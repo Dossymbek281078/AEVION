@@ -32,6 +32,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   const [error, setError] = useState<string | null>(null);
   const [labelFilter, setLabelFilter] = useState<ApplicationLabel | "ALL">("ALL");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [focusedAppIdx, setFocusedAppIdx] = useState<number>(-1);
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -59,6 +61,130 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Recruiter keyboard shortcuts on the application list. Only active when
+  // applications are loaded for the owner — i.e. when the panel is visible.
+  // We intentionally bail if focus is in a text input so typing into the
+  // composer doesn't trigger accept/reject.
+  useEffect(() => {
+    if (!applications || applications.length === 0) return;
+    const filtered = applications.filter((a) =>
+      labelFilter === "ALL" ? true : a.labelKey === labelFilter,
+    );
+    if (filtered.length === 0) return;
+
+    function isTypingTarget(t: EventTarget | null): boolean {
+      if (!(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (t.isContentEditable) return true;
+      return false;
+    }
+
+    async function setLabel(appId: string, label: ApplicationLabel) {
+      setApplications((prev) =>
+        prev ? prev.map((x) => (x.id === appId ? { ...x, labelKey: label } : x)) : prev,
+      );
+      try {
+        await buildApi.setApplicationLabel(appId, label);
+      } catch {
+        // Reload on error rather than tracking previous label here.
+        refresh();
+      }
+    }
+
+    async function setStatus(appId: string, status: "ACCEPTED" | "REJECTED") {
+      setApplications((prev) =>
+        prev ? prev.map((x) => (x.id === appId ? { ...x, status } : x)) : prev,
+      );
+      try {
+        await buildApi.updateApplication(appId, status);
+        refresh();
+      } catch {
+        refresh();
+      }
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (!applications) return;
+      const list = applications.filter((a) =>
+        labelFilter === "ALL" ? true : a.labelKey === labelFilter,
+      );
+      if (list.length === 0) return;
+      const cur = focusedAppIdx >= 0 && focusedAppIdx < list.length ? focusedAppIdx : -1;
+      const focusedApp = cur >= 0 ? list[cur] : null;
+
+      switch (e.key) {
+        case "j":
+          e.preventDefault();
+          setFocusedAppIdx((i) => Math.min((i < 0 ? -1 : i) + 1, list.length - 1));
+          break;
+        case "k":
+          e.preventDefault();
+          setFocusedAppIdx((i) => Math.max(i - 1, 0));
+          break;
+        case "?":
+          e.preventDefault();
+          setShortcutsHelpOpen((v) => !v);
+          break;
+        case "Escape":
+          if (shortcutsHelpOpen) {
+            e.preventDefault();
+            setShortcutsHelpOpen(false);
+          }
+          break;
+        case "a":
+          if (focusedApp && focusedApp.status !== "ACCEPTED") {
+            e.preventDefault();
+            void setStatus(focusedApp.id, "ACCEPTED");
+          }
+          break;
+        case "r":
+          if (focusedApp && focusedApp.status !== "REJECTED") {
+            e.preventDefault();
+            void setStatus(focusedApp.id, "REJECTED");
+          }
+          break;
+        case "t":
+          if (focusedApp) {
+            e.preventDefault();
+            void setLabel(focusedApp.id, "TOP_PICK");
+          }
+          break;
+        case "s":
+          if (focusedApp) {
+            e.preventDefault();
+            void setLabel(focusedApp.id, "SHORTLIST");
+          }
+          break;
+        case "i":
+          if (focusedApp) {
+            e.preventDefault();
+            void setLabel(focusedApp.id, "INTERVIEW");
+          }
+          break;
+        case "h":
+          if (focusedApp) {
+            e.preventDefault();
+            void setLabel(focusedApp.id, "HOLD");
+          }
+          break;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [applications, labelFilter, focusedAppIdx, shortcutsHelpOpen, refresh]);
+
+  // Auto-scroll the focused application into view.
+  useEffect(() => {
+    if (focusedAppIdx < 0) return;
+    const el = document.querySelector<HTMLElement>(
+      `[data-app-idx="${focusedAppIdx}"]`,
+    );
+    if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [focusedAppIdx]);
 
   if (loading) {
     return (
@@ -173,6 +299,14 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 </h2>
                 {applications.length > 0 && (
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShortcutsHelpOpen(true)}
+                      className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-mono text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
+                      title="Keyboard shortcuts (?)"
+                    >
+                      ⌨ ?
+                    </button>
                     <AiShortlistButton
                       vacancyId={vacancy.id}
                       pendingCount={applications.filter((a) => a.status === "PENDING").length}
@@ -228,8 +362,17 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                           }
                         />
                         <div className="space-y-3">
-                          {filtered.map((a) => (
-                            <div key={a.id} className="flex gap-2">
+                          {filtered.map((a, idx) => (
+                            <div
+                              key={a.id}
+                              data-app-idx={idx}
+                              className={`flex gap-2 rounded-xl transition ${
+                                focusedAppIdx === idx
+                                  ? "bg-emerald-500/[0.04] ring-1 ring-emerald-500/40 -mx-1 px-1"
+                                  : ""
+                              }`}
+                              onClick={() => setFocusedAppIdx(idx)}
+                            >
                               <input
                                 type="checkbox"
                                 checked={selected.has(a.id)}
@@ -341,7 +484,67 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {!isOwner && <SimilarVacancies vacancyId={vacancy.id} />}
+
+      {shortcutsHelpOpen && (
+        <KeyboardShortcutsHelp onClose={() => setShortcutsHelpOpen(false)} />
+      )}
     </BuildShell>
+  );
+}
+
+function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
+  const rows: { keys: string[]; label: string }[] = [
+    { keys: ["j"], label: "Next application" },
+    { keys: ["k"], label: "Previous application" },
+    { keys: ["a"], label: "Accept focused" },
+    { keys: ["r"], label: "Reject focused" },
+    { keys: ["t"], label: "Tag TOP_PICK" },
+    { keys: ["s"], label: "Tag SHORTLIST" },
+    { keys: ["i"], label: "Tag INTERVIEW" },
+    { keys: ["h"], label: "Tag HOLD" },
+    { keys: ["?"], label: "Toggle this overlay" },
+    { keys: ["Esc"], label: "Close" },
+  ];
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+    >
+      <div
+        className="w-[min(420px,calc(100vw-2rem))] rounded-xl border border-white/10 bg-slate-900 p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+            ⌨ Keyboard shortcuts
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">×</button>
+        </div>
+        <ul className="space-y-1.5 text-sm">
+          {rows.map((r) => (
+            <li key={r.label} className="flex items-center justify-between gap-3">
+              <div className="flex gap-1">
+                {r.keys.map((k) => (
+                  <kbd
+                    key={k}
+                    className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[11px] font-mono text-slate-200"
+                  >
+                    {k}
+                  </kbd>
+                ))}
+              </div>
+              <span className="text-slate-300">{r.label}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[11px] text-slate-500">
+          Shortcuts only fire when no input or textarea is focused.
+        </p>
+      </div>
+    </div>
   );
 }
 

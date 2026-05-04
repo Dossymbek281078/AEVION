@@ -287,6 +287,60 @@ aevRouter.get("/ledger/:deviceId", async (req: Request, res: Response) => {
   res.json({ ok: true, deviceId, count: filtered.length, entries: tail });
 });
 
+// Cross-module mint helper. Used by other backend routes (e.g. bureau
+// cert reward claim) that need to credit AEC to a device wallet without
+// going through the public HTTP mint endpoint. Same balance/ledger
+// semantics as POST /wallet/:deviceId/mint, plus an optional ownership
+// check (expectedUserId) so callers can refuse to mint into a wallet
+// that's bound to a different user. Returns { ok: false, error } on
+// validation failure rather than throwing — callers handle gracefully.
+export async function internalMintForDevice(opts: {
+  deviceId: string;
+  amount: number;
+  sourceKind: string;
+  sourceModule: string;
+  sourceAction: string;
+  reason?: string;
+  expectedUserId?: string | null;
+}): Promise<
+  | { ok: true; wallet: WalletRecord; entry: LedgerEntry }
+  | { ok: false; error: string; balance?: number }
+> {
+  const deviceId = sanitizeDeviceId(opts.deviceId);
+  if (!deviceId) return { ok: false, error: "invalid_device_id" };
+  const amount = clampAmount(opts.amount);
+  if (amount === null) return { ok: false, error: "invalid_amount" };
+
+  const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
+  const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, opts.expectedUserId ?? null);
+  if (opts.expectedUserId && w.userId && w.userId !== opts.expectedUserId) {
+    return { ok: false, error: "ownership_mismatch", balance: w.balance };
+  }
+  if (!w.userId && opts.expectedUserId) w.userId = opts.expectedUserId;
+  w.balance = Math.round((w.balance + amount) * 1_000_000) / 1_000_000;
+  w.lifetimeMined = Math.round((w.lifetimeMined + amount) * 1_000_000) / 1_000_000;
+  w.globalSupplyMined = Math.round((w.globalSupplyMined + amount) * 1_000_000) / 1_000_000;
+  w.updatedAt = Date.now();
+  wallets[deviceId] = w;
+
+  const entry: LedgerEntry = {
+    id: randomUUID(),
+    deviceId,
+    kind: "mint",
+    amount,
+    sourceKind: opts.sourceKind,
+    sourceModule: opts.sourceModule,
+    sourceAction: opts.sourceAction,
+    reason: opts.reason?.slice(0, 256),
+    balanceAfter: w.balance,
+    ts: Date.now(),
+  };
+  ledger.push(entry);
+  const trimmed = ledger.length > LEDGER_MAX ? ledger.slice(-LEDGER_MAX) : ledger;
+  await Promise.all([saveWallets(wallets), saveLedger(trimmed)]);
+  return { ok: true, wallet: w, entry };
+}
+
 // ── GET /api/aev/stats ─────────────────────────────────────────────
 aevRouter.get("/stats", async (_req: Request, res: Response) => {
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);

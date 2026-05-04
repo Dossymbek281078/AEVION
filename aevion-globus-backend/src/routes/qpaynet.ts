@@ -222,7 +222,7 @@ async function ensureDepositCheckoutsTable(): Promise<void> {
   }
 }
 
-// Insert a notification row + return id; safe to fire-and-forget.
+// Insert a notification row + fire SMTP email when configured. Fire-and-forget.
 async function notify(
   pool: ReturnType<typeof getPool>,
   ownerId: string,
@@ -238,9 +238,67 @@ async function notify(
       "INSERT INTO qpaynet_notifications (id, owner_id, kind, title, body, ref_id, amount) VALUES ($1,$2,$3,$4,$5,$6,$7)",
       [randomUUID(), ownerId, kind, title.slice(0, 200), body?.slice(0, 1000) ?? null, refId ?? null, amountTiin ?? null],
     );
+    // Best-effort email: look up user's email by id or email-as-id, send if SMTP configured.
+    void sendNotifEmail(pool, ownerId, title, body ?? "");
   } catch (err) {
     console.warn("[qpaynet notify] failed:", err instanceof Error ? err.message : err);
   }
+}
+
+async function sendNotifEmail(
+  pool: ReturnType<typeof getPool>,
+  ownerId: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
+  if (!host || !user || !pass) return;
+  try {
+    // ownerId may be a UUID (sub) or an email — handle both.
+    let toEmail: string | null = null;
+    if (ownerId.includes("@")) {
+      toEmail = ownerId;
+    } else {
+      const u = await pool.query(
+        `SELECT "email" FROM "AEVIONUser" WHERE "id"=$1 AND "deletedAt" IS NULL LIMIT 1`,
+        [ownerId],
+      ).catch(() => null);
+      toEmail = u?.rows[0]?.email ?? null;
+    }
+    if (!toEmail) return;
+
+    // Lazy-load nodemailer to avoid hard dep at module load.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const nodemailer = require("nodemailer") as typeof import("nodemailer");
+    const transport = nodemailer.createTransport({
+      host,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: Number(process.env.SMTP_PORT || 587) === 465,
+      auth: { user, pass },
+    });
+    const from = process.env.SMTP_FROM || "AEVION QPayNet <noreply@aevion.io>";
+    const html = `
+      <div style="font-family:sans-serif;background:#0f172a;color:#e2e8f0;padding:24px;">
+        <div style="max-width:520px;margin:0 auto;background:#1e293b;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.1);">
+          <div style="font-size:13px;font-weight:800;color:#a78bfa;letter-spacing:0.05em;margin-bottom:24px;">AEVION QPayNet</div>
+          <h2 style="margin:0 0 12px;font-size:22px;color:#f8fafc;">${escapeHtml(title)}</h2>
+          ${body ? `<p style="margin:0 0 16px;line-height:1.6;color:#cbd5e1;font-size:14px;">${escapeHtml(body)}</p>` : ""}
+          <a href="${FRONTEND}/qpaynet" style="display:inline-block;background:#7c3aed;color:#fff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:10px;text-decoration:none;margin-top:8px;">Открыть QPayNet</a>
+          <p style="font-size:11px;color:#475569;margin-top:24px;">Чтобы отписаться, отключите уведомления в настройках.</p>
+        </div>
+      </div>`;
+    await transport.sendMail({ from, to: toEmail, subject: title, html });
+  } catch (err) {
+    console.warn("[qpaynet email] failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]!));
 }
 
 async function ensureMerchantWebhooksTable(): Promise<void> {

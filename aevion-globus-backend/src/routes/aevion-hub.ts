@@ -23,6 +23,7 @@ const SUB_HEALTH = [
   { name: "qcontract", path: "/api/qcontract/health" },
   { name: "qpaynet", path: "/api/qpaynet/health" },
   { name: "smeta-trainer", path: "/api/smeta-trainer/stats" },
+  { name: "healthai", path: "/api/healthai/health" },
 ];
 
 const SUB_OPENAPI = [

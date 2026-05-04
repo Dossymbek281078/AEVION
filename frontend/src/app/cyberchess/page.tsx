@@ -2691,17 +2691,16 @@ export default function CyberChessPage(){
   const onBoardCancel = _bi.onBoardCancel;
   const sqFromPoint = _bi.sqFromBoard;
 
-  // ── NATIVE event fallback ────────────────────────────────────────────────
-  // React's synthetic event system has been the suspect in repeated drag/click
-  // breakage. Attach native pointer listeners directly to the board element via
-  // useEffect so the handlers fire even if React's onPointerDown wiring is lost
-  // (e.g., HMR module mismatch, suspended boundary, dev-mode strict double-mount).
-  // Each native event mints a tiny React-event-like object so the same v7 callbacks
-  // can be invoked. The native path runs FIRST (capture phase); we set
-  // bDownHandledRef so the React path skips chess logic and just clears annotations.
+  // ── NATIVE pointer fallback (mounts AFTER the board is in the DOM) ──────
+  // The board lives inside a conditional branch (`{(!setup||tab==="puzzles"||...)&&...}`),
+  // so on the first render boardRef.current can be null. A plain useEffect on
+  // mount would run too early. We use an effect keyed on the SAME conditions
+  // that gate the board, so it re-runs once the board appears, and an interval
+  // re-check on top of that as belt-and-suspenders for hot-reload cases where
+  // React's synthetic delegation might have been dropped.
   useEffect(() => {
-    const el = boardRef.current;
-    if (!el) return;
+    let attached: HTMLDivElement | null = null;
+    let cleanup: (() => void) | null = null;
     const wrap = (e: PointerEvent): React.PointerEvent => ({
       clientX: e.clientX, clientY: e.clientY,
       pointerId: e.pointerId, pointerType: e.pointerType,
@@ -2711,21 +2710,30 @@ export default function CyberChessPage(){
       target: e.target as any,
       currentTarget: e.currentTarget as any,
     } as any);
-    const onDown = (e: PointerEvent) => { try { onBoardDown(wrap(e)); } catch {} };
-    const onMove = (e: PointerEvent) => { try { onBoardMove(wrap(e)); } catch {} };
-    const onUp   = (e: PointerEvent) => { try { onBoardUp  (wrap(e)); } catch {} };
-    const onCan  = (e: PointerEvent) => { try { onBoardCancel(wrap(e)); } catch {} };
-    el.addEventListener("pointerdown",   onDown, { passive: false });
-    el.addEventListener("pointermove",   onMove, { passive: false });
-    el.addEventListener("pointerup",     onUp);
-    el.addEventListener("pointercancel", onCan);
-    return () => {
-      el.removeEventListener("pointerdown",   onDown);
-      el.removeEventListener("pointermove",   onMove);
-      el.removeEventListener("pointerup",     onUp);
-      el.removeEventListener("pointercancel", onCan);
+    const tryAttach = () => {
+      const el = boardRef.current;
+      if (!el || el === attached) return;
+      if (cleanup) cleanup();
+      attached = el;
+      const onDown = (e: PointerEvent) => { try { onBoardDown(wrap(e)); } catch {} };
+      const onMove = (e: PointerEvent) => { try { onBoardMove(wrap(e)); } catch {} };
+      const onUp   = (e: PointerEvent) => { try { onBoardUp  (wrap(e)); } catch {} };
+      const onCan  = (e: PointerEvent) => { try { onBoardCancel(wrap(e)); } catch {} };
+      el.addEventListener("pointerdown",   onDown, { passive: false });
+      el.addEventListener("pointermove",   onMove, { passive: false });
+      el.addEventListener("pointerup",     onUp);
+      el.addEventListener("pointercancel", onCan);
+      cleanup = () => {
+        el.removeEventListener("pointerdown",   onDown);
+        el.removeEventListener("pointermove",   onMove);
+        el.removeEventListener("pointerup",     onUp);
+        el.removeEventListener("pointercancel", onCan);
+      };
     };
-  }, [onBoardDown, onBoardMove, onBoardUp, onBoardCancel]);
+    tryAttach();
+    const id = window.setInterval(tryAttach, 600);
+    return () => { window.clearInterval(id); if (cleanup) cleanup(); };
+  }, [onBoardDown, onBoardMove, onBoardUp, onBoardCancel, setup, tab]);
 
   // Scratch — отдельный inst отображается вместо virtualGame.
   const renderGame=scratchOn&&scratchGame?scratchGame:virtualGame;
@@ -3652,6 +3660,10 @@ export default function CyberChessPage(){
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>
             <div ref={boardRef}
+              onPointerDown={onBoardDown}
+              onPointerMove={onBoardMove}
+              onPointerUp={onBoardUp}
+              onPointerCancel={onBoardCancel}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{

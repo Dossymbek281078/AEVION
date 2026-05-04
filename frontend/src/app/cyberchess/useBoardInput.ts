@@ -241,6 +241,10 @@ export function useBoardInput(opts: BoardInputOptions) {
   const onBoardDown = useCallback((e: React.PointerEvent) => {
     // Ignore non-primary mouse buttons (right-click handled separately).
     if (e.button !== 0 && e.pointerType === "mouse") return;
+    // Re-entry guard: if React's handler and the native fallback both fire for
+    // the same gesture, only the first one runs the chess logic. 50ms is well
+    // under the human inter-click interval but covers any same-event re-dispatch.
+    if (Date.now() - bDownHandledRef.current < 50) return;
     const sq = sqFromBoard(e.clientX, e.clientY);
     if (!sq) return;
     const o = optsRef.current;

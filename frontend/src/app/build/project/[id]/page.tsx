@@ -347,6 +347,73 @@ function OwnerStatusControls({
   );
 }
 
+function TemplatePicker({
+  onPick,
+}: {
+  onPick: (t: {
+    title: string;
+    description: string;
+    salary: number;
+    skills: string[];
+    questions: string[];
+  }) => void;
+}) {
+  const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.listVacancyTemplates>>["items"]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (loaded) return;
+    buildApi
+      .listVacancyTemplates()
+      .then((r) => setItems(r.items))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [loaded]);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/[0.06] p-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-fuchsia-200">★ Use template</span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-[10px] text-fuchsia-300 hover:underline"
+        >
+          {open ? "Hide" : `${items.length} saved`}
+        </button>
+      </div>
+      {open && (
+        <ul className="mt-2 max-h-48 space-y-0.5 overflow-y-auto">
+          {items.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPick({
+                    title: t.title,
+                    description: t.description,
+                    salary: t.salary,
+                    skills: t.skills ?? [],
+                    questions: t.questions ?? [],
+                  });
+                  setOpen(false);
+                }}
+                className="block w-full rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-fuchsia-500/10"
+              >
+                <span className="font-semibold">{t.name}</span>
+                <span className="ml-2 text-slate-500">→ {t.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -429,6 +496,15 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
       onSubmit={submit}
       className="w-full space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm"
     >
+      <TemplatePicker
+        onPick={(t) => {
+          setTitle(t.title);
+          setDescription(t.description);
+          setSalary(t.salary > 0 ? String(t.salary) : "");
+          setSkills(t.skills ?? []);
+          setQuestions(t.questions ?? []);
+        }}
+      />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}

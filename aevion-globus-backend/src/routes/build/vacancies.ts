@@ -244,6 +244,101 @@ vacanciesRouter.get("/by-project/:id", async (req, res) => {
   }
 });
 
+// --- Vacancy templates -----------------------------------------------------
+// IMPORTANT: these single-segment paths MUST be registered BEFORE the
+// generic /:id route below, otherwise Express matches "/templates" against
+// /:id with id="templates" and the dedicated handler never fires.
+
+// GET /api/build/vacancies/templates — caller's saved templates.
+vacanciesRouter.get("/templates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const r = await pool.query(
+      `SELECT "id","name","title","description","skillsJson","salary","salaryCurrency",
+              "city","questionsJson","createdAt"
+       FROM "BuildVacancyTemplate"
+       WHERE "ownerUserId" = $1
+       ORDER BY "createdAt" DESC LIMIT 100`,
+      [auth.sub],
+    );
+    const items = r.rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      skills: safeParseJson(row.skillsJson, [] as string[]),
+      questions: safeParseJson(row.questionsJson, [] as string[]),
+    }));
+    return ok(res, { items, total: items.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "templates_list_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/templates — save a new template.
+vacanciesRouter.post("/templates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const name = vString(req.body?.name, "name", { min: 2, max: 200 });
+    if (!name.ok) return fail(res, 400, name.error);
+    const title = vString(req.body?.title, "title", { min: 3, max: 200 });
+    if (!title.ok) return fail(res, 400, title.error);
+    const description = vString(req.body?.description, "description", { min: 10, max: 10_000 });
+    if (!description.ok) return fail(res, 400, description.error);
+
+    const salary = req.body?.salary != null
+      ? Math.max(0, Math.round(Number(req.body.salary) || 0))
+      : 0;
+    const salaryCurrency = typeof req.body?.salaryCurrency === "string"
+      ? String(req.body.salaryCurrency).slice(0, 8)
+      : null;
+    const city = typeof req.body?.city === "string" && req.body.city.trim()
+      ? String(req.body.city).slice(0, 100)
+      : null;
+
+    const skills = Array.isArray(req.body?.skills)
+      ? (req.body.skills as unknown[]).filter((s): s is string => typeof s === "string").map((s) => s.slice(0, 60)).slice(0, 30)
+      : [];
+    const questions = Array.isArray(req.body?.questions)
+      ? (req.body.questions as unknown[]).filter((q): q is string => typeof q === "string").map((q) => q.slice(0, 500)).slice(0, 10)
+      : [];
+
+    const id = crypto.randomUUID();
+    const r = await pool.query(
+      `INSERT INTO "BuildVacancyTemplate"
+         ("id","ownerUserId","name","title","description","skillsJson","salary","salaryCurrency","city","questionsJson")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        id, auth.sub, name.value, title.value, description.value,
+        JSON.stringify(skills), salary, salaryCurrency, city, JSON.stringify(questions),
+      ],
+    );
+    return ok(res, r.rows[0], 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "template_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/vacancies/templates/:id
+vacanciesRouter.delete("/templates/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const r = await pool.query(
+      `DELETE FROM "BuildVacancyTemplate"
+       WHERE "id" = $1 AND ("ownerUserId" = $2 OR $3 = TRUE)
+       RETURNING "id"`,
+      [id, auth.sub, auth.role === "ADMIN"],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "template_not_found_or_not_owned");
+    return ok(res, { id });
+  } catch (err: unknown) {
+    return fail(res, 500, "template_delete_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/:id
 vacanciesRouter.get("/:id", async (req, res) => {
   try {

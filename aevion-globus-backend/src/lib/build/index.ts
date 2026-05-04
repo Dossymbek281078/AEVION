@@ -233,6 +233,28 @@ async function _doEnsureBuildTables(): Promise<void> {
   // Used downstream for referrer rewards / leaderboard.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`);
+  // BuildVacancyTemplate: recruiter-saved reusable vacancy blueprint.
+  // Stores the same fields a vacancy needs (title/description/skills/salary/
+  // questions) so a future post can spin up from the template instead of
+  // typing it again. Per-user, no project binding — the template can be
+  // applied to any project the recruiter owns.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVacancyTemplate" (
+      "id" TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL,
+      "skillsJson" TEXT NOT NULL DEFAULT '[]',
+      "salary" INTEGER NOT NULL DEFAULT 0,
+      "salaryCurrency" TEXT,
+      "city" TEXT,
+      "questionsJson" TEXT NOT NULL DEFAULT '[]',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyTemplate_owner_idx" ON "BuildVacancyTemplate" ("ownerUserId", "createdAt" DESC);`);
+
   // Recruiter-only label e.g. SHORTLIST / INTERVIEW / HOLD / TOP_PICK.
   // Kept as a free-form short string rather than an enum so we can add
   // labels without schema migrations.

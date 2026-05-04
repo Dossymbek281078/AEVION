@@ -5,6 +5,7 @@ import { VideoEmbed } from "@/components/build/VideoEmbed";
 import { StarsDisplay } from "@/components/build/StarRating";
 import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
 import { ShareProfileButton } from "@/components/build/ShareProfileButton";
+import { ProfileShareQR } from "@/components/build/ProfileShareQR";
 
 export const dynamic = "force-dynamic";
 
@@ -152,6 +153,7 @@ export default async function PublicProfilePage({ params }: Props) {
             ← Talent search
           </Link>
           <div className="flex items-center gap-2">
+            <ProfileShareQR userId={id} name={data.name} />
             <ShareProfileButton userId={id} />
             <a
               href={`${getApiBase()}/api/build/profiles/${encodeURIComponent(id)}/resume.pdf`}

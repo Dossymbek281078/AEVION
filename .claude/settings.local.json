@@ -50,7 +50,18 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 65)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" pr diff 66)",
       "Bash(gh pr *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "PowerShell(gh pr *)",
+      "Bash(curl -sS https://aevion-production-a70c.up.railway.app/api/qpaynet/health)",
+      "Bash(curl -sS -X POST -H \"Content-Type: application/json\" -d '{}' https://aevion-production-a70c.up.railway.app/api/qpaynet/webhooks/test)",
+      "Bash(curl *)",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|settings\"})",
+      "PowerShell(gh api *)",
+      "PowerShell(git checkout *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion\"})",
+      "Bash(python3 -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\('status:', d['status'], 'healthy:', d['healthy'], '/', d['total']\\)\")",
+      "Bash(grep -n \"{/\\\\\\\\* Board \\\\\\\\+ Panel \\\\\\\\*/}\" frontend/src/app/cyberchess/page.tsx)"
     ]
   }
 }

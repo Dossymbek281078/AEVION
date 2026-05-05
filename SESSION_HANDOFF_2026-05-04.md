@@ -1,4 +1,4 @@
-# Session handoff — 2026-05-04 (P3-4 prod-ready, осталась конфигурация)
+﻿# Session handoff — 2026-05-04 (P3-4 prod-ready, осталась конфигурация)
 
 Продолжение трека `aevion-bank` из `SESSION_HANDOFF_2026-05-03.md`. Все
 3 задачи §5 закрыты + P3-4 (первый платный Bureau-серт) дотянут до
@@ -49,7 +49,7 @@ claude
 
 ```
 ✅ all steps passed (24/24)
-deploy: e98281d → https://aevion-lgyltzbgh-aevion.vercel.app
+deploy: e98281d → https://aevion-lgyltzbgh-aevion.app
 ```
 
 ---

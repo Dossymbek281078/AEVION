@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
@@ -489,7 +489,7 @@ export default function HomePage() {
               { title: "First-mover monopoly", desc: "The world's first electronic patent bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },
               { title: "$340B addressable market", desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: "$340B", sub: "TAM" },
               { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
-              { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.vercel.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
+              { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
               { title: "Quantum-resistant", desc: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.", metric: "3-layer", sub: "crypto shield" },
               { title: "Year 5: $2B+ revenue", desc: "Platform subscriptions + transaction fees + API licensing + advertising + banking services. Revenue compounds, not grows linearly.", metric: "$2B+", sub: "Year 5 ARR" },
             ].map((card) => (

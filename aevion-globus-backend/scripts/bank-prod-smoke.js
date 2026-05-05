@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
  * Bank prod smoke — end-to-end AEV wallet + QTrade account/transfer flow.
  *
@@ -28,7 +28,7 @@
 const { writeFileSync, mkdirSync } = require("node:fs");
 const { dirname, resolve } = require("node:path");
 
-const DEFAULT_PUBLIC_URL = "https://aevion-4bazipsxj-aevion.vercel.app/api-backend";
+const DEFAULT_PUBLIC_URL = "https://aevion.app/api-backend";
 const BASE = (process.env.BASE || DEFAULT_PUBLIC_URL).replace(/\/+$/, "");
 const DEVICE = process.env.DEVICE || `bank-smoke-${Date.now()}`;
 const SMOKE_EMAIL = `smoke+${Date.now()}@aevion.test`;

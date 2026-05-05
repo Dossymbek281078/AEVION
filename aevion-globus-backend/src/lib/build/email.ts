@@ -1,4 +1,4 @@
-/**
+﻿/**
  * QBuild transactional emails.
  * Uses nodemailer with SMTP (works with Gmail, Yandex, any provider).
  * All sends are fire-and-forget — never block the HTTP response.
@@ -28,7 +28,7 @@ function getTransport() {
 }
 
 const FROM = process.env.SMTP_FROM || "AEVION QBuild <noreply@aevion.io>";
-const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.vercel.app";
+const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 /** Fire-and-forget send — never throws. */
 async function send(to: string, subject: string, html: string): Promise<void> {

@@ -1,5 +1,5 @@
-{
-  "base": "https://aevion-8bxyonhba-aevion.vercel.app/api-backend",
+﻿{
+  "base": "https://aevion-8bxyonhba-aevion.app/api-backend",
   "runAt": "2026-05-03T16:54:38.822Z",
   "device": "bank-smoke-1777827271658",
   "email": "smoke+1777827271658@aevion.test",

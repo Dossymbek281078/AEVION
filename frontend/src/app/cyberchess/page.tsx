@@ -25,6 +25,10 @@ import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } f
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import MultiPanel from "./MultiPanel";
+import { useWorkspace } from "./useWorkspace";
+import WorkspaceToolbar from "./WorkspaceToolbar";
+import WorkspaceMediaPane from "./WorkspaceMediaPane";
+import WorkspaceDock from "./WorkspaceDock";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
@@ -396,6 +400,11 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
+  // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
+  const _ws=useWorkspace();
+  const wsPreset=_ws.preset; const sWsPreset=_ws.setPreset;
+  const wsShowMedia=_ws.showMediaPane;
+  const wsShowRight=_ws.showRightPanel;
   // SSR / hydration gate — все десятки state-init читают localStorage,
   // на сервере они дают defaults, на клиенте — реальные сохранения.
   // Без gate React детектит mismatch и регенерирует tree, ивент-хэндлеры
@@ -2908,6 +2917,7 @@ export default function CyberChessPage(){
             <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
           </div>
           <div style={{flex:1}}/>
+          <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
           <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel: chess + YouTube/Twitch streams" className="cc-focus-ring" style={{
             display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
             borderRadius:RADIUS.full,border:"1px solid #c4b5fd",

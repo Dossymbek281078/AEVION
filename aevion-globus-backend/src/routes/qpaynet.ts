@@ -1906,6 +1906,82 @@ qpaynetRouter.post("/webhooks/test", async (req, res) => {
   });
 });
 
+// GET /api/qpaynet/me/dashboard — owner aggregated analytics
+qpaynetRouter.get("/me/dashboard", async (req, res) => {
+  await ensureTables();
+  await ensureRequestsTable();
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  const [walletsTotal, monthFlow, daily7, requestsCounts, payoutsCounts, unread] = await Promise.all([
+    pool.query("SELECT COUNT(*) AS n, COALESCE(SUM(balance),0) AS s FROM qpaynet_wallets WHERE owner_id=$1 AND status='active'", [ownerId]),
+    pool.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN type IN ('deposit','transfer_in') THEN amount ELSE 0 END), 0) AS in_amount,
+         COALESCE(SUM(CASE WHEN type IN ('withdraw','transfer_out','merchant_charge') THEN amount + fee ELSE 0 END), 0) AS out_amount,
+         COUNT(*) AS tx_count
+       FROM qpaynet_transactions
+       WHERE owner_id=$1 AND created_at >= date_trunc('month', NOW())`,
+      [ownerId],
+    ),
+    pool.query(
+      `SELECT date_trunc('day', created_at) AS day,
+              COALESCE(SUM(CASE WHEN type IN ('deposit','transfer_in') THEN amount ELSE 0 END), 0) AS in_amount,
+              COALESCE(SUM(CASE WHEN type IN ('withdraw','transfer_out','merchant_charge') THEN amount + fee ELSE 0 END), 0) AS out_amount
+       FROM qpaynet_transactions
+       WHERE owner_id=$1 AND created_at >= NOW() - INTERVAL '7 days'
+       GROUP BY 1 ORDER BY 1 ASC`,
+      [ownerId],
+    ),
+    pool.query(
+      `SELECT status, COUNT(*) AS n FROM qpaynet_payment_requests WHERE owner_id=$1 GROUP BY status`,
+      [ownerId],
+    ),
+    pool.query(
+      `SELECT status, COUNT(*) AS n, COALESCE(SUM(amount),0) AS total FROM qpaynet_payouts WHERE owner_id=$1 GROUP BY status`,
+      [ownerId],
+    ),
+    pool.query("SELECT COUNT(*) AS n FROM qpaynet_notifications WHERE owner_id=$1 AND read_at IS NULL", [ownerId]).catch(() => ({ rows: [{ n: 0 }] })),
+  ]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const requestsByStatus: Record<string, number> = {};
+  for (const row of requestsCounts.rows) requestsByStatus[row.status] = Number(row.n);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const payoutsByStatus: Record<string, { count: number; totalKzt: number }> = {};
+  for (const row of payoutsCounts.rows) payoutsByStatus[row.status] = { count: Number(row.n), totalKzt: fromTiin(BigInt(row.total)) };
+
+  res.json({
+    wallets: {
+      activeCount: Number(walletsTotal.rows[0]?.n ?? 0),
+      totalBalanceKzt: fromTiin(BigInt(walletsTotal.rows[0]?.s ?? 0)),
+    },
+    thisMonth: {
+      inKzt: fromTiin(BigInt(monthFlow.rows[0]?.in_amount ?? 0)),
+      outKzt: fromTiin(BigInt(monthFlow.rows[0]?.out_amount ?? 0)),
+      netKzt: fromTiin(BigInt(monthFlow.rows[0]?.in_amount ?? 0) - BigInt(monthFlow.rows[0]?.out_amount ?? 0)),
+      txCount: Number(monthFlow.rows[0]?.tx_count ?? 0),
+    },
+    last7days: daily7.rows.map((r) => ({
+      day: new Date(r.day).toISOString().slice(0, 10),
+      inKzt: fromTiin(BigInt(r.in_amount)),
+      outKzt: fromTiin(BigInt(r.out_amount)),
+    })),
+    paymentRequests: {
+      pending: requestsByStatus.pending ?? 0,
+      paid: requestsByStatus.paid ?? 0,
+      cancelled: requestsByStatus.cancelled ?? 0,
+    },
+    payouts: payoutsByStatus,
+    unreadNotifications: Number(unread.rows[0]?.n ?? 0),
+  });
+});
+
 // GET /api/qpaynet/health — lightweight liveness check for hub monitor
 qpaynetRouter.get("/health", async (_req, res) => {
   try {

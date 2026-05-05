@@ -157,6 +157,8 @@ export default function QPayNetDashboard() {
         </div>
       )}
 
+      {token && !loading && <DashboardSummary token={token} />}
+
       {token && (
         <div className="max-w-5xl mx-auto px-6 py-8">
           {loading ? (
@@ -284,6 +286,68 @@ export default function QPayNetDashboard() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+interface Dashboard {
+  wallets: { activeCount: number; totalBalanceKzt: number };
+  thisMonth: { inKzt: number; outKzt: number; netKzt: number; txCount: number };
+  last7days: { day: string; inKzt: number; outKzt: number }[];
+  paymentRequests: { pending: number; paid: number; cancelled: number };
+}
+
+function DashboardSummary({ token }: { token: string }) {
+  const [data, setData] = useState<Dashboard | null>(null);
+
+  useEffect(() => {
+    fetch("/api/qpaynet/me/dashboard", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(setData)
+      .catch(() => {});
+  }, [token]);
+
+  if (!data) return null;
+
+  const max7 = Math.max(1, ...data.last7days.map(d => Math.max(d.inKzt, d.outKzt)));
+
+  return (
+    <div className="border-b border-slate-800 px-6 py-4">
+      <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div className="text-[10px] text-slate-500 uppercase tracking-wide">Всего на кошельках</div>
+          <div className="text-xl font-bold text-white mt-0.5">{fmt(data.wallets.totalBalanceKzt)} <span className="text-xs text-slate-500">₸</span></div>
+          <div className="text-[10px] text-slate-600 mt-0.5">{data.wallets.activeCount} актив.</div>
+        </div>
+        <div className="bg-emerald-950/40 border border-emerald-900/40 rounded-xl p-3">
+          <div className="text-[10px] text-emerald-400 uppercase tracking-wide">Получено (мес.)</div>
+          <div className="text-xl font-bold text-emerald-300 mt-0.5">+{fmt(data.thisMonth.inKzt)} <span className="text-xs text-emerald-500">₸</span></div>
+          <div className="text-[10px] text-emerald-500/60 mt-0.5">{data.thisMonth.txCount} операций</div>
+        </div>
+        <div className="bg-red-950/30 border border-red-900/40 rounded-xl p-3">
+          <div className="text-[10px] text-red-400 uppercase tracking-wide">Отправлено (мес.)</div>
+          <div className="text-xl font-bold text-red-300 mt-0.5">−{fmt(data.thisMonth.outKzt)} <span className="text-xs text-red-500">₸</span></div>
+          <div className={`text-[10px] mt-0.5 ${data.thisMonth.netKzt >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+            нетто: {data.thisMonth.netKzt >= 0 ? "+" : "−"}{fmt(Math.abs(data.thisMonth.netKzt))} ₸
+          </div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div className="text-[10px] text-slate-500 uppercase tracking-wide">7 дней</div>
+          <div className="flex items-end gap-0.5 h-8 mt-1.5">
+            {data.last7days.length === 0 ? (
+              <div className="text-[10px] text-slate-600 self-center">нет данных</div>
+            ) : data.last7days.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col gap-0.5 justify-end">
+                <div className="bg-emerald-500/60 rounded-sm" style={{ height: `${(d.inKzt / max7) * 24}px` }} />
+                <div className="bg-red-500/60 rounded-sm" style={{ height: `${(d.outKzt / max7) * 24}px` }} />
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-slate-600 mt-0.5">
+            запросы: {data.paymentRequests.paid}/{data.paymentRequests.pending + data.paymentRequests.paid + data.paymentRequests.cancelled}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

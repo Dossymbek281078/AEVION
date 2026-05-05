@@ -278,8 +278,16 @@ async function run() {
     assert("stats has shape", typeof adminStats.body.stats === "object");
   }
 
-  // 24. Insufficient balance
-  console.log("\n19. Edge cases");
+  // 24. Personal dashboard
+  console.log("\n19. Dashboard");
+  const dash = await req("GET", "/api/qpaynet/me/dashboard", null, auth);
+  assert("GET /me/dashboard → 200", dash.status === 200);
+  assert("dashboard.wallets shape", typeof dash.body.wallets?.totalBalanceKzt === "number");
+  assert("dashboard.thisMonth shape", typeof dash.body.thisMonth?.netKzt === "number");
+  assert("dashboard.last7days array", Array.isArray(dash.body.last7days));
+
+  // 25. Insufficient balance
+  console.log("\n20. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

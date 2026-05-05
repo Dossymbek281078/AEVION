@@ -37,10 +37,47 @@
 import { Router, raw } from "express";
 import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
 import Stripe from "stripe";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 
 export const qpaynetRouter = Router();
+
+// Rate limits — protect against abuse / DoS. Keyed by IP+auth.sub when present.
+const moneyLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,                // 30 money-movement calls/min per key
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const auth = verifyBearerOptional(req);
+    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
+    return `qpn:money:${id}`;
+  },
+  message: { error: "rate_limit_exceeded" },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,               // 120 reads/min
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const auth = verifyBearerOptional(req);
+    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
+    return `qpn:auth:${id}`;
+  },
+  message: { error: "rate_limit_exceeded" },
+});
+
+const publicLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 60,                // 60 public reads/min per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "rate_limit_exceeded" },
+});
 
 const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
 const STRIPE_WH = process.env.QPAYNET_STRIPE_WEBHOOK_SECRET?.trim();
@@ -389,6 +426,152 @@ function toTiin(kzt: number): bigint { return BigInt(Math.round(kzt * 100)); }
 function fromTiin(t: bigint): number { return Number(t) / 100; }
 function feeFor(amount: bigint): bigint { return BigInt(Math.ceil(Number(amount) * FEE_PCT)); }
 
+// Run fn inside a DB transaction with a dedicated client. Throws on failure;
+// caller catches and converts to HTTP error. Caller MUST NOT use `pool` inside
+// fn — only the client param — otherwise the work runs outside the transaction.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function withTx<T>(fn: (client: any) => Promise<T>): Promise<T> {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Append immutable audit row for compliance/forensics. Fire-and-forget, never throws.
+async function auditLog(
+  pool: ReturnType<typeof getPool>,
+  ownerId: string | null,
+  action: string,
+  details: Record<string, unknown>,
+  req?: import("express").Request,
+): Promise<void> {
+  try {
+    await ensureAuditTable();
+    const ip = req
+      ? (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? null
+      : null;
+    const ua = req ? (req.headers["user-agent"] as string ?? null) : null;
+    await pool.query(
+      `INSERT INTO qpaynet_audit_log (id, owner_id, action, details, ip, user_agent)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
+      [randomUUID(), ownerId, action, JSON.stringify(details), ip, ua],
+    );
+  } catch (err) {
+    console.warn("[qpaynet audit] failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+let auditTableReady = false;
+async function ensureAuditTable(): Promise<void> {
+  if (auditTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_audit_log (
+        id          TEXT PRIMARY KEY,
+        owner_id    TEXT,
+        action      TEXT NOT NULL,
+        details     JSONB NOT NULL DEFAULT '{}'::jsonb,
+        ip          TEXT,
+        user_agent  TEXT,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpa_owner ON qpaynet_audit_log (owner_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_qpa_action ON qpaynet_audit_log (action, created_at DESC);
+    `);
+    auditTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet audit] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Idempotency: cache response for 24h keyed by (owner_id, idempotency_key).
+// Replays with same key + same body return cached response unchanged.
+let idempotencyTableReady = false;
+async function ensureIdempotencyTable(): Promise<void> {
+  if (idempotencyTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_idempotency (
+        owner_id    TEXT NOT NULL,
+        key         TEXT NOT NULL,
+        body_hash   TEXT NOT NULL,
+        status      INTEGER NOT NULL,
+        response    JSONB NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (owner_id, key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpi_created ON qpaynet_idempotency (created_at DESC);
+    `);
+    idempotencyTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet idempotency] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Returns cached response if a same-key+same-body replay; null otherwise.
+async function checkIdempotency(
+  ownerId: string,
+  key: string | undefined,
+  body: unknown,
+): Promise<{ status: number; response: Record<string, unknown> } | { conflict: true } | null> {
+  if (!key) return null;
+  await ensureIdempotencyTable();
+  const pool = getPool();
+  const bodyHash = createHash("sha256").update(JSON.stringify(body ?? {})).digest("hex");
+  const r = await pool.query(
+    "SELECT body_hash, status, response FROM qpaynet_idempotency WHERE owner_id=$1 AND key=$2",
+    [ownerId, key],
+  );
+  if (!r.rows[0]) return null;
+  if (r.rows[0].body_hash !== bodyHash) return { conflict: true };
+  return { status: r.rows[0].status, response: r.rows[0].response };
+}
+
+async function saveIdempotency(
+  ownerId: string,
+  key: string | undefined,
+  body: unknown,
+  status: number,
+  response: Record<string, unknown>,
+): Promise<void> {
+  if (!key) return;
+  await ensureIdempotencyTable();
+  const pool = getPool();
+  const bodyHash = createHash("sha256").update(JSON.stringify(body ?? {})).digest("hex");
+  await pool.query(
+    `INSERT INTO qpaynet_idempotency (owner_id, key, body_hash, status, response)
+     VALUES ($1,$2,$3,$4,$5::jsonb)
+     ON CONFLICT (owner_id, key) DO NOTHING`,
+    [ownerId, key, bodyHash, status, JSON.stringify(response)],
+  ).catch(() => {});
+}
+
+// Periodic GC of idempotency keys older than 24h (keeps table small).
+let idempotencyGcStarted = false;
+function startIdempotencyGc(): void {
+  if (idempotencyGcStarted) return;
+  idempotencyGcStarted = true;
+  if (process.env.NODE_ENV === "test") return;
+  setInterval(async () => {
+    try {
+      await ensureIdempotencyTable();
+      const pool = getPool();
+      await pool.query("DELETE FROM qpaynet_idempotency WHERE created_at < NOW() - INTERVAL '24 hours'");
+    } catch { /* ignore */ }
+  }, 3_600_000).unref(); // hourly
+}
+
 // Returns sum of today's deposits for a wallet (in tiin).
 async function depositedToday(pool: ReturnType<typeof getPool>, walletId: string): Promise<bigint> {
   const r = await pool.query(
@@ -458,7 +641,7 @@ qpaynetRouter.get("/wallets/:id", async (req, res) => {
 });
 
 // GET /api/qpaynet/wallets/:id/public — recipient lookup (no auth, no balance)
-qpaynetRouter.get("/wallets/:id/public", async (req, res) => {
+qpaynetRouter.get("/wallets/:id/public", publicLimiter, async (req, res) => {
   await ensureTables();
   const pool = getPool();
   const w = await pool.query(
@@ -492,7 +675,7 @@ qpaynetRouter.patch("/wallets/:id", async (req, res) => {
 
 // ── Deposit ───────────────────────────────────────────────────────────────────
 
-qpaynetRouter.post("/deposit", async (req, res) => {
+qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
@@ -500,41 +683,55 @@ qpaynetRouter.post("/deposit", async (req, res) => {
   const { walletId, amount, description } = req.body as { walletId?: string; amount?: number; description?: string };
   if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
 
-  const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
-  const w = await pool.query(
-    "SELECT id, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
-    [walletId, ownerId],
-  );
-  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
-  if (w.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
+  const idemKey = req.headers["idempotency-key"] as string | undefined;
+  const cached = await checkIdempotency(ownerId, idemKey, req.body);
+  if (cached && "conflict" in cached) return res.status(409).json({ error: "idempotency_key_body_mismatch" });
+  if (cached) return res.status(cached.status).json(cached.response);
 
-  const tiin = toTiin(amount);
-  const cap = toTiin(DAILY_DEPOSIT_CAP_KZT);
-  const already = await depositedToday(pool, walletId);
-  if (already + tiin > cap) {
-    return res.status(400).json({
-      error: "daily_deposit_cap_exceeded",
-      capKzt: DAILY_DEPOSIT_CAP_KZT,
-      depositedTodayKzt: fromTiin(already),
-      remainingKzt: Math.max(0, fromTiin(cap - already)),
+  const pool = getPool();
+  try {
+    const result = await withTx(async (c) => {
+      const w = await c.query(
+        "SELECT id, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+        [walletId, ownerId],
+      );
+      if (!w.rows[0]) throw new HttpError(404, "wallet_not_found");
+      if (w.rows[0].status !== "active") throw new HttpError(400, "wallet_inactive");
+
+      const tiin = toTiin(amount);
+      const cap = toTiin(DAILY_DEPOSIT_CAP_KZT);
+      const todayR = await c.query(
+        `SELECT COALESCE(SUM(amount), 0) AS s FROM qpaynet_transactions
+         WHERE wallet_id=$1 AND type='deposit' AND created_at >= NOW() - INTERVAL '24 hours'`,
+        [walletId],
+      );
+      const already = BigInt(todayR.rows[0]?.s ?? 0);
+      if (already + tiin > cap) {
+        throw new HttpError(400, "daily_deposit_cap_exceeded");
+      }
+      const txId = randomUUID();
+      await c.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
+        [txId, walletId, ownerId, tiin, description ?? "Пополнение"],
+      );
+      const updated = await c.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [walletId]);
+      return { txId, newBalance: fromTiin(BigInt(updated.rows[0].balance)) };
     });
+    void auditLog(pool, ownerId, "deposit", { walletId, amount, txId: result.txId }, req);
+    const body = { txId: result.txId, amount, newBalance: result.newBalance };
+    await saveIdempotency(ownerId, idemKey, req.body, 200, body);
+    res.json(body);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    throw err;
   }
-  const txId = randomUUID();
-
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
-    [txId, walletId, ownerId, tiin, description ?? "Пополнение"],
-  );
-
-  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [walletId]);
-  res.json({ txId, amount, newBalance: fromTiin(BigInt(updated.rows[0].balance)) });
 });
 
 // ── Withdraw ─────────────────────────────────────────────────────────────────
 
-qpaynetRouter.post("/withdraw", async (req, res) => {
+qpaynetRouter.post("/withdraw", moneyLimiter, async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
@@ -542,33 +739,49 @@ qpaynetRouter.post("/withdraw", async (req, res) => {
   const { walletId, amount, description } = req.body as { walletId?: string; amount?: number; description?: string };
   if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
 
-  const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
-  const w = await pool.query(
-    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
-    [walletId, ownerId],
-  );
-  if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
+  const idemKey = req.headers["idempotency-key"] as string | undefined;
+  const cached = await checkIdempotency(ownerId, idemKey, req.body);
+  if (cached && "conflict" in cached) return res.status(409).json({ error: "idempotency_key_body_mismatch" });
+  if (cached) return res.status(cached.status).json(cached.response);
 
-  const tiin = toTiin(amount);
-  const fee = feeFor(tiin);
-  const total = tiin + fee;
-  if (BigInt(w.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+  const pool = getPool();
+  try {
+    const result = await withTx(async (c) => {
+      const w = await c.query(
+        "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+        [walletId, ownerId],
+      );
+      if (!w.rows[0]) throw new HttpError(404, "wallet_not_found");
+      if (w.rows[0].status !== "active") throw new HttpError(400, "wallet_inactive");
 
-  const txId = randomUUID();
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, walletId]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description) VALUES ($1,$2,$3,'withdraw',$4,$5,$6)",
-    [txId, walletId, ownerId, tiin, fee, description ?? "Вывод"],
-  );
+      const tiin = toTiin(amount);
+      const fee = feeFor(tiin);
+      const total = tiin + fee;
+      if (BigInt(w.rows[0].balance) < total) throw new HttpError(400, "insufficient_balance");
 
-  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [walletId]);
-  res.json({ txId, amount, fee: fromTiin(fee), newBalance: fromTiin(BigInt(updated.rows[0].balance)) });
+      const txId = randomUUID();
+      await c.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, walletId]);
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description) VALUES ($1,$2,$3,'withdraw',$4,$5,$6)",
+        [txId, walletId, ownerId, tiin, fee, description ?? "Вывод"],
+      );
+      const updated = await c.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [walletId]);
+      return { txId, fee: fromTiin(fee), newBalance: fromTiin(BigInt(updated.rows[0].balance)) };
+    });
+    void auditLog(pool, ownerId, "withdraw", { walletId, amount, txId: result.txId }, req);
+    const body = { txId: result.txId, amount, fee: result.fee, newBalance: result.newBalance };
+    await saveIdempotency(ownerId, idemKey, req.body, 200, body);
+    res.json(body);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    throw err;
+  }
 });
 
 // ── Transfer ──────────────────────────────────────────────────────────────────
 
-qpaynetRouter.post("/transfer", async (req, res) => {
+qpaynetRouter.post("/transfer", moneyLimiter, async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
@@ -586,8 +799,15 @@ qpaynetRouter.post("/transfer", async (req, res) => {
     return res.status(400).json({ error: "cannot_transfer_to_same_wallet" });
   }
 
-  const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  // Idempotency replay protection.
+  const idemKey = req.headers["idempotency-key"] as string | undefined;
+  const cached = await checkIdempotency(ownerId, idemKey, req.body);
+  if (cached && "conflict" in cached) return res.status(409).json({ error: "idempotency_key_body_mismatch" });
+  if (cached) return res.status(cached.status).json(cached.response);
+
+  const pool = getPool();
 
   // KYC soft enforcement: monthly outgoing > threshold requires verified status.
   await ensureKycTable();
@@ -606,39 +826,65 @@ qpaynetRouter.post("/transfer", async (req, res) => {
     }
   }
 
-  const from = await pool.query(
-    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
-    [fromWalletId, ownerId],
-  );
-  if (!from.rows[0]) return res.status(404).json({ error: "from_wallet_not_found" });
-  if (from.rows[0].status !== "active") return res.status(400).json({ error: "from_wallet_inactive" });
+  try {
+    const result = await withTx(async (c) => {
+      // Lock both wallets in deterministic order to avoid deadlock.
+      const [a, b] = [fromWalletId, toWalletId].sort();
+      const locked = await c.query(
+        "SELECT id, owner_id, balance, status FROM qpaynet_wallets WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        [[a, b]],
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const from = locked.rows.find((r: any) => r.id === fromWalletId && r.owner_id === ownerId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const to = locked.rows.find((r: any) => r.id === toWalletId);
+      if (!from) throw new HttpError(404, "from_wallet_not_found");
+      if (from.status !== "active") throw new HttpError(400, "from_wallet_inactive");
+      if (!to) throw new HttpError(404, "to_wallet_not_found");
 
-  const to = await pool.query("SELECT id, owner_id, status FROM qpaynet_wallets WHERE id=$1", [toWalletId]);
-  if (!to.rows[0]) return res.status(404).json({ error: "to_wallet_not_found" });
+      const tiin = toTiin(amount);
+      const fee = feeFor(tiin);
+      const total = tiin + fee;
+      if (BigInt(from.balance) < total) throw new HttpError(400, "insufficient_balance");
 
-  const tiin = toTiin(amount);
-  const fee = feeFor(tiin);
-  const total = tiin + fee;
-  if (BigInt(from.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+      const txOutId = randomUUID();
+      const txInId  = randomUUID();
+      const desc = description ?? `Перевод → ${toWalletId.slice(0, 8)}`;
 
-  const txOutId = randomUUID();
-  const txInId  = randomUUID();
-  const desc = description ?? `Перевод → ${toWalletId.slice(0, 8)}`;
+      await c.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, fromWalletId]);
+      await c.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, toWalletId]);
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_out',$4,$5,$6,$7)",
+        [txOutId, fromWalletId, ownerId, tiin, fee, desc, txInId],
+      );
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
+        [txInId, toWalletId, to.owner_id, tiin, desc, txOutId],
+      );
 
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, fromWalletId]);
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, toWalletId]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_out',$4,$5,$6,$7)",
-    [txOutId, fromWalletId, ownerId, tiin, fee, desc, txInId],
-  );
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
-    [txInId, toWalletId, to.rows[0].owner_id, tiin, desc, txOutId],
-  );
-
-  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
-  res.json({ txOutId, txInId, amount, fee: fromTiin(fee), newBalance: fromTiin(BigInt(updated.rows[0].balance)) });
+      const updated = await c.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
+      return {
+        txOutId, txInId, amount,
+        fee: fromTiin(fee),
+        newBalance: fromTiin(BigInt(updated.rows[0].balance)),
+        toOwnerId: to.owner_id,
+      };
+    });
+    void auditLog(pool, ownerId, "transfer", { fromWalletId, toWalletId, amount, txOutId: result.txOutId }, req);
+    void notify(pool, result.toOwnerId, "payment_received", `Получено ${amount.toLocaleString("ru-RU")} ₸`, description, result.txInId, toTiin(amount));
+    const responseBody = { txOutId: result.txOutId, txInId: result.txInId, amount, fee: result.fee, newBalance: result.newBalance };
+    await saveIdempotency(ownerId, idemKey, req.body, 200, responseBody);
+    res.json(responseBody);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    throw err;
+  }
 });
+
+// Tiny error class so withTx callbacks can signal HTTP status.
+class HttpError extends Error {
+  constructor(public status: number, public code: string) { super(code); }
+}
 
 // ── Transactions ──────────────────────────────────────────────────────────────
 
@@ -766,7 +1012,7 @@ qpaynetRouter.delete("/merchant/keys/:id", async (req, res) => {
 });
 
 // POST /api/qpaynet/merchant/charge — charge a user wallet via merchant key
-qpaynetRouter.post("/merchant/charge", async (req, res) => {
+qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
   await ensureTables();
   const apiKey = req.headers["x-api-key"] as string | undefined;
   if (!apiKey) return res.status(401).json({ error: "x-api-key header required" });
@@ -789,30 +1035,53 @@ qpaynetRouter.post("/merchant/charge", async (req, res) => {
   const merchantWalletId = mk.rows[0].wallet_id;
   if (merchantWalletId === customerWalletId) return res.status(400).json({ error: "cannot_charge_own_wallet" });
 
-  const tiin = toTiin(amount);
-  const fee = feeFor(tiin);
-  const total = tiin + fee;
+  const idemKey = req.headers["idempotency-key"] as string | undefined;
+  // Idempotency keyed by merchant key id (not user, since this endpoint is key-auth).
+  const cached = await checkIdempotency(`mk:${mk.rows[0].id}`, idemKey, req.body);
+  if (cached && "conflict" in cached) return res.status(409).json({ error: "idempotency_key_body_mismatch" });
+  if (cached) return res.status(cached.status).json(cached.response);
 
-  const from = await pool.query("SELECT balance, status FROM qpaynet_wallets WHERE id=$1", [customerWalletId]);
-  if (!from.rows[0]) return res.status(404).json({ error: "customer_wallet_not_found" });
-  if (BigInt(from.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+  try {
+    const result = await withTx(async (c) => {
+      const [a, b] = [customerWalletId, merchantWalletId].sort();
+      const locked = await c.query(
+        "SELECT id, balance, status FROM qpaynet_wallets WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        [[a, b]],
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const from = locked.rows.find((r: any) => r.id === customerWalletId);
+      if (!from) throw new HttpError(404, "customer_wallet_not_found");
+      if (from.status !== "active") throw new HttpError(400, "customer_wallet_inactive");
 
-  const txOutId = randomUUID();
-  const txInId  = randomUUID();
-  const desc = description ?? "Merchant charge";
+      const tiin = toTiin(amount);
+      const fee = feeFor(tiin);
+      const total = tiin + fee;
+      if (BigInt(from.balance) < total) throw new HttpError(400, "insufficient_balance");
 
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, customerWalletId]);
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, merchantWalletId]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, merchant_id) VALUES ($1,$2,$3,'merchant_charge',$4,$5,$6,$7)",
-    [txOutId, customerWalletId, mk.rows[0].owner_id, tiin, fee, desc, mk.rows[0].id],
-  );
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, merchant_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
-    [txInId, merchantWalletId, mk.rows[0].owner_id, tiin, desc, mk.rows[0].id],
-  );
+      const txOutId = randomUUID();
+      const txInId  = randomUUID();
+      const desc = description ?? "Merchant charge";
 
-  res.json({ ok: true, txId: txOutId, amount, fee: fromTiin(fee) });
+      await c.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, customerWalletId]);
+      await c.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, merchantWalletId]);
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, merchant_id) VALUES ($1,$2,$3,'merchant_charge',$4,$5,$6,$7)",
+        [txOutId, customerWalletId, mk.rows[0].owner_id, tiin, fee, desc, mk.rows[0].id],
+      );
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, merchant_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
+        [txInId, merchantWalletId, mk.rows[0].owner_id, tiin, desc, mk.rows[0].id],
+      );
+      return { txOutId, fee: fromTiin(fee) };
+    });
+    void auditLog(pool, mk.rows[0].owner_id, "merchant_charge", { merchantKeyId: mk.rows[0].id, customerWalletId, amount, txId: result.txOutId }, req);
+    const body = { ok: true, txId: result.txOutId, amount, fee: result.fee };
+    await saveIdempotency(`mk:${mk.rows[0].id}`, idemKey, req.body, 200, body);
+    res.json(body);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    throw err;
+  }
 });
 
 // GET /api/qpaynet/stats
@@ -1080,6 +1349,9 @@ async function ensureRequestsTable(): Promise<void> {
     ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_attempts INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_last_error TEXT;
     ALTER TABLE qpaynet_payment_requests ADD COLUMN IF NOT EXISTS notify_next_retry_at TIMESTAMPTZ;
+    -- Encrypted-at-rest: notify_secret stays as the actual signing key (we MUST
+    -- have it at fire time to compute HMAC). For storage hardening, prefer
+    -- column-level encryption via pgcrypto when available; fallback unchanged.
     CREATE INDEX IF NOT EXISTS idx_qpr_notify_due ON qpaynet_payment_requests (notify_next_retry_at)
       WHERE notify_url IS NOT NULL AND notified_at IS NULL;
   `).catch(() => {});
@@ -1262,7 +1534,7 @@ qpaynetRouter.get("/requests.csv", async (req, res) => {
 });
 
 // GET /api/qpaynet/requests/:token — view request (public, no auth)
-qpaynetRouter.get("/requests/:token", async (req, res) => {
+qpaynetRouter.get("/requests/:token", publicLimiter, async (req, res) => {
   await ensureRequestsTable();
   const pool = getPool();
   const result = await pool.query(
@@ -1287,7 +1559,7 @@ qpaynetRouter.get("/requests/:token", async (req, res) => {
 });
 
 // POST /api/qpaynet/requests/:token/pay — pay a request (auth required)
-qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
+qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
   await ensureTables();
   await ensureRequestsTable();
   const auth = verifyBearerOptional(req);
@@ -1296,53 +1568,86 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
   const { fromWalletId } = req.body as { fromWalletId?: string };
   if (!fromWalletId) return res.status(400).json({ error: "fromWalletId required" });
 
-  const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
+  const idemKey = req.headers["idempotency-key"] as string | undefined;
+  const cached = await checkIdempotency(ownerId, idemKey, req.body);
+  if (cached && "conflict" in cached) return res.status(409).json({ error: "idempotency_key_body_mismatch" });
+  if (cached) return res.status(cached.status).json(cached.response);
 
-  const reqRow = await pool.query(
-    "SELECT id, to_wallet_id, amount, description, status, expires_at, notify_url, notify_secret FROM qpaynet_payment_requests WHERE token=$1",
-    [req.params.token],
-  );
-  const pr = reqRow.rows[0];
-  if (!pr) return res.status(404).json({ error: "request_not_found" });
-  if (pr.status !== "pending") return res.status(400).json({ error: `request_${pr.status}` });
-  if (pr.expires_at && new Date(pr.expires_at) < new Date()) return res.status(400).json({ error: "request_expired" });
-  if (pr.to_wallet_id === fromWalletId) return res.status(400).json({ error: "cannot_pay_own_request" });
+  const pool = getPool();
 
-  const from = await pool.query(
-    "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
-    [fromWalletId, ownerId],
-  );
-  if (!from.rows[0]) return res.status(404).json({ error: "from_wallet_not_found" });
-  if (from.rows[0].status !== "active") return res.status(400).json({ error: "wallet_inactive" });
+  let txOutId: string;
+  let txInId: string;
+  let tiin: bigint;
+  let fee: bigint;
+  let pr: { id: string; description: string; notify_url: string | null; notify_secret: string | null; to_wallet_id: string; recipientOwnerId: string };
+  let newBalance: number;
 
-  const tiin = BigInt(pr.amount);
-  const fee = feeFor(tiin);
-  const total = tiin + fee;
+  try {
+    const result = await withTx(async (c) => {
+      // Lock the payment-request row to prevent double-pay race.
+      const reqRow = await c.query(
+        "SELECT id, to_wallet_id, amount, description, status, expires_at, notify_url, notify_secret FROM qpaynet_payment_requests WHERE token=$1 FOR UPDATE",
+        [req.params.token],
+      );
+      const r = reqRow.rows[0];
+      if (!r) throw new HttpError(404, "request_not_found");
+      if (r.status !== "pending") throw new HttpError(400, `request_${r.status}`);
+      if (r.expires_at && new Date(r.expires_at) < new Date()) throw new HttpError(400, "request_expired");
+      if (r.to_wallet_id === fromWalletId) throw new HttpError(400, "cannot_pay_own_request");
 
-  if (BigInt(from.rows[0].balance) < total) return res.status(400).json({ error: "insufficient_balance" });
+      // Lock both wallets in deterministic order.
+      const [a, b] = [fromWalletId, r.to_wallet_id].sort();
+      const locked = await c.query(
+        "SELECT id, owner_id, balance, status FROM qpaynet_wallets WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        [[a, b]],
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const from = locked.rows.find((x: any) => x.id === fromWalletId && x.owner_id === ownerId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const to = locked.rows.find((x: any) => x.id === r.to_wallet_id);
+      if (!from) throw new HttpError(404, "from_wallet_not_found");
+      if (from.status !== "active") throw new HttpError(400, "wallet_inactive");
+      if (!to) throw new HttpError(404, "to_wallet_not_found");
 
-  const txOutId = randomUUID();
-  const txInId  = randomUUID();
-  const desc = `Оплата запроса: ${pr.description}`;
+      const tiinL = BigInt(r.amount);
+      const feeL = feeFor(tiinL);
+      const total = tiinL + feeL;
+      if (BigInt(from.balance) < total) throw new HttpError(400, "insufficient_balance");
 
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, fromWalletId]);
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, pr.to_wallet_id]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_out',$4,$5,$6,$7)",
-    [txOutId, fromWalletId, ownerId, tiin, fee, desc, txInId],
-  );
-  const toWallet = await pool.query("SELECT owner_id FROM qpaynet_wallets WHERE id=$1", [pr.to_wallet_id]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
-    [txInId, pr.to_wallet_id, toWallet.rows[0]?.owner_id ?? "unknown", tiin, desc, txOutId],
-  );
-  await pool.query(
-    "UPDATE qpaynet_payment_requests SET status='paid', paid_by=$1, paid_tx_id=$2, paid_at=NOW() WHERE id=$3",
-    [fromWalletId, txOutId, pr.id],
-  );
+      const txOut = randomUUID();
+      const txIn  = randomUUID();
+      const desc = `Оплата запроса: ${r.description}`;
 
-  const updated = await pool.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
+      await c.query("UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2", [total, fromWalletId]);
+      await c.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiinL, r.to_wallet_id]);
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, fee, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_out',$4,$5,$6,$7)",
+        [txOut, fromWalletId, ownerId, tiinL, feeL, desc, txIn],
+      );
+      await c.query(
+        "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id) VALUES ($1,$2,$3,'transfer_in',$4,$5,$6)",
+        [txIn, r.to_wallet_id, to.owner_id, tiinL, desc, txOut],
+      );
+      await c.query(
+        "UPDATE qpaynet_payment_requests SET status='paid', paid_by=$1, paid_tx_id=$2, paid_at=NOW() WHERE id=$3",
+        [fromWalletId, txOut, r.id],
+      );
+      const upd = await c.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [fromWalletId]);
+      return {
+        txOutId: txOut, txInId: txIn,
+        tiin: tiinL, fee: feeL,
+        pr: { id: r.id, description: r.description, notify_url: r.notify_url, notify_secret: r.notify_secret, to_wallet_id: r.to_wallet_id, recipientOwnerId: to.owner_id },
+        newBalance: fromTiin(BigInt(upd.rows[0].balance)),
+      };
+    });
+    ({ txOutId, txInId, tiin, fee, pr, newBalance } = result);
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    throw err;
+  }
+
+  void auditLog(pool, ownerId, "request_pay", { requestId: pr.id, fromWalletId, toWalletId: pr.to_wallet_id, txOutId }, req);
 
   // Async webhook with retry queue (handled by background worker on failure).
   const payload = {
@@ -1357,13 +1662,10 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
     paidTxId: txOutId,
     paidAt: new Date().toISOString(),
   };
-  // Fan out to recipient owner's generic webhook subscriptions (set-once).
-  const recipientOwnerId = toWallet.rows[0]?.owner_id;
-  if (recipientOwnerId) {
-    void fanOutToOwner(pool, recipientOwnerId, "payment_request.paid", payload);
-    // In-app notification for the recipient.
+  if (pr.recipientOwnerId) {
+    void fanOutToOwner(pool, pr.recipientOwnerId, "payment_request.paid", payload);
     void notify(
-      pool, recipientOwnerId, "payment_received",
+      pool, pr.recipientOwnerId, "payment_received",
       `Получено ${fromTiin(tiin).toLocaleString("ru-RU")} ₸`,
       pr.description, pr.id, tiin,
     );
@@ -1385,11 +1687,9 @@ qpaynetRouter.post("/requests/:token/pay", async (req, res) => {
     }).catch(() => {});
   }
 
-  res.json({
-    ok: true, txId: txOutId,
-    amount: fromTiin(tiin), fee: fromTiin(fee),
-    newBalance: fromTiin(BigInt(updated.rows[0].balance)),
-  });
+  const responseBody = { ok: true, txId: txOutId, txInId, amount: fromTiin(tiin), fee: fromTiin(fee), newBalance };
+  await saveIdempotency(ownerId, idemKey, req.body, 200, responseBody);
+  res.json(responseBody);
 });
 
 // DELETE /api/qpaynet/requests/:id — cancel request (owner only)
@@ -1593,7 +1893,7 @@ qpaynetRouter.get("/deposit/checkout/:id", async (req, res) => {
 // external ref. Manual rail until partnership is signed.
 
 // POST /api/qpaynet/payouts — request payout
-qpaynetRouter.post("/payouts", async (req, res) => {
+qpaynetRouter.post("/payouts", moneyLimiter, async (req, res) => {
   await ensureTables();
   await ensurePayoutsTable();
   const auth = verifyBearerOptional(req);
@@ -1967,7 +2267,8 @@ qpaynetRouter.get("/me/dashboard", async (req, res) => {
       netKzt: fromTiin(BigInt(monthFlow.rows[0]?.in_amount ?? 0) - BigInt(monthFlow.rows[0]?.out_amount ?? 0)),
       txCount: Number(monthFlow.rows[0]?.tx_count ?? 0),
     },
-    last7days: daily7.rows.map((r) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    last7days: daily7.rows.map((r: any) => ({
       day: new Date(r.day).toISOString().slice(0, 10),
       inKzt: fromTiin(BigInt(r.in_amount)),
       outKzt: fromTiin(BigInt(r.out_amount)),
@@ -1980,6 +2281,23 @@ qpaynetRouter.get("/me/dashboard", async (req, res) => {
     payouts: payoutsByStatus,
     unreadNotifications: Number(unread.rows[0]?.n ?? 0),
   });
+});
+
+// GET /api/qpaynet/me/audit — owner audit log (immutable trail for compliance)
+qpaynetRouter.get("/me/audit", authLimiter, async (req, res) => {
+  await ensureAuditTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+  const r = await pool.query(
+    `SELECT id, action, details, ip, user_agent, created_at FROM qpaynet_audit_log
+     WHERE owner_id=$1 ORDER BY created_at DESC LIMIT $2`,
+    [ownerId, limit],
+  );
+  res.json({ events: r.rows });
 });
 
 // GET /api/qpaynet/health — lightweight liveness check for hub monitor
@@ -2051,8 +2369,9 @@ async function runRetryTick(): Promise<void> {
 export function startQpaynetRetryWorker(): void {
   if (retryWorkerStarted) return;
   retryWorkerStarted = true;
+  startIdempotencyGc();
   // Skip in test env unless explicitly enabled.
   if (process.env.NODE_ENV === "test" && process.env.QPAYNET_RETRY_IN_TEST !== "1") return;
   setInterval(() => { void runRetryTick(); }, RETRY_INTERVAL_MS).unref();
-  console.log(`[qpaynet] retry worker started (interval ${RETRY_INTERVAL_MS}ms, batch ${RETRY_BATCH})`);
+  console.log(`[qpaynet] retry worker + idempotency GC started`);
 }

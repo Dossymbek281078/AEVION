@@ -844,9 +844,32 @@ bureauRouter.get("/dashboard", async (req, res) => {
         LIMIT 20`,
       [user.userId],
     );
+    const { rows: trustEdges } = await pool.query(
+      `SELECT "id","certId","tier","aecRewardPlanned","aecRewardClaimedAt","createdAt"
+         FROM "BureauTrustEdge"
+        WHERE "userId" = $1
+        ORDER BY "createdAt" DESC
+        LIMIT 200`,
+      [user.userId],
+    );
+    const aecSummary = trustEdges.reduce(
+      (acc: { totalPlanned: number; totalClaimed: number; unclaimed: number }, e: { aecRewardPlanned: number | null; aecRewardClaimedAt: string | null }) => {
+        const planned = e.aecRewardPlanned || 0;
+        acc.totalPlanned += planned;
+        if (e.aecRewardClaimedAt) {
+          acc.totalClaimed += planned;
+        } else {
+          acc.unclaimed += planned;
+        }
+        return acc;
+      },
+      { totalPlanned: 0, totalClaimed: 0, unclaimed: 0 },
+    );
     res.json({
       certificates: certs,
       verifications,
+      trustEdges,
+      aecSummary,
       pricing: {
         verifiedTierCents: getVerifiedTierPriceCents(),
         currency: getVerifiedTierCurrency(),

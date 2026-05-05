@@ -144,18 +144,33 @@ export function useBoardInput(opts: BoardInputOptions) {
   }, []);
 
   // ── Ghost helpers ────────────────────────────────────────────────────────
+  // On touch, the user's finger covers the dragged piece. Lift the ghost ~60px
+  // above the touch point so the piece is always visible.
   const flushGhostPos = useCallback(() => {
     ghostRafRef.current = null;
     const el = ghostRef.current;
     if (!el) return;
     const { x, y } = ghostPosRef.current;
-    el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
+    const isTouch = dragRef.current?.ptype === "touch";
+    const dy = isTouch ? -60 : 0;
+    el.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
   }, []);
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
     ghostPosRef.current = { x, y };
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";
+    // Force-flush an initial position immediately so the ghost doesn't appear
+    // for one frame at (0,0) before the first RAF runs. Wait one RAF for the
+    // ref to be attached, then write the transform.
+    requestAnimationFrame(() => {
+      const el = ghostRef.current;
+      if (!el) return;
+      const { x: gx, y: gy } = ghostPosRef.current;
+      const isTouch = dragRef.current?.ptype === "touch";
+      const off = isTouch ? -60 : 0;
+      el.style.transform = `translate3d(${gx}px,${gy + off}px,0) translate(-50%,-50%)`;
+    });
   }, []);
 
   const hideGhost = useCallback(() => {

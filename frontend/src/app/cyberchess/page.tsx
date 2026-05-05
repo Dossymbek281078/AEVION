@@ -3556,39 +3556,8 @@ export default function CyberChessPage(){
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
 
-          {/* ── TOP STRIP above board: premove queue + (vs-computer only) recent moves
-                + analysis best line. P2P shows only premoves to keep play surface clean. */}
-          {(tab==="play"||tab==="coach")&&(pms.length>0||(!p2pMode&&hist.length>0))&&<div
-            style={{width:"min(920px,calc(100vw - 32px))",marginBottom:6,display:"flex",flexDirection:"column",gap:6}}>
-            {/* Premove row — shown in any mode while a premove is queued */}
-            {pms.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:8,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",border:"1px solid #bfdbfe",flexWrap:"wrap"}}>
-              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>Премувы · {pms.length}</span>
-              {pms.map((pm,i)=>(<span key={`pm-strip-${i}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
-                <span style={{minWidth:14,height:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900}}>{i+1}</span>
-                {pm.from}→{pm.to}
-              </span>))}
-              <span style={{flex:1}}/>
-              <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title="Отменить последний премув"
-                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶ Undo</button>
-              <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
-                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Clear</button>
-            </div>}
-            {/* Recent moves — vs computer / coach only. P2P hides this to focus on play. */}
-            {!p2pMode&&hist.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",borderRadius:8,background:CC.surface1,border:`1px solid ${CC.border}`,overflowX:"auto",scrollbarWidth:"thin"}}
-              className="cc-no-scrollbar">
-              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:CC.textDim,flexShrink:0}}>Ходы</span>
-              {hist.slice(Math.max(0,hist.length-12)).map((san,i)=>{
-                const realIdx=Math.max(0,hist.length-12)+i;
-                const isLast=realIdx===hist.length-1;
-                const moveNum=Math.floor(realIdx/2)+1;
-                const isWhite=realIdx%2===0;
-                return <span key={`top-mv-${realIdx}`} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",borderRadius:6,background:isLast?"rgba(5,150,105,0.15)":"transparent",border:isLast?`1px solid ${CC.accent}`:"1px solid transparent",fontSize:12,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:CC.text,fontWeight:isLast?900:600,flexShrink:0}}>
-                  {isWhite&&<span style={{color:CC.textMute,fontSize:10,fontWeight:700}}>{moveNum}.</span>}
-                  {san}
-                </span>;
-              })}
-            </div>}
-          </div>}
+          {/* Recent-moves chip-row removed — list lives in the right panel.
+              The premove queue moved to the TOP of that move list (right panel). */}
 
           <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px))",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
@@ -4651,6 +4620,19 @@ export default function CyberChessPage(){
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Analyzing…</div>}
 
           <div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            {/* Premove queue — sits ABOVE the move list so the user can see what's queued. */}
+            {pms.length>0&&(tab==="play"||tab==="coach")&&<div style={{padding:"7px 10px",borderBottom:`1px solid #bfdbfe`,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>Премувы · {pms.length}</span>
+              {pms.map((pm,i)=>(<span key={`pm-rp-${i}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
+                <span style={{minWidth:14,height:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900}}>{i+1}</span>
+                {pm.from}→{pm.to}
+              </span>))}
+              <span style={{flex:1}}/>
+              <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title="Отменить последний премув"
+                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶</button>
+              <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
+                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕</button>
+            </div>}
             <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:6}}>
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2}}/>

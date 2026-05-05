@@ -61,18 +61,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Pull employer IDs from the leaderboard endpoint — that's a public,
   // already-curated list of brand-name profiles worth indexing. Capped
   // server-side at 20+20, so cheap to fetch.
-  const [origin, projectIds, vacancyIds, employerLeaderboard] = await Promise.all([
+  const [origin, projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
     getOrigin(),
     fetchIds("/api/build/projects?limit=500&status=OPEN"),
     fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
     fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })
       .then((r) => (r.ok ? r.json() : { data: { employers: [] } }))
       .catch(() => ({ data: { employers: [] } })),
+    fetch(`${getApiBase()}/api/build/vacancies/skills/popular`, { next: { revalidate: 3600 } })
+      .then((r) => (r.ok ? r.json() : { data: { items: [] } }))
+      .catch(() => ({ data: { items: [] } })),
   ]);
 
   const employerIds: string[] = ((employerLeaderboard?.data?.employers ?? []) as { userId: string }[])
     .map((e) => e.userId)
     .filter(Boolean);
+
+  const skillSlugs: string[] = ((popularSkills?.data?.items ?? []) as { skill: string }[])
+    .map((s) => s.skill?.trim())
+    .filter((s): s is string => !!s)
+    .slice(0, 50)
+    .map((s) => s.toLowerCase().replace(/\s+/g, "-"));
 
   const today = new Date();
   const staticRoutes: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map((r) => ({
@@ -100,9 +109,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
+  const skillRoutes: MetadataRoute.Sitemap = skillSlugs.map((slug) => ({
+    url: `${origin}/build/skill/${slug}`,
+    changeFrequency: "daily" as const,
+    priority: 0.7,
+  }));
+
   // Cap total at 5000 so the sitemap stays valid (Google limit is 50k but
   // we prefer multiple smaller files long-term — single sitemap is enough
   // for now).
-  const all = [...staticRoutes, ...vacancyRoutes, ...projectRoutes, ...employerRoutes];
+  const all = [...staticRoutes, ...skillRoutes, ...vacancyRoutes, ...projectRoutes, ...employerRoutes];
   return all.slice(0, 5000);
 }

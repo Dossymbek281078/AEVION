@@ -7,6 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { getDeviceId } from "@/lib/aevApi";
 
 type Certificate = {
   id: string;
@@ -62,6 +63,15 @@ type DashboardData = {
     createdAt: string;
     completedAt: string | null;
   }>;
+  trustEdges?: Array<{
+    id: string;
+    certId: string;
+    tier: string;
+    aecRewardPlanned: number | null;
+    aecRewardClaimedAt: string | null;
+    createdAt: string;
+  }>;
+  aecSummary?: { totalPlanned: number; totalClaimed: number; unclaimed: number };
   pricing: { verifiedTierCents: number; currency: string };
 };
 
@@ -123,6 +133,32 @@ export default function BureauPage() {
     showToast("You're on the waitlist!", "success");
   };
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [claimingEdgeId, setClaimingEdgeId] = useState<string | null>(null);
+
+  const claimAec = async (edgeId: string) => {
+    setClaimingEdgeId(edgeId);
+    try {
+      const deviceId = getDeviceId();
+      const r = await fetch(apiUrl(`/api/bureau/trust-edges/${edgeId}/claim-aec`), {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ deviceId }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        showToast(j?.error || `claim failed (${r.status})`, "error");
+        return;
+      }
+      showToast(`Claimed ${j.amount} AEC`, "success");
+      // Refetch dashboard so the row flips to "claimed".
+      const dr = await fetch(apiUrl("/api/bureau/dashboard"), { headers: authHeaders() });
+      if (dr.ok) setDashboard((await dr.json()) as DashboardData);
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setClaimingEdgeId(null);
+    }
+  };
 
   const authHeaders = (): HeadersInit => {
     try {
@@ -307,6 +343,57 @@ export default function BureauPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Trust Graph (authed users with at least one earned edge) ── */}
+        {authed && dashboard?.trustEdges && dashboard.trustEdges.length > 0 && (
+          <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(217,119,6,0.25)", background: "linear-gradient(135deg, rgba(245,158,11,0.04), rgba(217,119,6,0.06))", padding: "18px 22px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#92400e" }}>
+                🔗 Trust Graph — your earned tiers
+              </div>
+              {dashboard.aecSummary && (
+                <div style={{ fontSize: 12, color: "#78350f" }}>
+                  Total earned <b>{dashboard.aecSummary.totalPlanned}</b> AEC ·
+                  claimed <b>{dashboard.aecSummary.totalClaimed}</b> ·
+                  unclaimed <b style={{ color: dashboard.aecSummary.unclaimed > 0 ? "#b45309" : "#78350f" }}>{dashboard.aecSummary.unclaimed}</b>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {dashboard.trustEdges.map((e) => {
+                const claimed = !!e.aecRewardClaimedAt;
+                const claimable = !claimed && (e.aecRewardPlanned ?? 0) > 0;
+                const isClaiming = claimingEdgeId === e.id;
+                return (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.7)", border: "1px solid rgba(217,119,6,0.15)" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "#92400e", textTransform: "capitalize" }}>{e.tier}</span>
+                      <span style={{ fontSize: 11, color: "#78716c", fontFamily: "ui-monospace, monospace" }}>cert {e.certId.slice(0, 8)}…</span>
+                      <span style={{ fontSize: 11, color: "#a8a29e" }}>{new Date(e.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>{e.aecRewardPlanned ?? 0} AEC</span>
+                      {claimed ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ claimed</span>
+                      ) : claimable ? (
+                        <button
+                          type="button"
+                          disabled={isClaiming}
+                          onClick={() => claimAec(e.id)}
+                          style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: isClaiming ? "#a8a29e" : "linear-gradient(135deg, #d97706, #ea580c)", color: "#fff", fontWeight: 800, fontSize: 12, cursor: isClaiming ? "default" : "pointer" }}
+                        >
+                          {isClaiming ? "Claiming…" : "Claim AEC"}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, color: "#a8a29e" }}>no reward</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

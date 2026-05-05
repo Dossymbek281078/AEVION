@@ -99,3 +99,17 @@ export function decryptSecret(stored: string | null | undefined): string | null 
   const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
   return pt.toString("utf8");
 }
+
+/**
+ * True if the value is non-null plaintext that should be migrated to encrypted
+ * (i.e. encryption is enabled AND value lacks the `enc:v1:` prefix).
+ *
+ * Use at read sites: if needsEncryption() → write back encrypted version.
+ * This implements lazy migration: rows added before QPAYNET_ENCRYPTION_KEY
+ * existed get rotated as they're touched, no big-bang script needed.
+ */
+export function needsEncryption(stored: string | null | undefined): boolean {
+  if (stored === null || stored === undefined || stored === "") return false;
+  if (stored.startsWith(PREFIX)) return false;
+  return isEncryptionEnabled();
+}

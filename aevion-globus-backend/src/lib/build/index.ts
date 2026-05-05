@@ -658,7 +658,11 @@ async function _doEnsureBuildTables(): Promise<void> {
 export const buildPool = pool;
 
 export const PROJECT_STATUSES = ["OPEN", "IN_PROGRESS", "DONE"] as const;
-export const VACANCY_STATUSES = ["OPEN", "CLOSED"] as const;
+// ARCHIVED is "closed and hidden" — owner explicitly hides the vacancy from
+// public feeds (RSS, partner API, /build/vacancies, employer page) but keeps
+// the row + its application history for analytics. Republish moves it back
+// to OPEN and resets expiry.
+export const VACANCY_STATUSES = ["OPEN", "CLOSED", "ARCHIVED"] as const;
 export const APPLICATION_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
 export const BUILD_ROLES = ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"] as const;
 export const SHIFT_PREFERENCES = ["DAY", "NIGHT", "FLEX", "ANY"] as const;

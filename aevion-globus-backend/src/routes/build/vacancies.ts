@@ -105,6 +105,11 @@ vacanciesRouter.get("/", async (req, res) => {
       const v = vEnum(req.query.status, "status", VACANCY_STATUSES);
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value); where.push(`v."status" = $${params.length}`);
+    } else {
+      // Default behavior: exclude ARCHIVED from the public feed. Recruiters
+      // can still see their own archived vacancies via the dashboard endpoint
+      // (mine/funnel) which doesn't filter by status.
+      where.push(`v."status" <> 'ARCHIVED'`);
     }
     if (typeof req.query.projectStatus === "string") {
       const v = vEnum(req.query.projectStatus, "projectStatus", PROJECT_STATUSES);

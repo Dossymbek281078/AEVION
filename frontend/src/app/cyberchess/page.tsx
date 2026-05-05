@@ -469,7 +469,7 @@ export default function CyberChessPage(){
   const[setup,sSetup]=useState(true);
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
-  const[coachAIEnabled,sCoachAIEnabled]=useState(true);
+  const[coachAIEnabled,sCoachAIEnabled]=useState(false);  // default off — user opts in via 🔮 button
   const[showKnowledge,sShowKnowledge]=useState(false);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
@@ -512,7 +512,9 @@ export default function CyberChessPage(){
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
-  const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush">("learn");
+  const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
+  const[pzCustomSec,sPzCustomSec]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_pz_custom_sec_v1")||"600");return isNaN(v)||v<30||v>3600?600:v}catch{return 600}});
+  useEffect(()=>{try{localStorage.setItem("aevion_pz_custom_sec_v1",String(pzCustomSec))}catch{}},[pzCustomSec]);
   const[pzTimeLeft,sPzTimeLeft]=useState(0);
   const[pzAttempt,sPzAttempt]=useState<"idle"|"wrong"|"correct"|"shown">("idle");
   const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
@@ -1230,7 +1232,7 @@ export default function CyberChessPage(){
                   sRushScore(s=>s+1);
                   sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
-                }else if(pzMode==="timed3"||pzMode==="timed5"){
+                }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
                   sPzTimeLeft(v=>v+bonus);
                   showToast(`✓ +${bonus}с`,"success");
@@ -2420,6 +2422,7 @@ export default function CyberChessPage(){
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
+    else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
     else sPzTimeLeft(0);
     showToast(`${pz.name} · ${pz.theme} · ${pz.r}`,"info")};
 
@@ -2479,11 +2482,12 @@ export default function CyberChessPage(){
   // Sync timer to current mode (fires on mode switch, even mid-puzzle)
   useEffect(()=>{
     if(tab!=="puzzles")return;
-    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false)}
-    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false)}
+    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false);showToast("⏱ Режим 3 минуты — таймер пошёл","info")}
+    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false);showToast("⏱ Режим 5 минут — таймер пошёл","info")}
+    else if(pzMode==="custom"){sPzTimeLeft(pzCustomSec);sRushActive(false);showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
     else if(pzMode==="rush"){sPzTimeLeft(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
     else {sPzTimeLeft(0);sRushActive(false)}
-  },[pzMode,tab,rushDuration]);
+  },[pzMode,tab,rushDuration,pzCustomSec]);
 
   // Rush end-of-session detection — fire only once per session
   useEffect(()=>{
@@ -2525,6 +2529,7 @@ export default function CyberChessPage(){
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
+    else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
     else sPzTimeLeft(0);
   },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab]);
 
@@ -2876,8 +2881,10 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Identity tab nav — pill-bar с цветовыми маркерами раздела */}
-      {!streamerMode&&(()=>{
+      {/* Identity tab nav — pill-bar с цветовыми маркерами раздела.
+          Скрыт во время активной игры/решения пазла (юзер: «лишние кнопки сверху»).
+          Группировка по смыслу: Игра | Тренировка (Задачи + Коуч) | Анализ. */}
+      {!streamerMode&&!on&&!pzCurrent&&!scratchOn&&(()=>{
         const switchTab=(t:"play"|"puzzles"|"analysis"|"coach")=>{
           const fromPuzzle=tab==="puzzles"&&pzCurrent;
           sTab(t);
@@ -2890,11 +2897,14 @@ export default function CyberChessPage(){
             const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
           }
         };
+        const sep=()=><div style={{width:1,height:22,background:CC.border,margin:"0 4px",alignSelf:"center"}}/>;
         return <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             <SymTab sym={SYM.play}     active={tab==="play"}     onClick={()=>switchTab("play")}/>
+            {sep()}
             <SymTab sym={SYM.puzzle}   active={tab==="puzzles"}  onClick={()=>switchTab("puzzles")} count={PUZZLES.length}/>
             <SymTab sym={SYM.coach}    active={tab==="coach"}    onClick={()=>switchTab("coach")}/>
+            {sep()}
             <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
           </div>
           <div style={{flex:1}}/>
@@ -4813,9 +4823,9 @@ export default function CyberChessPage(){
 
             {/* ── Mode Selector ── */}
             <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":""}/>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
+                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Custom"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
                   return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
                     style={{padding:"8px 4px",borderRadius:RADIUS.md,
@@ -4829,6 +4839,25 @@ export default function CyberChessPage(){
                   </button>;
                 })}
               </div>
+              {/* Custom duration input — пресеты + произвольное число секунд (любой контроль). */}
+              {pzMode==="custom"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность · любой контроль</div>
+                <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
+                  {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
+                    const active=pzCustomSec===sec;
+                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);sPzTimeLeft(sec);showToast(`Custom ${label}`,"info")}}
+                      style={{padding:"5px 10px",borderRadius:RADIUS.sm,
+                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
+                        fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
+                  })}
+                  <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
+                  <input type="number" min={30} max={3600} step={30}
+                    value={pzCustomSec}
+                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
+                    style={{width:78,padding:"5px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12,fontFamily:"ui-monospace,monospace",fontWeight:800,color:CC.text,background:CC.surface1}}/>
+                </div>
+              </div>}
               {/* Rush duration selector — виден только когда выбран Rush */}
               {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>

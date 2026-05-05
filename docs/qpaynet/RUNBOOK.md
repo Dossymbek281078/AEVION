@@ -291,8 +291,12 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Postgres backup automation | partial — `scripts/qpaynet-backup.mjs` exists; cron not wired | — |
 | Reconciliation endpoint | done — `GET /api/qpaynet/admin/reconcile` + `scripts/qpaynet-reconcile.mjs` | — |
 | Reconciliation cron + paging | open — wire 15min cron → `scripts/qpaynet-reconcile.mjs` exit-code → ALERT_URL | — |
-| Refunds API | done — `POST /api/qpaynet/admin/refund` (idempotent, audit-logged, accounted in reconcile) | — |
+| Refunds API | done — `POST /admin/refund` (idempotent via Idempotency-Key + ref_tx_id, audit-logged, accounted in reconcile) | — |
+| Refund history | done — `GET /admin/refunds` (cursor-paginated) | — |
 | Soft-freeze API | done — `/admin/wallets/:id/{freeze,unfreeze}` (status='frozen' rejected by all money paths) | — |
+| Merchant webhook delivery durability | done — `qpaynet_webhook_deliveries` queue + retry tick; `/admin/webhook-deliveries` for ops | — |
+| At-rest encryption: lazy migration | done — needsEncryption() check at read sites encrypts plaintext rows in-place when env-key is enabled | — |
+| /health degrade signal | done — pool waiting > 0 OR stuck deliveries > 50 → status=degraded | — |
 | ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |
 | Per-tier money limits | open — currently 30/min hardcoded; merchant integrations need bumps | — |
 

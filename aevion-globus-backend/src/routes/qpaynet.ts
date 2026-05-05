@@ -867,7 +867,67 @@ qpaynetRouter.post("/kyc/submit", async (req, res) => {
        rejected_reason = NULL`,
     [ownerId, status, fullName.trim().slice(0, 200), iin, address?.trim().slice(0, 500) ?? null, KYC_AUTO_VERIFY ? new Date() : null],
   );
+  if (status === "verified") {
+    void notify(pool, ownerId, "kyc_verified", "KYC верифицирован", "Месячный лимит снят. Все суммы доступны.");
+  }
   res.json({ ok: true, status, autoVerified: KYC_AUTO_VERIFY });
+});
+
+// POST /api/qpaynet/admin/kyc/:ownerId/verify — admin manually verifies KYC
+qpaynetRouter.post("/admin/kyc/:ownerId/verify", async (req, res) => {
+  await ensureKycTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_kyc SET status='verified', verified_at=NOW(), rejected_at=NULL, rejected_reason=NULL WHERE owner_id=$1 AND status='pending' RETURNING owner_id",
+    [req.params.ownerId],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_not_pending" });
+  void notify(pool, req.params.ownerId, "kyc_verified", "KYC верифицирован", "Месячный лимит снят. Все суммы доступны.");
+  res.json({ ok: true });
+});
+
+// POST /api/qpaynet/admin/kyc/:ownerId/reject — admin rejects KYC
+qpaynetRouter.post("/admin/kyc/:ownerId/reject", async (req, res) => {
+  await ensureKycTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const reason = (req.body as { reason?: string }).reason ?? "";
+  if (!reason.trim()) return res.status(400).json({ error: "reason_required" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_kyc SET status='rejected', rejected_at=NOW(), rejected_reason=$1 WHERE owner_id=$2 AND status='pending' RETURNING owner_id",
+    [reason.trim().slice(0, 500), req.params.ownerId],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_not_pending" });
+  res.json({ ok: true });
+});
+
+// GET /api/qpaynet/admin/kyc — admin lists pending KYC submissions
+qpaynetRouter.get("/admin/kyc", async (req, res) => {
+  await ensureKycTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  const status = req.query.status as string | undefined;
+  const params: unknown[] = [];
+  let where = "1=1";
+  if (status) { params.push(status); where = `status=$${params.length}`; }
+  const r = await pool.query(
+    `SELECT owner_id, status, full_name, iin, address, submitted_at, verified_at, rejected_at, rejected_reason
+     FROM qpaynet_kyc WHERE ${where}
+     ORDER BY (status='pending') DESC, submitted_at DESC LIMIT 200`,
+    params,
+  );
+  res.json({ submissions: r.rows });
 });
 
 // GET /api/qpaynet/kyc/status

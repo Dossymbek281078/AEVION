@@ -115,6 +115,7 @@ export default function AdminPayoutsPage() {
           <span className="text-slate-600">·</span>
           <h1 className="text-sm font-bold">⚙ Admin · Payouts</h1>
         </div>
+        <Link href="/qpaynet/admin/kyc" className="text-xs text-slate-400 hover:text-white">KYC →</Link>
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-6 space-y-5">

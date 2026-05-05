@@ -1063,7 +1063,7 @@ export const buildApi = {
     call<{ available: boolean; availableNow?: boolean; skills: string[]; city: string | null; availableUntil?: string | null }>("GET", "/api/build/workers/my-availability"),
   myShifts: () =>
     call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>("GET", "/api/build/shifts/me"),
-  shiftCheckin: (shiftId: string, lat?: number, lng?: number) =>
+  shiftCheckin: (shiftId: string, lat?: number | null, lng?: number | null) =>
     call<{ checkedIn: boolean }>("POST", `/api/build/shifts/${shiftId}/checkin`, { lat, lng }),
   shiftCheckout: (shiftId: string, lat?: number, lng?: number) =>
     call<{ checkedOut: boolean }>("POST", `/api/build/shifts/${shiftId}/checkout`, { lat, lng }),

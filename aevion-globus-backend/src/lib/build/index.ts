@@ -274,6 +274,21 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyTemplate_owner_idx" ON "BuildVacancyTemplate" ("ownerUserId", "createdAt" DESC);`);
 
+  // BuildBulkTemplate: recruiter-saved message templates for bulk DMs.
+  // When a recruiter writes "Спасибо за отклик, мы свяжемся в течение 48
+  // часов" the same way 50 times, this lets them save it once and reuse.
+  // Per-user; max 30 enforced in the route.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildBulkTemplate" (
+      "id" TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildBulkTemplate_owner_idx" ON "BuildBulkTemplate" ("ownerUserId", "createdAt" DESC);`);
+
   // BuildNotifPrefs: per-user opt-in/out for QBuild emails.
   // jobAlerts — new vacancy alerts for talent (also gated by BuildJobAlert.active).
   // applicationEmail — recruiter-side: notify on new application to my vacancies.

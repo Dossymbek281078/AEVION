@@ -188,10 +188,10 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
     if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
 
     const rows = await pool.query(
-      `SELECT a."id", a."status", a."createdAt", a."message", a."rejectReason",
+      `SELECT a."id", a."status", a."labelKey", a."createdAt", a."message", a."rejectReason",
               a."aiScoreOverall", a."matchScore",
               u."name" AS "applicantName", u."email" AS "applicantEmail",
-              p."title" AS "profileTitle", p."city", p."experienceYears"
+              p."title" AS "profileTitle", p."city", p."experienceYears", p."skillsJson"
        FROM "BuildApplication" a
        JOIN "AEVIONUser" u ON u."id" = a."userId"
        LEFT JOIN "BuildProfile" p ON p."userId" = a."userId"
@@ -200,10 +200,14 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
       [id],
     );
 
-    const header = ["id", "status", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "aiScore", "matchScore", "message", "rejectReason"].join(",");
+    const header = ["id", "status", "label", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "skills", "aiScore", "matchScore", "message", "rejectReason"].join(",");
     const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const skillsList = (j: unknown) => {
+      if (typeof j !== "string") return "";
+      try { return (JSON.parse(j) as string[]).join("; "); } catch { return ""; }
+    };
     const body = rows.rows.map((r: Record<string, unknown>) =>
-      [r.id, r.status, r.createdAt, r.applicantName, r.applicantEmail, r.city, r.experienceYears, r.profileTitle, r.aiScoreOverall, r.matchScore, r.message, r.rejectReason]
+      [r.id, r.status, r.labelKey, r.createdAt, r.applicantName, r.applicantEmail, r.city, r.experienceYears, r.profileTitle, skillsList(r.skillsJson), r.aiScoreOverall, r.matchScore, r.message, r.rejectReason]
         .map(escape)
         .join(","),
     ).join("\n");

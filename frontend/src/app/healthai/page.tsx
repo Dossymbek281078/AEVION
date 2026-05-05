@@ -1834,6 +1834,20 @@ export default function HealthAIPage() {
               >
                 {t("btn_export_json", lang)}
               </a>
+              <a
+                href="/healthai/screener"
+                style={{
+                  ...primaryBtn,
+                  background: "rgba(139,92,246,0.18)",
+                  borderColor: "rgba(139,92,246,0.45)",
+                  color: "#c4b5fd",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                🧠 {lang === "en" ? "Mental Health Screener" : "Психологический скрининг"}
+              </a>
             </div>
           </Card>
         ) : null}

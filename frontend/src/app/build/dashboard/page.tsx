@@ -6,6 +6,7 @@ import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useToast } from "@/components/build/Toast";
 import { rowsToCsv, downloadCsv } from "@/lib/build/csv";
+import { SavedSearchAlerts } from "@/components/build/SavedSearchAlerts";
 
 type Row = Awaited<ReturnType<typeof buildApi.myVacanciesFunnel>>["items"][number];
 
@@ -92,6 +93,8 @@ function Body() {
           </Link>
         </div>
       </header>
+
+      <SavedSearchAlerts />
 
       {items && <ClosingSoonBanner items={items} onChanged={() => {
         buildApi.myVacanciesFunnel().then((r) => setItems(r.items)).catch(() => {});

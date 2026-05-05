@@ -187,6 +187,8 @@ export type BuildApplication = {
   vacancyStatus?: VacancyStatus;
   vacancyExpiresAt?: string | null;
   labelKey?: ApplicationLabel | null;
+  sourceTag?: string | null;
+  aiWhyMatch?: string | null;
 };
 
 export type ApplicationLabel = "SHORTLIST" | "INTERVIEW" | "HOLD" | "TOP_PICK";
@@ -537,6 +539,8 @@ export const buildApi = {
     q?: string;
     city?: string;
     minSalary?: number;
+    maxSalary?: number;
+    currency?: string;
     skill?: string;
     sort?: "recent" | "salary" | "popular";
     limit?: number;
@@ -547,6 +551,8 @@ export const buildApi = {
     if (q?.q) params.set("q", q.q);
     if (q?.city) params.set("city", q.city);
     if (q?.minSalary != null) params.set("minSalary", String(q.minSalary));
+    if (q?.maxSalary != null) params.set("maxSalary", String(q.maxSalary));
+    if (q?.currency) params.set("currency", q.currency);
     if (q?.skill) params.set("skill", q.skill);
     if (q?.sort) params.set("sort", q.sort);
     if (q?.limit) params.set("limit", String(q.limit));
@@ -597,6 +603,7 @@ export const buildApi = {
         appsAccepted: number;
         appsRejected: number;
         oldestPendingAt: string | null;
+        avgResponseSeconds: number | null;
       }[];
       total: number;
     }>("GET", "/api/build/vacancies/mine/funnel"),
@@ -728,8 +735,9 @@ export const buildApi = {
     message?: string;
     answers?: string[];
     referredByUserId?: string;
+    sourceTag?: string;
   }) => call<BuildApplication>("POST", "/api/build/applications", input),
-  applyVacancy: (input: { vacancyId: string; message?: string }) =>
+  applyVacancy: (input: { vacancyId: string; message?: string; sourceTag?: string }) =>
     call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
   applicationsByVacancy: (vacancyId: string) =>
@@ -867,6 +875,14 @@ export const buildApi = {
       skillsOverlap: string[];
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/cover-letter", input),
+  aiWhyMatch: (applicationId: string, force = false) =>
+    call<{
+      explanation: string;
+      cached: boolean;
+      skillsOverlap?: string[];
+      skillsMissing?: string[];
+      usage?: { input: number; output: number };
+    }>("POST", "/api/build/ai/why-match", { applicationId, force }),
   loyaltyMe: () =>
     call<{
       hires: number;

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { useToast } from "@/components/build/Toast";
 
 type Row = Awaited<ReturnType<typeof buildApi.myVacanciesFunnel>>["items"][number];
 
@@ -50,16 +51,25 @@ function Body() {
   }, [items, statusFilter, sort]);
 
   const totals = useMemo(() => {
-    if (!items) return { open: 0, pending: 0, views: 0, accepted: 0 };
-    return items.reduce(
+    if (!items) return { open: 0, pending: 0, views: 0, accepted: 0, avgSlaSec: null as number | null };
+    const base = items.reduce(
       (acc, r) => ({
         open: acc.open + (r.status === "OPEN" ? 1 : 0),
         pending: acc.pending + r.appsPending,
         views: acc.views + (r.viewCount ?? 0),
         accepted: acc.accepted + r.appsAccepted,
+        slaSum: acc.slaSum + (r.avgResponseSeconds || 0),
+        slaCnt: acc.slaCnt + (r.avgResponseSeconds ? 1 : 0),
       }),
-      { open: 0, pending: 0, views: 0, accepted: 0 },
+      { open: 0, pending: 0, views: 0, accepted: 0, slaSum: 0, slaCnt: 0 },
     );
+    return {
+      open: base.open,
+      pending: base.pending,
+      views: base.views,
+      accepted: base.accepted,
+      avgSlaSec: base.slaCnt > 0 ? base.slaSum / base.slaCnt : null,
+    };
   }, [items]);
 
   return (
@@ -79,14 +89,18 @@ function Body() {
         </Link>
       </header>
 
+      {items && <ClosingSoonBanner items={items} onChanged={() => {
+        buildApi.myVacanciesFunnel().then((r) => setItems(r.items)).catch(() => {});
+      }} />}
       {items && <StaleAppsBanner items={items} />}
 
       {items && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Tile label="Open vacancies" value={totals.open} tone="emerald" />
           <Tile label="Pending apps" value={totals.pending} tone="amber" />
           <Tile label="Hired" value={totals.accepted} tone="emerald" />
           <Tile label="Total views" value={totals.views} />
+          <SlaTile avgSec={totals.avgSlaSec} />
         </div>
       )}
 
@@ -153,6 +167,7 @@ function Body() {
                 <th className="px-3 py-2 text-right font-semibold">Apps</th>
                 <th className="px-3 py-2 text-right font-semibold">Pending</th>
                 <th className="px-3 py-2 text-right font-semibold">Hired</th>
+                <th className="px-3 py-2 text-right font-semibold">SLA</th>
                 <th className="px-3 py-2 text-right font-semibold">Salary</th>
               </tr>
             </thead>
@@ -200,6 +215,9 @@ function Body() {
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
                       {r.appsAccepted}
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      <SlaCell seconds={r.avgResponseSeconds} />
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums text-emerald-300">
                       {r.salary > 0
                         ? `$${r.salary.toLocaleString()}`
@@ -213,6 +231,114 @@ function Body() {
         </div>
       )}
     </section>
+  );
+}
+
+// Render seconds as "1h 12m", "2d 4h", "—" depending on bucket. Anything over
+// 30 days is collapsed to ">30d" so a single ancient outlier doesn't blow up
+// the dashboard average.
+function formatSla(seconds: number | null): string {
+  if (!seconds || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const min = Math.round(seconds / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.round(seconds / 3600);
+  if (hr < 24) return `${hr}h`;
+  const days = Math.round(seconds / 86400);
+  if (days <= 30) return `${days}d`;
+  return ">30d";
+}
+
+function slaTone(seconds: number | null): string {
+  if (!seconds) return "text-slate-500";
+  if (seconds < 86400) return "text-emerald-300"; // <1d good
+  if (seconds < 3 * 86400) return "text-amber-300"; // 1-3d ok
+  return "text-rose-300"; // >3d bad
+}
+
+function SlaCell({ seconds }: { seconds: number | null }) {
+  return <span className={slaTone(seconds)}>{formatSla(seconds)}</span>;
+}
+
+function SlaTile({ avgSec }: { avgSec: number | null }) {
+  return (
+    <div
+      className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+      title="Average time from application received to first recruiter action"
+    >
+      <div className="text-xs uppercase tracking-wider text-slate-400">Avg SLA</div>
+      <div className={`mt-1 text-3xl font-bold ${slaTone(avgSec)}`}>{formatSla(avgSec)}</div>
+    </div>
+  );
+}
+
+function ClosingSoonBanner({
+  items,
+  onChanged,
+}: {
+  items: Row[];
+  onChanged: () => void;
+}) {
+  // OPEN vacancies expiring in <=3 days that have at least one application —
+  // worth nudging because closing those silently abandons the candidates.
+  const toast = useToast();
+  const cutoffMs = Date.now() + 3 * 86400000;
+  const closing = items.filter(
+    (r) =>
+      r.status === "OPEN" &&
+      r.expiresAt &&
+      new Date(r.expiresAt).getTime() <= cutoffMs &&
+      r.appsTotal > 0,
+  );
+  if (closing.length === 0) return null;
+
+  async function extend(id: string) {
+    try {
+      // republishVacancy resets expiry to +30d even when status===OPEN. Backend
+      // returns 409 vacancy_already_open, so we PATCH-close-then-republish.
+      await buildApi.patchVacancy(id, { status: "CLOSED" });
+      await buildApi.republishVacancy(id);
+      toast.success("Vacancy extended by 30 days");
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-100">
+      <div className="font-semibold text-rose-50">
+        ⏰ {closing.length} vacanc{closing.length === 1 ? "y" : "ies"} expiring within 3 days
+      </div>
+      <p className="mt-1 text-xs text-rose-200/80">
+        Each has at least one applicant. Closing silently abandons those candidates —
+        extend the vacancy by 30 days or close it explicitly with feedback.
+      </p>
+      <ul className="mt-2 space-y-1">
+        {closing.slice(0, 5).map((r) => {
+          const days = r.expiresAt
+            ? Math.max(0, Math.ceil((new Date(r.expiresAt).getTime() - Date.now()) / 86400000))
+            : 0;
+          return (
+            <li key={r.id} className="flex items-center justify-between gap-2 border-t border-rose-300/15 pt-1.5 text-xs">
+              <Link
+                href={`/build/vacancy/${encodeURIComponent(r.id)}`}
+                className="truncate text-rose-50 hover:underline"
+                title={r.title}
+              >
+                {r.title} · {r.appsTotal} app{r.appsTotal === 1 ? "" : "s"} · {days}d left
+              </Link>
+              <button
+                type="button"
+                onClick={() => extend(r.id)}
+                className="shrink-0 rounded-md border border-emerald-300/40 bg-emerald-300/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-300/25"
+              >
+                +30d
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

@@ -123,6 +123,18 @@ vacanciesRouter.get("/", async (req, res) => {
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value); where.push(`v."salary" >= $${params.length}`);
     }
+    if (req.query.maxSalary !== undefined) {
+      const v = vNumber(req.query.maxSalary, "maxSalary", { min: 0, max: 1e12 });
+      if (!v.ok) return fail(res, 400, v.error);
+      // Salary 0 means "not specified" — exclude from the upper-bound filter
+      // so the candidate can still see roles where the recruiter hasn't set
+      // a number rather than seeing an empty list.
+      params.push(v.value); where.push(`(v."salary" <= $${params.length} OR v."salary" = 0)`);
+    }
+    if (typeof req.query.currency === "string" && req.query.currency.trim()) {
+      params.push(req.query.currency.trim().toUpperCase().slice(0, 8));
+      where.push(`UPPER(COALESCE(v."salaryCurrency", 'USD')) = $${params.length}`);
+    }
     if (typeof req.query.skill === "string" && req.query.skill.trim()) {
       params.push(`%"${req.query.skill.trim().toLowerCase()}"%`);
       where.push(`lower(v."skillsJson") ILIKE $${params.length}`);
@@ -375,7 +387,12 @@ vacanciesRouter.get("/mine/funnel", async (req, res) => {
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING')::int AS "appsPending",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'ACCEPTED')::int AS "appsAccepted",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'REJECTED')::int AS "appsRejected",
-              (SELECT MIN(a."createdAt") FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING') AS "oldestPendingAt"
+              (SELECT MIN(a."createdAt") FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING') AS "oldestPendingAt",
+              (SELECT AVG(EXTRACT(EPOCH FROM (a."updatedAt" - a."createdAt")))
+               FROM "BuildApplication" a
+               WHERE a."vacancyId" = v."id"
+                 AND a."status" <> 'PENDING'
+                 AND a."updatedAt" > a."createdAt" + INTERVAL '1 second')::float AS "avgResponseSeconds"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
        WHERE p."clientId" = $1

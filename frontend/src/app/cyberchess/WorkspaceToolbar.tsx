@@ -16,12 +16,18 @@ type Props = {
 
 export default function WorkspaceToolbar({ preset, onChange }: Props) {
   return (
-    <div style={{
-      display: "inline-flex", alignItems: "center", gap: 0,
-      padding: 3, borderRadius: 9,
-      background: "#f1f5f9", border: "1px solid #cbd5e1",
-      boxShadow: "inset 0 1px 2px rgba(0,0,0,0.04)",
-    }}>
+    <div
+      title="Раскладка экрана: Focus / Standard / Stream / Study / Coach. Переключение клавишами 1..5"
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 0,
+        padding: 3, borderRadius: 9,
+        background: "#f1f5f9", border: "1px solid #cbd5e1",
+        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.04)",
+      }}>
+      <span style={{
+        fontSize: 9, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase",
+        color: "#64748b", padding: "0 8px 0 6px", whiteSpace: "nowrap",
+      }}>Layout</span>
       {ALL.map(p => {
         const m = WORKSPACE_META[p];
         const active = p === preset;
@@ -30,7 +36,7 @@ export default function WorkspaceToolbar({ preset, onChange }: Props) {
             title={`${m.name} · ${m.hint} · клавиша ${m.key}`}
             style={{
               display: "inline-flex", alignItems: "center", gap: 4,
-              padding: "4px 9px",
+              padding: active ? "4px 10px" : "4px 8px",
               border: "none",
               borderRadius: 6,
               background: active ? "#fff" : "transparent",
@@ -41,7 +47,15 @@ export default function WorkspaceToolbar({ preset, onChange }: Props) {
               transition: "background 0.12s ease, color 0.12s ease",
             }}>
             <span style={{ fontSize: 13 }}>{m.icon}</span>
-            <span style={{ display: active ? "inline" : "none" }}>{m.name}</span>
+            <span>{m.name}</span>
+            <span style={{
+              fontFamily: "ui-monospace, SFMono-Regular, monospace",
+              fontSize: 9, fontWeight: 800,
+              padding: "0 4px", marginLeft: 2,
+              borderRadius: 3,
+              background: active ? "#0f172a" : "rgba(15,23,42,0.08)",
+              color: active ? "#fbbf24" : "#94a3b8",
+            }}>{m.key}</span>
           </button>
         );
       })}

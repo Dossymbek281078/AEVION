@@ -2782,13 +2782,8 @@ export default function CyberChessPage(){
           <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
         </button>}
 
-        {/* Workspace switcher — always visible in the header so user can change layout
-            without scrolling. Replaces the duplicate switcher that was inside the SymTab strip. */}
-        <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute}}>Layout</span>
-          <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
-          <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>1..5</span>
-        </div>
+        {/* Workspace switcher — always visible in the header. Hint shown via tooltip on each chip. */}
+        <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
 
         <div style={{flex:1}}/>
 
@@ -2952,153 +2947,146 @@ export default function CyberChessPage(){
         return<div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
 
           {/* ─── HERO: format + color + AI + premoves — компактно вместе ─── */}
-          <Card padding={SPACE[4]} elevation="md">
-            {/* Формат + Time chips — на всю ширину, КРУПНЫЕ названия */}
+          <Card padding={SPACE[3]} elevation="md">
+            {/* Формат + Time chips — компактная одна строка с pill-переключателем категории */}
             <div>
-              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:SPACE[2]}}>
-                <span style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Формат партии</span>
-                <span style={{fontSize:12,color:CC.textMute,fontWeight:700}}>≈ {Math.round(tc.ini/60*2+tc.inc*0.5)} мин</span>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
-                {(["Bullet","Blitz","Rapid","Custom"] as const).map(c=>{
-                  const sel=activeCat===c;
-                  const tone={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Custom:CC.accent}[c];
-                  const emoji={Bullet:"💨",Blitz:"⚡",Rapid:"🕐",Custom:"⚙"}[c];
-                  return <button key={c} onClick={()=>{
-                    if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
-                    sUseCustom(false);
-                    const first=TCS.findIndex(t=>t.cat===c);
-                    if(first>=0)sTcI(first);
-                  }} className="cc-focus-ring" style={{
-                    display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                    padding:"12px 8px",
-                    borderRadius:RADIUS.md,
-                    border:sel?`2px solid ${tone}`:`1px solid ${CC.border}`,
-                    background:sel?`linear-gradient(135deg, ${tone}10, ${tone}22)`:CC.surface1,
-                    color:sel?tone:CC.text,
-                    cursor:"pointer",
-                    fontSize:18,fontWeight:sel?900:800,letterSpacing:0.4,
-                    boxShadow:sel?`0 4px 12px ${tone}33`:"none",
-                    transition:`all ${MOTION.fast} ${MOTION.ease}`,
-                  }}>
-                    <span style={{fontSize:20,lineHeight:1}}>{emoji}</span>
-                    <span style={{fontSize:15,fontWeight:sel?900:800}}>{c}</span>
-                  </button>;
-                })}
-              </div>
-              {activeCat!=="Custom"?(
-                <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4,marginTop:SPACE[2]}}>
-                  {catTcs.map(({t,i})=>{
-                    const selected=!useCustom&&tcI===i;
-                    return <button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} className="cc-focus-ring"
-                      style={{padding:"11px 0",borderRadius:RADIUS.sm,
-                        border:selected?`2px solid ${catColor}`:`1px solid ${CC.border}`,
-                        background:selected?`${catColor}15`:CC.surface1,
-                        color:selected?catColor:CC.text,
-                        fontSize:14,fontWeight:selected?900:800,cursor:"pointer",
-                        fontFamily:"ui-monospace, SFMono-Regular, monospace",
-                        transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                      {t.name}
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Формат</span>
+                {/* Pill row of 4 small format chips */}
+                <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
+                  {(["Bullet","Blitz","Rapid","Custom"] as const).map(c=>{
+                    const sel=activeCat===c;
+                    const tone={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Custom:CC.accent}[c];
+                    const emoji={Bullet:"💨",Blitz:"⚡",Rapid:"🕐",Custom:"⚙"}[c];
+                    return <button key={c} onClick={()=>{
+                      if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
+                      sUseCustom(false);
+                      const first=TCS.findIndex(t=>t.cat===c);
+                      if(first>=0)sTcI(first);
+                    }} className="cc-focus-ring" style={{
+                      display:"inline-flex",alignItems:"center",gap:5,
+                      padding:"5px 12px",borderRadius:RADIUS.full,
+                      border:"none",
+                      background:sel?"#fff":"transparent",
+                      color:sel?tone:CC.textDim,
+                      cursor:"pointer",
+                      fontSize:12,fontWeight:sel?900:700,
+                      boxShadow:sel?`0 1px 3px ${tone}33`:"none",
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                    }}>
+                      <span style={{fontSize:13}}>{emoji}</span>
+                      <span>{c}</span>
                     </button>;
                   })}
                 </div>
-              ):(
-                <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],alignItems:"center"}}>
-                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
-                    Min <input type="number" min={1} max={60} value={customMin}
-                      onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))}
-                      style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
-                  </label>
-                  <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,color:CC.textDim,fontWeight:700}}>
-                    +Inc <input type="number" min={0} max={60} value={customInc}
-                      onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))}
-                      style={{width:50,padding:"6px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:13}}/>
-                  </label>
-                  <Badge tone="accent" size="md">{customMin}+{customInc}</Badge>
-                </div>
-              )}
+                {/* Time chips — для активной категории, в той же строке */}
+                {activeCat!=="Custom"?(
+                  <div style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>
+                    {catTcs.map(({t,i})=>{
+                      const selected=!useCustom&&tcI===i;
+                      return <button key={i} onClick={()=>{sTcI(i);sUseCustom(false)}} className="cc-focus-ring"
+                        style={{padding:"5px 10px",borderRadius:RADIUS.sm,
+                          border:selected?`2px solid ${catColor}`:`1px solid ${CC.border}`,
+                          background:selected?`${catColor}15`:CC.surface1,
+                          color:selected?catColor:CC.text,
+                          fontSize:12,fontWeight:selected?900:700,cursor:"pointer",
+                          fontFamily:"ui-monospace, SFMono-Regular, monospace",
+                          transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                        {t.name}
+                      </button>;
+                    })}
+                  </div>
+                ):(
+                  <div style={{display:"inline-flex",gap:SPACE[2],alignItems:"center"}}>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:CC.textDim,fontWeight:700}}>
+                      Min <input type="number" min={1} max={60} value={customMin}
+                        onChange={e=>sCustomMin(Math.max(1,Math.min(60,+e.target.value||1)))}
+                        style={{width:48,padding:"4px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12}}/>
+                    </label>
+                    <label style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:CC.textDim,fontWeight:700}}>
+                      +Inc <input type="number" min={0} max={60} value={customInc}
+                        onChange={e=>sCustomInc(Math.max(0,Math.min(60,+e.target.value||0)))}
+                        style={{width:48,padding:"4px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12}}/>
+                    </label>
+                    <Badge tone="accent" size="sm">{customMin}+{customInc}</Badge>
+                  </div>
+                )}
+                <span style={{flex:1}}/>
+                <span style={{fontSize:11,color:CC.textMute,fontWeight:700,whiteSpace:"nowrap"}}>≈ {Math.round(tc.ini/60*2+tc.inc*0.5)} мин</span>
+              </div>
             </div>
 
             {/* Разделитель */}
-            <div style={{height:1,background:CC.border,margin:`${SPACE[3]}px 0`}}/>
+            <div style={{height:1,background:CC.border,margin:`${SPACE[2]}px 0`}}/>
 
             {/* Цвет + AI + Премувы — на одной строке (responsive grid) */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:SPACE[3]}}>
-              {/* Color */}
-              <div>
-                <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,marginBottom:SPACE[1],textTransform:"uppercase" as const}}>Цвет</div>
-                <div style={{display:"flex",gap:6}}>
+              {/* Color — tight pill row */}
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Цвет</span>
+                <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
                     const selected=pCol===v;
                     return <button key={v} onClick={()=>sPCol(v as ChessColor)} className="cc-focus-ring"
-                      style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1,
-                        padding:"8px 0",borderRadius:RADIUS.md,
-                        border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
-                        background:selected?CC.brandSoft:CC.surface1,
-                        color:selected?CC.brand:CC.text,
-                        cursor:"pointer",transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                      <span style={{fontSize:22,lineHeight:1}}>{ic}</span>
-                      <span style={{fontSize:11,fontWeight:700}}>{name}</span>
+                      style={{display:"inline-flex",alignItems:"center",gap:5,
+                        padding:"4px 12px",borderRadius:RADIUS.full,border:"none",
+                        background:selected?"#fff":"transparent",
+                        color:selected?CC.brand:CC.textDim,
+                        cursor:"pointer",fontSize:12,fontWeight:selected?900:700,
+                        boxShadow:selected?`0 1px 3px ${CC.brand}33`:"none",
+                        transition:`all ${MOTION.fast} ${MOTION.ease}`}}
+                      title={name}>
+                      <span style={{fontSize:14,lineHeight:1}}>{ic}</span>
+                      <span>{name}</span>
                     </button>;
                   })}
-                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Random"
+                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Random цвет"
                     className="cc-focus-ring"
-                    style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1,
-                      padding:"8px 0",borderRadius:RADIUS.md,
-                      border:`1px dashed ${CC.borderStrong}`,background:CC.surface2,
-                      color:CC.textDim,cursor:"pointer"}}>
-                    <span style={{fontSize:20,lineHeight:1}}>🎲</span>
-                    <span style={{fontSize:11,fontWeight:700}}>Random</span>
+                    style={{display:"inline-flex",alignItems:"center",
+                      padding:"4px 10px",borderRadius:RADIUS.full,border:"none",
+                      background:"transparent",color:CC.textMute,cursor:"pointer",fontSize:12,fontWeight:700}}>
+                    🎲
                   </button>
                 </div>
               </div>
 
               {/* AI opponent */}
               <div>
-                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:SPACE[1]}}>
-                  <span style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Соперник</span>
-                  <span style={{fontSize:11,fontWeight:800,color:lv.color}}>{lv.name} · {lv.elo}{aiI===5&&!chessy.owned.master_ai?" 🔒":""}</span>
-                </div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                  <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>AI</span>
                   <input type="range" min={0} max={chessy.owned.master_ai?5:4}
                     value={Math.min(aiI,chessy.owned.master_ai?5:4)}
                     onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI===5&&!chessy.owned.master_ai?" 🔒":""}</span>
                 </div>
                 {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
-                  style={{marginTop:6,padding:"4px 9px",borderRadius:RADIUS.sm,
+                  style={{marginTop:6,padding:"3px 8px",borderRadius:RADIUS.sm,
                     border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
-                    fontSize:10.5,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+                    fontSize:10,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
                   🔒 Master AI · 30 Chessy
                 </button>}
               </div>
 
-              {/* Premove queue limit */}
-              <div>
-                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:SPACE[1]}}>
-                  <span style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>⚡ Премувы</span>
-                  <span style={{fontSize:13,fontWeight:900,color:CC.info,fontFamily:"ui-monospace,monospace"}}>{pmLim}</span>
-                </div>
-                <div style={{display:"flex",gap:4,marginBottom:6}}>
+              {/* Premove queue limit — compact pill row, без range-слайдера */}
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ Премувы</span>
+                <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {[3,5,10,20].map(n=><button key={n} onClick={()=>sPmLim(n)}
-                    style={{flex:1,padding:"6px 0",borderRadius:RADIUS.sm,fontSize:12,fontWeight:800,
-                      border:pmLim===n?`2px solid ${CC.info}`:`1px solid ${CC.border}`,
-                      background:pmLim===n?CC.infoSoft:CC.surface1,
-                      color:pmLim===n?CC.info:CC.textDim,cursor:"pointer"}}>{n}</button>)}
+                    style={{padding:"4px 12px",borderRadius:RADIUS.full,fontSize:12,fontWeight:pmLim===n?900:700,
+                      border:"none",
+                      background:pmLim===n?"#fff":"transparent",
+                      color:pmLim===n?CC.info:CC.textDim,cursor:"pointer",
+                      boxShadow:pmLim===n?`0 1px 3px ${CC.info}33`:"none",
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>{n}</button>)}
                 </div>
-                <input type="range" min={1} max={20} value={pmLim}
-                  onChange={e=>sPmLim(+e.target.value)}
-                  style={{width:"100%",accentColor:CC.info}}/>
+                <span style={{fontSize:11,fontWeight:900,color:CC.info,fontFamily:"ui-monospace,monospace",marginLeft:"auto"}}>{pmLim}</span>
               </div>
             </div>
 
             {/* ─── Section 1: QUICK PLAY ─── */}
-            <div style={{marginTop:SPACE[4]}}>
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:SPACE[2]}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.brand,letterSpacing:1.5,textTransform:"uppercase" as const}}>▸ Быстрая игра</span>
-                <div style={{flex:1,height:1,background:`linear-gradient(90deg, ${CC.brand}33, transparent)`}}/>
-              </div>
+            <div style={{marginTop:SPACE[3]}}>
               <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:SPACE[2]}}>
                 <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
                   style={{padding:"16px 22px",borderRadius:RADIUS.lg,border:"none",
@@ -3132,6 +3120,39 @@ export default function CyberChessPage(){
                     <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
                   </div>
                 </Btn>
+              </div>
+
+              {/* Tertiary: задача / классика / база партий — small inline pills, не доминируют */}
+              <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textMute,letterSpacing:1.4,textTransform:"uppercase" as const}}>А ещё</span>
+                <button onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
+                  className="cc-focus-ring"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,
+                    border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
+                    fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{PUZZLES.length.toLocaleString()}</span>
+                </button>
+                <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
+                  className="cc-focus-ring"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,
+                    border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
+                    fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  ⚡ Puzzle Rush
+                </button>
+                <button onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
+                  className="cc-focus-ring"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,
+                    border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
+                    fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  ★ Классика
+                </button>
+                <button onClick={()=>{sTab("analysis");sShowAnal(true)}}
+                  className="cc-focus-ring"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,
+                    border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
+                    fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  ▲ Анализ
+                </button>
               </div>
 
             </div>
@@ -3343,8 +3364,10 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
-          {/* ─── HERO: главный блок «с чего начать» ─── */}
-          {(()=>{
+          {/* PLY/PZL/MST hero — удалён 2026-05-05: дублировал QUICK START + tertiary chips
+              в секции «Быстрая игра». Навигация на пазлы / классику теперь через
+              маленькие pill-кнопки прямо под главной кнопкой партии. */}
+          {false&&(()=>{
             const hero=[
               {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"AI любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
               {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${PUZZLES.length.toLocaleString()} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},

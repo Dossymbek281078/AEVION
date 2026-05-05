@@ -344,6 +344,11 @@ async function _doEnsureBuildTables(): Promise<void> {
   // doesn't re-spend tokens.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiWhyMatch" TEXT;`);
 
+  // Recruiter "snooze until" — temporarily hide a PENDING application from
+  // the default view without rejecting it. Helps clear the queue when the
+  // recruiter is waiting on the candidate (e.g. test task in flight).
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "snoozedUntil" TIMESTAMPTZ;`);
+
   // Application source tag — where the candidate landed from. Free-form
   // string (organic | widget | utm:linkedin | utm:google | referral) so
   // analytics can bucket without schema migrations.

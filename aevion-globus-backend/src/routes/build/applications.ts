@@ -742,6 +742,43 @@ applicationsRouter.post("/:id/withdraw", async (req, res) => {
   }
 });
 
+// POST /api/build/applications/:id/snooze — recruiter hides a PENDING
+// application until N days from now. Pass days=0 (or negative) to clear.
+applicationsRouter.post("/:id/snooze", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const daysRaw = Number(req.body?.days);
+    const days = Number.isFinite(daysRaw) ? Math.max(-1, Math.min(60, Math.round(daysRaw))) : 7;
+
+    const r = await pool.query(
+      `SELECT a."id", p."clientId" FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (r.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_owner_can_snooze");
+    }
+
+    if (days <= 0) {
+      await pool.query(`UPDATE "BuildApplication" SET "snoozedUntil" = NULL WHERE "id" = $1`, [id]);
+      return ok(res, { snoozedUntil: null });
+    }
+    const until = new Date(Date.now() + days * 86400000);
+    await pool.query(
+      `UPDATE "BuildApplication" SET "snoozedUntil" = $1 WHERE "id" = $2`,
+      [until, id],
+    );
+    return ok(res, { snoozedUntil: until.toISOString() });
+  } catch (err: unknown) {
+    return fail(res, 500, "application_snooze_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/applications/:id/flag — flag an application for moderation.
 // Anyone authenticated who can see the application (owner / candidate / admin)
 // can raise a flag. Admin queue resolves via /api/build/admin/flags.

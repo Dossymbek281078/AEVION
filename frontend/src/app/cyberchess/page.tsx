@@ -519,6 +519,9 @@ export default function CyberChessPage(){
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
+  // Hover-scrub: when user hovers a move in the move list, board previews that position
+  // without disturbing the canonical browseIdx. previewIdx===null = no preview active.
+  const[previewIdx,sPreviewIdx]=useState<number|null>(null);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
@@ -844,6 +847,10 @@ export default function CyberChessPage(){
   },[myT,on,over,hotseat]);
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const moveListScrollRef=useRef<HTMLDivElement>(null);
+  // Hover-scrub snapshot — captured FEN+browseIdx at the moment hover started; restored on leave.
+  // Click clears it so the new state isn't reverted by the trailing mouseleave.
+  const hoverSnapRef=useRef<{fen:string;idx:number}|null>(null);
+  const previewLeaveTimer=useRef<number|null>(null);
   const fPz=PUZZLES.filter(p=>{
     // Category filter
     if(pzCategory==="tactics"&&p.goal!=="Best move")return false;
@@ -899,6 +906,17 @@ export default function CyberChessPage(){
             showToast(`🧬 Получен клон: ${profile.username} (${profile.rating} · ${profile.style})`,"success");
           },800);
         }
+      }
+      // Quick-share FEN: ?fen=... loads the position into Analysis tab.
+      // Companion to the S hotkey which generates these URLs.
+      const fenParam=params.get("fen");
+      if(fenParam){
+        try{
+          const ch=new Chess(decodeURIComponent(fenParam));
+          setGame(ch);sBk(k=>k+1);sHist([]);sFenHist([ch.fen()]);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());sPCol(ch.turn());sFlip(ch.turn()==="b");
+          setTimeout(()=>showToast("▣ Открыта позиция из ссылки","info"),300);
+          return;
+        }catch{showToast("Невалидный FEN в ссылке","error");return}
       }
       const pgn=params.get("pgn");
       if(!pgn)return;
@@ -1432,6 +1450,22 @@ export default function CyberChessPage(){
       if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})}
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
+      // Quick-share (S): copy URL with current FEN (?fen=...) so anyone can open this position.
+      if(e.key==="s"||e.key==="S"){
+        e.preventDefault();
+        try{
+          const fen=game.fen();
+          const url=typeof window!=="undefined"?`${window.location.origin}/cyberchess?fen=${encodeURIComponent(fen)}`:`/cyberchess?fen=${encodeURIComponent(fen)}`;
+          if(navigator.clipboard?.writeText){
+            navigator.clipboard.writeText(url).then(
+              ()=>showToast("📋 Ссылка на позицию скопирована","success"),
+              ()=>showToast(`FEN: ${fen}`,"info")
+            );
+          }else{
+            showToast(`FEN: ${fen}`,"info");
+          }
+        }catch{showToast("Не удалось скопировать","error")}
+      }
       if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on)){e.preventDefault();newGRef.current()}}
       if(e.key==="r"||e.key==="R"){e.preventDefault();sRepertoireOpen(v=>!v)}
       if(hist.length===0)return;
@@ -4702,25 +4736,53 @@ export default function CyberChessPage(){
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
               </div>}
             </div>
-            <div ref={moveListScrollRef} style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
+            <div ref={moveListScrollRef}
+              onMouseLeave={()=>{
+                // Container leave: restore snapshot (real position) — debounce to avoid flicker.
+                if(previewLeaveTimer.current)window.clearTimeout(previewLeaveTimer.current);
+                previewLeaveTimer.current=window.setTimeout(()=>{
+                  if(!hoverSnapRef.current)return;
+                  const snap=hoverSnapRef.current;hoverSnapRef.current=null;
+                  try{const g=new Chess(snap.fen);setGame(g);sBk(k=>k+1);sLm(null);sSel(null);sVm(new Set());}catch{}
+                  sPreviewIdx(null);
+                  previewLeaveTimer.current=null;
+                },80);
+              }}
+              style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
               {hist.length?<div style={{display:"grid",gridTemplateColumns:"36px 1fr 1fr",fontSize:13,fontFamily:"monospace"}}>
                 {Array.from({length:Math.ceil(hist.length/2)}).map((_,i)=>{
                   const white=hist[i*2],black=hist[i*2+1];
                   const wIdx=i*2,bIdx=i*2+1;
                   const wIsBrowsed=browseIdx===wIdx||(browseIdx<0&&wIdx===hist.length-1);
                   const bIsBrowsed=browseIdx===bIdx||(browseIdx<0&&bIdx===hist.length-1);
-                  const isActivePair=wIsBrowsed||bIsBrowsed;
+                  const wIsPreview=previewIdx===wIdx;
+                  const bIsPreview=previewIdx===bIdx;
+                  const isActivePair=wIsBrowsed||bIsBrowsed||wIsPreview||bIsPreview;
                   const wEval=analysis[wIdx];const bEval=analysis[bIdx];
                   const wQ=wEval?.quality;const bQ=bEval?.quality;
                   const qIcon=(q?:string)=>q==="blunder"?"??":q==="mistake"?"?":q==="inacc"?"?!":q==="great"?"!":"";
                   const qColor=(q?:string)=>q==="blunder"?T.danger:q==="mistake"?"#ea580c":q==="inacc"?"#ca8a04":q==="great"?T.accent:"";
+                  // Hover-scrub: snapshot canonical state on first enter, then preview.
+                  // Click promotes preview to canonical (browseIdx) and clears the snapshot.
+                  const previewMove=(idx:number)=>{
+                    if(previewLeaveTimer.current){window.clearTimeout(previewLeaveTimer.current);previewLeaveTimer.current=null;}
+                    if(!hoverSnapRef.current){hoverSnapRef.current={fen:game.fen(),idx:browseIdx};}
+                    try{const g=new Chess(fenHist[idx+1]);setGame(g);sBk(k=>k+1);sLm(null);sSel(null);sVm(new Set());sPreviewIdx(idx);}catch{}
+                  };
+                  const commitMove=(idx:number)=>{
+                    hoverSnapRef.current=null;sPreviewIdx(null);
+                    if(previewLeaveTimer.current){window.clearTimeout(previewLeaveTimer.current);previewLeaveTimer.current=null;}
+                    try{const g=new Chess(fenHist[idx+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(idx);sLm(null);sSel(null);sVm(new Set());}catch{}
+                  };
                   return <React.Fragment key={i}>
                     <span data-pair-idx={i} data-active={isActivePair?"1":undefined} style={{color:T.dim,fontWeight:700,textAlign:"center",padding:"5px 0",background:isActivePair?"rgba(5,150,105,0.10)":"#fafafa",borderRight:`1px solid ${T.border}`,fontSize:12}}>{i+1}</span>
-                    <span onClick={()=>white&&(()=>{const g=new Chess(fenHist[wIdx+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(wIdx);sLm(null);sSel(null);sVm(new Set());})()} style={{color:T.text,fontWeight:600,padding:"5px 10px",background:wIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:wIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span onMouseEnter={()=>{if(white)previewMove(wIdx)}} onClick={()=>{if(white)commitMove(wIdx)}}
+                      style={{color:T.text,fontWeight:600,padding:"5px 10px",background:wIsPreview?"rgba(245,158,11,0.20)":wIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:wIsPreview?`3px solid #f59e0b`:wIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span>{white||""}{wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3}}>{qIcon(wQ)}</span>}</span>
                       {wEval&&<span style={{fontSize:10,color:wEval.cp>0?T.accent:wEval.cp<0?T.danger:T.dim,fontWeight:700}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
                     </span>
-                    <span onClick={()=>black&&(()=>{const g=new Chess(fenHist[bIdx+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(bIdx);sLm(null);sSel(null);sVm(new Set());})()} style={{color:T.text,fontWeight:600,padding:"5px 10px",background:bIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:bIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}}
+                      style={{color:T.text,fontWeight:600,padding:"5px 10px",background:bIsPreview?"rgba(245,158,11,0.20)":bIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:bIsPreview?`3px solid #f59e0b`:bIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span>{black||""}{bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3}}>{qIcon(bQ)}</span>}</span>
                       {bEval&&<span style={{fontSize:10,color:bEval.cp>0?T.accent:bEval.cp<0?T.danger:T.dim,fontWeight:700}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
                     </span>
@@ -5829,8 +5891,14 @@ export default function CyberChessPage(){
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
           ["R","📚 Открыть / закрыть Репертуар дебютов"],
+          ["S","🔗 Скопировать ссылку на текущую позицию (FEN URL)"],
+          ["1..5","Workspace: Focus / Standard / Stream / Study / Coach"],
           ["Ctrl+Shift+D","Debug HUD (drag-механика)"],
           ["?","Показать / скрыть эту подсказку"],
+        ]},
+        {title:"История ходов",rows:[
+          ["Hover на ход","🟧 Превью позиции на доске (без потери текущего состояния)"],
+          ["Click на ход","🟢 Прыгнуть в эту позицию навсегда (browse mode)"],
         ]},
         {title:"Эксклюзивные фичи AEVION",rows:[
           ["⚔ в «Мои партии»","Ghost Duel — дуэль с прошлой собой"],

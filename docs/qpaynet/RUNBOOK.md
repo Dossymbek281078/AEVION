@@ -129,8 +129,34 @@ in logs. Likely the worker thread crashed at boot — restart fixes it.
 
 ### 4.5 Webhook fan-out backed up
 
-`qpaynet_payment_requests.notify_attempts >= 5` rows are dead-lettered.
-Re-drive manually:
+Two queues handle webhook delivery — both with 5-attempt exp-backoff
+(30s, 2m, 10m, 30m, 2h) before dead-lettering:
+
+1. **Per-request webhooks** (`qpaynet_payment_requests.notify_*`) — for
+   one-off `notifyUrl` passed at request creation.
+2. **Merchant subscriptions** (`qpaynet_webhook_deliveries`) — for
+   per-owner subscriptions registered via `/webhook-subs`. Each event
+   creates one row per subscription.
+
+Both queues are drained by the same retry tick (every 30s, 20 rows/queue/tick).
+
+**Triage**
+
+```bash
+# Aggregate health probe
+curl -s $API/api/qpaynet/health | jq '.stuckWebhookDeliveries'
+# > 50 stuck = aggregate /health flips to degraded
+
+# List stuck merchant deliveries
+curl -s $API/api/qpaynet/admin/webhook-deliveries?status=stuck \
+  -H "Authorization: Bearer $ADMIN_JWT" | jq
+
+# Force-retry a single delivery (resets attempts to 0):
+curl -X POST $API/api/qpaynet/admin/webhook-deliveries/<id>/retry \
+  -H "Authorization: Bearer $ADMIN_JWT"
+```
+
+**Re-drive per-request webhooks (no admin endpoint, do it via SQL):**
 
 ```sql
 UPDATE qpaynet_payment_requests
@@ -265,8 +291,12 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Postgres backup automation | partial — `scripts/qpaynet-backup.mjs` exists; cron not wired | — |
 | Reconciliation endpoint | done — `GET /api/qpaynet/admin/reconcile` + `scripts/qpaynet-reconcile.mjs` | — |
 | Reconciliation cron + paging | open — wire 15min cron → `scripts/qpaynet-reconcile.mjs` exit-code → ALERT_URL | — |
-| Refunds API | done — `POST /api/qpaynet/admin/refund` (idempotent, audit-logged, accounted in reconcile) | — |
+| Refunds API | done — `POST /admin/refund` (idempotent via Idempotency-Key + ref_tx_id, audit-logged, accounted in reconcile) | — |
+| Refund history | done — `GET /admin/refunds` (cursor-paginated) | — |
 | Soft-freeze API | done — `/admin/wallets/:id/{freeze,unfreeze}` (status='frozen' rejected by all money paths) | — |
+| Merchant webhook delivery durability | done — `qpaynet_webhook_deliveries` queue + retry tick; `/admin/webhook-deliveries` for ops | — |
+| At-rest encryption: lazy migration | done — needsEncryption() check at read sites encrypts plaintext rows in-place when env-key is enabled | — |
+| /health degrade signal | done — pool waiting > 0 OR stuck deliveries > 50 → status=degraded | — |
 | ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |
 | Per-tier money limits | open — currently 30/min hardcoded; merchant integrations need bumps | — |
 

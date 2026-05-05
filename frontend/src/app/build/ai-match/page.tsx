@@ -52,7 +52,7 @@ export default function AiMatchPage() {
     setLoading(true); setError(""); setCoverLetter(null);
     try {
       const r = await buildApi.aiCoverLetter({ profileText, vacancyText, tone });
-      setCoverLetter(r.coverLetter);
+      setCoverLetter(r.coverLetter ?? r.letter ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка AI");
     } finally { setLoading(false); }

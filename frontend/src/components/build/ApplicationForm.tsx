@@ -5,7 +5,7 @@ import { buildApi, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { AiImprove } from "@/components/build/AiImprove";
 import { useToast } from "@/components/build/Toast";
-import { deriveApplySource } from "@/lib/build/applySource";
+import { deriveApplySource, deriveReferrerUserId } from "@/lib/build/applySource";
 
 export function ApplicationForm({
   vacancyId,
@@ -52,11 +52,13 @@ export function ApplicationForm({
   }
 
   // Read ?ref=<userId> from URL once on mount to attribute applications
-  // back to whoever shared the vacancy link.
+  // back to whoever shared the vacancy link. Falls back to localStorage
+  // (30d TTL) so a candidate who lands on /build/r/<userId> first and
+  // applies later still gets attributed.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const ref = new URLSearchParams(window.location.search).get("ref");
-    if (ref && ref.length <= 200) setReferredBy(ref);
+    const ref = deriveReferrerUserId();
+    if (ref) setReferredBy(ref);
   }, []);
 
   if (!token) {

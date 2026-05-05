@@ -12,6 +12,7 @@ import {
   type BuildEducation,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
 import { VoiceInput } from "@/components/build/VoiceInput";
 import { ResumeImporter } from "@/components/build/ResumeImporter";
 import { AiCoachChat } from "@/components/build/AiCoachChat";
@@ -121,6 +122,8 @@ function ProfileBody() {
               />
             </div>
           )}
+
+          {me?.id && <ShareLinkBlock userId={me.id} />}
 
           <div className="mb-4">
             <ResumeImporter
@@ -825,6 +828,44 @@ function VerificationWidget() {
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+function ShareLinkBlock({ userId }: { userId: string }) {
+  const toast = useToast();
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.tech";
+  const url = `${origin}/build/r/${encodeURIComponent(userId)}`;
+
+  function copy() {
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Share link copied"),
+      () => toast.error("Copy failed"),
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-4 text-sm">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-fuchsia-200">
+        Your personal share-link
+      </div>
+      <p className="mb-2 text-xs text-slate-400">
+        Анонсируешь вакансии в чат / Telegram / WhatsApp? Используй эту ссылку — каждый
+        отклик автоматически тегируется как пришедший от тебя (sourceTag <code className="text-slate-300">ref:&lt;userId&gt;</code>),
+        и ты видишь это в Application sources на dashboard.
+      </p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 truncate rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-slate-200">
+          {url}
+        </code>
+        <button
+          type="button"
+          onClick={copy}
+          className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/15 px-3 py-1 text-[11px] font-semibold text-fuchsia-100 hover:bg-fuchsia-500/25"
+        >
+          📋 Copy
+        </button>
+      </div>
     </div>
   );
 }

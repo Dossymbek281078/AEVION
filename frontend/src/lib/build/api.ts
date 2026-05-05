@@ -189,6 +189,7 @@ export type BuildApplication = {
   labelKey?: ApplicationLabel | null;
   sourceTag?: string | null;
   aiWhyMatch?: string | null;
+  snoozedUntil?: string | null;
 };
 
 export type ApplicationLabel = "SHORTLIST" | "INTERVIEW" | "HOLD" | "TOP_PICK";
@@ -621,6 +622,15 @@ export const buildApi = {
       undefined,
       { auth: false },
     ),
+  bulkCreateVacancies: (input: {
+    projectId: string;
+    rows: { title: string; description: string; salary?: number; city?: string; skills?: string | string[]; salaryCurrency?: string }[];
+  }) =>
+    call<{
+      created: number;
+      items: { id: string; title: string }[];
+      errors: { index: number; error: string }[];
+    }>("POST", "/api/build/vacancies/bulk", input),
   vacancyHistory: (id: string) =>
     call<{
       items: {
@@ -748,7 +758,7 @@ export const buildApi = {
     referredByUserId?: string;
     sourceTag?: string;
   }) => call<BuildApplication>("POST", "/api/build/applications", input),
-  applyVacancy: (input: { vacancyId: string; message?: string; sourceTag?: string }) =>
+  applyVacancy: (input: { vacancyId: string; message?: string; sourceTag?: string; referredByUserId?: string }) =>
     call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
   applicationsByVacancy: (vacancyId: string) =>
@@ -761,6 +771,12 @@ export const buildApi = {
       "PATCH",
       `/api/build/applications/${encodeURIComponent(id)}`,
       { status, ...(rejectReason ? { rejectReason } : {}) },
+    ),
+  snoozeApplication: (id: string, days: number) =>
+    call<{ snoozedUntil: string | null }>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/snooze`,
+      { days },
     ),
   flagApplication: (id: string, reason: string, note?: string) =>
     call<{ id: string }>(

@@ -34,7 +34,7 @@
  * Verify: HMAC-SHA256(notifySecret, `${timestamp}.${rawBody}`).
  */
 
-import { Router, raw } from "express";
+import { Router } from "express";
 import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
 import Stripe from "stripe";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1820,15 +1820,17 @@ qpaynetRouter.post("/deposit/confirm-stub", async (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/qpaynet/deposit/webhook — Stripe webhook (raw body, signature verified)
-qpaynetRouter.post("/deposit/webhook", raw({ type: "application/json" }), async (req, res) => {
+// POST /api/qpaynet/deposit/webhook — Stripe webhook (raw body via verify hook)
+qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   if (!stripe || !STRIPE_WH) return res.status(503).json({ error: "stripe_or_webhook_secret_missing" });
   const sig = req.headers["stripe-signature"] as string | undefined;
   if (!sig) return res.status(400).json({ error: "missing_signature" });
+  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+  if (!rawBody) return res.status(500).json({ error: "raw_body_unavailable" });
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(req.body as Buffer, sig, STRIPE_WH);
+    event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WH);
   } catch (err) {
     return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
   }
@@ -1839,18 +1841,39 @@ qpaynetRouter.post("/deposit/webhook", raw({ type: "application/json" }), async 
     if (checkoutId) {
       await ensureDepositCheckoutsTable();
       const pool = getPool();
-      const c = await pool.query(
-        "SELECT id, owner_id, wallet_id, amount, status FROM qpaynet_deposit_checkouts WHERE id=$1",
-        [checkoutId],
-      );
-      if (c.rows[0] && c.rows[0].status === "open") {
-        await creditDeposit(pool, c.rows[0].id, c.rows[0].wallet_id, c.rows[0].owner_id, BigInt(c.rows[0].amount), "Пополнение карты (Stripe)");
+      // Atomic: lock the row, check status — protects against Stripe retry +
+      // any other concurrent webhook delivery from double-crediting.
+      try {
+        await withTx(async (c) => {
+          const r = await c.query(
+            "SELECT id, owner_id, wallet_id, amount, status FROM qpaynet_deposit_checkouts WHERE id=$1 FOR UPDATE",
+            [checkoutId],
+          );
+          if (!r.rows[0] || r.rows[0].status !== "open") return; // already credited or not found
+          const txId = randomUUID();
+          await c.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [BigInt(r.rows[0].amount), r.rows[0].wallet_id]);
+          await c.query(
+            "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
+            [txId, r.rows[0].wallet_id, r.rows[0].owner_id, BigInt(r.rows[0].amount), "Пополнение карты (Stripe)"],
+          );
+          await c.query(
+            "UPDATE qpaynet_deposit_checkouts SET status='paid', tx_id=$1, completed_at=NOW() WHERE id=$2",
+            [txId, r.rows[0].id],
+          );
+          // notify outside the txn (best-effort)
+          void notify(pool, r.rows[0].owner_id, "deposit_received", `Пополнено ${fromTiin(BigInt(r.rows[0].amount)).toLocaleString("ru-RU")} ₸`, "Stripe", txId, BigInt(r.rows[0].amount));
+          void auditLog(pool, r.rows[0].owner_id, "stripe_deposit_credited", { checkoutId, txId, eventId: event.id });
+        });
+      } catch (err) {
+        console.error("[qpaynet stripe webhook]", err instanceof Error ? err.message : err);
       }
     }
   }
   res.json({ received: true });
 });
 
+// Atomic credit: locks deposit_checkout row, checks status, updates wallet+tx
+// in single transaction. Idempotent: if status already paid, does nothing.
 async function creditDeposit(
   pool: ReturnType<typeof getPool>,
   checkoutId: string,
@@ -1859,17 +1882,29 @@ async function creditDeposit(
   tiin: bigint,
   description: string,
 ): Promise<void> {
-  const txId = randomUUID();
-  await pool.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
-  await pool.query(
-    "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
-    [txId, walletId, ownerId, tiin, description],
-  );
-  await pool.query(
-    "UPDATE qpaynet_deposit_checkouts SET status='paid', tx_id=$1, completed_at=NOW() WHERE id=$2",
-    [txId, checkoutId],
-  );
-  await notify(pool, ownerId, "deposit_received", `Пополнено ${fromTiin(tiin).toLocaleString("ru-RU")} ₸`, description, txId, tiin);
+  let txId: string | null = null;
+  await withTx(async (c) => {
+    const r = await c.query(
+      "SELECT status FROM qpaynet_deposit_checkouts WHERE id=$1 FOR UPDATE",
+      [checkoutId],
+    );
+    if (!r.rows[0] || r.rows[0].status !== "open") return; // dedupe
+    const newTxId = randomUUID();
+    await c.query("UPDATE qpaynet_wallets SET balance = balance + $1 WHERE id=$2", [tiin, walletId]);
+    await c.query(
+      "INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description) VALUES ($1,$2,$3,'deposit',$4,$5)",
+      [newTxId, walletId, ownerId, tiin, description],
+    );
+    await c.query(
+      "UPDATE qpaynet_deposit_checkouts SET status='paid', tx_id=$1, completed_at=NOW() WHERE id=$2",
+      [newTxId, checkoutId],
+    );
+    txId = newTxId;
+  });
+  if (txId) {
+    void notify(pool, ownerId, "deposit_received", `Пополнено ${fromTiin(tiin).toLocaleString("ru-RU")} ₸`, description, txId, tiin);
+    void auditLog(pool, ownerId, "deposit_credited", { checkoutId, txId, source: description });
+  }
 }
 
 // GET /api/qpaynet/deposit/checkout/:id — owner polls status

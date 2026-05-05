@@ -36,6 +36,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   const [labelFilter, setLabelFilter] = useState<ApplicationLabel | "ALL">("ALL");
   const [minAi, setMinAi] = useState<number>(0);
   const [minMatch, setMinMatch] = useState<number>(0);
+  const [showSnoozed, setShowSnoozed] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [focusedAppIdx, setFocusedAppIdx] = useState<number>(-1);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
@@ -386,6 +387,35 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                     }}
                   />
                   {(() => {
+                    const nowMs = Date.now();
+                    const snoozedCount = applications.filter(
+                      (a) => a.status === "PENDING" && a.snoozedUntil && new Date(a.snoozedUntil).getTime() > nowMs,
+                    ).length;
+                    if (snoozedCount === 0) return null;
+                    return (
+                      <div className="mb-3 flex items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
+                        <span className="text-slate-300">
+                          💤 {snoozedCount} snoozed
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSnoozed((v) => !v);
+                            setSelected(new Set());
+                          }}
+                          className={`ml-auto rounded-md px-2 py-0.5 ${
+                            showSnoozed
+                              ? "bg-emerald-500/20 text-emerald-200"
+                              : "bg-white/5 text-slate-400 hover:bg-white/10"
+                          }`}
+                        >
+                          {showSnoozed ? "Hide snoozed" : "Show snoozed"}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const nowMs = Date.now();
                     const filtered = applications.filter((a) => {
                       if (labelFilter !== "ALL" && a.labelKey !== labelFilter) return false;
                       if (minAi > 0) {
@@ -393,6 +423,16 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                       }
                       if (minMatch > 0) {
                         if (a.matchScore == null || a.matchScore < minMatch) return false;
+                      }
+                      // Snooze: hide PENDING applications whose snoozedUntil is in the future,
+                      // unless the user explicitly toggles "Show snoozed".
+                      if (
+                        !showSnoozed &&
+                        a.status === "PENDING" &&
+                        a.snoozedUntil &&
+                        new Date(a.snoozedUntil).getTime() > nowMs
+                      ) {
+                        return false;
                       }
                       return true;
                     });
@@ -1012,6 +1052,13 @@ function ApplicationRow({
         )}
         <InterviewPrepButton applicationId={app.id} />
         <WhyMatchButton applicationId={app.id} />
+        {app.status === "PENDING" && (
+          <SnoozeApplicationButton
+            applicationId={app.id}
+            currentSnoozedUntil={app.snoozedUntil ?? null}
+            onChanged={onChanged}
+          />
+        )}
         <FlagApplicationButton applicationId={app.id} />
       </div>
       {aiOpen && aiDetails && (
@@ -1737,6 +1784,86 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
           >
             📋 Copy snippet
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SnoozeApplicationButton({
+  applicationId,
+  currentSnoozedUntil,
+  onChanged,
+}: {
+  applicationId: string;
+  currentSnoozedUntil: string | null;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const isSnoozed = !!(currentSnoozedUntil && new Date(currentSnoozedUntil).getTime() > Date.now());
+  const daysLeft = isSnoozed
+    ? Math.max(0, Math.ceil((new Date(currentSnoozedUntil!).getTime() - Date.now()) / 86400000))
+    : 0;
+
+  async function snooze(days: number) {
+    setBusy(true);
+    try {
+      await buildApi.snoozeApplication(applicationId, days);
+      if (days > 0) toast.success(`Snoozed ${days}d`);
+      else toast.success("Snooze cleared");
+      onChanged();
+      setOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={busy}
+        title={isSnoozed ? `Snoozed ${daysLeft}d more` : "Snooze this application"}
+        className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
+          isSnoozed
+            ? "border-amber-500/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
+            : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+        }`}
+      >
+        💤 {isSnoozed ? `${daysLeft}d` : "Snooze"}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-white/10 bg-slate-900 p-2 shadow-2xl">
+          <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500">
+            Snooze for
+          </div>
+          {[1, 3, 7, 14].map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => snooze(d)}
+              disabled={busy}
+              className="block w-full rounded px-2 py-1 text-left text-xs text-slate-200 hover:bg-white/5"
+            >
+              {d} day{d === 1 ? "" : "s"}
+            </button>
+          ))}
+          {isSnoozed && (
+            <button
+              type="button"
+              onClick={() => snooze(0)}
+              disabled={busy}
+              className="mt-1 block w-full rounded border-t border-white/5 px-2 py-1 text-left text-xs text-rose-200 hover:bg-rose-500/10"
+            >
+              Clear snooze
+            </button>
+          )}
         </div>
       )}
     </div>

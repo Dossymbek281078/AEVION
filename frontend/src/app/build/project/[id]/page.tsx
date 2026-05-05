@@ -119,7 +119,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <h2 className="text-lg font-semibold text-white">
                 Vacancies <span className="text-slate-500">({vacancies.length})</span>
               </h2>
-              {isOwner && <NewVacancyButton projectId={project.id} onCreated={refresh} />}
+              {isOwner && (
+                <div className="flex items-center gap-2">
+                  <BulkImportButton projectId={project.id} onCreated={refresh} />
+                  <NewVacancyButton projectId={project.id} onCreated={refresh} />
+                </div>
+              )}
             </div>
             {vacancies.length === 0 ? (
               <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
@@ -412,6 +417,154 @@ function TemplatePicker({
       )}
     </div>
   );
+}
+
+function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [csv, setCsv] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ created: number; errors: { index: number; error: string }[] } | null>(null);
+
+  function parse(text: string): { rows: { title: string; description: string; salary?: number; city?: string; skills?: string }[]; parseErrors: string[] } {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return { rows: [], parseErrors: ["Empty input"] };
+    // First line treated as header iff contains 'title'.
+    const looksLikeHeader = /title/i.test(lines[0]);
+    const dataLines = looksLikeHeader ? lines.slice(1) : lines;
+    const out: { title: string; description: string; salary?: number; city?: string; skills?: string }[] = [];
+    for (const line of dataLines) {
+      const cols = splitCsvLine(line);
+      const [title, description, salary, city, skills] = cols;
+      if (!title || !description) {
+        // skip silently — bulk endpoint will report per-row errors anyway
+        out.push({ title: title ?? "", description: description ?? "" });
+        continue;
+      }
+      const row: { title: string; description: string; salary?: number; city?: string; skills?: string } = {
+        title,
+        description,
+      };
+      if (salary && /^\d+$/.test(salary.trim())) row.salary = Number(salary);
+      if (city) row.city = city;
+      if (skills) row.skills = skills;
+      out.push(row);
+    }
+    return { rows: out, parseErrors: [] };
+  }
+
+  async function submit() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const { rows } = parse(csv);
+      if (rows.length === 0) throw new Error("No rows parsed");
+      const r = await buildApi.bulkCreateVacancies({ projectId, rows });
+      setResult({ created: r.created, errors: r.errors });
+      if (r.created > 0) onCreated();
+    } catch (e) {
+      setResult({ created: 0, errors: [{ index: -1, error: (e as Error).message }] });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+        title="Paste CSV with title,description,salary,city,skills to create many vacancies at once"
+      >
+        ↑ Bulk import CSV
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-white">Bulk import vacancies</h3>
+              <button onClick={() => setOpen(false)} aria-label="Close" className="text-slate-400 hover:text-white">×</button>
+            </div>
+            <p className="mb-2 text-xs text-slate-400">
+              CSV columns: <code className="rounded bg-white/10 px-1 text-slate-200">title,description,salary,city,skills</code>.
+              Skills are pipe-separated within the cell (welding|autocad). Header row optional. Up to 50 rows per call.
+            </p>
+            <textarea
+              value={csv}
+              onChange={(e) => setCsv(e.target.value)}
+              rows={10}
+              placeholder={`title,description,salary,city,skills\n"Senior welder","TIG/MIG, certified, 5+y",800000,Astana,"welding|tig|certified"`}
+              className="w-full rounded-md border border-white/10 bg-black/40 p-2 font-mono text-[11px] text-slate-100 focus:border-emerald-500/40 focus:outline-none"
+            />
+            {result && (
+              <div className="mt-3 rounded-md border border-white/10 bg-white/[0.03] p-2 text-xs">
+                <div className="font-semibold text-emerald-300">Created: {result.created}</div>
+                {result.errors.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-rose-200">
+                    {result.errors.slice(0, 8).map((e, i) => (
+                      <li key={i}>
+                        Row {e.index >= 0 ? e.index + 1 : "?"}: {e.error}
+                      </li>
+                    ))}
+                    {result.errors.length > 8 && <li>+{result.errors.length - 8} more…</li>}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy || csv.trim().length < 10}
+                className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+              >
+                {busy ? "Importing…" : "Import"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += c;
+      }
+    } else {
+      if (c === '"') {
+        inQuotes = true;
+      } else if (c === ",") {
+        out.push(cur.trim());
+        cur = "";
+      } else {
+        cur += c;
+      }
+    }
+  }
+  out.push(cur.trim());
+  return out;
 }
 
 function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {

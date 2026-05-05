@@ -605,6 +605,78 @@ vacanciesRouter.post("/:id/boost", async (req, res) => {
   }
 });
 
+// POST /api/build/vacancies/bulk — create up to 50 vacancies under one project
+// from a parsed array. Owner-only on the project. Returns per-row errors so
+// the UI can surface partial failures rather than rolling back everything.
+vacanciesRouter.post("/bulk", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const projectId = vString(req.body?.projectId, "projectId", { min: 1, max: 200 });
+    if (!projectId.ok) return fail(res, 400, projectId.error);
+    const rowsInput = Array.isArray(req.body?.rows) ? req.body.rows : null;
+    if (!rowsInput || rowsInput.length === 0) {
+      return fail(res, 400, "rows_required");
+    }
+    if (rowsInput.length > 50) {
+      return fail(res, 400, "too_many_rows", { limit: 50, got: rowsInput.length });
+    }
+
+    const project = await pool.query(
+      `SELECT "id","clientId" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`,
+      [projectId.value],
+    );
+    if (project.rowCount === 0) return fail(res, 404, "project_not_found");
+    if (project.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_project_owner_can_bulk_post");
+    }
+
+    const created: { id: string; title: string }[] = [];
+    const errors: { index: number; error: string }[] = [];
+
+    for (let i = 0; i < rowsInput.length; i++) {
+      const r = rowsInput[i];
+      const title = vString(r?.title, "title", { min: 3, max: 200 });
+      if (!title.ok) { errors.push({ index: i, error: title.error }); continue; }
+      const description = vString(r?.description, "description", { min: 10, max: 10_000 });
+      if (!description.ok) { errors.push({ index: i, error: description.error }); continue; }
+      const salaryRaw = r?.salary;
+      const salary = salaryRaw == null || salaryRaw === ""
+        ? { ok: true as const, value: 0 }
+        : vNumber(salaryRaw, "salary", { min: 0, max: 1e12 });
+      if (salary.ok === false) { errors.push({ index: i, error: salary.error }); continue; }
+      const skills = Array.isArray(r?.skills)
+        ? r.skills.map((s: unknown) => String(s).trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 30)
+        : typeof r?.skills === "string"
+          ? r.skills.split(/[;,|]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 30)
+          : [];
+      const city = r?.city == null ? null : String(r.city).trim().slice(0, 100) || null;
+      const salaryCurrency = typeof r?.salaryCurrency === "string"
+        ? r.salaryCurrency.trim().slice(0, 8) || "RUB"
+        : "RUB";
+      const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+
+      try {
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO "BuildVacancy"
+             ("id","projectId","title","description","salary","status","skillsJson","city","salaryCurrency","expiresAt")
+           VALUES ($1,$2,$3,$4,$5,'OPEN',$6,$7,$8,$9)`,
+          [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, expiresAt],
+        );
+        created.push({ id, title: title.value });
+      } catch (e) {
+        errors.push({ index: i, error: (e as Error).message });
+      }
+    }
+
+    return ok(res, { created: created.length, items: created, errors });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancies_bulk_failed", { details: (err as Error).message });
+  }
+});
+
 // PATCH /api/build/vacancies/:id — owner-only edits.
 // Accepts a partial body with any of: status / title / description / salary.
 // Each substantive change is logged to BuildVacancyEdit for the owner-only

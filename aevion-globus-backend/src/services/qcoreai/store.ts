@@ -2822,3 +2822,163 @@ export async function pinSession(id: string, userId: string | null, pinned: bool
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Notebook — user-curated snippets from run outputs.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type NotebookRow = {
+  id: string;
+  ownerUserId: string;
+  runId: string;
+  role: string;
+  content: string;
+  annotation: string | null;
+  tags: string[];
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memNotebook = new Map<string, NotebookRow>();
+
+export async function createSnippet(opts: {
+  ownerUserId: string;
+  runId: string;
+  role?: string;
+  content: string;
+  annotation?: string | null;
+  tags?: string[];
+}): Promise<NotebookRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: NotebookRow = {
+    id,
+    ownerUserId: opts.ownerUserId,
+    runId: opts.runId,
+    role: opts.role || "final",
+    content: opts.content.slice(0, 32000),
+    annotation: opts.annotation?.slice(0, 2000) ?? null,
+    tags: (opts.tags || []).slice(0, 10).map((t) => t.trim().toLowerCase().slice(0, 32)).filter(Boolean),
+    pinned: false,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+
+  if (!isDbReady()) {
+    memNotebook.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreNotebook" ("id","ownerUserId","runId","role","content","annotation","tags")
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING *`,
+    [id, row.ownerUserId, row.runId, row.role, row.content, row.annotation, row.tags]
+  );
+  return r.rows[0] as NotebookRow;
+}
+
+export async function listSnippets(
+  ownerUserId: string,
+  opts?: { tag?: string; q?: string; pinned?: boolean; limit?: number }
+): Promise<NotebookRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(200, opts?.limit ?? 50));
+
+  if (!isDbReady()) {
+    let rows = Array.from(memNotebook.values()).filter((n) => n.ownerUserId === ownerUserId);
+    if (opts?.pinned !== undefined) rows = rows.filter((n) => n.pinned === opts.pinned);
+    if (opts?.tag) rows = rows.filter((n) => n.tags.includes(opts.tag!));
+    if (opts?.q) {
+      const q = opts.q.toLowerCase();
+      rows = rows.filter((n) => n.content.toLowerCase().includes(q) || (n.annotation || "").toLowerCase().includes(q));
+    }
+    rows.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+    return rows.slice(0, lim);
+  }
+
+  const conditions = [`"ownerUserId"=$1`];
+  const vals: unknown[] = [ownerUserId];
+  let idx = 2;
+  if (opts?.pinned !== undefined) { conditions.push(`"pinned"=$${idx++}`); vals.push(opts.pinned); }
+  if (opts?.tag) { conditions.push(`$${idx++}=ANY("tags")`); vals.push(opts.tag); }
+  if (opts?.q) { conditions.push(`("content" ILIKE $${idx} OR "annotation" ILIKE $${idx})`); vals.push(`%${opts.q}%`); idx++; }
+  vals.push(lim);
+  const r = await pool.query(
+    `SELECT * FROM "QCoreNotebook" WHERE ${conditions.join(" AND ")}
+     ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $${idx}`,
+    vals
+  );
+  return r.rows as NotebookRow[];
+}
+
+export async function getSnippet(id: string): Promise<NotebookRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memNotebook.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreNotebook" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as NotebookRow) || null;
+}
+
+export async function updateSnippet(
+  id: string,
+  ownerUserId: string,
+  patch: Partial<Pick<NotebookRow, "annotation" | "tags" | "pinned">>
+): Promise<NotebookRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const n = memNotebook.get(id);
+    if (!n || n.ownerUserId !== ownerUserId) return null;
+    const updated = { ...n, ...patch, updatedAt: nowIso() };
+    memNotebook.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = ["\"updatedAt\"=NOW()"];
+  const vals: unknown[] = [id, ownerUserId];
+  let idx = 3;
+  if (patch.annotation !== undefined) { sets.push(`"annotation"=$${idx++}`); vals.push(patch.annotation); }
+  if (patch.tags !== undefined) { sets.push(`"tags"=$${idx++}`); vals.push(patch.tags); }
+  if (patch.pinned !== undefined) { sets.push(`"pinned"=$${idx++}`); vals.push(patch.pinned); }
+  const r = await pool.query(
+    `UPDATE "QCoreNotebook" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING *`,
+    vals
+  );
+  return (r.rows[0] as NotebookRow) || null;
+}
+
+export async function deleteSnippet(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const n = memNotebook.get(id);
+    if (!n || n.ownerUserId !== ownerUserId) return false;
+    memNotebook.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreNotebook" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, ownerUserId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listSnippetTagCloud(ownerUserId: string): Promise<Array<{ tag: string; count: number }>> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const freq: Record<string, number> = {};
+    for (const n of memNotebook.values()) {
+      if (n.ownerUserId !== ownerUserId) continue;
+      for (const t of n.tags) freq[t] = (freq[t] ?? 0) + 1;
+    }
+    return Object.entries(freq).map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count).slice(0, 30);
+  }
+  const r = await pool.query(
+    `SELECT unnest("tags") AS tag, COUNT(*)::int AS count
+     FROM "QCoreNotebook" WHERE "ownerUserId"=$1
+     GROUP BY tag ORDER BY count DESC LIMIT 30`,
+    [ownerUserId]
+  );
+  return r.rows as Array<{ tag: string; count: number }>;
+}

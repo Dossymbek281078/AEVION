@@ -249,6 +249,12 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   projectId={vacancy.projectId}
                 />
                 <SaveAsTemplateButton vacancy={vacancy} />
+                {vacancy.status === "CLOSED" && (
+                  <RepublishVacancyButton
+                    vacancyId={vacancy.id}
+                    onDone={refresh}
+                  />
+                )}
                 {(applications?.length ?? 0) === 0 && (
                   <DeleteVacancyButton
                     vacancyId={vacancy.id}
@@ -888,6 +894,13 @@ function ApplicationRow({
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-300">{app.message}</p>
       )}
       <div className="mt-3 flex items-center gap-2">
+        <Link
+          href={`/build/vacancy/${encodeURIComponent(app.vacancyId)}/review/${encodeURIComponent(app.id)}`}
+          className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20"
+          title="Open full-screen review (←/→ to navigate)"
+        >
+          🔍 Review
+        </Link>
         <Link
           href={`/build/messages?to=${encodeURIComponent(app.userId)}`}
           className="rounded-md bg-white/10 px-3 py-1.5 text-xs text-slate-200 hover:bg-white/20"
@@ -1885,6 +1898,43 @@ function DeleteVacancyButton({
       className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
     >
       {busy ? "…" : "🗑 Delete"}
+    </button>
+  );
+}
+
+function RepublishVacancyButton({
+  vacancyId,
+  onDone,
+}: {
+  vacancyId: string;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function republish() {
+    if (!confirm("Reopen this vacancy? Status will return to OPEN and expiry will reset to 30 days from now.")) return;
+    setBusy(true);
+    try {
+      await buildApi.republishVacancy(vacancyId);
+      toast.success("Vacancy reopened — expiry reset to 30 days");
+      onDone();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={republish}
+      disabled={busy}
+      title="Reopen this vacancy and reset expiry"
+      className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-50"
+    >
+      {busy ? "…" : "↻ Reopen"}
     </button>
   );
 }

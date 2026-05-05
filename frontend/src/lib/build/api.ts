@@ -343,7 +343,7 @@ export class BuildApiError extends Error {
 }
 
 async function call<T>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
   init?: { auth?: boolean; signal?: AbortSignal },
@@ -662,6 +662,34 @@ export const buildApi = {
       `/api/build/vacancies/${encodeURIComponent(id)}/duplicate`,
       { projectId: targetProjectId },
     ),
+  republishVacancy: (id: string) =>
+    call<BuildVacancy>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(id)}/republish`,
+    ),
+
+  // Notification preferences
+  getNotificationPrefs: () =>
+    call<{
+      jobAlerts: boolean;
+      applicationEmail: boolean;
+      weeklyDigest: boolean;
+      marketing: boolean;
+      updatedAt?: string;
+    }>("GET", "/api/build/settings/notifications"),
+  setNotificationPrefs: (input: Partial<{
+    jobAlerts: boolean;
+    applicationEmail: boolean;
+    weeklyDigest: boolean;
+    marketing: boolean;
+  }>) =>
+    call<{
+      jobAlerts: boolean;
+      applicationEmail: boolean;
+      weeklyDigest: boolean;
+      marketing: boolean;
+      updatedAt: string;
+    }>("PUT", "/api/build/settings/notifications", input),
   matchCandidates: (vacancyId: string) =>
     call<{
       items: (TalentRow & { matchScore: number; matchedSkills: string[] })[];

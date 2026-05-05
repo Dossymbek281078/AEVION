@@ -211,6 +211,45 @@ statsRouter.get("/hires", async (req, res) => {
   }
 });
 
+// GET /api/build/stats/featured-employers — public top-6 employers ranked by
+// hire count + review average. Fueled by /build home carousel.
+statsRouter.get("/featured-employers", async (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+  try {
+    const r = await pool.query(
+      `WITH per_employer AS (
+         SELECT pj."clientId" AS "userId",
+                COUNT(DISTINCT a."id") FILTER (WHERE a."status" = 'ACCEPTED') AS "hires",
+                COUNT(DISTINCT v."id") FILTER (WHERE v."status" = 'OPEN') AS "openVacancies"
+         FROM "BuildProject" pj
+         LEFT JOIN "BuildVacancy" v ON v."projectId" = pj."id"
+         LEFT JOIN "BuildApplication" a ON a."vacancyId" = v."id"
+         GROUP BY pj."clientId"
+       ),
+       per_review AS (
+         SELECT r."revieweeId" AS "userId",
+                AVG(r."rating")::float AS "avgRating",
+                COUNT(*)::int AS "reviewCount"
+         FROM "BuildReview" r GROUP BY r."revieweeId"
+       )
+       SELECT pe."userId", u."name", p."title", p."city", p."photoUrl", p."verifiedAt",
+              pe."hires", pe."openVacancies",
+              COALESCE(pr."avgRating", 0) AS "avgRating",
+              COALESCE(pr."reviewCount", 0) AS "reviewCount"
+       FROM per_employer pe
+       JOIN "AEVIONUser" u ON u."id" = pe."userId"
+       LEFT JOIN "BuildProfile" p ON p."userId" = pe."userId"
+       LEFT JOIN per_review pr ON pr."userId" = pe."userId"
+       WHERE pe."openVacancies" > 0 OR pe."hires" > 0
+       ORDER BY pe."hires" DESC, COALESCE(pr."avgRating",0) DESC, pe."openVacancies" DESC
+       LIMIT 6`,
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "featured_employers_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/employers/:id/overview — public aggregated brand view.
 // Combines the employer's profile + their projects + their open vacancies +
 // summary metrics so the /build/employer/:id page (and the /build/company/:id

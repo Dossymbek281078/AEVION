@@ -94,6 +94,7 @@ export default function BuildHomePage() {
 
       <LiveActivityBand />
 
+      <FeaturedEmployers />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
@@ -380,5 +381,96 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "em
       <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
     </div>
+  );
+}
+
+function FeaturedEmployers() {
+  const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.featuredEmployers>>["items"]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .featuredEmployers()
+      .then((r) => {
+        if (!cancelled) {
+          setItems(r.items);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <section className="mb-6">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+          Featured employers
+        </h2>
+        <Link href="/build/leaderboard" className="text-[11px] text-emerald-300 hover:underline">
+          See all →
+        </Link>
+      </div>
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {items.map((e) => (
+          <Link
+            key={e.userId}
+            href={`/build/employer/${encodeURIComponent(e.userId)}`}
+            className="group shrink-0 rounded-xl border border-white/10 bg-white/[0.03] p-3 transition hover:border-emerald-500/30 hover:bg-white/[0.06]"
+            style={{ minWidth: 200, maxWidth: 240 }}
+          >
+            <div className="flex items-center gap-2">
+              {e.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={e.photoUrl}
+                  alt={e.name ?? ""}
+                  width={36}
+                  height={36}
+                  className="h-9 w-9 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-bold text-emerald-200">
+                  {(e.name ?? "?").charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1">
+                  <span className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
+                    {e.name ?? "Anonymous"}
+                  </span>
+                  {e.verifiedAt && (
+                    <span className="text-[10px] text-sky-300" title="Verified">✓</span>
+                  )}
+                </div>
+                {e.city && <div className="truncate text-[10px] text-slate-400">📍 {e.city}</div>}
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+              <span>
+                {e.openVacancies > 0 ? (
+                  <span className="text-emerald-300">{e.openVacancies} open</span>
+                ) : (
+                  <span className="text-slate-500">no open roles</span>
+                )}
+              </span>
+              <span>
+                {e.hires > 0 && <span>{e.hires} hires</span>}
+                {e.avgRating > 0 && (
+                  <span className="ml-1.5 text-amber-300">★ {e.avgRating.toFixed(1)}</span>
+                )}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

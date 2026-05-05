@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { VacancySkeleton } from "@/components/build/Skeleton";
+import { CompareToggleButton } from "@/components/build/CompareToggleButton";
 import { buildApi, type BuildVacancy, type VacancyStatus } from "@/lib/build/api";
 import { getRecentVacancies, clearRecentVacancies, type RecentVacancy } from "@/lib/build/recentlyViewed";
 
@@ -236,7 +237,14 @@ export default function VacanciesFeedPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((v) => (
-            <VacancyCard key={v.id} vacancy={v} showProject />
+            <div key={v.id} className="relative">
+              <VacancyCard vacancy={v} showProject />
+              <div className="absolute bottom-2 right-2">
+                <CompareToggleButton
+                  entry={{ id: v.id, title: v.title, salary: v.salary, city: v.city ?? null }}
+                />
+              </div>
+            </div>
           ))}
         </div>
       )}

@@ -7,6 +7,7 @@ import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
 import { ToastProvider } from "./Toast";
 import { HeaderSearch } from "./HeaderSearch";
+import { CompareBar } from "./CompareBar";
 
 const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build", label: "Projects" },
@@ -158,6 +159,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
       />
 
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <CompareBar />
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
       <footer className="border-t border-white/5 mt-8">
         <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">

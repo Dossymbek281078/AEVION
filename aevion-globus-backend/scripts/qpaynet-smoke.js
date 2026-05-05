@@ -356,9 +356,50 @@ async function run() {
   assert("description > 200 chars → 400 validation_failed",
     longDesc.status === 400 && longDesc.body.error === "validation_failed" && longDesc.body.field === "description");
 
-  // 30. Reconciliation endpoint — money supply must match the ledger.
+  // 26. Wallet freeze / unfreeze (admin)
+  console.log("\n26. Wallet freeze");
+  const fwResp = await req("POST", "/api/qpaynet/wallets", { name: "freeze-test" }, auth);
+  const fwId = fwResp.body.id;
+  const fwNoReason = await req("POST", `/api/qpaynet/admin/wallets/${fwId}/freeze`, {}, auth);
+  assert("freeze without reason → 400 or 403", [400, 403].includes(fwNoReason.status));
+  const fwOk = await req("POST", `/api/qpaynet/admin/wallets/${fwId}/freeze`,
+    { reason: "smoke freeze" }, auth);
+  assert("freeze with reason → 200 or 403", [200, 403].includes(fwOk.status));
+  if (fwOk.status === 200) {
+    const dep = await req("POST", "/api/qpaynet/deposit",
+      { walletId: fwId, amount: 1 }, auth);
+    assert("deposit to frozen wallet → 400 wallet_inactive",
+      dep.status === 400 && dep.body.error === "wallet_inactive");
+    const unfreeze = await req("POST", `/api/qpaynet/admin/wallets/${fwId}/unfreeze`,
+      { reason: "smoke unfreeze" }, auth);
+    assert("unfreeze → 200", unfreeze.status === 200);
+    const dep2 = await req("POST", "/api/qpaynet/deposit",
+      { walletId: fwId, amount: 1 }, auth);
+    assert("deposit after unfreeze → 200", dep2.status === 200);
+  }
+
+  // 27. Refund — full + double-refund rejection
+  console.log("\n27. Refund");
+  const depForRefund = await req("POST", "/api/qpaynet/deposit",
+    { walletId, amount: 100 }, auth);
+  const refundTxId = depForRefund.body.txId;
+  const rNoReason = await req("POST", "/api/qpaynet/admin/refund", { txId: refundTxId }, auth);
+  assert("refund without reason → 400 or 403", [400, 403].includes(rNoReason.status));
+  const rOk = await req("POST", "/api/qpaynet/admin/refund",
+    { txId: refundTxId, reason: "smoke refund" }, auth);
+  assert("refund → 200 or 403", [200, 403].includes(rOk.status));
+  if (rOk.status === 200) {
+    assert("refund returns refundId", typeof rOk.body.refundId === "string");
+    assert("refund records correct amount", rOk.body.refundedKzt === 100);
+    const rDup = await req("POST", "/api/qpaynet/admin/refund",
+      { txId: refundTxId, reason: "smoke double" }, auth);
+    assert("double refund → 409 tx_already_refunded",
+      rDup.status === 409 && rDup.body.error === "tx_already_refunded");
+  }
+
+  // 28. Reconciliation endpoint — money supply must match the ledger.
   // Admin-gated; if QPAYNET_ADMIN_EMAILS unset, open access. Skip if 403.
-  console.log("\n25. Reconcile");
+  console.log("\n28. Reconcile");
   const recon = await req("GET", "/api/qpaynet/admin/reconcile", null, auth);
   assert("GET /admin/reconcile → 200 or 403", [200, 403].includes(recon.status));
   if (recon.status === 200) {

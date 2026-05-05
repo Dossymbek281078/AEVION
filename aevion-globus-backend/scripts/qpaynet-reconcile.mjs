@@ -39,11 +39,16 @@ try {
       (SELECT COALESCE(SUM(amount)::bigint, 0) FROM qpaynet_transactions WHERE type='deposit') AS deposits,
       (SELECT COALESCE(SUM(amount + COALESCE(fee,0))::bigint, 0) FROM qpaynet_transactions WHERE type='withdraw') AS withdraw_total,
       (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='transfer_out') AS transfer_fees,
-      (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='merchant_charge') AS merchant_fees
+      (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='merchant_charge') AS merchant_fees,
+      (SELECT COALESCE(SUM(amount)::bigint, 0) FROM qpaynet_transactions WHERE type='refund') AS refunds
   `);
   const row = r.rows[0];
   const actual = BigInt(row.actual);
-  const expected = BigInt(row.deposits) - BigInt(row.withdraw_total) - BigInt(row.transfer_fees) - BigInt(row.merchant_fees);
+  const expected = BigInt(row.deposits)
+    - BigInt(row.withdraw_total)
+    - BigInt(row.transfer_fees)
+    - BigInt(row.merchant_fees)
+    - BigInt(row.refunds);
   const drift = actual - expected;
 
   console.log(`[qpaynet-reconcile] actual_balance=${actual}t expected=${expected}t drift=${drift}t`);
@@ -54,6 +59,7 @@ try {
     console.error(`  withdraw_total:  ${row.withdraw_total}`);
     console.error(`  transfer_fees:   ${row.transfer_fees}`);
     console.error(`  merchant_fees:   ${row.merchant_fees}`);
+    console.error(`  refunds:         ${row.refunds}`);
     process.exit(1);
   }
   console.log(`[qpaynet-reconcile] ok`);

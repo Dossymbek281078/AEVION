@@ -143,12 +143,33 @@ silently keep retrying past 5 attempts (we'll waste budget on dead URLs).
 
 ### 4.6 Suspected fraud / chargeback
 
-1. Freeze wallet: `UPDATE qpaynet_wallets SET status='frozen' WHERE id=$1`.
+1. Freeze wallet via API (preferred — audit-logged + user notified):
+
+   ```bash
+   curl -X POST $API/api/qpaynet/admin/wallets/<wallet-id>/freeze \
+     -H "Authorization: Bearer $ADMIN_JWT" \
+     -H "Content-Type: application/json" \
+     -d '{"reason":"chargeback investigation case #..."}'
+   ```
+
+   SQL fallback if API is down: `UPDATE qpaynet_wallets SET status='frozen' WHERE id=$1`.
 2. Pull audit trail: `SELECT * FROM qpaynet_audit_log WHERE owner_id=$1 ORDER BY created_at DESC LIMIT 100`.
 3. Pull tx history: `SELECT * FROM qpaynet_transactions WHERE wallet_id=$1 OR owner_id=$2 ORDER BY created_at DESC`.
-4. If chargeback originates from Stripe deposit, refund via Stripe + reverse
-   our credit: `INSERT INTO qpaynet_transactions … type='deposit_reversal'`.
-   Do not just `UPDATE balance` — leaves no audit trail.
+4. If chargeback originates from Stripe deposit:
+   - Refund via Stripe dashboard.
+   - Reverse our credit through the refund API:
+
+     ```bash
+     curl -X POST $API/api/qpaynet/admin/refund \
+       -H "Authorization: Bearer $ADMIN_JWT" \
+       -H "Content-Type: application/json" \
+       -d '{"txId":"<original-deposit-tx-id>","reason":"stripe chargeback case #..."}'
+     ```
+
+   - Do NOT manually `UPDATE qpaynet_wallets SET balance = ...` — that breaks
+     reconcile (no offsetting ledger row). Always use `/admin/refund`.
+5. After resolution, unfreeze:
+   `POST /admin/wallets/:id/unfreeze` with `{"reason":"resolved case #..."}`.
 
 ## § 5 Key rotation
 
@@ -244,8 +265,10 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Postgres backup automation | partial — `scripts/qpaynet-backup.mjs` exists; cron not wired | — |
 | Reconciliation endpoint | done — `GET /api/qpaynet/admin/reconcile` + `scripts/qpaynet-reconcile.mjs` | — |
 | Reconciliation cron + paging | open — wire 15min cron → `scripts/qpaynet-reconcile.mjs` exit-code → ALERT_URL | — |
-| Refunds API | open | — |
-| Soft-freeze API for wallets | open | — |
+| Refunds API | done — `POST /api/qpaynet/admin/refund` (idempotent, audit-logged, accounted in reconcile) | — |
+| Soft-freeze API | done — `/admin/wallets/:id/{freeze,unfreeze}` (status='frozen' rejected by all money paths) | — |
+| ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |
+| Per-tier money limits | open — currently 30/min hardcoded; merchant integrations need bumps | — |
 
 Anything in "open" is documented but not yet code. When you finish one, move
 the row up and update the date.

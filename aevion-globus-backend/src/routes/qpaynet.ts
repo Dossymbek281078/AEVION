@@ -42,7 +42,8 @@ const rateLimit = require("express-rate-limit") as typeof import("express-rate-l
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
-import { validateOr400, ValidationError } from "../lib/qpaynetValidate";
+import { validateOr400 } from "../lib/qpaynetValidate";
+import { encryptSecret, decryptSecret } from "../lib/qpaynetCrypto";
 
 export const qpaynetRouter = Router();
 
@@ -992,8 +993,13 @@ qpaynetRouter.post("/merchant/keys", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { name = "API Key", walletId } = req.body as { name?: string; walletId?: string };
-  if (!walletId) return res.status(400).json({ error: "walletId required" });
+  const parsed = validateOr400(req, res, {
+    walletId: "uuid",
+    name: { kind: "string", optional: true, max: 80 },
+  });
+  if (!parsed) return;
+  const walletId = parsed.walletId as string;
+  const name = (parsed.name as string | undefined) ?? "API Key";
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1004,7 +1010,7 @@ qpaynetRouter.post("/merchant/keys", async (req, res) => {
   const id = randomUUID();
   await pool.query(
     "INSERT INTO qpaynet_merchant_keys (id, owner_id, name, key_hash, key_prefix, wallet_id) VALUES ($1,$2,$3,$4,$5,$6)",
-    [id, ownerId, name.slice(0, 80), hash, prefix, walletId],
+    [id, ownerId, name, hash, prefix, walletId],
   );
   res.status(201).json({ id, name, keyPrefix: prefix, key: raw, message: "Save this key — it won't be shown again." });
 });
@@ -1050,12 +1056,15 @@ qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
   );
   if (!mk.rows[0]) return res.status(403).json({ error: "invalid_or_revoked_key" });
 
-  const { amount, description, customerWalletId } = req.body as {
-    amount?: number; description?: string; customerWalletId?: string;
-  };
-  if (!amount || amount <= 0 || !customerWalletId) {
-    return res.status(400).json({ error: "amount and customerWalletId required" });
-  }
+  const parsed = validateOr400(req, res, {
+    customerWalletId: "uuid",
+    amount: { kind: "money", min: 1, max: MAX_TRANSFER_KZT },
+    description: { kind: "string", optional: true, max: 200 },
+  });
+  if (!parsed) return;
+  const customerWalletId = parsed.customerWalletId as string;
+  const amount = parsed.amount as number;
+  const description = parsed.description as string | undefined;
 
   const merchantWalletId = mk.rows[0].wallet_id;
   if (merchantWalletId === customerWalletId) return res.status(400).json({ error: "cannot_charge_own_wallet" });
@@ -1141,9 +1150,15 @@ qpaynetRouter.post("/kyc/submit", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { fullName, iin, address } = req.body as { fullName?: string; iin?: string; address?: string };
-  if (!fullName?.trim() || fullName.trim().length < 5) return res.status(400).json({ error: "full_name_required" });
-  if (!iin || !/^\d{12}$/.test(iin)) return res.status(400).json({ error: "iin_must_be_12_digits" });
+  const parsed = validateOr400(req, res, {
+    fullName: { kind: "string", min: 5, max: 200 },
+    iin: { kind: "string", pattern: /^\d{12}$/ },
+    address: { kind: "string", optional: true, max: 500 },
+  });
+  if (!parsed) return;
+  const fullName = (parsed.fullName as string).trim();
+  const iin = parsed.iin as string;
+  const address = (parsed.address as string | undefined)?.trim() ?? null;
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1161,7 +1176,7 @@ qpaynetRouter.post("/kyc/submit", async (req, res) => {
        verified_at = EXCLUDED.verified_at,
        rejected_at = NULL,
        rejected_reason = NULL`,
-    [ownerId, status, fullName.trim().slice(0, 200), iin, address?.trim().slice(0, 500) ?? null, KYC_AUTO_VERIFY ? new Date() : null],
+    [ownerId, status, fullName, iin, address, KYC_AUTO_VERIFY ? new Date() : null],
   );
   if (status === "verified") {
     void notify(pool, ownerId, "kyc_verified", "KYC верифицирован", "Месячный лимит снят. Все суммы доступны.");
@@ -1277,8 +1292,13 @@ qpaynetRouter.post("/webhook-subs", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { url, events = "payment_request.paid" } = req.body as { url?: string; events?: string };
-  if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: "url_must_be_http_or_https" });
+  const parsed = validateOr400(req, res, {
+    url: "url",
+    events: { kind: "string", optional: true, max: 500 },
+  });
+  if (!parsed) return;
+  const url = parsed.url as string;
+  const events = (parsed.events as string | undefined) ?? "payment_request.paid";
 
   const pool = getPool();
   const id = randomUUID();
@@ -1454,19 +1474,21 @@ qpaynetRouter.post("/requests", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { toWalletId, amount, description, note, expiresAt, notifyUrl } = req.body as {
-    toWalletId?: string; amount?: number; description?: string;
-    note?: string; expiresAt?: string; notifyUrl?: string;
-  };
-  if (!toWalletId || !amount || amount <= 0 || !description?.trim()) {
-    return res.status(400).json({ error: "toWalletId, positive amount, and description required" });
-  }
-  if (amount > MAX_TRANSFER_KZT) {
-    return res.status(400).json({ error: "request_amount_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
-  }
-  if (notifyUrl && !/^https?:\/\//i.test(notifyUrl)) {
-    return res.status(400).json({ error: "notifyUrl_must_be_http_or_https" });
-  }
+  const parsed = validateOr400(req, res, {
+    toWalletId: "uuid",
+    amount: { kind: "money", min: 1, max: MAX_TRANSFER_KZT },
+    description: { kind: "string", min: 1, max: 200 },
+    note: { kind: "string", optional: true, max: 500 },
+    expiresAt: { kind: "string", optional: true, max: 40 },
+    notifyUrl: { kind: "url", optional: true },
+  });
+  if (!parsed) return;
+  const toWalletId = parsed.toWalletId as string;
+  const amount = parsed.amount as number;
+  const description = (parsed.description as string).trim();
+  const note = parsed.note as string | undefined;
+  const expiresAt = parsed.expiresAt as string | undefined;
+  const notifyUrl = parsed.notifyUrl as string | undefined;
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1477,13 +1499,17 @@ qpaynetRouter.post("/requests", async (req, res) => {
   const token = randomBytes(16).toString("base64url");
   const tiin = toTiin(amount);
   // Auto-mint a per-request webhook secret so partners can verify HMAC.
+  // We RETURN it to the merchant once (plaintext); we STORE it encrypted
+  // when QPAYNET_ENCRYPTION_KEY is set. fireRequestWebhook decrypts at
+  // signing time. If env-key is unset, encryptSecret is a no-op (back-compat).
   const notifySecret = notifyUrl ? randomBytes(24).toString("base64url") : null;
+  const notifySecretStored = encryptSecret(notifySecret);
 
   await pool.query(
     `INSERT INTO qpaynet_payment_requests
        (id, owner_id, to_wallet_id, token, amount, description, note, expires_at, notify_url, notify_secret)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id, ownerId, toWalletId, token, tiin, description.trim(), note?.trim() ?? null, expiresAt ?? null, notifyUrl ?? null, notifySecret],
+    [id, ownerId, toWalletId, token, tiin, description, note?.trim() ?? null, expiresAt ?? null, notifyUrl ?? null, notifySecretStored],
   );
 
   const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
@@ -1593,8 +1619,9 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { fromWalletId } = req.body as { fromWalletId?: string };
-  if (!fromWalletId) return res.status(400).json({ error: "fromWalletId required" });
+  const parsed = validateOr400(req, res, { fromWalletId: "uuid" });
+  if (!parsed) return;
+  const fromWalletId = parsed.fromWalletId as string;
 
   const ownerId = auth.sub ?? auth.email ?? "anon";
   const idemKey = req.headers["idempotency-key"] as string | undefined;
@@ -1701,7 +1728,8 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
     );
   }
   if (pr.notify_url && pr.notify_secret) {
-    fireRequestWebhook(pr.notify_url, pr.notify_secret, payload).then(async (result) => {
+    const decryptedSecret = decryptSecret(pr.notify_secret) ?? "";
+    fireRequestWebhook(pr.notify_url, decryptedSecret, payload).then(async (result) => {
       if (result.ok) {
         await pool.query(
           "UPDATE qpaynet_payment_requests SET notified_at=NOW(), notify_attempts=1, notify_next_retry_at=NULL WHERE id=$1",
@@ -1775,11 +1803,13 @@ qpaynetRouter.post("/deposit/checkout", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { walletId, amount } = req.body as { walletId?: string; amount?: number };
-  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
-  if (amount > DAILY_DEPOSIT_CAP_KZT) {
-    return res.status(400).json({ error: "amount_exceeds_daily_cap", capKzt: DAILY_DEPOSIT_CAP_KZT });
-  }
+  const parsed = validateOr400(req, res, {
+    walletId: "uuid",
+    amount: { kind: "money", min: 100, max: DAILY_DEPOSIT_CAP_KZT },
+  });
+  if (!parsed) return;
+  const walletId = parsed.walletId as string;
+  const amount = parsed.amount as number;
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1834,8 +1864,9 @@ qpaynetRouter.post("/deposit/confirm-stub", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { id } = req.body as { id?: string };
-  if (!id) return res.status(400).json({ error: "id required" });
+  const parsed = validateOr400(req, res, { id: "uuid" });
+  if (!parsed) return;
+  const id = parsed.id as string;
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1968,13 +1999,17 @@ qpaynetRouter.post("/payouts", moneyLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { walletId, amount, method, destination } = req.body as {
-    walletId?: string; amount?: number; method?: string; destination?: string;
-  };
-  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
-  if (!method || !["card", "bank_transfer", "kaspi"].includes(method)) return res.status(400).json({ error: "method_must_be_card_bank_transfer_or_kaspi" });
-  if (!destination || destination.length < 4) return res.status(400).json({ error: "destination_required" });
-  if (amount > MAX_TRANSFER_KZT) return res.status(400).json({ error: "payout_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
+  const parsed = validateOr400(req, res, {
+    walletId: "uuid",
+    amount: { kind: "money", min: 1, max: MAX_TRANSFER_KZT },
+    method: { kind: "enum", values: ["card", "bank_transfer", "kaspi"] as const },
+    destination: { kind: "string", min: 4, max: 200 },
+  });
+  if (!parsed) return;
+  const walletId = parsed.walletId as string;
+  const amount = parsed.amount as number;
+  const method = parsed.method as string;
+  const destination = parsed.destination as string;
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -2054,6 +2089,63 @@ qpaynetRouter.get("/admin/payouts", async (req, res) => {
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   res.json({ payouts: r.rows.map((x: any) => ({ ...x, amount: fromTiin(BigInt(x.amount)) })) });
+});
+
+// GET /api/qpaynet/admin/reconcile — money-supply reconciliation.
+// Sums all wallet balances and compares against the immutable transaction
+// ledger. ANY drift = bug or hand-written SQL = page on it. Wire as cron
+// (every 15min). Returns 200 always; consumer reads `drift_tiin` field.
+//
+// expected = sum(deposits) - sum(withdraw + withdraw_fee) - sum(transfer_out_fees)
+//          - sum(merchant_charge_fees)
+qpaynetRouter.get("/admin/reconcile", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  try {
+    const r = await pool.query(`
+      SELECT
+        (SELECT COALESCE(SUM(balance)::bigint, 0) FROM qpaynet_wallets) AS actual,
+        (SELECT COALESCE(SUM(amount)::bigint, 0) FROM qpaynet_transactions WHERE type='deposit') AS deposits,
+        (SELECT COALESCE(SUM(amount + COALESCE(fee,0))::bigint, 0) FROM qpaynet_transactions WHERE type='withdraw') AS withdraw_total,
+        (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='transfer_out') AS transfer_fees,
+        (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='merchant_charge') AS merchant_fees,
+        (SELECT COUNT(*)::int FROM qpaynet_wallets WHERE balance < 0) AS negative_wallets
+    `);
+    const row = r.rows[0];
+    const actual = BigInt(row.actual);
+    const expected = BigInt(row.deposits) - BigInt(row.withdraw_total) - BigInt(row.transfer_fees) - BigInt(row.merchant_fees);
+    const drift = actual - expected;
+    res.json({
+      ok: drift === 0n && row.negative_wallets === 0,
+      checked_at: new Date().toISOString(),
+      actual_tiin: actual.toString(),
+      expected_tiin: expected.toString(),
+      drift_tiin: drift.toString(),
+      drift_kzt: Number(drift) / 100,
+      negative_wallet_count: row.negative_wallets,
+      breakdown: {
+        deposits_tiin: row.deposits,
+        withdraw_total_tiin: row.withdraw_total,
+        transfer_fees_tiin: row.transfer_fees,
+        merchant_fees_tiin: row.merchant_fees,
+      },
+    });
+    if (drift !== 0n || row.negative_wallets > 0) {
+      // Always log + Sentry on drift — operations should see this without
+      // having to poll the endpoint.
+      console.error(`[qpaynet/reconcile] DRIFT detected: ${drift} tiin, ${row.negative_wallets} negative wallets`);
+      captureException(new Error(`qpaynet reconcile drift=${drift}t neg=${row.negative_wallets}`), {
+        source: "qpaynet/reconcile", drift: drift.toString(), neg: row.negative_wallets,
+      });
+    }
+  } catch (err) {
+    captureException(err, { source: "qpaynet/reconcile", phase: "query" });
+    res.status(500).json({ error: "reconcile_failed", detail: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // GET /api/qpaynet/admin/payouts/stats — counts by status (for badges)
@@ -2241,13 +2333,13 @@ qpaynetRouter.post("/webhooks/test", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { url, secret } = req.body as { url?: string; secret?: string };
-  if (!url || !/^https?:\/\//i.test(url)) {
-    return res.status(400).json({ error: "url_must_be_http_or_https" });
-  }
-  if (!secret || secret.length < 16) {
-    return res.status(400).json({ error: "secret_must_be_at_least_16_chars" });
-  }
+  const parsed = validateOr400(req, res, {
+    url: "url",
+    secret: { kind: "string", min: 16, max: 200 },
+  });
+  if (!parsed) return;
+  const url = parsed.url as string;
+  const secret = parsed.secret as string;
 
   const payload = {
     event: "payment_request.paid",
@@ -2415,7 +2507,7 @@ async function runRetryTick(): Promise<void> {
         description: row.description, paid_by: row.paid_by,
         paid_tx_id: row.paid_tx_id, paid_at: row.paid_at,
       });
-      const result = await fireRequestWebhook(row.notify_url, row.notify_secret, payload);
+      const result = await fireRequestWebhook(row.notify_url, decryptSecret(row.notify_secret) ?? "", payload);
       const attempts = (row.notify_attempts ?? 0) + 1;
       if (result.ok) {
         await pool.query(

@@ -35,6 +35,7 @@ Latency budget reasoning: `/transfer` does 1 KYC read + 1 SELECT FOR UPDATE on
 | `QPAYNET_ADMIN_EMAILS` | recommended | — | comma-list with payouts/kyc admin powers |
 | `SMTP_HOST/PORT/USER/PASS/FROM` | no | — | without it email notifs are silently skipped |
 | `SENTRY_DSN` | recommended | — | error capture (no-op without it) |
+| `QPAYNET_ENCRYPTION_KEY` | recommended | — | hex-32 or passphrase; encrypts webhook `notify_secret` at rest. Without it, secrets store as plaintext (back-compat). |
 | `PG_POOL_MAX` | no | `20` | Postgres pool size |
 | `PG_POOL_IDLE_MS` | no | `30000` | idle connection eviction |
 | `PG_POOL_CONN_MS` | no | `5000` | acquire timeout |
@@ -238,10 +239,11 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Stripe webhook signature | done (rawBody fix) | — |
 | Sentry wiring | done | — |
 | Pool tuning | done | — |
-| Boundary validation | partial — wallets/deposit/withdraw/transfer covered, others (kyc, payouts, requests/create, merchant/keys, prefs) still ad-hoc | — |
-| pgcrypto for `notify_secret` | open | — |
-| Postgres backup automation | open (manual via § 6) | — |
-| Reconciliation cron (§ 6 query, hourly, alerts on mismatch) | open | — |
+| Boundary validation | done — deposit/withdraw/transfer/merchant-charge/kyc/requests/payouts/checkout/webhook-subs covered | — |
+| At-rest encryption for `notify_secret` | done — app-layer AES-256-GCM, no extension required | — |
+| Postgres backup automation | partial — `scripts/qpaynet-backup.mjs` exists; cron not wired | — |
+| Reconciliation endpoint | done — `GET /api/qpaynet/admin/reconcile` + `scripts/qpaynet-reconcile.mjs` | — |
+| Reconciliation cron + paging | open — wire 15min cron → `scripts/qpaynet-reconcile.mjs` exit-code → ALERT_URL | — |
 | Refunds API | open | — |
 | Soft-freeze API for wallets | open | — |
 

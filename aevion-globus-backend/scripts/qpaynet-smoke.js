@@ -356,6 +356,21 @@ async function run() {
   assert("description > 200 chars → 400 validation_failed",
     longDesc.status === 400 && longDesc.body.error === "validation_failed" && longDesc.body.field === "description");
 
+  // 30. Reconciliation endpoint — money supply must match the ledger.
+  // Admin-gated; if QPAYNET_ADMIN_EMAILS unset, open access. Skip if 403.
+  console.log("\n25. Reconcile");
+  const recon = await req("GET", "/api/qpaynet/admin/reconcile", null, auth);
+  assert("GET /admin/reconcile → 200 or 403", [200, 403].includes(recon.status));
+  if (recon.status === 200) {
+    assert("reconcile reports drift_tiin field", typeof recon.body.drift_tiin === "string");
+    assert("reconcile reports breakdown", typeof recon.body.breakdown === "object");
+    assert("reconcile drift is zero (ledger consistent)",
+      recon.body.drift_tiin === "0",
+      `drift=${recon.body.drift_tiin}t — ledger inconsistent, investigate immediately`);
+    assert("no negative wallets", recon.body.negative_wallet_count === 0,
+      `${recon.body.negative_wallet_count} wallets have negative balance`);
+  }
+
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

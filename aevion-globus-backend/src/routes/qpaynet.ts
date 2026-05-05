@@ -2097,7 +2097,7 @@ qpaynetRouter.get("/admin/payouts", async (req, res) => {
 // (every 15min). Returns 200 always; consumer reads `drift_tiin` field.
 //
 // expected = sum(deposits) - sum(withdraw + withdraw_fee) - sum(transfer_out_fees)
-//          - sum(merchant_charge_fees)
+//          - sum(merchant_charge_fees) - sum(refunds)
 qpaynetRouter.get("/admin/reconcile", async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
@@ -2113,11 +2113,16 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
         (SELECT COALESCE(SUM(amount + COALESCE(fee,0))::bigint, 0) FROM qpaynet_transactions WHERE type='withdraw') AS withdraw_total,
         (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='transfer_out') AS transfer_fees,
         (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='merchant_charge') AS merchant_fees,
+        (SELECT COALESCE(SUM(amount)::bigint, 0) FROM qpaynet_transactions WHERE type='refund') AS refunds,
         (SELECT COUNT(*)::int FROM qpaynet_wallets WHERE balance < 0) AS negative_wallets
     `);
     const row = r.rows[0];
     const actual = BigInt(row.actual);
-    const expected = BigInt(row.deposits) - BigInt(row.withdraw_total) - BigInt(row.transfer_fees) - BigInt(row.merchant_fees);
+    const expected = BigInt(row.deposits)
+      - BigInt(row.withdraw_total)
+      - BigInt(row.transfer_fees)
+      - BigInt(row.merchant_fees)
+      - BigInt(row.refunds);
     const drift = actual - expected;
     res.json({
       ok: drift === 0n && row.negative_wallets === 0,
@@ -2132,6 +2137,7 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
         withdraw_total_tiin: row.withdraw_total,
         transfer_fees_tiin: row.transfer_fees,
         merchant_fees_tiin: row.merchant_fees,
+        refunds_tiin: row.refunds,
       },
     });
     if (drift !== 0n || row.negative_wallets > 0) {
@@ -2145,6 +2151,153 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
   } catch (err) {
     captureException(err, { source: "qpaynet/reconcile", phase: "query" });
     res.status(500).json({ error: "reconcile_failed", detail: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ── Wallet freeze / unfreeze (admin) ─────────────────────────────────────────
+// Admin freeze flips wallet.status='frozen'. Existing checks
+// `if (status !== 'active')` in deposit/withdraw/transfer/checkout/payouts
+// block all money movement on a frozen wallet without further code changes.
+//
+// Use cases: fraud investigation, chargeback reversal pending, KYC dispute,
+// court order, user-requested security hold.
+
+qpaynetRouter.post("/admin/wallets/:id/freeze", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const parsed = validateOr400(req, res, {
+    reason: { kind: "string", min: 5, max: 500 },
+  });
+  if (!parsed) return;
+  const reason = parsed.reason as string;
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_wallets SET status='frozen' WHERE id=$1 AND status='active' RETURNING id, owner_id",
+    [req.params.id],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "wallet_not_found_or_not_active" });
+  void auditLog(pool, r.rows[0].owner_id, "wallet_frozen",
+    { walletId: r.rows[0].id, by: auth.email, reason }, req);
+  void notify(pool, r.rows[0].owner_id, "wallet_frozen",
+    "Кошелёк заморожен", `Причина: ${reason}. Свяжитесь с поддержкой.`, r.rows[0].id);
+  res.json({ ok: true, walletId: r.rows[0].id, status: "frozen" });
+});
+
+qpaynetRouter.post("/admin/wallets/:id/unfreeze", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const parsed = validateOr400(req, res, {
+    reason: { kind: "string", min: 5, max: 500 },
+  });
+  if (!parsed) return;
+  const reason = parsed.reason as string;
+
+  const pool = getPool();
+  const r = await pool.query(
+    "UPDATE qpaynet_wallets SET status='active' WHERE id=$1 AND status='frozen' RETURNING id, owner_id",
+    [req.params.id],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "wallet_not_found_or_not_frozen" });
+  void auditLog(pool, r.rows[0].owner_id, "wallet_unfrozen",
+    { walletId: r.rows[0].id, by: auth.email, reason }, req);
+  void notify(pool, r.rows[0].owner_id, "wallet_unfrozen",
+    "Кошелёк разморожен", "Все операции снова доступны.", r.rows[0].id);
+  res.json({ ok: true, walletId: r.rows[0].id, status: "active" });
+});
+
+// ── Refund (admin) ───────────────────────────────────────────────────────────
+// Reverse a deposit / transfer_in / merchant_charge that was credited in
+// error / chargeback / fraud. Always creates a NEW transaction (type='refund')
+// — never deletes the original — so the audit trail stays intact and
+// reconciliation accounts for it.
+//
+// Idempotent: a refund references the original via ref_tx_id; double-call
+// returns 409 tx_already_refunded.
+
+qpaynetRouter.post("/admin/refund", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const parsed = validateOr400(req, res, {
+    txId: "uuid",
+    reason: { kind: "string", min: 5, max: 500 },
+    amount: { kind: "money", optional: true, min: 1 },
+  });
+  if (!parsed) return;
+  const txId = parsed.txId as string;
+  const reason = parsed.reason as string;
+  const requestedAmount = parsed.amount as number | undefined;
+
+  const pool = getPool();
+  try {
+    const result = await withTx(async (c) => {
+      const tx = await c.query(
+        "SELECT id, wallet_id, owner_id, type, amount FROM qpaynet_transactions WHERE id=$1 FOR UPDATE",
+        [txId],
+      );
+      if (!tx.rows[0]) throw new HttpError(404, "tx_not_found");
+      const orig = tx.rows[0];
+      if (!["deposit", "transfer_in", "merchant_charge"].includes(orig.type)) {
+        throw new HttpError(400, "tx_type_not_refundable");
+      }
+      const existing = await c.query(
+        "SELECT id FROM qpaynet_transactions WHERE ref_tx_id=$1 AND type='refund'",
+        [txId],
+      );
+      if (existing.rows[0]) throw new HttpError(409, "tx_already_refunded");
+
+      const origAmount = BigInt(orig.amount);
+      const refundTiin = requestedAmount ? toTiin(requestedAmount) : origAmount;
+      if (refundTiin <= 0n) throw new HttpError(400, "refund_amount_must_be_positive");
+      if (refundTiin > origAmount) throw new HttpError(400, "refund_exceeds_original");
+
+      const w = await c.query(
+        "SELECT id, balance FROM qpaynet_wallets WHERE id=$1 FOR UPDATE",
+        [orig.wallet_id],
+      );
+      if (!w.rows[0]) throw new HttpError(404, "wallet_not_found");
+      // Refund may push wallet negative on chargeback — we allow it (legal claim
+      // sits on the user, not the platform). reconcile.negative_wallet_count
+      // surfaces this in monitoring.
+
+      const refundId = randomUUID();
+      await c.query(
+        "UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2",
+        [refundTiin, orig.wallet_id],
+      );
+      await c.query(
+        `INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id)
+         VALUES ($1,$2,$3,'refund',$4,$5,$6)`,
+        [refundId, orig.wallet_id, orig.owner_id, refundTiin, `Возврат: ${reason}`, txId],
+      );
+      const updated = await c.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [orig.wallet_id]);
+      return {
+        refundId,
+        ownerId: orig.owner_id,
+        walletId: orig.wallet_id,
+        refundedKzt: fromTiin(refundTiin),
+        newBalance: fromTiin(BigInt(updated.rows[0].balance)),
+      };
+    });
+    void auditLog(pool, result.ownerId, "refund_issued",
+      { refundId: result.refundId, originalTxId: txId, amountKzt: result.refundedKzt, reason, by: auth.email }, req);
+    void notify(pool, result.ownerId, "refund_issued",
+      `Возврат ${result.refundedKzt.toLocaleString("ru-RU")} ₸`, reason, result.refundId);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    captureException(err, { route: "qpaynet/admin/refund", txId });
+    console.error("[qpaynet/admin/refund] unhandled:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 

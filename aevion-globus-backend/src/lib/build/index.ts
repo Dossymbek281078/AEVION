@@ -274,6 +274,39 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyTemplate_owner_idx" ON "BuildVacancyTemplate" ("ownerUserId", "createdAt" DESC);`);
 
+  // BuildApplicationFlag: a recruiter (or anyone with auth) flags an
+  // application as spam / abuse / fake. Admin moderation queue resolves it.
+  // status: open / dismissed / actioned. resolvedBy + resolvedAt audit.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildApplicationFlag" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "reporterUserId" TEXT NOT NULL,
+      "reason" TEXT NOT NULL,
+      "note" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'open',
+      "resolvedBy" TEXT,
+      "resolvedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationFlag_status_idx" ON "BuildApplicationFlag" ("status", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationFlag_app_idx" ON "BuildApplicationFlag" ("applicationId");`);
+
+  // BuildVacancyEdit: append-only changelog of recruiter edits to a vacancy.
+  // Each row stores a JSON snapshot of which fields changed (before/after).
+  // Visible to the vacancy owner only — not part of the public API.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVacancyEdit" (
+      "id" TEXT PRIMARY KEY,
+      "vacancyId" TEXT NOT NULL,
+      "editorId" TEXT NOT NULL,
+      "changesJson" TEXT NOT NULL DEFAULT '{}',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyEdit_vacancy_idx" ON "BuildVacancyEdit" ("vacancyId", "createdAt" DESC);`);
+
   // BuildBulkTemplate: recruiter-saved message templates for bulk DMs.
   // When a recruiter writes "Спасибо за отклик, мы свяжемся в течение 48
   // часов" the same way 50 times, this lets them save it once and reuse.

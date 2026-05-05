@@ -605,28 +605,120 @@ vacanciesRouter.post("/:id/boost", async (req, res) => {
   }
 });
 
-// PATCH /api/build/vacancies/:id — toggle status
+// PATCH /api/build/vacancies/:id — owner-only edits.
+// Accepts a partial body with any of: status / title / description / salary.
+// Each substantive change is logged to BuildVacancyEdit for the owner-only
+// changelog endpoint below.
 vacanciesRouter.patch("/:id", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
     const id = String(req.params.id);
-    const status = vEnum(req.body?.status, "status", VACANCY_STATUSES);
-    if (!status.ok) return fail(res, 400, status.error);
 
     const row = await pool.query(
-      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+      `SELECT v.*, p."clientId" FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
       [id],
     );
     if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
     if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "only_project_owner_can_update_vacancy");
 
-    const result = await pool.query(`UPDATE "BuildVacancy" SET "status" = $1 WHERE "id" = $2 RETURNING *`, [status.value, id]);
+    const updates: { col: string; value: unknown; before: unknown; after: unknown }[] = [];
+    if (req.body?.status !== undefined) {
+      const v = vEnum(req.body.status, "status", VACANCY_STATUSES);
+      if (!v.ok) return fail(res, 400, v.error);
+      if (row.rows[0].status !== v.value) {
+        updates.push({ col: "status", value: v.value, before: row.rows[0].status, after: v.value });
+      }
+    }
+    if (req.body?.title !== undefined) {
+      const v = vString(req.body.title, "title", { min: 3, max: 200 });
+      if (!v.ok) return fail(res, 400, v.error);
+      if (row.rows[0].title !== v.value) {
+        updates.push({ col: "title", value: v.value, before: row.rows[0].title, after: v.value });
+      }
+    }
+    if (req.body?.description !== undefined) {
+      const v = vString(req.body.description, "description", { min: 10, max: 10_000 });
+      if (!v.ok) return fail(res, 400, v.error);
+      if (row.rows[0].description !== v.value) {
+        updates.push({ col: "description", value: v.value, before: row.rows[0].description, after: v.value });
+      }
+    }
+    if (req.body?.salary !== undefined) {
+      const v = vNumber(req.body.salary, "salary", { min: 0, max: 1e12 });
+      if (!v.ok) return fail(res, 400, v.error);
+      if (Number(row.rows[0].salary) !== v.value) {
+        updates.push({ col: "salary", value: v.value, before: row.rows[0].salary, after: v.value });
+      }
+    }
+
+    if (updates.length === 0) {
+      return ok(res, row.rows[0]);
+    }
+
+    const setSql = updates.map((u, i) => `"${u.col}" = $${i + 1}`).join(", ");
+    const setParams = updates.map((u) => u.value);
+    setParams.push(id);
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET ${setSql} WHERE "id" = $${updates.length + 1} RETURNING *`,
+      setParams,
+    );
+
+    // Append changelog row (one per PATCH, even if multiple fields changed).
+    const changes: Record<string, { before: unknown; after: unknown }> = {};
+    for (const u of updates) changes[u.col] = { before: u.before, after: u.after };
+    void pool.query(
+      `INSERT INTO "BuildVacancyEdit" ("id","vacancyId","editorId","changesJson")
+       VALUES ($1,$2,$3,$4)`,
+      [crypto.randomUUID(), id, auth.sub, JSON.stringify(changes)],
+    ).catch(() => {});
+
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_update_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/:id/history — owner-only changelog.
+vacanciesRouter.get("/:id/history", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const r = await pool.query(
+      `SELECT e."id", e."editorId", e."changesJson", e."createdAt",
+              u."name" AS "editorName"
+       FROM "BuildVacancyEdit" e
+       LEFT JOIN "AEVIONUser" u ON u."id" = e."editorId"
+       WHERE e."vacancyId" = $1
+       ORDER BY e."createdAt" DESC LIMIT 100`,
+      [id],
+    );
+    const items = r.rows.map((row: Record<string, unknown>) => {
+      let changes: Record<string, { before: unknown; after: unknown }> = {};
+      try { changes = JSON.parse(String(row.changesJson)); } catch { /* ignore */ }
+      return {
+        id: row.id,
+        editorId: row.editorId,
+        editorName: row.editorName,
+        createdAt: row.createdAt,
+        changes,
+      };
+    });
+    return ok(res, { items, total: items.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_history_failed", { details: (err as Error).message });
   }
 });
 

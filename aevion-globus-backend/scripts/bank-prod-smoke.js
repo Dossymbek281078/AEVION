@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * Bank prod smoke — end-to-end AEV wallet + QTrade account/transfer flow.
  *

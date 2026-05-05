@@ -409,7 +409,7 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
           setDescription(draft.description);
           setSkills(draft.skills);
           if (draft.salaryMin != null) setSalary(String(draft.salaryMin));
-          if (draft.questions.length > 0) setQuestions(draft.questions.slice(0, 5));
+          if (draft.questions && draft.questions.length > 0) setQuestions(draft.questions.slice(0, 5));
         }}
       />
       <input

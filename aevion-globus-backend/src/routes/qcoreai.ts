@@ -45,6 +45,8 @@ import {
   addWorkspaceSession,
   createComment,
   deleteRunsBulk,
+  getSessionCostSummary,
+  pinSession,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -439,6 +441,19 @@ qcoreaiRouter.patch("/sessions/:id", async (req, res) => {
     res.json({ session: updated });
   } catch (err: any) {
     res.status(500).json({ error: "rename failed", details: err?.message });
+  }
+});
+
+/** PATCH /sessions/:id/pin — toggle session pin (starred sessions float to top). */
+qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const pinned = typeof req.body?.pinned === "boolean" ? req.body.pinned : true;
+    const ok = await pinSession(String(req.params.id), auth?.sub ?? null, pinned);
+    if (!ok) return res.status(404).json({ error: "session not found" });
+    res.json({ ok: true, pinned });
+  } catch (err: any) {
+    res.status(500).json({ error: "pin failed", details: err?.message });
   }
 });
 
@@ -907,6 +922,22 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
 });
 
 /**
+ * GET /api/qcoreai/analytics/sessions?days=7&limit=10
+ * Top sessions by cost for the given window (for the authenticated user).
+ */
+qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const days = Math.min(90, parseInt(String(req.query.days || "7"), 10) || 7);
+    const limit = Math.min(50, parseInt(String(req.query.limit || "10"), 10) || 10);
+    const items = await getSessionCostSummary(auth?.sub ?? null, days, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "session analytics failed", details: err?.message });
+  }
+});
+
+/**
  * GET /api/qcoreai/analytics/export?format=csv&days=30
  * Export analytics as CSV for spreadsheet analysis.
  */
@@ -1351,6 +1382,8 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
               : costUsd(meta?.provider || "", meta?.model || "", evt.tokensIn, evt.tokensOut);
           totalCost += agentCost;
           lastAgentContent = evt.content;
+          // V9: emit running cost total after every agent turn so UI can display live spend.
+          send({ type: "cost_tick", runId, accumulatedCostUsd: totalCost });
           await insertMessage({
             runId,
             role: evt.role,

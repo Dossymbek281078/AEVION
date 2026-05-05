@@ -6,6 +6,90 @@ import { getAuthToken } from "./auth";
 // ── Domain types ─────────────────────────────────────────────────────
 
 export type BuildRole = "CLIENT" | "CONTRACTOR" | "WORKER" | "ADMIN";
+
+export type AiVacancyDraft = {
+  title: string;
+  description: string;
+  skills: string[];
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string;
+  questions?: string[];
+  tasks?: string[];
+  requirements?: string[];
+};
+
+export type BuildStory = {
+  id: string;
+  userId: string;
+  text: string;
+  content?: string;
+  mediaUrl: string | null;
+  likeCount: number;
+  likedByMe: boolean;
+  authorName: string | null;
+  userName?: string | null;
+  authorRole: string | null;
+  userRole?: string | null;
+  userPhoto?: string | null;
+  userTier?: string | null;
+  userCity?: string | null;
+  userSpecialty?: string | null;
+  mediaType?: string | null;
+  createdAt: string;
+  expiresAt?: string | null;
+};
+
+export type PaymentEventStatus = "DUE" | "PAID" | "OVERDUE" | "CANCELLED" | "CANCELED" | "PENDING";
+
+export type BuildPaymentEvent = {
+  id: string;
+  projectId: string | null;
+  projectTitle: string | null;
+  payerId: string | null;
+  payeeId: string | null;
+  amount: number;
+  currency: string;
+  dueDate: string | null;
+  paidAt: string | null;
+  status: PaymentEventStatus;
+  note: string | null;
+  createdAt: string;
+  applicationId?: string | null;
+  vacancyTitle?: string | null;
+  payerName?: string | null;
+  payeeName?: string | null;
+  clientId?: string | null;
+  workerId?: string | null;
+};
+
+export type LeaderboardRow = {
+  rank: number;
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+  photoUrl?: string | null;
+  score: number;
+  tier: string;
+  kind: "employer" | "worker";
+  rating?: number;
+  projectCount?: number;
+  hireCount?: number;
+  completedProjects?: number;
+  averageRating?: number;
+  avgRating?: number;
+  reviewCount?: number;
+  totalEarned?: number;
+  hires?: number;
+  tierKey?: string;
+  tierLabel?: string;
+  trialsApproved?: number;
+  jobsDone?: number;
+  workerScore?: number;
+  title?: string | null;
+  city?: string | null;
+  specialty?: string | null;
+};
 export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
 export type VacancyStatus = "OPEN" | "CLOSED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
@@ -61,10 +145,20 @@ export type BuildProfile = {
   safetyTrainingValid: boolean;
   safetyTrainingUntil: string | null;
   introVideoUrl: string | null;
-  // KZ localisation (v3)
   iin?: string | null;
   bin?: string | null;
-  locale?: "ru" | "en" | "kz";
+  bankAccount?: string | null;
+  taxId?: string | null;
+  tier?: string | null;
+  referralCode?: string | null;
+  loyaltyPoints?: number;
+  buildScore?: number;
+  locale?: "ru" | "en" | "kz" | null;
+  timezone?: string | null;
+  notifyOnNewApplicant?: boolean;
+  notifyOnApplicationUpdate?: boolean;
+  notifyOnMessage?: boolean;
+  notifyOnShiftReminder?: boolean;
 };
 
 export type BuildExperience = {
@@ -218,16 +312,6 @@ export type BuildFile = {
   createdAt: string;
 };
 
-export type AiVacancyDraft = {
-  title: string;
-  skills: string[];
-  description: string;
-  salaryMin: number | null;
-  salaryMax: number | null;
-  salaryCurrency: "RUB" | "KZT" | "USD";
-  questions: string[];
-};
-
 // ── Pricing types ────────────────────────────────────────────────────
 
 export type PlanKey = "FREE" | "PRO" | "AGENCY" | "PPHIRE";
@@ -335,48 +419,6 @@ export type BuildSubscription = {
   currency?: string;
 };
 
-export type LeaderboardRow = {
-  userId: string;
-  name: string;
-  photoUrl: string | null;
-  title: string | null;
-  city: string | null;
-  avgRating?: number | null;
-  reviewCount?: number;
-  hires?: number;
-  tierKey?: string;
-  tierLabel?: string;
-  trialsApproved?: number;
-};
-
-export type BuildStory = {
-  id: string;
-  userId: string;
-  userName: string | null;
-  userPhoto: string | null;
-  userCity: string | null;
-  content: string;
-  mediaUrl: string | null;
-  mediaType: "image" | "video" | null;
-  likeCount: number;
-  createdAt: string;
-};
-
-export type PaymentEventStatus = "PENDING" | "PAID" | "OVERDUE" | "CANCELED";
-
-export type BuildPaymentEvent = {
-  id: string;
-  applicationId: string;
-  clientId: string;
-  workerId: string;
-  amount: number;
-  currency: string;
-  dueDate: string;
-  status: PaymentEventStatus;
-  note: string | null;
-  createdAt: string;
-};
-
 // ── Envelope + transport ─────────────────────────────────────────────
 
 type Envelope<T> = { success: true; data: T } | { success: false; error: string; [k: string]: unknown };
@@ -475,7 +517,14 @@ export const buildApi = {
     introVideoUrl?: string | null;
     iin?: string | null;
     bin?: string | null;
-    locale?: "ru" | "en" | "kz";
+    bankAccount?: string | null;
+    taxId?: string | null;
+    locale?: "ru" | "en" | "kz" | null;
+    timezone?: string | null;
+    notifyOnNewApplicant?: boolean;
+    notifyOnApplicationUpdate?: boolean;
+    notifyOnMessage?: boolean;
+    notifyOnShiftReminder?: boolean;
   }) => call<BuildProfile>("POST", "/api/build/profiles", input),
   getProfile: (userId: string) =>
     call<BuildResumeBundle>("GET", `/api/build/profiles/${encodeURIComponent(userId)}`, undefined, { auth: false }),
@@ -500,19 +549,6 @@ export const buildApi = {
     return call<{ items: TalentRow[]; total: number }>(
       "GET",
       `/api/build/profiles/search${qs ? "?" + qs : ""}`,
-    );
-  },
-  availableWorkers: (q?: { city?: string; specialty?: string; limit?: number }) => {
-    const params = new URLSearchParams();
-    if (q?.city) params.set("city", q.city);
-    if (q?.specialty) params.set("specialty", q.specialty);
-    if (q?.limit) params.set("limit", String(q.limit));
-    const qs = params.toString();
-    return call<{ items: TalentRow[]; total: number; asOf: string }>(
-      "GET",
-      `/api/build/availability/workers${qs ? "?" + qs : ""}`,
-      undefined,
-      { auth: false },
     );
   },
   addExperience: (input: {
@@ -1008,165 +1044,109 @@ export const buildApi = {
     sizeBytes?: number;
   }) => call<BuildFile>("POST", "/api/build/files/upload", input),
 
-  // Availability
+  // Team requests
+  applyToTeam: (id: string, roleIndex: number, message?: string) =>
+    call<{ id: string; status: string }>("POST", `/api/build/team-requests/${id}/apply`, { roleIndex, message }),
+  teamRequests: (q?: { vacancyId?: string; status?: string; limit?: number }) =>
+    call<{ items: Array<{ id: string; title: string; description: string; rolesJson: string; city: string | null; clientName: string | null; applicantCount: number; createdAt: string }>; total: number }>("GET", `/api/build/team-requests${q ? `?${new URLSearchParams(Object.fromEntries(Object.entries(q).filter(([,v])=>v!=null)) as Record<string,string>)}` : ""}`),
+  teamRequest: (id: string) =>
+    call<{ id: string; title: string; description: string; roles: Array<{ specialty: string; count: number; salary: number | null }>; city: string | null; clientName: string | null; applications: Array<{ id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }>; createdAt: string }>("GET", `/api/build/team-requests/${id}`),
+  createTeamRequest: (input: { title: string; description: string; roles: Array<{ specialty: string; count: number; salary?: number | null }>; city?: string; startDate?: string }) =>
+    call<{ id: string; title: string; status: string }>("POST", "/api/build/team-requests", input),
+
+  // Available workers & shifts
+  availableWorkers: (q?: { skill?: string; city?: string; specialty?: string; limit?: number; offset?: number }) =>
+    call<{ items: unknown[]; total: number; asOf?: string }>("GET", `/api/build/workers/available${q ? `?${new URLSearchParams(Object.fromEntries(Object.entries(q).filter(([,v])=>v!=null)) as Record<string,string>)}` : ""}`),
+  setAvailability: (available: boolean, hours?: number) =>
+    call<{ updated: boolean; availableNow?: boolean; availableUntil?: string | null }>("PATCH", "/api/build/workers/availability", { available, hours }),
   myAvailability: () =>
-    call<{ availableNow: boolean; availableUntil: string | null }>("GET", "/api/build/availability/me"),
-  setAvailability: (availableNow: boolean, hours: number) =>
-    call<{ availableNow: boolean; availableUntil: string | null }>("POST", "/api/build/availability", { availableNow, hours }),
+    call<{ available: boolean; availableNow?: boolean; skills: string[]; city: string | null; availableUntil?: string | null }>("GET", "/api/build/workers/my-availability"),
+  myShifts: () =>
+    call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>("GET", "/api/build/shifts/me"),
+  shiftCheckin: (shiftId: string, lat?: number, lng?: number) =>
+    call<{ checkedIn: boolean }>("POST", `/api/build/shifts/${shiftId}/checkin`, { lat, lng }),
+  shiftCheckout: (shiftId: string, lat?: number, lng?: number) =>
+    call<{ checkedOut: boolean }>("POST", `/api/build/shifts/${shiftId}/checkout`, { lat, lng }),
 
-  // Push notifications
-  pushPublicKey: () =>
-    call<{ publicKey: string | null }>("GET", "/api/build/push/public-key"),
-  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
-    call<{ ok: boolean }>("POST", "/api/build/push/subscribe", sub),
-  pushUnsubscribe: (endpoint: string) =>
-    call<{ ok: boolean }>("POST", "/api/build/push/unsubscribe", { endpoint }),
-  pushTest: () =>
-    call<{ ok: boolean }>("POST", "/api/build/push/test"),
-
-  // Quick Apply
-  quickApply: (input: { vacancyId: string; referredByUserId?: string }) =>
-    call<{ applied: boolean; applicationId: string }>("POST", "/api/build/applications/quick", input),
-
-  // Safety Briefing
-  safetyTemplate: () =>
-    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template", undefined, { auth: false }),
-  signSafetyBriefing: (shiftId: string, items: string[]) =>
-    call<{ signed: boolean }>("POST", "/api/build/safety-briefing", { shiftId, items }),
+  // Stories
+  storiesFeed: (q?: { limit?: number }) =>
+    call<{ items: BuildStory[] }>("GET", `/api/build/stories${q?.limit ? `?limit=${q.limit}` : ""}`),
+  createStory: (input: { text?: string; content?: string; mediaUrl?: string | null; mediaType?: string | null }) =>
+    call<BuildStory>("POST", "/api/build/stories", input),
+  toggleStoryLike: (storyId: string) =>
+    call<{ liked: boolean; likes: number; likeCount: number }>("POST", `/api/build/stories/${storyId}/like`, {}),
 
   // Communities
   communities: () =>
-    call<{
-      items: {
-        id: string; slug: string; name: string; specialty: string;
-        description: string | null; memberCount: number; lastMessageAt: string | null;
-      }[];
-    }>("GET", "/api/build/communities"),
-  community: (slug: string) =>
-    call<{
-      community: { id: string; slug: string; name: string; specialty: string; memberCount: number };
-      messages: {
-        id: string; userId: string; content: string; createdAt: string;
-        authorName: string | null; authorPhoto: string | null; buildRole: string | null;
-      }[];
-    }>("GET", `/api/build/communities/${encodeURIComponent(slug)}`),
-  joinCommunity: (slug: string) =>
-    call<{ ok: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/join`),
-  sendCommunityMessage: (slug: string, content: string) =>
-    call<{ ok: boolean }>("POST", `/api/build/communities/${encodeURIComponent(slug)}/messages`, { content }),
+    call<{ items: Array<{ id: string; slug: string; name: string; specialty: string; description: string | null; memberCount: number; lastMessageAt: string | null }> }>("GET", "/api/build/communities"),
+  community: (id: string) =>
+    call<{ community: { id: string; slug: string; name: string; specialty: string; description: string | null; memberCount: number; joined?: boolean }; messages: Array<{ id: string; userId: string; content: string; createdAt: string; authorName: string | null; authorPhoto: string | null; buildRole: string | null }> }>("GET", `/api/build/communities/${id}`),
+  joinCommunity: (id: string) =>
+    call<{ joined: boolean }>("POST", `/api/build/communities/${id}/join`, {}),
+  sendCommunityMessage: (id: string, text: string) =>
+    call<{ id: string; text: string; createdAt: string }>("POST", `/api/build/communities/${id}/messages`, { text }),
 
-  // Documents (admin verification)
-  adminPendingDocuments: () =>
-    call<{
-      items: {
-        id: string; userId: string; docType: string; fileUrl: string;
-        createdAt: string; userName: string | null; userEmail: string | null;
-      }[];
-    }>("GET", "/api/build/documents/admin/pending"),
-  verifyDocument: (id: string) =>
-    call<{ ok: boolean }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/verify`),
-  rejectDocument: (id: string, reason?: string) =>
-    call<{ ok: boolean }>("PATCH", `/api/build/documents/${encodeURIComponent(id)}/reject`, { reason }),
-
-  // Shifts
-  myShifts: () =>
-    call<{
-      items: {
-        id: string; applicationId: string; workerId: string; clientId: string;
-        shiftDate: string; startTime: string | null; endTime: string | null;
-        status: string; checkInAt: string | null; checkOutAt: string | null;
-        workerName: string | null; clientName: string | null;
-      }[];
-    }>("GET", "/api/build/shifts/my"),
-  shiftCheckin: (id: string, lat: number | null | undefined, lng: number | null | undefined) =>
-    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkin`, { lat: lat ?? null, lng: lng ?? null }),
-  shiftCheckout: (id: string) =>
-    call<{ ok: boolean }>("PATCH", `/api/build/shifts/${encodeURIComponent(id)}/checkout`),
-
-  // Video Rooms
+  // Video rooms
+  createVideoRoom: (input: { title?: string; maxParticipants?: number; guestId?: string; scheduledAt?: string }) =>
+    call<{ id: string; roomUrl: string; hostId: string; guestId: string | null; scheduledAt: string | null; status: string; hostName: string | null; guestName: string | null; createdAt: string }>("POST", "/api/build/video-rooms", input),
   myVideoRooms: () =>
-    call<{
-      items: {
-        id: string; roomUrl: string; hostId: string; guestId: string | null;
-        scheduledAt: string | null; status: string; hostName: string | null;
-        guestName: string | null; createdAt: string;
-      }[];
-    }>("GET", "/api/build/video/my"),
-  createVideoRoom: (input: { guestId?: string | null; scheduledAt?: string | null }) =>
-    call<{
-      id: string; roomUrl: string; hostId: string; guestId: string | null;
-      scheduledAt: string | null; status: string; hostName: string | null;
-      guestName: string | null; createdAt: string;
-    }>("POST", "/api/build/video", input),
-  inviteToVideoRoom: (roomId: string, guestId: string) =>
-    call<{ ok: boolean }>("POST", `/api/build/video/${encodeURIComponent(roomId)}/invite`, { guestId }),
+    call<{ items: Array<{ id: string; roomUrl: string; hostId: string; guestId: string | null; scheduledAt: string | null; status: string; hostName: string | null; guestName: string | null; createdAt: string }> }>("GET", "/api/build/video-rooms/me"),
+  inviteToVideoRoom: (roomId: string, userId: string) =>
+    call<{ invited: boolean }>("POST", `/api/build/video-rooms/${roomId}/invite`, { userId }),
 
-  // Team Requests
-  teamRequests: (q: { limit?: number } = {}) =>
-    call<{
-      items: {
-        id: string; title: string; description: string; rolesJson: string;
-        city: string | null; clientName: string | null; applicantCount: number; createdAt: string;
-      }[];
-    }>("GET", `/api/build/team-requests?limit=${q.limit ?? 30}`),
-  teamRequest: (id: string) =>
-    call<{
-      id: string; title: string; description: string;
-      roles: { specialty: string; count: number; salary: number | null }[];
-      city: string | null; clientName: string | null;
-      applications: { id: string; userId: string; roleIndex: number; message: string | null; status: string; applicantName: string | null }[];
-      createdAt: string;
-    }>("GET", `/api/build/team-requests/${encodeURIComponent(id)}`),
-  applyToTeam: (id: string, roleIndex: number | null, message?: string) =>
-    call<{ ok: boolean }>("POST", `/api/build/team-requests/${encodeURIComponent(id)}/apply`, { roleIndex, message }),
-  aiGenerateVacancy: (input: { brief: string; city?: string | null; locale?: "ru" | "en" | "kz" }) =>
-    call<{
-      draft: AiVacancyDraft;
-      usage: { input: number; output: number };
-    }>("POST", "/api/build/ai/generate-vacancy", input),
-  aiMatchVacancy: (input: { profileText: string; vacancyText: string }) =>
-    call<{
-      match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string };
-      usage: { input: number; output: number };
-    }>("POST", "/api/build/ai/match-vacancy", input),
-  aiCoverLetter: (input: { profileText: string; vacancyText: string; tone: "professional" | "friendly" | "concise" }) =>
-    call<{
-      coverLetter: string;
-      usage: { input: number; output: number };
-    }>("POST", "/api/build/ai/cover-letter", input),
-  createTeamRequest: (input: {
-    title: string; description: string; city?: string;
-    startDate?: string;
-    roles: { specialty: string; count: number; salary?: number | null }[];
-  }) =>
-    call<{ id: string }>("POST", "/api/build/team-requests", input),
+  // Push notifications
+  pushPublicKey: () =>
+    call<{ publicKey: string }>("GET", "/api/build/push/public-key", undefined, { auth: false }),
+  registerPushSubscription: (subscription: object) =>
+    call<{ registered: boolean }>("POST", "/api/build/push/subscribe", { subscription }),
+  pushSubscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string } }) =>
+    call<{ subscribed: boolean }>("POST", "/api/build/push/subscribe", sub),
+  pushUnsubscribe: (endpoint: string) =>
+    call<{ unsubscribed: boolean }>("POST", "/api/build/push/unsubscribe", { endpoint }),
+  pushTest: () =>
+    call<{ sent: boolean }>("POST", "/api/build/push/test", {}),
+
+  // Safety briefing
+  safetyTemplate: () =>
+    call<{ items: string[] }>("GET", "/api/build/safety/template", undefined, { auth: false }),
+  signSafetyBriefing: (shiftId: string, checkedItemIds: string[]) =>
+    call<{ signed: boolean; signedAt: string }>("POST", `/api/build/shifts/${shiftId}/safety-briefing`, { checkedItemIds }),
+
+  // Quick apply
+  quickApply: (input: { vacancyId: string; referredByUserId?: string | null }) =>
+    call<{ applicationId: string; status: string }>("POST", "/api/build/quick-apply", input),
+
+  // AI tools
+  aiGenerateVacancy: (input: { brief: string; city?: string | null }) =>
+    call<{ draft: AiVacancyDraft }>("POST", "/api/build/ai/generate-vacancy", input),
+
+  // Payment calendar
+  myPaymentCalendar: () =>
+    call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar"),
+  updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus; paidAt?: string | null; note?: string | null }) =>
+    call<BuildPaymentEvent>("PATCH", `/api/build/payment-calendar/${id}`, patch),
 
   // Leaderboard
   leaderboard: (kind: "employer" | "worker", limit = 30) =>
-    call<{ items: LeaderboardRow[] }>(
-      "GET",
-      `/api/build/leaderboard?kind=${kind}&limit=${limit}`,
-    ),
+    call<{ items: LeaderboardRow[] }>("GET", `/api/build/leaderboard?kind=${kind}&limit=${limit}`),
 
-  // Stories
-  storiesFeed: (q: { limit?: number } = {}) =>
-    call<{ items: BuildStory[] }>(
-      "GET",
-      `/api/build/stories?limit=${q.limit ?? 30}`,
+  // Documents — verification workflow
+  uploadDocument: (input: { fileUrl: string; docType: string }) =>
+    call<{ id: string; status: string; docType: string; fileUrl: string; createdAt: string }>(
+      "POST", "/api/build/documents", input
     ),
-  createStory: (input: { content: string; mediaUrl: string | null; mediaType: string | null }) =>
-    call<BuildStory>("POST", "/api/build/stories", input),
-  toggleStoryLike: (id: string) =>
-    call<{ likeCount: number; liked: boolean }>("POST", `/api/build/stories/${encodeURIComponent(id)}/like`),
-
-  // Payment Calendar
-  myPaymentCalendar: () =>
-    call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>(
-      "GET",
-      "/api/build/payment-calendar/me",
+  myDocuments: () =>
+    call<{ items: Array<{ id: string; docType: string; status: string; fileUrl: string; verifiedAt: string | null; rejectReason: string | null; createdAt: string }>; total: number }>(
+      "GET", "/api/build/documents/me"
     ),
-  updatePaymentEvent: (id: string, patch: { status?: PaymentEventStatus }) =>
-    call<{ ok: boolean }>("PATCH", `/api/build/payment-calendar/${encodeURIComponent(id)}`, patch),
+  adminPendingDocuments: () =>
+    call<{ items: Array<{ id: string; userId: string; docType: string; fileUrl: string; status: string; userName: string; userEmail: string; createdAt: string }>; total: number }>(
+      "GET", "/api/build/documents/admin/pending"
+    ),
+  verifyDocument: (id: string) =>
+    call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/verify`, {}),
+  rejectDocument: (id: string, reason?: string) =>
+    call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/reject`, { reason }),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─
@@ -1203,61 +1183,66 @@ export async function buildRegister(email: string, password: string, name: strin
   return json;
 }
 
-export async function requestEmailVerification(): Promise<{ ok: boolean; email?: string }> {
-  const token = getAuthToken();
-  const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
-  return json;
-}
-
-export async function completeEmailVerification(verifyToken: string): Promise<{ verified: boolean }> {
-  const token = getAuthToken();
-  const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ token: verifyToken }),
-    cache: "no-store",
-  });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "invalid_or_expired_token", json);
-  return json;
-}
-
-export async function requestPasswordReset(email: string): Promise<{ ok: boolean }> {
+/** Request a password reset email for the given address. */
+export async function requestPasswordReset(email: string): Promise<void> {
   const res = await fetch(apiUrl("/api/auth/password/reset/request"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
     cache: "no-store",
   });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "reset_request_failed", json);
-  return json;
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new BuildApiError(res.status, json?.error || "reset_request_failed", json);
+  }
 }
 
-export async function completePasswordReset(
-  email: string,
-  token: string,
-  newPassword: string,
-): Promise<{ ok: boolean }> {
+/** Complete a password reset with the token from the reset link and a new password. */
+export async function completePasswordReset(email: string, token: string, newPassword: string): Promise<void> {
   const res = await fetch(apiUrl("/api/auth/password/reset/complete"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, token, newPassword }),
     cache: "no-store",
   });
-  const json = await res.json();
-  if (!res.ok) throw new BuildApiError(res.status, json?.error || "invalid_or_expired_token", json);
-  return json;
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new BuildApiError(res.status, json?.error || "reset_complete_failed", json);
+  }
+}
+
+/** Request a verification email for the currently logged-in user. */
+export async function requestEmailVerification(): Promise<void> {
+  const token = typeof window !== "undefined"
+    ? localStorage.getItem("build_auth_token") || sessionStorage.getItem("build_auth_token")
+    : null;
+  const res = await fetch(apiUrl("/api/auth/email/verify/request"), {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new BuildApiError(res.status, json?.error || "verify_request_failed", json);
+  }
+}
+
+/** Complete email verification with the token from the verification link. */
+export async function completeEmailVerification(token: string): Promise<void> {
+  const authToken = typeof window !== "undefined"
+    ? localStorage.getItem("build_auth_token") || sessionStorage.getItem("build_auth_token")
+    : null;
+  const res = await fetch(apiUrl("/api/auth/email/verify/complete"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({ token }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new BuildApiError(res.status, json?.error || "verify_complete_failed", json);
+  }
 }

@@ -237,6 +237,9 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
   `);
 
+  // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
+
   // Public comments on shared runs. No auth required to post — authorName is free-text.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreRunComment" (

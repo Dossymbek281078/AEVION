@@ -100,15 +100,17 @@ export default function QCoreAnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null);
   const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
   const [topTags, setTopTags] = useState<TagCount[]>([]);
+  const [topSessions, setTopSessions] = useState<Array<{ id: string; title: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     setError(null);
     try {
-      const [aRes, tsRes, tagRes] = await Promise.all([
+      const [aRes, tsRes, tagRes, sessRes] = await Promise.all([
         fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/analytics/timeseries?days=30"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/tags?limit=15"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/sessions?days=7&limit=5"), { headers: bearerHeader() }),
       ]);
       const json = await aRes.json();
       if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
@@ -117,6 +119,8 @@ export default function QCoreAnalyticsPage() {
       if (Array.isArray(tsJson?.items)) setTimeseries(tsJson.items);
       const tagJson = await tagRes.json().catch(() => ({}));
       if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
+      const sessJson = await sessRes.json().catch(() => ({}));
+      if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
     } catch (e: any) {
       setError(e?.message || "Failed to load analytics");
     }
@@ -426,6 +430,39 @@ export default function QCoreAnalyticsPage() {
                 ))}
               </div>
             </Section>
+
+            {/* Top sessions by cost (7-day window) */}
+            {topSessions.length > 0 && (
+              <Section title="Top sessions (7d by cost)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {topSessions.map((s) => (
+                    <Link
+                      key={s.id}
+                      href="/qcoreai/multi"
+                      style={{
+                        display: "flex", gap: 10, alignItems: "center",
+                        padding: "8px 12px", borderRadius: 10,
+                        background: "#fff", border: "1px solid #e2e8f0",
+                        textDecoration: "none", color: "#0f172a", fontSize: 12,
+                      }}
+                    >
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{s.title}</span>
+                      <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{s.runCount} run{s.runCount !== 1 ? "s" : ""}</span>
+                      <span style={{ fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
+                        {s.totalCostUsd > 0 ? `$${s.totalCostUsd.toFixed(4)}` : "—"}
+                      </span>
+                      <Link
+                        href={`/qcoreai/compare?a=${s.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ fontSize: 10, color: "#4338ca", fontWeight: 700, textDecoration: "none" }}
+                      >
+                        ⚖️
+                      </Link>
+                    </Link>
+                  ))}
+                </div>
+              </Section>
+            )}
           </>
         )}
       </ProductPageShell>

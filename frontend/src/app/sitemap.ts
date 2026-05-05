@@ -44,23 +44,35 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/help", changeFrequency: "weekly", priority: 0.5 },
 ];
 
-async function fetchIds(path: string): Promise<string[]> {
+async function fetchIds(path: string, idField: string = "id"): Promise<string[]> {
   try {
     const res = await fetch(`${getApiBase()}${path}`, { next: { revalidate: 3600 } });
     if (!res.ok) return [];
     const j = await res.json();
-    return (j?.data?.items ?? []).map((r: { id: string }) => r.id).filter(Boolean);
+    return (j?.data?.items ?? [])
+      .map((r: Record<string, unknown>) => r[idField] as string | undefined)
+      .filter((v: string | undefined): v is string => !!v);
   } catch {
     return [];
   }
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [origin, projectIds, vacancyIds] = await Promise.all([
+  // Pull employer IDs from the leaderboard endpoint — that's a public,
+  // already-curated list of brand-name profiles worth indexing. Capped
+  // server-side at 20+20, so cheap to fetch.
+  const [origin, projectIds, vacancyIds, employerLeaderboard] = await Promise.all([
     getOrigin(),
-    fetchIds("/api/build/projects?limit=200&status=OPEN"),
-    fetchIds("/api/build/vacancies?limit=200&status=OPEN"),
+    fetchIds("/api/build/projects?limit=500&status=OPEN"),
+    fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
+    fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })
+      .then((r) => (r.ok ? r.json() : { data: { employers: [] } }))
+      .catch(() => ({ data: { employers: [] } })),
   ]);
+
+  const employerIds: string[] = ((employerLeaderboard?.data?.employers ?? []) as { userId: string }[])
+    .map((e) => e.userId)
+    .filter(Boolean);
 
   const today = new Date();
   const staticRoutes: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map((r) => ({
@@ -71,7 +83,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   const projectRoutes: MetadataRoute.Sitemap = projectIds.map((id) => ({
-    url: `${origin}/build/p/${id}`,
+    url: `${origin}/build/project/${id}`,
     changeFrequency: "daily" as const,
     priority: 0.6,
   }));
@@ -82,5 +94,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...projectRoutes, ...vacancyRoutes];
+  const employerRoutes: MetadataRoute.Sitemap = employerIds.map((id) => ({
+    url: `${origin}/build/employer/${id}`,
+    changeFrequency: "weekly" as const,
+    priority: 0.5,
+  }));
+
+  // Cap total at 5000 so the sitemap stays valid (Google limit is 50k but
+  // we prefer multiple smaller files long-term — single sitemap is enough
+  // for now).
+  const all = [...staticRoutes, ...vacancyRoutes, ...projectRoutes, ...employerRoutes];
+  return all.slice(0, 5000);
 }

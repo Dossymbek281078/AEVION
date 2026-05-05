@@ -36,29 +36,40 @@ type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): any[] {
   try {
     const fen = virtualGame.fen();
-    const buildBoard = (): Chess | null => {
-      const g = new Chess(fen);
+    const g = new Chess(fen);
+    {
       const fp = g.fen().split(" "); fp[1] = pCol;
-      try { g.load(fp.join(" ")); return g; } catch { return null; }
-    };
-    const g1 = buildBoard();
-    if (!g1) return [];
-    const piece = g1.get(from);
+      try { g.load(fp.join(" ")); } catch { return []; }
+    }
+    const piece = g.get(from);
     if (!piece || piece.color !== pCol) return [];
-    const pass1: any[] = g1.moves({ square: from, verbose: true });
+
+    // Pass 1 — standard chess.js legal moves (FROM → empty / FROM → enemy capture).
+    const pass1: any[] = g.moves({ square: from, verbose: true });
     const have = new Set(pass1.map(m => m.to));
 
-    const board = g1.board();
+    // Pass 2 — RESCUE: own-piece squares that FROM ATTACKS (= can land on if
+    // opponent captures the own piece first). Use chess.js attackers() which is
+    // O(1) per square, instead of per-square board rebuilds. Massively faster
+    // mid-game when the user has many own pieces still on the board.
+    const board = g.board();
+    const fromTypeUpper = piece.type === "p" ? "" : piece.type.toUpperCase();
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const p = board[r][c];
         if (!p || p.color !== pCol || p.type === "k") continue;
         const sq = (FILES[c] + (8 - r)) as Square;
         if (sq === from || have.has(sq)) continue;
-        const g2 = buildBoard(); if (!g2) continue;
-        try { g2.remove(sq); } catch { continue; }
-        const m = g2.moves({ square: from, verbose: true }).find((x: any) => x.to === sq);
-        if (m) { pass1.push(m); have.add(sq); }
+        let attackers: Square[] = [];
+        try { attackers = g.attackers(sq, pCol); } catch {}
+        if (attackers.indexOf(from) === -1) continue;
+        // Synthesize a verbose-shaped move record. It only needs `to` for our
+        // matched.find(m=>m.to===sq) consumer, but we shape the rest minimally.
+        pass1.push({
+          color: pCol, from, to: sq, piece: piece.type,
+          flags: "c", san: `${fromTypeUpper}x${sq}`,
+        });
+        have.add(sq);
       }
     }
     return pass1;

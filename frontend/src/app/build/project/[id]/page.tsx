@@ -526,12 +526,15 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        placeholder="Requirements, schedule, equipment provided…"
+        placeholder="Requirements, schedule, equipment provided… (Markdown ok: **bold**, _italic_, - bullet, 1. numbered)"
         required
         minLength={10}
-        rows={3}
+        rows={4}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
+      <div className="text-[10px] text-slate-500">
+        Supports Markdown: <code className="text-slate-300">**bold**</code> <code className="text-slate-300">_italic_</code> <code className="text-slate-300">- bullet</code> <code className="text-slate-300">1. numbered</code> <code className="text-slate-300">`code`</code>
+      </div>
       <AiImprove
         value={description}
         onAccept={(v) => setDescription(v)}

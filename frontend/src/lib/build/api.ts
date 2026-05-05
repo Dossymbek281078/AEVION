@@ -621,6 +621,17 @@ export const buildApi = {
       undefined,
       { auth: false },
     ),
+  vacancyHistory: (id: string) =>
+    call<{
+      items: {
+        id: string;
+        editorId: string;
+        editorName: string | null;
+        createdAt: string;
+        changes: Record<string, { before: unknown; after: unknown }>;
+      }[];
+      total: number;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/history`),
   patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
   listVacancyTemplates: () =>
@@ -750,6 +761,38 @@ export const buildApi = {
       "PATCH",
       `/api/build/applications/${encodeURIComponent(id)}`,
       { status, ...(rejectReason ? { rejectReason } : {}) },
+    ),
+  flagApplication: (id: string, reason: string, note?: string) =>
+    call<{ id: string }>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/flag`,
+      { reason, ...(note ? { note } : {}) },
+    ),
+  adminListFlags: (status: "open" | "dismissed" | "actioned" = "open") =>
+    call<{
+      items: {
+        id: string;
+        applicationId: string;
+        reporterUserId: string;
+        reason: string;
+        note: string | null;
+        status: string;
+        createdAt: string;
+        resolvedAt: string | null;
+        resolvedBy: string | null;
+        reporterName: string | null;
+        candidateId: string | null;
+        candidateName: string | null;
+        vacancyId: string | null;
+        vacancyTitle: string | null;
+      }[];
+      total: number;
+    }>("GET", `/api/build/admin/flags?status=${encodeURIComponent(status)}`),
+  adminResolveFlag: (id: string, status: "dismissed" | "actioned") =>
+    call<{ id: string; status: string }>(
+      "PATCH",
+      `/api/build/admin/flags/${encodeURIComponent(id)}`,
+      { status },
     ),
   withdrawApplication: (id: string) =>
     call<BuildApplication>(
@@ -1118,6 +1161,22 @@ export const buildApi = {
         reviews: Record<string, unknown>[];
       };
     }>("GET", "/api/build/stats/export/all"),
+  featuredEmployers: () =>
+    call<{
+      items: {
+        userId: string;
+        name: string | null;
+        title: string | null;
+        city: string | null;
+        photoUrl: string | null;
+        verifiedAt: string | null;
+        hires: number;
+        openVacancies: number;
+        avgRating: number;
+        reviewCount: number;
+      }[];
+      total: number;
+    }>("GET", "/api/build/stats/featured-employers", undefined, { auth: false }),
   rejectReasonsBreakdown: (days = 90) =>
     call<{
       days: number;

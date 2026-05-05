@@ -519,6 +519,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {isOwner && <VacancyTimeline vacancyId={vacancy.id} />}
 
+          {isOwner && <VacancyEditHistory vacancyId={vacancy.id} />}
+
           {isOwner && <EmbedSnippetBlock vacancyId={vacancy.id} />}
 
           {!isOwner && vacancy.skills && vacancy.skills.length > 0 && (
@@ -1010,6 +1012,7 @@ function ApplicationRow({
         )}
         <InterviewPrepButton applicationId={app.id} />
         <WhyMatchButton applicationId={app.id} />
+        <FlagApplicationButton applicationId={app.id} />
       </div>
       {aiOpen && aiDetails && (
         <div className="mt-3 space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">
@@ -1734,6 +1737,108 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
           >
             📋 Copy snippet
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FlagApplicationButton({ applicationId }: { applicationId: string }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  async function flag() {
+    const reason = window.prompt(
+      "Reason (spam / fake-profile / abuse / other):",
+      "spam",
+    );
+    if (!reason?.trim()) return;
+    setBusy(true);
+    try {
+      await buildApi.flagApplication(applicationId, reason.trim().slice(0, 64));
+      toast.success("Flagged for moderation. Admin will review.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={flag}
+      disabled={busy}
+      title="Report as spam / abuse / fake — sent to admin moderation queue"
+      className="rounded-md border border-rose-500/20 bg-rose-500/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-rose-200/80 transition hover:bg-rose-500/15 disabled:opacity-50"
+    >
+      {busy ? "…" : "⚐"}
+    </button>
+  );
+}
+
+function VacancyEditHistory({ vacancyId }: { vacancyId: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.vacancyHistory>>["items"] | null>(null);
+
+  useEffect(() => {
+    if (!open || items !== null) return;
+    let cancelled = false;
+    buildApi
+      .vacancyHistory(vacancyId)
+      .then((r) => {
+        if (!cancelled) setItems(r.items);
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, items, vacancyId]);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200"
+      >
+        <span>Edit history</span>
+        <span className="text-slate-500">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-3">
+          {items === null ? (
+            <p className="text-xs text-slate-500">Loading…</p>
+          ) : items.length === 0 ? (
+            <p className="text-xs text-slate-500">No edits yet.</p>
+          ) : (
+            <ol className="space-y-2 border-l border-white/10 pl-3 text-xs">
+              {items.map((e) => (
+                <li key={e.id}>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <span className="text-slate-200">{e.editorName || "Owner"}</span>
+                    <span className="text-slate-500">{new Date(e.createdAt).toLocaleString()}</span>
+                  </div>
+                  <ul className="mt-0.5 space-y-0.5 text-slate-300">
+                    {Object.entries(e.changes).map(([field, ba]) => {
+                      const beforeStr = String(ba.before ?? "—").slice(0, 80);
+                      const afterStr = String(ba.after ?? "—").slice(0, 80);
+                      return (
+                        <li key={field}>
+                          <span className="font-mono text-slate-400">{field}</span>:{" "}
+                          <span className="text-rose-300/80 line-through">{beforeStr}</span>{" "}
+                          <span className="text-slate-500">→</span>{" "}
+                          <span className="text-emerald-300">{afterStr}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          )}
         </div>
       )}
     </div>

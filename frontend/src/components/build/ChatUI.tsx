@@ -70,26 +70,46 @@ export function ChatUI({
         {!loading && messages.length === 0 && (
           <p className="text-sm text-slate-400">No messages yet — say hello.</p>
         )}
-        {messages.map((m) => {
+        {messages.map((m, idx) => {
           const mine = me?.id === m.senderId;
+          // Show explicit "Read" label only on the LAST own message in the
+          // thread — beyond that the ✓✓ tick is enough signal and the label
+          // would be repetitive.
+          const lastMineIdx = (() => {
+            for (let i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].senderId === me?.id) return i;
+            }
+            return -1;
+          })();
+          const showReadLabel = mine && idx === lastMineIdx && !!m.readAt;
+          const readTooltip = m.readAt
+            ? `Read ${new Date(m.readAt).toLocaleString()}`
+            : "Sent";
           return (
             <div
               key={m.id}
               className={`flex ${mine ? "justify-end" : "justify-start"}`}
             >
-              <div
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${
-                  mine
-                    ? "bg-emerald-500 text-emerald-950"
-                    : "bg-white/10 text-slate-100"
-                }`}
-              >
-                <div className="whitespace-pre-wrap break-words">{m.content}</div>
-                <div className="mt-1 flex items-center gap-1 text-[10px] opacity-60">
-                  <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                  {mine && m.readAt && <span title="Read">✓✓</span>}
-                  {mine && !m.readAt && <span title="Sent">✓</span>}
+              <div className="max-w-[80%]">
+                <div
+                  className={`rounded-2xl px-3.5 py-2 text-sm ${
+                    mine
+                      ? "bg-emerald-500 text-emerald-950"
+                      : "bg-white/10 text-slate-100"
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap break-words">{m.content}</div>
+                  <div className="mt-1 flex items-center gap-1 text-[10px] opacity-60">
+                    <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    {mine && m.readAt && <span title={readTooltip}>✓✓</span>}
+                    {mine && !m.readAt && <span title="Sent">✓</span>}
+                  </div>
                 </div>
+                {showReadLabel && (
+                  <div className="mt-0.5 pr-1 text-right text-[10px] text-emerald-300">
+                    Read
+                  </div>
+                )}
               </div>
             </div>
           );

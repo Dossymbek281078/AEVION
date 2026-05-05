@@ -87,12 +87,27 @@ export async function dispatchJobAlerts(vacancy: {
     const vacancySkills = safeSkillsJson(vacancy.skillsJson);
     const vacancyWords = `${vacancy.title} ${vacancy.description}`.toLowerCase();
 
+    // LEFT JOIN BuildNotifPrefs so users who opted out of jobAlerts via
+    // /build/settings get filtered out even if their BuildJobAlert is active.
+    // Default (NULL) is treated as opt-in for backwards compat.
     const alerts = await pool.query(
-      `SELECT "email","keywords","skills","city" FROM "BuildJobAlert" WHERE "active" = true LIMIT 200`,
+      `SELECT a."email", a."keywords", a."skills", a."city", a."userId", p."jobAlerts" AS "prefJobAlerts"
+       FROM "BuildJobAlert" a
+       LEFT JOIN "BuildNotifPrefs" p ON p."userId" = a."userId"
+       WHERE a."active" = true LIMIT 200`,
     );
 
     const matches: string[] = [];
-    for (const a of alerts.rows as { email: string; keywords: string; skills: string; city: string | null }[]) {
+    for (const a of alerts.rows as {
+      email: string;
+      keywords: string;
+      skills: string;
+      city: string | null;
+      userId: string;
+      prefJobAlerts: boolean | null;
+    }[]) {
+      // Honor opt-out (only false explicitly mutes — NULL/true allow).
+      if (a.prefJobAlerts === false) continue;
       // City filter
       if (a.city && vacancy.city && a.city.toLowerCase() !== vacancy.city.toLowerCase()) continue;
       // Skill match

@@ -24,6 +24,7 @@ import { healthRouter } from "./build/health";
 import { alertsRouter } from "./build/alerts";
 import { verificationRouter } from "./build/verification";
 import { publicRouter } from "./build/public";
+import { settingsRouter } from "./build/settings";
 
 export const buildRouter = Router();
 
@@ -107,3 +108,4 @@ buildRouter.use("/verification", verificationRouter);
 // /v1/vacancies resolves at /api/build/public/v1/vacancies. Auth is the
 // X-Build-Key header validated inside the public router.
 buildRouter.use("/public", publicRouter);
+buildRouter.use("/settings", settingsRouter);

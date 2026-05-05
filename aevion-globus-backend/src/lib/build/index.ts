@@ -274,6 +274,23 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyTemplate_owner_idx" ON "BuildVacancyTemplate" ("ownerUserId", "createdAt" DESC);`);
 
+  // BuildNotifPrefs: per-user opt-in/out for QBuild emails.
+  // jobAlerts — new vacancy alerts for talent (also gated by BuildJobAlert.active).
+  // applicationEmail — recruiter-side: notify on new application to my vacancies.
+  // weeklyDigest — periodic summary email (cron not yet wired).
+  // marketing — product updates / launches.
+  // Defaults assume opt-in (true) so existing behavior is preserved when no row exists.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildNotifPrefs" (
+      "userId" TEXT PRIMARY KEY,
+      "jobAlerts" BOOLEAN NOT NULL DEFAULT TRUE,
+      "applicationEmail" BOOLEAN NOT NULL DEFAULT TRUE,
+      "weeklyDigest" BOOLEAN NOT NULL DEFAULT TRUE,
+      "marketing" BOOLEAN NOT NULL DEFAULT TRUE,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
   // Recruiter-only label e.g. SHORTLIST / INTERVIEW / HOLD / TOP_PICK.
   // Kept as a free-form short string rather than an enum so we can add
   // labels without schema migrations.

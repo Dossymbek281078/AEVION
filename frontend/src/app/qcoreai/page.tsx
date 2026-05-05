@@ -666,6 +666,7 @@ export default function QCoreAIPage() {
             { href: "/qcoreai/eval",       icon: "🧪", t: "Eval harness",            d: "Regression testing with 6+ judge types" },
             { href: "/qcoreai/prompts",    icon: "📝", t: "Prompts library",         d: "Versioned system prompts, fork & share" },
             { href: "/qcoreai/analytics",  icon: "📊", t: "Analytics",               d: "Cost tracking, token usage, trends" },
+            { href: "/qcoreai/budget",     icon: "💰", t: "Budget & Limits",         d: "Set monthly spend cap, alert threshold" },
             { href: "/qcoreai/batch",      icon: "⚡", t: "Batch runs",              d: "20 prompts in parallel, one call" },
             { href: "/qcoreai/schedule",   icon: "🕐", t: "Scheduled batches",       d: "Hourly, daily, weekly automation" },
             { href: "/qcoreai/workspaces", icon: "🗂️", t: "Workspaces",              d: "Share session collections with your team" },

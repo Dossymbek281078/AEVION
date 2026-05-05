@@ -861,6 +861,14 @@ function ApplicationRow({
             {app.applicantExperienceYears != null && app.applicantExperienceYears > 0 && (
               <span>⏱ {app.applicantExperienceYears}y</span>
             )}
+            {app.sourceTag && (
+              <span
+                className="rounded bg-slate-500/20 px-1.5 py-0.5 text-[10px] text-slate-300"
+                title={`Source: ${app.sourceTag}`}
+              >
+                ↩ {app.sourceTag.replace(/^utm:/, "@").replace(/^ref:/, "←")}
+              </span>
+            )}
           </div>
           {(app.matchedSkills?.length ?? 0) > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
@@ -959,6 +967,7 @@ function ApplicationRow({
           </button>
         )}
         <InterviewPrepButton applicationId={app.id} />
+        <WhyMatchButton applicationId={app.id} />
       </div>
       {aiOpen && aiDetails && (
         <div className="mt-3 space-y-2 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/5 p-3 text-xs">
@@ -1621,6 +1630,80 @@ function VacancyExpiryBadge({
     >
       {days === 0 ? "ends today" : `${days} day${days === 1 ? "" : "s"} left`}
     </span>
+  );
+}
+
+function WhyMatchButton({ applicationId }: { applicationId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{
+    explanation: string;
+    skillsOverlap?: string[];
+    skillsMissing?: string[];
+    cached: boolean;
+  } | null>(null);
+  const toast = useToast();
+
+  async function load(force = false) {
+    setBusy(true);
+    try {
+      const r = await buildApi.aiWhyMatch(applicationId, force);
+      setData({
+        explanation: r.explanation,
+        skillsOverlap: r.skillsOverlap,
+        skillsMissing: r.skillsMissing,
+        cached: r.cached,
+      });
+      setOpen(true);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => (open ? setOpen(false) : load(false))}
+        disabled={busy}
+        className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+        title="Claude explains why this candidate matches"
+      >
+        {busy ? "…" : open ? "Hide ✨" : "✨ Why match?"}
+      </button>
+      {open && data && (
+        <div className="mt-2 w-full rounded-md border border-cyan-500/30 bg-cyan-500/5 p-3 text-xs text-cyan-50">
+          <p className="whitespace-pre-wrap">{data.explanation}</p>
+          {(data.skillsOverlap?.length || data.skillsMissing?.length) && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {data.skillsOverlap?.map((s) => (
+                <span key={`m-${s}`} className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+                  ✓ {s}
+                </span>
+              ))}
+              {data.skillsMissing?.map((s) => (
+                <span key={`x-${s}`} className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] text-rose-200">
+                  ✗ {s}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 flex items-center justify-between text-[10px] text-cyan-200/60">
+            <span>{data.cached ? "Cached — click 🔄 to regenerate" : "Generated just now"}</span>
+            <button
+              type="button"
+              onClick={() => load(true)}
+              disabled={busy}
+              className="text-cyan-200 hover:text-white"
+            >
+              🔄 Regenerate
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -291,6 +291,16 @@ async function _doEnsureBuildTables(): Promise<void> {
     );
   `);
 
+  // AI "why match" cached explanation. Populated on demand by /ai/why-match —
+  // we cache it on the application row so re-opening the same candidate
+  // doesn't re-spend tokens.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiWhyMatch" TEXT;`);
+
+  // Application source tag — where the candidate landed from. Free-form
+  // string (organic | widget | utm:linkedin | utm:google | referral) so
+  // analytics can bucket without schema migrations.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "sourceTag" TEXT;`);
+
   // Recruiter-only label e.g. SHORTLIST / INTERVIEW / HOLD / TOP_PICK.
   // Kept as a free-form short string rather than an enum so we can add
   // labels without schema migrations.

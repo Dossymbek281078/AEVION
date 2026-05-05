@@ -670,3 +670,101 @@ ${p.summary || "—"}
     return fail(res, 500, "ai_cover_letter_failed", { details: (err as Error).message });
   }
 });
+
+// POST /api/build/ai/why-match
+// Body: { applicationId: string, force?: boolean }
+// Recruiter-side: explains in 2-3 sentences why a specific candidate matches
+// (or doesn't match) a vacancy. Cached on BuildApplication.aiWhyMatch so
+// re-opening the same candidate doesn't burn tokens. Pass force:true to
+// regenerate.
+aiRouter.post("/why-match", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const applicationId = vString(req.body?.applicationId, "applicationId", { min: 1, max: 64 });
+    if (!applicationId.ok) return fail(res, 400, applicationId.error);
+    const force = req.body?.force === true;
+
+    const r = await pool.query(
+      `SELECT a."id", a."message", a."aiWhyMatch", a."matchScore",
+              v."title" AS "vacancyTitle", v."description" AS "vacancyDesc",
+              v."skillsJson" AS "vacancySkillsJson",
+              p."clientId",
+              prof."name" AS "candidateName", prof."title" AS "candidateHeadline",
+              prof."skillsJson" AS "candidateSkillsJson",
+              prof."experienceYears", prof."summary"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "BuildProfile" prof ON prof."userId" = a."userId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [applicationId.value],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    const row = r.rows[0];
+    if (row.clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    if (!force && row.aiWhyMatch) {
+      return ok(res, { explanation: row.aiWhyMatch, cached: true });
+    }
+
+    const vSkills = safeParseJson(row.vacancySkillsJson, [] as string[]);
+    const cSkills = safeParseJson(row.candidateSkillsJson, [] as string[]);
+    const overlap = vSkills.filter((s: string) =>
+      cSkills.some((cs: string) => cs.toLowerCase() === s.toLowerCase()),
+    );
+    const missing = vSkills.filter((s: string) => !overlap.includes(s));
+
+    const userPayload = `VACANCY:
+Title: ${row.vacancyTitle}
+Description: ${String(row.vacancyDesc || "").slice(0, 1000)}
+Required skills: ${vSkills.join(", ") || "—"}
+
+CANDIDATE:
+Name: ${row.candidateName || "Anonymous"}
+Headline: ${row.candidateHeadline || "—"}
+Years experience: ${row.experienceYears ?? 0}
+Skills: ${cSkills.join(", ") || "—"}
+Skills match: ${overlap.join(", ") || "(none)"}
+Skills missing: ${missing.join(", ") || "(none)"}
+Match score: ${row.matchScore ?? "n/a"}
+Cover note: ${String(row.message || "").slice(0, 400) || "(none)"}
+Summary: ${String(row.summary || "").slice(0, 400) || "(none)"}
+
+Объясни в 2-3 предложениях, насколько кандидат подходит. Без markdown, без списков.`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — рекрутинг-ассистент AEVION QBuild. Объясняешь рекрутеру, почему кандидат подходит (или не подходит) к вакансии.
+
+Жёсткие правила:
+- 2-3 предложения, по сути.
+- Опирайся ТОЛЬКО на предоставленные данные. Никаких выдумок про опыт или сертификаты.
+- Назови 1-2 сильные стороны и 1 риск/пробел.
+- Без markdown, без эмодзи, без списков.
+- Тональность нейтральная и трезвая, без пафоса.
+- Если match очень слабый — скажи это прямо.
+- Ответ на русском.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 400,
+      cacheSystem: false,
+    });
+
+    const explanation = reply.text.trim().slice(0, 2000);
+    await pool.query(
+      `UPDATE "BuildApplication" SET "aiWhyMatch" = $1 WHERE "id" = $2`,
+      [explanation, applicationId.value],
+    );
+
+    return ok(res, {
+      explanation,
+      cached: false,
+      skillsOverlap: overlap,
+      skillsMissing: missing,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_why_match_failed", { details: (err as Error).message });
+  }
+});

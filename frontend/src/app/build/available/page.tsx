@@ -55,7 +55,7 @@ export default function AvailablePage() {
         skills: typeof w.skillsJson === "string" ? JSON.parse(w.skillsJson) as string[] : (w.skills ?? []),
       }));
       setWorkers(items);
-      setAsOf(r.asOf);
+      setAsOf(r.asOf ?? null);
     } catch {
       setWorkers([]);
     } finally {
@@ -214,8 +214,8 @@ function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
     if (!token) return;
     buildApi.myAvailability().then((r) => {
       const expired = r.availableUntil && new Date(r.availableUntil) < new Date();
-      setOn(r.availableNow && !expired);
-      setUntil(r.availableUntil);
+      setOn(!!(r.availableNow && !expired));
+      setUntil(r.availableUntil ?? null);
     }).catch(() => {});
   }, [token]);
 
@@ -224,8 +224,8 @@ function AvailabilityToggle({ onChanged }: { onChanged: () => void }) {
     try {
       const r = await buildApi.setAvailability(!on, hours);
       const expired = r.availableUntil && new Date(r.availableUntil) < new Date();
-      setOn(r.availableNow && !expired);
-      setUntil(r.availableUntil);
+      setOn(!!(r.availableNow && !expired));
+      setUntil(r.availableUntil ?? null);
       onChanged();
     } catch {/**/}
     finally { setBusy(false); }

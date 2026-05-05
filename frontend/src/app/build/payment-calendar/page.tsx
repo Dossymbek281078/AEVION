@@ -104,7 +104,7 @@ function SummaryCard({ label, amount, tone }: { label: string; amount: number; t
 
 function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: string | null; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
-  const due = row.status === "PENDING" && row.dueDate < new Date().toISOString().slice(0, 10);
+  const due = row.status === "PENDING" && !!row.dueDate && row.dueDate < new Date().toISOString().slice(0, 10);
   const tone =
     row.status === "PAID"
       ? "border-emerald-500/30 bg-emerald-500/5"
@@ -126,9 +126,11 @@ function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: st
         <div className="font-semibold text-white">{row.amount.toLocaleString("ru-RU")} {row.currency}</div>
       </div>
       <div className="min-w-0 flex-1">
-        <Link href={`/build/applications/${row.applicationId}`} className="text-xs text-slate-300 hover:underline">
-          App #{row.applicationId.slice(0, 8)}
-        </Link>
+        {row.applicationId && (
+          <Link href={`/build/applications/${row.applicationId}`} className="text-xs text-slate-300 hover:underline">
+            App #{row.applicationId.slice(0, 8)}
+          </Link>
+        )}
         {row.note && <p className="mt-0.5 text-xs text-slate-400">{row.note}</p>}
       </div>
       <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">

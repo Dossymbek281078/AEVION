@@ -39,11 +39,11 @@ import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
 import Stripe from "stripe";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
-import { getPool } from "../lib/dbPool";
+import { getPool, getPoolStats } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
 import { validateOr400 } from "../lib/qpaynetValidate";
-import { encryptSecret, decryptSecret } from "../lib/qpaynetCrypto";
+import { encryptSecret, decryptSecret, isEncryptionEnabled } from "../lib/qpaynetCrypto";
 
 export const qpaynetRouter = Router();
 
@@ -80,6 +80,22 @@ const publicLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "rate_limit_exceeded" },
+});
+
+// CSV export is heavy (up to 5000 rows); tight per-user limit prevents both
+// accidental spam from buggy frontends and intentional DoS by serving a
+// large response on every request.
+const csvLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 5,                 // 5 CSV exports/min per user
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const auth = verifyBearerOptional(req);
+    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
+    return `qpn:csv:${id}`;
+  },
+  message: { error: "rate_limit_exceeded", hint: "csv export limited to 5/min" },
 });
 
 const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
@@ -947,8 +963,8 @@ qpaynetRouter.get("/transactions", async (req, res) => {
   });
 });
 
-// GET /api/qpaynet/transactions.csv — CSV export
-qpaynetRouter.get("/transactions.csv", async (req, res) => {
+// GET /api/qpaynet/transactions.csv — CSV export (rate-limited 5/min/user)
+qpaynetRouter.get("/transactions.csv", csvLimiter, async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
@@ -2620,7 +2636,18 @@ qpaynetRouter.get("/health", async (_req, res) => {
     await ensureTables();
     const pool = getPool();
     const r = await pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets");
-    res.json({ status: "ok", service: "qpaynet", wallets: Number(r.rows[0]?.n ?? 0) });
+    const stats = getPoolStats();
+    // Pool exhaustion = degraded but reachable. Surface it so the aggregate
+    // /api/aevion/health flips to degraded and on-call gets paged before
+    // requests start timing out.
+    const degraded = !!stats && stats.waiting > 0;
+    res.json({
+      status: degraded ? "degraded" : "ok",
+      service: "qpaynet",
+      wallets: Number(r.rows[0]?.n ?? 0),
+      pool: stats,
+      encryption: isEncryptionEnabled() ? "enabled" : "disabled",
+    });
   } catch (err) {
     res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
   }

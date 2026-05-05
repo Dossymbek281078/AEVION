@@ -648,6 +648,56 @@ vacanciesRouter.delete("/:id", async (req, res) => {
   }
 });
 
+// POST /api/build/vacancies/:id/republish — owner reopens a CLOSED vacancy.
+// Resets status -> OPEN and pushes expiresAt out by 30 days from now.
+// Useful when a hire fell through or the role re-opened.
+vacanciesRouter.post("/:id/republish", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const row = await pool.query(
+      `SELECT v."id", v."status", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_republish");
+    }
+    if (row.rows[0].status === "OPEN") {
+      return fail(res, 409, "vacancy_already_open");
+    }
+
+    // Respect plan vacancy slot limits — republishing counts as an active slot.
+    if (auth.role !== "ADMIN") {
+      const plan = await getUserPlan(auth.sub);
+      if (!isUnlimited(plan.vacancySlots)) {
+        const active = await pool.query(
+          `SELECT COUNT(*)::int AS c FROM "BuildVacancy" v
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND v."status" = 'OPEN'`,
+          [auth.sub],
+        );
+        const used = active.rows[0]?.c ?? 0;
+        if (used >= plan.vacancySlots) {
+          return fail(res, 403, "plan_vacancy_limit_reached", { planKey: plan.key, limit: plan.vacancySlots, used, upgradeUrl: "/build/pricing" });
+        }
+      }
+    }
+
+    const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET "status" = 'OPEN', "expiresAt" = $1 WHERE "id" = $2 RETURNING *`,
+      [newExpiry, id],
+    );
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_republish_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/vacancies/:id/duplicate — clone into another project
 vacanciesRouter.post("/:id/duplicate", async (req, res) => {
   try {

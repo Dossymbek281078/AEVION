@@ -41,6 +41,8 @@ import Stripe from "stripe";
 const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { captureException } from "../lib/sentry";
+import { validateOr400, ValidationError } from "../lib/qpaynetValidate";
 
 export const qpaynetRouter = Router();
 
@@ -313,6 +315,7 @@ async function notify(
     }
   } catch (err) {
     console.warn("[qpaynet notify] failed:", err instanceof Error ? err.message : err);
+    captureException(err, { source: "qpaynet/notify", ownerId, kind });
   }
 }
 
@@ -680,8 +683,15 @@ qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { walletId, amount, description } = req.body as { walletId?: string; amount?: number; description?: string };
-  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
+  const parsed = validateOr400(req, res, {
+    walletId: "uuid",
+    amount: { kind: "money", min: 1, max: DAILY_DEPOSIT_CAP_KZT },
+    description: { kind: "string", optional: true, max: 200 },
+  });
+  if (!parsed) return;
+  const walletId = parsed.walletId as string;
+  const amount = parsed.amount as number;
+  const description = parsed.description as string | undefined;
 
   const ownerId = auth.sub ?? auth.email ?? "anon";
   const idemKey = req.headers["idempotency-key"] as string | undefined;
@@ -725,7 +735,9 @@ qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
     res.json(body);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
-    throw err;
+    captureException(err, { route: "qpaynet/deposit", ownerId, walletId });
+    console.error("[qpaynet/deposit] unhandled:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -736,8 +748,15 @@ qpaynetRouter.post("/withdraw", moneyLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { walletId, amount, description } = req.body as { walletId?: string; amount?: number; description?: string };
-  if (!walletId || !amount || amount <= 0) return res.status(400).json({ error: "walletId and positive amount required" });
+  const parsed = validateOr400(req, res, {
+    walletId: "uuid",
+    amount: { kind: "money", min: 1 },
+    description: { kind: "string", optional: true, max: 200 },
+  });
+  if (!parsed) return;
+  const walletId = parsed.walletId as string;
+  const amount = parsed.amount as number;
+  const description = parsed.description as string | undefined;
 
   const ownerId = auth.sub ?? auth.email ?? "anon";
   const idemKey = req.headers["idempotency-key"] as string | undefined;
@@ -775,7 +794,9 @@ qpaynetRouter.post("/withdraw", moneyLimiter, async (req, res) => {
     res.json(body);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
-    throw err;
+    captureException(err, { route: "qpaynet/withdraw", ownerId, walletId });
+    console.error("[qpaynet/withdraw] unhandled:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -786,15 +807,17 @@ qpaynetRouter.post("/transfer", moneyLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { fromWalletId, toWalletId, amount, description } = req.body as {
-    fromWalletId?: string; toWalletId?: string; amount?: number; description?: string;
-  };
-  if (!fromWalletId || !toWalletId || !amount || amount <= 0) {
-    return res.status(400).json({ error: "fromWalletId, toWalletId and positive amount required" });
-  }
-  if (amount > MAX_TRANSFER_KZT) {
-    return res.status(400).json({ error: "transfer_amount_exceeds_max", maxKzt: MAX_TRANSFER_KZT });
-  }
+  const parsed = validateOr400(req, res, {
+    fromWalletId: "uuid",
+    toWalletId: "uuid",
+    amount: { kind: "money", min: 1, max: MAX_TRANSFER_KZT },
+    description: { kind: "string", optional: true, max: 200 },
+  });
+  if (!parsed) return;
+  const fromWalletId = parsed.fromWalletId as string;
+  const toWalletId = parsed.toWalletId as string;
+  const amount = parsed.amount as number;
+  const description = parsed.description as string | undefined;
   if (fromWalletId === toWalletId) {
     return res.status(400).json({ error: "cannot_transfer_to_same_wallet" });
   }
@@ -877,7 +900,9 @@ qpaynetRouter.post("/transfer", moneyLimiter, async (req, res) => {
     res.json(responseBody);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
-    throw err;
+    captureException(err, { route: "qpaynet/transfer", ownerId, fromWalletId, toWalletId });
+    console.error("[qpaynet/transfer] unhandled:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -1080,7 +1105,9 @@ qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
     res.json(body);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
-    throw err;
+    captureException(err, { route: "qpaynet/merchant/charge", merchantKeyId: mk.rows[0]?.id });
+    console.error("[qpaynet/merchant/charge] unhandled:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -1313,6 +1340,7 @@ async function fanOutToOwner(
     await Promise.all(subs.map((s: any) => fireRequestWebhook(s.url, s.secret, payload)));
   } catch (err) {
     console.warn("[qpaynet fanout] failed:", err instanceof Error ? err.message : err);
+    captureException(err, { source: "qpaynet/fanout", ownerId, eventName });
   }
 }
 
@@ -1644,7 +1672,9 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
     ({ txOutId, txInId, tiin, fee, pr, newBalance } = result);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
-    throw err;
+    captureException(err, { route: "qpaynet/requests/pay", ownerId, token: req.params.token });
+    console.error("[qpaynet/requests/pay] unhandled:", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "internal_error" });
   }
 
   void auditLog(pool, ownerId, "request_pay", { requestId: pr.id, fromWalletId, toWalletId: pr.to_wallet_id, txOutId }, req);
@@ -1832,6 +1862,9 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   try {
     event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WH);
   } catch (err) {
+    // Sentry: signature failure = either misconfiguration OR active spoof attempt.
+    // Either way we want to know about it.
+    captureException(err, { source: "qpaynet/stripe-webhook", phase: "verifySignature" });
     return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
   }
 
@@ -1866,6 +1899,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
         });
       } catch (err) {
         console.error("[qpaynet stripe webhook]", err instanceof Error ? err.message : err);
+        captureException(err, { source: "qpaynet/stripe-webhook", phase: "credit", checkoutId, eventId: event.id });
       }
     }
   }
@@ -2398,6 +2432,7 @@ async function runRetryTick(): Promise<void> {
     }
   } catch (err) {
     console.warn("[qpaynet retry] tick failed:", err instanceof Error ? err.message : err);
+    captureException(err, { source: "qpaynet/retryWorker" });
   }
 }
 

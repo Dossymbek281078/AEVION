@@ -334,6 +334,28 @@ async function run() {
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 
+  // 29. Boundary validation — proves validateOr400 helper rejects bad input
+  // before any DB work runs.
+  console.log("\n24. Boundary validation");
+  const badUuid = await req("POST", "/api/qpaynet/transfer", {
+    fromWalletId: "not-a-uuid", toWalletId: walletId, amount: 1,
+  }, auth);
+  assert("non-uuid fromWalletId → 400 validation_failed",
+    badUuid.status === 400 && badUuid.body.error === "validation_failed" && badUuid.body.field === "fromWalletId");
+
+  const noAmount = await req("POST", "/api/qpaynet/deposit", { walletId }, auth);
+  assert("missing amount → 400 validation_failed",
+    noAmount.status === 400 && noAmount.body.error === "validation_failed" && noAmount.body.field === "amount");
+
+  const tooManyDecimals = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 1.234 }, auth);
+  assert("3-decimal amount → 400 validation_failed",
+    tooManyDecimals.status === 400 && tooManyDecimals.body.error === "validation_failed");
+
+  const longDesc = await req("POST", "/api/qpaynet/deposit",
+    { walletId, amount: 1, description: "x".repeat(500) }, auth);
+  assert("description > 200 chars → 400 validation_failed",
+    longDesc.status === 400 && longDesc.body.error === "validation_failed" && longDesc.body.field === "description");
+
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

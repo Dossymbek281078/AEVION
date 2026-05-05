@@ -39,11 +39,11 @@ import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
 import Stripe from "stripe";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
-import { getPool, getPoolStats } from "../lib/dbPool";
+import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
 import { validateOr400 } from "../lib/qpaynetValidate";
-import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
+import { encryptSecret, decryptSecret } from "../lib/qpaynetCrypto";
 
 export const qpaynetRouter = Router();
 
@@ -80,22 +80,6 @@ const publicLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "rate_limit_exceeded" },
-});
-
-// CSV export is heavy (up to 5000 rows); tight per-user limit prevents both
-// accidental spam from buggy frontends and intentional DoS by serving a
-// large response on every request.
-const csvLimiter = rateLimit({
-  windowMs: 60_000,
-  limit: 5,                 // 5 CSV exports/min per user
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    const auth = verifyBearerOptional(req);
-    const id = auth?.sub ?? auth?.email ?? req.ip ?? "anon";
-    return `qpn:csv:${id}`;
-  },
-  message: { error: "rate_limit_exceeded", hint: "csv export limited to 5/min" },
 });
 
 const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
@@ -963,8 +947,8 @@ qpaynetRouter.get("/transactions", async (req, res) => {
   });
 });
 
-// GET /api/qpaynet/transactions.csv — CSV export (rate-limited 5/min/user)
-qpaynetRouter.get("/transactions.csv", csvLimiter, async (req, res) => {
+// GET /api/qpaynet/transactions.csv — CSV export
+qpaynetRouter.get("/transactions.csv", async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
@@ -1323,7 +1307,7 @@ qpaynetRouter.post("/webhook-subs", async (req, res) => {
 
   await pool.query(
     "INSERT INTO qpaynet_merchant_webhooks (id, owner_id, url, secret, events) VALUES ($1,$2,$3,$4,$5)",
-    [id, ownerId, url, encryptSecret(secret), events.slice(0, 200)],
+    [id, ownerId, url, secret, events.slice(0, 200)],
   );
   res.status(201).json({ id, url, events, secret, message: "Save the secret — it won't be shown again." });
 });
@@ -1357,44 +1341,7 @@ qpaynetRouter.delete("/webhook-subs/:id", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Durable delivery queue for merchant_webhooks fan-out.
-// Without this, fanOutToOwner was Promise.all'ing fire-and-forget and any
-// failed delivery was silently lost — a real prod bug for partners that
-// rely on event consistency.
-let deliveriesTableReady = false;
-async function ensureDeliveriesTable(): Promise<void> {
-  if (deliveriesTableReady) return;
-  try {
-    const pool = getPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS qpaynet_webhook_deliveries (
-        id              TEXT PRIMARY KEY,
-        sub_id          TEXT NOT NULL,
-        owner_id        TEXT NOT NULL,
-        event           TEXT NOT NULL,
-        payload         JSONB NOT NULL,
-        attempts        INTEGER NOT NULL DEFAULT 0,
-        last_error      TEXT,
-        next_retry_at   TIMESTAMPTZ,
-        delivered_at    TIMESTAMPTZ,
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_qpwd_due ON qpaynet_webhook_deliveries (next_retry_at)
-        WHERE delivered_at IS NULL;
-      CREATE INDEX IF NOT EXISTS idx_qpwd_owner ON qpaynet_webhook_deliveries (owner_id, created_at DESC);
-    `);
-    deliveriesTableReady = true;
-  } catch (err) {
-    console.warn("[qpaynet deliveries] table init skipped:", err instanceof Error ? err.message : err);
-  }
-}
-
-// Fan out an event to all active merchant webhooks for an owner.
-//
-// Strategy: persist one row per matching sub, fire the first attempt inline
-// for low latency, then on failure leave the row for the retry tick to pick
-// up. This is the same pattern as payment_request notifications — a single
-// retry worker drains both queues.
+// Helper: fan out an event to all active merchant webhooks for an owner.
 async function fanOutToOwner(
   pool: ReturnType<typeof getPool>,
   ownerId: string,
@@ -1403,47 +1350,14 @@ async function fanOutToOwner(
 ): Promise<void> {
   try {
     await ensureMerchantWebhooksTable();
-    await ensureDeliveriesTable();
     const r = await pool.query(
-      "SELECT id, url, secret, events FROM qpaynet_merchant_webhooks WHERE owner_id=$1 AND revoked_at IS NULL",
+      "SELECT url, secret, events FROM qpaynet_merchant_webhooks WHERE owner_id=$1 AND revoked_at IS NULL",
       [ownerId],
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subs = r.rows.filter((s: any) => (s.events as string).split(",").map(e => e.trim()).includes(eventName));
-    if (subs.length === 0) return;
-
-    const payloadJson = JSON.stringify(payload);
-    await Promise.all(subs.map(async (s: { id: string; url: string; secret: string }) => {
-      const deliveryId = randomUUID();
-      // Insert as pending. If the inline attempt succeeds we'll flip
-      // delivered_at; on failure the retry tick takes over.
-      await pool.query(
-        `INSERT INTO qpaynet_webhook_deliveries
-           (id, sub_id, owner_id, event, payload, attempts, next_retry_at)
-         VALUES ($1,$2,$3,$4,$5::jsonb,0,NOW())`,
-        [deliveryId, s.id, ownerId, eventName, payloadJson],
-      );
-      const decryptedSecret = decryptSecret(s.secret) ?? "";
-      if (needsEncryption(s.secret)) {
-        pool.query(
-          "UPDATE qpaynet_merchant_webhooks SET secret=$1 WHERE id=$2",
-          [encryptSecret(decryptedSecret), s.id],
-        ).catch(() => { /* best-effort */ });
-      }
-      const result = await fireRequestWebhook(s.url, decryptedSecret, payload);
-      if (result.ok) {
-        await pool.query(
-          "UPDATE qpaynet_webhook_deliveries SET attempts=1, delivered_at=NOW(), next_retry_at=NULL WHERE id=$1",
-          [deliveryId],
-        );
-      } else {
-        const next = nextRetryAt(1);
-        await pool.query(
-          "UPDATE qpaynet_webhook_deliveries SET attempts=1, last_error=$1, next_retry_at=$2 WHERE id=$3",
-          [result.error?.slice(0, 500) ?? "unknown", next, deliveryId],
-        );
-      }
-    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await Promise.all(subs.map((s: any) => fireRequestWebhook(s.url, s.secret, payload)));
   } catch (err) {
     console.warn("[qpaynet fanout] failed:", err instanceof Error ? err.message : err);
     captureException(err, { source: "qpaynet/fanout", ownerId, eventName });
@@ -1815,14 +1729,6 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
   }
   if (pr.notify_url && pr.notify_secret) {
     const decryptedSecret = decryptSecret(pr.notify_secret) ?? "";
-    // Lazy at-rest migration: if env-key was just enabled and this row is
-    // still plaintext, encrypt it now. Best-effort; failure doesn't block delivery.
-    if (needsEncryption(pr.notify_secret)) {
-      pool.query(
-        "UPDATE qpaynet_payment_requests SET notify_secret=$1 WHERE id=$2",
-        [encryptSecret(decryptedSecret), pr.id],
-      ).catch(() => { /* migration is fire-and-forget */ });
-    }
     fireRequestWebhook(pr.notify_url, decryptedSecret, payload).then(async (result) => {
       if (result.ok) {
         await pool.query(
@@ -1983,10 +1889,9 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
   if (!rawBody) return res.status(500).json({ error: "raw_body_unavailable" });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let event: { type: string; data: { object: any }; [k: string]: unknown };
+  let event: ReturnType<typeof stripe.webhooks.constructEvent>;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WH) as typeof event;
+    event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WH);
   } catch (err) {
     // Sentry: signature failure = either misconfiguration OR active spoof attempt.
     // Either way we want to know about it.
@@ -1995,8 +1900,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   }
 
   if (event.type === "checkout.session.completed") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const session = event.data.object as any;
+    const session = event.data.object as { metadata?: Record<string, string>; client_reference_id?: string; payment_intent?: string; amount_total?: number; currency?: string };
     const checkoutId = session.metadata?.qpaynet_checkout_id ?? session.client_reference_id;
     if (checkoutId) {
       await ensureDepositCheckoutsTable();
@@ -2193,7 +2097,7 @@ qpaynetRouter.get("/admin/payouts", async (req, res) => {
 // (every 15min). Returns 200 always; consumer reads `drift_tiin` field.
 //
 // expected = sum(deposits) - sum(withdraw + withdraw_fee) - sum(transfer_out_fees)
-//          - sum(merchant_charge_fees) - sum(refunds)
+//          - sum(merchant_charge_fees)
 qpaynetRouter.get("/admin/reconcile", async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
@@ -2209,16 +2113,11 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
         (SELECT COALESCE(SUM(amount + COALESCE(fee,0))::bigint, 0) FROM qpaynet_transactions WHERE type='withdraw') AS withdraw_total,
         (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='transfer_out') AS transfer_fees,
         (SELECT COALESCE(SUM(fee)::bigint, 0) FROM qpaynet_transactions WHERE type='merchant_charge') AS merchant_fees,
-        (SELECT COALESCE(SUM(amount)::bigint, 0) FROM qpaynet_transactions WHERE type='refund') AS refunds,
         (SELECT COUNT(*)::int FROM qpaynet_wallets WHERE balance < 0) AS negative_wallets
     `);
     const row = r.rows[0];
     const actual = BigInt(row.actual);
-    const expected = BigInt(row.deposits)
-      - BigInt(row.withdraw_total)
-      - BigInt(row.transfer_fees)
-      - BigInt(row.merchant_fees)
-      - BigInt(row.refunds);
+    const expected = BigInt(row.deposits) - BigInt(row.withdraw_total) - BigInt(row.transfer_fees) - BigInt(row.merchant_fees);
     const drift = actual - expected;
     res.json({
       ok: drift === 0n && row.negative_wallets === 0,
@@ -2233,7 +2132,6 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
         withdraw_total_tiin: row.withdraw_total,
         transfer_fees_tiin: row.transfer_fees,
         merchant_fees_tiin: row.merchant_fees,
-        refunds_tiin: row.refunds,
       },
     });
     if (drift !== 0n || row.negative_wallets > 0) {
@@ -2248,264 +2146,6 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
     captureException(err, { source: "qpaynet/reconcile", phase: "query" });
     res.status(500).json({ error: "reconcile_failed", detail: err instanceof Error ? err.message : String(err) });
   }
-});
-
-// ── Wallet freeze / unfreeze (admin) ─────────────────────────────────────────
-// Admin freeze flips wallet.status='frozen'. Existing checks
-// `if (status !== 'active')` in deposit/withdraw/transfer/checkout/payouts
-// block all money movement on a frozen wallet without further code changes.
-//
-// Use cases: fraud investigation, chargeback reversal pending, KYC dispute,
-// court order, user-requested security hold.
-
-qpaynetRouter.post("/admin/wallets/:id/freeze", async (req, res) => {
-  await ensureTables();
-  const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth_required" });
-  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
-
-  const parsed = validateOr400(req, res, {
-    reason: { kind: "string", min: 5, max: 500 },
-  });
-  if (!parsed) return;
-  const reason = parsed.reason as string;
-
-  const pool = getPool();
-  const r = await pool.query(
-    "UPDATE qpaynet_wallets SET status='frozen' WHERE id=$1 AND status='active' RETURNING id, owner_id",
-    [req.params.id],
-  );
-  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "wallet_not_found_or_not_active" });
-  void auditLog(pool, r.rows[0].owner_id, "wallet_frozen",
-    { walletId: r.rows[0].id, by: auth.email, reason }, req);
-  void notify(pool, r.rows[0].owner_id, "wallet_frozen",
-    "Кошелёк заморожен", `Причина: ${reason}. Свяжитесь с поддержкой.`, r.rows[0].id);
-  res.json({ ok: true, walletId: r.rows[0].id, status: "frozen" });
-});
-
-qpaynetRouter.post("/admin/wallets/:id/unfreeze", async (req, res) => {
-  await ensureTables();
-  const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth_required" });
-  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
-
-  const parsed = validateOr400(req, res, {
-    reason: { kind: "string", min: 5, max: 500 },
-  });
-  if (!parsed) return;
-  const reason = parsed.reason as string;
-
-  const pool = getPool();
-  const r = await pool.query(
-    "UPDATE qpaynet_wallets SET status='active' WHERE id=$1 AND status='frozen' RETURNING id, owner_id",
-    [req.params.id],
-  );
-  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "wallet_not_found_or_not_frozen" });
-  void auditLog(pool, r.rows[0].owner_id, "wallet_unfrozen",
-    { walletId: r.rows[0].id, by: auth.email, reason }, req);
-  void notify(pool, r.rows[0].owner_id, "wallet_unfrozen",
-    "Кошелёк разморожен", "Все операции снова доступны.", r.rows[0].id);
-  res.json({ ok: true, walletId: r.rows[0].id, status: "active" });
-});
-
-// ── Refund (admin) ───────────────────────────────────────────────────────────
-// Reverse a deposit / transfer_in / merchant_charge that was credited in
-// error / chargeback / fraud. Always creates a NEW transaction (type='refund')
-// — never deletes the original — so the audit trail stays intact and
-// reconciliation accounts for it.
-//
-// Idempotent: a refund references the original via ref_tx_id; double-call
-// returns 409 tx_already_refunded.
-
-qpaynetRouter.post("/admin/refund", async (req, res) => {
-  await ensureTables();
-  const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth_required" });
-  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
-
-  const parsed = validateOr400(req, res, {
-    txId: "uuid",
-    reason: { kind: "string", min: 5, max: 500 },
-    amount: { kind: "money", optional: true, min: 1 },
-  });
-  if (!parsed) return;
-  const txId = parsed.txId as string;
-  const reason = parsed.reason as string;
-  const requestedAmount = parsed.amount as number | undefined;
-
-  // Idempotency-Key support: keyed by `refund:<adminEmail>` namespace so two
-  // different admins can't collide. Replay with same body returns cached
-  // 200; replay with different body returns 409 idempotency_key_body_mismatch.
-  // (The stricter ref_tx_id check below still prevents double-refunds even
-  // without idempotency keys; this layer just lets retrying frontends not
-  // surprise admins with a 409.)
-  const adminScope = `refund:${auth.email ?? auth.sub ?? "anon"}`;
-  const idemKey = req.headers["idempotency-key"] as string | undefined;
-  const cached = await checkIdempotency(adminScope, idemKey, req.body);
-  if (cached && "conflict" in cached) {
-    return res.status(409).json({ error: "idempotency_key_body_mismatch" });
-  }
-  if (cached) return res.status(cached.status).json(cached.response);
-
-  const pool = getPool();
-  try {
-    const result = await withTx(async (c) => {
-      const tx = await c.query(
-        "SELECT id, wallet_id, owner_id, type, amount FROM qpaynet_transactions WHERE id=$1 FOR UPDATE",
-        [txId],
-      );
-      if (!tx.rows[0]) throw new HttpError(404, "tx_not_found");
-      const orig = tx.rows[0];
-      if (!["deposit", "transfer_in", "merchant_charge"].includes(orig.type)) {
-        throw new HttpError(400, "tx_type_not_refundable");
-      }
-      const existing = await c.query(
-        "SELECT id FROM qpaynet_transactions WHERE ref_tx_id=$1 AND type='refund'",
-        [txId],
-      );
-      if (existing.rows[0]) throw new HttpError(409, "tx_already_refunded");
-
-      const origAmount = BigInt(orig.amount);
-      const refundTiin = requestedAmount ? toTiin(requestedAmount) : origAmount;
-      if (refundTiin <= 0n) throw new HttpError(400, "refund_amount_must_be_positive");
-      if (refundTiin > origAmount) throw new HttpError(400, "refund_exceeds_original");
-
-      const w = await c.query(
-        "SELECT id, balance FROM qpaynet_wallets WHERE id=$1 FOR UPDATE",
-        [orig.wallet_id],
-      );
-      if (!w.rows[0]) throw new HttpError(404, "wallet_not_found");
-      // Refund may push wallet negative on chargeback — we allow it (legal claim
-      // sits on the user, not the platform). reconcile.negative_wallet_count
-      // surfaces this in monitoring.
-
-      const refundId = randomUUID();
-      await c.query(
-        "UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2",
-        [refundTiin, orig.wallet_id],
-      );
-      await c.query(
-        `INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id)
-         VALUES ($1,$2,$3,'refund',$4,$5,$6)`,
-        [refundId, orig.wallet_id, orig.owner_id, refundTiin, `Возврат: ${reason}`, txId],
-      );
-      const updated = await c.query("SELECT balance FROM qpaynet_wallets WHERE id=$1", [orig.wallet_id]);
-      return {
-        refundId,
-        ownerId: orig.owner_id,
-        walletId: orig.wallet_id,
-        refundedKzt: fromTiin(refundTiin),
-        newBalance: fromTiin(BigInt(updated.rows[0].balance)),
-      };
-    });
-    void auditLog(pool, result.ownerId, "refund_issued",
-      { refundId: result.refundId, originalTxId: txId, amountKzt: result.refundedKzt, reason, by: auth.email }, req);
-    void notify(pool, result.ownerId, "refund_issued",
-      `Возврат ${result.refundedKzt.toLocaleString("ru-RU")} ₸`, reason, result.refundId);
-    const responseBody = { ok: true as const, ...result };
-    await saveIdempotency(adminScope, idemKey, req.body, 200, responseBody);
-    res.json(responseBody);
-  } catch (err) {
-    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
-    captureException(err, { route: "qpaynet/admin/refund", txId });
-    console.error("[qpaynet/admin/refund] unhandled:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "internal_error" });
-  }
-});
-
-// GET /api/qpaynet/admin/webhook-deliveries — operational view for ops
-// to triage failing or pending merchant webhook deliveries. ?status=stuck
-// returns rows that exhausted retries (attempts >= MAX, no delivered_at).
-qpaynetRouter.get("/admin/webhook-deliveries", async (req, res) => {
-  await ensureDeliveriesTable();
-  const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth_required" });
-  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
-
-  const status = (req.query.status as string | undefined)?.trim();
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
-
-  let where = "1=1";
-  if (status === "stuck") where = `delivered_at IS NULL AND attempts >= ${MAX_NOTIFY_ATTEMPTS}`;
-  else if (status === "pending") where = "delivered_at IS NULL AND next_retry_at IS NOT NULL";
-  else if (status === "delivered") where = "delivered_at IS NOT NULL";
-
-  const pool = getPool();
-  const r = await pool.query(
-    `SELECT id, sub_id, owner_id, event, attempts, last_error, next_retry_at, delivered_at, created_at
-     FROM qpaynet_webhook_deliveries
-     WHERE ${where}
-     ORDER BY created_at DESC
-     LIMIT $1`,
-    [limit],
-  );
-  res.json({ items: r.rows });
-});
-
-// POST /api/qpaynet/admin/webhook-deliveries/:id/retry — admin force-retry a delivery
-// (resets attempts to 0 + schedules immediate). For ops bringing a flaky
-// integration back online without writing SQL.
-qpaynetRouter.post("/admin/webhook-deliveries/:id/retry", async (req, res) => {
-  await ensureDeliveriesTable();
-  const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth_required" });
-  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
-
-  const pool = getPool();
-  const r = await pool.query(
-    `UPDATE qpaynet_webhook_deliveries
-     SET attempts=0, next_retry_at=NOW(), last_error=NULL, delivered_at=NULL
-     WHERE id=$1 RETURNING id, sub_id`,
-    [req.params.id],
-  );
-  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "delivery_not_found" });
-  void auditLog(pool, null, "webhook_delivery_force_retry",
-    { deliveryId: r.rows[0].id, subId: r.rows[0].sub_id, by: auth.email }, req);
-  res.json({ ok: true, deliveryId: r.rows[0].id });
-});
-
-// GET /api/qpaynet/admin/refunds — paginated refund history for compliance review.
-// Cursor-based: pass `before=<created_at-iso>` to page deeper.
-qpaynetRouter.get("/admin/refunds", async (req, res) => {
-  await ensureTables();
-  const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth_required" });
-  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
-
-  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
-  const before = (req.query.before as string | undefined)?.trim();
-  const params: unknown[] = [limit];
-  let where = "type = 'refund'";
-  if (before) {
-    params.push(before);
-    where += ` AND created_at < $${params.length}`;
-  }
-  const pool = getPool();
-  const r = await pool.query(
-    `SELECT t.id, t.wallet_id, t.owner_id, t.amount, t.description, t.ref_tx_id, t.created_at,
-            o.amount AS original_amount, o.type AS original_type, o.created_at AS original_created_at
-     FROM qpaynet_transactions t
-     LEFT JOIN qpaynet_transactions o ON o.id = t.ref_tx_id
-     WHERE ${where}
-     ORDER BY t.created_at DESC
-     LIMIT $1`,
-    params,
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items = r.rows.map((row: any) => ({
-    refundId: row.id,
-    walletId: row.wallet_id,
-    ownerId: row.owner_id,
-    amountKzt: fromTiin(BigInt(row.amount)),
-    description: row.description,
-    originalTxId: row.ref_tx_id,
-    originalAmountKzt: row.original_amount ? fromTiin(BigInt(row.original_amount)) : null,
-    originalType: row.original_type,
-    originalCreatedAt: row.original_created_at ? new Date(row.original_created_at).toISOString() : null,
-    createdAt: new Date(row.created_at).toISOString(),
-  }));
-  const nextCursor = items.length === limit ? items[items.length - 1].createdAt : null;
-  res.json({ items, nextCursor });
 });
 
 // GET /api/qpaynet/admin/payouts/stats — counts by status (for badges)
@@ -2825,31 +2465,9 @@ qpaynetRouter.get("/me/audit", authLimiter, async (req, res) => {
 qpaynetRouter.get("/health", async (_req, res) => {
   try {
     await ensureTables();
-    await ensureDeliveriesTable();
     const pool = getPool();
-    const [walletsR, stuckR] = await Promise.all([
-      pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets"),
-      pool.query(
-        `SELECT COUNT(*)::int AS n
-         FROM qpaynet_webhook_deliveries
-         WHERE delivered_at IS NULL AND attempts >= $1`,
-        [MAX_NOTIFY_ATTEMPTS],
-      ).catch(() => ({ rows: [{ n: 0 }] })),
-    ]);
-    const stats = getPoolStats();
-    const stuckDeliveries = Number(stuckR.rows[0]?.n ?? 0);
-    // Pool exhaustion or > 50 stuck webhook deliveries = degraded.
-    // /api/aevion/health rolls this up so on-call gets paged before requests
-    // start timing out or partners stop getting events.
-    const degraded = (!!stats && stats.waiting > 0) || stuckDeliveries > 50;
-    res.json({
-      status: degraded ? "degraded" : "ok",
-      service: "qpaynet",
-      wallets: Number(walletsR.rows[0]?.n ?? 0),
-      pool: stats,
-      encryption: isEncryptionEnabled() ? "enabled" : "disabled",
-      stuckWebhookDeliveries: stuckDeliveries,
-    });
+    const r = await pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets");
+    res.json({ status: "ok", service: "qpaynet", wallets: Number(r.rows[0]?.n ?? 0) });
   } catch (err) {
     res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
   }
@@ -2889,14 +2507,7 @@ async function runRetryTick(): Promise<void> {
         description: row.description, paid_by: row.paid_by,
         paid_tx_id: row.paid_tx_id, paid_at: row.paid_at,
       });
-      const decryptedSecret = decryptSecret(row.notify_secret) ?? "";
-      if (needsEncryption(row.notify_secret)) {
-        pool.query(
-          "UPDATE qpaynet_payment_requests SET notify_secret=$1 WHERE id=$2",
-          [encryptSecret(decryptedSecret), row.id],
-        ).catch(() => { /* migration best-effort */ });
-      }
-      const result = await fireRequestWebhook(row.notify_url, decryptedSecret, payload);
+      const result = await fireRequestWebhook(row.notify_url, decryptSecret(row.notify_secret) ?? "", payload);
       const attempts = (row.notify_attempts ?? 0) + 1;
       if (result.ok) {
         await pool.query(
@@ -2907,45 +2518,6 @@ async function runRetryTick(): Promise<void> {
         const next = nextRetryAt(attempts);
         await pool.query(
           "UPDATE qpaynet_payment_requests SET notify_attempts=$1, notify_last_error=$2, notify_next_retry_at=$3 WHERE id=$4",
-          [attempts, result.error?.slice(0, 500) ?? "unknown", next, row.id],
-        );
-      }
-    }
-
-    // Second pass: drain pending merchant_webhooks deliveries.
-    await ensureDeliveriesTable();
-    const dueDeliveries = await pool.query(
-      `SELECT d.id, d.sub_id, d.event, d.payload, d.attempts, m.url, m.secret
-       FROM qpaynet_webhook_deliveries d
-       JOIN qpaynet_merchant_webhooks m ON m.id = d.sub_id
-       WHERE d.delivered_at IS NULL
-         AND d.next_retry_at IS NOT NULL
-         AND d.next_retry_at <= NOW()
-         AND d.attempts < $1
-         AND m.revoked_at IS NULL
-       ORDER BY d.next_retry_at ASC
-       LIMIT $2`,
-      [MAX_NOTIFY_ATTEMPTS, RETRY_BATCH],
-    );
-    for (const row of dueDeliveries.rows) {
-      const decryptedSecret = decryptSecret(row.secret) ?? "";
-      if (needsEncryption(row.secret)) {
-        pool.query(
-          "UPDATE qpaynet_merchant_webhooks SET secret=$1 WHERE id=$2",
-          [encryptSecret(decryptedSecret), row.sub_id],
-        ).catch(() => { /* best-effort */ });
-      }
-      const result = await fireRequestWebhook(row.url, decryptedSecret, row.payload);
-      const attempts = (row.attempts ?? 0) + 1;
-      if (result.ok) {
-        await pool.query(
-          "UPDATE qpaynet_webhook_deliveries SET attempts=$1, delivered_at=NOW(), next_retry_at=NULL, last_error=NULL WHERE id=$2",
-          [attempts, row.id],
-        );
-      } else {
-        const next = nextRetryAt(attempts);
-        await pool.query(
-          "UPDATE qpaynet_webhook_deliveries SET attempts=$1, last_error=$2, next_retry_at=$3 WHERE id=$4",
           [attempts, result.error?.slice(0, 500) ?? "unknown", next, row.id],
         );
       }

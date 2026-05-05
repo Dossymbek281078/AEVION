@@ -1063,7 +1063,7 @@ export const buildApi = {
     call<{ available: boolean; availableNow?: boolean; skills: string[]; city: string | null; availableUntil?: string | null }>("GET", "/api/build/workers/my-availability"),
   myShifts: () =>
     call<{ items: Array<{ id: string; applicationId: string; workerId: string; clientId: string; shiftDate: string; startTime: string | null; endTime: string | null; status: string; checkInAt: string | null; checkOutAt: string | null; workerName: string | null; clientName: string | null }>; total: number }>("GET", "/api/build/shifts/me"),
-  shiftCheckin: (shiftId: string, lat?: number | null, lng?: number | null) =>
+  shiftCheckin: (shiftId: string, lat?: number, lng?: number) =>
     call<{ checkedIn: boolean }>("POST", `/api/build/shifts/${shiftId}/checkin`, { lat, lng }),
   shiftCheckout: (shiftId: string, lat?: number, lng?: number) =>
     call<{ checkedOut: boolean }>("POST", `/api/build/shifts/${shiftId}/checkout`, { lat, lng }),
@@ -1120,14 +1120,11 @@ export const buildApi = {
   aiGenerateVacancy: (input: { brief: string; city?: string | null }) =>
     call<{ draft: AiVacancyDraft }>("POST", "/api/build/ai/generate-vacancy", input),
   aiMatchVacancy: (input: { profileText: string; vacancyText: string }) =>
-    call<{
-      match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string };
-      usage: { input: number; output: number };
-    }>("POST", "/api/build/ai/match-vacancy", input),
-  aiCoverLetter: (input: { profileText: string; vacancyText: string; tone?: "professional" | "friendly" | "concise" }) =>
-    call<{ coverLetter: string; usage: { input: number; output: number } }>(
-      "POST", "/api/build/ai/cover-letter", input
-    ),
+    call<{ match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string } }>("POST", "/api/build/ai/match-vacancy", input),
+  aiCoverLetter: (input: { profileText: string; vacancyText: string; tone?: string }) =>
+    call<{ letter: string; coverLetter?: string }>("POST", "/api/build/ai/cover-letter", input),
+  aiScoreApplication: (input: { applicationId: string; vacancyContext?: string }) =>
+    call<{ score: number; summary: string; redFlags: string[] }>("POST", "/api/build/ai/score-application", input),
 
   // Payment calendar
   myPaymentCalendar: () =>

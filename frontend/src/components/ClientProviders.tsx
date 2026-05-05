@@ -10,7 +10,12 @@ import { WebVitals } from "@/components/WebVitals";
 import { InstallPrompt } from "@/components/InstallPrompt";
 
 // Prefixes where standalone app shells take over — no global header/footer.
-const APP_PREFIXES = ["/build", "/qright", "/qsign", "/qcoreai", "/multichat-engine", "/aevion-bank"];
+// These pages are full apps (game, dashboards, trading) — the global product nav
+// distracts from the in-app workflow, so we hide it.
+const APP_PREFIXES = [
+  "/build", "/qright", "/qsign", "/qcoreai", "/multichat-engine", "/aevion-bank",
+  "/cyberchess",
+];
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

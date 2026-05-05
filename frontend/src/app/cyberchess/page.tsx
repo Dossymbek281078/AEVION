@@ -2782,6 +2782,14 @@ export default function CyberChessPage(){
           <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
         </button>}
 
+        {/* Workspace switcher — always visible in the header so user can change layout
+            without scrolling. Replaces the duplicate switcher that was inside the SymTab strip. */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute}}>Layout</span>
+          <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
+          <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>1..5</span>
+        </div>
+
         <div style={{flex:1}}/>
 
         {/* Rating badge */}
@@ -2891,9 +2899,11 @@ export default function CyberChessPage(){
       })()}
 
       {/* Identity tab nav — pill-bar с цветовыми маркерами раздела.
-          Скрыт во время активной игры/решения пазла (юзер: «лишние кнопки сверху»).
-          Группировка по смыслу: Игра | Тренировка (Задачи + Коуч) | Анализ. */}
-      {!streamerMode&&!on&&!pzCurrent&&!scratchOn&&(()=>{
+          Скрыт на главном экране (setup+play) и во время активной игры/решения пазла —
+          юзер: «лишние кнопки сверху». Навигация на главном экране — через hero-карточки
+          PLY/PZL/MST. Эта полоска появляется когда юзер уже внутри Puzzles/Coach/Analysis
+          и ему нужен путь обратно. */}
+      {!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(()=>{
         const switchTab=(t:"play"|"puzzles"|"analysis"|"coach")=>{
           const fromPuzzle=tab==="puzzles"&&pzCurrent;
           sTab(t);
@@ -2917,7 +2927,6 @@ export default function CyberChessPage(){
             <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
           </div>
           <div style={{flex:1}}/>
-          <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
           <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel: chess + YouTube/Twitch streams" className="cc-focus-ring" style={{
             display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
             borderRadius:RADIUS.full,border:"1px solid #c4b5fd",
@@ -3557,14 +3566,6 @@ export default function CyberChessPage(){
           </Card>}
         </div>;
       })()}
-
-      {/* Workspace toolbar — always visible above the board, even during play.
-          Lets the user switch presets without leaving an active game. */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{marginBottom:8,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute}}>Workspace</span>
-        <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
-        <span style={{fontSize:10,color:CC.textMute}}>· клавиши 1..5</span>
-      </div>}
 
       {/* Board + Panel + (optional) Media Pane */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>

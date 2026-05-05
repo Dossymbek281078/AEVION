@@ -64,13 +64,13 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
       {/* Always-visible icon column */}
       <div style={{
         position: "fixed", top: "50%", right: 8, transform: "translateY(-50%)",
-        zIndex: 1100,
+        zIndex: 9999,
         display: "flex", flexDirection: "column", gap: 4,
         padding: 4, borderRadius: 12,
-        background: "rgba(15,23,42,0.92)",
+        background: "rgba(15,23,42,0.95)",
         backdropFilter: "blur(8px)",
-        border: "1px solid rgba(148,163,184,0.18)",
-        boxShadow: "0 6px 20px rgba(0,0,0,0.30)",
+        border: "1px solid rgba(251,191,36,0.55)",
+        boxShadow: "0 6px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(251,191,36,0.15)",
       }}>
         {SECTIONS.map(s => {
           const active = open === s.id;
@@ -93,7 +93,7 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
       {open && (
         <div style={{
           position: "fixed", top: "50%", right: 56, transform: "translateY(-50%)",
-          zIndex: 1100,
+          zIndex: 9999,
           width: 280, maxHeight: "70vh", overflowY: "auto",
           padding: 14, borderRadius: 12,
           background: "#0f172a", color: "#e2e8f0",

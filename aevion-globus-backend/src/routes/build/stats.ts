@@ -347,6 +347,78 @@ statsRouter.get("/reject-reasons", async (req, res) => {
   }
 });
 
+// GET /api/build/stats/export/all — recruiter-only data export bundle.
+// Returns JSON with 4 datasets (projects, vacancies, applications, reviews)
+// scoped to the calling recruiter. Frontend turns this into 4 CSV downloads —
+// avoids taking a server-side zip dependency.
+statsRouter.get("/export/all", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const [projects, vacancies, applications, reviews] = await Promise.all([
+      pool.query(
+        `SELECT pj."id", pj."title", pj."status", pj."city", pj."budget",
+                pj."createdAt"
+         FROM "BuildProject" pj
+         WHERE pj."clientId" = $1
+         ORDER BY pj."createdAt" DESC`,
+        [auth.sub],
+      ),
+      pool.query(
+        `SELECT v."id", v."projectId", v."title", v."status", v."salary",
+                v."salaryCurrency", v."city", v."createdAt", v."expiresAt",
+                v."viewCount"
+         FROM "BuildVacancy" v
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1
+         ORDER BY v."createdAt" DESC`,
+        [auth.sub],
+      ),
+      pool.query(
+        `SELECT a."id", a."vacancyId", a."status", a."labelKey", a."sourceTag",
+                a."matchScore", a."aiScoreOverall", a."rejectReason",
+                a."createdAt", a."updatedAt",
+                u."name" AS "applicantName", u."email" AS "applicantEmail"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = a."userId"
+         WHERE p."clientId" = $1
+         ORDER BY a."createdAt" DESC`,
+        [auth.sub],
+      ),
+      pool.query(
+        `SELECT r."id", r."rating", r."comment", r."revieweeId", r."reviewerId",
+                r."createdAt"
+         FROM "BuildReview" r
+         WHERE r."revieweeId" = $1 OR r."reviewerId" = $1
+         ORDER BY r."createdAt" DESC`,
+        [auth.sub],
+      ),
+    ]);
+
+    return ok(res, {
+      generatedAt: new Date().toISOString(),
+      ownerUserId: auth.sub,
+      counts: {
+        projects: projects.rowCount,
+        vacancies: vacancies.rowCount,
+        applications: applications.rowCount,
+        reviews: reviews.rowCount,
+      },
+      datasets: {
+        projects: projects.rows,
+        vacancies: vacancies.rows,
+        applications: applications.rows,
+        reviews: reviews.rows,
+      },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "export_all_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/stats/sources — recruiter-only attribution breakdown.
 // Buckets the caller's incoming applications by sourceTag prefix:
 //   organic | utm:* | ref:* | widget | (null -> "organic")

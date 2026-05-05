@@ -7,7 +7,7 @@ import { getAuthToken } from "./auth";
 
 export type BuildRole = "CLIENT" | "CONTRACTOR" | "WORKER" | "ADMIN";
 export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
-export type VacancyStatus = "OPEN" | "CLOSED";
+export type VacancyStatus = "OPEN" | "CLOSED" | "ARCHIVED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
 export type ShiftPreference = "DAY" | "NIGHT" | "FLEX" | "ANY";
@@ -1106,6 +1106,18 @@ export const buildApi = {
       applications: { day: string; n: number }[];
       projects: { day: string; n: number }[];
     }>("GET", "/api/build/stats/timeseries", undefined, { auth: false }),
+  exportAll: () =>
+    call<{
+      generatedAt: string;
+      ownerUserId: string;
+      counts: { projects: number; vacancies: number; applications: number; reviews: number };
+      datasets: {
+        projects: Record<string, unknown>[];
+        vacancies: Record<string, unknown>[];
+        applications: Record<string, unknown>[];
+        reviews: Record<string, unknown>[];
+      };
+    }>("GET", "/api/build/stats/export/all"),
   rejectReasonsBreakdown: (days = 90) =>
     call<{
       days: number;

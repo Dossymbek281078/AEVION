@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useToast } from "@/components/build/Toast";
+import { rowsToCsv, downloadCsv } from "@/lib/build/csv";
 
 type Row = Awaited<ReturnType<typeof buildApi.myVacanciesFunnel>>["items"][number];
 
@@ -81,12 +82,15 @@ function Body() {
             All vacancies you own with the funnel — views, applications by status, hires.
           </p>
         </div>
-        <Link
-          href="/build/create-project"
-          className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
-        >
-          + New project / vacancy
-        </Link>
+        <div className="flex items-center gap-2">
+          <ExportBundleButton />
+          <Link
+            href="/build/create-project"
+            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
+          >
+            + New project / vacancy
+          </Link>
+        </div>
       </header>
 
       {items && <ClosingSoonBanner items={items} onChanged={() => {
@@ -371,6 +375,52 @@ function SourceBreakdownChart() {
         })}
       </ul>
     </div>
+  );
+}
+
+function ExportBundleButton() {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function run() {
+    setBusy(true);
+    try {
+      const r = await buildApi.exportAll();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const downloads: { name: string; rows: Record<string, unknown>[] }[] = [
+        { name: `qbuild-projects-${stamp}.csv`, rows: r.datasets.projects },
+        { name: `qbuild-vacancies-${stamp}.csv`, rows: r.datasets.vacancies },
+        { name: `qbuild-applications-${stamp}.csv`, rows: r.datasets.applications },
+        { name: `qbuild-reviews-${stamp}.csv`, rows: r.datasets.reviews },
+      ];
+      let nonEmpty = 0;
+      for (const d of downloads) {
+        if (d.rows.length === 0) continue;
+        downloadCsv(d.name, rowsToCsv(d.rows));
+        nonEmpty += 1;
+      }
+      if (nonEmpty === 0) {
+        toast.info("Nothing to export yet.");
+      } else {
+        toast.success(`Downloaded ${nonEmpty} CSV file${nonEmpty === 1 ? "" : "s"}`);
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={run}
+      disabled={busy}
+      title="Download all your data as CSV files (vacancies, applications, projects, reviews)"
+      className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+    >
+      {busy ? "…" : "↓ Export all"}
+    </button>
   );
 }
 

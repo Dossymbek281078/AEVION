@@ -218,6 +218,18 @@ publicRouter.get("/widget.js", (_req, res) => {
   function load(host){
     var key = host.getAttribute("data-key");
     if (!key){ host.innerHTML = '<div style="padding:12px;color:#dc2626;font:14px system-ui">[AEVION QBuild widget] missing data-key</div>'; return; }
+    // Single-vacancy mode: data-vacancy-id="..." -> render exactly one role.
+    var vid = host.getAttribute("data-vacancy-id");
+    if (vid) {
+      fetch(API + "/api/build/public/v1/vacancies/" + encodeURIComponent(vid), { headers: { "X-Build-Key": key } })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (!j || !j.success) { host.innerHTML = '<div style="padding:12px;color:#dc2626;font:14px system-ui">[AEVION] '+esc(j && j.error || "vacancy unavailable")+'</div>'; return; }
+          render(host, j.data ? [j.data] : []);
+        })
+        .catch(function(e){ host.innerHTML = '<div style="padding:12px;color:#dc2626;font:14px system-ui">[AEVION] '+esc(e.message||"network error")+'</div>'; });
+      return;
+    }
     var qs = new URLSearchParams();
     var limit = host.getAttribute("data-limit"); if (limit) qs.set("limit", limit);
     var city = host.getAttribute("data-city"); if (city) qs.set("city", city);

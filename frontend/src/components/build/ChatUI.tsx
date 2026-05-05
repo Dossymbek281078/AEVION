@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { buildApi, type BuildMessage } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import {
+  googleCalendarLink,
+  outlookCalendarLink,
+  icsBlob,
+  interviewBlurb,
+  type InterviewDraft,
+} from "@/lib/build/calendar";
 
 export function ChatUI({
   peerId,
@@ -133,6 +140,7 @@ export function ChatUI({
             placeholder="Type a message…"
             className="flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
           />
+          <ScheduleInterviewButton onInsert={(text) => setDraft((d) => (d ? `${d}\n\n${text}` : text))} />
           <button
             type="submit"
             disabled={sending || !draft.trim()}
@@ -142,6 +150,128 @@ export function ChatUI({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function ScheduleInterviewButton({ onInsert }: { onInsert: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("Interview · AEVION QBuild");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("14:00");
+  const [duration, setDuration] = useState(30);
+  const [location, setLocation] = useState("");
+
+  function buildDraft(): InterviewDraft | null {
+    if (!date || !time) return null;
+    const [hh, mm] = time.split(":").map(Number);
+    const [yy, mo, dd] = date.split("-").map(Number);
+    if (!yy || !mo || !dd || isNaN(hh) || isNaN(mm)) return null;
+    return {
+      title: title.trim() || "Interview",
+      startsAt: new Date(yy, mo - 1, dd, hh, mm, 0),
+      durationMinutes: Math.max(10, Math.min(240, duration)),
+      location: location.trim() || undefined,
+    };
+  }
+
+  function insertSnippet() {
+    const d = buildDraft();
+    if (!d) return;
+    const links = { google: googleCalendarLink(d), outlook: outlookCalendarLink(d) };
+    onInsert(interviewBlurb(d, links));
+    setOpen(false);
+  }
+
+  function downloadIcs() {
+    const d = buildDraft();
+    if (!d) return;
+    const blob = icsBlob(d);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${d.title.replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 40)}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Generate calendar links for an interview slot"
+        className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-sm text-slate-200 hover:bg-white/10"
+      >
+        📅
+      </button>
+      {open && (
+        <div className="absolute bottom-full right-0 z-20 mb-2 w-72 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Schedule interview
+          </div>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Title"
+            className="mb-1.5 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-slate-500"
+          />
+          <div className="mb-1.5 grid grid-cols-2 gap-1.5">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+            />
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+            />
+          </div>
+          <div className="mb-1.5 flex items-center gap-2 text-xs">
+            <label className="text-slate-400">Duration</label>
+            <select
+              value={duration}
+              onChange={(e) => setDuration(Number(e.target.value))}
+              className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-xs text-white"
+            >
+              <option value={15}>15m</option>
+              <option value={30}>30m</option>
+              <option value={45}>45m</option>
+              <option value={60}>60m</option>
+              <option value={90}>90m</option>
+            </select>
+          </div>
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Location (Zoom URL or address)"
+            className="mb-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-slate-500"
+          />
+          <div className="flex justify-between gap-1.5">
+            <button
+              type="button"
+              onClick={downloadIcs}
+              disabled={!buildDraft()}
+              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10 disabled:opacity-50"
+            >
+              .ics
+            </button>
+            <button
+              type="button"
+              onClick={insertSnippet}
+              disabled={!buildDraft()}
+              className="rounded-md bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+            >
+              Insert in message
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

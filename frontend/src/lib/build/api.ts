@@ -1106,8 +1106,26 @@ export const buildApi = {
       applications: { day: string; n: number }[];
       projects: { day: string; n: number }[];
     }>("GET", "/api/build/stats/timeseries", undefined, { auth: false }),
-  recruiterSourceBreakdown: (days = 30) =>
+  rejectReasonsBreakdown: (days = 90) =>
     call<{
+      days: number;
+      total: number;
+      buckets: {
+        overqualified: number;
+        "missing-skill": number;
+        "salary-mismatch": number;
+        location: number;
+        timing: number;
+        other: number;
+        unspecified: number;
+      };
+    }>("GET", `/api/build/stats/reject-reasons?days=${encodeURIComponent(String(days))}`),
+  recruiterSourceBreakdown: (opts: { days?: number; vacancyId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.days != null) params.set("days", String(opts.days));
+    if (opts.vacancyId) params.set("vacancyId", opts.vacancyId);
+    const qs = params.toString();
+    return call<{
       days: number;
       total: number;
       buckets: {
@@ -1117,7 +1135,8 @@ export const buildApi = {
         widget: { count: number; details: { tag: string; count: number }[] };
         other: { count: number; details: { tag: string; count: number }[] };
       };
-    }>("GET", `/api/build/stats/sources?days=${encodeURIComponent(String(days))}`),
+    }>("GET", `/api/build/stats/sources${qs ? "?" + qs : ""}`);
+  },
   adminListPartnerKeys: () =>
     call<{
       items: {

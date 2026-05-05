@@ -296,6 +296,57 @@ statsRouter.get("/employers/:id/overview", async (req, res) => {
   }
 });
 
+// GET /api/build/stats/reject-reasons — recruiter-only reject reason breakdown.
+// Parses the "reason:bucket|note" prefix encoded by the frontend reject modal
+// and rolls up counts. Plain old free-form reasons (no prefix) are bucketed
+// as "other".
+statsRouter.get("/reject-reasons", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const daysRaw = Number(req.query.days);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, Math.round(daysRaw))) : 90;
+
+    const r = await pool.query(
+      `SELECT a."rejectReason"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1
+         AND a."status" = 'REJECTED'
+         AND a."updatedAt" > NOW() - ($2 || ' days')::INTERVAL`,
+      [auth.sub, String(days)],
+    );
+
+    const buckets: Record<string, number> = {
+      overqualified: 0,
+      "missing-skill": 0,
+      "salary-mismatch": 0,
+      location: 0,
+      timing: 0,
+      other: 0,
+      unspecified: 0,
+    };
+    let total = 0;
+    for (const row of r.rows as { rejectReason: string | null }[]) {
+      total += 1;
+      const raw = row.rejectReason ?? "";
+      if (!raw) {
+        buckets.unspecified += 1;
+        continue;
+      }
+      const m = /^reason:([a-z\-]+)\|/i.exec(raw);
+      const key = m ? m[1].toLowerCase() : "other";
+      buckets[key] = (buckets[key] ?? 0) + 1;
+    }
+
+    return ok(res, { days, total, buckets });
+  } catch (err: unknown) {
+    return fail(res, 500, "stats_reject_reasons_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/stats/sources — recruiter-only attribution breakdown.
 // Buckets the caller's incoming applications by sourceTag prefix:
 //   organic | utm:* | ref:* | widget | (null -> "organic")
@@ -309,6 +360,18 @@ statsRouter.get("/sources", async (req, res) => {
     const daysRaw = Number(req.query.days);
     const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(180, Math.round(daysRaw))) : 30;
 
+    // Optional ?vacancyId — narrow to one vacancy. We still scope by ownership
+    // so a recruiter can't peek at competitors' sources.
+    const vacancyId = typeof req.query.vacancyId === "string" && req.query.vacancyId.trim()
+      ? req.query.vacancyId.trim().slice(0, 200) : null;
+
+    const params: unknown[] = [auth.sub, String(days)];
+    let extraWhere = "";
+    if (vacancyId) {
+      params.push(vacancyId);
+      extraWhere = ` AND a."vacancyId" = $${params.length}`;
+    }
+
     const r = await pool.query(
       `SELECT COALESCE(a."sourceTag", 'organic') AS "tag",
               COUNT(*)::int AS "n"
@@ -317,9 +380,10 @@ statsRouter.get("/sources", async (req, res) => {
        JOIN "BuildProject" p ON p."id" = v."projectId"
        WHERE p."clientId" = $1
          AND a."createdAt" > NOW() - ($2 || ' days')::INTERVAL
+         ${extraWhere}
        GROUP BY 1
        ORDER BY 2 DESC`,
-      [auth.sub, String(days)],
+      params,
     );
 
     type Bucket = "organic" | "utm" | "ref" | "widget" | "other";

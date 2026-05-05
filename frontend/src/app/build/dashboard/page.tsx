@@ -106,6 +106,8 @@ function Body() {
 
       {items && <SourceBreakdownChart />}
 
+      {items && <RejectReasonsChart />}
+
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <div className="flex items-center gap-1">
           {(["OPEN", "CLOSED", "ALL"] as StatusFilter[]).map((s) => (
@@ -280,7 +282,7 @@ function SourceBreakdownChart() {
   useEffect(() => {
     let cancelled = false;
     buildApi
-      .recruiterSourceBreakdown(days)
+      .recruiterSourceBreakdown({ days })
       .then((r) => {
         if (!cancelled) setData(r);
       })
@@ -359,6 +361,82 @@ function SourceBreakdownChart() {
             .join(", ");
           return (
             <li key={key} className="flex items-center gap-1.5" title={detail || undefined}>
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-slate-300">{label}</span>
+              <span className="ml-auto tabular-nums text-slate-400">
+                {n} <span className="text-slate-500">({pct}%)</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function RejectReasonsChart() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.rejectReasonsBreakdown>> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .rejectReasonsBreakdown(90)
+      .then((r) => {
+        if (!cancelled) setData(r);
+      })
+      .catch(() => {
+        if (!cancelled) setData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!data || data.total === 0) return null;
+
+  const order: { key: keyof typeof data.buckets; label: string; color: string }[] = [
+    { key: "overqualified", label: "Overqualified", color: "#a855f7" },
+    { key: "missing-skill", label: "Missing skill", color: "#ef4444" },
+    { key: "salary-mismatch", label: "Salary mismatch", color: "#f59e0b" },
+    { key: "location", label: "Location", color: "#06b6d4" },
+    { key: "timing", label: "Timing", color: "#10b981" },
+    { key: "other", label: "Other", color: "#64748b" },
+    { key: "unspecified", label: "No reason given", color: "#475569" },
+  ];
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Rejection reasons
+          </div>
+          <div className="mt-0.5 text-xs text-slate-500">
+            {data.total} rejection{data.total === 1 ? "" : "s"} · last {data.days} days
+          </div>
+        </div>
+      </div>
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-white/5">
+        {order.map(({ key, color }) => {
+          const n = data.buckets[key];
+          if (n === 0) return null;
+          const pct = (n / data.total) * 100;
+          return (
+            <div
+              key={key}
+              style={{ width: `${pct}%`, backgroundColor: color }}
+              title={`${key}: ${n}`}
+            />
+          );
+        })}
+      </div>
+      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+        {order.map(({ key, label, color }) => {
+          const n = data.buckets[key];
+          if (n === 0) return null;
+          const pct = data.total > 0 ? Math.round((n / data.total) * 100) : 0;
+          return (
+            <li key={key} className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
               <span className="text-slate-300">{label}</span>
               <span className="ml-auto tabular-nums text-slate-400">

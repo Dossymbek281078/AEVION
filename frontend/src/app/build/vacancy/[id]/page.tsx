@@ -20,6 +20,7 @@ import { emailError, isEmail } from "@/lib/build/validate";
 import { useToast } from "@/components/build/Toast";
 import { VacancyDetailSkeleton } from "@/components/build/Skeleton";
 import { recordVacancyView } from "@/lib/build/recentlyViewed";
+import { renderMarkdown } from "@/lib/build/markdown";
 
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -297,7 +298,11 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 />
               )}
             </div>
-            <p className="whitespace-pre-wrap text-sm text-slate-200">{vacancy.description}</p>
+            <div
+              className="space-y-2 text-sm text-slate-200 [&_a]:text-emerald-300 [&_a]:hover:underline [&_strong]:text-white [&_em]:italic"
+              // renderMarkdown escapes input first, then emits a known-safe subset.
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(vacancy.description) }}
+            />
             {vacancy.skills && vacancy.skills.length > 0 && (
               <div className="mt-4">
                 <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -459,6 +464,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               />
             </div>
           )}
+          {isOwner && <VacancySourceMiniPanel vacancyId={vacancy.id} />}
+
           {isOwner && (applications !== null || vacancy.viewCount != null) && (
             <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
               <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
@@ -959,15 +966,14 @@ function ApplicationRow({
           </button>
         )}
         {app.status !== "REJECTED" && (
-          <button
+          <RejectButton
             disabled={busy}
-            onClick={async () => {
-              const reason = prompt("Reason for rejection (optional, shown to candidate):");
+            onConfirm={async (composed) => {
               previousStatusRef.current = app.status;
               onOptimistic?.("REJECTED");
               setBusy(true);
               try {
-                await buildApi.updateApplication(app.id, "REJECTED", reason?.trim() || undefined);
+                await buildApi.updateApplication(app.id, "REJECTED", composed || undefined);
                 toast.info("Candidate rejected.");
                 onChanged();
               } catch (err) {
@@ -977,10 +983,7 @@ function ApplicationRow({
                 setBusy(false);
               }
             }}
-            className="rounded-md bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
-          >
-            Reject
-          </button>
+          />
         )}
         <InterviewPrepButton applicationId={app.id} />
         <WhyMatchButton applicationId={app.id} />
@@ -1424,6 +1427,166 @@ function SalaryMarketWidget({ skill }: { skill: string }) {
         ${data.median.toLocaleString()} <span className="text-xs font-normal text-slate-400">median</span>
       </div>
       <div className="mt-0.5 text-[10px] text-slate-500">Based on {data.count} vacancies on QBuild</div>
+    </div>
+  );
+}
+
+// Reject reason vocab — bucket key + human label. The bucket gets prefixed
+// onto the persisted rejectReason as "reason:bucket|free-form note" so the
+// existing column doesn't need a schema change. The dashboard chart parses
+// the prefix back out for aggregation.
+const REJECT_BUCKETS: { key: string; label: string }[] = [
+  { key: "overqualified", label: "Overqualified" },
+  { key: "missing-skill", label: "Missing required skill" },
+  { key: "salary-mismatch", label: "Salary mismatch" },
+  { key: "location", label: "Location / relocation" },
+  { key: "timing", label: "Bad timing / availability" },
+  { key: "other", label: "Other" },
+];
+
+function RejectButton({
+  disabled,
+  onConfirm,
+}: {
+  disabled: boolean;
+  onConfirm: (composedReason: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [bucket, setBucket] = useState<string>("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    try {
+      const composed = bucket
+        ? `reason:${bucket}|${note.trim()}`
+        : note.trim();
+      await onConfirm(composed);
+      setOpen(false);
+      setBucket("");
+      setNote("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-md bg-rose-500/20 px-3 py-1.5 text-xs font-medium text-rose-200 hover:bg-rose-500/30 disabled:opacity-50"
+      >
+        Reject
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-rose-500/30 bg-slate-900 p-3 shadow-2xl">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-rose-200">
+            Reason for rejection
+          </div>
+          <select
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            className="mb-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white focus:border-rose-500/40 focus:outline-none"
+          >
+            <option value="">— pick a category —</option>
+            {REJECT_BUCKETS.map((b) => (
+              <option key={b.key} value={b.key}>{b.label}</option>
+            ))}
+          </select>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional message to candidate (a short, kind explanation goes a long way)"
+            rows={3}
+            maxLength={500}
+            className="w-full rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-rose-500/40 focus:outline-none"
+          />
+          <div className="mt-2 flex justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy}
+              className="rounded-md bg-rose-500 px-3 py-1 text-[11px] font-semibold text-rose-50 hover:bg-rose-400 disabled:opacity-50"
+            >
+              {busy ? "…" : "Confirm reject"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VacancySourceMiniPanel({ vacancyId }: { vacancyId: string }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.recruiterSourceBreakdown>> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .recruiterSourceBreakdown({ vacancyId, days: 90 })
+      .then((r) => {
+        if (!cancelled) setData(r);
+      })
+      .catch(() => {
+        if (!cancelled) setData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vacancyId]);
+
+  if (!data || data.total === 0) return null;
+
+  const order: { key: keyof typeof data.buckets; label: string; color: string }[] = [
+    { key: "organic", label: "Organic", color: "#10b981" },
+    { key: "utm", label: "UTM", color: "#06b6d4" },
+    { key: "ref", label: "Refs", color: "#f59e0b" },
+    { key: "widget", label: "Widget", color: "#a855f7" },
+    { key: "other", label: "Other", color: "#64748b" },
+  ];
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+        Application sources <span className="text-slate-600">(90d)</span>
+      </div>
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-white/5">
+        {order.map(({ key, color }) => {
+          const n = data.buckets[key].count;
+          if (n === 0) return null;
+          const pct = (n / data.total) * 100;
+          return (
+            <div
+              key={key}
+              style={{ width: `${pct}%`, backgroundColor: color }}
+              title={`${key}: ${n}`}
+            />
+          );
+        })}
+      </div>
+      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
+        {order.map(({ key, label, color }) => {
+          const n = data.buckets[key].count;
+          if (n === 0) return null;
+          return (
+            <li key={key} className="flex items-center gap-1">
+              <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-slate-400">{label}</span>
+              <span className="ml-auto tabular-nums text-slate-300">{n}</span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

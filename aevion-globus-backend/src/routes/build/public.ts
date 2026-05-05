@@ -167,6 +167,86 @@ publicRouter.get("/v1/health", publicRateLimiter, requirePartnerKey, async (_req
   return ok(res, { status: "ok", apiVersion: "v1" });
 });
 
+// GET /api/build/rss/vacancies.xml — public RSS 2.0 feed of OPEN vacancies.
+// No partner key required — purely a syndication endpoint so candidates
+// can subscribe in their RSS reader / Slack RSS-app / IFTTT.
+// Optional filters: ?city=Astana ?skill=welding (case-insensitive).
+publicRouter.get("/rss/vacancies.xml", async (req, res) => {
+  try {
+    const city = typeof req.query.city === "string" ? req.query.city.trim().slice(0, 100) : "";
+    const skill = typeof req.query.skill === "string" ? req.query.skill.trim().slice(0, 60) : "";
+    const where: string[] = [`v."status" = 'OPEN'`];
+    const params: unknown[] = [];
+    if (city) {
+      params.push(city);
+      where.push(`p."city" ILIKE $${params.length}`);
+    }
+    if (skill) {
+      params.push(`%"${skill.toLowerCase()}"%`);
+      where.push(`lower(v."skillsJson") LIKE $${params.length}`);
+    }
+    const r = await pool.query(
+      `SELECT v."id", v."title", v."description", v."salary", v."salaryCurrency",
+              v."city", v."createdAt", p."title" AS "projectTitle", p."city" AS "projectCity"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY v."createdAt" DESC LIMIT 50`,
+      params,
+    );
+
+    const xmlEscape = (s: string) =>
+      String(s ?? "").replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c] as string);
+
+    const items = (r.rows as {
+      id: string;
+      title: string;
+      description: string;
+      salary: number;
+      salaryCurrency: string | null;
+      city: string | null;
+      createdAt: string;
+      projectTitle: string;
+      projectCity: string | null;
+    }[]).map((v) => {
+      const link = `https://aevion.tech/build/vacancy/${encodeURIComponent(v.id)}`;
+      const cityStr = v.city || v.projectCity || "";
+      const salaryStr = v.salary > 0 ? `${v.salary.toLocaleString()} ${v.salaryCurrency || "USD"}` : "—";
+      const descSummary = `${cityStr ? `📍 ${cityStr} · ` : ""}💰 ${salaryStr}\n\n${(v.description || "").slice(0, 600)}`;
+      return `    <item>
+      <title>${xmlEscape(v.title)}</title>
+      <link>${xmlEscape(link)}</link>
+      <guid isPermaLink="true">${xmlEscape(link)}</guid>
+      <pubDate>${new Date(v.createdAt).toUTCString()}</pubDate>
+      <description>${xmlEscape(descSummary)}</description>
+    </item>`;
+    }).join("\n");
+
+    const titleSuffix = [city, skill].filter(Boolean).join(" / ");
+    const channelTitle = titleSuffix
+      ? `AEVION QBuild · open vacancies · ${titleSuffix}`
+      : "AEVION QBuild · open vacancies";
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>${xmlEscape(channelTitle)}</title>
+    <link>https://aevion.tech/build/vacancies</link>
+    <description>${xmlEscape("Latest open vacancies on AEVION QBuild construction recruiting platform.")}</description>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <ttl>5</ttl>
+${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    return res.send(xml);
+  } catch (err: unknown) {
+    return fail(res, 500, "rss_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/public/widget.js — drop-in <script> for partner sites.
 //
 // The partner adds:

@@ -1119,6 +1119,15 @@ export const buildApi = {
   // AI tools
   aiGenerateVacancy: (input: { brief: string; city?: string | null }) =>
     call<{ draft: AiVacancyDraft }>("POST", "/api/build/ai/generate-vacancy", input),
+  aiMatchVacancy: (input: { profileText: string; vacancyText: string }) =>
+    call<{
+      match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string };
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/match-vacancy", input),
+  aiCoverLetter: (input: { profileText: string; vacancyText: string; tone?: "professional" | "friendly" | "concise" }) =>
+    call<{ coverLetter: string; usage: { input: number; output: number } }>(
+      "POST", "/api/build/ai/cover-letter", input
+    ),
 
   // Payment calendar
   myPaymentCalendar: () =>

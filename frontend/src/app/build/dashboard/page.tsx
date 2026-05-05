@@ -104,6 +104,8 @@ function Body() {
         </div>
       )}
 
+      {items && <SourceBreakdownChart />}
+
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <div className="flex items-center gap-1">
           {(["OPEN", "CLOSED", "ALL"] as StatusFilter[]).map((s) => (
@@ -267,6 +269,105 @@ function SlaTile({ avgSec }: { avgSec: number | null }) {
     >
       <div className="text-xs uppercase tracking-wider text-slate-400">Avg SLA</div>
       <div className={`mt-1 text-3xl font-bold ${slaTone(avgSec)}`}>{formatSla(avgSec)}</div>
+    </div>
+  );
+}
+
+function SourceBreakdownChart() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.recruiterSourceBreakdown>> | null>(null);
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .recruiterSourceBreakdown(days)
+      .then((r) => {
+        if (!cancelled) setData(r);
+      })
+      .catch(() => {
+        if (!cancelled) setData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [days]);
+
+  if (!data) return null;
+  if (data.total === 0) return null;
+
+  const order: { key: keyof typeof data.buckets; label: string; color: string }[] = [
+    { key: "organic", label: "Organic", color: "#10b981" },
+    { key: "utm", label: "UTM", color: "#06b6d4" },
+    { key: "ref", label: "Referrers", color: "#f59e0b" },
+    { key: "widget", label: "Widget", color: "#a855f7" },
+    { key: "other", label: "Other", color: "#64748b" },
+  ];
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Application sources
+          </div>
+          <div className="mt-0.5 text-xs text-slate-500">
+            {data.total} application{data.total === 1 ? "" : "s"} · last {data.days} days
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {([7, 30, 90] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDays(d)}
+              className={`rounded-md px-2 py-0.5 text-[11px] ${
+                days === d
+                  ? "bg-emerald-500/20 text-emerald-200"
+                  : "text-slate-400 hover:bg-white/5"
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Stacked bar */}
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-white/5">
+        {order.map(({ key, color }) => {
+          const n = data.buckets[key].count;
+          if (n === 0) return null;
+          const pct = (n / data.total) * 100;
+          return (
+            <div
+              key={key}
+              style={{ width: `${pct}%`, backgroundColor: color }}
+              title={`${key}: ${n}`}
+            />
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-5">
+        {order.map(({ key, label, color }) => {
+          const n = data.buckets[key].count;
+          const pct = data.total > 0 ? Math.round((n / data.total) * 100) : 0;
+          const detail = data.buckets[key].details
+            .slice(0, 3)
+            .map((d) => d.tag)
+            .join(", ");
+          return (
+            <li key={key} className="flex items-center gap-1.5" title={detail || undefined}>
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-slate-300">{label}</span>
+              <span className="ml-auto tabular-nums text-slate-400">
+                {n} <span className="text-slate-500">({pct}%)</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

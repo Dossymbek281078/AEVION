@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { buildPool as pool, ok, fail } from "../../lib/build";
+import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
 
 export const statsRouter = Router();
 
@@ -208,6 +208,149 @@ statsRouter.get("/hires", async (req, res) => {
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "hires_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/employers/:id/overview — public aggregated brand view.
+// Combines the employer's profile + their projects + their open vacancies +
+// summary metrics so the /build/employer/:id page (and the /build/company/:id
+// alias) can render a single hero+listing without making 4 separate
+// frontend round trips. No auth — public.
+statsRouter.get("/employers/:id/overview", async (req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+  try {
+    const id = String(req.params.id);
+
+    const [profileQ, projectsQ, vacanciesQ, hiresQ, reviewsQ] = await Promise.all([
+      pool.query(
+        `SELECT p."userId", u."name", p."title", p."city", p."summary",
+                p."buildRole", p."verifiedAt", p."photoUrl"
+         FROM "BuildProfile" p
+         JOIN "AEVIONUser" u ON u."id" = p."userId"
+         WHERE p."userId" = $1 LIMIT 1`,
+        [id],
+      ),
+      pool.query(
+        `SELECT pj."id", pj."title", pj."status", pj."city", pj."budget", pj."createdAt",
+                (SELECT COUNT(*)::int FROM "BuildVacancy" v WHERE v."projectId" = pj."id" AND v."status" = 'OPEN') AS "openVacancies"
+         FROM "BuildProject" pj
+         WHERE pj."clientId" = $1
+         ORDER BY pj."createdAt" DESC LIMIT 50`,
+        [id],
+      ),
+      pool.query(
+        `SELECT v."id", v."title", v."salary", v."salaryCurrency", v."skillsJson",
+                v."city", v."createdAt", v."expiresAt",
+                pj."title" AS "projectTitle", pj."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         JOIN "BuildProject" pj ON pj."id" = v."projectId"
+         WHERE pj."clientId" = $1 AND v."status" = 'OPEN'
+         ORDER BY v."createdAt" DESC LIMIT 30`,
+        [id],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "n"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" pj ON pj."id" = v."projectId"
+         WHERE pj."clientId" = $1 AND a."status" = 'ACCEPTED'`,
+        [id],
+      ),
+      pool.query(
+        `SELECT AVG(r."rating")::float AS "avg", COUNT(*)::int AS "n"
+         FROM "BuildReview" r WHERE r."revieweeId" = $1`,
+        [id],
+      ),
+    ]);
+
+    if (profileQ.rowCount === 0) return fail(res, 404, "employer_not_found");
+
+    const employer = profileQ.rows[0];
+    const vacancies = vacanciesQ.rows.map((row: Record<string, unknown>) => {
+      let skills: string[] = [];
+      try {
+        const j = row.skillsJson;
+        if (typeof j === "string") skills = JSON.parse(j) as string[];
+      } catch { /* ignore */ }
+      return {
+        ...row,
+        skills,
+      };
+    });
+
+    return ok(res, {
+      employer,
+      projects: projectsQ.rows,
+      vacancies,
+      stats: {
+        openVacancies: vacancies.length,
+        openProjects: projectsQ.rows.filter((p: { status: string }) => p.status === "OPEN").length,
+        totalProjects: projectsQ.rowCount,
+        hires: Number(hiresQ.rows[0]?.n ?? 0),
+        avgRating: Number(reviewsQ.rows[0]?.avg ?? 0) || 0,
+        reviewCount: Number(reviewsQ.rows[0]?.n ?? 0),
+      },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "employer_overview_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/stats/sources — recruiter-only attribution breakdown.
+// Buckets the caller's incoming applications by sourceTag prefix:
+//   organic | utm:* | ref:* | widget | (null -> "organic")
+// Returns counts per bucket so the dashboard can render a stacked bar.
+statsRouter.get("/sources", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    // Optional ?days=30 window (1-180, default 30).
+    const daysRaw = Number(req.query.days);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(180, Math.round(daysRaw))) : 30;
+
+    const r = await pool.query(
+      `SELECT COALESCE(a."sourceTag", 'organic') AS "tag",
+              COUNT(*)::int AS "n"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1
+         AND a."createdAt" > NOW() - ($2 || ' days')::INTERVAL
+       GROUP BY 1
+       ORDER BY 2 DESC`,
+      [auth.sub, String(days)],
+    );
+
+    type Bucket = "organic" | "utm" | "ref" | "widget" | "other";
+    const buckets: Record<Bucket, { count: number; details: { tag: string; count: number }[] }> = {
+      organic: { count: 0, details: [] },
+      utm: { count: 0, details: [] },
+      ref: { count: 0, details: [] },
+      widget: { count: 0, details: [] },
+      other: { count: 0, details: [] },
+    };
+    let total = 0;
+    for (const row of r.rows as { tag: string; n: number }[]) {
+      const tag = String(row.tag || "organic").toLowerCase();
+      const n = Number(row.n);
+      total += n;
+      let bucket: Bucket = "other";
+      if (tag === "organic") bucket = "organic";
+      else if (tag.startsWith("utm:")) bucket = "utm";
+      else if (tag.startsWith("ref:")) bucket = "ref";
+      else if (tag === "widget") bucket = "widget";
+      buckets[bucket].count += n;
+      buckets[bucket].details.push({ tag, count: n });
+    }
+
+    return ok(res, {
+      days,
+      total,
+      buckets,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "stats_sources_failed", { details: (err as Error).message });
   }
 });
 

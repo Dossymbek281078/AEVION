@@ -772,6 +772,22 @@ export const buildApi = {
       `/api/build/applications/${encodeURIComponent(id)}/label`,
       { labelKey },
     ),
+  listBulkTemplates: () =>
+    call<{
+      items: { id: string; name: string; body: string; createdAt: string }[];
+      total: number;
+    }>("GET", "/api/build/bulk-templates"),
+  saveBulkTemplate: (input: { name: string; body: string }) =>
+    call<{ id: string; name: string; body: string; createdAt: string }>(
+      "POST",
+      "/api/build/bulk-templates",
+      input,
+    ),
+  deleteBulkTemplate: (id: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/bulk-templates/${encodeURIComponent(id)}`,
+    ),
   bulkMessageApplicants: (vacancyId: string, content: string, status: "PENDING" | "ACCEPTED" | "REJECTED" | "ALL" = "PENDING") =>
     call<{ sent: number; recipients: string[] }>(
       "POST",
@@ -1090,6 +1106,18 @@ export const buildApi = {
       applications: { day: string; n: number }[];
       projects: { day: string; n: number }[];
     }>("GET", "/api/build/stats/timeseries", undefined, { auth: false }),
+  recruiterSourceBreakdown: (days = 30) =>
+    call<{
+      days: number;
+      total: number;
+      buckets: {
+        organic: { count: number; details: { tag: string; count: number }[] };
+        utm: { count: number; details: { tag: string; count: number }[] };
+        ref: { count: number; details: { tag: string; count: number }[] };
+        widget: { count: number; details: { tag: string; count: number }[] };
+        other: { count: number; details: { tag: string; count: number }[] };
+      };
+    }>("GET", `/api/build/stats/sources?days=${encodeURIComponent(String(days))}`),
   adminListPartnerKeys: () =>
     call<{
       items: {

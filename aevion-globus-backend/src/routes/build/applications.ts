@@ -742,6 +742,52 @@ applicationsRouter.post("/:id/withdraw", async (req, res) => {
   }
 });
 
+// POST /api/build/applications/:id/flag — flag an application for moderation.
+// Anyone authenticated who can see the application (owner / candidate / admin)
+// can raise a flag. Admin queue resolves via /api/build/admin/flags.
+applicationsRouter.post("/:id/flag", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const reason = vString(req.body?.reason, "reason", { min: 2, max: 64 });
+    if (!reason.ok) return fail(res, 400, reason.error);
+    const note = req.body?.note == null
+      ? { ok: true as const, value: null }
+      : vString(req.body.note, "note", { max: 500, allowEmpty: true });
+    if (note.ok === false) return fail(res, 400, note.error);
+
+    // Verify the application exists and the caller has any relationship to
+    // it (vacancy owner OR the candidate themself OR admin). Otherwise we
+    // could become a spam vector.
+    const r = await pool.query(
+      `SELECT a."id", a."userId", p."clientId"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    const row = r.rows[0];
+    const isParticipant = row.userId === auth.sub || row.clientId === auth.sub;
+    if (!isParticipant && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_authorized_to_flag");
+    }
+
+    const flagId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "BuildApplicationFlag" ("id","applicationId","reporterUserId","reason","note")
+       VALUES ($1,$2,$3,$4,$5)`,
+      [flagId, id, auth.sub, reason.value, note.value || null],
+    );
+    return ok(res, { id: flagId }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_flag_failed", { details: (err as Error).message });
+  }
+});
+
 async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return; // email not configured

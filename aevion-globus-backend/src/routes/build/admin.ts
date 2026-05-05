@@ -275,5 +275,60 @@ adminRouter.post("/vacancies/close-expired", async (req, res) => {
   }
 });
 
+// GET /api/build/admin/flags?status=open — application moderation queue.
+adminRouter.get("/flags", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const status = typeof req.query.status === "string" ? req.query.status : "open";
+    const r = await pool.query(
+      `SELECT f."id", f."applicationId", f."reporterUserId", f."reason", f."note",
+              f."status", f."createdAt", f."resolvedAt", f."resolvedBy",
+              ru."name" AS "reporterName",
+              a."userId" AS "candidateId",
+              ca."name" AS "candidateName",
+              a."vacancyId", v."title" AS "vacancyTitle"
+       FROM "BuildApplicationFlag" f
+       LEFT JOIN "AEVIONUser" ru ON ru."id" = f."reporterUserId"
+       LEFT JOIN "BuildApplication" a ON a."id" = f."applicationId"
+       LEFT JOIN "AEVIONUser" ca ON ca."id" = a."userId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       WHERE f."status" = $1
+       ORDER BY f."createdAt" DESC LIMIT 200`,
+      [status],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_flags_failed", { details: (err as Error).message });
+  }
+});
+
+// PATCH /api/build/admin/flags/:id — resolve a flag (admin).
+adminRouter.patch("/flags/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const id = String(req.params.id);
+    const next = typeof req.body?.status === "string" ? req.body.status : "";
+    if (next !== "dismissed" && next !== "actioned") {
+      return fail(res, 400, "status_must_be_dismissed_or_actioned");
+    }
+    const r = await pool.query(
+      `UPDATE "BuildApplicationFlag"
+       SET "status" = $1, "resolvedBy" = $2, "resolvedAt" = NOW()
+       WHERE "id" = $3 RETURNING "id","status"`,
+      [next, auth.sub, id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "flag_not_found");
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_flag_resolve_failed", { details: (err as Error).message });
+  }
+});
+
 // Suppress unused import warning — crypto used for future admin routes
 void crypto;

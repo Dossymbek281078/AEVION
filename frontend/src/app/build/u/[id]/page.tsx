@@ -163,6 +163,14 @@ export default async function PublicProfilePage({ params }: Props) {
             >
               ⬇ Resume PDF
             </a>
+            <Link
+              href={`/build/u/${encodeURIComponent(id)}/resume`}
+              target="_blank"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+              title="Open print-friendly resume with QR code"
+            >
+              🖨 Print
+            </Link>
           </div>
         </div>
 

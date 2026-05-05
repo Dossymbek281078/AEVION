@@ -152,6 +152,20 @@ function TalentBody() {
         />
       </div>
 
+      <TalentSavedSearches
+        current={{ q, skill, city, role, minExp, openOnly, verifiedOnly, withRatingOnly }}
+        onApply={(s) => {
+          setQ(s.q);
+          setSkill(s.skill);
+          setCity(s.city);
+          setRole(s.role);
+          setMinExp(s.minExp);
+          setOpenOnly(s.openOnly);
+          setVerifiedOnly(s.verifiedOnly);
+          setWithRatingOnly(s.withRatingOnly);
+        }}
+      />
+
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
           {ROLE_FILTERS.map((r) => (
@@ -357,5 +371,115 @@ function TalentCard({ talent }: { talent: TalentRow }) {
         </div>
       )}
     </Link>
+  );
+}
+
+type TalentSearchState = {
+  q: string;
+  skill: string;
+  city: string;
+  role: BuildRole | "ALL";
+  minExp: string;
+  openOnly: boolean;
+  verifiedOnly: boolean;
+  withRatingOnly: boolean;
+};
+type TalentSavedSearch = TalentSearchState & { id: string; name: string };
+const TALENT_SAVED_KEY = "qbuild.talent.savedSearches.v1";
+
+function TalentSavedSearches({
+  current,
+  onApply,
+}: {
+  current: TalentSearchState;
+  onApply: (s: TalentSearchState) => void;
+}) {
+  const [items, setItems] = useState<TalentSavedSearch[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TALENT_SAVED_KEY);
+      if (raw) setItems(JSON.parse(raw) as TalentSavedSearch[]);
+    } catch {
+      try { localStorage.removeItem(TALENT_SAVED_KEY); } catch {}
+    }
+    setHydrated(true);
+  }, []);
+
+  function persist(next: TalentSavedSearch[]) {
+    setItems(next);
+    try { localStorage.setItem(TALENT_SAVED_KEY, JSON.stringify(next)); } catch {}
+  }
+
+  function describe(c: TalentSearchState) {
+    const parts: string[] = [];
+    if (c.q) parts.push(`"${c.q}"`);
+    if (c.skill) parts.push(`skill:${c.skill}`);
+    if (c.city) parts.push(`city:${c.city}`);
+    if (c.role !== "ALL") parts.push(`role:${c.role}`);
+    if (c.minExp) parts.push(`≥${c.minExp}y`);
+    if (!c.openOnly) parts.push("any-availability");
+    if (c.verifiedOnly) parts.push("verified");
+    if (c.withRatingOnly) parts.push("reviewed");
+    return parts.length > 0 ? parts.join(" · ") : "all candidates";
+  }
+
+  function save() {
+    const summary = describe(current);
+    const name = window.prompt("Name this talent search:", summary === "all candidates" ? "" : summary);
+    if (!name?.trim()) return;
+    const id = `t_${Date.now()}`;
+    persist([{ id, name: name.trim().slice(0, 60), ...current }, ...items].slice(0, 20));
+  }
+
+  function remove(id: string) {
+    persist(items.filter((s) => s.id !== id));
+  }
+
+  if (!hydrated) return null;
+
+  const hasFilters =
+    current.q || current.city || current.minExp || current.skill ||
+    current.role !== "ALL" || !current.openOnly || current.verifiedOnly || current.withRatingOnly;
+
+  if (items.length === 0 && !hasFilters) return null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
+      {items.length === 0 && (
+        <span className="text-[11px] text-slate-500">none yet</span>
+      )}
+      {items.map((s) => (
+        <span
+          key={s.id}
+          className="inline-flex items-center gap-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-0.5 text-xs text-fuchsia-200"
+        >
+          <button
+            onClick={() => onApply(s)}
+            title={describe(s)}
+            className="hover:underline"
+          >
+            {s.name}
+          </button>
+          <button
+            onClick={() => remove(s.id)}
+            aria-label={`Delete ${s.name}`}
+            className="text-fuchsia-200/60 hover:text-fuchsia-200"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {hasFilters && (
+        <button
+          onClick={save}
+          className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20"
+        >
+          ★ Save current
+        </button>
+      )}
+    </div>
   );
 }

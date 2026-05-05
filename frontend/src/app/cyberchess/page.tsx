@@ -3558,8 +3558,18 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Board + Panel */}
+      {/* Workspace toolbar — always visible above the board, even during play.
+          Lets the user switch presets without leaving an active game. */}
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{marginBottom:8,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute}}>Workspace</span>
+        <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
+        <span style={{fontSize:10,color:CC.textMute}}>· клавиши 1..5</span>
+      </div>}
+
+      {/* Board + Panel + (optional) Media Pane */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        {/* Inline media pane on the LEFT — visible only in Stream workspace */}
+        {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
           {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(920px,calc(100vw - 48px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
@@ -4009,8 +4019,8 @@ export default function CyberChessPage(){
           </div>}
         </div>
 
-        {/* Right panel */}
-        <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
+        {/* Right panel — hidden in Focus workspace (board only). */}
+        {wsShowRight&&<div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
           {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
               (it reads as "noise" when user is focused on the board). Shown in puzzles tab
               and when no game is in progress (between matches). */}
@@ -5403,7 +5413,7 @@ export default function CyberChessPage(){
           {tab==="play"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:13,color:T.dim}}>{s.l}</div></div>)}
           </div>}
-        </div>
+        </div>}
       </div>}
 
       {promo&&<div className="cc-backdrop" style={{display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sPromo(null)}>
@@ -7729,5 +7739,6 @@ export default function CyberChessPage(){
       </div>;
     })()}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
+    <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
     </main>);
 }

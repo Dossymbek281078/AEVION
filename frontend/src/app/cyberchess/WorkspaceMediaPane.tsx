@@ -89,7 +89,7 @@ export default function WorkspaceMediaPane() {
   const parent = typeof window !== "undefined" ? window.location.hostname : "localhost";
 
   let iframeSrc = "";
-  let iframeKey = state.tab;
+  let iframeKey: string = state.tab;
   if (state.tab === "youtube") {
     const id = ytId(state.yt);
     if (id) iframeSrc = `https://www.youtube.com/embed/${id}?autoplay=1&mute=1`;

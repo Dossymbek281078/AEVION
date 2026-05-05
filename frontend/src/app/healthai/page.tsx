@@ -1848,6 +1848,20 @@ export default function HealthAIPage() {
               >
                 🧠 {lang === "en" ? "Mental Health Screener" : "Психологический скрининг"}
               </a>
+              <a
+                href="/healthai/plan"
+                style={{
+                  ...primaryBtn,
+                  background: "rgba(20,184,166,0.18)",
+                  borderColor: "rgba(20,184,166,0.45)",
+                  color: "#5eead4",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                📋 {lang === "en" ? "My Health Plan" : "Мой план здоровья"}
+              </a>
             </div>
           </Card>
         ) : null}

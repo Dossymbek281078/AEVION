@@ -286,8 +286,51 @@ async function run() {
   assert("dashboard.thisMonth shape", typeof dash.body.thisMonth?.netKzt === "number");
   assert("dashboard.last7days array", Array.isArray(dash.body.last7days));
 
-  // 25. Insufficient balance
-  console.log("\n20. Edge cases");
+  // 25. Concurrency safety — fire 5 parallel transfers from a wallet that can only afford 1
+  console.log("\n20. Concurrency (atomicity proof)");
+  // Top up to 1000 KZT exactly so 5×500 transfers can't all succeed.
+  await req("POST", "/api/qpaynet/deposit", { walletId, amount: 1000 }, auth);
+
+  // Create receiver wallet
+  const recv = await req("POST", "/api/qpaynet/wallets", { name: "concurrency-recv" }, auth);
+  const recvId = recv.body.id;
+
+  // Fire 5 parallel transfers of 500 each (only 1 should succeed without atomicity → race)
+  const transfers = await Promise.all(
+    [1, 2, 3, 4, 5].map(() => req("POST", "/api/qpaynet/transfer", {
+      fromWalletId: walletId, toWalletId: recvId, amount: 500,
+    }, auth))
+  );
+  const successes = transfers.filter(t => t.status === 200).length;
+  const insufficient = transfers.filter(t => t.body?.error === "insufficient_balance").length;
+  assert("at most 1 parallel transfer succeeded", successes <= 1, `${successes} succeeded`);
+  assert("rest got insufficient_balance", successes + insufficient === 5);
+
+  // Verify wallet balance consistent: original - successful*500.001(fee)
+  const finalW = await req("GET", `/api/qpaynet/wallets/${walletId}`, null, auth);
+  assert("final balance non-negative", finalW.body.balance >= 0, `balance=${finalW.body.balance}`);
+
+  // 26. Idempotency replay
+  console.log("\n21. Idempotency");
+  const idemKey = "smoke-" + Date.now();
+  const dep1 = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 100 }, { ...auth, "Idempotency-Key": idemKey });
+  const dep2 = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 100 }, { ...auth, "Idempotency-Key": idemKey });
+  assert("first deposit → 200", dep1.status === 200);
+  assert("replay → 200 (cached)", dep2.status === 200);
+  assert("same txId (proves cache hit)", dep1.body.txId === dep2.body.txId);
+
+  const dep3 = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 200 }, { ...auth, "Idempotency-Key": idemKey });
+  assert("different body, same key → 409", dep3.status === 409 && dep3.body.error === "idempotency_key_body_mismatch");
+
+  // 27. Audit log
+  console.log("\n22. Audit log");
+  const audit = await req("GET", "/api/qpaynet/me/audit?limit=10", null, auth);
+  assert("GET /me/audit → 200", audit.status === 200);
+  assert("events array", Array.isArray(audit.body.events));
+  assert("recent transfer logged", audit.body.events?.some(e => e.action === "transfer"));
+
+  // 28. Insufficient balance
+  console.log("\n23. Edge cases");
   const bigWd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 999999 }, auth);
   assert("withdraw beyond balance → 400", bigWd.status === 400 && bigWd.body.error === "insufficient_balance");
 

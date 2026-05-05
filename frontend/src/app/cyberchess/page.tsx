@@ -522,6 +522,12 @@ export default function CyberChessPage(){
   // Hover-scrub: when user hovers a move in the move list, board previews that position
   // without disturbing the canonical browseIdx. previewIdx===null = no preview active.
   const[previewIdx,sPreviewIdx]=useState<number|null>(null);
+  // Live rating-delta chip — fires when `rat` changes; floats top-right for ~3.5s.
+  // Tracks the previous rating so we can compute the signed delta (+/- N).
+  const[ratDelta,sRatDelta]=useState<{d:number;newRat:number;ts:number}|null>(null);
+  const ratPrevRef=useRef<number|null>(null);
+  // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
+  const[lichessLoading,sLichessLoading]=useState(false);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
@@ -930,6 +936,18 @@ export default function CyberChessPage(){
       showToast(`▶ Просмотр партии · ${mh.length} ходов`,"info");
     }catch{}
   },[]);
+
+  // Live rating-delta chip — animates floating chip whenever `rat` changes.
+  // Skips first set (initial load from localStorage) using ratPrevRef===null guard.
+  useEffect(()=>{
+    if(ratPrevRef.current===null){ratPrevRef.current=rat;return;}
+    const d=rat-ratPrevRef.current;
+    ratPrevRef.current=rat;
+    if(d===0)return;
+    sRatDelta({d,newRat:rat,ts:Date.now()});
+    const t=window.setTimeout(()=>sRatDelta(null),3800);
+    return()=>window.clearTimeout(t);
+  },[rat]);
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
@@ -3172,6 +3190,57 @@ export default function CyberChessPage(){
                     border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
                   ⚡ Puzzle Rush
+                </button>
+                {/* Lichess Daily Puzzle — fetched live from public CC0 API. */}
+                <button disabled={lichessLoading} onClick={async()=>{
+                  if(lichessLoading)return;
+                  sLichessLoading(true);
+                  showToast("⏳ Загружаю Lichess Daily…","info");
+                  try{
+                    const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
+                    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+                    const j=await r.json();
+                    // Replay the game's PGN up to puzzle.initialPly to land on the puzzle's start position.
+                    const ch=new Chess();
+                    const pgnTokens=String(j?.game?.pgn||"").trim().split(/\s+/).filter(Boolean);
+                    const ply=Number(j?.puzzle?.initialPly||0);
+                    for(let i=0;i<ply&&i<pgnTokens.length;i++){try{ch.move(pgnTokens[i])}catch{break}}
+                    // Lichess solution is UCI; the side to move plays first. Convert first move to SAN for our schema.
+                    const sols:string[]=Array.isArray(j?.puzzle?.solution)?j.puzzle.solution:[];
+                    if(!sols.length)throw new Error("no solution");
+                    const first=sols[0];
+                    const probe=new Chess(ch.fen());
+                    const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
+                    if(!mv)throw new Error("solution invalid");
+                    const fakePz:Puzzle={
+                      name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,
+                      r:Number(j?.puzzle?.rating)||1500,
+                      theme:(j?.puzzle?.themes?.[0]||"tactics") as any,
+                      phase:"Middlegame",
+                      side:ch.turn() as "w"|"b",
+                      goal:"Best move",
+                      mateIn:0,
+                      fen:ch.fen(),
+                      sol:[mv.san],
+                    };
+                    sTab("puzzles");
+                    setGame(new Chess(fakePz.fen));sBk(k=>k+1);
+                    sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());
+                    sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");
+                    sOn(true);
+                    showToast(`🌐 Lichess Daily · rating ${fakePz.r} · ${j?.puzzle?.themes?.slice(0,2).join(" · ")||""}`,"success");
+                  }catch(e:any){
+                    showToast(`Lichess недоступен: ${e?.message||"network"}`,"error");
+                  }finally{
+                    sLichessLoading(false);
+                  }
+                }}
+                  className="cc-focus-ring"
+                  style={{padding:"6px 12px",borderRadius:RADIUS.full,
+                    border:`1px solid #c4b5fd`,background:lichessLoading?"#f5f3ff":"linear-gradient(135deg,#f5f3ff,#ede9fe)",color:CC.accent,
+                    fontSize:12,fontWeight:800,cursor:lichessLoading?"wait":"pointer",
+                    display:"inline-flex",alignItems:"center",gap:5,opacity:lichessLoading?0.6:1}}>
+                  🌐 Lichess Daily{lichessLoading?" …":""}
                 </button>
                 <button onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
                   className="cc-focus-ring"
@@ -7832,5 +7901,20 @@ export default function CyberChessPage(){
     })()}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
+    {/* Live rating-delta chip — appears top-right when rat changes (after a game) */}
+    {ratDelta&&<div key={ratDelta.ts} style={{
+      position:"fixed",top:80,right:60,
+      zIndex:8500,pointerEvents:"none",
+      padding:"10px 18px",borderRadius:999,
+      background:ratDelta.d>0?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#dc2626,#ef4444)",
+      color:"#fff",fontWeight:900,fontSize:16,
+      boxShadow:ratDelta.d>0?"0 8px 24px rgba(5,150,105,0.45)":"0 8px 24px rgba(220,38,38,0.45)",
+      animation:"fadeInUp 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards",
+      display:"inline-flex",alignItems:"center",gap:8,
+    }}>
+      <span style={{fontSize:18}}>{ratDelta.d>0?"▲":"▼"}</span>
+      <span>{ratDelta.d>0?"+":""}{ratDelta.d}</span>
+      <span style={{opacity:0.85,fontSize:12,fontWeight:700,paddingLeft:8,borderLeft:"1px solid rgba(255,255,255,0.35)"}}>rating {ratDelta.newRat}</span>
+    </div>}
     </main>);
 }

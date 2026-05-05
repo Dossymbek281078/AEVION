@@ -1889,7 +1889,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
   if (!rawBody) return res.status(500).json({ error: "raw_body_unavailable" });
 
-  let event: Stripe.Event;
+  let event: ReturnType<typeof stripe.webhooks.constructEvent>;
   try {
     event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WH);
   } catch (err) {
@@ -1900,7 +1900,7 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   }
 
   if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
+    const session = event.data.object as { metadata?: Record<string, string>; client_reference_id?: string; payment_intent?: string; amount_total?: number; currency?: string };
     const checkoutId = session.metadata?.qpaynet_checkout_id ?? session.client_reference_id;
     if (checkoutId) {
       await ensureDepositCheckoutsTable();

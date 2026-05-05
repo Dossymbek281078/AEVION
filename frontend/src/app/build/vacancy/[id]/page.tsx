@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ApplicationForm } from "@/components/build/ApplicationForm";
 import { TrialTaskBlock } from "@/components/build/TrialTaskBlock";
@@ -24,6 +24,8 @@ import { recordVacancyView } from "@/lib/build/recentlyViewed";
 export default function VacancyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const me = useBuildAuth((s) => s.user);
+  const searchParams = useSearchParams();
+  const previewMode = searchParams.get("preview");
 
   const [vacancy, setVacancy] = useState<BuildVacancy | null>(null);
   const [applications, setApplications] = useState<BuildApplication[] | null>(null);
@@ -204,10 +206,17 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
     );
   }
 
-  const isOwner = me?.id === vacancy.clientId;
+  const isActualOwner = me?.id === vacancy.clientId;
+  // ?preview=candidate hides every owner-only UI element so the recruiter
+  // can self-check exactly what an applicant sees. We track ownership in
+  // two variables: isActualOwner (real ACL) for the banner; isOwner (effective
+  // for rendering) flips to false in preview mode.
+  const previewing = isActualOwner && previewMode === "candidate";
+  const isOwner = isActualOwner && !previewing;
 
   return (
     <BuildShell>
+      {previewing && <PreviewAsCandidateBanner vacancyId={vacancy.id} />}
       <Link
         href={`/build/project/${encodeURIComponent(vacancy.projectId)}`}
         className="text-xs text-slate-400 underline-offset-2 hover:underline"
@@ -244,6 +253,13 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 onToggled={refresh}
               />
               <div className="flex flex-wrap justify-end gap-1.5">
+                <Link
+                  href={`/build/vacancy/${encodeURIComponent(vacancy.id)}?preview=candidate`}
+                  className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
+                  title="See exactly what an applicant sees"
+                >
+                  👁 Preview
+                </Link>
                 <CloneVacancyButton
                   vacancyId={vacancy.id}
                   projectId={vacancy.projectId}
@@ -1412,6 +1428,24 @@ function SalaryMarketWidget({ skill }: { skill: string }) {
   );
 }
 
+function PreviewAsCandidateBanner({ vacancyId }: { vacancyId: string }) {
+  return (
+    <div className="-mx-4 mb-3 border-y border-cyan-400/30 bg-cyan-500/10 px-4 py-2">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 text-xs text-cyan-100">
+        <span className="font-semibold">
+          👁 Preview as candidate — owner UI is hidden so you see exactly what applicants see.
+        </span>
+        <Link
+          href={`/build/vacancy/${encodeURIComponent(vacancyId)}`}
+          className="rounded-md border border-cyan-300/40 bg-cyan-300/15 px-3 py-1 text-cyan-50 hover:bg-cyan-300/25"
+        >
+          Exit preview ×
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
@@ -1913,7 +1947,17 @@ function BulkMessageButton({
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string; body: string }[] | null>(null);
   const toast = useToast();
+
+  // Lazy-load templates the first time the dropdown opens.
+  useEffect(() => {
+    if (!open || templates !== null) return;
+    buildApi
+      .listBulkTemplates()
+      .then((r) => setTemplates(r.items))
+      .catch(() => setTemplates([]));
+  }, [open, templates]);
 
   if (pendingCount === 0) return null;
 
@@ -1937,6 +1981,29 @@ function BulkMessageButton({
     }
   }
 
+  async function saveAsTemplate() {
+    const body = content.trim();
+    if (body.length < 5) return;
+    const name = window.prompt("Template name:", body.slice(0, 40));
+    if (!name?.trim()) return;
+    try {
+      const t = await buildApi.saveBulkTemplate({ name: name.trim(), body });
+      setTemplates((arr) => (arr ? [t, ...arr] : [t]));
+      toast.success("Template saved");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function removeTemplate(id: string) {
+    try {
+      await buildApi.deleteBulkTemplate(id);
+      setTemplates((arr) => arr?.filter((t) => t.id !== id) ?? arr);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   return (
     <div className="relative">
       <button
@@ -1948,10 +2015,37 @@ function BulkMessageButton({
         ✉ Message all ({pendingCount})
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-80 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
+        <div className="absolute right-0 top-full z-20 mt-1 w-96 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-200">
             Message {pendingCount} pending applicants
           </div>
+          {templates && templates.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {templates.map((t) => (
+                <span
+                  key={t.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-200"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setContent(t.body)}
+                    title={t.body}
+                    className="hover:underline"
+                  >
+                    {t.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeTemplate(t.id)}
+                    aria-label={`Delete template ${t.name}`}
+                    className="text-slate-500 hover:text-rose-300"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -1960,22 +2054,33 @@ function BulkMessageButton({
             placeholder="Hi, thanks for applying — I'd like to schedule a 15-min call this week. Free Tue/Wed afternoon?"
             className="w-full rounded border border-white/10 bg-white/5 p-2 text-xs text-white placeholder:text-slate-500 focus:border-sky-500/40 focus:outline-none"
           />
-          <div className="mt-2 flex justify-end gap-1.5">
+          <div className="mt-2 flex items-center justify-between gap-1.5">
             <button
               type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
+              onClick={saveAsTemplate}
+              disabled={content.trim().length < 5}
+              className="text-[10px] text-slate-400 hover:text-emerald-300 disabled:opacity-40"
+              title="Save current text as a reusable template"
             >
-              Cancel
+              ★ Save as template
             </button>
-            <button
-              type="button"
-              onClick={send}
-              disabled={busy || content.trim().length < 5}
-              className="rounded-md bg-sky-500 px-3 py-1 text-[11px] font-semibold text-sky-950 hover:bg-sky-400 disabled:opacity-50"
-            >
-              {busy ? "…" : "Send"}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={send}
+                disabled={busy || content.trim().length < 5}
+                className="rounded-md bg-sky-500 px-3 py-1 text-[11px] font-semibold text-sky-950 hover:bg-sky-400 disabled:opacity-50"
+              >
+                {busy ? "…" : "Send"}
+              </button>
+            </div>
           </div>
         </div>
       )}

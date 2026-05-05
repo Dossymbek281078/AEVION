@@ -421,10 +421,20 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
   const [salary, setSalary] = useState("");
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
+  const [popularSkills, setPopularSkills] = useState<string[]>([]);
   const [questions, setQuestions] = useState<string[]>([]);
   const [questionInput, setQuestionInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load popular skills the first time the dialog opens.
+  useEffect(() => {
+    if (!open || popularSkills.length > 0) return;
+    buildApi
+      .popularSkills()
+      .then((r) => setPopularSkills(r.items.slice(0, 30).map((s) => s.skill)))
+      .catch(() => {});
+  }, [open, popularSkills.length]);
 
   function addSkill() {
     const v = skillInput.trim();
@@ -567,9 +577,35 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
             }}
             onBlur={addSkill}
             placeholder={skills.length === 0 ? "Welding, AutoCAD…" : ""}
+            list="qbuild-skill-suggestions"
             className="flex-1 min-w-[100px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
           />
+          <datalist id="qbuild-skill-suggestions">
+            {popularSkills
+              .filter((s) => !skills.includes(s))
+              .map((s) => (
+                <option key={s} value={s} />
+              ))}
+          </datalist>
         </div>
+        {popularSkills.length > 0 && skills.length < 5 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Popular:</span>
+            {popularSkills
+              .filter((s) => !skills.includes(s))
+              .slice(0, 12)
+              .map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSkills([...skills, s].slice(0, 30))}
+                  className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] px-1.5 py-0 text-[10px] text-emerald-300 hover:bg-emerald-500/15"
+                >
+                  + {s}
+                </button>
+              ))}
+          </div>
+        )}
       </div>
       <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
         <div className="mb-1 text-xs text-fuchsia-200/80">

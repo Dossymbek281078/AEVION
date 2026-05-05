@@ -329,13 +329,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                       }
                     />
                     <BulkMessageButton vacancyId={vacancy.id} pendingCount={applications.filter((a) => a.status === "PENDING").length} />
-                    <a
-                      href={`/api/build/applications/by-vacancy/${encodeURIComponent(vacancy.id)}/export.csv`}
-                      className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10"
-                      download
-                    >
-                      ↓ CSV
-                    </a>
+                    <ExportCsvButton vacancyId={vacancy.id} vacancyTitle={vacancy.title} />
                   </div>
                 )}
               </div>
@@ -476,6 +470,10 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           <ShareVacancyBlock vacancyId={vacancy.id} />
 
           {isOwner && <InviteCandidateBlock vacancyId={vacancy.id} />}
+
+          {isOwner && <VacancyTimeline vacancyId={vacancy.id} />}
+
+          {isOwner && <EmbedSnippetBlock vacancyId={vacancy.id} />}
 
           {!isOwner && vacancy.skills && vacancy.skills.length > 0 && (
             <SalaryMarketWidget skill={vacancy.skills[0]} />
@@ -1405,6 +1403,135 @@ function SalaryMarketWidget({ skill }: { skill: string }) {
   );
 }
 
+function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.tech";
+  const snippet = `<div data-aevion-build data-key="qb_pk_..." data-vacancy-id="${vacancyId}"></div>
+<script src="${origin}/api/build/public/widget.js" defer></script>`;
+
+  function copy() {
+    navigator.clipboard.writeText(snippet).then(
+      () => toast.success("Embed snippet copied"),
+      () => toast.error("Copy failed"),
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Embed on your site
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+        >
+          {open ? "Hide" : "Show snippet"}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3 space-y-2">
+          <p className="text-[11px] text-slate-400">
+            Drop this on any website. Replace <code className="rounded bg-black/40 px-1 text-emerald-200">qb_pk_...</code> with a partner key from{" "}
+            <Link href="/build/admin/partner-keys" className="text-emerald-300 underline">
+              admin → partner keys
+            </Link>
+            .
+          </p>
+          <pre className="overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 text-[11px] text-slate-200">
+            <code>{snippet}</code>
+          </pre>
+          <button
+            type="button"
+            onClick={copy}
+            className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-400/25"
+          >
+            📋 Copy snippet
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VacancyTimeline({ vacancyId }: { vacancyId: string }) {
+  const [events, setEvents] = useState<{
+    kind: string;
+    ts: string;
+    title: string;
+    meta?: Record<string, unknown>;
+  }[] | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || events !== null) return;
+    let cancelled = false;
+    buildApi
+      .vacancyTimeline(vacancyId)
+      .then((r) => {
+        if (!cancelled) setEvents(r.events);
+      })
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, events, vacancyId]);
+
+  const KIND_TONE: Record<string, { emoji: string; cls: string }> = {
+    VACANCY_CREATED: { emoji: "🚀", cls: "border-emerald-400/40 bg-emerald-400/10 text-emerald-100" },
+    BOOST_STARTED: { emoji: "⚡", cls: "border-amber-400/40 bg-amber-400/10 text-amber-100" },
+    BOOST_ENDED: { emoji: "💤", cls: "border-slate-400/30 bg-slate-400/5 text-slate-300" },
+    APPLICATION_RECEIVED: { emoji: "📩", cls: "border-cyan-400/30 bg-cyan-400/10 text-cyan-100" },
+    APPLICATION_ACCEPTED: { emoji: "✓", cls: "border-emerald-400/40 bg-emerald-400/15 text-emerald-100" },
+    APPLICATION_REJECTED: { emoji: "✗", cls: "border-rose-400/30 bg-rose-400/10 text-rose-100" },
+    HIRE_FEE: { emoji: "💸", cls: "border-fuchsia-400/40 bg-fuchsia-400/10 text-fuchsia-100" },
+  };
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200"
+      >
+        <span>Activity timeline</span>
+        <span className="text-slate-500">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-3">
+          {events === null ? (
+            <p className="text-xs text-slate-500">Loading…</p>
+          ) : events.length === 0 ? (
+            <p className="text-xs text-slate-500">No events yet.</p>
+          ) : (
+            <ol className="space-y-2 border-l border-white/10 pl-3">
+              {events.map((e, i) => {
+                const t = KIND_TONE[e.kind] ?? { emoji: "•", cls: "border-white/10 bg-white/5 text-slate-200" };
+                return (
+                  <li key={i} className="relative">
+                    <span className={`mr-2 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] ${t.cls}`}>
+                      <span aria-hidden>{t.emoji}</span>
+                    </span>
+                    <span className="text-xs text-slate-200">{e.title}</span>
+                    <span className="ml-2 text-[10px] text-slate-500">
+                      {new Date(e.ts).toLocaleString()}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1898,6 +2025,56 @@ function DeleteVacancyButton({
       className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
     >
       {busy ? "…" : "🗑 Delete"}
+    </button>
+  );
+}
+
+function ExportCsvButton({
+  vacancyId,
+  vacancyTitle,
+}: {
+  vacancyId: string;
+  vacancyTitle: string;
+}) {
+  const token = useBuildAuth((s) => s.token);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function download() {
+    if (!token || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `/api/build/applications/by-vacancy/${encodeURIComponent(vacancyId)}/export.csv`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const slug = vacancyTitle.replace(/[^a-z0-9]/gi, "-").toLowerCase().slice(0, 40);
+      a.download = `applications-${slug}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      toast.error(`CSV download failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={download}
+      disabled={busy}
+      title="Download all applications as CSV (includes label, skills, AI score)"
+      className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+    >
+      {busy ? "…" : "↓ CSV"}
     </button>
   );
 }

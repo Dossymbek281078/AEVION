@@ -596,6 +596,7 @@ export const buildApi = {
         appsPending: number;
         appsAccepted: number;
         appsRejected: number;
+        oldestPendingAt: string | null;
       }[];
       total: number;
     }>("GET", "/api/build/vacancies/mine/funnel"),
@@ -667,6 +668,23 @@ export const buildApi = {
       "POST",
       `/api/build/vacancies/${encodeURIComponent(id)}/republish`,
     ),
+  vacancyTimeline: (id: string) =>
+    call<{
+      events: {
+        kind:
+          | "VACANCY_CREATED"
+          | "BOOST_STARTED"
+          | "BOOST_ENDED"
+          | "APPLICATION_RECEIVED"
+          | "APPLICATION_ACCEPTED"
+          | "APPLICATION_REJECTED"
+          | "HIRE_FEE";
+        ts: string;
+        title: string;
+        meta?: Record<string, unknown>;
+      }[];
+      total: number;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/timeline`),
 
   // Notification preferences
   getNotificationPrefs: () =>

@@ -374,7 +374,8 @@ vacanciesRouter.get("/mine/funnel", async (req, res) => {
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "appsTotal",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING')::int AS "appsPending",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'ACCEPTED')::int AS "appsAccepted",
-              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'REJECTED')::int AS "appsRejected"
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'REJECTED')::int AS "appsRejected",
+              (SELECT MIN(a."createdAt") FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING') AS "oldestPendingAt"
        FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
        WHERE p."clientId" = $1
@@ -645,6 +646,117 @@ vacanciesRouter.delete("/:id", async (req, res) => {
     return ok(res, { id });
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_delete_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/:id/timeline — owner-only chronological feed of
+// vacancy events. No new table; we union 4 existing sources (vacancy itself,
+// applications, boosts, hire orders) and sort by ts desc. Cap 80 events.
+vacanciesRouter.get("/:id/timeline", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", v."createdAt", v."status", p."clientId", p."title" AS "projectTitle"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    type Event = {
+      kind: "VACANCY_CREATED" | "BOOST_STARTED" | "BOOST_ENDED" | "APPLICATION_RECEIVED" | "APPLICATION_ACCEPTED" | "APPLICATION_REJECTED" | "HIRE_FEE";
+      ts: string;
+      title: string;
+      meta?: Record<string, unknown>;
+    };
+    const events: Event[] = [];
+
+    events.push({
+      kind: "VACANCY_CREATED",
+      ts: String(owner.rows[0].createdAt),
+      title: "Vacancy posted",
+      meta: { projectTitle: owner.rows[0].projectTitle },
+    });
+
+    const apps = await pool.query(
+      `SELECT a."id", a."status", a."createdAt", a."updatedAt", a."rejectReason",
+              u."name" AS "applicantName"
+       FROM "BuildApplication" a
+       JOIN "AEVIONUser" u ON u."id" = a."userId"
+       WHERE a."vacancyId" = $1
+       ORDER BY a."createdAt" DESC LIMIT 200`,
+      [id],
+    );
+    for (const a of apps.rows as { id: string; status: string; createdAt: string; updatedAt: string; rejectReason: string | null; applicantName: string }[]) {
+      events.push({
+        kind: "APPLICATION_RECEIVED",
+        ts: a.createdAt,
+        title: `Application from ${a.applicantName}`,
+        meta: { applicationId: a.id },
+      });
+      // Detect status change events from updatedAt > createdAt + 1s.
+      // Note: we only know the final status, not intermediate flips. For a
+      // PENDING row updatedAt may equal createdAt — skip in that case.
+      if (a.status !== "PENDING" && new Date(a.updatedAt).getTime() - new Date(a.createdAt).getTime() > 1000) {
+        events.push({
+          kind: a.status === "ACCEPTED" ? "APPLICATION_ACCEPTED" : "APPLICATION_REJECTED",
+          ts: a.updatedAt,
+          title: `${a.applicantName} ${a.status === "ACCEPTED" ? "accepted" : "rejected"}`,
+          meta: { applicationId: a.id, rejectReason: a.rejectReason ?? undefined },
+        });
+      }
+    }
+
+    const boosts = await pool.query(
+      `SELECT "id","startedAt","endsAt","source" FROM "BuildBoost"
+       WHERE "vacancyId" = $1 ORDER BY "startedAt" DESC LIMIT 50`,
+      [id],
+    );
+    for (const b of boosts.rows as { id: string; startedAt: string; endsAt: string; source: string }[]) {
+      events.push({
+        kind: "BOOST_STARTED",
+        ts: b.startedAt,
+        title: `Boost activated (${b.source})`,
+        meta: { endsAt: b.endsAt, boostId: b.id },
+      });
+      if (new Date(b.endsAt) <= new Date()) {
+        events.push({
+          kind: "BOOST_ENDED",
+          ts: b.endsAt,
+          title: "Boost expired",
+          meta: { boostId: b.id },
+        });
+      }
+    }
+
+    // Hire fee orders are tied to vacancy via metaJson.vacancyId.
+    const hires = await pool.query(
+      `SELECT "id","createdAt","amount","currency","status","metaJson"
+       FROM "BuildOrder" WHERE "kind" = 'HIRE_FEE' AND "userId" = $1
+       ORDER BY "createdAt" DESC LIMIT 50`,
+      [auth.sub],
+    );
+    for (const o of hires.rows as { id: string; createdAt: string; amount: number; currency: string; status: string; metaJson: string }[]) {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(o.metaJson) as Record<string, unknown>; } catch {}
+      if (meta.vacancyId !== id) continue;
+      events.push({
+        kind: "HIRE_FEE",
+        ts: o.createdAt,
+        title: `Hire fee · ${o.amount.toLocaleString()} ${o.currency} (${o.status})`,
+        meta: { orderId: o.id, status: o.status },
+      });
+    }
+
+    events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    return ok(res, { events: events.slice(0, 80), total: events.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_timeline_failed", { details: (err as Error).message });
   }
 });
 

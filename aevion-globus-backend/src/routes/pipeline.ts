@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+﻿import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -687,7 +687,7 @@ pipelineRouter.post("/protect", async (req, res) => {
       },
       protectedAt,
       status: "active",
-      verifyUrl: `https://aevion.vercel.app/verify/${certId}`,
+      verifyUrl: `https://aevion.app/verify/${certId}`,
     };
 
     // Re-derive for response (shadowing inner scope).
@@ -1367,7 +1367,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         protectedAt: r.protectedAt,
         verifiedCount: r.verifiedCount || 0,
         shieldId: r.shieldId || null,
-        verifyUrl: `https://aevion.vercel.app/verify/${r.id}`,
+        verifyUrl: `https://aevion.app/verify/${r.id}`,
       })),
       total: rows.length,
     });
@@ -1401,7 +1401,7 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
     const PDFDocument = (await import("pdfkit")).default;
     const QRCode = await import("qrcode");
 
-    const verifyUrl = `https://aevion.vercel.app/verify/${cert.id}`;
+    const verifyUrl = `https://aevion.app/verify/${cert.id}`;
     const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
       width: 160,
       margin: 1,
@@ -1662,7 +1662,7 @@ pipelineRouter.get("/certificate/:certId/pdf", async (req, res: Response) => {
       .font("Helvetica")
       .fillColor("#64748b")
       .text(
-        "AEVION Digital IP Bureau  ·  aevion.vercel.app  ·  Powered by SHA-256, Ed25519, Shamir's Secret Sharing",
+        "AEVION Digital IP Bureau  ·  aevion.app  ·  Powered by SHA-256, Ed25519, Shamir's Secret Sharing",
         50,
         footerY + 14,
         { align: "center", width: W },

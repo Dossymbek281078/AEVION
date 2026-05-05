@@ -1,4 +1,4 @@
-# Bank prod smoke
+﻿# Bank prod smoke
 
 End-to-end smoke against the deployed Bank surface — AEV wallet (anonymous,
 device-bound) + Auth + QTrade (authed, owner-scoped). Closes Master Plan
@@ -59,7 +59,7 @@ Override defaults via env:
 
 ```bash
 # Pin to a specific deploy
-BASE=https://aevion-<hash>-aevion.vercel.app/api-backend npm run smoke:bank-prod
+BASE=https://aevion-<hash>-aevion.app/api-backend npm run smoke:bank-prod
 
 # Skip the Vercel rewrite, hit Railway directly
 BASE=https://aevion-production-a70c.up.railway.app npm run smoke:bank-prod
@@ -80,7 +80,7 @@ gh api repos/Dossymbek281078/AEVION/deployments/${ID}/statuses \
 ## Latest run
 
 `SMOKE_PROD_20260503-215431.json` — 19/19 PASS against
-`https://aevion-8bxyonhba-aevion.vercel.app/api-backend` (commit `d2aaeba`,
+`https://aevion-8bxyonhba-aevion.app/api-backend` (commit `d2aaeba`,
 post-PR #91 i18n SSR fix).
 
 Latency snapshot (ms, single run, Vercel rewrite path):

@@ -119,7 +119,7 @@ export default function MerchantPage() {
 
         {/* Usage example */}
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
-          <h2 className="font-bold mb-3">Использование</h2>
+          <h2 className="font-bold mb-3">Использование (server-to-server)</h2>
           <code className="block bg-slate-800 text-emerald-400 text-xs p-4 rounded-xl font-mono whitespace-pre overflow-x-auto">{`POST /api/qpaynet/merchant/charge
 X-Api-Key: qpn_live_...
 
@@ -129,6 +129,30 @@ X-Api-Key: qpn_live_...
   "description": "Оплата подписки QBuild Pro"
 }`}</code>
         </div>
+
+        {/* Webhook subscriptions (set-once) */}
+        <WebhookSubs token={token} />
+
+        {/* Webhook tester */}
+        <WebhookTester token={token} />
+
+        {/* Embed widget */}
+        {wallets.length > 0 && (
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
+            <h2 className="font-bold mb-1">Pay-кнопка для сайта</h2>
+            <p className="text-xs text-slate-400 mb-3">
+              Вставьте iframe на любой сайт — получатели смогут оплатить через AEVION без интеграции:
+            </p>
+            <code className="block bg-slate-800 text-violet-300 text-xs p-4 rounded-xl font-mono whitespace-pre-wrap break-all">{`<iframe
+  src="https://aevion.kz/qpaynet/widget/${wallets[0].id}?amount=990&desc=Подписка"
+  width="380" height="360" frameborder="0"
+  style="border-radius:16px"
+></iframe>`}</code>
+            <p className="text-[11px] text-slate-500 mt-2">
+              Параметры: <code className="text-slate-400">amount</code>, <code className="text-slate-400">desc</code>, <code className="text-slate-400">compact=1</code> (прозрачный фон).
+            </p>
+          </div>
+        )}
 
         {/* Keys list */}
         <div>
@@ -155,6 +179,168 @@ X-Api-Key: qpn_live_...
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface SubItem {
+  id: string;
+  url: string;
+  events: string;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+function WebhookSubs({ token }: { token: string }) {
+  const [subs, setSubs] = useState<SubItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newUrl, setNewUrl] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) { setLoading(false); return; }
+    fetch("/api/qpaynet/webhook-subs", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setSubs(d.subscriptions ?? []))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  if (!token) return null;
+
+  async function create() {
+    if (!newUrl.trim()) return;
+    setCreating(true);
+    try {
+      const r = await fetch("/api/qpaynet/webhook-subs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ url: newUrl.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setSubs(prev => [{ id: d.id, url: d.url, events: d.events, revoked_at: null, created_at: new Date().toISOString() }, ...prev]);
+        setCreatedSecret(d.secret);
+        setNewUrl("");
+      }
+    } finally { setCreating(false); }
+  }
+
+  async function revoke(id: string) {
+    if (!confirm("Отозвать webhook подписку?")) return;
+    const r = await fetch(`/api/qpaynet/webhook-subs/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (r.ok) setSubs(prev => prev.map(s => s.id === id ? { ...s, revoked_at: new Date().toISOString() } : s));
+  }
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
+      <h2 className="font-bold mb-1">Webhook подписки (set-once)</h2>
+      <p className="text-xs text-slate-400 mb-3">
+        Подписка получает все <code>payment_request.paid</code> события для всех ваших кошельков.
+        Альтернатива per-request <code>notifyUrl</code>.
+      </p>
+
+      {createdSecret && (
+        <div className="bg-amber-950/40 border border-amber-800 rounded-xl p-3 mb-3">
+          <div className="text-[10px] text-amber-400 font-bold uppercase mb-1">Секрет (показан 1 раз)</div>
+          <code className="text-xs text-amber-200 break-all block">{createdSecret}</code>
+          <button onClick={() => setCreatedSecret(null)} className="text-[10px] text-amber-400/70 mt-2 hover:text-amber-300">Скрыть</button>
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-4">
+        <input type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)}
+          placeholder="https://your-site.kz/webhooks/qpaynet"
+          className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500" />
+        <button onClick={create} disabled={creating || !newUrl}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
+          {creating ? "..." : "+ Добавить"}
+        </button>
+      </div>
+
+      {loading && <div className="text-slate-500 text-xs">Загрузка...</div>}
+      {!loading && subs.length === 0 && <div className="text-slate-600 text-xs">Подписок нет</div>}
+
+      <div className="space-y-2">
+        {subs.map(s => (
+          <div key={s.id} className={`flex items-center justify-between p-2 rounded-lg border ${s.revoked_at ? "border-slate-800 opacity-50" : "border-slate-700 bg-slate-950"}`}>
+            <div className="min-w-0 flex-1 mr-3">
+              <div className="text-xs font-mono text-slate-300 truncate">{s.url}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{s.events}</div>
+            </div>
+            {s.revoked_at ? (
+              <span className="text-[10px] bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full shrink-0">Отозвана</span>
+            ) : (
+              <button onClick={() => revoke(s.id)}
+                className="text-[10px] px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 rounded shrink-0">
+                Отозвать
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WebhookTester({ token }: { token: string }) {
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; deliveryStatus: number; error?: string; hint: string; payloadSent: unknown } | null>(null);
+
+  if (!token) return null;
+
+  async function run() {
+    if (!url || !secret) return;
+    setRunning(true);
+    setResult(null);
+    try {
+      const r = await fetch("/api/qpaynet/webhooks/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ url: url.trim(), secret: secret.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setResult({ ok: false, deliveryStatus: 0, error: d.error, hint: "Validation failed.", payloadSent: null });
+      } else {
+        setResult(d);
+      }
+    } finally { setRunning(false); }
+  }
+
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5">
+      <h2 className="font-bold mb-1">Тест webhook</h2>
+      <p className="text-xs text-slate-400 mb-3">
+        Проверьте свой endpoint до боевого использования. Получатель должен ответить 2xx.
+      </p>
+      <div className="space-y-2">
+        <input type="url" value={url} onChange={e => setUrl(e.target.value)}
+          placeholder="https://your-site.kz/webhook/qpaynet"
+          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500" />
+        <input type="text" value={secret} onChange={e => setSecret(e.target.value)}
+          placeholder="notifySecret (≥16 chars)"
+          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-violet-500" />
+        <button onClick={run} disabled={running || !url || !secret}
+          className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
+          {running ? "Отправка..." : "Отправить тестовый POST"}
+        </button>
+      </div>
+      {result && (
+        <div className={`mt-3 p-3 rounded-lg border text-xs ${result.ok ? "border-emerald-800 bg-emerald-950/30" : "border-red-800 bg-red-950/30"}`}>
+          <div className={`font-semibold mb-1 ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
+            {result.ok ? "✓ Доставлено" : "✗ Ошибка"}
+            {result.deliveryStatus > 0 && <span className="ml-2 text-slate-400 font-mono">HTTP {result.deliveryStatus}</span>}
+          </div>
+          <div className="text-slate-300">{result.hint}</div>
+          {result.error && <div className="text-red-300/80 mt-1 font-mono break-all">{result.error}</div>}
+        </div>
+      )}
     </div>
   );
 }

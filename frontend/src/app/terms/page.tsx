@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { ProductPageShell } from "@/components/ProductPageShell";
 
 export const metadata: Metadata = {
@@ -30,7 +30,7 @@ export default function TermsPage() {
 
         <div style={{ lineHeight: 1.75, color: "#334155", fontSize: 15 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>1. Acceptance of Terms</h2>
-          <p>By accessing or using the AEVION platform (aevion.vercel.app and related services), you agree to be bound by these Terms of Service. If you do not agree, do not use the platform.</p>
+          <p>By accessing or using the AEVION platform (aevion.app and related services), you agree to be bound by these Terms of Service. If you do not agree, do not use the platform.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>2. Description of Services</h2>
           <p>AEVION provides digital intellectual property infrastructure including: IP registration (QRight), cryptographic signatures (QSign), patent bureau services (IP Bureau), compliance and certification (Planet), awards and recognition (Awards), digital banking (AEVION Bank), and gaming (CyberChess).</p>

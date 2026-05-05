@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import Stripe from "stripe";
 import {
@@ -211,7 +211,7 @@ billingRouter.post("/orders/:id/checkout", async (req, res) => {
     if (row.status !== "PENDING") return fail(res, 400, "order_not_payable", { currentStatus: row.status });
 
     const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
-    const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.vercel.app").replace(/\/+$/, "");
+    const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
 
     if (!stripeKey) {
       // Dev mode: immediately mark as paid (same as /pay stub)

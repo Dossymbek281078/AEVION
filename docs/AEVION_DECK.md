@@ -1,10 +1,10 @@
----
+﻿---
 marp: true
 theme: default
 paginate: true
 size: 16:9
 header: 'AEVION · Seed Round · 2026'
-footer: 'aevion.vercel.app · github.com/Dossymbek281078/AEVION'
+footer: 'aevion.app · github.com/Dossymbek281078/AEVION'
 style: |
   section { background: #0b0e14; color: #e8efe9; font-family: -apple-system, system-ui, sans-serif; }
   h1 { color: #4ade80; }
@@ -24,7 +24,7 @@ style: |
 
 **Seed round · $5 M · 2026**
 
-`aevion.vercel.app` · *(контакт)*
+`aevion.app` · *(контакт)*
 
 ---
 
@@ -67,7 +67,7 @@ register  →  sign  →  certify  →  vote  →  earn
 
 ## 3. Demo
 
-**Откройте `aevion.vercel.app` — это live-продукт, не мокап.**
+**Откройте `aevion.app` — это live-продукт, не мокап.**
 
 | Маршрут | Что показать |
 |---|---|
@@ -216,7 +216,7 @@ register  →  sign  →  certify  →  vote  →  earn
 
 # Спасибо
 
-**aevion.vercel.app**
+**aevion.app**
 **github.com/Dossymbek281078/AEVION**
 
 *(контакт: email, Telegram, Calendly)*

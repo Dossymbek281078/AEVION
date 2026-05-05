@@ -39,18 +39,33 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<string>("all");
+  const [token, setToken] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("aevion_token") ?? "";
-    if (!token) { setError("Необходима авторизация"); setLoading(false); return; }
+    const t = localStorage.getItem("aevion_token") ?? "";
+    setToken(t);
+    if (!t) { setError("Необходима авторизация"); setLoading(false); return; }
     fetch("/api/qpaynet/transactions?limit=100", {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${t}` },
     })
       .then(r => r.json())
       .then(d => setTxs(d.transactions ?? []))
       .catch(() => setError("Ошибка загрузки"))
       .finally(() => setLoading(false));
   }, []);
+
+  async function exportCsv() {
+    if (!token) return;
+    const r = await fetch("/api/qpaynet/transactions.csv", { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return;
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qpaynet-transactions-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const filtered = filter === "all" ? txs : txs.filter(t => t.type === filter);
 
@@ -69,7 +84,15 @@ export default function TransactionsPage() {
           <span className="text-slate-600">·</span>
           <h1 className="text-sm font-bold">История транзакций</h1>
         </div>
-        <div className="text-xs text-slate-500">{txs.length} транзакций</div>
+        <div className="flex items-center gap-3">
+          {token && txs.length > 0 && (
+            <button onClick={exportCsv}
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700">
+              ⬇ CSV
+            </button>
+          )}
+          <div className="text-xs text-slate-500">{txs.length} транзакций</div>
+        </div>
       </header>
 
       <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">

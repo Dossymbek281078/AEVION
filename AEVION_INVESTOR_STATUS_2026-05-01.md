@@ -1,5 +1,5 @@
-# AEVION — Investor Status Report
-**Дата:** 2026-05-01 · **Репозиторий:** `github.com/Dossymbek281078/AEVION` · **Прод:** `aevion.vercel.app`
+﻿# AEVION — Investor Status Report
+**Дата:** 2026-05-01 · **Репозиторий:** `github.com/Dossymbek281078/AEVION` · **Прод:** `aevion.app`
 
 ---
 
@@ -32,7 +32,7 @@
 
 | Слой | Где | Состояние |
 |---|---|---|
-| Production frontend | `https://aevion.vercel.app` | 29 узлов в UI, основной pipeline `Auth → QRight → QSign → Bureau → Planet` живой |
+| Production frontend | `https://aevion.app` | 29 узлов в UI, основной pipeline `Auth → QRight → QSign → Bureau → Planet` живой |
 | GitHub | `Dossymbek281078/AEVION` (main) | last push 30.04, CI зелёный, 6 открытых PR |
 | Локальный dev (запущен) | `:3000` (Next 16 Turbopack), `:4001` (Express + Prisma) | оба отвечают, `/api/planet/stats` возвращает реальные метрики |
 | База данных Planet (dev) | Postgres | 3 Quantum Shield объекта, схема Y/X (eligibleParticipants, distinctVoters) считается |

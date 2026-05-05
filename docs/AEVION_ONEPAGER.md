@@ -1,4 +1,4 @@
-# AEVION
+﻿# AEVION
 **Операционная система доверия для эпохи ИИ-контента**
 *Seed round · $5M · 2026*
 
@@ -20,7 +20,7 @@
 - **14 production-модулей** в `main`, из них **9 — Tier 2** (webhooks, embed, revoke, transparency, admin, audit, тесты, SDK).
 - **Уникальные техактивы:** ML-DSA-65 (постквантовая подпись), Quantum Shield (Shamir 2-of-3 + Ed25519).
 - **Velocity:** 30 merged PR за 9 дней, 295 коммитов за 6 недель.
-- **Live прод:** `aevion.vercel.app` · **Repo:** `github.com/Dossymbek281078/AEVION`.
+- **Live прод:** `aevion.app` · **Repo:** `github.com/Dossymbek281078/AEVION`.
 - **Mobile SDK** для QCoreAI: Kotlin + Swift.
 
 ## Рынок
@@ -54,4 +54,4 @@
 **$5 M seed** · 40% команда (10 разработчиков) · 25% user acquisition · 20% юр+compliance · 15% runway.
 
 ## Контакты
-`aevion.vercel.app` · `github.com/Dossymbek281078/AEVION` · *(добавить email/Telegram)*
+`aevion.app` · `github.com/Dossymbek281078/AEVION` · *(добавить email/Telegram)*

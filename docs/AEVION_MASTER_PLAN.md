@@ -76,7 +76,7 @@ window's auto-memory `MEMORY.md`:
 | `aevion-backend-modules` | `main` / `feat/*` | platform backend (qright, bureau, awards, pipeline, qshield, planet, modules) | active |
 | `aevion-qsign` | `feat/qsign-v2` | QSign v2 | **shipped (PR #2)** — do nothing without checking PR list |
 | `frontend-qcore` | `qcore-multi-agent` | QCoreAI multi-agent | shipped (PRs #3, #20, #31) |
-| `aevion-bank` | `bank-payment-layer` | Bank UI + AEC ledger | active |
+| `aevion-bank` | `main` (`frontend/src/app/bank/`) | Bank UI + AEC ledger | active — branch archived, work continues on main |
 | `aevion-smeta` | `feat/smeta-trainer` | смета (construction estimates) | active |
 | `aevion-qbuild` | `port-qbuild-v3` | qbuild (construction hiring) | active |
 | `aevion-cyberchess` | `chess-tournaments` | CyberChess UX | active |
@@ -199,7 +199,7 @@ parity + docs/runbook.
 | P3-1 | Demo recording — 8-minute scripted walkthrough across QRight → Bureau → Awards → Bank | aevion-core |
 | P3-2 | Press kit / one-pager — `docs/AEVION_ONEPAGER.md` exists; bring up to current state | aevion-core |
 | P3-3 | Reference customer onboarding — RU partnership artifacts in `docs/bureau/` need productisation | aevion-bureau / aevion-core |
-| P3-4 | First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau |
+| P3-4 | First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau | **code-complete** — Trust Graph edge in `aca91c2`, AEC mint claim flow in PR #112 (`internalMintForDevice` + `/trust-edges/:edgeId/claim-aec`); remaining is config: product decision on `BUREAU_*_AEC_REWARD` env values + prod Stripe keys |
 | P3-5 | Investor demo flow on prod — every link in pitch deck resolves, every stat is live | aevion-core |
 
 ### Phase 4 — Public launch
@@ -241,9 +241,9 @@ If the user insists on more code work in this window, candidates are:
 
 ### `aevion-bank`
 1. ~~**AEC ↔ fiat boundary doc**~~ ✅ done — `docs/bank/AEC_FIAT_BOUNDARY.md` (4 canonical rules R1–R4, P3-4 flow diagram, legal positioning, pre-P3-4 checklist)
-2. Resolve `bank-payment-layer` branch — 256 commits ahead of main (squash-diverged); decide: archive as tag + delete, or open PR to merge net-new bank features into main
-3. Wire `npm run smoke:bank-prod` into the daily cron (PR #103 shipped the harness; `smoke:all` orchestrator pickup pending)
-4. **P3-4** First paid Bureau cert E2E — prereqs now met (AEC boundary doc done); implement Trust Graph edge record + connect prod Stripe keys
+2. ~~Resolve `bank-payment-layer` branch~~ ✅ done — archived as `archive/bank-payment-layer-2026-05-03` tag; all 362 net-new files were already present on main via parallel development; worktree + remote branch removed
+3. ~~Wire `npm run smoke:bank-prod` into the daily cron~~ ✅ done — added `bank-prod-smoke` job to `daily-smoke.yml` (cron+dispatch only, skips on push; artifact stored 14 days in GitHub Actions)
+4. **P3-4 code-complete** — Trust Graph edge (`aca91c2`) + AEC claim flow (PR #112) + smoke plumbing & reward sizing draft (PR #113) + Sentry alerts (`39f561d`) + 14 unit tests (`721554f`) + dashboard endpoint extension `trustEdges`/`aecSummary` (`ec37db6d`). Remaining is config-only: product decision on `BUREAU_*_AEC_REWARD` env values (proposal in `AEC_FIAT_BOUNDARY.md` §8: 50/150/500/1000), prod Stripe keys, frontend `/bureau` dashboard UI to render the new fields. Manual go-live runbook: `docs/bank/P3-4_RAILWAY_GO_LIVE.md`.
 
 ### `aevion-qsign`
 1. **Do nothing without checking PR list** — P1-P9 already merged via PR #2 on 2026-04-26

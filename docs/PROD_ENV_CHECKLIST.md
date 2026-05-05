@@ -65,9 +65,13 @@ by its own section below.
 | `PLANET_WEBHOOK_SECRET` | 🟡 | required if Planet validators POST to `/api/planet/payouts/certify-webhook` |
 | `WEBHOOK_REQUIRE_HMAC` | 🟢 | when `1`, enforces HMAC signature on every inbound webhook |
 | `BUREAU_KYC_PROVIDER` | 🟡 | `stub` (default) / `veriff` / etc. |
-| `BUREAU_PAYMENT_PROVIDER` | 🟡 | `stub` (default) / `stripe` |
+| `BUREAU_PAYMENT_PROVIDER` | 🟡 | `stub` (default) / `stripe`. Set to `stripe` for P3-4. |
 | `BUREAU_VERIFIED_PRICE_CENTS` | 🟢 | default 1900 ($19) |
 | `BUREAU_VERIFIED_PRICE_CURRENCY` | 🟢 | default `USD` |
+| `BUREAU_VERIFIED_AEC_REWARD` | 🟢 | AEC awarded to claimant on Verified-tier upgrade. Default 0. Proposed prod value: **50** (see `docs/bank/AEC_FIAT_BOUNDARY.md` §8). |
+| `BUREAU_NOTARIZED_AEC_REWARD` | 🟢 | default 0. Proposed prod value: **150**. |
+| `BUREAU_FILED_KZ_AEC_REWARD` | 🟢 | default 0. Proposed prod value: **500**. |
+| `BUREAU_FILED_PCT_AEC_REWARD` | 🟢 | default 0. Proposed prod value: **1000** (capped — `aev.ts` clampAmount limits per-call mint to 1000). |
 
 ### Bank + QTrade + AEV
 

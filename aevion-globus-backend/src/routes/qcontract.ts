@@ -337,13 +337,28 @@ qcontractRouter.get("/documents", async (req, res) => {
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "unknown";
+  const q = (req.query.q as string | undefined)?.trim();
+  const status = req.query.status as string | undefined; // "active" | "expired" | "revoked"
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
+  const params: unknown[] = [ownerId];
+  let where = "owner_id = $1";
+
+  if (q) {
+    params.push(`%${q.toLowerCase()}%`);
+    where += ` AND LOWER(title) LIKE $${params.length}`;
+  }
+  if (status === "revoked") where += " AND revoked_at IS NOT NULL";
+  else if (status === "active") where += " AND revoked_at IS NULL";
+
+  params.push(limit);
   const result = await pool.query(
     `SELECT id, title, content_type, max_views, view_count, expires_at, revoked_at,
             require_signature, qright_id, (password_hash IS NOT NULL) as has_password,
             access_token, created_at
      FROM qcontract_documents
-     WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 50`,
-    [ownerId],
+     WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length}`,
+    params,
   );
 
   const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
@@ -366,6 +381,42 @@ qcontractRouter.get("/documents", async (req, res) => {
     })),
     total: result.rowCount ?? 0,
   });
+});
+
+// PATCH /api/qcontract/documents/:id — extend expiry / bump max views
+qcontractRouter.patch("/documents/:id", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const { extendDays, addMaxViews } = req.body as { extendDays?: number; addMaxViews?: number };
+  if (!extendDays && !addMaxViews) return res.status(400).json({ error: "extendDays_or_addMaxViews_required" });
+  if (extendDays && (extendDays < 1 || extendDays > 365)) return res.status(400).json({ error: "extendDays_1_to_365" });
+  if (addMaxViews && (addMaxViews < 1 || addMaxViews > 1000)) return res.status(400).json({ error: "addMaxViews_1_to_1000" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "unknown";
+
+  const sets: string[] = ["updated_at = NOW()"];
+  const params: unknown[] = [];
+  if (extendDays) {
+    params.push(extendDays);
+    sets.push(`expires_at = COALESCE(expires_at, NOW()) + ($${params.length} || ' days')::interval`);
+  }
+  if (addMaxViews) {
+    params.push(addMaxViews);
+    sets.push(`max_views = COALESCE(max_views, 0) + $${params.length}`);
+  }
+  params.push(req.params.id, ownerId);
+
+  const result = await pool.query(
+    `UPDATE qcontract_documents SET ${sets.join(", ")}
+     WHERE id = $${params.length - 1} AND owner_id = $${params.length} AND revoked_at IS NULL
+     RETURNING id, expires_at, max_views`,
+    params,
+  );
+  if ((result.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found_or_revoked" });
+  res.json({ ok: true, ...result.rows[0] });
 });
 
 // DELETE /api/qcontract/documents/:id
@@ -429,6 +480,46 @@ qcontractRouter.get("/documents/:id/log", async (req, res) => {
       viewedAt: v.viewed_at,
     })),
   });
+});
+
+// GET /api/qcontract/documents/:id/log.csv — audit log CSV export
+qcontractRouter.get("/documents/:id/log.csv", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const pool = getPool();
+  const ownerId = auth.sub ?? auth.email ?? "unknown";
+
+  const doc = await pool.query(
+    "SELECT id, title FROM qcontract_documents WHERE id = $1 AND owner_id = $2",
+    [req.params.id, ownerId],
+  );
+  if (!doc.rows[0]) return res.status(404).json({ error: "not_found" });
+
+  const views = await pool.query(
+    `SELECT id, viewer_ip, viewer_ua, viewer_email, signed_at, viewed_at
+     FROM qcontract_views WHERE document_id = $1 ORDER BY viewed_at DESC LIMIT 5000`,
+    [req.params.id],
+  );
+
+  const escape = (v: unknown) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = "view_id,viewer_ip,viewer_email,signed,viewed_at,user_agent";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = views.rows.map((v: any) => [
+    v.id, v.viewer_ip ?? "", v.viewer_email ?? "",
+    v.signed_at ? "yes" : "no",
+    new Date(v.viewed_at).toISOString(),
+    v.viewer_ua ?? "",
+  ].map(escape).join(","));
+
+  const safeTitle = doc.rows[0].title.replace(/[^\w-]/g, "_").slice(0, 40);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="qcontract-${safeTitle}-log-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.send(header + "\n" + rows.join("\n"));
 });
 
 // POST /api/qcontract/view/:token — record view + return content
@@ -531,5 +622,17 @@ qcontractRouter.get("/stats", async (_req, res) => {
     });
   } catch {
     res.json({ totalDocuments: 0, totalViews: 0, signedViews: 0 });
+  }
+});
+
+// GET /api/qcontract/health
+qcontractRouter.get("/health", async (_req, res) => {
+  try {
+    await ensureTables();
+    const pool = getPool();
+    const r = await pool.query("SELECT COUNT(*) AS n FROM qcontract_documents");
+    res.json({ status: "ok", service: "qcontract", documents: Number(r.rows[0]?.n ?? 0) });
+  } catch (err) {
+    res.status(503).json({ status: "error", service: "qcontract", error: err instanceof Error ? err.message : String(err) });
   }
 });

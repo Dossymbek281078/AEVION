@@ -55,6 +55,8 @@ export default function QPayNetDashboard() {
   const [newWalletName, setNewWalletName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
 
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
@@ -70,6 +72,20 @@ export default function QPayNetDashboard() {
       if (wd.wallets?.[0]) setActiveWallet(wd.wallets[0].id);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  async function saveRename() {
+    const name = renameValue.trim();
+    if (!name || !activeWallet) return;
+    const r = await fetch(`/api/qpaynet/wallets/${activeWallet}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name }),
+    });
+    if (r.ok) {
+      setWallets(prev => prev.map(w => w.id === activeWallet ? { ...w, name } : w));
+    }
+    setRenaming(false);
+  }
 
   async function createWallet() {
     setCreating(true);
@@ -98,6 +114,10 @@ export default function QPayNetDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
+          {token && <NotificationBell token={token} />}
+          {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white">📥 Запросы</Link>}
+          {token && <Link href="/qpaynet/payouts" className="text-xs text-slate-400 hover:text-white">🏦 Выплаты</Link>}
+          {token && <Link href="/qpaynet/kyc" className="text-xs text-slate-400 hover:text-white">🛡 KYC</Link>}
           <Link href="/qpaynet/merchant" className="text-xs text-slate-400 hover:text-white">Merchant API</Link>
           {token && (
             <button onClick={() => setShowCreate(true)}
@@ -136,6 +156,8 @@ export default function QPayNetDashboard() {
           </Link>
         </div>
       )}
+
+      {token && !loading && <DashboardSummary token={token} />}
 
       {token && (
         <div className="max-w-5xl mx-auto px-6 py-8">
@@ -183,18 +205,47 @@ export default function QPayNetDashboard() {
                 {activeW && (
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <div className="text-xs text-slate-400">{activeW.name}</div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 group">
+                          {renaming ? (
+                            <>
+                              <input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") setRenaming(false); }}
+                                className="bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-xs text-white focus:outline-none focus:border-violet-500 w-40" />
+                              <button onClick={saveRename} className="text-emerald-400 hover:text-emerald-300 text-xs">✓</button>
+                              <button onClick={() => setRenaming(false)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-xs text-slate-400 truncate">{activeW.name}</div>
+                              <button onClick={() => { setRenameValue(activeW.name); setRenaming(true); }}
+                                className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-500 hover:text-slate-300 transition-opacity">
+                                ✎
+                              </button>
+                            </>
+                          )}
+                        </div>
                         <div className="text-2xl font-bold">{fmt(activeW.balance)} ₸</div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <Link href={`/qpaynet/deposit?wallet=${activeW.id}`}
                           className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-semibold">+ Пополнить</Link>
                         <Link href={`/qpaynet/send?wallet=${activeW.id}`}
                           className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 rounded-lg text-xs font-semibold">→ Отправить</Link>
+                        <Link href={`/qpaynet/request?wallet=${activeW.id}`}
+                          className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-semibold">📥 Запросить</Link>
                       </div>
                     </div>
-                    <div className="text-[10px] text-slate-600 font-mono">ID: {activeW.id}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="text-[10px] text-slate-600 font-mono truncate">{activeW.id}</div>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(activeW.id); }}
+                        title="Скопировать ID кошелька"
+                        className="shrink-0 text-[10px] text-slate-500 hover:text-slate-300 px-1.5 py-0.5 bg-slate-800 rounded"
+                      >
+                        📋
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -236,5 +287,93 @@ export default function QPayNetDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+interface Dashboard {
+  wallets: { activeCount: number; totalBalanceKzt: number };
+  thisMonth: { inKzt: number; outKzt: number; netKzt: number; txCount: number };
+  last7days: { day: string; inKzt: number; outKzt: number }[];
+  paymentRequests: { pending: number; paid: number; cancelled: number };
+}
+
+function DashboardSummary({ token }: { token: string }) {
+  const [data, setData] = useState<Dashboard | null>(null);
+
+  useEffect(() => {
+    fetch("/api/qpaynet/me/dashboard", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(setData)
+      .catch(() => {});
+  }, [token]);
+
+  if (!data) return null;
+
+  const max7 = Math.max(1, ...data.last7days.map(d => Math.max(d.inKzt, d.outKzt)));
+
+  return (
+    <div className="border-b border-slate-800 px-6 py-4">
+      <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div className="text-[10px] text-slate-500 uppercase tracking-wide">Всего на кошельках</div>
+          <div className="text-xl font-bold text-white mt-0.5">{fmt(data.wallets.totalBalanceKzt)} <span className="text-xs text-slate-500">₸</span></div>
+          <div className="text-[10px] text-slate-600 mt-0.5">{data.wallets.activeCount} актив.</div>
+        </div>
+        <div className="bg-emerald-950/40 border border-emerald-900/40 rounded-xl p-3">
+          <div className="text-[10px] text-emerald-400 uppercase tracking-wide">Получено (мес.)</div>
+          <div className="text-xl font-bold text-emerald-300 mt-0.5">+{fmt(data.thisMonth.inKzt)} <span className="text-xs text-emerald-500">₸</span></div>
+          <div className="text-[10px] text-emerald-500/60 mt-0.5">{data.thisMonth.txCount} операций</div>
+        </div>
+        <div className="bg-red-950/30 border border-red-900/40 rounded-xl p-3">
+          <div className="text-[10px] text-red-400 uppercase tracking-wide">Отправлено (мес.)</div>
+          <div className="text-xl font-bold text-red-300 mt-0.5">−{fmt(data.thisMonth.outKzt)} <span className="text-xs text-red-500">₸</span></div>
+          <div className={`text-[10px] mt-0.5 ${data.thisMonth.netKzt >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+            нетто: {data.thisMonth.netKzt >= 0 ? "+" : "−"}{fmt(Math.abs(data.thisMonth.netKzt))} ₸
+          </div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div className="text-[10px] text-slate-500 uppercase tracking-wide">7 дней</div>
+          <div className="flex items-end gap-0.5 h-8 mt-1.5">
+            {data.last7days.length === 0 ? (
+              <div className="text-[10px] text-slate-600 self-center">нет данных</div>
+            ) : data.last7days.map((d, i) => (
+              <div key={i} className="flex-1 flex flex-col gap-0.5 justify-end">
+                <div className="bg-emerald-500/60 rounded-sm" style={{ height: `${(d.inKzt / max7) * 24}px` }} />
+                <div className="bg-red-500/60 rounded-sm" style={{ height: `${(d.outKzt / max7) * 24}px` }} />
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-slate-600 mt-0.5">
+            запросы: {data.paymentRequests.paid}/{data.paymentRequests.pending + data.paymentRequests.paid + data.paymentRequests.cancelled}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotificationBell({ token }: { token: string }) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      fetch("/api/qpaynet/notifications/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : { unread: 0 })
+        .then(d => { if (!cancelled) setCount(d.unread ?? 0); })
+        .catch(() => {});
+    };
+    tick();
+    const iv = setInterval(tick, 60000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [token]);
+  return (
+    <Link href="/qpaynet/notifications" className="relative text-xs text-slate-400 hover:text-white">
+      🔔
+      {count > 0 && (
+        <span className="absolute -top-1.5 -right-2 bg-amber-500 text-slate-950 text-[9px] font-bold rounded-full px-1.5 min-w-[18px] text-center">
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
   );
 }

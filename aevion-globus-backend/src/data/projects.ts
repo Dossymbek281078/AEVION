@@ -388,4 +388,19 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+
+  // ===== EDUCATION / TRAINING =====
+  {
+    id: "smeta-trainer",
+    code: "SMETA",
+    name: "Smeta Trainer — AI Сметный тренажёр РК",
+    description:
+      "Учебная платформа по сметному делу Казахстана: 5 уровней, 222 расценки ЭСН РК, AI-советник, сквозной кейс школа №47.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["education", "construction", "ai", "kazakhstan"],
+    createdAt: now,
+    updatedAt: now,
+  },
 ];

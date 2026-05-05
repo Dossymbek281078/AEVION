@@ -357,7 +357,7 @@ authRouter.post("/login", loginIpRateLimit, async (req, res) => {
 
 authRouter.get("/me", async (req, res) => {
   try {
-    const payload: any = requireAuth(req, res);
+    const payload: any = await requireAuthStrict(req, res);
     if (!payload) return;
     await ensureAuthTier2Tables();
 

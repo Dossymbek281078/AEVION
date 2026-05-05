@@ -1,4 +1,4 @@
-# AEVION — Production Deployment Guide
+﻿# AEVION — Production Deployment Guide
 
 ## From Demo to Real Product: Step by Step
 
@@ -33,7 +33,7 @@
 7. Wait 5-30 minutes for DNS propagation
 8. Vercel auto-provisions SSL certificate
 
-After this: `https://aevion.app` will show your site instead of `aevion.vercel.app`
+After this: `https://aevion.app` will show your site instead of `aevion.app`
 
 ---
 

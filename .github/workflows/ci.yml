@@ -43,6 +43,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm install --include=optional --no-audit --no-fund
+      # Cheap script — fails the job if anyone adds an EN translation key
+      # without ru/kk siblings. Prevents the silent English fallback that
+      # PR #106 just spent 72 keys cleaning up.
+      - name: i18n parity (en/ru/kk)
+        working-directory: ${{ github.workspace }}
+        run: node scripts/i18n-kk-extract.mjs
       - run: npm run build
 
   payments-smoke:

@@ -20,6 +20,10 @@ const SUB_HEALTH = [
   { name: "planet", path: "/api/planet/health" },
   { name: "bureau", path: "/api/bureau/health" },
   { name: "auth", path: "/api/auth/health" },
+  { name: "qcontract", path: "/api/qcontract/health" },
+  { name: "qpaynet", path: "/api/qpaynet/health" },
+  { name: "smeta-trainer", path: "/api/smeta-trainer/health" },
+  { name: "healthai", path: "/api/healthai/health" },
 ];
 
 const SUB_OPENAPI = [
@@ -169,6 +173,7 @@ aevionHubRouter.get("/sitemap.xml", (_req, res) => {
   const modules = [
     "/qright", "/qsign", "/bureau", "/qcoreai", "/cyberchess",
     "/planet", "/awards", "/bank", "/healthai", "/qtrade", "/quantum-shield",
+    "/qcontract", "/qpaynet", "/smeta-trainer", "/build",
   ];
   const urls = modules
     .map((p) => `  <url><loc>${base}${p}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`)

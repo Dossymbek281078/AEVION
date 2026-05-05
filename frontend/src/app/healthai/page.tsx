@@ -1834,6 +1834,34 @@ export default function HealthAIPage() {
               >
                 {t("btn_export_json", lang)}
               </a>
+              <a
+                href="/healthai/screener"
+                style={{
+                  ...primaryBtn,
+                  background: "rgba(139,92,246,0.18)",
+                  borderColor: "rgba(139,92,246,0.45)",
+                  color: "#c4b5fd",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                🧠 {lang === "en" ? "Mental Health Screener" : "Психологический скрининг"}
+              </a>
+              <a
+                href="/healthai/plan"
+                style={{
+                  ...primaryBtn,
+                  background: "rgba(20,184,166,0.18)",
+                  borderColor: "rgba(20,184,166,0.45)",
+                  color: "#5eead4",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                📋 {lang === "en" ? "My Health Plan" : "Мой план здоровья"}
+              </a>
             </div>
           </Card>
         ) : null}

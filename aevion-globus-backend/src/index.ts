@@ -39,7 +39,7 @@ import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { qcontractRouter } from "./routes/qcontract";
 import { healthaiRouter } from "./routes/healthai";
-import { qpaynetRouter } from "./routes/qpaynet";
+import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -54,7 +54,16 @@ const PORT = process.env.PORT || 4001;
 app.use(cors());
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
-app.use(express.json({ limit: "10mb" }));
+//
+// `verify` stashes the raw bytes on req.rawBody for paths that need exact-byte
+// signature verification (Stripe webhooks: /api/qpaynet/deposit/webhook,
+// /api/checkout/webhook, etc.). All other handlers ignore rawBody.
+app.use(express.json({
+  limit: "10mb",
+  verify: (req, _res, buf) => {
+    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 
 // Health-check. Both /health (legacy) and /api/health (the path the
 // frontend + diagnostics page have always probed against) return the
@@ -411,6 +420,7 @@ app.use("/api/healthai", healthaiRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);
+startQpaynetRetryWorker();
 
 app.use(
   (

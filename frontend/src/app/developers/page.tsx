@@ -91,6 +91,37 @@ const APIS = [
       "POST /api/auth/sign-out-everywhere",
     ],
   },
+  {
+    name: "QPayNet",
+    color: "#a78bfa",
+    href: "/qpaynet",
+    desc: "Embedded payments — KZT wallets, P2P transfers (0.1% fee), Stripe Checkout deposits, manual payout queue, tracked payment requests with HMAC webhooks (5-attempt retry queue), merchant API key, set-once webhook subscriptions, KYC stub for РК compliance, in-app notifications, embeddable pay widget, CSV exports.",
+    endpoints: [
+      "POST /api/qpaynet/wallets",
+      "POST /api/qpaynet/transfer",
+      "POST /api/qpaynet/deposit/checkout",
+      "POST /api/qpaynet/payouts",
+      "POST /api/qpaynet/requests",
+      "POST /api/qpaynet/webhook-subs",
+      "POST /api/qpaynet/kyc/submit",
+      "GET /api/qpaynet/notifications",
+      "PATCH /api/qpaynet/notifications/preferences",
+      "GET /api/qpaynet/admin/payouts",
+      "POST /api/qpaynet/merchant/charge",
+    ],
+  },
+  {
+    name: "QContract",
+    color: "#ef4444",
+    href: "/qcontract",
+    desc: "Self-destruct smart documents. Password protection, max-views or expiry, audit log + CSV export, 5 RU templates (NDA, offer, service, construction, equipment-lease).",
+    endpoints: [
+      "POST /api/qcontract/documents",
+      "POST /api/qcontract/view/:token",
+      "PATCH /api/qcontract/documents/:id",
+      "GET /api/qcontract/documents/:id/log.csv",
+    ],
+  },
 ];
 
 const SDKS = [

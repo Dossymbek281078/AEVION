@@ -25,6 +25,10 @@ import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } f
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import MultiPanel from "./MultiPanel";
+import { useWorkspace } from "./useWorkspace";
+import WorkspaceToolbar from "./WorkspaceToolbar";
+import WorkspaceMediaPane from "./WorkspaceMediaPane";
+import WorkspaceDock from "./WorkspaceDock";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
@@ -159,6 +163,8 @@ function snd(t:string){if(isMuted())return;try{
   else if(t==="check")    makeBurst(n,0.07,2400,0.28);
   else if(t==="castle")   {makeBurst(n,0.05,1200,0.2);makeBurst(n+0.08,0.05,1200,0.18);}
   else if(t==="premove")  makeBurst(n,0.04,1800,0.12);
+  // Distinct premove-cancel sound: short downward tone — clearly different from "premove confirm".
+  else if(t==="cancel")   {makeBurst(n,0.05,900,0.18);makeBurst(n+0.05,0.05,500,0.13);}
   else if(t==="x")        {for(let i=0;i<4;i++)makeBurst(n+i*0.08,0.07,600-i*60,0.15);}
   else                    makeBurst(n,0.05,1200,0.20);
 }catch{}}
@@ -367,11 +373,24 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   const isLifted=(iS||iPS)&&!isDragOrigin;
   // Coord label color: contrast against cell background
   const coordCol=bg.includes("e2e8f0")||bg.includes("f8fafc")||bg.includes("cbd5e1")||bg.includes("bfdbfe")||bg.includes("dcfce7")||bg.includes("fed7aa")||bg.includes("fef9c3")?"rgba(30,41,59,0.5)":"rgba(255,255,255,0.55)";
+  // Snap-on-land: when isAnimDest flips true→false, the slide just landed —
+  // briefly apply cc-piece-snap so the piece "settles" with a tiny bounce.
+  const prevAnimDestRef=useRef(false);
+  const[snapNonce,setSnapNonce]=useState(0);
+  useEffect(()=>{
+    if(prevAnimDestRef.current&&!isAnimDest){
+      setSnapNonce(n=>n+1);
+    }
+    prevAnimDestRef.current=isAnimDest;
+  },[isAnimDest]);
+  // The inner piece div is keyed on snapNonce so a snap-trigger remounts it
+  // and the cc-piece-snap class plays its animation once on the fresh element.
+  const snapClass=snapNonce>0&&iL&&!iCk?"cc-piece-snap":"";
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.12s"}}>
     {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
-    {hasPiece&&<div style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
+    {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
     {coordFile&&<div style={{position:"absolute",bottom:"5%",right:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordFile}</div>}
@@ -381,6 +400,11 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
+  // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
+  const _ws=useWorkspace();
+  const wsPreset=_ws.preset; const sWsPreset=_ws.setPreset;
+  const wsShowMedia=_ws.showMediaPane;
+  const wsShowRight=_ws.showRightPanel;
   // SSR / hydration gate — все десятки state-init читают localStorage,
   // на сервере они дают defaults, на клиенте — реальные сохранения.
   // Без gate React детектит mismatch и регенерирует tree, ивент-хэндлеры
@@ -454,7 +478,7 @@ export default function CyberChessPage(){
   const[setup,sSetup]=useState(true);
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
-  const[coachAIEnabled,sCoachAIEnabled]=useState(true);
+  const[coachAIEnabled,sCoachAIEnabled]=useState(false);  // default off — user opts in via 🔮 button
   const[showKnowledge,sShowKnowledge]=useState(false);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
@@ -497,7 +521,9 @@ export default function CyberChessPage(){
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
-  const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush">("learn");
+  const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
+  const[pzCustomSec,sPzCustomSec]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_pz_custom_sec_v1")||"600");return isNaN(v)||v<30||v>3600?600:v}catch{return 600}});
+  useEffect(()=>{try{localStorage.setItem("aevion_pz_custom_sec_v1",String(pzCustomSec))}catch{}},[pzCustomSec]);
   const[pzTimeLeft,sPzTimeLeft]=useState(0);
   const[pzAttempt,sPzAttempt]=useState<"idle"|"wrong"|"correct"|"shown">("idle");
   const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
@@ -806,6 +832,16 @@ export default function CyberChessPage(){
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
+  // "Your turn" board glow — fires for ~700ms when AI just moved.
+  // Suppressed during hotseat/p2p (those use other cues), and on first myT.
+  const prevMyTRef=useRef(myT);
+  const[turnFlashKey,sTurnFlashKey]=useState(0);
+  useEffect(()=>{
+    if(!prevMyTRef.current&&myT&&on&&!over&&!hotseat){
+      sTurnFlashKey(k=>k+1);
+    }
+    prevMyTRef.current=myT;
+  },[myT,on,over,hotseat]);
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const moveListScrollRef=useRef<HTMLDivElement>(null);
   const fPz=PUZZLES.filter(p=>{
@@ -1205,7 +1241,7 @@ export default function CyberChessPage(){
                   sRushScore(s=>s+1);
                   sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
-                }else if(pzMode==="timed3"||pzMode==="timed5"){
+                }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
                   sPzTimeLeft(v=>v+bonus);
                   showToast(`✓ +${bonus}с`,"success");
@@ -1884,6 +1920,9 @@ export default function CyberChessPage(){
   const lmKeyRef=useRef("");
   // Capture animation: захваченная фигура коротко fade+shrink на cell взятия (lichess-style).
   const[capAnim,sCapAnim]=useState<{sq:Square;piece:{type:any;color:any};key:number}|null>(null);
+  // Premove cancel flash: красный pulse на FROM-клетке отменённого премува (~600ms).
+  const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
+  useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
   useEffect(()=>{
     if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
     const key=`${lm.from}-${lm.to}-${bk}`;
@@ -2234,7 +2273,14 @@ export default function CyberChessPage(){
       // (FROM или TO) — отменяет этот премув. Цепочки премувов теперь только драгом
       // (drag отрабатывается в pointerup отдельно и не попадает сюда).
       const pmHit=curPms.findIndex(x=>x.from===sq||x.to===sq);
-      if(pmHit>=0){sPms(v=>v.filter((_,i)=>i!==pmHit));snd("premove");return}
+      if(pmHit>=0){
+        const cancelled=curPms[pmHit];
+        sPms(v=>v.filter((_,i)=>i!==pmHit));
+        snd("cancel");
+        sCancelFlash({sq:cancelled.from,key:Date.now()});
+        showToast(`Премув отменён · ${cancelled.from}→${cancelled.to}`,"info");
+        return;
+      }
 
       // Case 2: no selection → click on own piece (real or virtual) starts new premove
       if(vp?.color===pCol){sPmSel(sq);return}
@@ -2385,6 +2431,7 @@ export default function CyberChessPage(){
     // Set timer based on mode
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
+    else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
     else sPzTimeLeft(0);
     showToast(`${pz.name} · ${pz.theme} · ${pz.r}`,"info")};
 
@@ -2444,11 +2491,12 @@ export default function CyberChessPage(){
   // Sync timer to current mode (fires on mode switch, even mid-puzzle)
   useEffect(()=>{
     if(tab!=="puzzles")return;
-    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false)}
-    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false)}
+    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false);showToast("⏱ Режим 3 минуты — таймер пошёл","info")}
+    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false);showToast("⏱ Режим 5 минут — таймер пошёл","info")}
+    else if(pzMode==="custom"){sPzTimeLeft(pzCustomSec);sRushActive(false);showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
     else if(pzMode==="rush"){sPzTimeLeft(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
     else {sPzTimeLeft(0);sRushActive(false)}
-  },[pzMode,tab,rushDuration]);
+  },[pzMode,tab,rushDuration,pzCustomSec]);
 
   // Rush end-of-session detection — fire only once per session
   useEffect(()=>{
@@ -2490,6 +2538,7 @@ export default function CyberChessPage(){
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
+    else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
     else sPzTimeLeft(0);
   },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab]);
 
@@ -2613,7 +2662,18 @@ export default function CyberChessPage(){
         try{g.load(fenParts.join(" "));}catch{}
         const from=g.get(pm.from);
         if(!from||from.color!==pCol)continue;
-        try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        // First try the move as-is.
+        let moved=false;
+        try{const mv=g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});if(mv)moved=true;}catch{}
+        if(moved)continue;
+        // "Rescue" premove: TO is occupied by our own piece. Project as if opponent
+        // captured that piece (remove it), then retry the move so chained premoves
+        // see the right virtual state. If still illegal, skip this premove.
+        const occ=g.get(pm.to);
+        if(occ&&occ.color===pCol){
+          try{g.remove(pm.to);}catch{}
+          try{g.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"});}catch{}
+        }
       }
       return g;
     }catch{return game;}
@@ -2628,7 +2688,8 @@ export default function CyberChessPage(){
     editorMode,
     exec, sSel, sVm, sPms, sPmSel, sPromo,
     sScratchSel, sScratchVm, sScratchBk, sScratchHist, sScratchLm,
-    snd, click,
+    snd,
+    click,  // tap (pointer-up without drag) delegates here
     filterMovesByDice,
   });
   const boardRef = _bi.boardRef;
@@ -2638,6 +2699,7 @@ export default function CyberChessPage(){
   const ghostFrom = _bi.ghostFrom;
   const dragHover = _bi.dragHover;
   const recentDragRef = _bi.recentDragRef;
+  const bDownHandledRef = _bi.bDownHandledRef;
   const onBoardDown = _bi.onBoardDown;
   const onBoardMove = _bi.onBoardMove;
   const onBoardUp = _bi.onBoardUp;
@@ -2719,6 +2781,14 @@ export default function CyberChessPage(){
           <span style={{fontSize:14}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
           <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
         </button>}
+
+        {/* Workspace switcher — always visible in the header so user can change layout
+            without scrolling. Replaces the duplicate switcher that was inside the SymTab strip. */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute}}>Layout</span>
+          <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
+          <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>1..5</span>
+        </div>
 
         <div style={{flex:1}}/>
 
@@ -2828,8 +2898,12 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Identity tab nav — pill-bar с цветовыми маркерами раздела */}
-      {!streamerMode&&(()=>{
+      {/* Identity tab nav — pill-bar с цветовыми маркерами раздела.
+          Скрыт на главном экране (setup+play) и во время активной игры/решения пазла —
+          юзер: «лишние кнопки сверху». Навигация на главном экране — через hero-карточки
+          PLY/PZL/MST. Эта полоска появляется когда юзер уже внутри Puzzles/Coach/Analysis
+          и ему нужен путь обратно. */}
+      {!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(()=>{
         const switchTab=(t:"play"|"puzzles"|"analysis"|"coach")=>{
           const fromPuzzle=tab==="puzzles"&&pzCurrent;
           sTab(t);
@@ -2842,11 +2916,14 @@ export default function CyberChessPage(){
             const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
           }
         };
+        const sep=()=><div style={{width:1,height:22,background:CC.border,margin:"0 4px",alignSelf:"center"}}/>;
         return <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
             <SymTab sym={SYM.play}     active={tab==="play"}     onClick={()=>switchTab("play")}/>
+            {sep()}
             <SymTab sym={SYM.puzzle}   active={tab==="puzzles"}  onClick={()=>switchTab("puzzles")} count={PUZZLES.length}/>
             <SymTab sym={SYM.coach}    active={tab==="coach"}    onClick={()=>switchTab("coach")}/>
+            {sep()}
             <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
           </div>
           <div style={{flex:1}}/>
@@ -3490,17 +3567,23 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Board + Panel */}
+      {/* Board + Panel + (optional) Media Pane */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        {/* Inline media pane on the LEFT — visible only in Stream workspace */}
+        {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
           {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(920px,calc(100vw - 48px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
 
+          {/* Recent-moves chip-row removed — list lives in the right panel.
+              The premove queue moved to the TOP of that move list (right panel). */}
+
           <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px))",gap:4}}>
-            {/* Eval bar — with W/B labels + centered numeric badge */}
-            {sfOk&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
+            {/* Eval bar — with W/B labels + centered numeric badge.
+                Hidden in P2P mode (no analysis surface during human matches). */}
+            {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
               const cp=evalMate!==0?(evalMate>0?2000:-2000):Math.max(-1500,Math.min(1500,evalCp));
               const pct=50+cp/30;
               const wPct=Math.max(2,Math.min(98,pct));
@@ -3538,11 +3621,12 @@ export default function CyberChessPage(){
               draggable={false}
               onDragStart={e=>e.preventDefault()}
               onClick={e=>{
-                if(Date.now()-recentDragRef.current<200)return;
+                // Pointerdown arms the gesture; window-pointerup decides drop vs tap
+                // and delegates taps to click(). onClick here only clears annotations
+                // (e.g., right-click arrows) when the user clicks empty space.
+                if(Date.now()-recentDragRef.current<300)return;
                 const sq=sqFromPoint(e.clientX,e.clientY);if(!sq)return;
-                // Левый клик чистит размышляющие стрелки/хайлайты во всех режимах.
                 if(arrows.length>0||sqHL.length>0)clearAnnotations();
-                click(sq);
               }}
               onMouseDown={e=>{
                 if(e.button!==2)return;
@@ -3564,7 +3648,14 @@ export default function CyberChessPage(){
                 // Right-click на тот же квадрат: если на нём премув — удалить премув
                 // (старая полезная фича). Иначе — toggle highlight.
                 const pmIdx=pms.findIndex(p=>p.from===sq||p.to===sq);
-                if(pmIdx>=0){sPms(p=>p.filter((_,i)=>i!==pmIdx));return}
+                if(pmIdx>=0){
+                  const cancelled=pms[pmIdx];
+                  sPms(p=>p.filter((_,i)=>i!==pmIdx));
+                  snd("cancel"); // distinct sound for premove cancel
+                  sCancelFlash({sq:cancelled.from,key:Date.now()});
+                  showToast(`Премув отменён · ${cancelled.from}→${cancelled.to}`,"info");
+                  return;
+                }
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
@@ -3654,6 +3745,14 @@ export default function CyberChessPage(){
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
                   coordFile={isBottomRow?sq[0]:undefined}/>;
               }))}
+              {/* Premove cancel flash — красный pulse на FROM-клетке отменённого премува */}
+              {cancelFlash&&(()=>{
+                const cf=FILES.indexOf(cancelFlash.sq[0]);
+                const cr=8-parseInt(cancelFlash.sq[1]);
+                const cc=flip?7-cf:cf;const crr=flip?7-cr:cr;
+                return <div key={`cancel-${cancelFlash.key}`} className="cc-cancel-flash"
+                  style={{position:"absolute",left:`${cc*12.5}%`,top:`${crr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:7,boxSizing:"border-box"}}/>;
+              })()}
               {/* Capture animation — захваченная фигура pop+fade на cell взятия */}
               {capAnim&&(()=>{
                 const cf=FILES.indexOf(capAnim.sq[0]);
@@ -3665,6 +3764,12 @@ export default function CyberChessPage(){
                   </div>
                 </div>;
               })()}
+              {/* "Your turn" flash — brief inner-glow overlay when AI just moved.
+                  Keyed on turnFlashKey so each transition mounts a fresh overlay
+                  whose CSS animation runs once and self-removes via opacity 0. */}
+              {turnFlashKey>0&&<div key={`tflash-${turnFlashKey}`}
+                className="cc-turn-flash"
+                style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:6,borderRadius:6}}/>}
               {/* Hover halo — кольцо на cell под курсором во время drag (lichess-style) */}
               {dragHover&&(()=>{
                 const hf=FILES.indexOf(dragHover[0]);
@@ -3672,19 +3777,9 @@ export default function CyberChessPage(){
                 const hc=flip?7-hf:hf;const hrr=flip?7-hr:hr;
                 const isLegal=vm.has(dragHover);
                 const ringCol=isLegal?"#10b981":"#94a3b8";
-                return <div style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
+                return <div className={isLegal?"cc-hover-pulse":undefined} style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
               })()}
-              {/* Ghost piece following cursor during drag */}
-              {ghostFrom&&(()=>{
-                const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
-                if(!gp)return null;
-                const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
-                return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(56px,9vw,88px)",height:"clamp(56px,9vw,88px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:1000,willChange:"transform"}}>
-                  <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 12px 22px rgba(0,0,0,0.55)) drop-shadow(0 0 14px rgba(5,150,105,0.35))"}}>
-                    <Piece type={gp.type as any} color={gp.color as any}/>
-                  </div>
-                </div>;
-              })()}
+              {/* Ghost moved to sibling of main so overflow:hidden of board cannot clip it */}
 
               {/* Move slide animation — летящая фигура поверх board */}
               {moveAnim&&(()=>{
@@ -3868,8 +3963,8 @@ export default function CyberChessPage(){
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
             }}>⌨️ Ход текстом</Btn>}
             {over&&<Btn size="sm" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
-            {pms.length>0&&<Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>sPms(p=>p.slice(0,-1))} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Undo</Btn>}
-            {pms.length>0&&<Btn size="sm" variant="secondary" onClick={()=>{sPms([]);sPmSel(null)}} style={{background:"#fef2f2",color:CC.danger,borderColor:"#fca5a5"}}>✕ Clear ({pms.length})</Btn>}
+            {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
+                Removed from this bottom controls row to avoid duplication. */}
           </div>
           {on&&!over&&!setup&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
             <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
@@ -3925,12 +4020,15 @@ export default function CyberChessPage(){
           </div>}
         </div>
 
-        {/* Right panel */}
-        <div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
-          {/* Daily Mission widget */}
-          {(tab==="play"||tab==="puzzles")&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
-          {/* Coach Predictions: shows opponent's likely next moves while AI thinks */}
-          {tab==="play"&&on&&!over&&!hotseat&&sfOk&&<CoachPredictions
+        {/* Right panel — hidden in Focus workspace (board only). */}
+        {wsShowRight&&<div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
+          {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
+              (it reads as "noise" when user is focused on the board). Shown in puzzles tab
+              and when no game is in progress (between matches). */}
+          {((tab==="puzzles"&&!on)||(tab==="play"&&!on&&!p2pMode))&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
+          {/* Coach Predictions: shows opponent's likely next moves while AI thinks.
+              Hidden in P2P (no analytics during human-vs-human matches per design). */}
+          {tab==="play"&&on&&!over&&!hotseat&&!p2pMode&&sfOk&&<CoachPredictions
             fen={game.fen()}
             opponentColor={pCol==="w"?"b":"w"}
             isOpponentTurn={game.turn()!==pCol}
@@ -4543,6 +4641,19 @@ export default function CyberChessPage(){
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Analyzing…</div>}
 
           <div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            {/* Premove queue — sits ABOVE the move list so the user can see what's queued. */}
+            {pms.length>0&&(tab==="play"||tab==="coach")&&<div style={{padding:"7px 10px",borderBottom:`1px solid #bfdbfe`,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>Премувы · {pms.length}</span>
+              {pms.map((pm,i)=>(<span key={`pm-rp-${i}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
+                <span style={{minWidth:14,height:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900}}>{i+1}</span>
+                {pm.from}→{pm.to}
+              </span>))}
+              <span style={{flex:1}}/>
+              <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title="Отменить последний премув"
+                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶</button>
+              <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
+                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕</button>
+            </div>}
             <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:11,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:6}}>
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2}}/>
@@ -4715,9 +4826,9 @@ export default function CyberChessPage(){
 
             {/* ── Mode Selector ── */}
             <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":""}/>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:SPACE[1]}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
+                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Custom"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
                   return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
                     style={{padding:"8px 4px",borderRadius:RADIUS.md,
@@ -4731,6 +4842,25 @@ export default function CyberChessPage(){
                   </button>;
                 })}
               </div>
+              {/* Custom duration input — пресеты + произвольное число секунд (любой контроль). */}
+              {pzMode==="custom"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность · любой контроль</div>
+                <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
+                  {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
+                    const active=pzCustomSec===sec;
+                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);sPzTimeLeft(sec);showToast(`Custom ${label}`,"info")}}
+                      style={{padding:"5px 10px",borderRadius:RADIUS.sm,
+                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
+                        fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
+                  })}
+                  <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
+                  <input type="number" min={30} max={3600} step={30}
+                    value={pzCustomSec}
+                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
+                    style={{width:78,padding:"5px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12,fontFamily:"ui-monospace,monospace",fontWeight:800,color:CC.text,background:CC.surface1}}/>
+                </div>
+              </div>}
               {/* Rush duration selector — виден только когда выбран Rush */}
               {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
@@ -5284,7 +5414,7 @@ export default function CyberChessPage(){
           {tab==="play"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:13,color:T.dim}}>{s.l}</div></div>)}
           </div>}
-        </div>
+        </div>}
       </div>}
 
       {promo&&<div className="cc-backdrop" style={{display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sPromo(null)}>
@@ -7597,10 +7727,19 @@ export default function CyberChessPage(){
     </Modal>
 
     </ProductPageShell>
-    {/* Ghost element is created imperatively by the hook in useEffect via
-        document.createElement + appendChild(document.body). It lives
-        outside React's render tree entirely — no re-render can ever
-        overwrite its inline style. See useBoardInput.ts. */}
+    {/* Ghost piece — rendered OUTSIDE the board div so overflow:hidden cannot clip it.
+        position:fixed + zIndex:9999 → always visible on top of everything. */}
+    {ghostFrom&&(()=>{
+      const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
+      if(!gp)return null;
+      const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
+      return <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(60px,9vw,92px)",height:"clamp(60px,9vw,92px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:9999,willChange:"transform"}}>
+        <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))"}}>
+          <Piece type={gp.type as any} color={gp.color as any}/>
+        </div>
+      </div>;
+    })()}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
+    <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
     </main>);
 }

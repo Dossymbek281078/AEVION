@@ -259,7 +259,7 @@ async function ensureBureauTables(): Promise<void> {
 // fiat→AEC is platform-minted on event, never automatic from Stripe. Default 0
 // until product decides reward sizing; the row is still recorded so a later
 // claim flow can backfill mints when a user device links their account.
-function bureauAecReward(tier: string): number {
+export function bureauAecReward(tier: string): number {
   const env = (key: string): number => {
     const raw = process.env[key];
     const n = raw ? Number(raw) : NaN;

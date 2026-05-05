@@ -114,7 +114,11 @@ function ProfileBody() {
 
           {profile && (
             <div className="mb-4">
-              <ProfileCompletenessMeter profile={profile} />
+              <ProfileCompletenessMeter
+                profile={profile}
+                hasExperiences={experiences.length > 0}
+                hasEducation={education.length > 0}
+              />
             </div>
           )}
 

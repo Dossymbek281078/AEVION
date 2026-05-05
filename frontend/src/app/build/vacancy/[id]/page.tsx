@@ -34,6 +34,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [labelFilter, setLabelFilter] = useState<ApplicationLabel | "ALL">("ALL");
+  const [minAi, setMinAi] = useState<number>(0);
+  const [minMatch, setMinMatch] = useState<number>(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [focusedAppIdx, setFocusedAppIdx] = useState<number>(-1);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
@@ -266,8 +268,14 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   projectId={vacancy.projectId}
                 />
                 <SaveAsTemplateButton vacancy={vacancy} />
-                {vacancy.status === "CLOSED" && (
+                {(vacancy.status === "CLOSED" || vacancy.status === "ARCHIVED") && (
                   <RepublishVacancyButton
+                    vacancyId={vacancy.id}
+                    onDone={refresh}
+                  />
+                )}
+                {vacancy.status !== "ARCHIVED" && (
+                  <ArchiveVacancyButton
                     vacancyId={vacancy.id}
                     onDone={refresh}
                   />
@@ -368,10 +376,25 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                       setSelected(new Set());
                     }}
                   />
+                  <ScoreRangeFilter
+                    minAi={minAi}
+                    minMatch={minMatch}
+                    onChange={(ai, match) => {
+                      setMinAi(ai);
+                      setMinMatch(match);
+                      setSelected(new Set());
+                    }}
+                  />
                   {(() => {
                     const filtered = applications.filter((a) => {
-                      if (labelFilter === "ALL") return true;
-                      return a.labelKey === labelFilter;
+                      if (labelFilter !== "ALL" && a.labelKey !== labelFilter) return false;
+                      if (minAi > 0) {
+                        if (a.aiScoreOverall == null || a.aiScoreOverall < minAi) return false;
+                      }
+                      if (minMatch > 0) {
+                        if (a.matchScore == null || a.matchScore < minMatch) return false;
+                      }
+                      return true;
                     });
                     return (
                       <>
@@ -1024,6 +1047,60 @@ function ApplicationRow({
       )}
       <RecruiterNotes applicationId={app.id} />
     </li>
+  );
+}
+
+function ScoreRangeFilter({
+  minAi,
+  minMatch,
+  onChange,
+}: {
+  minAi: number;
+  minMatch: number;
+  onChange: (ai: number, match: number) => void;
+}) {
+  const active = minAi > 0 || minMatch > 0;
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        Min scores:
+      </span>
+      <label className="flex items-center gap-1.5 text-slate-300">
+        <span title="Claude's overall fit score">✨ AI ≥</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={minAi}
+          onChange={(e) => onChange(Number(e.target.value), minMatch)}
+          className="h-1 w-24 accent-fuchsia-500"
+        />
+        <span className="w-7 text-right tabular-nums text-fuchsia-200">{minAi}</span>
+      </label>
+      <label className="flex items-center gap-1.5 text-slate-300">
+        <span title="Skill overlap with vacancy required skills">🎯 Match ≥</span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={10}
+          value={minMatch}
+          onChange={(e) => onChange(minAi, Number(e.target.value))}
+          className="h-1 w-24 accent-emerald-500"
+        />
+        <span className="w-7 text-right tabular-nums text-emerald-200">{minMatch}</span>
+      </label>
+      {active && (
+        <button
+          type="button"
+          onClick={() => onChange(0, 0)}
+          className="ml-auto text-[10px] text-slate-400 hover:text-slate-200"
+        >
+          Clear
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -2426,6 +2503,47 @@ function ExportCsvButton({
       className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
     >
       {busy ? "…" : "↓ CSV"}
+    </button>
+  );
+}
+
+function ArchiveVacancyButton({
+  vacancyId,
+  onDone,
+}: {
+  vacancyId: string;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function archive() {
+    if (
+      !confirm(
+        "Archive this vacancy? It will be hidden from public feeds and partner widgets, but its application history and analytics stay intact. You can republish it later.",
+      )
+    ) return;
+    setBusy(true);
+    try {
+      await buildApi.patchVacancy(vacancyId, { status: "ARCHIVED" });
+      toast.success("Vacancy archived");
+      onDone();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={archive}
+      disabled={busy}
+      title="Hide from public feeds; preserve application history"
+      className="rounded-md border border-slate-500/40 bg-slate-500/10 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-500/20 disabled:opacity-50"
+    >
+      {busy ? "…" : "📦 Archive"}
     </button>
   );
 }

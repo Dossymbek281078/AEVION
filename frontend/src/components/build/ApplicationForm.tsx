@@ -5,6 +5,7 @@ import { buildApi, BuildApiError } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { AiImprove } from "@/components/build/AiImprove";
 import { useToast } from "@/components/build/Toast";
+import { deriveApplySource } from "@/lib/build/applySource";
 
 export function ApplicationForm({
   vacancyId,
@@ -89,6 +90,7 @@ export function ApplicationForm({
         message: message.trim() || undefined,
         answers: qs.length > 0 ? answers.map((a) => a.trim()) : undefined,
         referredByUserId: referredBy || undefined,
+        sourceTag: deriveApplySource(),
       });
       setSuccess(true);
       onApplied?.();

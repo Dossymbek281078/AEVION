@@ -6,6 +6,7 @@ import type { BuildVacancy } from "@/lib/build/api";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 import { BookmarkButton } from "./BookmarkButton";
+import { deriveApplySource } from "@/lib/build/applySource";
 
 export function VacancyCard({
   vacancy,
@@ -34,7 +35,7 @@ export function VacancyCard({
     if (!token || applied || busy || isOwner) return;
     setBusy(true);
     try {
-      await buildApi.applyVacancy({ vacancyId: vacancy.id });
+      await buildApi.applyVacancy({ vacancyId: vacancy.id, sourceTag: deriveApplySource() });
       setApplied(true);
     } catch {
       // If has questions or already applied, navigate to full page

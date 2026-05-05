@@ -27,6 +27,8 @@ export default function VacanciesFeedPage() {
   const [q, setQ] = useState(searchParams.get("q") || "");
   const [city, setCity] = useState(searchParams.get("city") || "");
   const [minSalary, setMinSalary] = useState<string>(searchParams.get("minSalary") || "");
+  const [maxSalary, setMaxSalary] = useState<string>(searchParams.get("maxSalary") || "");
+  const [currency, setCurrency] = useState<string>(searchParams.get("currency") || "");
   const [skill, setSkill] = useState(searchParams.get("skill") || "");
   const [sort, setSort] = useState<"recent" | "salary" | "popular">(
     (searchParams.get("sort") as "recent" | "salary" | "popular") || "recent",
@@ -45,6 +47,8 @@ export default function VacanciesFeedPage() {
       if (q.trim()) next.set("q", q.trim());
       if (city.trim()) next.set("city", city.trim());
       if (minSalary.trim()) next.set("minSalary", minSalary.trim());
+      if (maxSalary.trim()) next.set("maxSalary", maxSalary.trim());
+      if (currency.trim()) next.set("currency", currency.trim());
       if (skill.trim()) next.set("skill", skill.trim());
       if (sort !== "recent") next.set("sort", sort);
       if (status !== "OPEN") next.set("status", status);
@@ -53,19 +57,22 @@ export default function VacanciesFeedPage() {
       router.replace(url, { scroll: false });
     }, 300);
     return () => clearTimeout(handle);
-  }, [q, city, minSalary, skill, sort, status, router]);
+  }, [q, city, minSalary, maxSalary, currency, skill, sort, status, router]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
       let cancelled = false;
       setLoading(true);
       const min = minSalary.trim() ? Number(minSalary) : undefined;
+      const max = maxSalary.trim() ? Number(maxSalary) : undefined;
       buildApi
         .listVacancies({
           status: status === "ALL" ? undefined : status,
           q: q.trim() || undefined,
           city: city.trim() || undefined,
           minSalary: Number.isFinite(min) ? (min as number) : undefined,
+          maxSalary: Number.isFinite(max) ? (max as number) : undefined,
+          currency: currency.trim() || undefined,
           skill: skill.trim() || undefined,
           sort,
           limit: 100,
@@ -84,7 +91,7 @@ export default function VacanciesFeedPage() {
       };
     }, 250);
     return () => clearTimeout(handle);
-  }, [status, q, city, minSalary, skill, sort]);
+  }, [status, q, city, minSalary, maxSalary, currency, skill, sort]);
 
   const stats = useMemo(() => {
     const openItems = items.filter((v) => v.status === "OPEN");
@@ -139,10 +146,29 @@ export default function VacanciesFeedPage() {
         <input
           value={minSalary}
           onChange={(e) => setMinSalary(e.target.value.replace(/[^\d]/g, ""))}
-          placeholder="Min $"
+          placeholder="Min"
           inputMode="numeric"
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-28"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
         />
+        <input
+          value={maxSalary}
+          onChange={(e) => setMaxSalary(e.target.value.replace(/[^\d]/g, ""))}
+          placeholder="Max"
+          inputMode="numeric"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none sm:w-24"
+        />
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-sm text-white focus:border-emerald-500/40 focus:outline-none"
+          title="Salary currency"
+        >
+          <option value="">Any ¤</option>
+          <option value="USD">USD</option>
+          <option value="RUB">RUB</option>
+          <option value="KZT">KZT</option>
+          <option value="EUR">EUR</option>
+        </select>
         <input
           value={skill}
           onChange={(e) => setSkill(e.target.value)}
@@ -201,11 +227,13 @@ export default function VacanciesFeedPage() {
       <RecentlyViewedRow />
 
       <SavedSearches
-        current={{ q, city, minSalary, skill, sort, status }}
+        current={{ q, city, minSalary, maxSalary, currency, skill, sort, status }}
         onApply={(s) => {
           setQ(s.q);
           setCity(s.city);
           setMinSalary(s.minSalary);
+          setMaxSalary(s.maxSalary || "");
+          setCurrency(s.currency || "");
           setSkill(s.skill);
           setSort(s.sort);
           setStatus(s.status);
@@ -330,6 +358,8 @@ type SavedSearch = {
   q: string;
   city: string;
   minSalary: string;
+  maxSalary?: string;
+  currency?: string;
   skill: string;
   sort: "recent" | "salary" | "popular";
   status: VacancyStatus | "ALL";

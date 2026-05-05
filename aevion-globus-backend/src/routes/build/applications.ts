@@ -98,12 +98,20 @@ applicationsRouter.post("/", async (req, res) => {
       typeof referredByRaw === "string" && referredByRaw.trim().length > 0 && referredByRaw.trim() !== auth.sub
         ? referredByRaw.trim().slice(0, 200) : null;
 
+    // Source attribution. Accept "organic" / "widget" / "utm:linkedin" /
+    // "referral" / etc. Free-form string capped at 64 chars; analytics queries
+    // bucket by prefix. Empty / missing → null (organic implied).
+    const sourceTagRaw = req.body?.sourceTag;
+    const sourceTag =
+      typeof sourceTagRaw === "string" && sourceTagRaw.trim().length > 0
+        ? sourceTagRaw.trim().toLowerCase().slice(0, 64) : null;
+
     const id = crypto.randomUUID();
     try {
       const result = await pool.query(
-        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId")
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId],
+        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId","sourceTag")
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId, sourceTag],
       );
 
       if (questions.length > 0 && process.env.ANTHROPIC_API_KEY) {

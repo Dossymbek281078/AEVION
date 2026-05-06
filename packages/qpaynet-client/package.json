@@ -1,0 +1,51 @@
+{
+  "name": "@aevion/qpaynet-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for AEVION QPayNet — embedded payment infrastructure with HMAC webhooks, idempotent transfers, merchant keys, payment links.",
+  "license": "Apache-2.0",
+  "author": "AEVION",
+  "homepage": "https://aevion.app/qpaynet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "packages/qpaynet-client"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "aevion",
+    "qpaynet",
+    "payments",
+    "wallet",
+    "kzt",
+    "tenge",
+    "merchant",
+    "webhook",
+    "hmac",
+    "idempotency",
+    "stripe-alternative"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

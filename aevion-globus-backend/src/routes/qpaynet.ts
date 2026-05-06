@@ -35,7 +35,7 @@
  */
 
 import { Router } from "express";
-import { randomUUID, createHash, createHmac, randomBytes } from "node:crypto";
+import { randomUUID, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import Stripe from "stripe";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
@@ -167,19 +167,21 @@ async function ensureTables(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_qpt_owner  ON qpaynet_transactions (owner_id,  created_at DESC);
 
       CREATE TABLE IF NOT EXISTS qpaynet_merchant_keys (
-        id          TEXT PRIMARY KEY,
-        owner_id    TEXT NOT NULL,
-        name        TEXT NOT NULL,
-        key_hash    TEXT UNIQUE NOT NULL,
-        key_prefix  TEXT NOT NULL,  -- first 8 chars for display
-        wallet_id   TEXT NOT NULL,
-        scopes      TEXT NOT NULL DEFAULT 'charge,read', -- comma-list: charge,read,refund
-        revoked_at  TIMESTAMPTZ,
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id                  TEXT PRIMARY KEY,
+        owner_id            TEXT NOT NULL,
+        name                TEXT NOT NULL,
+        key_hash            TEXT UNIQUE NOT NULL,
+        key_prefix          TEXT NOT NULL,  -- first 8 chars for display
+        wallet_id           TEXT NOT NULL,
+        scopes              TEXT NOT NULL DEFAULT 'charge,read', -- charge,read,refund
+        require_signature   BOOLEAN NOT NULL DEFAULT FALSE,
+        revoked_at          TIMESTAMPTZ,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_qpmk_owner ON qpaynet_merchant_keys (owner_id);
       CREATE INDEX IF NOT EXISTS idx_qpmk_hash  ON qpaynet_merchant_keys (key_hash);
       ALTER TABLE qpaynet_merchant_keys ADD COLUMN IF NOT EXISTS scopes TEXT NOT NULL DEFAULT 'charge,read';
+      ALTER TABLE qpaynet_merchant_keys ADD COLUMN IF NOT EXISTS require_signature BOOLEAN NOT NULL DEFAULT FALSE;
     `);
     tablesReady = true;
   } catch (err) {
@@ -1185,11 +1187,13 @@ qpaynetRouter.post("/merchant/keys", async (req, res) => {
     walletId: "uuid",
     name: { kind: "string", optional: true, max: 80 },
     scopes: { kind: "string", optional: true, max: 100 },
+    requireSignature: { kind: "bool", optional: true },
   });
   if (!parsed) return;
   const walletId = parsed.walletId as string;
   const name = (parsed.name as string | undefined) ?? "API Key";
   const scopes = parseScopes(parsed.scopes as string | undefined);
+  const requireSignature = (parsed.requireSignature as boolean | undefined) ?? false;
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1199,11 +1203,11 @@ qpaynetRouter.post("/merchant/keys", async (req, res) => {
   const { raw, hash, prefix } = makeMerchantKey();
   const id = randomUUID();
   await pool.query(
-    "INSERT INTO qpaynet_merchant_keys (id, owner_id, name, key_hash, key_prefix, wallet_id, scopes) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-    [id, ownerId, name, hash, prefix, walletId, scopes.join(",")],
+    "INSERT INTO qpaynet_merchant_keys (id, owner_id, name, key_hash, key_prefix, wallet_id, scopes, require_signature) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+    [id, ownerId, name, hash, prefix, walletId, scopes.join(","), requireSignature],
   );
   res.status(201).json({
-    id, name, keyPrefix: prefix, scopes, key: raw,
+    id, name, keyPrefix: prefix, scopes, requireSignature, key: raw,
     message: "Save this key — it won't be shown again.",
   });
 });
@@ -1215,7 +1219,7 @@ qpaynetRouter.get("/merchant/keys", async (req, res) => {
 
   const pool = getPool();
   const result = await pool.query(
-    "SELECT id, name, key_prefix, wallet_id, scopes, revoked_at, created_at FROM qpaynet_merchant_keys WHERE owner_id=$1 ORDER BY created_at DESC",
+    "SELECT id, name, key_prefix, wallet_id, scopes, require_signature, revoked_at, created_at FROM qpaynet_merchant_keys WHERE owner_id=$1 ORDER BY created_at DESC",
     [auth.sub ?? auth.email ?? "anon"],
   );
   // Convert comma-string to array so consumers don't have to parse.
@@ -1223,6 +1227,7 @@ qpaynetRouter.get("/merchant/keys", async (req, res) => {
   const keys = result.rows.map((k: any) => ({
     ...k,
     scopes: typeof k.scopes === "string" ? k.scopes.split(",").map((s: string) => s.trim()).filter(Boolean) : ["charge", "read"],
+    requireSignature: !!k.require_signature,
   }));
   res.json({ keys });
 });
@@ -1250,7 +1255,7 @@ qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
   const keyHash = createHash("sha256").update(apiKey).digest("hex");
   const pool = getPool();
   const mk = await pool.query(
-    "SELECT id, wallet_id, owner_id, scopes FROM qpaynet_merchant_keys WHERE key_hash=$1 AND revoked_at IS NULL",
+    "SELECT id, wallet_id, owner_id, scopes, require_signature FROM qpaynet_merchant_keys WHERE key_hash=$1 AND revoked_at IS NULL",
     [keyHash],
   );
   if (!mk.rows[0]) return res.status(403).json({ error: "invalid_or_revoked_key" });
@@ -1259,6 +1264,34 @@ qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
   const keyScopes = (mk.rows[0].scopes as string ?? "charge,read").split(",").map((s: string) => s.trim());
   if (!keyScopes.includes("charge")) {
     return res.status(403).json({ error: "scope_missing", required: "charge", granted: keyScopes });
+  }
+
+  // Optional HMAC replay protection. When the key is created with
+  // requireSignature=true, every charge MUST carry:
+  //   X-Aevion-Timestamp: <unix-seconds>
+  //   X-Aevion-Signature: sha256=<hex(hmac(apiKey, "${ts}.${rawBody}"))>
+  // Old timestamps (>5min drift) reject. This makes a leaked key alone
+  // insufficient if the leak is separated from request-signing code (e.g.
+  // pastebin/git-history exposure of an env var).
+  if (mk.rows[0].require_signature) {
+    const ts = req.headers["x-aevion-timestamp"] as string | undefined;
+    const sig = req.headers["x-aevion-signature"] as string | undefined;
+    if (!ts || !sig) {
+      return res.status(401).json({ error: "signature_required", required: ["X-Aevion-Timestamp", "X-Aevion-Signature"] });
+    }
+    const tsNum = Number(ts);
+    if (!Number.isFinite(tsNum) || Math.abs(Math.floor(Date.now() / 1000) - tsNum) > 300) {
+      return res.status(401).json({ error: "signature_timestamp_drift", maxDriftSeconds: 300 });
+    }
+    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const bodyText = rawBody ? rawBody.toString("utf8") : JSON.stringify(req.body ?? {});
+    const expected = "sha256=" + createHmac("sha256", apiKey).update(`${ts}.${bodyText}`).digest("hex");
+    // Constant-time compare via timingSafeEqual on equal-length buffers.
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: "signature_mismatch" });
+    }
   }
 
   const parsed = validateOr400(req, res, {
@@ -3291,9 +3324,18 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
         post: {
           tags: ["Merchants"], summary: "Charge a customer wallet via API key",
           security: [{ merchantKey: [] }],
-          parameters: [{ name: "Idempotency-Key", in: "header", schema: { type: "string" } }],
+          parameters: [
+            { name: "Idempotency-Key", in: "header", schema: { type: "string" } },
+            { name: "X-Aevion-Timestamp", in: "header", schema: { type: "string" }, description: "Unix seconds. REQUIRED when key was created with requireSignature=true. Reject window 5 minutes." },
+            { name: "X-Aevion-Signature", in: "header", schema: { type: "string" }, description: "sha256=<hex(hmac(apiKey, `${ts}.${rawBody}`))>. REQUIRED when requireSignature=true." },
+          ],
           requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["amount", "customerWalletId"], properties: { amount: { type: "number" }, customerWalletId: { type: "string", format: "uuid" }, description: { type: "string" } } } } } },
-          responses: { "200": { description: "OK" }, "400": { description: "Validation / cannot_charge_own_wallet" }, "403": { description: "invalid_or_revoked_key" } },
+          responses: {
+            "200": { description: "OK" },
+            "400": { description: "Validation / cannot_charge_own_wallet" },
+            "401": { description: "signature_required / signature_timestamp_drift / signature_mismatch" },
+            "403": { description: "invalid_or_revoked_key / scope_missing" },
+          },
         },
       },
       "/requests": {

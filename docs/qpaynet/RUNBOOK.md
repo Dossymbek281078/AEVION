@@ -310,6 +310,8 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Audit log PII redaction | done — `QPAYNET_AUDIT_REDACT=1` + `QPAYNET_PII_SALT`; HMAC-hashes IPs/emails | — |
 | Per-tier money limits | done — `QPAYNET_RATE_TIERS=email:limit,...` overrides without code change | — |
 | Merchant API key scopes | done — `scopes` column on `qpaynet_merchant_keys`; `charge`/`read`/`refund`. Charge endpoint enforces `charge` scope. | — |
+| Merchant key HMAC signing | done — opt-in `requireSignature: true` on key create. Charge requires `X-Aevion-Timestamp` + `X-Aevion-Signature`; 5-min replay window. SDK signs automatically when `signRequests: true`. | — |
+| TypeScript SDK package | done — `@aevion/qpaynet-client` v1.0.0 in `packages/qpaynet-client/`. Isomorphic (Node 18+/Bun/Deno/browsers); `verifyWebhook()` helper; auto-retry on 5xx/429; HMAC signing helper. | — |
 | ALERT_URL Slack/Discord hookup | done — `QPAYNET_ALERT_URL` posts on reconcile drift + delivery dead-letter (Slack `text` + Discord `content` co-format) | — |
 
 Anything in "open" is documented but not yet code. When you finish one, move

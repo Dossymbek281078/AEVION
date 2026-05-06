@@ -557,6 +557,43 @@ async function run() {
     await req("DELETE", `/api/qpaynet/merchant/keys/${readOnlyKey.body.id}`, null, auth);
   }
 
+  // 39. Merchant key with HMAC signature requirement
+  console.log("\n39. Merchant key signed charge");
+  const signedKey = await req("POST", "/api/qpaynet/merchant/keys",
+    { walletId, name: "signed-key", scopes: "charge,read", requireSignature: true }, auth);
+  if (signedKey.status === 201 && signedKey.body.requireSignature === true) {
+    assert("requireSignature returned true on create", signedKey.body.requireSignature === true);
+
+    // Try unsigned charge — must reject
+    const unsignedTry = await fetch(`${BASE}/api/qpaynet/merchant/charge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": signedKey.body.key },
+      body: JSON.stringify({ customerWalletId: walletId, amount: 1 }),
+    });
+    const unsignedBody = await unsignedTry.json();
+    assert("unsigned charge → 401 signature_required",
+      unsignedTry.status === 401 && unsignedBody.error === "signature_required");
+
+    // Stale timestamp — must reject
+    const oldTs = String(Math.floor(Date.now() / 1000) - 1000);
+    const staleTry = await fetch(`${BASE}/api/qpaynet/merchant/charge`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": signedKey.body.key,
+        "X-Aevion-Timestamp": oldTs,
+        "X-Aevion-Signature": "sha256=invalid",
+      },
+      body: JSON.stringify({ customerWalletId: walletId, amount: 1 }),
+    });
+    const staleBody = await staleTry.json();
+    assert("stale timestamp → 401 signature_timestamp_drift",
+      staleTry.status === 401 && staleBody.error === "signature_timestamp_drift");
+
+    // Cleanup
+    await req("DELETE", `/api/qpaynet/merchant/keys/${signedKey.body.id}`, null, auth);
+  }
+
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

@@ -27,6 +27,8 @@ export default function ApplicationReviewPage() {
   const [notes, setNotes] = useState<{ id: string; body: string; isPinned: boolean; createdAt: string }[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteBusy, setNoteBusy] = useState(false);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +129,52 @@ export default function ApplicationReviewPage() {
       }
     },
     [current, busy, next, goTo, toast],
+  );
+
+  const pendingApps = useMemo(
+    () => (applications ?? []).filter((a) => a.status === "PENDING"),
+    [applications],
+  );
+
+  const toggleBulk = useCallback((id: string) => {
+    setBulkSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const bulkApply = useCallback(
+    async (status: "ACCEPTED" | "REJECTED") => {
+      const ids = Array.from(bulkSelected);
+      if (ids.length === 0 || bulkBusy) return;
+      const reason =
+        status === "REJECTED"
+          ? prompt(`Bulk reject ${ids.length} applicant${ids.length === 1 ? "" : "s"} — optional reason:`) || undefined
+          : undefined;
+      if (status === "REJECTED" && reason === undefined && !confirm(`Reject ${ids.length} applicants without a reason?`)) return;
+      setBulkBusy(true);
+      try {
+        let ok = 0;
+        for (const id of ids) {
+          try {
+            await buildApi.updateApplication(id, status, reason);
+            ok++;
+          } catch {
+            /* keep going */
+          }
+        }
+        toast.success(`${status === "ACCEPTED" ? "Accepted" : "Rejected"} ${ok} of ${ids.length}`);
+        setApplications((items) =>
+          items?.map((a) => (bulkSelected.has(a.id) ? { ...a, status } : a)) ?? items,
+        );
+        setBulkSelected(new Set());
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [bulkSelected, bulkBusy, toast],
   );
 
   const addNote = useCallback(async () => {
@@ -416,6 +464,74 @@ export default function ApplicationReviewPage() {
               </ul>
             )}
           </div>
+
+          {pendingApps.length > 1 && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Bulk actions ({bulkSelected.size}/{pendingApps.length})
+                </div>
+                {bulkSelected.size > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setBulkSelected(new Set())}
+                    className="text-[10px] text-slate-500 hover:text-slate-300"
+                  >
+                    Clear
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setBulkSelected(new Set(pendingApps.map((a) => a.id)))}
+                    className="text-[10px] text-slate-500 hover:text-slate-300"
+                  >
+                    Select all
+                  </button>
+                )}
+              </div>
+              <ul className="mb-3 max-h-48 space-y-1 overflow-y-auto pr-1">
+                {pendingApps.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-2 rounded-md border border-white/5 bg-black/20 p-1.5 text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={bulkSelected.has(a.id)}
+                      onChange={() => toggleBulk(a.id)}
+                      className="accent-emerald-400"
+                    />
+                    <span className="truncate text-slate-200">
+                      {a.applicantName || "Anonymous"}
+                    </span>
+                    {a.matchScore != null && (
+                      <span className="ml-auto shrink-0 text-[10px] text-cyan-300">
+                        {Math.round(a.matchScore)}%
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => bulkApply("REJECTED")}
+                  disabled={bulkSelected.size === 0 || bulkBusy}
+                  className="flex-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-40"
+                >
+                  ✗ Reject selected
+                </button>
+                <button
+                  type="button"
+                  onClick={() => bulkApply("ACCEPTED")}
+                  disabled={bulkSelected.size === 0 || bulkBusy}
+                  className="flex-1 rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2 py-1.5 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-40"
+                >
+                  ✓ Accept
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
             <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">

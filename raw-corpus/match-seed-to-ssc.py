@@ -75,25 +75,106 @@ STOPWORDS = {
     "марки","марка","типа","тип","класс","ст","сорт","диаметр","толщина",
     "размер","группы","группа",
 }
+# словарь канонизации: разные написания одного материала → единый токен
+SYNONYMS = {
+    "брусок": "брус", "брусья": "брус",
+    "выключатель": "выключатель", "автомат": "выключатель",
+    "автоматический": "автоматич",
+    "анкер": "анкер", "анкерный": "анкер",
+    "лист": "лист", "листовой": "лист", "листы": "лист",
+    "плита": "плита", "плиты": "плита", "плитка": "плитка",
+    "панель": "панель", "панели": "панель",
+    "кран": "кран", "краны": "кран",
+    "винт": "винт", "винты": "винт",
+    "шуруп": "шуруп", "шурупы": "шуруп",
+    "проволока": "проволока", "проволочный": "проволока",
+    "электрод": "электрод", "электроды": "электрод",
+    "трубопровод": "труба", "трубы": "труба", "труба": "труба",
+    "кабель": "кабель", "кабельный": "кабель", "провод": "кабель",
+    "грунтовка": "грунт", "грунт": "грунт",
+    "шпатлёвка": "шпатлевка", "шпатлевка": "шпатлевка", "шпаклевка": "шпатлевка",
+    "краска": "краска", "краски": "краска",
+    "доска": "доска", "доски": "доска",
+    "линолеум": "линолеум", "линолеумы": "линолеум",
+}
 def tokenize(s: str) -> list[str]:
     s = s.lower()
     s = re.sub(r"[^\w\s]+", " ", s, flags=re.UNICODE)
     toks = []
     for t in s.split():
+        t = SYNONYMS.get(t, t)
         if t in STOPWORDS: continue
         if t.isdigit() and len(t) > 4: continue  # длинные номера ГОСТ
         if len(t) < 2: continue
         toks.append(t)
     return toks
 
+# ---- структурные сигналы (марка/класс/диаметр/толщина) -----------------------
+#
+# Семантика: если у seed-материала есть «класс В12,5» — у ССЦ-кандидата он
+# ДОЛЖЕН совпасть (иначе это другой материал, не просто похожий).
+# Если у seed нет — фильтр не применяется.
+
+# нормализация чисел: "12,5" / "12.5" / "12,5мм" → "12.5"
+def _norm_num(s: str) -> str:
+    return s.replace(",", ".").rstrip(".0") or "0"
+
+def extract_concrete_class(s: str) -> str | None:
+    """Бетон класса В7,5 / В12,5 / В22,5 / В30 итд."""
+    m = re.search(r"\bв\s*(\d+(?:[.,]\d+)?)", s, re.I)
+    return _norm_num(m.group(1)) if m else None
+
+def extract_mortar_grade(s: str) -> str | None:
+    """Раствор / цемент марки М50 / М100 / М150 / М400."""
+    m = re.search(r"\bм\s*(\d{2,4})\b", s, re.I)
+    return m.group(1) if m else None
+
+def extract_diameter(s: str) -> str | None:
+    """Диаметр 20/32/50/100 (для труб)."""
+    m = re.search(r"(?:dn|ду|диаметр[ом]*|d[нy]?|ø)\s*(\d{1,4})", s, re.I)
+    if m: return m.group(1)
+    return None
+
+def extract_thickness(s: str) -> str | None:
+    """Толщина X мм (для листов, плит, плёнок)."""
+    m = re.search(r"толщин[ао][ий]?\s*(\d+(?:[.,]\d+)?)\s*мм", s, re.I)
+    if m: return _norm_num(m.group(1))
+    m = re.search(r"\b(\d+(?:[.,]\d+)?)\s*мм\b", s, re.I)
+    return _norm_num(m.group(1)) if m else None
+
+def extract_signals(s: str) -> dict[str, str]:
+    """Все структурные сигналы — ключи только для тех, что найдены."""
+    out: dict[str, str] = {}
+    if (v := extract_concrete_class(s)): out["concrete_class"] = v
+    if (v := extract_mortar_grade(s)):   out["mortar_grade"] = v
+    if (v := extract_diameter(s)):       out["diameter"] = v
+    if (v := extract_thickness(s)):      out["thickness"] = v
+    return out
+
+def signals_compatible(seed_sigs: dict[str, str], cand_sigs: dict[str, str]) -> bool:
+    """Если у seed есть сигнал, у кандидата он должен совпасть.
+       (Если у кандидата сигнала нет — несовместимо.)"""
+    for k, v in seed_sigs.items():
+        if cand_sigs.get(k) != v:
+            return False
+    return True
+
 def score(seed_name: str, ssc_name: str) -> float:
-    """Jaccard-подобный скор пересечения значимых токенов."""
+    """Jaccard-подобный скор пересечения значимых токенов.
+       Бонус за совпадение структурных сигналов."""
     a, b = set(tokenize(seed_name)), set(tokenize(ssc_name))
     if not a or not b: return 0.0
     inter = len(a & b)
     if not inter: return 0.0
-    # вес: пересечение / (1 + штраф за лишние слова в ССЦ-имени)
-    return inter / (len(a) + 0.3 * (len(b) - inter))
+    base = inter / (len(a) + 0.3 * (len(b) - inter))
+    # бонус: совпадающие структурные сигналы поднимают скор
+    seed_sigs = extract_signals(seed_name)
+    cand_sigs = extract_signals(ssc_name)
+    if seed_sigs:
+        matching = sum(1 for k, v in seed_sigs.items() if cand_sigs.get(k) == v)
+        if matching:
+            base += 0.15 * matching  # +0.15 за каждый совпадающий сигнал
+    return base
 
 def load_book(slug: str) -> list[dict]:
     p = SSC_DIR / f"{slug}.json"
@@ -115,11 +196,18 @@ def best_candidate(name: str, unit: str, books: dict[str, list[dict]],
                    min_score: float = 0.35) -> dict | None:
     best = None
     best_s = 0.0
+    seed_sigs = extract_signals(name)
     for slug, rows in books.items():
         for r in rows:
             if r.get("isGroup"): continue
             if not units_match(unit, r.get("unit", "")): continue
             if r.get("smetnaya") is None: continue
+            # жёсткий фильтр: класс/марка/диаметр/толщина обязаны совпасть,
+            # если они заданы у seed
+            if seed_sigs:
+                cand_sigs = extract_signals(r["name"])
+                if not signals_compatible(seed_sigs, cand_sigs):
+                    continue
             s = score(name, r["name"])
             if s > best_s:
                 best_s, best = s, {**r, "_slug": slug, "_score": round(s, 3)}

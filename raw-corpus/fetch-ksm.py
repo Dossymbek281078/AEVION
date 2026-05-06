@@ -24,7 +24,7 @@
 from __future__ import annotations
 import hashlib, json, os, re, shutil, subprocess, sys, time
 from pathlib import Path
-from urllib.parse import unquote, urljoin
+from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
@@ -53,9 +53,17 @@ WANTED_PREFIXES = (
 
 # ---- HTTP --------------------------------------------------------------------
 
+def safe_url(url: str) -> str:
+    """urllib не URL-encode'ит кириллицу автоматически и падает с
+    UnicodeEncodeError. Прогоняем path через quote(), сохраняя уже
+    закодированные %XX (safe='%/...')."""
+    parts = urlsplit(url)
+    path = quote(parts.path, safe="/%")
+    return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+
 def http_get(url: str, dest: Path | None = None) -> bytes | None:
-    req = Request(url, headers={"User-Agent": USER_AGENT})
-    with urlopen(req, timeout=120) as r:
+    req = Request(safe_url(url), headers={"User-Agent": USER_AGENT})
+    with urlopen(req, timeout=300) as r:
         if dest is None:
             return r.read()
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +73,7 @@ def http_get(url: str, dest: Path | None = None) -> bytes | None:
 
 def http_head_size(url: str) -> int | None:
     """HEAD-запрос для получения размера без скачивания."""
-    req = Request(url, headers={"User-Agent": USER_AGENT}, method="HEAD")
+    req = Request(safe_url(url), headers={"User-Agent": USER_AGENT}, method="HEAD")
     try:
         with urlopen(req, timeout=30) as r:
             cl = r.headers.get("Content-Length")
@@ -127,15 +135,20 @@ def extract(archive: Path, dest: Path) -> bool:
             z.extractall(dest)
         return True
     if suffix == ".rar":
-        # пробуем unrar (linux/CI), потом WinRAR (локально)
+        # пробуем unrar (linux/CI), потом WinRAR (локально).
+        # capture_output без text — WinRAR на Windows выводит cp866, не utf-8.
         for tool in ["unrar", UNRAR]:
             try:
                 r = subprocess.run([tool, "x", "-o+", "-y", str(archive), str(dest) + os.sep],
-                                   capture_output=True, text=True, timeout=600)
+                                   capture_output=True, timeout=900)
                 if r.returncode == 0:
                     return True
-                print(f"  {tool} failed (rc={r.returncode}): {r.stderr[:200]}", file=sys.stderr)
+                err = (r.stderr or b"").decode("cp866", errors="replace")[:300]
+                print(f"  {tool} failed (rc={r.returncode}): {err}", file=sys.stderr)
             except FileNotFoundError:
+                continue
+            except Exception as e:
+                print(f"  {tool} exception: {e}", file=sys.stderr)
                 continue
         print(f"  no working unrar tool for {archive}", file=sys.stderr)
         return False

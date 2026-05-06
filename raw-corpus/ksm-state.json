@@ -1,4 +1,33 @@
 {
-  "items": {},
+  "items": {
+    "https://new-shop.ksm.kz/upload/library/version/НДЦС%20РК%208.04-07-2025%20Индексы%20стоимости%20для%20строительства.rar": {
+      "filename": "НДЦС РК 8.04-07-2025 Индексы стоимости для строительства.rar",
+      "size": 270911,
+      "sha256": "09db0dc1662c5a16569c5e4eaebb66181b216dcd07616fc35bef987c781bd076",
+      "extracted": true,
+      "fetched_at": "2026-05-06T09:24:58Z"
+    },
+    "https://new-shop.ksm.kz/upload/library/version/ССЦ%20РК%208.04-09-2025%20Инженерное%20оборудование.rar": {
+      "filename": "ССЦ РК 8.04-09-2025 Инженерное оборудование.rar",
+      "size": 7645260,
+      "sha256": "fdef305b88153cc0e3e658ce1161c8fe7b5b42ecf7a8f54699d390a1c2da5064",
+      "extracted": true,
+      "fetched_at": "2026-05-06T09:24:59Z"
+    },
+    "https://new-shop.ksm.kz/upload/library/version/СЦЭМ%20РК%208.04-11-2025%20Сметные%20цены%20на%20эксплуатацию%20строительных%20машин%20и%20механизмов.rar": {
+      "filename": "СЦЭМ РК 8.04-11-2025 Сметные цены на эксплуатацию строительных машин и механизмов.rar",
+      "size": 41684258,
+      "sha256": "2bd9bfe39cb164f13b0ec12221885645e3c823275e4b5f2d6cccf7a9c0025c27",
+      "extracted": true,
+      "fetched_at": "2026-05-06T09:25:05Z"
+    },
+    "https://new-shop.ksm.kz/upload/library/version/ССЦ%20РК%208.04-08-2025%20Материалы,%20изделия%20и%20конструкции.rar": {
+      "filename": "ССЦ РК 8.04-08-2025 Материалы, изделия и конструкции.rar",
+      "size": 141510562,
+      "sha256": "3ae9dd5237ec345ee7a1c5c4451ab336440dcf84eb69bf66aacbe1c7783ecbb2",
+      "extracted": true,
+      "fetched_at": "2026-05-06T09:25:26Z"
+    }
+  },
   "_note": "Состояние fetch-ksm.py: URL → {filename, size, sha256, fetched_at}. Обновляется автоматически weekly cron'ом (.github/workflows/update-ksm.yml). Пустой = ещё не было ни одного запуска."
 }

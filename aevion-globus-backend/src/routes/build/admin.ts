@@ -117,6 +117,44 @@ adminRouter.get("/partner-keys/usage", async (req, res) => {
   }
 });
 
+// POST /api/build/admin/partner-keys/:id/rotate — revoke + mint new key with same label.
+// Returns the new key's plaintext (one-time). Old key id stays in DB for audit.
+adminRouter.post("/partner-keys/:id/rotate", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const id = String(req.params.id);
+
+    const existing = await pool.query(
+      `SELECT "id","label","revokedAt" FROM "BuildPartnerApiKey" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (existing.rowCount === 0) return fail(res, 404, "key_not_found");
+    if (existing.rows[0].revokedAt) {
+      return fail(res, 409, "key_already_revoked");
+    }
+
+    await pool.query(
+      `UPDATE "BuildPartnerApiKey" SET "revokedAt" = NOW() WHERE "id" = $1`,
+      [id],
+    );
+
+    const newId = crypto.randomUUID();
+    const plaintext = `qb_pk_${crypto.randomBytes(24).toString("base64url")}`;
+    const keyHash = crypto.createHash("sha256").update(plaintext).digest("hex");
+    const labelWithSuffix = `${existing.rows[0].label} (rotated)`.slice(0, 200);
+
+    const r = await pool.query(
+      `INSERT INTO "BuildPartnerApiKey" ("id","label","keyHash") VALUES ($1,$2,$3) RETURNING *`,
+      [newId, labelWithSuffix, keyHash],
+    );
+    return ok(res, { ...r.rows[0], plaintext, replacedKeyId: id }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_key_rotate_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/admin/partner-keys/:id/revoke — revoke a key (idempotent).
 adminRouter.post("/partner-keys/:id/revoke", async (req, res) => {
   try {

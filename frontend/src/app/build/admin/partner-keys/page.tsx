@@ -30,6 +30,8 @@ function Body() {
   const [label, setLabel] = useState("");
   const [creating, setCreating] = useState(false);
   const [freshKey, setFreshKey] = useState<{ label: string; plaintext: string } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   async function load() {
     try {
@@ -86,6 +88,47 @@ function Body() {
     } catch (e) {
       toast.error((e as Error).message);
     }
+  }
+
+  async function rotate(id: string) {
+    if (!confirm("Rotate this key? Old key revokes immediately, new key with the same label is minted. Copy the plaintext on the next screen.")) return;
+    try {
+      const r = await buildApi.adminRotatePartnerKey(id);
+      setFreshKey({ label: r.label, plaintext: r.plaintext });
+      toast.success("Key rotated — copy the new plaintext");
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function bulkRevoke() {
+    const ids = Array.from(selected);
+    if (ids.length === 0 || bulkBusy) return;
+    if (!confirm(`Revoke ${ids.length} key${ids.length === 1 ? "" : "s"}? This action is per-key idempotent but cannot be undone.`)) return;
+    setBulkBusy(true);
+    let ok = 0;
+    for (const id of ids) {
+      try {
+        await buildApi.adminRevokePartnerKey(id);
+        ok++;
+      } catch {
+        /* keep going */
+      }
+    }
+    toast.success(`Revoked ${ok} of ${ids.length}`);
+    setSelected(new Set());
+    setBulkBusy(false);
+    await load();
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   return (
@@ -178,22 +221,78 @@ function Body() {
         </p>
       )}
 
+      {items && items.length > 0 && selected.size > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+          <span className="font-semibold">
+            {selected.size} key{selected.size === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="text-rose-200 hover:text-white"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={bulkRevoke}
+              disabled={bulkBusy}
+              className="rounded-md border border-rose-500/40 bg-rose-500/20 px-2.5 py-1 font-semibold hover:bg-rose-500/30 disabled:opacity-50"
+            >
+              {bulkBusy ? "…" : `Revoke ${selected.size}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {items && items.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full min-w-[560px] text-sm">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400">
               <tr>
+                <th className="px-2 py-2 text-left">
+                  <input
+                    type="checkbox"
+                    checked={
+                      items != null &&
+                      items.filter((k) => !k.revokedAt).length > 0 &&
+                      items.filter((k) => !k.revokedAt).every((k) => selected.has(k.id))
+                    }
+                    onChange={(e) => {
+                      if (!items) return;
+                      if (e.target.checked) {
+                        setSelected(new Set(items.filter((k) => !k.revokedAt).map((k) => k.id)));
+                      } else {
+                        setSelected(new Set());
+                      }
+                    }}
+                    className="accent-emerald-400"
+                    aria-label="Select all active keys"
+                  />
+                </th>
                 <th className="px-3 py-2 text-left font-semibold">Label</th>
                 <th className="px-3 py-2 text-left font-semibold">Last {windowDays}d</th>
                 <th className="px-3 py-2 text-right font-semibold">Calls</th>
                 <th className="px-3 py-2 text-right font-semibold">Last used</th>
                 <th className="px-3 py-2 text-right font-semibold">Status</th>
-                <th className="px-3 py-2"></th>
+                <th className="px-3 py-2 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {items.map((k) => (
                 <tr key={k.id} className="border-t border-white/5">
+                  <td className="px-2 py-2">
+                    {!k.revokedAt && (
+                      <input
+                        type="checkbox"
+                        checked={selected.has(k.id)}
+                        onChange={() => toggleSelect(k.id)}
+                        className="accent-emerald-400"
+                        aria-label={`Select ${k.label}`}
+                      />
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="text-slate-200">{k.label}</div>
                     <div className="font-mono text-[10px] text-slate-500">id: {k.id.slice(0, 8)}…</div>
@@ -218,12 +317,21 @@ function Body() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {!k.revokedAt && (
-                      <button
-                        onClick={() => revoke(k.id)}
-                        className="text-[11px] text-rose-300 hover:text-rose-200"
-                      >
-                        Revoke
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => rotate(k.id)}
+                          className="text-[11px] text-amber-300 hover:text-amber-200"
+                          title="Revoke + mint new key with same label"
+                        >
+                          ↻ Rotate
+                        </button>
+                        <button
+                          onClick={() => revoke(k.id)}
+                          className="text-[11px] text-rose-300 hover:text-rose-200"
+                        >
+                          Revoke
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>

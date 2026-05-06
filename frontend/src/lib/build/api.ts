@@ -806,6 +806,23 @@ export const buildApi = {
   applyVacancy: (input: { vacancyId: string; message?: string; sourceTag?: string; referredByUserId?: string }) =>
     call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
+  myInterviews: () =>
+    call<{
+      items: {
+        id: string;
+        status: string;
+        labelKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        message: string | null;
+        matchScore: number | null;
+        vacancyId: string;
+        vacancyTitle: string;
+        applicantName: string | null;
+        applicantHeadline: string | null;
+      }[];
+      total: number;
+    }>("GET", "/api/build/applications/mine/interviews"),
   applicationsByVacancy: (vacancyId: string) =>
     call<{ items: BuildApplication[]; total: number }>(
       "GET",
@@ -1324,6 +1341,17 @@ export const buildApi = {
     call<{ id: string; revokedAt: string }>(
       "POST",
       `/api/build/admin/partner-keys/${encodeURIComponent(id)}/revoke`,
+    ),
+  adminRotatePartnerKey: (id: string) =>
+    call<{
+      id: string;
+      label: string;
+      plaintext: string;
+      replacedKeyId: string;
+      createdAt: string;
+    }>(
+      "POST",
+      `/api/build/admin/partner-keys/${encodeURIComponent(id)}/rotate`,
     ),
   adminInsights: () =>
     call<{

@@ -4405,11 +4405,27 @@ function FinalCard({
   onContinue?: (runId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
+    } catch { /* noop */ }
+  };
+  const saveToNotebook = async () => {
+    try {
+      const token = typeof window !== "undefined"
+        ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token")
+        : null;
+      if (!token) return;
+      await fetch(apiUrl("/api/qcoreai/notebook"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ runId, role: "final", content: content.slice(0, 32000) }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch { /* noop */ }
   };
   return (
@@ -4438,6 +4454,19 @@ function FinalCard({
           {stopped ? "Partial answer (stopped)" : "Final answer"}
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button
+            onClick={saveToNotebook}
+            title="Save to notebook"
+            style={{
+              padding: "4px 10px", borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.2)",
+              background: saved ? "rgba(16,185,129,0.1)" : "#fff",
+              color: saved ? "#065f46" : "#475569",
+              fontSize: 11, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            {saved ? "Saved ✓" : "⊞ Notebook"}
+          </button>
           {onContinue && (
             <button
               onClick={() => onContinue(runId)}

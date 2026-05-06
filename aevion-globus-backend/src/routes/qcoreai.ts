@@ -44,6 +44,12 @@ import {
   addWorkspaceMember,
   addWorkspaceSession,
   createComment,
+  createSnippet,
+  deleteSnippet,
+  getSnippet,
+  listSnippets,
+  listSnippetTagCloud,
+  updateSnippet,
   deleteRunsBulk,
   getSessionCostSummary,
   pinSession,
@@ -2505,6 +2511,101 @@ qcoreaiRouter.delete("/workspaces/:id/sessions/:sessionId", async (req, res) => 
     res.json({ ok });
   } catch (err: any) {
     res.status(500).json({ error: "remove session failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Notebook — save + search run output snippets
+   POST   /api/qcoreai/notebook
+   GET    /api/qcoreai/notebook?q=&tag=&pinned=&limit=
+   GET    /api/qcoreai/notebook/tags
+   GET    /api/qcoreai/notebook/:id
+   PATCH  /api/qcoreai/notebook/:id
+   DELETE /api/qcoreai/notebook/:id
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/notebook", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { runId, role, content, annotation, tags } = req.body || {};
+    if (!runId?.trim()) return res.status(400).json({ error: "runId required" });
+    if (!content?.trim()) return res.status(400).json({ error: "content required" });
+    const snippet = await createSnippet({
+      ownerUserId: auth.sub, runId: String(runId), role: role || "final",
+      content: String(content), annotation: annotation ?? null,
+      tags: Array.isArray(tags) ? tags : [],
+    });
+    res.status(201).json({ snippet });
+  } catch (err: any) {
+    res.status(500).json({ error: "create snippet failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/notebook/tags", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listSnippetTagCloud(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "tag cloud failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/notebook", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const tag = typeof req.query.tag === "string" ? req.query.tag : undefined;
+    const pinned = req.query.pinned === "true" ? true : req.query.pinned === "false" ? false : undefined;
+    const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
+    const items = await listSnippets(auth.sub, { q, tag, pinned, limit });
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list snippets failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/notebook/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const snippet = await getSnippet(String(req.params.id));
+    if (!snippet || snippet.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
+    res.json({ snippet });
+  } catch (err: any) {
+    res.status(500).json({ error: "get snippet failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/notebook/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { annotation, tags, pinned } = req.body || {};
+    const snippet = await updateSnippet(String(req.params.id), auth.sub, {
+      ...(annotation !== undefined && { annotation }),
+      ...(tags !== undefined && { tags }),
+      ...(pinned !== undefined && { pinned: Boolean(pinned) }),
+    });
+    if (!snippet) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ snippet });
+  } catch (err: any) {
+    res.status(500).json({ error: "update snippet failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/notebook/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteSnippet(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete snippet failed", details: err?.message });
   }
 });
 

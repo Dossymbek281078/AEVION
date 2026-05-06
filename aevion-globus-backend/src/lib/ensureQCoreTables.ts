@@ -240,6 +240,27 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Notebook — user-curated snippets from run outputs.
+  // A snippet is a highlighted fragment of a run's final or agent content,
+  // optionally annotated. Snippets form a searchable knowledge base.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreNotebook" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "runId"       TEXT NOT NULL,
+      "role"        TEXT NOT NULL DEFAULT 'final',
+      "content"     TEXT NOT NULL,
+      "annotation"  TEXT,
+      "tags"        TEXT[] NOT NULL DEFAULT '{}',
+      "pinned"      BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_owner_updated_idx" ON "QCoreNotebook" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_run_idx" ON "QCoreNotebook" ("runId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_tags_gin_idx" ON "QCoreNotebook" USING GIN ("tags");`);
+
   // Public comments on shared runs. No auth required to post — authorName is free-text.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreRunComment" (

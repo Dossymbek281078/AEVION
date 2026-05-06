@@ -94,6 +94,8 @@ function Body() {
         </div>
       </header>
 
+      {items && <TodayDigestTile items={items} />}
+
       <SavedSearchAlerts />
 
       {items && <ClosingSoonBanner items={items} onChanged={() => {
@@ -377,6 +379,128 @@ function SourceBreakdownChart() {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function TodayDigestTile({ items }: { items: Row[] }) {
+  // Stand-up summary for the recruiter computed entirely from existing
+  // funnel rows. We need an extra fetch to count "new in last 24h" since
+  // the funnel only has totals; reuse the live activity feed (which is
+  // already the home page's data source) but filter to apps for vacancies
+  // I own.
+  const [recentApps, setRecentApps] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .liveActivity()
+      .then((r) => {
+        if (cancelled) return;
+        // The live feed is platform-wide; we approximate "my new apps" by
+        // matching titles against my open vacancies. False positives are
+        // possible if two recruiters happen to use the same title — but
+        // it's a quick heuristic and the precise count is shown elsewhere.
+        const myTitles = new Set(items.filter((r) => r.status === "OPEN").map((r) => r.title));
+        const cutoff = Date.now() - 24 * 3600 * 1000;
+        const n = r.items.filter(
+          (e) =>
+            e.kind === "APPLICATION" &&
+            myTitles.has(e.title) &&
+            new Date(e.at).getTime() >= cutoff,
+        ).length;
+        setRecentApps(n);
+      })
+      .catch(() => {
+        if (!cancelled) setRecentApps(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
+
+  const nowMs = Date.now();
+  const stale = items.filter(
+    (r) =>
+      r.status === "OPEN" &&
+      r.appsPending > 0 &&
+      r.oldestPendingAt &&
+      nowMs - new Date(r.oldestPendingAt).getTime() > 7 * 86400 * 1000,
+  ).reduce((acc, r) => acc + r.appsPending, 0);
+
+  const closing = items.filter(
+    (r) =>
+      r.status === "OPEN" &&
+      r.appsTotal > 0 &&
+      r.expiresAt &&
+      new Date(r.expiresAt).getTime() - nowMs <= 3 * 86400 * 1000 &&
+      new Date(r.expiresAt).getTime() > nowMs,
+  ).length;
+
+  const totalPending = items.reduce((a, r) => a + r.appsPending, 0);
+
+  // Skip rendering if nothing actionable.
+  if (recentApps === null && totalPending === 0 && stale === 0 && closing === 0) return null;
+
+  const parts: { label: string; value: string | number; tone: string; href: string }[] = [];
+  if (recentApps != null && recentApps > 0) {
+    parts.push({
+      label: "new apps · 24h",
+      value: recentApps,
+      tone: "text-emerald-300",
+      href: "#funnel",
+    });
+  }
+  if (totalPending > 0) {
+    parts.push({
+      label: "pending",
+      value: totalPending,
+      tone: "text-amber-300",
+      href: "#funnel",
+    });
+  }
+  if (stale > 0) {
+    parts.push({
+      label: "stale >7d",
+      value: stale,
+      tone: "text-rose-300",
+      href: "/build/applications?staleOnly=1",
+    });
+  }
+  if (closing > 0) {
+    parts.push({
+      label: "closing ≤3d",
+      value: closing,
+      tone: "text-fuchsia-300",
+      href: "#funnel",
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-gradient-to-r from-emerald-500/[0.04] to-fuchsia-500/[0.04] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Today
+          </div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+            {parts.map((p, i) => (
+              <a
+                key={i}
+                href={p.href}
+                className="group flex items-baseline gap-1.5"
+                title={p.label}
+              >
+                <span className={`text-xl font-bold ${p.tone}`}>{p.value}</span>
+                <span className="text-xs text-slate-400 group-hover:text-slate-200">{p.label}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+        <div className="text-[10px] uppercase tracking-wider text-slate-500">
+          {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+        </div>
+      </div>
     </div>
   );
 }

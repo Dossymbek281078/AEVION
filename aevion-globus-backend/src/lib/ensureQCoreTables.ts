@@ -240,6 +240,22 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Webhook delivery log — auditable record of every POST attempt.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWebhookLog" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT,
+      "event"       TEXT NOT NULL,
+      "url"         TEXT NOT NULL,
+      "statusCode"  INTEGER,
+      "durationMs"  INTEGER,
+      "error"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWebhookLog_user_created_idx" ON "QCoreWebhookLog" ("userId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWebhookLog_created_idx" ON "QCoreWebhookLog" ("createdAt" DESC);`);
+
   // Notebook — user-curated snippets from run outputs.
   // A snippet is a highlighted fragment of a run's final or agent content,
   // optionally annotated. Snippets form a searchable knowledge base.

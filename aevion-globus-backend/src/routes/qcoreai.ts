@@ -16,7 +16,7 @@ import {
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { rateLimit } from "../lib/rateLimit";
-import { isWebhookConfigured, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
+import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
   fetchQRightAttachments,
   normalizeAttachmentIds,
@@ -338,6 +338,19 @@ qcoreaiRouter.post("/me/webhook/test", async (req, res) => {
     res.json({ ok: true, sentTo: userOverride?.url || envUrl });
   } catch (err: any) {
     res.status(500).json({ error: "test webhook failed", details: err?.message });
+  }
+});
+
+/** GET /api/qcoreai/me/webhook/log — last 50 webhook delivery attempts for the caller. */
+qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const limit = Math.min(100, parseInt(String(req.query.limit || "50"), 10) || 50);
+    const items = await listWebhookLogs(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook log failed", details: err?.message });
   }
 });
 

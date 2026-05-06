@@ -2372,6 +2372,9 @@ export default function QCoreMultiAgentPage() {
                     </button>
                   </div>
                 )}
+                {userWebhook && (
+                  <WebhookLogPanel />
+                )}
               </div>
 
               {/* QRight attachments — pre-fetched as Analyst context */}
@@ -2774,6 +2777,17 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.title || "(untitled)"}
                     </button>
+                    {/* Session stats chip — shown only for the active session */}
+                    {activeSessionId === s.id && runs.length > 0 && (() => {
+                      const donRuns = runs.filter((r) => r.status !== "running");
+                      const totalCost = donRuns.reduce((a, r) => a + (r.totalCostUsd ?? 0), 0);
+                      if (totalCost === 0 && donRuns.length === 0) return null;
+                      return (
+                        <span style={{ fontSize: 9, color: "#94a3b8", whiteSpace: "nowrap" }}>
+                          {donRuns.length}r · {totalCost > 0 ? `$${totalCost.toFixed(4)}` : "$0"}
+                        </span>
+                      );
+                    })()}
                     <button
                       onClick={async () => {
                         const pinned = !(s as any).pinned;
@@ -3268,6 +3282,56 @@ export default function QCoreMultiAgentPage() {
 /* ═══════════════════════════════════════════════════════════════════════
    Subcomponents
    ═══════════════════════════════════════════════════════════════════════ */
+
+function WebhookLogPanel() {
+  const [log, setLog] = useState<Array<{ id: string; event: string; statusCode: number | null; durationMs: number | null; error: string | null; createdAt: string }>>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/webhook/log?limit=10"), { headers: bearerHeader() });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setLog(data.items);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 10, borderTop: "1px solid #f1f5f9", paddingTop: 8 }}>
+      <button
+        onClick={() => { setOpen((v) => !v); if (!open && log.length === 0) load(); }}
+        style={{ fontSize: 11, fontWeight: 700, color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        {open ? "▾" : "▸"} Delivery log
+        <button onClick={(e) => { e.stopPropagation(); load(); }} style={{ marginLeft: 6, fontSize: 10, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>↻</button>
+      </button>
+      {open && (
+        <div style={{ marginTop: 6 }}>
+          {loading && <p style={{ fontSize: 11, color: "#94a3b8" }}>Loading…</p>}
+          {!loading && log.length === 0 && <p style={{ fontSize: 11, color: "#94a3b8" }}>No deliveries yet.</p>}
+          {log.map((l) => (
+            <div key={l.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0", borderBottom: "1px solid #f8fafc", fontSize: 10 }}>
+              <span style={{
+                width: 42, textAlign: "center", borderRadius: 4, fontWeight: 800,
+                padding: "1px 4px",
+                background: l.statusCode && l.statusCode < 300 ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.08)",
+                color: l.statusCode && l.statusCode < 300 ? "#065f46" : "#991b1b",
+              }}>
+                {l.statusCode ?? "ERR"}
+              </span>
+              <span style={{ flex: 1, color: "#475569" }}>{l.event}</span>
+              {l.durationMs != null && <span style={{ color: "#94a3b8" }}>{l.durationMs}ms</span>}
+              <span style={{ color: "#cbd5e1" }}>
+                {new Date(l.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SpendLimitPanel() {
   const [summary, setSummary] = useState<{
@@ -4271,6 +4335,17 @@ function RunCard({
                   title="Compare this run with another"
                 >
                   ⚖️ Compare
+                </a>
+                <a
+                  href={`/qcoreai/replay/${run.id}`}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid rgba(124,58,237,0.3)",
+                    color: "#6d28d9", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Step through agent events with replay controls"
+                >
+                  ▶ Replay
                 </a>
               </>
             )}

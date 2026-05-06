@@ -132,6 +132,7 @@ export function ChatUI({
           messageCount={messages.length}
           onPick={(text) => setDraft(text)}
         />
+        <QuickTemplates onPick={(text) => setDraft((d) => (d ? `${d}\n\n${text}` : text))} />
         <div className="flex items-end gap-2">
           <textarea
             value={draft}
@@ -355,6 +356,42 @@ function ReplySuggestions({
       >
         ✕
       </button>
+    </div>
+  );
+}
+
+const QUICK_TEMPLATES: { emoji: string; label: string; body: string }[] = [
+  {
+    emoji: "🙏",
+    label: "Politely decline",
+    body: "Спасибо, что откликнулись. К сожалению, в этот раз мы выбрали другого кандидата. Будем рады рассмотреть ваше резюме на следующих позициях.",
+  },
+  {
+    emoji: "⏳",
+    label: "Will get back",
+    body: "Спасибо за отклик. Мы вернёмся к вам с обратной связью в течение 48 часов.",
+  },
+  {
+    emoji: "📞",
+    label: "Schedule call",
+    body: "Здравствуйте! Готов созвониться, чтобы обсудить детали. Какое время вам удобно — сегодня или завтра до 18:00?",
+  },
+];
+
+function QuickTemplates({ onPick }: { onPick: (text: string) => void }) {
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {QUICK_TEMPLATES.map((t) => (
+        <button
+          key={t.label}
+          type="button"
+          onClick={() => onPick(t.body)}
+          className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-slate-300 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-100"
+          title={t.body}
+        >
+          {t.emoji} {t.label}
+        </button>
+      ))}
     </div>
   );
 }

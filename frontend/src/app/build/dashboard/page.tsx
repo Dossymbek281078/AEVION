@@ -94,6 +94,8 @@ function Body() {
         </div>
       </header>
 
+      {items && <FirstHireCelebrationBanner items={items} />}
+
       {items && <TodayDigestTile items={items} />}
 
       <WeeklyDigestTile />
@@ -383,6 +385,92 @@ function SourceBreakdownChart() {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function FirstHireCelebrationBanner({ items }: { items: Row[] }) {
+  const KEY = "qbuild.firstHire.dismissed.v1";
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(KEY)) setDismissed(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Sum all-time accepted across the recruiter's funnel rows. We can't tell
+  // *when* the first hire happened from this aggregate, so the banner shows
+  // until the user dismisses it explicitly. Acceptable for a one-time
+  // celebration prompt.
+  const totalAccepted = items.reduce(
+    (s, r) => s + (typeof r.appsAccepted === "number" ? r.appsAccepted : 0),
+    0,
+  );
+  if (dismissed || totalAccepted === 0) return null;
+
+  function dismiss() {
+    try {
+      localStorage.setItem(KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+  }
+
+  return (
+    <div className="relative mb-4 overflow-hidden rounded-xl border border-amber-300/40 bg-gradient-to-br from-amber-400/15 via-fuchsia-400/10 to-emerald-400/10 p-5">
+      {/* Confetti dots — pure CSS, no JS animation library */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {Array.from({ length: 18 }).map((_, i) => (
+          <span
+            key={i}
+            className="absolute h-1.5 w-1.5 rounded-full opacity-70"
+            style={{
+              top: `${(i * 17) % 90 + 5}%`,
+              left: `${(i * 23) % 95 + 2}%`,
+              backgroundColor: ["#fde68a", "#f9a8d4", "#86efac", "#93c5fd", "#fcd34d"][i % 5],
+            }}
+          />
+        ))}
+      </div>
+      <div className="relative flex items-start gap-3">
+        <div className="text-3xl">🎉</div>
+        <div className="min-w-0 flex-1">
+          <div className="text-base font-bold text-white">
+            Поздравляем — {totalAccepted === 1 ? "первый найм" : `${totalAccepted} найма`} на QBuild!
+          </div>
+          <p className="mt-1 text-sm text-slate-200">
+            Вы только что превратили QBuild в работающий рекрутинг-канал.
+            Теперь самое время масштабировать — постите ещё вакансии, делитесь ref-ссылкой и
+            копите AEV-кэшбэк за каждого нанятого.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            <Link
+              href="/build/loyalty"
+              className="rounded-md border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-100 hover:bg-amber-300/25"
+            >
+              💎 Лояльность & кэшбэк
+            </Link>
+            <Link
+              href="/build/referrals"
+              className="rounded-md border border-fuchsia-300/40 bg-fuchsia-300/15 px-2.5 py-1 font-semibold text-fuchsia-100 hover:bg-fuchsia-300/25"
+            >
+              🎯 Реферальная программа
+            </Link>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={dismiss}
+          className="text-[11px] text-slate-300 hover:text-white"
+          title="Скрыть это сообщение навсегда"
+        >
+          Hide
+        </button>
+      </div>
     </div>
   );
 }

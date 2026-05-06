@@ -211,28 +211,33 @@ export default function WorkspaceMediaPane() {
               </div>
             </div>
 
-            {/* Быстрые пресеты — клик грузит сразу */}
+            {/* YouTube quick channels — open in new tab (channels can't be embedded directly,
+                only specific videos can). User can paste any video URL/ID into the input bar. */}
             {state.tab === "youtube" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: 1, color: "#94a3b8", textTransform: "uppercase" }}>Популярные YT-каналы</div>
+                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: 1, color: "#94a3b8", textTransform: "uppercase" }}>Каналы (откроются в новой вкладке)</div>
                 {[
-                  ["jcUJ9Lxv-w0", "▶ GothamChess · разборы (LIVE)"],
-                  ["E0sl9TLbg30", "▶ Hikaru Highlights"],
-                  ["jvsZqOoVVxk", "▶ Daniel Naroditsky speedrun"],
-                  ["HIyR7CtJoZ4", "▶ ChessNetwork"],
-                ].map(([id, label]) => (
-                  <button key={id} onClick={() => apply(id)}
+                  ["https://www.youtube.com/@GothamChess", "▶ GothamChess (Levy)"],
+                  ["https://www.youtube.com/@HikaruNakamura", "▶ Hikaru Nakamura"],
+                  ["https://www.youtube.com/@DanielNaroditskyGM", "▶ Daniel Naroditsky"],
+                  ["https://www.youtube.com/@ChessNetwork", "▶ ChessNetwork"],
+                  ["https://www.youtube.com/@agadmator", "▶ agadmator's Chess Channel"],
+                ].map(([url, label]) => (
+                  <a key={url} href={url} target="_blank" rel="noopener noreferrer"
                     style={{
                       padding: "8px 10px", borderRadius: 6,
                       background: "#1e293b", color: "#e2e8f0",
                       border: "1px solid #334155", fontSize: 11.5, fontWeight: 700,
-                      textAlign: "left", cursor: "pointer",
+                      textDecoration: "none", display: "block",
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = "#334155")}
                     onMouseLeave={e => (e.currentTarget.style.background = "#1e293b")}>
-                    {label}
-                  </button>
+                    {label} <span style={{ float: "right", color: "#64748b", fontSize: 10 }}>↗</span>
+                  </a>
                 ))}
+                <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 6, padding: "0 4px", lineHeight: 1.45 }}>
+                  💡 Чтобы встроить видео в окно — скопируй ссылку (или 11-значный ID) с конкретного видео в YouTube и вставь в поле выше. Каналы целиком встраивать YouTube не позволяет.
+                </div>
               </div>
             )}
             {state.tab === "twitch" && (
@@ -266,8 +271,29 @@ export default function WorkspaceMediaPane() {
               </div>
             )}
             {state.tab === "lichess" && (
-              <div style={{ fontSize: 11.5, color: "#94a3b8", padding: "0 4px" }}>
-                Lichess TV — прямые трансляции топ-партий мира. Вверху по умолчанию канал «Best». В самом виджете можно переключать каналы (Bullet/Blitz/Rapid/Classical/Chess960…).
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: 1, color: "#94a3b8", textTransform: "uppercase" }}>Lichess TV каналы</div>
+                {[
+                  ["https://lichess.org/tv/best", "♛ Best — топ-партии всех типов"],
+                  ["https://lichess.org/tv/blitz", "⚡ Blitz TV"],
+                  ["https://lichess.org/tv/rapid", "🕐 Rapid TV"],
+                  ["https://lichess.org/tv/bullet", "💨 Bullet TV"],
+                  ["https://lichess.org/tv/classical", "📜 Classical TV"],
+                  ["https://lichess.org/tv/chess960", "🎲 Chess960 TV"],
+                ].map(([url, label]) => (
+                  <button key={url} onClick={() => setState(s => ({ ...s, lichess: url }))}
+                    style={{
+                      padding: "8px 10px", borderRadius: 6,
+                      background: state.lichess === url ? "#334155" : "#1e293b",
+                      color: "#e2e8f0", border: `1px solid ${state.lichess === url ? "#fbbf24" : "#334155"}`,
+                      fontSize: 11.5, fontWeight: 700, textAlign: "left", cursor: "pointer",
+                    }}>
+                    {label}
+                  </button>
+                ))}
+                <div style={{ fontSize: 10.5, color: "#94a3b8", marginTop: 4, padding: "0 4px", lineHeight: 1.45 }}>
+                  💡 Если окно остаётся чёрным — Lichess блокирует embed на этом домене. Жми «↗ Открыть» внизу панели чтобы открыть в новой вкладке.
+                </div>
               </div>
             )}
           </div>

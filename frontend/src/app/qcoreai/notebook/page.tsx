@@ -148,9 +148,34 @@ export default function NotebookPage() {
             <h1 style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: 0 }}>📓 Notebook</h1>
             <Link href="/qcoreai/multi" style={{ fontSize: 12, color: "#4338ca", fontWeight: 700, textDecoration: "none" }}>← Multi-agent</Link>
           </div>
-          <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 0" }}>
-            Saved snippets from run outputs — highlight, annotate, and search your knowledge base.
-          </p>
+          <div style={{ display: "flex", gap: 8, margin: "8px 0 0", flexWrap: "wrap" }}>
+            <p style={{ fontSize: 13, color: "#64748b", margin: 0, flex: 1 }}>
+              Saved snippets from run outputs — highlight, annotate, and search your knowledge base.
+            </p>
+            <button
+              onClick={async () => {
+                const lines = ["# QCoreAI Notebook Export", `*${new Date().toISOString().slice(0, 10)}*`, ""];
+                for (const s of snippets) {
+                  lines.push(`## [${s.role.toUpperCase()}] ${new Date(s.createdAt).toLocaleDateString()}`, "");
+                  if (s.annotation) lines.push(`> ${s.annotation}`, "");
+                  if (s.tags.length > 0) lines.push(`Tags: ${s.tags.map((t) => `#${t}`).join(", ")}`, "");
+                  lines.push(s.content, "", "---", "");
+                }
+                const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = "qcore-notebook.md"; a.click();
+                URL.revokeObjectURL(url);
+              }}
+              disabled={snippets.length === 0}
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: snippets.length > 0 ? "pointer" : "default",
+                border: "1px solid #cbd5e1", background: "#fff", color: "#475569", whiteSpace: "nowrap",
+              }}
+            >
+              ⬇ Export MD ({snippets.length})
+            </button>
+          </div>
         </div>
 
         {/* Search + filters */}

@@ -3022,3 +3022,102 @@ export async function mergeSessions(
   await pool.query(`DELETE FROM "QCoreSession" WHERE "id"=$1`, [sourceSessionId]);
   return { moved };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run ratings — thumbs up (1) / thumbs down (-1) on final answers.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type RatingRow = {
+  runId: string;
+  userId: string | null;
+  rating: 1 | -1;
+  note: string | null;
+  createdAt: string;
+};
+
+const memRatings = new Map<string, RatingRow>(); // key = runId:userId
+
+export async function rateRun(
+  runId: string,
+  userId: string | null,
+  rating: 1 | -1,
+  note?: string | null
+): Promise<RatingRow> {
+  await ensureQCoreTables(pool);
+  const key = `${runId}:${userId ?? ""}`;
+  const row: RatingRow = { runId, userId, rating, note: note?.slice(0, 500) ?? null, createdAt: nowIso() };
+
+  if (!isDbReady()) {
+    memRatings.set(key, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreRunRating" ("runId","userId","rating","note")
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT ("runId", COALESCE("userId",'')) DO UPDATE
+       SET "rating"=$3, "note"=$4, "createdAt"=NOW()
+     RETURNING *`,
+    [runId, userId, rating, row.note]
+  );
+  return r.rows[0] as RatingRow;
+}
+
+export async function getRating(runId: string, userId: string | null): Promise<RatingRow | null> {
+  await ensureQCoreTables(pool);
+  const key = `${runId}:${userId ?? ""}`;
+  if (!isDbReady()) return memRatings.get(key) ?? null;
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRunRating" WHERE "runId"=$1 AND COALESCE("userId",'')=$2`,
+    [runId, userId ?? ""]
+  );
+  return (r.rows[0] as RatingRow) || null;
+}
+
+export async function getRatingsSummary(runId: string): Promise<{ thumbsUp: number; thumbsDown: number; total: number }> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    let up = 0, down = 0;
+    for (const [k, r] of memRatings.entries()) {
+      if (k.startsWith(`${runId}:`)) { if (r.rating === 1) up++; else down++; }
+    }
+    return { thumbsUp: up, thumbsDown: down, total: up + down };
+  }
+  const r = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE "rating"=1)::int AS "thumbsUp",
+       COUNT(*) FILTER (WHERE "rating"=-1)::int AS "thumbsDown",
+       COUNT(*)::int AS "total"
+     FROM "QCoreRunRating" WHERE "runId"=$1`,
+    [runId]
+  );
+  return r.rows[0] as { thumbsUp: number; thumbsDown: number; total: number };
+}
+
+export async function listTopRatedRuns(userId: string | null, limit = 20): Promise<Array<{ runId: string; thumbsUp: number; thumbsDown: number; score: number }>> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const acc: Record<string, { up: number; down: number }> = {};
+    for (const r of memRatings.values()) {
+      if (!acc[r.runId]) acc[r.runId] = { up: 0, down: 0 };
+      if (r.rating === 1) acc[r.runId].up++; else acc[r.runId].down++;
+    }
+    return Object.entries(acc)
+      .map(([runId, { up, down }]) => ({ runId, thumbsUp: up, thumbsDown: down, score: up - down }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT "runId",
+            COUNT(*) FILTER (WHERE "rating"=1)::int AS "thumbsUp",
+            COUNT(*) FILTER (WHERE "rating"=-1)::int AS "thumbsDown",
+            (COUNT(*) FILTER (WHERE "rating"=1) - COUNT(*) FILTER (WHERE "rating"=-1))::int AS "score"
+     FROM "QCoreRunRating"
+     ${userId ? `WHERE "runId" IN (SELECT r."id" FROM "QCoreRun" r JOIN "QCoreSession" s ON s.id=r."sessionId" WHERE s."userId"=$1)` : ""}
+     GROUP BY "runId"
+     ORDER BY "score" DESC
+     LIMIT $${userId ? 2 : 1}`,
+    userId ? [userId, limit] : [limit]
+  );
+  return r.rows as Array<{ runId: string; thumbsUp: number; thumbsDown: number; score: number }>;
+}

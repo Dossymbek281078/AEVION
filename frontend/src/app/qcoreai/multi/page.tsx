@@ -4529,6 +4529,8 @@ function FinalCard({
 }) {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [userRating, setUserRating] = useState<1 | -1 | null>(null);
+  const [ratingCounts, setRatingCounts] = useState<{ thumbsUp: number; thumbsDown: number } | null>(null);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -4549,6 +4551,22 @@ function FinalCard({
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch { /* noop */ }
+  };
+
+  const rate = async (rating: 1 | -1) => {
+    if (userRating === rating) return; // already rated this
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/rate`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ rating }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setUserRating(rating);
+        setRatingCounts({ thumbsUp: data.summary?.thumbsUp ?? 0, thumbsDown: data.summary?.thumbsDown ?? 0 });
+      }
     } catch { /* noop */ }
   };
   return (
@@ -4604,6 +4622,31 @@ function FinalCard({
               ↩ Continue
             </button>
           )}
+          {/* Rating buttons */}
+          <button
+            onClick={() => rate(1)}
+            title="Thumbs up — this answer was helpful"
+            style={{
+              padding: "4px 8px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+              border: `1px solid ${userRating === 1 ? "rgba(16,185,129,0.5)" : "rgba(15,23,42,0.15)"}`,
+              background: userRating === 1 ? "rgba(16,185,129,0.12)" : "#fff",
+              color: userRating === 1 ? "#065f46" : "#475569",
+            }}
+          >
+            👍{ratingCounts && ratingCounts.thumbsUp > 0 ? <span style={{ fontSize: 10, marginLeft: 3 }}>{ratingCounts.thumbsUp}</span> : null}
+          </button>
+          <button
+            onClick={() => rate(-1)}
+            title="Thumbs down — this answer needs improvement"
+            style={{
+              padding: "4px 8px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+              border: `1px solid ${userRating === -1 ? "rgba(239,68,68,0.5)" : "rgba(15,23,42,0.15)"}`,
+              background: userRating === -1 ? "rgba(239,68,68,0.08)" : "#fff",
+              color: userRating === -1 ? "#991b1b" : "#475569",
+            }}
+          >
+            👎{ratingCounts && ratingCounts.thumbsDown > 0 ? <span style={{ fontSize: 10, marginLeft: 3 }}>{ratingCounts.thumbsDown}</span> : null}
+          </button>
           <button
             onClick={copy}
             style={{

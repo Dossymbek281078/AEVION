@@ -155,7 +155,11 @@ export default function BuildHomePage() {
         </div>
       )}
 
-      {!loading && projects.length === 0 && (
+      {!loading && projects.length === 0 && mineOnly && token && (
+        <FirstProjectCta />
+      )}
+
+      {!loading && projects.length === 0 && !(mineOnly && token) && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
           <p className="text-sm text-slate-400">
             No projects match these filters. Try clearing the search or{" "}
@@ -472,5 +476,49 @@ function FeaturedEmployers() {
         ))}
       </div>
     </section>
+  );
+}
+
+function FirstProjectCta() {
+  return (
+    <div className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent p-8 text-center">
+      <div className="text-5xl">🏗</div>
+      <h2 className="mt-4 text-xl font-bold text-white">Запустите первый проект на QBuild</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-slate-300">
+        Проект — это контейнер для одной или нескольких вакансий. Один проект может содержать
+        бригады разных специальностей: сварщики, монтажники, прорабы.
+      </p>
+      <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-slate-300 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-base">📝</div>
+          <div className="mt-1 font-semibold text-white">Опишите объект</div>
+          <p className="mt-0.5 text-[11px] text-slate-400">Город, бюджет, сроки</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-base">👥</div>
+          <div className="mt-1 font-semibold text-white">Добавьте вакансии</div>
+          <p className="mt-0.5 text-[11px] text-slate-400">С зарплатой и навыками</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-base">✓</div>
+          <div className="mt-1 font-semibold text-white">Получайте отклики</div>
+          <p className="mt-0.5 text-[11px] text-slate-400">AI-скоринг + bulk-actions</p>
+        </div>
+      </div>
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <Link
+          href="/build/create-project"
+          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+        >
+          + Создать первый проект
+        </Link>
+        <Link
+          href="/build/onboarding"
+          className="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+        >
+          5-step онбординг
+        </Link>
+      </div>
+    </div>
   );
 }

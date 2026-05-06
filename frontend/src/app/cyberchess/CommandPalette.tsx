@@ -62,26 +62,57 @@ function fuzzyScore(q: string, target: string): number {
   return score;
 }
 
+const RECENT_KEY = "aevion_chess_palette_recent_v1";
+const RECENT_MAX = 5;
+
+function loadRecent(): string[] {
+  if (typeof window === "undefined") return [];
+  try { const raw = localStorage.getItem(RECENT_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function saveRecent(ids: string[]) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(ids.slice(0, RECENT_MAX))); } catch {}
+}
+
 export default function CommandPalette({ open, onClose, commands }: Props) {
   const [q, sQ] = useState("");
   const [idx, sIdx] = useState(0);
+  const [recent, sRecent] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Reset on open
+  // Reset on open + reload recent list (lets new entries persisted in localStorage propagate)
   useEffect(() => {
     if (open) {
       sQ("");
       sIdx(0);
+      sRecent(loadRecent());
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }, [open]);
 
-  // Filter + score
+  // Wrap each command's `run` so executing it also pushes the id to the recent list.
+  const exec = (c: Command) => {
+    const next = [c.id, ...recent.filter(id => id !== c.id)].slice(0, RECENT_MAX);
+    sRecent(next);
+    saveRecent(next);
+    onClose();
+    setTimeout(() => c.run(), 0);
+  };
+
+  // Filter + score. Empty query → show recent first (in order), then the rest.
   const filtered = useMemo(() => {
     if (!q.trim()) {
-      // No query — show all, grouped by group, top 12 visible
-      return commands.slice(0, 14);
+      const seen = new Set<string>();
+      const out: Command[] = [];
+      for (const id of recent) {
+        const c = commands.find(x => x.id === id);
+        if (c && !seen.has(c.id)) { out.push(c); seen.add(c.id); }
+      }
+      for (const c of commands) {
+        if (out.length >= 14) break;
+        if (!seen.has(c.id)) { out.push(c); seen.add(c.id); }
+      }
+      return out;
     }
     return commands
       .map(c => ({ c, s: fuzzyScore(q.trim(), `${c.label} ${c.hint || ""}`) }))
@@ -89,7 +120,7 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
       .sort((a, b) => a.s - b.s)
       .slice(0, 14)
       .map(x => x.c);
-  }, [q, commands]);
+  }, [q, commands, recent]);
 
   // Clamp idx within filtered range
   useEffect(() => { if (idx >= filtered.length) sIdx(Math.max(0, filtered.length - 1)); }, [filtered.length, idx]);
@@ -108,7 +139,7 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
     else if (e.key === "Enter") {
       e.preventDefault();
       const cmd = filtered[idx];
-      if (cmd) { onClose(); setTimeout(() => cmd.run(), 0); }
+      if (cmd) exec(cmd);
     } else if (e.key === "Escape") { e.preventDefault(); onClose(); }
   };
 
@@ -163,10 +194,25 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
             </div>
           ) : filtered.map((c, i) => {
             const active = i === idx;
+            // When no query, items 0..(recent.length-1) come from recent list.
+            const isRecent = !q.trim() && i < recent.length && recent.includes(c.id);
+            const showRecentHeader = isRecent && i === 0;
+            const showAllHeader = !q.trim() && i === recent.length && recent.length > 0;
             return (
-              <button key={c.id} data-cmd-i={i}
+              <React.Fragment key={c.id}>
+                {showRecentHeader && (
+                  <div style={{ padding: "6px 12px 4px", fontSize: 9.5, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#94a3b8" }}>
+                    Недавние
+                  </div>
+                )}
+                {showAllHeader && (
+                  <div style={{ padding: "8px 12px 4px", fontSize: 9.5, fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase", color: "#94a3b8" }}>
+                    Все команды
+                  </div>
+                )}
+              <button data-cmd-i={i}
                 onMouseEnter={() => sIdx(i)}
-                onClick={() => { onClose(); setTimeout(() => c.run(), 0); }}
+                onClick={() => exec(c)}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", gap: 10,
                   padding: "10px 12px",
@@ -199,6 +245,7 @@ export default function CommandPalette({ open, onClose, commands }: Props) {
                   whiteSpace: "nowrap",
                 }}>{c.hotkey}</kbd>}
               </button>
+              </React.Fragment>
             );
           })}
         </div>

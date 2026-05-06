@@ -793,17 +793,39 @@ export default function CyberChessPage(){
     },100);
     return()=>clearInterval(id);
   },[coordSession,coordResult,addChessy]);
-  // PGN paste in Analysis tab — Ctrl+V loads pasted PGN (lichess/chess.com export-friendly)
+  // Clipboard auto-load (Ctrl+V) — works in Analysis OR on the home setup screen.
+  // Detects FEN first (single-line, 6 space-separated fields, last is move number),
+  // then PGN (has [Header] tags or SAN moves). Loads into Analysis tab and toasts.
+  // Skipped while typing in input/textarea/contentEditable.
   useEffect(()=>{
     if(typeof window==="undefined")return;
     const handler=(e:ClipboardEvent)=>{
-      if(tab!=="analysis")return;
+      // Allow on analysis tab OR on the home setup screen — anywhere user might paste.
+      const allowedTab=tab==="analysis"||(tab==="play"&&setup);
+      if(!allowedTab)return;
       const tgt=e.target as HTMLElement|null;
       const tag=tgt?.tagName?.toLowerCase()||"";
       if(tag==="input"||tag==="textarea"||tgt?.isContentEditable)return;
-      const txt=e.clipboardData?.getData("text/plain")||"";
+      const txt=(e.clipboardData?.getData("text/plain")||"").trim();
       if(!txt||txt.length<6)return;
-      // Looks like PGN if it has a SAN move or a header tag
+
+      // ── 1. FEN detection: single line, 6 space-separated fields,
+      //      last field is a move-number (positive int), rank field has 8 ranks.
+      const oneLine=txt.split(/\r?\n/).find(l=>l.trim().length>=10);
+      if(oneLine){
+        const parts=oneLine.trim().split(/\s+/);
+        if(parts.length===6&&/^[1-9]\d*$/.test(parts[5])&&parts[0].split("/").length===8){
+          try{
+            const ch=new Chess(oneLine.trim());
+            setGame(ch);sBk(k=>k+1);sHist([]);sFenHist([ch.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(-1);sPCol(ch.turn());sFlip(ch.turn()==="b");
+            showToast("📋 FEN загружен из буфера","success");
+            e.preventDefault();
+            return;
+          }catch{}
+        }
+      }
+
+      // ── 2. PGN detection: [Header "tag"] OR algebraic SAN moves
       if(!/\b[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8]/.test(txt)&&!/\[\w+\s+"/.test(txt))return;
       try{
         const ch=new Chess();
@@ -813,13 +835,29 @@ export default function CyberChessPage(){
         const replay=new Chess();
         const fens=[replay.fen()];
         for(const san of moves){replay.move(san);fens.push(replay.fen())}
-        setGame(replay);sBk(k=>k+1);sHist(moves);sFenHist(fens);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sBrowseIdx(-1);
+        setGame(replay);sBk(k=>k+1);sHist(moves);sFenHist(fens);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(-1);
         showToast(`📋 PGN загружен: ${moves.length} ходов`,"success");
+        e.preventDefault();
       }catch{}
     };
     window.addEventListener("paste",handler);
     return()=>window.removeEventListener("paste",handler);
-  },[tab,showToast]);
+  },[tab,setup,showToast]);
+
+  // Onboarding hint — fires once for new users to surface the Command Palette.
+  // Localstorage-gated so it never shows twice. Delayed so it doesn't compete
+  // with the welcome toast on first visit.
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
+      if(localStorage.getItem("aevion_chess_palette_hint_v1")==="1")return;
+      const t=window.setTimeout(()=>{
+        showToast("⌕ Жми Ctrl+K чтобы найти любую команду — игру, пазл, анализ, стрим…","info");
+        try{localStorage.setItem("aevion_chess_palette_hint_v1","1")}catch{}
+      },2400);
+      return()=>window.clearTimeout(t);
+    }catch{}
+  },[showToast]);
   // Opening Explorer + Tablebase: fetch when on Analysis tab + position changes
   useEffect(()=>{
     if(tab!=="analysis"||!showOpeningExp){sOpeningData(null);return}
@@ -4630,26 +4668,7 @@ export default function CyberChessPage(){
             </div>);
           })()}
 
-          {/* Scratch / Analysis-during-play — варианты пока соперник думает */}
-          {tab==="play"&&on&&!over&&!setup&&<div style={{padding:"8px 12px",borderRadius:8,background:scratchOn?"linear-gradient(135deg,#fef3c7,#fde68a)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:`1px solid ${scratchOn?"#fbbf24":"#c4b5fd"}`}}>
-            {!scratchOn?<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-              <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                <span style={{fontSize:13,fontWeight:800,letterSpacing:"0.05em",color:T.purple}}>🔍 Анализ варианта</span>
-                <span style={{fontSize:10,color:T.dim,fontStyle:"italic"}}>Двигай за обе стороны не ломая партию</span>
-              </div>
-              <button onClick={enterScratch} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3,boxShadow:"0 2px 6px rgba(124,58,237,0.3)"}}>Войти →</button>
-            </div>:<div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>🔍 РЕЖИМ АНАЛИЗА</span>
-                <div style={{display:"flex",gap:5}}>
-                  <button onClick={resetScratch} title="Сбросить к актуальной позиции" style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>↺ Сброс</button>
-                  <button onClick={exitScratch} title="Вернуться к партии" style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Выйти</button>
-                </div>
-              </div>
-              {scratchHist.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"4px 0"}}>{scratchHist.map((s,i)=><span key={i} style={{padding:"1px 5px",borderRadius:3,background:"rgba(255,255,255,0.6)",color:"#92400e",fontSize:11,fontWeight:700,fontFamily:"monospace"}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{s}</span>)}</div>}
-              <span style={{fontSize:10,color:"#78350f",fontStyle:"italic"}}>Партия идёт параллельно · таймеры тикают · соперник может сходить</span>
-            </div>}
-          </div>}
+          {/* "Анализ варианта" — moved DOWN below the move list per UX feedback. */}
 
           {pms.length>0&&!scratchOn&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
@@ -4904,6 +4923,30 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
+
+          {/* Scratch / Analysis-during-play — relocated here per UX feedback (was above
+              the move list, now below it so the move list sits closer to the top of the
+              right panel). Same behaviour: enter scratch to play out variations without
+              committing to the live game; clock keeps ticking. */}
+          {tab==="play"&&on&&!over&&!setup&&<div style={{padding:"8px 12px",borderRadius:8,background:scratchOn?"linear-gradient(135deg,#fef3c7,#fde68a)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:`1px solid ${scratchOn?"#fbbf24":"#c4b5fd"}`}}>
+            {!scratchOn?<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+              <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                <span style={{fontSize:13,fontWeight:800,letterSpacing:"0.05em",color:T.purple}}>🔍 Анализ варианта</span>
+                <span style={{fontSize:10,color:T.dim,fontStyle:"italic"}}>Двигай за обе стороны не ломая партию</span>
+              </div>
+              <button onClick={enterScratch} style={{padding:"6px 12px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",letterSpacing:0.3,boxShadow:"0 2px 6px rgba(124,58,237,0.3)"}}>Войти →</button>
+            </div>:<div style={{display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                <span style={{fontSize:13,fontWeight:900,letterSpacing:"0.08em",color:"#92400e"}}>🔍 РЕЖИМ АНАЛИЗА</span>
+                <div style={{display:"flex",gap:5}}>
+                  <button onClick={resetScratch} title="Сбросить к актуальной позиции" style={{padding:"4px 10px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",fontSize:11,fontWeight:800,cursor:"pointer"}}>↺ Сброс</button>
+                  <button onClick={exitScratch} title="Вернуться к партии" style={{padding:"4px 10px",borderRadius:6,border:"none",background:T.danger,color:"#fff",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ Выйти</button>
+                </div>
+              </div>
+              {scratchHist.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"4px 0"}}>{scratchHist.map((s,i)=><span key={i} style={{padding:"1px 5px",borderRadius:3,background:"rgba(255,255,255,0.6)",color:"#92400e",fontSize:11,fontWeight:700,fontFamily:"monospace"}}>{i%2===0?`${Math.floor(i/2)+1}.`:""}{s}</span>)}</div>}
+              <span style={{fontSize:10,color:"#78350f",fontStyle:"italic"}}>Партия идёт параллельно · таймеры тикают · соперник может сходить</span>
+            </div>}
+          </div>}
 
           {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
             {/* ── Current Puzzle Card ── */}

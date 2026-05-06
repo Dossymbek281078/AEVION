@@ -54,6 +54,7 @@ import {
   updateSnippet,
   deleteRunsBulk,
   getSessionCostSummary,
+  mergeSessions,
   pinSession,
   createTemplate,
   createWorkspace,
@@ -475,6 +476,20 @@ qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
     res.json({ ok: true, pinned });
   } catch (err: any) {
     res.status(500).json({ error: "pin failed", details: err?.message });
+  }
+});
+
+/** POST /sessions/:id/merge — move all runs from sourceSessionId into this session, then delete source. */
+qcoreaiRouter.post("/sessions/:id/merge", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const { sourceSessionId } = req.body || {};
+    if (!sourceSessionId?.trim()) return res.status(400).json({ error: "sourceSessionId required" });
+    if (sourceSessionId === req.params.id) return res.status(400).json({ error: "cannot merge a session into itself" });
+    const result = await mergeSessions(String(req.params.id), String(sourceSessionId), auth?.sub ?? null);
+    res.json({ ok: true, moved: result.moved });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || "merge failed", details: err?.message });
   }
 });
 

@@ -217,10 +217,34 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
   // for rendering) flips to false in preview mode.
   const previewing = isActualOwner && previewMode === "candidate";
   const isOwner = isActualOwner && !previewing;
+  const embedded = searchParams.get("embed") === "1";
+
+  // ?embed=1 strips BuildShell entirely so the page can render inside an
+  // <iframe> on a partner site without leaking platform navigation. Owner-only
+  // tooling is also implicitly hidden because nothing is "owned" from a
+  // public iframe perspective.
+  const Shell = embedded
+    ? ({ children }: { children: React.ReactNode }) => (
+        <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100">
+          <div className="mx-auto max-w-3xl">{children}</div>
+          <footer className="mx-auto mt-8 max-w-3xl border-t border-white/5 pt-3 text-center text-[10px] text-slate-500">
+            Powered by{" "}
+            <a
+              href="https://aevion.tech/build"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-emerald-300 hover:underline"
+            >
+              AEVION QBuild
+            </a>
+          </footer>
+        </main>
+      )
+    : BuildShell;
 
   return (
-    <BuildShell>
-      {previewing && <PreviewAsCandidateBanner vacancyId={vacancy.id} />}
+    <Shell>
+      {previewing && !embedded && <PreviewAsCandidateBanner vacancyId={vacancy.id} />}
       <Link
         href={`/build/project/${encodeURIComponent(vacancy.projectId)}`}
         className="text-xs text-slate-400 underline-offset-2 hover:underline"
@@ -600,10 +624,10 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
       {!isOwner && <SimilarVacancies vacancyId={vacancy.id} />}
 
-      {shortcutsHelpOpen && (
+      {shortcutsHelpOpen && !embedded && (
         <KeyboardShortcutsHelp onClose={() => setShortcutsHelpOpen(false)} />
       )}
-    </BuildShell>
+    </Shell>
   );
 }
 

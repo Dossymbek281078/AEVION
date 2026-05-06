@@ -88,9 +88,12 @@ function MessagesBody() {
                   )}
                 </div>
                 <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{row.lastContent}</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">
-                  {new Date(row.lastAt).toLocaleString()}
-                </p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <p className="text-[10px] text-slate-500">
+                    {new Date(row.lastAt).toLocaleDateString()}
+                  </p>
+                  <LastActivePill ts={row.lastAt} />
+                </div>
               </button>
             </li>
           ))}
@@ -107,5 +110,37 @@ function MessagesBody() {
         )}
       </section>
     </div>
+  );
+}
+
+function LastActivePill({ ts }: { ts: string }) {
+  const ms = Date.now() - new Date(ts).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+
+  const min = Math.floor(ms / 60_000);
+  if (min < 5) {
+    return (
+      <span
+        className="inline-flex items-center gap-0.5 rounded-full border border-emerald-400/40 bg-emerald-400/15 px-1.5 py-0 text-[9px] font-semibold text-emerald-100"
+        title={`Active ${new Date(ts).toLocaleString()}`}
+      >
+        <span className="h-1 w-1 rounded-full bg-emerald-300" />
+        active
+      </span>
+    );
+  }
+  let label: string;
+  if (min < 60) label = `${min}m ago`;
+  else if (min < 60 * 24) label = `${Math.floor(min / 60)}h ago`;
+  else if (min < 60 * 24 * 7) label = `${Math.floor(min / (60 * 24))}d ago`;
+  else return null;
+
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 rounded-full border border-white/10 bg-white/5 px-1.5 py-0 text-[9px] text-slate-400"
+      title={`Last message ${new Date(ts).toLocaleString()}`}
+    >
+      {label}
+    </span>
   );
 }

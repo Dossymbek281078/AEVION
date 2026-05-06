@@ -15,6 +15,8 @@ import {
 } from "../services/qcoreai/orchestrator";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
 import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
+import { getPool } from "../lib/dbPool";
+const pool = getPool();
 import { rateLimit } from "../lib/rateLimit";
 import { isWebhookConfigured, listWebhookLogs, notifyEvent, notifyRunCompleted } from "../lib/qcoreWebhook";
 import {
@@ -937,6 +939,42 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
     res.json({ breakdown, totalCostUsd, totalTokensIn, totalTokensOut, byProvider });
   } catch (err: any) {
     res.status(500).json({ error: "cost breakdown failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/by-tag?limit=20
+ * Per-tag cost + run count breakdown for the caller's runs.
+ */
+qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+
+    if (!isDbReady()) {
+      // In-memory: approximate using tags from runs
+      return res.json({ items: [] });
+    }
+
+    const r = await pool.query(
+      `SELECT t.tag,
+              COUNT(r."id")::int AS "runs",
+              COALESCE(SUM(r."totalCostUsd"),0) AS "totalCostUsd",
+              COALESCE(SUM(r."totalDurationMs"),0) AS "totalDurationMs",
+              COALESCE(SUM(r."totalCostUsd")/NULLIF(COUNT(r."id"),0),0) AS "avgCostUsd"
+       FROM (SELECT "id","totalCostUsd","totalDurationMs", unnest("tags") AS tag
+             FROM "QCoreRun" WHERE "sessionId" IN (
+               SELECT "id" FROM "QCoreSession" WHERE "userId"=$1
+             ) AND "tags" != '{}') r
+       CROSS JOIN LATERAL (SELECT r.tag) t
+       GROUP BY t.tag
+       ORDER BY "totalCostUsd" DESC
+       LIMIT $2`,
+      [auth?.sub ?? null, limit]
+    );
+    res.json({ items: r.rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "by-tag analytics failed", details: err?.message });
   }
 });
 

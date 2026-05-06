@@ -761,6 +761,56 @@ qpaynetRouter.patch("/wallets/:id", async (req, res) => {
   res.json({ ok: true, ...r.rows[0] });
 });
 
+// POST /api/qpaynet/wallets/:id/close — owner-initiated wallet closure.
+// Refuses if balance > 0 (user must withdraw or transfer first) or there are
+// pending payouts. Closure is reversible only by admin (no public unclose).
+//
+// Distinct from admin freeze (involuntary, can be unfrozen by admin) and
+// closed (voluntary, terminal). All money paths reject status != 'active',
+// so closing immediately blocks deposits/transfers/etc.
+qpaynetRouter.post("/wallets/:id/close", async (req, res) => {
+  await ensureTables();
+  await ensurePayoutsTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+
+  const ownerId = auth.sub ?? auth.email ?? "anon";
+  const pool = getPool();
+  try {
+    const result = await withTx(async (c) => {
+      const w = await c.query(
+        "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2 FOR UPDATE",
+        [req.params.id, ownerId],
+      );
+      if (!w.rows[0]) throw new HttpError(404, "wallet_not_found");
+      if (w.rows[0].status === "closed") throw new HttpError(400, "already_closed");
+      if (w.rows[0].status === "frozen") throw new HttpError(400, "wallet_frozen_contact_support");
+      if (BigInt(w.rows[0].balance) !== 0n) {
+        throw new HttpError(400, "balance_must_be_zero");
+      }
+      const pending = await c.query(
+        "SELECT COUNT(*)::int AS n FROM qpaynet_payouts WHERE wallet_id=$1 AND status IN ('requested','approved')",
+        [req.params.id],
+      );
+      if ((pending.rows[0]?.n ?? 0) > 0) {
+        throw new HttpError(400, "pending_payouts_must_complete");
+      }
+      await c.query(
+        "UPDATE qpaynet_wallets SET status='closed' WHERE id=$1",
+        [req.params.id],
+      );
+      return { walletId: req.params.id };
+    });
+    void auditLog(pool, ownerId, "wallet_closed",
+      { walletId: result.walletId, by: auth.email }, req);
+    res.json({ ok: true, walletId: result.walletId, status: "closed" });
+  } catch (err) {
+    if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
+    captureException(err, { route: "qpaynet/wallets/close", ownerId, walletId: req.params.id });
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 // ── Deposit ───────────────────────────────────────────────────────────────────
 
 qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
@@ -2041,6 +2091,48 @@ qpaynetRouter.post("/deposit/confirm-stub", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Stripe event.id dedup table.
+//
+// Even with the per-checkout `status='open'` guard inside FOR UPDATE, we want
+// stronger defense-in-depth: if Stripe sends the SAME event twice (network
+// glitch on our 200 ACK, Cloudflare retry, etc.), we should reject the
+// replay before doing any DB work. Stripe guarantees event.id is stable
+// across retries, so an INSERT ... ON CONFLICT serves as the gate.
+//
+// 30-day TTL via background GC matches Stripe's webhook retention window.
+let stripeEventsTableReady = false;
+async function ensureStripeEventsTable(): Promise<void> {
+  if (stripeEventsTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_stripe_events (
+        event_id      TEXT PRIMARY KEY,
+        event_type    TEXT NOT NULL,
+        processed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpse_processed ON qpaynet_stripe_events (processed_at);
+    `);
+    stripeEventsTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet stripe-events] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+let stripeEventsGcStarted = false;
+function startStripeEventsGc(): void {
+  if (stripeEventsGcStarted) return;
+  stripeEventsGcStarted = true;
+  if (process.env.NODE_ENV === "test") return;
+  setInterval(async () => {
+    try {
+      await ensureStripeEventsTable();
+      const pool = getPool();
+      await pool.query("DELETE FROM qpaynet_stripe_events WHERE processed_at < NOW() - INTERVAL '30 days'");
+    } catch { /* ignore */ }
+  }, 6 * 3_600_000).unref(); // every 6h
+}
+
 // POST /api/qpaynet/deposit/webhook — Stripe webhook (raw body via verify hook)
 qpaynetRouter.post("/deposit/webhook", async (req, res) => {
   if (!stripe || !STRIPE_WH) return res.status(503).json({ error: "stripe_or_webhook_secret_missing" });
@@ -2057,6 +2149,32 @@ qpaynetRouter.post("/deposit/webhook", async (req, res) => {
     // Either way we want to know about it.
     captureException(err, { source: "qpaynet/stripe-webhook", phase: "verifySignature" });
     return res.status(400).json({ error: "signature_verification_failed", detail: err instanceof Error ? err.message : String(err) });
+  }
+
+  // Event-level dedup. INSERT first; if a row already exists, this is a
+  // replay — return 200 silently so Stripe stops retrying. We INSERT before
+  // any side effects so even if our processing crashes, Stripe re-delivery
+  // will skip on the next retry (we either succeed once or fail-and-skip;
+  // we never double-credit). For ops visibility, the event_id is logged.
+  try {
+    await ensureStripeEventsTable();
+    const pool = getPool();
+    const r = await pool.query(
+      `INSERT INTO qpaynet_stripe_events (event_id, event_type)
+       VALUES ($1, $2)
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING event_id`,
+      [event.id, event.type],
+    );
+    if ((r.rowCount ?? 0) === 0) {
+      // Replay — already processed. Acknowledge silently.
+      return res.json({ received: true, replay: true, eventId: event.id });
+    }
+  } catch (err) {
+    // If we can't write to the dedup table, we still process — better to
+    // risk a rare double-credit than miss a payment entirely. Per-checkout
+    // FOR UPDATE guard remains the second line of defense.
+    captureException(err, { source: "qpaynet/stripe-webhook", phase: "dedupInsert", eventId: event.id });
   }
 
   if (event.type === "checkout.session.completed") {
@@ -2884,7 +3002,18 @@ qpaynetRouter.get("/me/audit", authLimiter, async (req, res) => {
 // Covers wallets, transactions, transfers, deposits, merchants, payment
 // requests, webhook subscriptions. Admin endpoints are intentionally
 // omitted — they're internal-ops, not part of the partner contract.
+qpaynetRouter.options("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Max-Age", "3600");
+  res.status(204).end();
+});
 qpaynetRouter.get("/openapi.json", (_req, res) => {
+  // CORS: partners view this from third-party tools (Stoplight, ReDoc,
+  // openapi-generator, swagger-ui hosted on their own domain). Read-only
+  // public spec — no auth, no sensitive data — so wildcard origin is fine.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   const base = (process.env.PUBLIC_BACKEND_URL ?? "https://aevion-production-a70c.up.railway.app").replace(/\/$/, "");
   const spec = {
     openapi: "3.1.0",
@@ -2984,6 +3113,17 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
       "/wallets/{id}/public": {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         get: { tags: ["Public"], summary: "Recipient lookup (no balance)", security: [], responses: { "200": { description: "OK" }, "404": { description: "Not found" } } },
+      },
+      "/wallets/{id}/close": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        post: {
+          tags: ["Wallets"], summary: "Close wallet (terminal). Requires zero balance + no pending payouts.",
+          responses: {
+            "200": { description: "OK" },
+            "400": { description: "balance_must_be_zero / pending_payouts_must_complete / wallet_frozen / already_closed" },
+            "404": { description: "Not found" },
+          },
+        },
       },
       "/deposit": {
         post: {
@@ -3237,8 +3377,9 @@ export function startQpaynetRetryWorker(): void {
   if (retryWorkerStarted) return;
   retryWorkerStarted = true;
   startIdempotencyGc();
+  startStripeEventsGc();
   // Skip in test env unless explicitly enabled.
   if (process.env.NODE_ENV === "test" && process.env.QPAYNET_RETRY_IN_TEST !== "1") return;
   setInterval(() => { void runRetryTick(); }, RETRY_INTERVAL_MS).unref();
-  console.log(`[qpaynet] retry worker + idempotency GC started`);
+  console.log(`[qpaynet] retry worker + idempotency GC + stripe-events GC started`);
 }

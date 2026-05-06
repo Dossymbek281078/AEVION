@@ -300,7 +300,9 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Merchant webhook delivery durability | done — `qpaynet_webhook_deliveries` queue + retry tick; `/admin/webhook-deliveries` for ops | — |
 | At-rest encryption: lazy migration | done — needsEncryption() check at read sites encrypts plaintext rows in-place when env-key is enabled | — |
 | /health degrade signal | done — pool waiting > 0 OR stuck deliveries > 50 → status=degraded | — |
-| OpenAPI spec for partners | done — `GET /api/qpaynet/openapi.json` (3.1; admin endpoints intentionally hidden) | — |
+| OpenAPI spec for partners | done — `GET /api/qpaynet/openapi.json` (3.1; admin endpoints intentionally hidden; CORS for third-party explorers) | — |
+| Stripe event.id dedup | done — `qpaynet_stripe_events` table; INSERT ON CONFLICT before any side effect; 30d GC | — |
+| Wallet close API | done — `POST /wallets/:id/close` (zero balance + no pending payouts; terminal) | — |
 | Audit log PII redaction | done — `QPAYNET_AUDIT_REDACT=1` + `QPAYNET_PII_SALT`; HMAC-hashes IPs/emails | — |
 | Per-tier money limits | done — `QPAYNET_RATE_TIERS=email:limit,...` overrides without code change | — |
 | ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |

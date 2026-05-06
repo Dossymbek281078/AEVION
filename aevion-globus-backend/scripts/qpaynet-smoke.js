@@ -417,7 +417,8 @@ async function run() {
   console.log("\n29. Refund idempotency");
   const idemDep = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 50 }, auth);
   const idemTxId = idemDep.body.txId;
-  const idemKey = "refund-" + Date.now();
+  const refundIdemKey = "refund-" + Date.now();
+  const idemKey = refundIdemKey;
   const ref1 = await req("POST", "/api/qpaynet/admin/refund",
     { txId: idemTxId, reason: "idem test" }, { ...auth, "Idempotency-Key": idemKey });
   if (ref1.status === 200) {
@@ -472,9 +473,38 @@ async function run() {
   assert("info.title is QPayNet", spec.body.info?.title?.includes("QPayNet"));
   assert("paths includes /transfer", typeof spec.body.paths?.["/transfer"] === "object");
   assert("paths includes /merchant/charge", typeof spec.body.paths?.["/merchant/charge"] === "object");
+  assert("paths includes /wallets/{id}/close", typeof spec.body.paths?.["/wallets/{id}/close"] === "object");
   assert("admin paths NOT exposed (partner-facing only)",
     !spec.body.paths?.["/admin/refund"] && !spec.body.paths?.["/admin/reconcile"]);
   assert("x-webhook-contract present", typeof spec.body["x-webhook-contract"] === "object");
+
+  // 34. CORS on OpenAPI — third-party API explorers need this
+  console.log("\n34. OpenAPI CORS");
+  const corsR = await fetch(`${BASE}/api/qpaynet/openapi.json`);
+  assert("openapi.json sets Access-Control-Allow-Origin: *",
+    corsR.headers.get("access-control-allow-origin") === "*");
+
+  // 35. Wallet close — voluntary terminal closure
+  console.log("\n35. Wallet close");
+  const closeOkWallet = await req("POST", "/api/qpaynet/wallets", { name: "close-test" }, auth);
+  const closeOkId = closeOkWallet.body.id;
+  const closeOk = await req("POST", `/api/qpaynet/wallets/${closeOkId}/close`, {}, auth);
+  assert("close zero-balance wallet → 200", closeOk.status === 200);
+  assert("status now closed", closeOk.body.status === "closed");
+  const depToClosed = await req("POST", "/api/qpaynet/deposit",
+    { walletId: closeOkId, amount: 1 }, auth);
+  assert("deposit to closed wallet → 400 wallet_inactive",
+    depToClosed.status === 400 && depToClosed.body.error === "wallet_inactive");
+  const reClose = await req("POST", `/api/qpaynet/wallets/${closeOkId}/close`, {}, auth);
+  assert("re-close → 400 already_closed",
+    reClose.status === 400 && reClose.body.error === "already_closed");
+
+  const balWallet = await req("POST", "/api/qpaynet/wallets", { name: "close-bal-test" }, auth);
+  const balId = balWallet.body.id;
+  await req("POST", "/api/qpaynet/deposit", { walletId: balId, amount: 10 }, auth);
+  const closeReject = await req("POST", `/api/qpaynet/wallets/${balId}/close`, {}, auth);
+  assert("non-zero balance close → 400 balance_must_be_zero",
+    closeReject.status === 400 && closeReject.body.error === "balance_must_be_zero");
 
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);

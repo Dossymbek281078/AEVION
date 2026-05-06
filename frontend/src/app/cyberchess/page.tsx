@@ -2943,6 +2943,18 @@ export default function CyberChessPage(){
             background:"#fff",color:"#475569",border:`1px solid #cbd5e1`,
           }}>⌃K</kbd>
         </button>
+        {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
+            command palette pre-filtered to "открыть" so the bookmark list is the top result. */}
+        {bookmarks.length>0&&<button onClick={()=>sPalOpen(true)} title={`${bookmarks.length} закладок · клик откроет палитру (Ctrl+K)`} className="cc-focus-ring"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:5,
+            padding:"5px 10px",borderRadius:RADIUS.full,
+            border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
+            fontSize:11,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
+          }}>
+          <span style={{fontSize:13,lineHeight:1}}>⭐</span>
+          <span>{bookmarks.length}</span>
+        </button>}
         {/* Workspace switcher — always visible in the header. Hint shown via tooltip on each chip. */}
         <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
 

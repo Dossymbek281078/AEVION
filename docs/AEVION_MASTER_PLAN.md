@@ -199,7 +199,7 @@ parity + docs/runbook.
 | P3-1 | Demo recording — 8-minute scripted walkthrough across QRight → Bureau → Awards → Bank | aevion-core |
 | P3-2 | Press kit / one-pager — `docs/AEVION_ONEPAGER.md` exists; bring up to current state | aevion-core |
 | P3-3 | Reference customer onboarding — RU partnership artifacts in `docs/bureau/` need productisation | aevion-bureau / aevion-core |
-| P3-4 | First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau | **code-complete** — Trust Graph edge in `aca91c2`, AEC mint claim flow in PR #112 (`internalMintForDevice` + `/trust-edges/:edgeId/claim-aec`); remaining is config: product decision on `BUREAU_*_AEC_REWARD` env values + prod Stripe keys |
+| P3-4 | ✅ **DONE 2026-05-06** — First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau | Trust Graph edge in `aca91c2`, AEC mint claim flow in PR #112 (`internalMintForDevice` + `/trust-edges/:edgeId/claim-aec`), smoke plumbing PR #113, dashboard extension `ec37db6d`, 14 unit tests `721554f`. Stripe (test mode) + AEC reward env vars live on Railway, redeploy verified, prod smoke 24/24, dashboard returns `trustEdges`+`aecSummary`. Remaining (post-launch polish): live-mode Stripe keys + first real paid cert via UI |
 | P3-5 | Investor demo flow on prod — every link in pitch deck resolves, every stat is live | aevion-core |
 
 ### Phase 4 — Public launch
@@ -243,7 +243,7 @@ If the user insists on more code work in this window, candidates are:
 1. ~~**AEC ↔ fiat boundary doc**~~ ✅ done — `docs/bank/AEC_FIAT_BOUNDARY.md` (4 canonical rules R1–R4, P3-4 flow diagram, legal positioning, pre-P3-4 checklist)
 2. ~~Resolve `bank-payment-layer` branch~~ ✅ done — archived as `archive/bank-payment-layer-2026-05-03` tag; all 362 net-new files were already present on main via parallel development; worktree + remote branch removed
 3. ~~Wire `npm run smoke:bank-prod` into the daily cron~~ ✅ done — added `bank-prod-smoke` job to `daily-smoke.yml` (cron+dispatch only, skips on push; artifact stored 14 days in GitHub Actions)
-4. **P3-4 code-complete** — Trust Graph edge (`aca91c2`) + AEC claim flow (PR #112) + smoke plumbing & reward sizing draft (PR #113) + Sentry alerts (`39f561d`) + 14 unit tests (`721554f`) + dashboard endpoint extension `trustEdges`/`aecSummary` (`ec37db6d`). Remaining is config-only: product decision on `BUREAU_*_AEC_REWARD` env values (proposal in `AEC_FIAT_BOUNDARY.md` §8: 50/150/500/1000), prod Stripe keys, frontend `/bureau` dashboard UI to render the new fields. Manual go-live runbook: `docs/bank/P3-4_RAILWAY_GO_LIVE.md`.
+4. ~~**P3-4 First paid Bureau cert E2E**~~ ✅ **done 2026-05-06** — Trust Graph edge (`aca91c2`) + AEC claim flow (PR #112) + smoke plumbing & reward sizing draft (PR #113) + Sentry alerts (`39f561d`) + 14 unit tests (`721554f`) + dashboard endpoint extension `trustEdges`/`aecSummary` (`ec37db6d`) + frontend `/bureau` Trust Graph UI (`f2eed5af`). Railway prod config: `BUREAU_*_AEC_REWARD={50,150,500,1000}`, `STRIPE_SECRET_KEY=sk_test_*`, `STRIPE_WEBHOOK_SECRET=whsec_*`, `BUREAU_PAYMENT_PROVIDER=stripe`. Stripe Webhook destination "AEVION Bureau payments" (events: `payment_intent.succeeded`, `payment_intent.payment_failed`) → `https://aevion-production-a70c.up.railway.app/api/bureau/payment/webhook`. Redeploy verified, prod smoke 24/24, dashboard returns `trustEdges`+`aecSummary`. Post-launch polish: switch Stripe to live mode + run first real paid cert through `/bureau/upgrade` UI. Runbook: `docs/bank/P3-4_RAILWAY_GO_LIVE.md`.
 
 ### `aevion-qsign`
 1. **Do nothing without checking PR list** — P1-P9 already merged via PR #2 on 2026-04-26
@@ -275,6 +275,7 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-06  —    P3-4 ✅ DONE — Stripe + AEC reward env on Railway, redeploy + smoke 24/24, dashboard trustEdges/aecSummary live
 2026-05-03  —    docs(bank): AEC ↔ fiat boundary rules shipped to main (R1–R4, P3-4 prereq done)
 2026-05-03  #102 feat(platform): P1 follow-up — awards+planet smokes + OpenAPI 0.5.1 + Sentry alerts spec
 2026-05-03  #98  feat(platform): P1 bundle — auth-replay smoke + RUNBOOK.md + OpenAPI 0.5.0 (P1-2b, P1-4, P1-7 done)

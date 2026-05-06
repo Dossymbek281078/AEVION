@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { ServiceWorkerRegister } from "@/components/build/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
   title: "AEVION QBuild — Construction & Recruiting",
@@ -72,6 +73,7 @@ export default function BuildLayout({ children }: { children: React.ReactNode })
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(SITE_LD) }}
       />
+      <ServiceWorkerRegister />
       {children}
     </>
   );

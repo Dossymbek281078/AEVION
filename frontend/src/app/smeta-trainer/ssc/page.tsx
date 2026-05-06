@@ -99,7 +99,7 @@ export default function SscReferencePage() {
           >
             ← К курсу
           </Link>
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-900">
               ССЦ РК 8.04-08-2025
             </h1>
@@ -109,6 +109,12 @@ export default function SscReferencePage() {
               позиций
             </p>
           </div>
+          <Link
+            href="/smeta-trainer/ssc/mapping"
+            className="text-xs px-3 py-1.5 border border-emerald-300 text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold whitespace-nowrap"
+          >
+            🔗 Привязка к расценкам
+          </Link>
         </div>
       </header>
 

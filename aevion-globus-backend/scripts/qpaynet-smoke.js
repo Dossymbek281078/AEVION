@@ -594,6 +594,63 @@ async function run() {
     await req("DELETE", `/api/qpaynet/merchant/keys/${signedKey.body.id}`, null, auth);
   }
 
+  console.log("\n40. Admin wallet search");
+  if (auth) {
+    const search = await req("GET", "/api/qpaynet/admin/wallets?limit=5", null, auth);
+    assert(
+      "admin wallet search returns array",
+      search.status === 200 && Array.isArray(search.body.items),
+    );
+  }
+
+  console.log("\n41. Admin audit log");
+  if (auth) {
+    const audit = await req("GET", "/api/qpaynet/admin/audit?limit=10", null, auth);
+    assert(
+      "admin audit returns items + pagination",
+      audit.status === 200 && Array.isArray(audit.body.items),
+    );
+  }
+
+  console.log("\n42. Refunds CSV export");
+  if (auth) {
+    const csv = await fetch(`${BASE}/api/qpaynet/admin/refunds.csv?limit=10`, {
+      headers: { Authorization: `Bearer ${auth}` },
+    });
+    const text = await csv.text();
+    assert(
+      "CSV header present",
+      csv.status === 200 && text.startsWith("refund_id,wallet_id,owner_id,"),
+    );
+    assert(
+      "CSV content-type is text/csv",
+      csv.headers.get("content-type")?.startsWith("text/csv") === true,
+    );
+  }
+
+  console.log("\n43. Bulk refund (validation)");
+  if (auth) {
+    const bulkBad = await req("POST", "/api/qpaynet/admin/refund/bulk", { items: [] }, auth);
+    assert("empty items rejected 400", bulkBad.status === 400 && bulkBad.body.error === "items_required");
+
+    const tooMany = Array.from({ length: 51 }, () => ({ txId: "x", reason: "y" }));
+    const bulkTooMany = await req("POST", "/api/qpaynet/admin/refund/bulk", { items: tooMany }, auth);
+    assert("51 items rejected 400 too_many_items", bulkTooMany.status === 400 && bulkTooMany.body.error === "too_many_items");
+
+    const bulkValidation = await req(
+      "POST",
+      "/api/qpaynet/admin/refund/bulk",
+      { items: [{ txId: "00000000-0000-0000-0000-000000000000", reason: "test bulk smoke" }] },
+      auth,
+    );
+    assert(
+      "bulk refund returns succeeded/failed arrays",
+      bulkValidation.status === 200 &&
+        Array.isArray(bulkValidation.body.succeeded) &&
+        Array.isArray(bulkValidation.body.failed),
+    );
+  }
+
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

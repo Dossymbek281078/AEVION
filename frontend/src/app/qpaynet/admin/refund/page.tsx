@@ -51,6 +51,19 @@ export default function AdminRefundPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formMsg, setFormMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  // Bulk state
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkReason, setBulkReason] = useState("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    requested: number;
+    succeededCount: number;
+    failedCount: number;
+    succeeded: Array<{ txId: string; refundId: string; refundedKzt: number }>;
+    failed: Array<{ txId: string; error: string }>;
+  } | null>(null);
+
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
@@ -82,6 +95,69 @@ export default function AdminRefundPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function submitBulk(e: React.FormEvent) {
+    e.preventDefault();
+    setBulkResult(null);
+    const lines = bulkText
+      .split(/\n+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (lines.length === 0) return;
+    if (lines.length > 50) {
+      alert("Максимум 50 строк за раз");
+      return;
+    }
+    if (bulkReason.trim().length < 5) {
+      alert("Общая причина должна быть от 5 символов");
+      return;
+    }
+    if (!confirm(`Подтвердите массовый возврат для ${lines.length} транзакций?`)) return;
+    const items = lines.map(line => {
+      // Format: <txId>[,<amount>]
+      const [id, amt] = line.split(",").map(s => s.trim());
+      const item: { txId: string; amount?: number } = { txId: id };
+      if (amt) {
+        const n = Number(amt);
+        if (Number.isFinite(n) && n > 0) item.amount = n;
+      }
+      return item;
+    });
+    setBulkSubmitting(true);
+    try {
+      const r = await fetch("/api/qpaynet/admin/refund/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ items, reason: bulkReason.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert(`Ошибка: ${d.error ?? r.status}`);
+        return;
+      }
+      setBulkResult(d);
+      void load(token, null);
+    } finally {
+      setBulkSubmitting(false);
+    }
+  }
+
+  function exportCsv() {
+    const url = `/api/qpaynet/admin/refunds.csv?limit=5000`;
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.blob())
+      .then(blob => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `qpaynet-refunds-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      })
+      .catch(() => alert("Не удалось скачать CSV"));
   }
 
   async function submit(e: React.FormEvent) {
@@ -248,19 +324,105 @@ export default function AdminRefundPage() {
           </div>
         </div>
 
+        {/* Bulk refund */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl">
+          <button
+            onClick={() => setBulkOpen(o => !o)}
+            className="w-full flex items-center justify-between p-5 hover:bg-slate-800/40"
+          >
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              📦 Массовый возврат (chargeback wave / fraud sweep)
+            </div>
+            <span className="text-slate-500">{bulkOpen ? "▾" : "▸"}</span>
+          </button>
+          {bulkOpen && (
+            <form onSubmit={submitBulk} className="px-5 pb-5 space-y-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Список транзакций (одна на строку, формат: <code className="bg-slate-950 px-1 rounded">txId</code> или{" "}
+                  <code className="bg-slate-950 px-1 rounded">txId,amount</code>; до 50)
+                </label>
+                <textarea
+                  value={bulkText}
+                  onChange={e => setBulkText(e.target.value)}
+                  rows={6}
+                  placeholder={`a1b2c3d4-...\n5e6f7a8b-...,1500.00\n...`}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono focus:border-violet-600 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Общая причина (применяется ко всем)
+                </label>
+                <input
+                  type="text"
+                  value={bulkReason}
+                  onChange={e => setBulkReason(e.target.value)}
+                  placeholder="Chargeback wave 2026-05"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:border-violet-600 focus:outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={bulkSubmitting}
+                className="px-4 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-40 rounded-lg text-sm font-semibold"
+              >
+                {bulkSubmitting ? "..." : "📦 Запустить массовый возврат"}
+              </button>
+
+              {bulkResult && (
+                <div className="mt-3 p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs space-y-2">
+                  <div>
+                    Запрошено: <strong>{bulkResult.requested}</strong> · Успешно:{" "}
+                    <strong className="text-emerald-400">{bulkResult.succeededCount}</strong> ·
+                    Ошибок: <strong className="text-red-400">{bulkResult.failedCount}</strong>
+                  </div>
+                  {bulkResult.failed.length > 0 && (
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-red-400 mb-1">
+                        Failed
+                      </div>
+                      <ul className="space-y-0.5 max-h-40 overflow-y-auto">
+                        {bulkResult.failed.map((f, i) => (
+                          <li
+                            key={i}
+                            className="flex justify-between gap-2 text-[11px] font-mono"
+                          >
+                            <span className="text-slate-500 truncate">{f.txId}</span>
+                            <span className="text-red-400 shrink-0">{f.error}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </form>
+          )}
+        </div>
+
         {/* Refund history */}
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
               История возвратов
             </div>
-            <button
-              onClick={() => void load(token, null)}
-              disabled={loading}
-              className="px-3 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs"
-            >
-              {loading && refunds.length === 0 ? "..." : "↻"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={exportCsv}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs"
+                title="Экспорт CSV (до 5000 строк)"
+              >
+                ⬇ CSV
+              </button>
+              <button
+                onClick={() => void load(token, null)}
+                disabled={loading}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-lg text-xs"
+              >
+                {loading && refunds.length === 0 ? "..." : "↻"}
+              </button>
+            </div>
           </div>
 
           {loading && refunds.length === 0 && (

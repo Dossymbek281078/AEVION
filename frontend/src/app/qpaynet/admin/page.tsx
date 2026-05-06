@@ -28,6 +28,39 @@ interface Tile {
   borderClass?: string;
 }
 
+interface LiveEvent {
+  kind: string;
+  at: string;
+  by?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: Record<string, any>;
+}
+
+const EVENT_LABEL: Record<string, { label: string; chip: string }> = {
+  refund_issued: { label: "REFUND", chip: "bg-red-900 text-red-300" },
+  wallet_frozen: { label: "FROZEN", chip: "bg-cyan-900 text-cyan-300" },
+  wallet_unfrozen: { label: "UNFROZEN", chip: "bg-emerald-900 text-emerald-300" },
+  delivery_force_retry: { label: "RETRY", chip: "bg-violet-900 text-violet-300" },
+  drift_alert: { label: "DRIFT 🚨", chip: "bg-red-900 text-red-300 font-bold" },
+};
+
+function describeEvent(ev: LiveEvent): string {
+  const d = ev.data ?? {};
+  switch (ev.kind) {
+    case "refund_issued":
+      return `${d.amountKzt?.toLocaleString?.("ru-RU") ?? d.amountKzt} ₸ · ${d.reason ?? ""}`;
+    case "wallet_frozen":
+    case "wallet_unfrozen":
+      return `${(d.walletId ?? "").slice(0, 8)}… · ${d.reason ?? ""}`;
+    case "delivery_force_retry":
+      return `delivery ${(d.deliveryId ?? "").slice(0, 8)}…`;
+    case "drift_alert":
+      return `${d.drift_kzt} ₸ drift · ${d.negative_wallet_count} neg wallets`;
+    default:
+      return JSON.stringify(d);
+  }
+}
+
 function fmtTiin(t: string): string {
   try {
     const tiin = BigInt(t);
@@ -50,6 +83,10 @@ export default function AdminIndexPage() {
   const [payouts, setPayouts] = useState<PayoutsStats | null>(null);
   const [kyc, setKyc] = useState<KycPending | null>(null);
   const [stuckCount, setStuckCount] = useState<number | null>(null);
+  const [live, setLive] = useState<LiveEvent[]>([]);
+  const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "closed" | "error">(
+    "connecting",
+  );
 
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
@@ -60,6 +97,42 @@ export default function AdminIndexPage() {
     }
     void loadAll(t);
   }, []);
+
+  useEffect(() => {
+    if (authed !== "ok" || !token) return;
+    const url = `/api/qpaynet/admin/events?token=${encodeURIComponent(token)}`;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(url);
+    } catch {
+      setLiveStatus("error");
+      return;
+    }
+    es.onopen = () => setLiveStatus("open");
+    es.onerror = () => setLiveStatus("error");
+    const handle = (kind: string) => (e: MessageEvent) => {
+      try {
+        const ev = JSON.parse(e.data) as LiveEvent;
+        ev.kind = kind as LiveEvent["kind"];
+        setLive(prev => [ev, ...prev].slice(0, 40));
+      } catch {
+        // ignore malformed payload
+      }
+    };
+    for (const kind of [
+      "refund_issued",
+      "wallet_frozen",
+      "wallet_unfrozen",
+      "delivery_force_retry",
+      "drift_alert",
+    ]) {
+      es.addEventListener(kind, handle(kind) as EventListener);
+    }
+    return () => {
+      setLiveStatus("closed");
+      es?.close();
+    };
+  }, [authed, token]);
 
   async function loadAll(t: string) {
     try {
@@ -224,6 +297,13 @@ export default function AdminIndexPage() {
     borderClass: stuckCount && stuckCount > 0 ? "border-red-800/60" : undefined,
   };
 
+  const auditTile: Tile = {
+    href: "/qpaynet/admin/audit",
+    emoji: "📜",
+    title: "Audit log",
+    desc: "Кросс-овнерская immutable-история действий: фильтр по action / owner.",
+  };
+
   const tiles: Tile[] = [
     reconcileTile,
     deliveriesTile,
@@ -231,6 +311,7 @@ export default function AdminIndexPage() {
     freezeTile,
     payoutsTile,
     kycTile,
+    auditTile,
   ];
 
   return (
@@ -250,11 +331,34 @@ export default function AdminIndexPage() {
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-black">Operations dashboard</h2>
-          <p className="text-sm text-slate-500">
-            Шесть инструментов для удержания сети в платёжно-готовом состоянии.
-          </p>
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-black">Operations dashboard</h2>
+            <p className="text-sm text-slate-500">
+              Семь инструментов для удержания сети в платёжно-готовом состоянии.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                liveStatus === "open"
+                  ? "bg-emerald-400 animate-pulse"
+                  : liveStatus === "error"
+                  ? "bg-red-500"
+                  : "bg-slate-500"
+              }`}
+            />
+            <span className="text-slate-400">
+              Live:{" "}
+              {liveStatus === "open"
+                ? "подключено"
+                : liveStatus === "connecting"
+                ? "соединение..."
+                : liveStatus === "error"
+                ? "разорвано"
+                : "закрыто"}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -280,6 +384,61 @@ export default function AdminIndexPage() {
               <div className="text-xs text-slate-400 leading-relaxed">{t.desc}</div>
             </Link>
           ))}
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              📡 Live activity
+            </div>
+            {live.length > 0 && (
+              <button
+                onClick={() => setLive([])}
+                className="text-[10px] text-slate-600 hover:text-slate-400"
+              >
+                очистить
+              </button>
+            )}
+          </div>
+          {live.length === 0 ? (
+            <div className="text-xs text-slate-600">
+              События появятся здесь по мере действий админа (refund / freeze / retry / drift).
+            </div>
+          ) : (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {live.map((ev, i) => {
+                const meta = EVENT_LABEL[ev.kind] ?? {
+                  label: ev.kind,
+                  chip: "bg-slate-800 text-slate-400",
+                };
+                return (
+                  <div
+                    key={`${ev.at}-${i}`}
+                    className="flex items-center gap-3 text-xs bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
+                  >
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${meta.chip}`}
+                    >
+                      {meta.label}
+                    </span>
+                    <span className="text-slate-400 truncate flex-1">{describeEvent(ev)}</span>
+                    {ev.by && (
+                      <span className="text-[10px] font-mono text-slate-600 shrink-0">
+                        {ev.by}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-slate-600 shrink-0">
+                      {new Date(ev.at).toLocaleTimeString("ru-RU", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">

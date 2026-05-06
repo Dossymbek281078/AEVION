@@ -313,6 +313,12 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Merchant key HMAC signing | done — opt-in `requireSignature: true` on key create. Charge requires `X-Aevion-Timestamp` + `X-Aevion-Signature`; 5-min replay window. SDK signs automatically when `signRequests: true`. | — |
 | TypeScript SDK package | done — `@aevion/qpaynet-client` v1.0.0 in `packages/qpaynet-client/`. Isomorphic (Node 18+/Bun/Deno/browsers); `verifyWebhook()` helper; auto-retry on 5xx/429; HMAC signing helper. | — |
 | ALERT_URL Slack/Discord hookup | done — `QPAYNET_ALERT_URL` posts on reconcile drift + delivery dead-letter (Slack `text` + Discord `content` co-format) | — |
+| Wallet search by email/owner | done — `GET /admin/wallets?q=&status=&limit=` (ILIKE owner_id/id/name) | — |
+| Bulk refund | done — `POST /admin/refund/bulk` (≤50 items, per-item failure isolation, emits `refund_issued` events) | — |
+| CSV export of refunds | done — `GET /admin/refunds.csv` (≤5000 rows, attachment) | — |
+| Cross-owner audit viewer | done — `GET /admin/audit?action=&owner=&before=&limit=` (cursor-paginated) | — |
+| Live ops SSE feed | done — `GET /admin/events` (token via `?token=` for EventSource); emits `refund_issued`, `wallet_frozen`, `wallet_unfrozen`, `delivery_force_retry`, `drift_alert` with 25s heartbeat | — |
+| Frontend admin UI | done — `/qpaynet/admin/{,reconcile,refund,freeze,webhook-deliveries,audit,payouts,kyc}` (auth-gated, not in sitemap) | — |
 
 Anything in "open" is documented but not yet code. When you finish one, move
 the row up and update the date.

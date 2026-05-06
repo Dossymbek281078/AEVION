@@ -13,6 +13,22 @@ interface ActionResult {
   at: string;
 }
 
+interface WalletHit {
+  id: string;
+  ownerId: string;
+  name: string;
+  status: "active" | "frozen" | "closed";
+  balanceKzt: number;
+  currency: string;
+  createdAt: string;
+}
+
+const STATUS_CHIP: Record<WalletHit["status"], string> = {
+  active: "bg-emerald-900 text-emerald-300",
+  frozen: "bg-cyan-900 text-cyan-300",
+  closed: "bg-slate-800 text-slate-500",
+};
+
 export default function AdminFreezePage() {
   const [token, setToken] = useState("");
   const [walletId, setWalletId] = useState("");
@@ -21,6 +37,12 @@ export default function AdminFreezePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [recent, setRecent] = useState<ActionResult[]>([]);
+
+  // Search state
+  const [searchQ, setSearchQ] = useState("");
+  const [searchStatus, setSearchStatus] = useState<"" | "active" | "frozen" | "closed">("");
+  const [searchHits, setSearchHits] = useState<WalletHit[]>([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
@@ -32,6 +54,31 @@ export default function AdminFreezePage() {
       // ignore corrupt log
     }
   }, []);
+
+  async function search() {
+    if (!searchQ.trim() && !searchStatus) {
+      setSearchHits([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      if (searchQ.trim()) params.set("q", searchQ.trim());
+      if (searchStatus) params.set("status", searchStatus);
+      const r = await fetch(`/api/qpaynet/admin/wallets?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) {
+        setError(`Поиск не удался: ${r.status}`);
+        return;
+      }
+      const d = await r.json();
+      setSearchHits(d.items ?? []);
+    } finally {
+      setSearching(false);
+    }
+  }
 
   function persistRecent(updated: ActionResult[]) {
     setRecent(updated);
@@ -118,6 +165,77 @@ export default function AdminFreezePage() {
             {error}
           </div>
         )}
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+            🔍 Найти кошелёк
+          </div>
+          <div className="grid sm:grid-cols-3 gap-2">
+            <input
+              type="text"
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") void search();
+              }}
+              placeholder="email, owner-id, wallet-id или имя"
+              className="sm:col-span-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono focus:border-violet-600 focus:outline-none"
+            />
+            <select
+              value={searchStatus}
+              onChange={e => setSearchStatus(e.target.value as typeof searchStatus)}
+              className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-2 text-sm"
+            >
+              <option value="">любой статус</option>
+              <option value="active">active</option>
+              <option value="frozen">frozen</option>
+              <option value="closed">closed</option>
+            </select>
+          </div>
+          <button
+            onClick={() => void search()}
+            disabled={searching}
+            className="mt-2 px-3 py-1.5 bg-violet-700 hover:bg-violet-600 disabled:opacity-40 rounded-lg text-xs font-semibold"
+          >
+            {searching ? "..." : "Найти"}
+          </button>
+
+          {searchHits.length > 0 && (
+            <div className="mt-3 space-y-1.5 max-h-64 overflow-y-auto">
+              {searchHits.map(h => (
+                <button
+                  key={h.id}
+                  onClick={() => {
+                    setWalletId(h.id);
+                    setAction(h.status === "frozen" ? "unfreeze" : "freeze");
+                  }}
+                  className="w-full text-left bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg p-2.5 flex items-center gap-3 text-xs"
+                >
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${STATUS_CHIP[h.status]}`}
+                  >
+                    {h.status}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-slate-300 truncate">{h.id}</div>
+                    <div className="text-[10px] text-slate-500 truncate">
+                      {h.name} · owner: {h.ownerId}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono text-slate-400">
+                      {h.balanceKzt.toLocaleString("ru-RU", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      {h.currency}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">

@@ -34,18 +34,42 @@
  * Verify: HMAC-SHA256(notifySecret, `${timestamp}.${rawBody}`).
  */
 
-import { Router } from "express";
+import { Router, Response } from "express";
 import { randomUUID, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { EventEmitter } from "node:events";
 import Stripe from "stripe";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const rateLimit = require("express-rate-limit") as typeof import("express-rate-limit").default;
 import { getPool, getPoolStats } from "../lib/dbPool";
-import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerOptional, verifyBearerToken } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
 import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 
 export const qpaynetRouter = Router();
+
+// ── Admin event bus (in-process) ──────────────────────────────────────────────
+// Lightweight pub/sub for live ops dashboards. Subscribers connect via SSE
+// (/admin/events) and receive `refund_issued`, `wallet_frozen`,
+// `wallet_unfrozen`, `delivery_force_retry`, `drift_alert`. Survives only
+// for the process lifetime — for durability use the audit log + a cron poll.
+type AdminEvent = {
+  kind:
+    | "refund_issued"
+    | "wallet_frozen"
+    | "wallet_unfrozen"
+    | "delivery_force_retry"
+    | "drift_alert";
+  at: string;
+  by?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: Record<string, any>;
+};
+const adminBus = new EventEmitter();
+adminBus.setMaxListeners(50);
+function emitAdminEvent(ev: AdminEvent): void {
+  try { adminBus.emit("event", ev); } catch { /* never let bus errors leak */ }
+}
 
 // Per-tier rate limit overrides: `QPAYNET_RATE_TIERS=email1@x.com:300,email2@y.com:600`.
 // Lets enterprise/merchant integrations get higher caps without hard-coding.
@@ -2575,6 +2599,15 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
         drift_kzt: (Number(drift) / 100).toFixed(2),
         negative_wallets: row.negative_wallets,
       });
+      emitAdminEvent({
+        kind: "drift_alert",
+        at: new Date().toISOString(),
+        data: {
+          drift_tiin: drift.toString(),
+          drift_kzt: Number(drift) / 100,
+          negative_wallet_count: row.negative_wallets,
+        },
+      });
     }
   } catch (err) {
     captureException(err, { source: "qpaynet/reconcile", phase: "query" });
@@ -2612,6 +2645,12 @@ qpaynetRouter.post("/admin/wallets/:id/freeze", async (req, res) => {
     { walletId: r.rows[0].id, by: auth.email, reason }, req);
   void notify(pool, r.rows[0].owner_id, "wallet_frozen",
     "Кошелёк заморожен", `Причина: ${reason}. Свяжитесь с поддержкой.`, r.rows[0].id);
+  emitAdminEvent({
+    kind: "wallet_frozen",
+    at: new Date().toISOString(),
+    by: auth.email,
+    data: { walletId: r.rows[0].id, ownerId: r.rows[0].owner_id, reason },
+  });
   res.json({ ok: true, walletId: r.rows[0].id, status: "frozen" });
 });
 
@@ -2637,6 +2676,12 @@ qpaynetRouter.post("/admin/wallets/:id/unfreeze", async (req, res) => {
     { walletId: r.rows[0].id, by: auth.email, reason }, req);
   void notify(pool, r.rows[0].owner_id, "wallet_unfrozen",
     "Кошелёк разморожен", "Все операции снова доступны.", r.rows[0].id);
+  emitAdminEvent({
+    kind: "wallet_unfrozen",
+    at: new Date().toISOString(),
+    by: auth.email,
+    data: { walletId: r.rows[0].id, ownerId: r.rows[0].owner_id, reason },
+  });
   res.json({ ok: true, walletId: r.rows[0].id, status: "active" });
 });
 
@@ -2731,6 +2776,19 @@ qpaynetRouter.post("/admin/refund", async (req, res) => {
       { refundId: result.refundId, originalTxId: txId, amountKzt: result.refundedKzt, reason, by: auth.email }, req);
     void notify(pool, result.ownerId, "refund_issued",
       `Возврат ${result.refundedKzt.toLocaleString("ru-RU")} ₸`, reason, result.refundId);
+    emitAdminEvent({
+      kind: "refund_issued",
+      at: new Date().toISOString(),
+      by: auth.email,
+      data: {
+        refundId: result.refundId,
+        originalTxId: txId,
+        ownerId: result.ownerId,
+        walletId: result.walletId,
+        amountKzt: result.refundedKzt,
+        reason,
+      },
+    });
     const responseBody = { ok: true as const, ...result };
     await saveIdempotency(adminScope, idemKey, req.body, 200, responseBody);
     res.json(responseBody);
@@ -2785,6 +2843,306 @@ qpaynetRouter.get("/admin/refunds", async (req, res) => {
   res.json({ items, nextCursor });
 });
 
+// GET /api/qpaynet/admin/refunds.csv — same data as /admin/refunds, streamed as
+// CSV for compliance / accounting export. Caps at 5000 rows per call.
+qpaynetRouter.get("/admin/refunds.csv", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const limit = Math.max(1, Math.min(5000, Number(req.query.limit ?? 1000)));
+  const before = (req.query.before as string | undefined)?.trim();
+  const params: unknown[] = [limit];
+  let where = "type = 'refund'";
+  if (before) {
+    params.push(before);
+    where += ` AND created_at < $${params.length}`;
+  }
+  const pool = getPool();
+  const r = await pool.query(
+    `SELECT t.id, t.wallet_id, t.owner_id, t.amount, t.description, t.ref_tx_id, t.created_at,
+            o.amount AS original_amount, o.type AS original_type, o.created_at AS original_created_at
+     FROM qpaynet_transactions t
+     LEFT JOIN qpaynet_transactions o ON o.id = t.ref_tx_id
+     WHERE ${where}
+     ORDER BY t.created_at DESC
+     LIMIT $1`,
+    params,
+  );
+  const csvEscape = (v: unknown): string => {
+    if (v == null) return "";
+    const s = String(v);
+    if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+  const header = [
+    "refund_id", "wallet_id", "owner_id", "refund_amount_kzt", "description",
+    "original_tx_id", "original_amount_kzt", "original_type", "original_created_at",
+    "created_at",
+  ];
+  const lines = [header.join(",")];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const row of r.rows as any[]) {
+    lines.push([
+      csvEscape(row.id),
+      csvEscape(row.wallet_id),
+      csvEscape(row.owner_id),
+      csvEscape(fromTiin(BigInt(row.amount)).toFixed(2)),
+      csvEscape(row.description),
+      csvEscape(row.ref_tx_id),
+      csvEscape(row.original_amount ? fromTiin(BigInt(row.original_amount)).toFixed(2) : ""),
+      csvEscape(row.original_type),
+      csvEscape(row.original_created_at ? new Date(row.original_created_at).toISOString() : ""),
+      csvEscape(new Date(row.created_at).toISOString()),
+    ].join(","));
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-refunds-${stamp}.csv"`);
+  res.send(lines.join("\n") + "\n");
+});
+
+// POST /api/qpaynet/admin/refund/bulk — issue many refunds in one call.
+// Used for chargeback waves / fraud sweeps. Each item is processed
+// independently; failures are reported per-item, successes commit immediately.
+// Max 50 items per call to keep transactions short.
+qpaynetRouter.post("/admin/refund/bulk", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const body = req.body as { items?: Array<{ txId?: string; reason?: string; amount?: number }>; reason?: string };
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return res.status(400).json({ error: "items_required" });
+  }
+  if (body.items.length > 50) {
+    return res.status(400).json({ error: "too_many_items", max: 50 });
+  }
+  const sharedReason = (body.reason ?? "").trim();
+
+  const pool = getPool();
+  const succeeded: Array<{ txId: string; refundId: string; refundedKzt: number }> = [];
+  const failed: Array<{ txId: string; error: string }> = [];
+
+  for (const item of body.items) {
+    const txId = (item.txId ?? "").trim();
+    const reason = ((item.reason ?? sharedReason) ?? "").trim();
+    if (!txId || reason.length < 5) {
+      failed.push({ txId, error: "validation_failed" });
+      continue;
+    }
+    try {
+      const result = await withTx(async (c) => {
+        const tx = await c.query(
+          "SELECT id, wallet_id, owner_id, type, amount FROM qpaynet_transactions WHERE id=$1 FOR UPDATE",
+          [txId],
+        );
+        if (!tx.rows[0]) throw new HttpError(404, "tx_not_found");
+        const orig = tx.rows[0];
+        if (!["deposit", "transfer_in", "merchant_charge"].includes(orig.type)) {
+          throw new HttpError(400, "tx_type_not_refundable");
+        }
+        const existing = await c.query(
+          "SELECT id FROM qpaynet_transactions WHERE ref_tx_id=$1 AND type='refund'",
+          [txId],
+        );
+        if (existing.rows[0]) throw new HttpError(409, "tx_already_refunded");
+        const origAmount = BigInt(orig.amount);
+        const refundTiin = item.amount ? toTiin(item.amount) : origAmount;
+        if (refundTiin <= 0n) throw new HttpError(400, "refund_amount_must_be_positive");
+        if (refundTiin > origAmount) throw new HttpError(400, "refund_exceeds_original");
+        const w = await c.query(
+          "SELECT id FROM qpaynet_wallets WHERE id=$1 FOR UPDATE",
+          [orig.wallet_id],
+        );
+        if (!w.rows[0]) throw new HttpError(404, "wallet_not_found");
+        const refundId = randomUUID();
+        await c.query(
+          "UPDATE qpaynet_wallets SET balance = balance - $1 WHERE id=$2",
+          [refundTiin, orig.wallet_id],
+        );
+        await c.query(
+          `INSERT INTO qpaynet_transactions (id, wallet_id, owner_id, type, amount, description, ref_tx_id)
+           VALUES ($1,$2,$3,'refund',$4,$5,$6)`,
+          [refundId, orig.wallet_id, orig.owner_id, refundTiin, `Возврат: ${reason}`, txId],
+        );
+        return {
+          refundId,
+          ownerId: orig.owner_id,
+          walletId: orig.wallet_id,
+          refundedKzt: fromTiin(refundTiin),
+        };
+      });
+      void auditLog(pool, result.ownerId, "refund_issued",
+        { refundId: result.refundId, originalTxId: txId, amountKzt: result.refundedKzt, reason, by: auth.email, bulk: true }, req);
+      void notify(pool, result.ownerId, "refund_issued",
+        `Возврат ${result.refundedKzt.toLocaleString("ru-RU")} ₸`, reason, result.refundId);
+      emitAdminEvent({
+        kind: "refund_issued",
+        at: new Date().toISOString(),
+        by: auth.email,
+        data: { refundId: result.refundId, originalTxId: txId, ownerId: result.ownerId, walletId: result.walletId, amountKzt: result.refundedKzt, reason, bulk: true },
+      });
+      succeeded.push({ txId, refundId: result.refundId, refundedKzt: result.refundedKzt });
+    } catch (err) {
+      const code = err instanceof HttpError ? err.code : "internal_error";
+      if (!(err instanceof HttpError)) {
+        captureException(err, { route: "qpaynet/admin/refund/bulk", txId });
+      }
+      failed.push({ txId, error: code });
+    }
+  }
+  res.json({
+    requested: body.items.length,
+    succeededCount: succeeded.length,
+    failedCount: failed.length,
+    succeeded,
+    failed,
+  });
+});
+
+// GET /api/qpaynet/admin/wallets — search wallets by owner-id substring or
+// status. Used by /admin/freeze to look up by email instead of UUID.
+qpaynetRouter.get("/admin/wallets", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const q = (req.query.q as string | undefined)?.trim();
+  const status = (req.query.status as string | undefined)?.trim();
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (q) {
+    params.push(`%${q}%`);
+    const idx = params.length;
+    where.push(`(owner_id ILIKE $${idx} OR id ILIKE $${idx} OR name ILIKE $${idx})`);
+  }
+  if (status && ["active", "frozen", "closed"].includes(status)) {
+    params.push(status);
+    where.push(`status = $${params.length}`);
+  }
+  params.push(limit);
+  const sql = `
+    SELECT id, owner_id, name, status, balance, currency, created_at
+    FROM qpaynet_wallets
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY created_at DESC
+    LIMIT $${params.length}
+  `;
+  const pool = getPool();
+  const r = await pool.query(sql, params);
+  res.json({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    items: r.rows.map((row: any) => ({
+      id: row.id,
+      ownerId: row.owner_id,
+      name: row.name,
+      status: row.status,
+      balanceKzt: fromTiin(BigInt(row.balance)),
+      currency: row.currency,
+      createdAt: new Date(row.created_at).toISOString(),
+    })),
+  });
+});
+
+// GET /api/qpaynet/admin/audit — paginated cross-owner audit log for
+// compliance review. Filter by action / owner / cursor.
+qpaynetRouter.get("/admin/audit", async (req, res) => {
+  await ensureAuditTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const action = (req.query.action as string | undefined)?.trim();
+  const owner = (req.query.owner as string | undefined)?.trim();
+  const before = (req.query.before as string | undefined)?.trim();
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit ?? 100)));
+
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (action) {
+    params.push(action);
+    where.push(`action = $${params.length}`);
+  }
+  if (owner) {
+    params.push(`%${owner}%`);
+    where.push(`owner_id ILIKE $${params.length}`);
+  }
+  if (before) {
+    params.push(before);
+    where.push(`created_at < $${params.length}`);
+  }
+  params.push(limit);
+  const sql = `
+    SELECT id, owner_id, action, details, ip, user_agent, created_at
+    FROM qpaynet_audit_log
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY created_at DESC
+    LIMIT $${params.length}
+  `;
+  const pool = getPool();
+  const r = await pool.query(sql, params);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items = r.rows.map((row: any) => ({
+    id: row.id,
+    ownerId: row.owner_id,
+    action: row.action,
+    details: row.details,
+    ip: row.ip,
+    userAgent: row.user_agent,
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
+  const nextCursor = items.length === limit ? items[items.length - 1].createdAt : null;
+  res.json({ items, nextCursor });
+});
+
+// GET /api/qpaynet/admin/events — Server-Sent Events live stream of
+// admin-relevant events (refund_issued, wallet_frozen/unfrozen,
+// delivery_force_retry, drift_alert). Process-local; for durability use
+// /admin/audit. Heartbeat every 25s keeps proxies from idling-out.
+qpaynetRouter.get("/admin/events", (req, res: Response) => {
+  // EventSource (browser SSE client) cannot set Authorization headers,
+  // so accept ?token= query as fallback. Same JWT, same admin gate.
+  let auth = verifyBearerOptional(req);
+  if (!auth && typeof req.query.token === "string") {
+    auth = verifyBearerToken(req.query.token);
+  }
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  res.write(`event: hello\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
+
+  const onEvent = (ev: AdminEvent) => {
+    try {
+      res.write(`event: ${ev.kind}\ndata: ${JSON.stringify(ev)}\n\n`);
+    } catch {
+      // socket likely closed; cleanup happens via close handler below.
+    }
+  };
+  adminBus.on("event", onEvent);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch { /* closed */ }
+  }, 25_000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    adminBus.off("event", onEvent);
+  });
+});
+
 // GET /api/qpaynet/admin/webhook-deliveries — operational view for ops to triage
 // failing or pending merchant webhook deliveries. ?status=stuck returns rows
 // that exhausted retries (attempts >= MAX, no delivered_at).
@@ -2832,6 +3190,12 @@ qpaynetRouter.post("/admin/webhook-deliveries/:id/retry", async (req, res) => {
   if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "delivery_not_found" });
   void auditLog(pool, null, "webhook_delivery_force_retry",
     { deliveryId: r.rows[0].id, subId: r.rows[0].sub_id, by: auth.email }, req);
+  emitAdminEvent({
+    kind: "delivery_force_retry",
+    at: new Date().toISOString(),
+    by: auth.email,
+    data: { deliveryId: r.rows[0].id, subId: r.rows[0].sub_id },
+  });
   res.json({ ok: true, deliveryId: r.rows[0].id });
 });
 

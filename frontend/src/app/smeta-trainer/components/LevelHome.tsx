@@ -58,6 +58,19 @@ export function LevelHome() {
               style={{ width: `${(done / total) * 100}%` }}
             />
           </div>
+
+          {/* Справочники */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href="/smeta-trainer/ssc"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📚 Справочник ССЦ РК 8.04-08-2025
+              <span className="text-[10px] text-emerald-500 font-normal">
+                182 936 позиций
+              </span>
+            </Link>
+          </div>
         </div>
 
         {/* Карточки уровней */}

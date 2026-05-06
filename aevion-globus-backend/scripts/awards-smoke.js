@@ -128,7 +128,7 @@ async function main() {
     r = await call("POST", "/api/auth/register", {
       body: { email: EMAIL, password: PASSWORD, name: "Awards smoke" },
     });
-    if (r.status !== 200 || !r.body?.token) return fail("submit chain · register", `status=${r.status}`);
+    if ((r.status !== 200 && r.status !== 201) || !r.body?.token) return fail("submit chain · register", `status=${r.status}`);
     const token = r.body.token;
     const auth = { authorization: `Bearer ${token}` };
 

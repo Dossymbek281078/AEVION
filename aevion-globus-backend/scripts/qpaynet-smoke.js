@@ -417,16 +417,16 @@ async function run() {
   console.log("\n29. Refund idempotency");
   const idemDep = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 50 }, auth);
   const idemTxId = idemDep.body.txId;
-  const idemKey = "refund-" + Date.now();
+  const refundKey = "refund-" + Date.now();
   const ref1 = await req("POST", "/api/qpaynet/admin/refund",
-    { txId: idemTxId, reason: "idem test" }, { ...auth, "Idempotency-Key": idemKey });
+    { txId: idemTxId, reason: "idem test" }, { ...auth, "Idempotency-Key": refundKey });
   if (ref1.status === 200) {
     const ref2 = await req("POST", "/api/qpaynet/admin/refund",
-      { txId: idemTxId, reason: "idem test" }, { ...auth, "Idempotency-Key": idemKey });
+      { txId: idemTxId, reason: "idem test" }, { ...auth, "Idempotency-Key": refundKey });
     assert("refund replay same key+body → 200 cached", ref2.status === 200);
     assert("refund cached refundId matches", ref2.body.refundId === ref1.body.refundId);
     const ref3 = await req("POST", "/api/qpaynet/admin/refund",
-      { txId: idemTxId, reason: "different reason" }, { ...auth, "Idempotency-Key": idemKey });
+      { txId: idemTxId, reason: "different reason" }, { ...auth, "Idempotency-Key": refundKey });
     assert("refund replay same key+different body → 409",
       ref3.status === 409 && ref3.body.error === "idempotency_key_body_mismatch");
   }
@@ -446,10 +446,10 @@ async function run() {
 
   // 31. Webhook deliveries admin view (durable fan-out queue)
   console.log("\n31. Webhook deliveries");
-  const wd = await req("GET", "/api/qpaynet/admin/webhook-deliveries?limit=10", null, auth);
-  assert("GET /admin/webhook-deliveries → 200 or 403", [200, 403].includes(wd.status));
-  if (wd.status === 200) {
-    assert("deliveries items array", Array.isArray(wd.body.items));
+  const wdList = await req("GET", "/api/qpaynet/admin/webhook-deliveries?limit=10", null, auth);
+  assert("GET /admin/webhook-deliveries → 200 or 403", [200, 403].includes(wdList.status));
+  if (wdList.status === 200) {
+    assert("deliveries items array", Array.isArray(wdList.body.items));
   }
   const wdStuck = await req("GET", "/api/qpaynet/admin/webhook-deliveries?status=stuck", null, auth);
   assert("GET deliveries?status=stuck → 200 or 403", [200, 403].includes(wdStuck.status));

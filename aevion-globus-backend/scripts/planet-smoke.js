@@ -71,7 +71,7 @@ async function main() {
   r = await call("POST", "/api/auth/register", {
     body: { email: EMAIL, password: PASSWORD, name: "Planet smoke" },
   });
-  if (r.status !== 200 || !r.body?.token) return fail("register", `status=${r.status}`);
+  if ((r.status !== 200 && r.status !== 201) || !r.body?.token) return fail("register", `status=${r.status}`);
   const token = r.body.token;
   ok("register", `userId=${r.body?.user?.id?.slice(0, 8)}…`);
 

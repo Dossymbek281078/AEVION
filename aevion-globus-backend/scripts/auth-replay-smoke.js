@@ -69,7 +69,7 @@ async function main() {
   let r = await call("POST", "/api/auth/register", {
     body: { email: EMAIL, password: PASSWORD, name: "Auth replay smoke" },
   });
-  if (r.status !== 200 || !r.body?.token) return fail("register", `status=${r.status} body=${JSON.stringify(r.body)}`);
+  if ((r.status !== 200 && r.status !== 201) || !r.body?.token) return fail("register", `status=${r.status} body=${JSON.stringify(r.body)}`);
   const T1 = r.body.token;
   ok("register", `token len=${T1.length}`);
 
@@ -98,7 +98,7 @@ async function main() {
 
   // 5. fresh login → T2 with new sid
   r = await call("POST", "/api/auth/login", { body: { email: EMAIL, password: PASSWORD } });
-  if (r.status !== 200 || !r.body?.token) return fail("login (fresh)", `status=${r.status}`);
+  if ((r.status !== 200 && r.status !== 201) || !r.body?.token) return fail("login (fresh)", `status=${r.status}`);
   const T2 = r.body.token;
   if (T2 === T1) return fail("login (fresh)", "T2 equals T1 — sid is not in the token");
   ok("login (fresh)", `T2 differs from T1`);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportError } from "@/lib/reporter";
 
 interface Delivery {
   id: string;
@@ -84,6 +85,9 @@ export default function AdminWebhookDeliveriesPage() {
       }
       const d = await r.json();
       setItems(d.items ?? []);
+    } catch (err) {
+      reportError(err, "qpaynet/admin/webhook-deliveries");
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }

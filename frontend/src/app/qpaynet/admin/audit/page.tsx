@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportError } from "@/lib/reporter";
 
 interface AuditEvent {
   id: string;
@@ -93,6 +94,9 @@ export default function AdminAuditPage() {
       const d = await r.json();
       setEvents(prev => (before ? [...prev, ...(d.items ?? [])] : (d.items ?? [])));
       setNextCursor(d.nextCursor ?? null);
+    } catch (err) {
+      reportError(err, "qpaynet/admin/audit");
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }

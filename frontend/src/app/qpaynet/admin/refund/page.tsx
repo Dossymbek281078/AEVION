@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportError } from "@/lib/reporter";
 
 interface Refund {
   refundId: string;
@@ -92,6 +93,9 @@ export default function AdminRefundPage() {
       const d = await r.json();
       setRefunds(prev => (before ? [...prev, ...(d.items ?? [])] : (d.items ?? [])));
       setNextCursor(d.nextCursor ?? null);
+    } catch (err) {
+      reportError(err, "qpaynet/admin/refund");
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }

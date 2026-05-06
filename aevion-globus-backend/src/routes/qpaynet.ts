@@ -71,6 +71,23 @@ function emitAdminEvent(ev: AdminEvent): void {
   try { adminBus.emit("event", ev); } catch { /* never let bus errors leak */ }
 }
 
+// Per-email SSE connection counter — protects against runaway dashboard tabs
+// or a misbehaving client opening many EventSources. Cap is conservative;
+// admins rarely need more than a couple of dashboards open.
+const SSE_MAX_PER_EMAIL = Math.max(1, Number(process.env.QPAYNET_SSE_MAX_PER_EMAIL ?? 5));
+const sseConnsByEmail = new Map<string, number>();
+function tryAcquireSseSlot(email: string): boolean {
+  const cur = sseConnsByEmail.get(email) ?? 0;
+  if (cur >= SSE_MAX_PER_EMAIL) return false;
+  sseConnsByEmail.set(email, cur + 1);
+  return true;
+}
+function releaseSseSlot(email: string): void {
+  const cur = sseConnsByEmail.get(email) ?? 0;
+  if (cur <= 1) sseConnsByEmail.delete(email);
+  else sseConnsByEmail.set(email, cur - 1);
+}
+
 // Per-tier rate limit overrides: `QPAYNET_RATE_TIERS=email1@x.com:300,email2@y.com:600`.
 // Lets enterprise/merchant integrations get higher caps without hard-coding.
 // Keys are emails (or sub IDs); values are per-minute limits for the money
@@ -3102,6 +3119,70 @@ qpaynetRouter.get("/admin/audit", async (req, res) => {
   res.json({ items, nextCursor });
 });
 
+// GET /api/qpaynet/admin/analytics — last 30 days operational metrics for
+// dashboard sparklines: refund volume by day, deliveries success rate by day,
+// frozen-wallet count, total wallets. One round-trip; safe to cache 60s.
+qpaynetRouter.get("/admin/analytics", async (req, res) => {
+  await ensureTables();
+  await ensureDeliveriesTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const days = Math.max(7, Math.min(90, Number(req.query.days ?? 30)));
+  const pool = getPool();
+
+  const [refundDaily, deliveryDaily, walletStats] = await Promise.all([
+    pool.query(
+      `SELECT
+         to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+         COUNT(*)::int AS n,
+         COALESCE(SUM(amount), 0)::bigint AS total
+       FROM qpaynet_transactions
+       WHERE type='refund' AND created_at >= NOW() - $1::interval
+       GROUP BY 1 ORDER BY 1 ASC`,
+      [`${days} days`],
+    ),
+    pool.query(
+      `SELECT
+         to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+         COUNT(*) FILTER (WHERE delivered_at IS NOT NULL)::int AS delivered,
+         COUNT(*) FILTER (WHERE delivered_at IS NULL AND attempts >= 5)::int AS stuck,
+         COUNT(*)::int AS total
+       FROM qpaynet_webhook_deliveries
+       WHERE created_at >= NOW() - $1::interval
+       GROUP BY 1 ORDER BY 1 ASC`,
+      [`${days} days`],
+    ),
+    pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status='active')::int AS active,
+         COUNT(*) FILTER (WHERE status='frozen')::int AS frozen,
+         COUNT(*) FILTER (WHERE status='closed')::int AS closed,
+         COUNT(*)::int AS total
+       FROM qpaynet_wallets`,
+    ),
+  ]);
+
+  res.json({
+    days,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    refundsByDay: refundDaily.rows.map((r: any) => ({
+      day: r.day,
+      count: r.n,
+      totalKzt: fromTiin(BigInt(r.total)),
+    })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deliveriesByDay: deliveryDaily.rows.map((r: any) => ({
+      day: r.day,
+      delivered: r.delivered,
+      stuck: r.stuck,
+      total: r.total,
+    })),
+    wallets: walletStats.rows[0] ?? { active: 0, frozen: 0, closed: 0, total: 0 },
+  });
+});
+
 // GET /api/qpaynet/admin/events — Server-Sent Events live stream of
 // admin-relevant events (refund_issued, wallet_frozen/unfrozen,
 // delivery_force_retry, drift_alert). Process-local; for durability use
@@ -3115,6 +3196,14 @@ qpaynetRouter.get("/admin/events", (req, res: Response) => {
   }
   if (!auth) return res.status(401).json({ error: "auth_required" });
   if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const emailKey = (auth.email ?? auth.sub ?? "anon").toLowerCase();
+  if (!tryAcquireSseSlot(emailKey)) {
+    return res.status(429).json({
+      error: "too_many_sse_connections",
+      max: SSE_MAX_PER_EMAIL,
+    });
+  }
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -3137,10 +3226,16 @@ qpaynetRouter.get("/admin/events", (req, res: Response) => {
     try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch { /* closed */ }
   }, 25_000);
 
-  req.on("close", () => {
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
     clearInterval(heartbeat);
     adminBus.off("event", onEvent);
-  });
+    releaseSseSlot(emailKey);
+  };
+  req.on("close", cleanup);
+  res.on("close", cleanup);
 });
 
 // GET /api/qpaynet/admin/webhook-deliveries — operational view for ops to triage

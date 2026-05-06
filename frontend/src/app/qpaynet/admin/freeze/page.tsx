@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportError } from "@/lib/reporter";
 
 type ActionKind = "freeze" | "unfreeze";
 
@@ -75,6 +76,9 @@ export default function AdminFreezePage() {
       }
       const d = await r.json();
       setSearchHits(d.items ?? []);
+    } catch (err) {
+      reportError(err, "qpaynet/admin/freeze");
+      setError(err instanceof Error ? err.message : "Search failed");
     } finally {
       setSearching(false);
     }

@@ -1,6 +1,6 @@
 {
   "name": "@aevion/qpaynet-client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "TypeScript client for AEVION QPayNet — embedded payment infrastructure with HMAC webhooks, idempotent transfers, merchant keys, payment links.",
   "license": "Apache-2.0",
   "author": "AEVION",

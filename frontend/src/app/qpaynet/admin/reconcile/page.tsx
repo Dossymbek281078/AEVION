@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportError } from "@/lib/reporter";
 
 interface Reconcile {
   ok: boolean;
@@ -67,6 +68,9 @@ export default function AdminReconcilePage() {
       }
       setData(await r.json());
       setLastRefreshed(new Date());
+    } catch (err) {
+      reportError(err, "qpaynet/admin/reconcile");
+      setError(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }

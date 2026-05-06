@@ -319,6 +319,11 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Cross-owner audit viewer | done — `GET /admin/audit?action=&owner=&before=&limit=` (cursor-paginated) | — |
 | Live ops SSE feed | done — `GET /admin/events` (token via `?token=` for EventSource); emits `refund_issued`, `wallet_frozen`, `wallet_unfrozen`, `delivery_force_retry`, `drift_alert` with 25s heartbeat | — |
 | Frontend admin UI | done — `/qpaynet/admin/{,reconcile,refund,freeze,webhook-deliveries,audit,payouts,kyc}` (auth-gated, not in sitemap) | — |
+| Admin analytics for sparklines | done — `GET /admin/analytics?days=` (refunds_by_day, deliveries_by_day success rate, wallet status counts) + inline-SVG sparkline panel on /admin | — |
+| SSE per-email connection cap | done — `QPAYNET_SSE_MAX_PER_EMAIL` (default 5); 429 `too_many_sse_connections` on overflow | — |
+| Sentry error capture in admin UI | done — `reportError(err, "qpaynet/admin/<page>")` wired in fetch catch on all 6 admin pages; mirrors to /api/errors + Sentry when DSN set | — |
+| Playwright admin smoke | done — `e2e/qpaynet-admin-smoke.spec.ts` covers all 8 admin routes (anon render + optional ADMIN_JWT authed flow) | — |
+| SDK v1.0.1 publish-ready | done — `npm run build` + `npm pack --dry-run` clean. 16.4 kB tarball, 6 files. Awaiting `npm publish` (needs npm auth) | — |
 
 Anything in "open" is documented but not yet code. When you finish one, move
 the row up and update the date.

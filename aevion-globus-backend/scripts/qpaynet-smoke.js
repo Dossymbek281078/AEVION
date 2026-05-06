@@ -651,6 +651,19 @@ async function run() {
     );
   }
 
+  console.log("\n44. Admin analytics");
+  if (auth) {
+    const ana = await req("GET", "/api/qpaynet/admin/analytics?days=14", null, auth);
+    assert(
+      "analytics returns refunds/deliveries/wallets",
+      ana.status === 200 &&
+        Array.isArray(ana.body.refundsByDay) &&
+        Array.isArray(ana.body.deliveriesByDay) &&
+        ana.body.wallets &&
+        typeof ana.body.wallets.total === "number",
+    );
+  }
+
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

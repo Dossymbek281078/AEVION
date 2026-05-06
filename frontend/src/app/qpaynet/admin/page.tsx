@@ -2,12 +2,53 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { reportError } from "@/lib/reporter";
 
 interface ReconcileSummary {
   ok: boolean;
   drift_tiin: string;
   negative_wallet_count: number;
   checked_at: string;
+}
+
+interface Analytics {
+  days: number;
+  refundsByDay: Array<{ day: string; count: number; totalKzt: number }>;
+  deliveriesByDay: Array<{ day: string; delivered: number; stuck: number; total: number }>;
+  wallets: { active: number; frozen: number; closed: number; total: number };
+}
+
+function Sparkline({
+  values,
+  color,
+  height = 28,
+  width = 120,
+}: {
+  values: number[];
+  color: string;
+  height?: number;
+  width?: number;
+}) {
+  if (values.length === 0) {
+    return <svg width={width} height={height} aria-hidden="true" />;
+  }
+  const max = Math.max(...values, 1);
+  const step = values.length === 1 ? width : width / (values.length - 1);
+  const points = values
+    .map((v, i) => `${i * step},${height - (v / max) * (height - 4) - 2}`)
+    .join(" ");
+  return (
+    <svg width={width} height={height} aria-hidden="true">
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        points={points}
+      />
+    </svg>
+  );
 }
 
 interface PayoutsStats {
@@ -83,6 +124,7 @@ export default function AdminIndexPage() {
   const [payouts, setPayouts] = useState<PayoutsStats | null>(null);
   const [kyc, setKyc] = useState<KycPending | null>(null);
   const [stuckCount, setStuckCount] = useState<number | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [live, setLive] = useState<LiveEvent[]>([]);
   const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "closed" | "error">(
     "connecting",
@@ -137,11 +179,12 @@ export default function AdminIndexPage() {
   async function loadAll(t: string) {
     try {
       const headers = { Authorization: `Bearer ${t}` };
-      const [rec, pay, kycR, stuck] = await Promise.all([
+      const [rec, pay, kycR, stuck, ana] = await Promise.all([
         fetch("/api/qpaynet/admin/reconcile", { headers }),
         fetch("/api/qpaynet/admin/payouts/stats", { headers }),
         fetch("/api/qpaynet/admin/kyc/pending", { headers }).catch(() => null),
         fetch("/api/qpaynet/admin/webhook-deliveries?status=stuck&limit=200", { headers }),
+        fetch("/api/qpaynet/admin/analytics?days=30", { headers }),
       ]);
       if (rec.status === 403) {
         setAuthed("denied");
@@ -161,8 +204,9 @@ export default function AdminIndexPage() {
         const d = await stuck.json();
         setStuckCount((d.items ?? []).length);
       }
-    } catch {
-      // network errors fall through to base state
+      if (ana.ok) setAnalytics(await ana.json());
+    } catch (err) {
+      reportError(err, "qpaynet/admin");
     }
   }
 
@@ -385,6 +429,86 @@ export default function AdminIndexPage() {
             </Link>
           ))}
         </div>
+
+        {analytics && (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              📈 30-day analytics
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                  Refunds (count / day)
+                </div>
+                <div className="flex items-center gap-3">
+                  <Sparkline
+                    values={analytics.refundsByDay.map(r => r.count)}
+                    color="#f87171"
+                  />
+                  <div className="text-sm">
+                    <div className="font-bold">
+                      {analytics.refundsByDay.reduce((s, r) => s + r.count, 0)}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      {analytics.refundsByDay
+                        .reduce((s, r) => s + r.totalKzt, 0)
+                        .toLocaleString("ru-RU", { maximumFractionDigits: 0 })}{" "}
+                      ₸
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                  Webhook delivery success
+                </div>
+                <div className="flex items-center gap-3">
+                  <Sparkline
+                    values={analytics.deliveriesByDay.map(d =>
+                      d.total === 0 ? 0 : (d.delivered / d.total) * 100,
+                    )}
+                    color="#34d399"
+                  />
+                  <div className="text-sm">
+                    {(() => {
+                      const total = analytics.deliveriesByDay.reduce((s, r) => s + r.total, 0);
+                      const delivered = analytics.deliveriesByDay.reduce(
+                        (s, r) => s + r.delivered,
+                        0,
+                      );
+                      const rate = total === 0 ? 100 : (delivered / total) * 100;
+                      return (
+                        <>
+                          <div className="font-bold">{rate.toFixed(1)}%</div>
+                          <div className="text-[10px] text-slate-500">
+                            {delivered}/{total}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                  Wallets
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 font-semibold">
+                    active {analytics.wallets.active}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-900 text-cyan-300 font-semibold">
+                    frozen {analytics.wallets.frozen}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-semibold">
+                    closed {analytics.wallets.closed}
+                  </span>
+                  <span className="text-slate-500">/ Σ {analytics.wallets.total}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
           <div className="flex items-center justify-between">

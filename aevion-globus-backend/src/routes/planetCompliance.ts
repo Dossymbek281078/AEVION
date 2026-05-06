@@ -1216,7 +1216,7 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
       INSERT INTO "PlanetArtifactVersion"
         ("id","submissionId","versionNo","ownerId","artifactType","productKey","tier","status","inputSetHash","generationParamsHash","canonicalArtifactHash","evidenceRoot","validatorResultsJson","codeIndexJson","mediaIndexJson","parentVersionId")
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16)
     `,
     [
       artifactVersionId,
@@ -1231,9 +1231,9 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
       generationParamsHash,
       canonicalArtifactHash,
       evidenceRoot,
-      validatorResultsJson,
-      codeIndexJson ? codeIndexJson : null,
-      mediaIndex ? mediaIndex : null,
+      JSON.stringify(validatorResultsJson),
+      codeIndexJson ? JSON.stringify(codeIndexJson) : null,
+      mediaIndex ? JSON.stringify(mediaIndex) : null,
       null,
     ]
   );
@@ -1277,14 +1277,14 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
         INSERT INTO "PlanetCertificate"
           ("id","artifactVersionId","ownerId","status","publicPayloadJson","privatePayloadJson","policyManifestHash","evidenceRoot","signature","revokedAt","revokeReason")
         VALUES
-          ($1,$2,$3,'issued',$4,$5,$6,$7,$8,NULL,NULL)
+          ($1,$2,$3,'issued',$4::jsonb,$5::jsonb,$6,$7,$8,NULL,NULL)
       `,
       [
         certificateId,
         artifactVersionId,
         ownerId,
-        publicPayloadJson,
-        privatePayloadJson,
+        JSON.stringify(publicPayloadJson),
+        JSON.stringify(privatePayloadJson),
         policyManifestHash,
         evidenceRoot,
         signature,
@@ -1779,7 +1779,7 @@ planetComplianceRouter.post("/submissions/:submissionId/resubmit", async (req, r
       INSERT INTO "PlanetArtifactVersion"
         ("id","submissionId","versionNo","ownerId","artifactType","productKey","tier","status","inputSetHash","generationParamsHash","canonicalArtifactHash","evidenceRoot","validatorResultsJson","codeIndexJson","mediaIndexJson","parentVersionId")
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15::jsonb,$16)
     `,
     [
       artifactVersionId,
@@ -1794,9 +1794,9 @@ planetComplianceRouter.post("/submissions/:submissionId/resubmit", async (req, r
       generationParamsHash,
       canonicalArtifactHash,
       evidenceRoot,
-      validatorResults,
-      codeIndex ? codeIndex : null,
-      mediaIndex ? mediaIndex : null,
+      JSON.stringify(validatorResults),
+      codeIndex ? JSON.stringify(codeIndex) : null,
+      mediaIndex ? JSON.stringify(mediaIndex) : null,
       parentVersionIdForInsert,
     ]
   );
@@ -1840,14 +1840,14 @@ planetComplianceRouter.post("/submissions/:submissionId/resubmit", async (req, r
         INSERT INTO "PlanetCertificate"
           ("id","artifactVersionId","ownerId","status","publicPayloadJson","privatePayloadJson","policyManifestHash","evidenceRoot","signature","revokedAt","revokeReason")
         VALUES
-          ($1,$2,$3,'issued',$4,$5,$6,$7,$8,NULL,NULL)
+          ($1,$2,$3,'issued',$4::jsonb,$5::jsonb,$6,$7,$8,NULL,NULL)
       `,
       [
         certificateId,
         artifactVersionId,
         ownerId,
-        publicPayloadJson,
-        privatePayloadJson,
+        JSON.stringify(publicPayloadJson),
+        JSON.stringify(privatePayloadJson),
         policyManifestHash,
         evidenceRoot,
         signature,

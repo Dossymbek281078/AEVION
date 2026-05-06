@@ -196,9 +196,9 @@ parity + docs/runbook.
 
 | ID | Task | Owner |
 |---|---|---|
-| P3-1 | Demo recording — 8-minute scripted walkthrough across QRight → Bureau → Awards → Bank | aevion-core |
+| P3-1 | Demo recording — 8-minute scripted walkthrough across QRight → Bureau → Awards → Bank | aevion-core | **script ready** — `docs/demo/P3-1_INVESTOR_DEMO_SCRIPT.md` (timecodes + click sequence + voiceover lines + checklist). Recording needs human voice + OBS/Loom — manual step |
 | P3-2 | ✅ **DONE 2026-05-06** — Press kit / one-pager refreshed to 2026-05-06: paid E2E live, velocity 114 PR/30d, 10-min investor demo flow added | aevion-core |
-| P3-3 | Reference customer onboarding — RU partnership artifacts in `docs/bureau/` need productisation | aevion-bureau / aevion-core |
+| P3-3 | ✅ **DONE 2026-05-06** — Reference customer pack `docs/bureau/REFERENCE_CUSTOMER_PACK.md`: ICP, 30-day playbook, public pricing, pilot offer email, onboarding checklist, Q3 KPI. Existing partner letter templates linked | aevion-bureau / aevion-core |
 | P3-4 | ✅ **DONE 2026-05-06** — First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau | Trust Graph edge in `aca91c2`, AEC mint claim flow in PR #112 (`internalMintForDevice` + `/trust-edges/:edgeId/claim-aec`), smoke plumbing PR #113, dashboard extension `ec37db6d`, 14 unit tests `721554f`. Stripe (test mode) + AEC reward env vars live on Railway, redeploy verified, prod smoke 24/24, dashboard returns `trustEdges`+`aecSummary`. Remaining (post-launch polish): live-mode Stripe keys + first real paid cert via UI |
 | P3-5 | ✅ **DONE 2026-05-06** — Investor demo flow on prod — `scripts/investor-demo-audit.sh` covers 18 checks (10 UI routes + 6 backend endpoints + Railway origin + GitHub), all green; run before any pitch | aevion-core |
 
@@ -206,7 +206,7 @@ parity + docs/runbook.
 
 | ID | Task | Owner |
 |---|---|---|
-| P4-1 | DNS cutover announcement | aevion-core |
+| P4-1 | DNS cutover announcement | aevion-core | **draft ready** — `docs/PHASE4_LAUNCH_ANNOUNCEMENT.md` (Twitter thread, LinkedIn post, habr structure, Telegram template, pre-launch checklist). Publishes after P3-1 + P3-3 first paying customer |
 | P4-2 | First press wave (TechCrunch / Forbes RU / habr) | aevion-core |
 | P4-3 | Reference customer case study published | aevion-core |
 | P4-4 | Open API quotas + paid tier rollout | aevion-backend-modules |
@@ -275,6 +275,9 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-06  —    P3-1 script ready — investor demo 8-min recording script with timecodes
+2026-05-06  —    P3-3 ✅ DONE — reference customer pack: ICP, 30-day playbook, pilot offer, onboarding checklist
+2026-05-06  —    P4-1 draft — Phase 4 launch announcement (Twitter/LinkedIn/habr/Telegram + pre-launch checklist)
 2026-05-06  —    P3-2 ✅ DONE — onepager refreshed (paid E2E live, 114 PR/30d, 10-min demo flow)
 2026-05-06  —    P3-5 ✅ DONE — investor-demo-audit.sh (18/18 green): UI routes, backend, Railway, GitHub
 2026-05-06  —    P3-4 ✅ DONE — Stripe + AEC reward env on Railway, redeploy + smoke 24/24, dashboard trustEdges/aecSummary live

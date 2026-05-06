@@ -1547,6 +1547,27 @@ export default function CyberChessPage(){
       if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})}
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
+      // Hint (H): show the engine's top move as a 3s ghost arrow on the board.
+      // Costs 5 Chessy in active play; free in Analysis tab. No-op if engine not ready
+      // or if the user is not on play / coach / analysis (e.g. in puzzles, the puzzle
+      // hint button on the right panel handles it differently).
+      if(e.key==="h"||e.key==="H"){
+        if(!(tab==="play"||tab==="coach"||tab==="analysis"))return;
+        if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+        if(over){showToast("Партия закончена","info");return}
+        e.preventDefault();
+        // Charge only during active play; free elsewhere.
+        const charged=tab==="play"&&on&&!over;
+        if(charged&&!spendChessy(5,"подсказка хода"))return;
+        showToast(charged?"💡 Считаю лучший ход (-5 Chessy)":"💡 Считаю лучший ход","info");
+        try{
+          sfR.current.go(game.fen(),12,(f,t)=>{
+            if(!f||!t){showToast("Не нашёл хода","error");return}
+            sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);
+            window.setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
+          });
+        }catch{showToast("Ошибка движка","error")}
+      }
       // Save bookmark (B): persist current FEN to position bookmarks.
       if(e.key==="b"||e.key==="B"){
         e.preventDefault();
@@ -6098,6 +6119,7 @@ export default function CyberChessPage(){
           ["R","📚 Открыть / закрыть Репертуар дебютов"],
           ["S","🔗 Скопировать ссылку на текущую позицию (FEN URL)"],
           ["B","⭐ Сохранить позицию в закладки (Ctrl+K → найти открыть)"],
+          ["H","💡 Показать лучший ход (3 сек, 5 Chessy в Play, free в Анализе)"],
           ["Ctrl+V","📋 Вставить FEN / PGN / Lichess URL — авто-загрузка в Анализ"],
           ["1..5","Workspace: Focus / Standard / Stream / Study / Coach"],
           ["Ctrl+Shift+D","Debug HUD (drag-механика)"],
@@ -8106,6 +8128,20 @@ export default function CyberChessPage(){
         {id:"hotkeys",      icon:"⌨", group:"Board", label:"Все горячие клавиши",hotkey:"?", run:()=>sShowHelp(v=>!v)},
         {id:"bookmark-save",icon:"⭐",group:"Board", label:"Сохранить позицию (закладка)",hint:"Текущий FEN в закладки",hotkey:"B", run:()=>{
           try{const fen=game.fen();if(bookmarks.some(b=>b.fen===fen)){showToast("⭐ Уже в закладках","info")}else{const next=addBookmark(bookmarks,fen);sBookmarks(next);showToast(`⭐ Сохранено · всего ${next.length}`,"success")}}catch{showToast("Ошибка","error")}
+        }},
+        {id:"hint",         icon:"💡",group:"Board", label:"Показать лучший ход",hint:tab==="analysis"?"Free в Анализе · 3-сек ghost-стрелка":"5 Chessy · 3-сек ghost-стрелка",hotkey:"H", run:()=>{
+          if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+          if(over){showToast("Партия закончена","info");return}
+          const charged=tab==="play"&&on&&!over;
+          if(charged&&!spendChessy(5,"подсказка хода"))return;
+          showToast(charged?"💡 Считаю лучший ход (-5 Chessy)":"💡 Считаю лучший ход","info");
+          try{
+            sfR.current.go(game.fen(),12,(f,t)=>{
+              if(!f||!t){showToast("Не нашёл хода","error");return}
+              sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);
+              window.setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
+            });
+          }catch{showToast("Ошибка движка","error")}
         }},
 
         // ── SETTINGS ──

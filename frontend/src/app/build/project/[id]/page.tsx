@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
@@ -122,7 +122,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               {isOwner && (
                 <div className="flex items-center gap-2">
                   <BulkImportButton projectId={project.id} onCreated={refresh} />
-                  <NewVacancyButton projectId={project.id} onCreated={refresh} />
+                  <NewVacancyButton
+                    projectId={project.id}
+                    onCreated={refresh}
+                    existingTitles={vacancies
+                      .filter((v) => v.status !== "ARCHIVED")
+                      .map((v) => v.title)}
+                  />
                 </div>
               )}
             </div>
@@ -567,7 +573,15 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
-function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
+function NewVacancyButton({
+  projectId,
+  onCreated,
+  existingTitles = [],
+}: {
+  projectId: string;
+  onCreated: () => void;
+  existingTitles?: string[];
+}) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -579,6 +593,38 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
   const [questionInput, setQuestionInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Cheap fuzzy-match: normalise → token-set Jaccard. Triggers a soft warning
+  // if there's an active vacancy in this project with very similar title.
+  const duplicateCandidate = useMemo(() => {
+    const t = title.trim();
+    if (t.length < 4 || existingTitles.length === 0) return null;
+    const tokenize = (s: string) =>
+      new Set(
+        s
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .split(/\s+/)
+          .filter((w) => w.length >= 3),
+      );
+    const a = tokenize(t);
+    if (a.size === 0) return null;
+    let best: { title: string; score: number } | null = null;
+    for (const other of existingTitles) {
+      const b = tokenize(other);
+      if (b.size === 0) continue;
+      let inter = 0;
+      a.forEach((w) => {
+        if (b.has(w)) inter++;
+      });
+      const union = a.size + b.size - inter;
+      const score = union ? inter / union : 0;
+      if (score >= 0.6 && (!best || score > best.score)) {
+        best = { title: other, score };
+      }
+    }
+    return best;
+  }, [title, existingTitles]);
 
   // Load popular skills the first time the dialog opens.
   useEffect(() => {
@@ -676,6 +722,16 @@ function NewVacancyButton({ projectId, onCreated }: { projectId: string; onCreat
         minLength={3}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
+      {duplicateCandidate && (
+        <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-100">
+          ⚠ Looks similar to an existing vacancy in this project:{" "}
+          <span className="font-semibold">“{duplicateCandidate.title}”</span>
+          <span className="ml-1 text-amber-200/70">
+            ({Math.round(duplicateCandidate.score * 100)}% match)
+          </span>
+          . Consider editing the existing one — duplicates split applicant attention.
+        </div>
+      )}
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}

@@ -70,6 +70,24 @@ export function LevelHome() {
                 182 936 позиций
               </span>
             </Link>
+            <Link
+              href="/smeta-trainer/indexes"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📈 Индексы НДЦС РК 8.04-07-2025
+              <span className="text-[10px] text-emerald-500 font-normal">
+                15 годовых + 26 квартальных
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/dashboard"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg"
+            >
+              📊 Dashboard
+              <span className="text-[10px] text-slate-400 font-normal">
+                прогресс + лидерборд
+              </span>
+            </Link>
           </div>
         </div>
 

@@ -45,11 +45,14 @@ WANTED_PREFIXES = (
     "СЦЭМ РК 8.04-11",  # сметные цены на эксплуатацию строительных машин
     "СЦПГ РК 8.04-12",  # сметные цены на перевозки грузов
     "СЦЗТ РК 8.04-13",  # сметные цены на затраты труда
+    "НДЦС РК 8.02-01",  # нормативы предельной стоимости строительства
     "НДЦС РК 8.04-03",  # единичные сметные цены на СМР
     "НДЦС РК 8.04-07",  # индексы стоимости
     "ЭСН РК",           # элементные сметные нормы (любой год)
     "ЕСЦ РК",           # единичные сметные цены
 )
+# некоторые ссылки на каталоге начинаются с числового префикса вида "8 НДЦС...",
+# "9 НДЦС..." — поэтому WANTED_PREFIXES проверяется и без leading-цифры (см. parse_catalog).
 
 # ---- HTTP --------------------------------------------------------------------
 
@@ -93,9 +96,11 @@ def parse_catalog(html: str) -> list[dict]:
         url = urljoin(CATALOG_URL, href)
         # имя файла — последний сегмент пути, URL-decoded
         fname = unquote(href.rsplit("/", 1)[-1])
-        if not any(fname.startswith(p) for p in WANTED_PREFIXES):
+        # некоторые ссылки начинаются с порядкового номера вида "8 НДЦС..." — снимаем его
+        clean = re.sub(r"^\d+\s+", "", fname)
+        if not any(clean.startswith(p) for p in WANTED_PREFIXES):
             continue
-        items.append({"url": url, "filename": fname})
+        items.append({"url": url, "filename": clean if clean != fname else fname})
     # дедуп по URL
     seen = set()
     out = []
@@ -233,6 +238,16 @@ def main(force: bool = False) -> int:
     for j in PARSED_DIR.glob("*.json"):
         shutil.copy2(j, PUBLIC_SSC / j.name)
     print(f"    copied {len(list(PARSED_DIR.glob('*.json')))} files")
+
+    # Дополнительные парсеры (PDF-сборники)
+    indexes_pdf_changed = any("8.04-07" in c for c in changed)
+    if indexes_pdf_changed:
+        print("==> running NDCS indexes parser")
+        rc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "parse-ndcs-indexes.py")],
+                            cwd=str(ROOT)).returncode
+        if rc != 0:
+            print("  NDCS indexes parser failed (non-fatal)", file=sys.stderr)
+
     print(f"==> done. Updated: {', '.join(changed[:5])}{'…' if len(changed) > 5 else ''}")
     return 0
 

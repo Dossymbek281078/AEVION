@@ -18,6 +18,7 @@ import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { aevRouter } from "./routes/aev";
+import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -213,6 +214,7 @@ app.get("/api/openapi.json", (_req, res) => {
 // ==========================
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/aev", aevRouter);
+app.use("/api/smeta-trainer", smetaTrainerRouter);
 app.use("/api/qright", qrightRouter);
 
 // ==========================

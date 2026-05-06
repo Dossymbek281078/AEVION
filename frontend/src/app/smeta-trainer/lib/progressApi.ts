@@ -1,0 +1,172 @@
+/**
+ * Клиент для backend-API прогресса студента (/api/smeta-trainer/*).
+ * Работает через AEVION backend (по умолчанию http://localhost:4001),
+ * с graceful fallback: если бэкенд недоступен, локальные данные
+ * (useProgress.ts → localStorage) остаются единственным источником.
+ */
+
+import type { CourseProgress, LevelProgress } from "./useProgress";
+
+const API_BASE =
+  (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_AEVION_API) ||
+  (typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.hostname}:4001`
+    : "http://localhost:4001");
+
+const DEVICE_ID_KEY = "aevion-smeta-device-id-v1";
+
+export function getDeviceId(): string {
+  if (typeof window === "undefined") return "ssr";
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = "smeta-" + Math.random().toString(36).slice(2, 12) + "-" + Date.now().toString(36);
+    localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
+export type ServerLevelProgress = {
+  level: number;
+  status: "open" | "in-progress" | "done";
+  score?: number;
+  completedAt?: number;
+  attemptsCnt?: number;
+  lastVisitAt?: number;
+};
+
+export type ServerStudent = {
+  deviceId: string;
+  userId: string | null;
+  displayName: string | null;
+  group: string | null;
+  startedAt: number;
+  updatedAt: number;
+  levels: Record<string, ServerLevelProgress>;
+};
+
+export type AttemptRecord = {
+  id: string;
+  deviceId: string;
+  level: number;
+  kind: "quiz" | "exercise" | "lsr-submit";
+  score: number | null;
+  payload: unknown;
+  feedback: string | null;
+  ts: number;
+};
+
+export type LeaderboardEntry = {
+  deviceId: string;
+  displayName: string | null;
+  group: string | null;
+  doneCount: number;
+  totalScore: number;
+  levelScore: number | null;
+  updatedAt: number;
+};
+
+export type SmetaStats = {
+  studentsTotal: number;
+  attemptsTotal: number;
+  perLevel: Record<
+    number,
+    { open: number; "in-progress": number; done: number; avgScore: number }
+  >;
+  lastUpdate: number;
+};
+
+class BackendUnavailableError extends Error {
+  constructor() { super("backend unavailable"); }
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as T;
+  } catch {
+    throw new BackendUnavailableError();
+  }
+}
+
+export async function fetchStudent(): Promise<ServerStudent | null> {
+  const id = getDeviceId();
+  const r = await api<{ student: ServerStudent | null }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}`,
+  );
+  return r.student;
+}
+
+export async function syncProgress(p: CourseProgress, displayName?: string, group?: string): Promise<ServerStudent> {
+  const id = getDeviceId();
+  // CourseProgress.levels: Record<number, LevelProgress> — приводим к серверной форме.
+  const levels: Record<string, ServerLevelProgress> = {};
+  for (const [k, v] of Object.entries(p.levels)) {
+    const lvl = Number(k);
+    if (!Number.isFinite(lvl)) continue;
+    levels[String(lvl)] = {
+      level: lvl,
+      status: v.status === "locked" ? "open" : v.status,
+      score: v.score,
+      completedAt: v.completedAt ? new Date(v.completedAt).getTime() : undefined,
+      attemptsCnt: v.attempts,
+    };
+  }
+  const r = await api<{ student: ServerStudent }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/sync`,
+    { method: "POST", body: JSON.stringify({ levels, displayName, group }) },
+  );
+  return r.student;
+}
+
+export async function recordAttempt(
+  level: number,
+  kind: "quiz" | "exercise" | "lsr-submit",
+  score?: number,
+  payload?: unknown,
+  feedback?: string,
+): Promise<AttemptRecord> {
+  const id = getDeviceId();
+  const r = await api<{ attempt: AttemptRecord }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/attempt`,
+    { method: "POST", body: JSON.stringify({ level, kind, score, payload, feedback }) },
+  );
+  return r.attempt;
+}
+
+export async function fetchAttempts(limit = 50): Promise<AttemptRecord[]> {
+  const id = getDeviceId();
+  const r = await api<{ attempts: AttemptRecord[] }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/attempts?limit=${limit}`,
+  );
+  return r.attempts;
+}
+
+export async function fetchLeaderboard(level?: number, limit = 20): Promise<LeaderboardEntry[]> {
+  const params = new URLSearchParams();
+  if (level) params.set("level", String(level));
+  params.set("limit", String(limit));
+  const r = await api<{ leaderboard: LeaderboardEntry[] }>(
+    `/api/smeta-trainer/leaderboard?${params.toString()}`,
+  );
+  return r.leaderboard;
+}
+
+export async function fetchStats(): Promise<SmetaStats> {
+  return api<SmetaStats>(`/api/smeta-trainer/stats`);
+}
+
+/** Проверка живости бэкенда — для conditional UI. */
+export async function pingBackend(): Promise<boolean> {
+  try {
+    await fetchStudent();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export { BackendUnavailableError };

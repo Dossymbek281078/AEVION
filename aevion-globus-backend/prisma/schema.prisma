@@ -212,3 +212,54 @@ model AevLedgerEntry {
   @@index([walletId, ts])
   @@index([sourceModule])
 }
+
+// ── AI-тренажёр сметного дела РК (smeta-trainer) ─────────────────────
+// Прогресс студентов курса «Сметное дело в РК» (5 уровней).
+// Ключевание по deviceId (anonymous) либо userId (если авторизован).
+// Frontend держит копию в localStorage (useProgress.ts) — БД нужна для
+// cross-device sync, leaderboard'ов и аналитики курса для куратора.
+
+model SmetaStudent {
+  id          String           @id @default(uuid())
+  deviceId    String           @unique
+  userId      String?
+  displayName String?          // как студент представился
+  group       String?          // учебная группа / поток
+  startedAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  progress    SmetaProgress[]
+  attempts    SmetaAttempt[]
+
+  @@index([userId])
+  @@index([group])
+}
+
+model SmetaProgress {
+  id           String       @id @default(uuid())
+  studentId    String
+  student      SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level        Int          // 1..5 (соответствует LEVELS в frontend/lib/levels.ts)
+  status       String       // "open" | "in-progress" | "done"
+  score        Int?         // 0..100 для уровней с тестами
+  completedAt  DateTime?
+  attemptsCnt  Int          @default(0) // сколько раз заходил/сдавал
+  lastVisitAt  DateTime     @default(now())
+
+  @@unique([studentId, level])
+  @@index([level, score])
+}
+
+model SmetaAttempt {
+  id        String       @id @default(uuid())
+  studentId String
+  student   SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level     Int
+  kind      String       // "quiz" | "exercise" | "lsr-submit"
+  score     Int?         // 0..100
+  payload   String?      // JSON: ответы / снимок ЛСР / детали попытки
+  feedback  String?      // ответ AI-советника / комментарий куратора
+  ts        DateTime     @default(now())
+
+  @@index([studentId, ts])
+  @@index([level, ts])
+}

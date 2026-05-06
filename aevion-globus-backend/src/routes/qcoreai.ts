@@ -14,7 +14,7 @@ import {
   PipelineStrategy,
 } from "../services/qcoreai/orchestrator";
 import { getPricingTable, costUsd } from "../services/qcoreai/pricing";
-import { getDbError, isDbReady } from "../lib/ensureQCoreTables";
+import { ensureQCoreTables, getDbError, isDbReady } from "../lib/ensureQCoreTables";
 import { getPool } from "../lib/dbPool";
 const pool = getPool();
 import { rateLimit } from "../lib/rateLimit";
@@ -54,6 +54,7 @@ import {
   updateSnippet,
   deleteRunsBulk,
   getSessionCostSummary,
+  archiveSession,
   getRating,
   getRatingsSummary,
   listTopRatedRuns,
@@ -362,6 +363,46 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Analytics goals — monthly run count and cost targets
+   GET /api/qcoreai/me/analytics-goal
+   PUT /api/qcoreai/me/analytics-goal  body:{monthlyRuns?,monthlyCostUsd?}
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/analytics-goal", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    await ensureQCoreTables(pool);
+    if (!isDbReady()) return res.json({ goal: null });
+    const r = await pool.query(`SELECT * FROM "QCoreAnalyticsGoal" WHERE "userId"=$1`, [auth.sub]);
+    res.json({ goal: r.rows[0] || null });
+  } catch (err: any) {
+    res.status(500).json({ error: "get goal failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.put("/me/analytics-goal", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { monthlyRuns, monthlyCostUsd } = req.body || {};
+  try {
+    await ensureQCoreTables(pool);
+    if (!isDbReady()) return res.json({ goal: { userId: auth.sub, monthlyRuns, monthlyCostUsd } });
+    const r = await pool.query(
+      `INSERT INTO "QCoreAnalyticsGoal" ("userId","monthlyRuns","monthlyCostUsd")
+       VALUES ($1,$2,$3)
+       ON CONFLICT ("userId") DO UPDATE
+         SET "monthlyRuns"=$2, "monthlyCostUsd"=$3, "updatedAt"=NOW()
+       RETURNING *`,
+      [auth.sub, monthlyRuns ?? null, monthlyCostUsd ?? null]
+    );
+    res.json({ goal: r.rows[0] });
+  } catch (err: any) {
+    res.status(500).json({ error: "set goal failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    Monthly spend limit — per-user budget gate
    GET    /api/qcoreai/me/spend-limit
    PUT    /api/qcoreai/me/spend-limit
@@ -480,6 +521,31 @@ qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
     res.json({ ok: true, pinned });
   } catch (err: any) {
     res.status(500).json({ error: "pin failed", details: err?.message });
+  }
+});
+
+/** PATCH /sessions/:id/archive — soft-delete a session (hidden from default list; recoverable). */
+qcoreaiRouter.patch("/sessions/:id/archive", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const archive = req.body?.archive !== false; // default true
+  try {
+    const ok = await archiveSession(String(req.params.id), auth?.sub ?? null, archive);
+    if (!ok) return res.status(404).json({ error: "session not found" });
+    res.json({ ok: true, archived: archive });
+  } catch (err: any) {
+    res.status(500).json({ error: "archive failed", details: err?.message });
+  }
+});
+
+/** GET /sessions/archived — list archived sessions. */
+qcoreaiRouter.get("/sessions/archived", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const rows = await listSessions(auth?.sub ?? null, 100, true);
+    const archived = rows.filter((s) => s.archivedAt);
+    res.json({ items: archived, total: archived.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "list archived failed", details: err?.message });
   }
 });
 

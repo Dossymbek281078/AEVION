@@ -240,6 +240,19 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Analytics goals — monthly run count and cost targets per user.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAnalyticsGoal" (
+      "userId"        TEXT PRIMARY KEY,
+      "monthlyRuns"   INTEGER,
+      "monthlyCostUsd" DOUBLE PRECISION,
+      "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Session archiving — soft-delete with ability to restore. Archived sessions hidden from default list.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMPTZ;`);
+
   // Run ratings — user feedback on final answers (thumbs up/down + optional note).
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreRunRating" (

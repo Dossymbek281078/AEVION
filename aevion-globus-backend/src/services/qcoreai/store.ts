@@ -26,6 +26,7 @@ export type SessionRow = {
   createdAt: string;
   updatedAt: string;
   pinned?: boolean;
+  archivedAt?: string | null;
 };
 
 export type RunRow = {
@@ -192,14 +193,21 @@ export async function renameSessionIfDefault(sessionId: string, seed: string): P
   );
 }
 
-export async function listSessions(userId: string | null, limit = 50): Promise<SessionRow[]> {
+export async function listSessions(
+  userId: string | null,
+  limit = 50,
+  includeArchived = false
+): Promise<SessionRow[]> {
   await ensureQCoreTables(pool);
   const lim = Math.max(1, Math.min(200, limit));
 
   if (!isDbReady()) {
     const all = Array.from(memSessions.values());
-    const filtered = all.filter((s) => (userId ? s.userId === userId : s.userId == null));
-    // Pinned sessions float to top within the same updatedAt ordering.
+    const filtered = all.filter((s) => {
+      if (userId ? s.userId !== userId : s.userId != null) return false;
+      if (!includeArchived && (s as any).archivedAt) return false;
+      return true;
+    });
     filtered.sort((a, b) => {
       const pa = (a as any).pinned ? 1 : 0;
       const pb = (b as any).pinned ? 1 : 0;
@@ -209,18 +217,34 @@ export async function listSessions(userId: string | null, limit = 50): Promise<S
     return filtered.slice(0, lim);
   }
 
+  const archiveFilter = includeArchived ? "" : `AND "archivedAt" IS NULL`;
   if (userId) {
     const r = await pool.query(
-      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $2`,
+      `SELECT * FROM "QCoreSession" WHERE "userId"=$1 ${archiveFilter} ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $2`,
       [userId, lim]
     );
     return r.rows as SessionRow[];
   }
   const r = await pool.query(
-    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $1`,
+    `SELECT * FROM "QCoreSession" WHERE "userId" IS NULL ${archiveFilter} ORDER BY "pinned" DESC, "updatedAt" DESC LIMIT $1`,
     [lim]
   );
   return r.rows as SessionRow[];
+}
+
+export async function archiveSession(id: string, userId: string | null, archive: boolean): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memSessions.get(id);
+    if (!s) return false;
+    (s as any).archivedAt = archive ? new Date().toISOString() : null;
+    return true;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreSession" SET "archivedAt"=${archive ? "NOW()" : "NULL"} WHERE "id"=$1 AND ("userId"=$2 OR "userId" IS NULL) RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
 }
 
 export async function getSession(id: string, userId: string | null): Promise<SessionRow | null> {

@@ -720,6 +720,34 @@ export const buildApi = {
       total: number;
     }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/timeline`),
 
+  vacancyNotes: (vacancyId: string) =>
+    call<{
+      items: {
+        id: string;
+        authorUserId: string;
+        authorName: string | null;
+        body: string;
+        createdAt: string;
+      }[];
+      total: number;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notes`),
+  addVacancyNote: (vacancyId: string, body: string) =>
+    call<{
+      id: string;
+      vacancyId: string;
+      authorUserId: string;
+      body: string;
+      createdAt: string;
+    }>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notes`,
+      { body },
+    ),
+  deleteVacancyNote: (vacancyId: string, noteId: string) =>
+    call<{ id: string; deleted: true }>(
+      "DELETE",
+      `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notes/${encodeURIComponent(noteId)}`,
+    ),
   vacancyBoostRoi: (id: string) =>
     call<{
       hasBoost: boolean;
@@ -1276,6 +1304,15 @@ export const buildApi = {
       }[];
       total: number;
     }>("GET", "/api/build/admin/partner-keys"),
+  adminPartnerKeysUsage: () =>
+    call<{
+      windowDays: number;
+      items: {
+        keyId: string;
+        label: string;
+        days: { day: string; hits: number }[];
+      }[];
+    }>("GET", "/api/build/admin/partner-keys/usage"),
   adminCreatePartnerKey: (label: string) =>
     call<{
       id: string;

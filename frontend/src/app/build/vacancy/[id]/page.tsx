@@ -574,6 +574,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {isOwner && <BoostRoiTile vacancyId={vacancy.id} />}
 
+          {isOwner && <VacancyTeamNotes vacancyId={vacancy.id} />}
+
           {isOwner && <VacancyEditHistory vacancyId={vacancy.id} />}
 
           {isOwner && <EmbedSnippetBlock vacancyId={vacancy.id} />}
@@ -2118,6 +2120,121 @@ function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
       <p className="mt-2 text-[11px] text-amber-200/60">
         Comparing applications during the boost period vs. the same-length window immediately before.
       </p>
+    </div>
+  );
+}
+
+function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
+  type Note = Awaited<ReturnType<typeof buildApi.vacancyNotes>>["items"][number];
+  const [items, setItems] = useState<Note[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+
+  async function load() {
+    try {
+      const r = await buildApi.vacancyNotes(vacancyId);
+      setItems(r.items);
+    } catch {
+      setItems([]);
+    }
+  }
+
+  useEffect(() => {
+    if (open && items === null) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  async function add() {
+    const body = draft.trim();
+    if (!body || busy) return;
+    setBusy(true);
+    try {
+      const note = await buildApi.addVacancyNote(vacancyId, body);
+      setItems((arr) => [
+        { id: note.id, authorUserId: note.authorUserId, authorName: null, body: note.body, createdAt: note.createdAt },
+        ...(arr ?? []),
+      ]);
+      setDraft("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Delete this team note?")) return;
+    try {
+      await buildApi.deleteVacancyNote(vacancyId, id);
+      setItems((arr) => arr?.filter((n) => n.id !== id) ?? null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-sm font-semibold text-slate-200"
+      >
+        <span>📝 Team notes {items && items.length > 0 ? `(${items.length})` : ""}</span>
+        <span className="text-xs text-slate-500">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Private notes about this role — visible to vacancy owner only. Не путать с заметками
+            на конкретного кандидата.
+          </p>
+          <div className="mt-3 flex items-end gap-2">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={2}
+              maxLength={4000}
+              placeholder="Например: «бюджет согласован до 5 млн ₸», «клиент хочет только русскоязычных»…"
+              className="flex-1 resize-none rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-emerald-400/40 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={add}
+              disabled={!draft.trim() || busy}
+              className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-50"
+            >
+              {busy ? "…" : "Add"}
+            </button>
+          </div>
+          {items && items.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {items.map((n) => (
+                <li
+                  key={n.id}
+                  className="rounded-md border border-white/5 bg-black/20 p-2.5 text-xs"
+                >
+                  <div className="whitespace-pre-wrap text-slate-200">{n.body}</div>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+                    <span>
+                      {n.authorName || n.authorUserId.slice(0, 8)} ·{" "}
+                      {new Date(n.createdAt).toLocaleString()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => remove(n.id)}
+                      className="text-slate-500 hover:text-rose-300"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </div>
   );
 }

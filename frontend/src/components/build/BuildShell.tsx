@@ -158,7 +158,8 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
         onLogout={logout}
       />
 
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 pt-6 pb-24 sm:pb-6">{children}</main>
+      {hydrated && user && <MobileBottomNav pathname={pathname} />}
       <CompareBar />
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
       <footer className="border-t border-white/5 mt-8">
@@ -178,6 +179,48 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
       </footer>
     </div>
     </ToastProvider>
+  );
+}
+
+function MobileBottomNav({ pathname }: { pathname: string }) {
+  const tabs: { href: string; label: string; icon: string }[] = [
+    { href: "/build", label: "Home", icon: "🏠" },
+    { href: "/build/vacancies", label: "Feed", icon: "📋" },
+    { href: "/build/messages", label: "Chats", icon: "💬" },
+    { href: "/build/dashboard", label: "Stats", icon: "📊" },
+    { href: "/build/profile", label: "Me", icon: "👤" },
+  ];
+  return (
+    <nav
+      aria-label="Bottom navigation"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/95 backdrop-blur sm:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <ul className="mx-auto grid max-w-md grid-cols-5">
+        {tabs.map((t) => {
+          const active =
+            t.href === "/build"
+              ? pathname === "/build"
+              : pathname === t.href || pathname.startsWith(`${t.href}/`);
+          return (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition ${
+                  active ? "text-emerald-300" : "text-slate-400 hover:text-slate-200"
+                }`}
+                aria-current={active ? "page" : undefined}
+              >
+                <span className="text-base leading-none" aria-hidden="true">
+                  {t.icon}
+                </span>
+                <span>{t.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 

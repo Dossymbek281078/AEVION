@@ -11,9 +11,11 @@ import { deriveApplySource, deriveReferrerUserId } from "@/lib/build/applySource
 export function VacancyCard({
   vacancy,
   showProject = false,
+  hot = false,
 }: {
   vacancy: BuildVacancy;
   showProject?: boolean;
+  hot?: boolean;
 }) {
   const token = useBuildAuth((s) => s.token);
   const me = useBuildAuth((s) => s.user);
@@ -60,11 +62,21 @@ export function VacancyCard({
             : "border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10"
       }`}
     >
-      {isFeatured && (
-        <div className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
-          ★ Featured
-        </div>
-      )}
+      <div className="mb-2 flex flex-wrap gap-1">
+        {isFeatured && (
+          <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+            ★ Featured
+          </div>
+        )}
+        {hot && !isClosed && (
+          <div
+            className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-200"
+            title="Trending — high applicant interest right now"
+          >
+            🔥 Hot
+          </div>
+        )}
+      </div>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="truncate text-base font-semibold text-white group-hover:text-emerald-200">

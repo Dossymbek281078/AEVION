@@ -106,6 +106,27 @@ export default function VacanciesFeedPage() {
     };
   }, [items]);
 
+  // Hot = recent (created in last 14d) AND applicationsCount in top quartile
+  // of the visible feed, with a minimum floor of 3 apps. Cheap, no extra fetch.
+  const hotIds = useMemo(() => {
+    const open = items.filter((v) => v.status === "OPEN");
+    if (open.length < 4) return new Set<string>();
+    const recent = open.filter(
+      (v) => Date.now() - new Date(v.createdAt).getTime() < 14 * 86400_000,
+    );
+    if (recent.length === 0) return new Set<string>();
+    const counts = recent
+      .map((v) => v.applicationsCount ?? 0)
+      .sort((a, b) => a - b);
+    const q3Idx = Math.floor(counts.length * 0.75);
+    const threshold = Math.max(3, counts[q3Idx] ?? 0);
+    return new Set(
+      recent
+        .filter((v) => (v.applicationsCount ?? 0) >= threshold)
+        .map((v) => v.id),
+    );
+  }, [items]);
+
   return (
     <BuildShell>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -277,7 +298,7 @@ export default function VacanciesFeedPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((v) => (
             <div key={v.id} className="relative">
-              <VacancyCard vacancy={v} showProject />
+              <VacancyCard vacancy={v} showProject hot={hotIds.has(v.id)} />
               <div className="absolute bottom-2 right-2">
                 <CompareToggleButton
                   entry={{ id: v.id, title: v.title, salary: v.salary, city: v.city ?? null }}

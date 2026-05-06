@@ -161,7 +161,7 @@ function Body() {
         </p>
       )}
 
-      {!items && !error && <p className="text-sm text-slate-400">Loading dashboard…</p>}
+      {!items && !error && <DashboardSkeleton />}
 
       {items && filtered.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-10 text-center">
@@ -387,6 +387,33 @@ function SourceBreakdownChart() {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true">
+      {/* 4 KPI tiles */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-20 animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
+          />
+        ))}
+      </div>
+      {/* Today digest tile */}
+      <div className="h-32 animate-pulse rounded-xl border border-white/5 bg-white/[0.03]" />
+      {/* Funnel rows */}
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-24 animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
+          />
+        ))}
+      </div>
     </div>
   );
 }

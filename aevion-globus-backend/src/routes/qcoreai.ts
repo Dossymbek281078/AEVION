@@ -363,6 +363,58 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Agent personas — custom display names per role
+   GET /api/qcoreai/me/personas
+   PUT /api/qcoreai/me/personas/:roleId  body:{name, emoji?, color?}
+   DELETE /api/qcoreai/me/personas/:roleId
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const VALID_ROLES = ["analyst", "writer", "writerB", "critic"];
+
+qcoreaiRouter.get("/me/personas", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    await ensureQCoreTables(pool);
+    if (!isDbReady()) return res.json({ personas: [] });
+    const r = await pool.query(`SELECT * FROM "QCoreAgentPersona" WHERE "userId"=$1`, [auth.sub]);
+    res.json({ personas: r.rows });
+  } catch (err: any) { res.status(500).json({ error: "get personas failed" }); }
+});
+
+qcoreaiRouter.put("/me/personas/:roleId", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const roleId = String(req.params.roleId);
+  if (!VALID_ROLES.includes(roleId)) return res.status(400).json({ error: "invalid roleId" });
+  const { name, emoji, color } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  try {
+    await ensureQCoreTables(pool);
+    if (!isDbReady()) return res.json({ persona: { userId: auth.sub, roleId, name, emoji: emoji || null, color: color || null } });
+    const r = await pool.query(
+      `INSERT INTO "QCoreAgentPersona" ("userId","roleId","name","emoji","color")
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT ("userId","roleId") DO UPDATE SET "name"=$3,"emoji"=$4,"color"=$5,"updatedAt"=NOW()
+       RETURNING *`,
+      [auth.sub, roleId, String(name).slice(0, 40), emoji?.slice(0, 4) || null, color?.slice(0, 20) || null]
+    );
+    res.json({ persona: r.rows[0] });
+  } catch (err: any) { res.status(500).json({ error: "set persona failed" }); }
+});
+
+qcoreaiRouter.delete("/me/personas/:roleId", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    await ensureQCoreTables(pool);
+    if (!isDbReady()) return res.json({ ok: true });
+    await pool.query(`DELETE FROM "QCoreAgentPersona" WHERE "userId"=$1 AND "roleId"=$2`, [auth.sub, req.params.roleId]);
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: "delete persona failed" }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    Analytics goals — monthly run count and cost targets
    GET /api/qcoreai/me/analytics-goal
    PUT /api/qcoreai/me/analytics-goal  body:{monthlyRuns?,monthlyCostUsd?}

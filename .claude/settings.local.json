@@ -52,7 +52,8 @@
       "Bash(gh pr *)",
       "Bash(npx vitest *)",
       "Bash(Remove-Item -Force .next/lock -ErrorAction SilentlyContinue)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(grep -n \"onContinue.*runId\\\\|onSaveTemplate.*runId\\\\|RunCard.*{$\" \"C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/qcoreai/multi/page.tsx\")"
     ]
   }
 }

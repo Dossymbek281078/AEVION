@@ -794,11 +794,27 @@ export default function CyberChessPage(){
     return()=>clearInterval(id);
   },[coordSession,coordResult,addChessy]);
   // Clipboard auto-load (Ctrl+V) — works in Analysis OR on the home setup screen.
-  // Detects FEN first (single-line, 6 space-separated fields, last is move number),
-  // then PGN (has [Header] tags or SAN moves). Loads into Analysis tab and toasts.
+  // Three input formats handled, in priority order:
+  //   1. Lichess game URL (https://lichess.org/abc12345 or with /white|/black/orient suffix) →
+  //      fetches the PGN from the public export endpoint and loads it.
+  //   2. FEN (single line, 6 space-separated fields, last is move number).
+  //   3. PGN (has [Header] tags or SAN moves).
   // Skipped while typing in input/textarea/contentEditable.
   useEffect(()=>{
     if(typeof window==="undefined")return;
+    const loadPgnText=(txt:string)=>{
+      try{
+        const ch=new Chess();
+        ch.loadPgn(txt);
+        const moves=ch.history();
+        if(moves.length<2)return false;
+        const replay=new Chess();
+        const fens=[replay.fen()];
+        for(const san of moves){replay.move(san);fens.push(replay.fen())}
+        setGame(replay);sBk(k=>k+1);sHist(moves);sFenHist(fens);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(-1);
+        return true;
+      }catch{return false}
+    };
     const handler=(e:ClipboardEvent)=>{
       // Allow on analysis tab OR on the home setup screen — anywhere user might paste.
       const allowedTab=tab==="analysis"||(tab==="play"&&setup);
@@ -809,8 +825,22 @@ export default function CyberChessPage(){
       const txt=(e.clipboardData?.getData("text/plain")||"").trim();
       if(!txt||txt.length<6)return;
 
-      // ── 1. FEN detection: single line, 6 space-separated fields,
-      //      last field is a move-number (positive int), rank field has 8 ranks.
+      // ── 1. Lichess game URL — fetch PGN and load
+      const liMatch=txt.match(/lichess\.org\/([a-zA-Z0-9]{8})(?:[a-zA-Z0-9]{4})?/);
+      if(liMatch){
+        const gameId=liMatch[1];
+        e.preventDefault();
+        showToast(`⏳ Загружаю партию ${gameId} с Lichess…`,"info");
+        fetch(`https://lichess.org/game/export/${gameId}?moves=true&clocks=false&evals=false&opening=true`,{
+          headers:{Accept:"application/x-chess-pgn"}
+        }).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.text()}).then(pgn=>{
+          if(!loadPgnText(pgn)){showToast("PGN загружен, но позиций мало","error");return}
+          showToast(`📋 Партия ${gameId} загружена в Анализ`,"success");
+        }).catch(err=>showToast(`Lichess: ${err?.message||"не найдено"}`,"error"));
+        return;
+      }
+
+      // ── 2. FEN detection
       const oneLine=txt.split(/\r?\n/).find(l=>l.trim().length>=10);
       if(oneLine){
         const parts=oneLine.trim().split(/\s+/);
@@ -825,20 +855,12 @@ export default function CyberChessPage(){
         }
       }
 
-      // ── 2. PGN detection: [Header "tag"] OR algebraic SAN moves
+      // ── 3. PGN detection
       if(!/\b[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8]/.test(txt)&&!/\[\w+\s+"/.test(txt))return;
-      try{
-        const ch=new Chess();
-        ch.loadPgn(txt);
-        const moves=ch.history();
-        if(moves.length<2)return;
-        const replay=new Chess();
-        const fens=[replay.fen()];
-        for(const san of moves){replay.move(san);fens.push(replay.fen())}
-        setGame(replay);sBk(k=>k+1);sHist(moves);sFenHist(fens);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(-1);
-        showToast(`📋 PGN загружен: ${moves.length} ходов`,"success");
+      if(loadPgnText(txt)){
+        const moveCount=new Chess();try{moveCount.loadPgn(txt);showToast(`📋 PGN загружен: ${moveCount.history().length} ходов`,"success")}catch{showToast("📋 PGN загружен","success")}
         e.preventDefault();
-      }catch{}
+      }
     };
     window.addEventListener("paste",handler);
     return()=>window.removeEventListener("paste",handler);
@@ -3335,14 +3357,16 @@ export default function CyberChessPage(){
           {(dailyVariantInfo||(dailyState&&PUZZLES[dailyState.idx]))&&(()=>{
             const hours=24-new Date().getHours();
             return <Card padding={0} elevation="sm" style={{overflow:"hidden",animation:"fadeInUp 0.4s ease-out"}}>
-              <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,
+              {/* Slim header — emoji + label + countdown all on one ~24px row */}
+              <div style={{padding:"4px 12px",
                 background:"linear-gradient(90deg,#fef3c7,#fde68a,#fef3c7)",
                 borderBottom:`1px solid ${CC.border}`,
                 display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:18}}>☀</span>
-                <span style={{fontSize:11,fontWeight:900,color:"#78350f",letterSpacing:1,textTransform:"uppercase" as const}}>DAILY · {new Date().toLocaleDateString("ru-RU")}</span>
+                <span style={{fontSize:14}}>☀</span>
+                <span style={{fontSize:10,fontWeight:900,color:"#78350f",letterSpacing:1,textTransform:"uppercase" as const}}>Daily</span>
+                <span style={{fontSize:10,color:"#92400e",fontWeight:700,opacity:0.75}}>{new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"short"})}</span>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:10,color:"#92400e",fontWeight:700}}>сброс через {hours} ч</span>
+                <span style={{fontSize:10,color:"#92400e",fontWeight:700,opacity:0.75}}>осталось {hours}ч</span>
               </div>
               <div style={{display:"grid",gridTemplateColumns:dailyVariantInfo&&(dailyState&&PUZZLES[dailyState.idx])?"1fr 1fr":"1fr",gap:0}}>
                 {dailyVariantInfo&&(()=>{

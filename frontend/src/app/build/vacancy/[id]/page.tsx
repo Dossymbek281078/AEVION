@@ -240,6 +240,10 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
             {vacancy.viewCount != null && vacancy.viewCount >= 5 && (
               <span title="Total page views">👁 {vacancy.viewCount} views</span>
             )}
+            <ApplyRateChip
+              views={vacancy.viewCount ?? 0}
+              apps={applications?.length ?? vacancy.applicationsCount ?? 0}
+            />
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -271,6 +275,12 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 <SaveAsTemplateButton vacancy={vacancy} />
                 {(vacancy.status === "CLOSED" || vacancy.status === "ARCHIVED") && (
                   <RepublishVacancyButton
+                    vacancyId={vacancy.id}
+                    onDone={refresh}
+                  />
+                )}
+                {vacancy.status === "OPEN" && (
+                  <ExtendVacancyButton
                     vacancyId={vacancy.id}
                     onDone={refresh}
                   />
@@ -2181,6 +2191,26 @@ function InviteCandidateBlock({ vacancyId }: { vacancyId: string }) {
   );
 }
 
+function ApplyRateChip({ views, apps }: { views: number; apps: number }) {
+  // Need at least 20 views before the ratio is meaningful — sub-20 is noise.
+  if (views < 20 || apps === 0) return null;
+  const pct = (apps / views) * 100;
+  const tone =
+    pct >= 8
+      ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-100"
+      : pct >= 3
+        ? "border-sky-400/40 bg-sky-400/15 text-sky-100"
+        : "border-slate-400/30 bg-slate-400/10 text-slate-200";
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tone}`}
+      title={`${apps} applications / ${views} views — apply rate`}
+    >
+      📈 {pct.toFixed(1)}% apply rate
+    </span>
+  );
+}
+
 function VacancyExpiryBadge({
   expiresAt,
   status,
@@ -2888,6 +2918,44 @@ function RepublishVacancyButton({
       className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-50"
     >
       {busy ? "…" : "↻ Reopen"}
+    </button>
+  );
+}
+
+function ExtendVacancyButton({
+  vacancyId,
+  onDone,
+}: {
+  vacancyId: string;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  async function extend() {
+    setBusy(true);
+    try {
+      const r = await buildApi.extendVacancy(vacancyId, 30);
+      toast.success(
+        `Expiry pushed to ${new Date(r.newExpiresAt).toLocaleDateString()} (+${r.extendedDays}d)`,
+      );
+      onDone();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={extend}
+      disabled={busy}
+      title="Push expiry out by 30 more days"
+      className="rounded-md border border-amber-400/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-400/25 disabled:opacity-50"
+    >
+      {busy ? "…" : "+30d expiry"}
     </button>
   );
 }

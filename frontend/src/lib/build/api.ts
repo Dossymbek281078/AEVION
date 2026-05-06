@@ -696,6 +696,12 @@ export const buildApi = {
       "POST",
       `/api/build/vacancies/${encodeURIComponent(id)}/republish`,
     ),
+  extendVacancy: (id: string, days = 30) =>
+    call<{ vacancy: BuildVacancy; extendedDays: number; newExpiresAt: string }>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(id)}/extend`,
+      { days },
+    ),
   vacancyTimeline: (id: string) =>
     call<{
       events: {

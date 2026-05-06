@@ -1068,6 +1068,47 @@ vacanciesRouter.post("/:id/republish", async (req, res) => {
   }
 });
 
+// POST /api/build/vacancies/:id/extend — owner pushes expiresAt out by N days
+// (default 30, capped at 180). Cheaper than republish for OPEN vacancies that
+// just need a longer runway.
+vacanciesRouter.post("/:id/extend", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const rawDays = Number(req.body?.days ?? 30);
+    const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(180, Math.floor(rawDays))) : 30;
+
+    const row = await pool.query(
+      `SELECT v."id", v."status", v."expiresAt", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_extend");
+    }
+    if (row.rows[0].status === "ARCHIVED") {
+      return fail(res, 409, "vacancy_archived");
+    }
+
+    // Anchor on max(now, currentExpiry) so extending an already-future expiry
+    // adds genuine extra time rather than collapsing to "now + days".
+    const current = row.rows[0].expiresAt ? new Date(row.rows[0].expiresAt) : null;
+    const anchor = current && current.getTime() > Date.now() ? current : new Date();
+    const newExpiry = new Date(anchor.getTime() + days * 86400_000);
+
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET "expiresAt" = $1 WHERE "id" = $2 RETURNING *`,
+      [newExpiry, id],
+    );
+    return ok(res, { vacancy: result.rows[0], extendedDays: days, newExpiresAt: newExpiry.toISOString() });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_extend_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/vacancies/:id/duplicate — clone into another project
 vacanciesRouter.post("/:id/duplicate", async (req, res) => {
   try {

@@ -3791,20 +3791,23 @@ export default function CyberChessPage(){
                 const isDraw=g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
                 const resCol=isWin?CC.brand:isDraw?CC.textDim:CC.danger;
                 const catBadge:"danger"|"gold"|"brand"=g.category==="Bullet"?"danger":g.category==="Blitz"?"gold":"brand";
-                return(<button key={g.id} className="cc-focus-ring" onClick={()=>{
-                  sTab("analysis");
-                  const ch=new Chess();
-                  for(const san of g.moves)try{ch.move(san)}catch{}
-                  setGame(ch);sBk(k=>k+1);sHist(g.moves);
-                  const fens=[new Chess().fen()];const tmp=new Chess();
-                  for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
-                  sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
-                }} style={{width:"100%",padding:"8px 12px",border:"none",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",
-                  animation:`fadeInUp 0.3s ease-out ${Math.min(gIdx*30,400)}ms both`,
-                  borderLeft:`3px solid ${resCol}`,
-                  transition:`background ${MOTION.fast} ${MOTION.ease}, padding ${MOTION.fast} ${MOTION.ease}`}}
-                  onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.background=CC.surface2;el.style.paddingLeft="16px"}}
-                  onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.background=CC.surface1;el.style.paddingLeft="12px"}}>
+                return(<div key={g.id} className="cc-focus-ring" role="button" tabIndex={0}
+                  onClick={()=>{
+                    sTab("analysis");
+                    const ch=new Chess();
+                    for(const san of g.moves)try{ch.move(san)}catch{}
+                    setGame(ch);sBk(k=>k+1);sHist(g.moves);
+                    const fens=[new Chess().fen()];const tmp=new Chess();
+                    for(const san of g.moves){try{tmp.move(san);fens.push(tmp.fen())}catch{}}
+                    sFenHist(fens);sOver(g.result);sOn(false);sSetup(false);sSel(null);sVm(new Set());sLm(null);
+                  }}
+                  onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){(e.currentTarget as HTMLDivElement).click()}}}
+                  style={{width:"100%",padding:"8px 12px",borderBottom:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",
+                    animation:`fadeInUp 0.3s ease-out ${Math.min(gIdx*30,400)}ms both`,
+                    borderLeft:`3px solid ${resCol}`,
+                    transition:`background ${MOTION.fast} ${MOTION.ease}, padding ${MOTION.fast} ${MOTION.ease}`}}
+                  onMouseEnter={e=>{const el=e.currentTarget as HTMLDivElement;el.style.background=CC.surface2;el.style.paddingLeft="16px"}}
+                  onMouseLeave={e=>{const el=e.currentTarget as HTMLDivElement;el.style.background=CC.surface1;el.style.paddingLeft="12px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                     <div style={{width:26,height:26,borderRadius:"50%",background:resCol+"18",color:resCol,
                       display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900}}>
@@ -3830,7 +3833,7 @@ export default function CyberChessPage(){
                       showToast(`👻 Дуэль: ${formatPastDate(g.date)} — ${g.aiLevel}. Попробуй сыграть лучше!`,"success");
                     }} style={{padding:"2px 7px",borderRadius:6,border:`1px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,fontSize:10,fontWeight:900,cursor:"pointer"}}>⚔</button>}
                   </div>
-                </button>);
+                </div>);
               })}
             </div>
           </Card>}

@@ -47,10 +47,34 @@ import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } fr
 
 export const qpaynetRouter = Router();
 
+// Per-tier rate limit overrides: `QPAYNET_RATE_TIERS=email1@x.com:300,email2@y.com:600`.
+// Lets enterprise/merchant integrations get higher caps without hard-coding.
+// Keys are emails (or sub IDs); values are per-minute limits for the money
+// limiter. The auth limiter scales proportionally (×4) to match the original
+// 30:120 ratio.
+const RATE_TIERS = (() => {
+  const raw = process.env.QPAYNET_RATE_TIERS?.trim();
+  const out: Record<string, number> = {};
+  if (!raw) return out;
+  for (const pair of raw.split(",")) {
+    const [k, v] = pair.split(":").map((s) => s.trim());
+    const n = Number(v);
+    if (k && Number.isFinite(n) && n > 0) out[k.toLowerCase()] = Math.min(10_000, Math.floor(n));
+  }
+  return out;
+})();
+
+function tierLimitFor(req: import("express").Request, defaultLimit: number, multiplier = 1): number {
+  const auth = verifyBearerOptional(req);
+  const id = (auth?.email ?? auth?.sub ?? "").toLowerCase();
+  const override = id && RATE_TIERS[id];
+  return override ? override * multiplier : defaultLimit;
+}
+
 // Rate limits — protect against abuse / DoS. Keyed by IP+auth.sub when present.
 const moneyLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 30,                // 30 money-movement calls/min per key
+  limit: (req) => tierLimitFor(req, 30),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
@@ -63,7 +87,7 @@ const moneyLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 60_000,
-  limit: 120,               // 120 reads/min
+  limit: (req) => tierLimitFor(req, 120, 4),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
@@ -466,6 +490,46 @@ async function withTx<T>(fn: (client: any) => Promise<T>): Promise<T> {
   }
 }
 
+// PII redaction for audit log. When QPAYNET_AUDIT_REDACT=1, IPs and email
+// addresses are hashed (HMAC-SHA256) before storage. Same input → same hash,
+// so grouping/correlation queries still work; plaintext is not recoverable
+// from a leaked DB dump.
+//
+// QPAYNET_PII_SALT supplies the HMAC key. If unset, redaction falls back to
+// a one-way SHA-256 (no salt) — still better than plaintext but vulnerable
+// to rainbow tables. We log a warning once at boot in that case.
+const REDACT_AUDIT = process.env.QPAYNET_AUDIT_REDACT === "1";
+const PII_SALT = process.env.QPAYNET_PII_SALT?.trim() || "";
+const EMAIL_RE_AUDIT = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+let piiSaltWarned = false;
+
+function hashPii(value: string): string {
+  if (!REDACT_AUDIT) return value;
+  if (!PII_SALT && !piiSaltWarned) {
+    piiSaltWarned = true;
+    console.warn("[qpaynet audit] QPAYNET_AUDIT_REDACT=1 but QPAYNET_PII_SALT empty — using unsalted hash (rainbow-vulnerable)");
+  }
+  const h = PII_SALT
+    ? createHmac("sha256", PII_SALT).update(value).digest("hex")
+    : createHash("sha256").update(value).digest("hex");
+  return `pii:${h.slice(0, 16)}`;
+}
+
+function redactDetails(details: Record<string, unknown>): Record<string, unknown> {
+  if (!REDACT_AUDIT) return details;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(details)) {
+    if (typeof v === "string" && EMAIL_RE_AUDIT.test(v)) {
+      out[k] = hashPii(v);
+    } else if (k === "ip" && typeof v === "string") {
+      out[k] = hashPii(v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 // Append immutable audit row for compliance/forensics. Fire-and-forget, never throws.
 async function auditLog(
   pool: ReturnType<typeof getPool>,
@@ -476,14 +540,18 @@ async function auditLog(
 ): Promise<void> {
   try {
     await ensureAuditTable();
-    const ip = req
+    const ipRaw = req
       ? (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? null
       : null;
+    const ip = ipRaw && REDACT_AUDIT ? hashPii(ipRaw) : ipRaw;
     const ua = req ? (req.headers["user-agent"] as string ?? null) : null;
+    const ownerIdStored = ownerId && REDACT_AUDIT && EMAIL_RE_AUDIT.test(ownerId)
+      ? hashPii(ownerId)
+      : ownerId;
     await pool.query(
       `INSERT INTO qpaynet_audit_log (id, owner_id, action, details, ip, user_agent)
        VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
-      [randomUUID(), ownerId, action, JSON.stringify(details), ip, ua],
+      [randomUUID(), ownerIdStored, action, JSON.stringify(redactDetails(details)), ip, ua],
     );
   } catch (err) {
     console.warn("[qpaynet audit] failed:", err instanceof Error ? err.message : err);
@@ -2810,6 +2878,224 @@ qpaynetRouter.get("/me/audit", authLimiter, async (req, res) => {
     [ownerId, limit],
   );
   res.json({ events: r.rows });
+});
+
+// GET /api/qpaynet/openapi.json — partner-facing OpenAPI 3.1 spec.
+// Covers wallets, transactions, transfers, deposits, merchants, payment
+// requests, webhook subscriptions. Admin endpoints are intentionally
+// omitted — they're internal-ops, not part of the partner contract.
+qpaynetRouter.get("/openapi.json", (_req, res) => {
+  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://aevion-production-a70c.up.railway.app").replace(/\/$/, "");
+  const spec = {
+    openapi: "3.1.0",
+    info: {
+      title: "AEVION QPayNet",
+      version: "1.0.0",
+      description: "Embedded payment infrastructure for AEVION ecosystem (KZT). HMAC-signed webhooks, idempotent transfers, in-app wallets, merchant API keys, payment links.",
+      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+      license: { name: "Proprietary" },
+    },
+    servers: [{ url: `${base}/api/qpaynet`, description: "Production" }],
+    tags: [
+      { name: "Wallets" }, { name: "Transactions" }, { name: "Transfers" },
+      { name: "Deposits" }, { name: "Merchants" }, { name: "PaymentRequests" },
+      { name: "Webhooks" }, { name: "Public" },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+        merchantKey: { type: "apiKey", in: "header", name: "X-API-Key" },
+      },
+      schemas: {
+        Wallet: {
+          type: "object",
+          required: ["id", "name", "currency", "balance", "status"],
+          properties: {
+            id: { type: "string", format: "uuid" },
+            name: { type: "string" },
+            currency: { type: "string", example: "KZT" },
+            balance: { type: "number", description: "Available balance in KZT" },
+            status: { type: "string", enum: ["active", "frozen", "closed"] },
+          },
+        },
+        Transaction: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            wallet_id: { type: "string", format: "uuid" },
+            type: { type: "string", enum: ["deposit", "withdraw", "transfer_in", "transfer_out", "merchant_charge", "refund"] },
+            amount: { type: "number" },
+            fee: { type: "number" },
+            description: { type: "string", nullable: true },
+            created_at: { type: "string", format: "date-time" },
+          },
+        },
+        TransferRequest: {
+          type: "object",
+          required: ["fromWalletId", "toWalletId", "amount"],
+          properties: {
+            fromWalletId: { type: "string", format: "uuid" },
+            toWalletId: { type: "string", format: "uuid" },
+            amount: { type: "number", minimum: 1, description: "KZT (max 100000 by default)" },
+            description: { type: "string", maxLength: 200 },
+          },
+        },
+        ValidationError: {
+          type: "object",
+          properties: {
+            error: { type: "string", const: "validation_failed" },
+            field: { type: "string" },
+            reason: { type: "string" },
+          },
+        },
+        Error: {
+          type: "object",
+          required: ["error"],
+          properties: { error: { type: "string", description: "Stable machine-readable code" } },
+        },
+      },
+      responses: {
+        ValidationFailed: { description: "Input validation failed", content: { "application/json": { schema: { $ref: "#/components/schemas/ValidationError" } } } },
+        AuthRequired: { description: "Bearer token missing or invalid", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        RateLimited: { description: "Rate limit exceeded", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+      },
+    },
+    security: [{ bearerAuth: [] }],
+    paths: {
+      "/health": { get: { tags: ["Public"], summary: "Service health + pool stats", security: [], responses: { "200": { description: "OK" } } } },
+      "/stats": { get: { tags: ["Public"], summary: "Aggregate ecosystem stats", security: [], responses: { "200": { description: "OK" } } } },
+      "/wallets": {
+        get: { tags: ["Wallets"], summary: "List my wallets", responses: { "200": { description: "OK" }, "401": { $ref: "#/components/responses/AuthRequired" } } },
+        post: {
+          tags: ["Wallets"], summary: "Create wallet",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, currency: { type: "string", default: "KZT" } } } } } },
+          responses: { "201": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/Wallet" } } } } },
+        },
+      },
+      "/wallets/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["Wallets"], summary: "Wallet detail (owner)", responses: { "200": { description: "OK" }, "404": { description: "Not found" } } },
+        patch: {
+          tags: ["Wallets"], summary: "Rename wallet",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["name"], properties: { name: { type: "string", maxLength: 80 } } } } } },
+          responses: { "200": { description: "OK" }, "400": { $ref: "#/components/responses/ValidationFailed" } },
+        },
+      },
+      "/wallets/{id}/public": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: { tags: ["Public"], summary: "Recipient lookup (no balance)", security: [], responses: { "200": { description: "OK" }, "404": { description: "Not found" } } },
+      },
+      "/deposit": {
+        post: {
+          tags: ["Deposits"], summary: "Top up wallet (test/sandbox)",
+          parameters: [{ name: "Idempotency-Key", in: "header", schema: { type: "string" } }],
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["walletId", "amount"], properties: { walletId: { type: "string", format: "uuid" }, amount: { type: "number" }, description: { type: "string" } } } } } },
+          responses: { "200": { description: "OK" }, "400": { $ref: "#/components/responses/ValidationFailed" }, "429": { $ref: "#/components/responses/RateLimited" } },
+        },
+      },
+      "/deposit/checkout": {
+        post: {
+          tags: ["Deposits"], summary: "Stripe Checkout Session (real cards)",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["walletId", "amount"], properties: { walletId: { type: "string" }, amount: { type: "number", minimum: 100 } } } } } },
+          responses: { "200": { description: "Returns Stripe checkout URL or stub URL when STRIPE_SECRET_KEY is unset" } },
+        },
+      },
+      "/withdraw": {
+        post: {
+          tags: ["Transactions"], summary: "Withdraw from wallet (0.1% fee)",
+          parameters: [{ name: "Idempotency-Key", in: "header", schema: { type: "string" } }],
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["walletId", "amount"], properties: { walletId: { type: "string" }, amount: { type: "number" }, description: { type: "string" } } } } } },
+          responses: { "200": { description: "OK" }, "400": { description: "insufficient_balance / wallet_inactive / validation" } },
+        },
+      },
+      "/transfer": {
+        post: {
+          tags: ["Transfers"], summary: "P2P transfer (0.1% fee, atomic, KYC-aware)",
+          parameters: [{ name: "Idempotency-Key", in: "header", schema: { type: "string" } }],
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/TransferRequest" } } } },
+          responses: { "200": { description: "OK" }, "400": { description: "insufficient/inactive/same_wallet/over_max" }, "403": { description: "kyc_required" } },
+        },
+      },
+      "/transactions": {
+        get: { tags: ["Transactions"], summary: "Transaction history", parameters: [{ name: "walletId", in: "query", schema: { type: "string", format: "uuid" } }], responses: { "200": { description: "OK" } } },
+      },
+      "/transactions.csv": {
+        get: { tags: ["Transactions"], summary: "CSV export (max 5000 rows, 5/min)", responses: { "200": { description: "text/csv" }, "429": { $ref: "#/components/responses/RateLimited" } } },
+      },
+      "/merchant/keys": {
+        post: { tags: ["Merchants"], summary: "Issue merchant API key (shown once)", responses: { "201": { description: "Created" } } },
+        get: { tags: ["Merchants"], summary: "List my merchant keys", responses: { "200": { description: "OK" } } },
+      },
+      "/merchant/keys/{id}": {
+        delete: { tags: ["Merchants"], summary: "Revoke key", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "OK" } } },
+      },
+      "/merchant/charge": {
+        post: {
+          tags: ["Merchants"], summary: "Charge a customer wallet via API key",
+          security: [{ merchantKey: [] }],
+          parameters: [{ name: "Idempotency-Key", in: "header", schema: { type: "string" } }],
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["amount", "customerWalletId"], properties: { amount: { type: "number" }, customerWalletId: { type: "string", format: "uuid" }, description: { type: "string" } } } } } },
+          responses: { "200": { description: "OK" }, "400": { description: "Validation / cannot_charge_own_wallet" }, "403": { description: "invalid_or_revoked_key" } },
+        },
+      },
+      "/requests": {
+        post: {
+          tags: ["PaymentRequests"], summary: "Create a payment link",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["toWalletId", "amount", "description"], properties: { toWalletId: { type: "string", format: "uuid" }, amount: { type: "number" }, description: { type: "string", maxLength: 200 }, note: { type: "string" }, expiresAt: { type: "string" }, notifyUrl: { type: "string", format: "uri" } } } } } },
+          responses: { "201": { description: "Created (returns notifySecret once)" } },
+        },
+        get: { tags: ["PaymentRequests"], summary: "List my payment requests", responses: { "200": { description: "OK" } } },
+      },
+      "/requests/{token}": {
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Public"], summary: "View payment request (no auth)", security: [], responses: { "200": { description: "OK" } } },
+      },
+      "/requests/{token}/pay": {
+        post: {
+          tags: ["PaymentRequests"], summary: "Pay a request (auth required)",
+          parameters: [
+            { name: "token", in: "path", required: true, schema: { type: "string" } },
+            { name: "Idempotency-Key", in: "header", schema: { type: "string" } },
+          ],
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["fromWalletId"], properties: { fromWalletId: { type: "string", format: "uuid" } } } } } },
+          responses: { "200": { description: "OK (fires HMAC-signed webhook async)" } },
+        },
+      },
+      "/webhook-subs": {
+        post: {
+          tags: ["Webhooks"], summary: "Subscribe to events (set-once secret returned)",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri" }, events: { type: "string", default: "payment_request.paid" } } } } } },
+          responses: { "201": { description: "Created" } },
+        },
+        get: { tags: ["Webhooks"], summary: "List my subscriptions", responses: { "200": { description: "OK" } } },
+      },
+      "/webhook-subs/{id}": {
+        delete: { tags: ["Webhooks"], summary: "Revoke subscription", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "OK" } } },
+      },
+      "/webhooks/test": {
+        post: {
+          tags: ["Webhooks"], summary: "Smoke-test your webhook URL (HMAC roundtrip)",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["url", "secret"], properties: { url: { type: "string", format: "uri" }, secret: { type: "string", minLength: 16 } } } } } },
+          responses: { "200": { description: "Returns delivery result + payload" } },
+        },
+      },
+      "/openapi.json": {
+        get: { tags: ["Public"], summary: "This document", security: [], responses: { "200": { description: "OK" } } },
+      },
+    },
+    "x-webhook-contract": {
+      eventTypes: ["payment_request.paid"],
+      headers: {
+        "X-Aevion-Event": "Event type (e.g. payment_request.paid)",
+        "X-Aevion-Timestamp": "Unix seconds. Reject if older than 5 minutes (replay protection).",
+        "X-Aevion-Signature": "sha256=<hex(hmac(secret, `${timestamp}.${rawBody}`))>",
+      },
+      retries: "5 attempts, exp-backoff 30s/2m/10m/30m/2h. After exhaustion, dead-letter — visible via /admin/webhook-deliveries.",
+      verification: "Verify signature BEFORE parsing body. Use constant-time comparison. Reject if timestamp drift > 5 minutes.",
+    },
+  };
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json(spec);
 });
 
 // GET /api/qpaynet/health — lightweight liveness check for hub monitor

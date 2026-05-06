@@ -29,6 +29,7 @@ const SUB_HEALTH = [
 const SUB_OPENAPI = [
   { name: "qsign-v2", path: "/api/qsign/v2/openapi.json", title: "AEVION QSign v2" },
   { name: "quantum-shield", path: "/api/quantum-shield/openapi.json", title: "AEVION Quantum Shield" },
+  { name: "qpaynet", path: "/api/qpaynet/openapi.json", title: "AEVION QPayNet" },
 ];
 
 /**

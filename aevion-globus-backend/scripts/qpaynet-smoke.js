@@ -464,6 +464,18 @@ async function run() {
   assert("health reports encryption flag",
     health.body.encryption === "enabled" || health.body.encryption === "disabled");
 
+  // 33. Public OpenAPI spec — partners use this for SDK gen / docs
+  console.log("\n33. OpenAPI");
+  const spec = await req("GET", "/api/qpaynet/openapi.json");
+  assert("GET /api/qpaynet/openapi.json → 200", spec.status === 200);
+  assert("OpenAPI version 3.1.0", spec.body.openapi === "3.1.0");
+  assert("info.title is QPayNet", spec.body.info?.title?.includes("QPayNet"));
+  assert("paths includes /transfer", typeof spec.body.paths?.["/transfer"] === "object");
+  assert("paths includes /merchant/charge", typeof spec.body.paths?.["/merchant/charge"] === "object");
+  assert("admin paths NOT exposed (partner-facing only)",
+    !spec.body.paths?.["/admin/refund"] && !spec.body.paths?.["/admin/reconcile"]);
+  assert("x-webhook-contract present", typeof spec.body["x-webhook-contract"] === "object");
+
   console.log(`\n${"═".repeat(40)}`);
   console.log(`QPayNet smoke: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

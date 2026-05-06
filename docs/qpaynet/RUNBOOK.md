@@ -36,6 +36,9 @@ Latency budget reasoning: `/transfer` does 1 KYC read + 1 SELECT FOR UPDATE on
 | `SMTP_HOST/PORT/USER/PASS/FROM` | no | — | without it email notifs are silently skipped |
 | `SENTRY_DSN` | recommended | — | error capture (no-op without it) |
 | `QPAYNET_ENCRYPTION_KEY` | recommended | — | hex-32 or passphrase; encrypts webhook `notify_secret` at rest. Without it, secrets store as plaintext (back-compat). |
+| `QPAYNET_AUDIT_REDACT` | recommended | `0` | `1` = HMAC-hash IPs and emails in audit log (GDPR). |
+| `QPAYNET_PII_SALT` | recommended | — | HMAC key for audit redaction. 32+ chars. Without it, falls back to unsalted SHA-256. |
+| `QPAYNET_RATE_TIERS` | no | — | Per-email money rate-limit overrides: `email1:300,email2:600` |
 | `PG_POOL_MAX` | no | `20` | Postgres pool size |
 | `PG_POOL_IDLE_MS` | no | `30000` | idle connection eviction |
 | `PG_POOL_CONN_MS` | no | `5000` | acquire timeout |
@@ -297,8 +300,10 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Merchant webhook delivery durability | done — `qpaynet_webhook_deliveries` queue + retry tick; `/admin/webhook-deliveries` for ops | — |
 | At-rest encryption: lazy migration | done — needsEncryption() check at read sites encrypts plaintext rows in-place when env-key is enabled | — |
 | /health degrade signal | done — pool waiting > 0 OR stuck deliveries > 50 → status=degraded | — |
+| OpenAPI spec for partners | done — `GET /api/qpaynet/openapi.json` (3.1; admin endpoints intentionally hidden) | — |
+| Audit log PII redaction | done — `QPAYNET_AUDIT_REDACT=1` + `QPAYNET_PII_SALT`; HMAC-hashes IPs/emails | — |
+| Per-tier money limits | done — `QPAYNET_RATE_TIERS=email:limit,...` overrides without code change | — |
 | ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |
-| Per-tier money limits | open — currently 30/min hardcoded; merchant integrations need bumps | — |
 
 Anything in "open" is documented but not yet code. When you finish one, move
 the row up and update the date.

@@ -2982,3 +2982,43 @@ export async function listSnippetTagCloud(ownerUserId: string): Promise<Array<{ 
   );
   return r.rows as Array<{ tag: string; count: number }>;
 }
+
+/** Move all runs from sourceSessionId into targetSessionId. Caller must own both. */
+export async function mergeSessions(
+  targetSessionId: string,
+  sourceSessionId: string,
+  userId: string | null
+): Promise<{ moved: number }> {
+  await ensureQCoreTables(pool);
+
+  // Verify ownership of both sessions
+  const [target, source] = await Promise.all([
+    getSession(targetSessionId, userId),
+    getSession(sourceSessionId, userId),
+  ]);
+  if (!target) throw new Error("target session not found or forbidden");
+  if (!source) throw new Error("source session not found or forbidden");
+
+  if (!isDbReady()) {
+    let moved = 0;
+    for (const run of memRuns.values()) {
+      if (run.sessionId === sourceSessionId) {
+        run.sessionId = targetSessionId;
+        moved++;
+      }
+    }
+    memSessions.delete(sourceSessionId);
+    return { moved };
+  }
+
+  const r = await pool.query(
+    `WITH moved AS (
+       UPDATE "QCoreRun" SET "sessionId"=$1 WHERE "sessionId"=$2 RETURNING "id"
+     )
+     SELECT COUNT(*) AS moved FROM moved`,
+    [targetSessionId, sourceSessionId]
+  );
+  const moved = parseInt(r.rows[0]?.moved ?? "0", 10);
+  await pool.query(`DELETE FROM "QCoreSession" WHERE "id"=$1`, [sourceSessionId]);
+  return { moved };
+}

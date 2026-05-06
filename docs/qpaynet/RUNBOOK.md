@@ -39,6 +39,7 @@ Latency budget reasoning: `/transfer` does 1 KYC read + 1 SELECT FOR UPDATE on
 | `QPAYNET_AUDIT_REDACT` | recommended | `0` | `1` = HMAC-hash IPs and emails in audit log (GDPR). |
 | `QPAYNET_PII_SALT` | recommended | — | HMAC key for audit redaction. 32+ chars. Without it, falls back to unsalted SHA-256. |
 | `QPAYNET_RATE_TIERS` | no | — | Per-email money rate-limit overrides: `email1:300,email2:600` |
+| `QPAYNET_ALERT_URL` | recommended | — | Slack/Discord webhook for reconcile drift + dead-letter delivery alerts. |
 | `PG_POOL_MAX` | no | `20` | Postgres pool size |
 | `PG_POOL_IDLE_MS` | no | `30000` | idle connection eviction |
 | `PG_POOL_CONN_MS` | no | `5000` | acquire timeout |
@@ -308,7 +309,8 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | Stable error code registry | done — `x-error-codes` extension in OpenAPI groups codes by category | — |
 | Audit log PII redaction | done — `QPAYNET_AUDIT_REDACT=1` + `QPAYNET_PII_SALT`; HMAC-hashes IPs/emails | — |
 | Per-tier money limits | done — `QPAYNET_RATE_TIERS=email:limit,...` overrides without code change | — |
-| ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |
+| Merchant API key scopes | done — `scopes` column on `qpaynet_merchant_keys`; `charge`/`read`/`refund`. Charge endpoint enforces `charge` scope. | — |
+| ALERT_URL Slack/Discord hookup | done — `QPAYNET_ALERT_URL` posts on reconcile drift + delivery dead-letter (Slack `text` + Discord `content` co-format) | — |
 
 Anything in "open" is documented but not yet code. When you finish one, move
 the row up and update the date.

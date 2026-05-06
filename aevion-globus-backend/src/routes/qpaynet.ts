@@ -173,11 +173,13 @@ async function ensureTables(): Promise<void> {
         key_hash    TEXT UNIQUE NOT NULL,
         key_prefix  TEXT NOT NULL,  -- first 8 chars for display
         wallet_id   TEXT NOT NULL,
+        scopes      TEXT NOT NULL DEFAULT 'charge,read', -- comma-list: charge,read,refund
         revoked_at  TIMESTAMPTZ,
         created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_qpmk_owner ON qpaynet_merchant_keys (owner_id);
       CREATE INDEX IF NOT EXISTS idx_qpmk_hash  ON qpaynet_merchant_keys (key_hash);
+      ALTER TABLE qpaynet_merchant_keys ADD COLUMN IF NOT EXISTS scopes TEXT NOT NULL DEFAULT 'charge,read';
     `);
     tablesReady = true;
   } catch (err) {
@@ -1161,6 +1163,19 @@ qpaynetRouter.get("/transactions.csv", csvLimiter, async (req, res) => {
 
 // ── Merchant keys ─────────────────────────────────────────────────────────────
 
+// Merchant key scopes — least-privilege per key. Default 'charge,read' so
+// existing keys keep working. Partners can issue read-only keys for
+// dashboards, charge-only keys for checkouts, etc.
+const VALID_SCOPES = ["charge", "read", "refund"] as const;
+type Scope = typeof VALID_SCOPES[number];
+
+function parseScopes(raw: string | undefined): Scope[] {
+  if (!raw) return ["charge", "read"];
+  const parts = raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const valid = parts.filter((s): s is Scope => VALID_SCOPES.includes(s as Scope));
+  return valid.length > 0 ? valid : ["charge", "read"];
+}
+
 qpaynetRouter.post("/merchant/keys", async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
@@ -1169,10 +1184,12 @@ qpaynetRouter.post("/merchant/keys", async (req, res) => {
   const parsed = validateOr400(req, res, {
     walletId: "uuid",
     name: { kind: "string", optional: true, max: 80 },
+    scopes: { kind: "string", optional: true, max: 100 },
   });
   if (!parsed) return;
   const walletId = parsed.walletId as string;
   const name = (parsed.name as string | undefined) ?? "API Key";
+  const scopes = parseScopes(parsed.scopes as string | undefined);
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
@@ -1182,10 +1199,13 @@ qpaynetRouter.post("/merchant/keys", async (req, res) => {
   const { raw, hash, prefix } = makeMerchantKey();
   const id = randomUUID();
   await pool.query(
-    "INSERT INTO qpaynet_merchant_keys (id, owner_id, name, key_hash, key_prefix, wallet_id) VALUES ($1,$2,$3,$4,$5,$6)",
-    [id, ownerId, name, hash, prefix, walletId],
+    "INSERT INTO qpaynet_merchant_keys (id, owner_id, name, key_hash, key_prefix, wallet_id, scopes) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [id, ownerId, name, hash, prefix, walletId, scopes.join(",")],
   );
-  res.status(201).json({ id, name, keyPrefix: prefix, key: raw, message: "Save this key — it won't be shown again." });
+  res.status(201).json({
+    id, name, keyPrefix: prefix, scopes, key: raw,
+    message: "Save this key — it won't be shown again.",
+  });
 });
 
 qpaynetRouter.get("/merchant/keys", async (req, res) => {
@@ -1195,10 +1215,16 @@ qpaynetRouter.get("/merchant/keys", async (req, res) => {
 
   const pool = getPool();
   const result = await pool.query(
-    "SELECT id, name, key_prefix, wallet_id, revoked_at, created_at FROM qpaynet_merchant_keys WHERE owner_id=$1 ORDER BY created_at DESC",
+    "SELECT id, name, key_prefix, wallet_id, scopes, revoked_at, created_at FROM qpaynet_merchant_keys WHERE owner_id=$1 ORDER BY created_at DESC",
     [auth.sub ?? auth.email ?? "anon"],
   );
-  res.json({ keys: result.rows });
+  // Convert comma-string to array so consumers don't have to parse.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const keys = result.rows.map((k: any) => ({
+    ...k,
+    scopes: typeof k.scopes === "string" ? k.scopes.split(",").map((s: string) => s.trim()).filter(Boolean) : ["charge", "read"],
+  }));
+  res.json({ keys });
 });
 
 qpaynetRouter.delete("/merchant/keys/:id", async (req, res) => {
@@ -1224,10 +1250,16 @@ qpaynetRouter.post("/merchant/charge", moneyLimiter, async (req, res) => {
   const keyHash = createHash("sha256").update(apiKey).digest("hex");
   const pool = getPool();
   const mk = await pool.query(
-    "SELECT id, wallet_id, owner_id FROM qpaynet_merchant_keys WHERE key_hash=$1 AND revoked_at IS NULL",
+    "SELECT id, wallet_id, owner_id, scopes FROM qpaynet_merchant_keys WHERE key_hash=$1 AND revoked_at IS NULL",
     [keyHash],
   );
   if (!mk.rows[0]) return res.status(403).json({ error: "invalid_or_revoked_key" });
+
+  // Scope check: 'charge' required. Read-only keys must NOT be able to move money.
+  const keyScopes = (mk.rows[0].scopes as string ?? "charge,read").split(",").map((s: string) => s.trim());
+  if (!keyScopes.includes("charge")) {
+    return res.status(403).json({ error: "scope_missing", required: "charge", granted: keyScopes });
+  }
 
   const parsed = validateOr400(req, res, {
     customerWalletId: "uuid",
@@ -2422,6 +2454,33 @@ qpaynetRouter.get("/admin/payouts", async (req, res) => {
   res.json({ payouts: r.rows.map((x: any) => ({ ...x, amount: fromTiin(BigInt(x.amount)) })) });
 });
 
+// Post drift / stuck-deliveries alerts to QPAYNET_ALERT_URL. Slack and
+// Discord both accept the same `text` payload shape. No-op when env unset.
+async function postAlert(text: string, context: Record<string, unknown> = {}): Promise<void> {
+  const url = process.env.QPAYNET_ALERT_URL?.trim();
+  if (!url) return;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const ctxLines = Object.entries(context).map(([k, v]) => `• ${k}: \`${v}\``).join("\n");
+    await fetch(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json" },
+      // Slack: accepts {text}. Discord: accepts {content}. Send both;
+      // each side ignores the unknown field.
+      body: JSON.stringify({
+        text: `${text}${ctxLines ? `\n${ctxLines}` : ""}`,
+        content: `${text}${ctxLines ? `\n${ctxLines}` : ""}`,
+      }),
+    });
+    clearTimeout(t);
+  } catch (err) {
+    console.warn("[qpaynet alert] failed:", err instanceof Error ? err.message : err);
+    // Do NOT Sentry this — it'd loop if Sentry is down + alert URL is also down.
+  }
+}
+
 // GET /api/qpaynet/admin/reconcile — money-supply reconciliation.
 // Sums all wallet balances and compares against the immutable transaction
 // ledger. ANY drift = bug or hand-written SQL = page on it. Wire as cron
@@ -2472,11 +2531,16 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
       },
     });
     if (drift !== 0n || row.negative_wallets > 0) {
-      // Always log + Sentry on drift — operations should see this without
-      // having to poll the endpoint.
+      // Always log + Sentry + ALERT_URL on drift. Operations should see this
+      // without having to poll the endpoint.
       console.error(`[qpaynet/reconcile] DRIFT detected: ${drift} tiin, ${row.negative_wallets} negative wallets`);
       captureException(new Error(`qpaynet reconcile drift=${drift}t neg=${row.negative_wallets}`), {
         source: "qpaynet/reconcile", drift: drift.toString(), neg: row.negative_wallets,
+      });
+      void postAlert("🚨 QPayNet reconciliation drift detected", {
+        drift_tiin: drift.toString(),
+        drift_kzt: (Number(drift) / 100).toFixed(2),
+        negative_wallets: row.negative_wallets,
       });
     }
   } catch (err) {
@@ -3463,6 +3527,17 @@ async function runRetryTick(): Promise<void> {
           "UPDATE qpaynet_webhook_deliveries SET attempts=$1, last_error=$2, next_retry_at=$3 WHERE id=$4",
           [attempts, result.error?.slice(0, 500) ?? "unknown", next, row.id],
         );
+        // Alert on dead-letter (final attempt exhausted). Once per row, not
+        // per attempt — avoids alert storms during partner outages.
+        if (attempts >= MAX_NOTIFY_ATTEMPTS) {
+          void postAlert("⚠️ QPayNet webhook delivery exhausted retries", {
+            deliveryId: row.id,
+            subId: row.sub_id,
+            event: row.event,
+            url: row.url,
+            error: result.error?.slice(0, 200) ?? "unknown",
+          });
+        }
       }
     }
   } catch (err) {

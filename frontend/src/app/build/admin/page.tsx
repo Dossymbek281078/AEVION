@@ -79,6 +79,7 @@ function Body() {
 
       <h2 className="pt-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Sections</h2>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <NavCard href="/build/admin/insights" title="Weekly insights" body="Past 7d platform metrics: new users / apps / hires + top employers + conversion." />
         <NavCard href="/build/admin/leads" title="Leads" body="Email captures from /build/why-aevion. Search, filter, CSV export." />
         <NavCard href="/build/admin/partner-keys" title="Partner API keys" body="Read-only API keys for partner sites syndicating the vacancy feed." />
         <NavCard href="/build/admin/users" title="Users" body="All registered users, roles, profiles, verification status." />

@@ -178,6 +178,32 @@ applicationsRouter.get("/my", async (req, res) => {
   }
 });
 
+// GET /api/build/applications/mine/pipeline — all PENDING applications across
+// the recruiter's vacancies, lightweight for the kanban view at /build/pipeline.
+// Returns id + applicantName + vacancyTitle + labelKey + matchScore, ordered
+// by labelKey priority then most-recent.
+applicationsRouter.get("/mine/pipeline", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const result = await pool.query(
+      `SELECT a."id", a."labelKey", a."matchScore", a."createdAt", a."updatedAt",
+              v."id" AS "vacancyId", v."title" AS "vacancyTitle",
+              prof."name" AS "applicantName", prof."title" AS "applicantHeadline"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "BuildProfile" prof ON prof."userId" = a."userId"
+       WHERE p."clientId" = $1 AND a."status" = 'PENDING'
+       ORDER BY a."updatedAt" DESC LIMIT 500`,
+      [auth.sub],
+    );
+    return ok(res, { items: result.rows, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "pipeline_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/applications/mine/interviews — recruiter-side calendar feed.
 // Returns INTERVIEW-labeled applications across all owned vacancies, ordered
 // by labeled-at (which we approximate using updatedAt). Used by /build/calendar.
@@ -560,9 +586,9 @@ applicationsRouter.post("/bulk-status", async (req, res) => {
 
 // PATCH /api/build/applications/:id/label
 // Owner-only. Sets a recruiter-private label on the application
-// (SHORTLIST/INTERVIEW/HOLD/TOP_PICK or null to clear). Doesn't move the
+// (SHORTLIST/INTERVIEW/OFFER/HOLD/TOP_PICK or null to clear). Doesn't move the
 // application status, so it doesn't email the candidate or fire hire fees.
-const ALLOWED_LABELS = new Set(["SHORTLIST", "INTERVIEW", "HOLD", "TOP_PICK"]);
+const ALLOWED_LABELS = new Set(["SHORTLIST", "INTERVIEW", "OFFER", "HOLD", "TOP_PICK"]);
 applicationsRouter.patch("/:id/label", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);

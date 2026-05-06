@@ -1197,7 +1197,7 @@ function ApplicationLabelFilter({
       >
         All ({applications.length})
       </button>
-      {(["TOP_PICK", "SHORTLIST", "INTERVIEW", "HOLD"] as ApplicationLabel[]).map((l) => {
+      {(["TOP_PICK", "SHORTLIST", "INTERVIEW", "OFFER", "HOLD"] as ApplicationLabel[]).map((l) => {
         const n = counts[l] ?? 0;
         if (n === 0) return null;
         const active = value === l;
@@ -1290,15 +1290,17 @@ const LABEL_TONE: Record<ApplicationLabel, string> = {
   TOP_PICK: "border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-100",
   SHORTLIST: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
   INTERVIEW: "border-sky-500/40 bg-sky-500/10 text-sky-200",
-  HOLD: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+  OFFER: "border-amber-300/50 bg-amber-300/15 text-amber-100",
+  HOLD: "border-slate-500/40 bg-slate-500/10 text-slate-200",
 };
 const LABEL_EMOJI: Record<ApplicationLabel, string> = {
   TOP_PICK: "★",
   SHORTLIST: "✓",
   INTERVIEW: "📞",
+  OFFER: "📝",
   HOLD: "⏸",
 };
-const LABEL_OPTIONS: ApplicationLabel[] = ["TOP_PICK", "SHORTLIST", "INTERVIEW", "HOLD"];
+const LABEL_OPTIONS: ApplicationLabel[] = ["TOP_PICK", "SHORTLIST", "INTERVIEW", "OFFER", "HOLD"];
 
 function ApplicationLabelPicker({
   applicationId,

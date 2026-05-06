@@ -192,7 +192,7 @@ export type BuildApplication = {
   snoozedUntil?: string | null;
 };
 
-export type ApplicationLabel = "SHORTLIST" | "INTERVIEW" | "HOLD" | "TOP_PICK";
+export type ApplicationLabel = "SHORTLIST" | "INTERVIEW" | "OFFER" | "HOLD" | "TOP_PICK";
 
 export type BuildMessage = {
   id: string;
@@ -806,6 +806,21 @@ export const buildApi = {
   applyVacancy: (input: { vacancyId: string; message?: string; sourceTag?: string; referredByUserId?: string }) =>
     call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
+  myPipeline: () =>
+    call<{
+      items: {
+        id: string;
+        labelKey: ApplicationLabel | null;
+        matchScore: number | null;
+        createdAt: string;
+        updatedAt: string;
+        vacancyId: string;
+        vacancyTitle: string;
+        applicantName: string | null;
+        applicantHeadline: string | null;
+      }[];
+      total: number;
+    }>("GET", "/api/build/applications/mine/pipeline"),
   myInterviews: () =>
     call<{
       items: {
@@ -1353,6 +1368,14 @@ export const buildApi = {
       "POST",
       `/api/build/admin/partner-keys/${encodeURIComponent(id)}/rotate`,
     ),
+  adminWeeklyPreview: (userId: string) =>
+    call<{
+      to: string;
+      subject: string;
+      body: string;
+      counts: { applications: number; vacanciesPosted: number; hires: number };
+      windowStart: string;
+    }>("GET", `/api/build/admin/weekly-preview/${encodeURIComponent(userId)}`),
   adminInsights: () =>
     call<{
       windowStart: string;

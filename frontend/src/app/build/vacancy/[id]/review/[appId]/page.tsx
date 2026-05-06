@@ -11,6 +11,7 @@ const LABEL_OPTIONS: { key: ApplicationLabel; emoji: string; label: string }[] =
   { key: "TOP_PICK", emoji: "⭐", label: "Top pick" },
   { key: "SHORTLIST", emoji: "📋", label: "Shortlist" },
   { key: "INTERVIEW", emoji: "💬", label: "Interview" },
+  { key: "OFFER", emoji: "📝", label: "Offer sent" },
   { key: "HOLD", emoji: "⏸", label: "Hold" },
 ];
 
@@ -222,6 +223,8 @@ export default function ApplicationReviewPage() {
       } else if (e.key === "3") {
         setLabel("INTERVIEW");
       } else if (e.key === "4") {
+        setLabel("OFFER");
+      } else if (e.key === "5") {
         setLabel("HOLD");
       } else if (e.key === "0") {
         setLabel(null);
@@ -540,7 +543,7 @@ export default function ApplicationReviewPage() {
             <ul className="space-y-1 text-[11px] text-slate-400">
               <li><kbd className="rounded bg-white/10 px-1">←</kbd> / <kbd className="rounded bg-white/10 px-1">→</kbd> prev/next</li>
               <li><kbd className="rounded bg-white/10 px-1">a</kbd> accept · <kbd className="rounded bg-white/10 px-1">r</kbd> reject</li>
-              <li><kbd className="rounded bg-white/10 px-1">1-4</kbd> set label · <kbd className="rounded bg-white/10 px-1">0</kbd> clear</li>
+              <li><kbd className="rounded bg-white/10 px-1">1-5</kbd> set label · <kbd className="rounded bg-white/10 px-1">0</kbd> clear</li>
               <li><kbd className="rounded bg-white/10 px-1">Esc</kbd> back</li>
             </ul>
           </div>

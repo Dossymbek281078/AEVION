@@ -197,10 +197,10 @@ parity + docs/runbook.
 | ID | Task | Owner |
 |---|---|---|
 | P3-1 | Demo recording — 8-minute scripted walkthrough across QRight → Bureau → Awards → Bank | aevion-core |
-| P3-2 | Press kit / one-pager — `docs/AEVION_ONEPAGER.md` exists; bring up to current state | aevion-core |
+| P3-2 | ✅ **DONE 2026-05-06** — Press kit / one-pager refreshed to 2026-05-06: paid E2E live, velocity 114 PR/30d, 10-min investor demo flow added | aevion-core |
 | P3-3 | Reference customer onboarding — RU partnership artifacts in `docs/bureau/` need productisation | aevion-bureau / aevion-core |
 | P3-4 | ✅ **DONE 2026-05-06** — First paid Bureau cert E2E — invoice via Stripe, Bureau cert issued, Trust Graph edge recorded | aevion-bank + aevion-bureau | Trust Graph edge in `aca91c2`, AEC mint claim flow in PR #112 (`internalMintForDevice` + `/trust-edges/:edgeId/claim-aec`), smoke plumbing PR #113, dashboard extension `ec37db6d`, 14 unit tests `721554f`. Stripe (test mode) + AEC reward env vars live on Railway, redeploy verified, prod smoke 24/24, dashboard returns `trustEdges`+`aecSummary`. Remaining (post-launch polish): live-mode Stripe keys + first real paid cert via UI |
-| P3-5 | Investor demo flow on prod — every link in pitch deck resolves, every stat is live | aevion-core |
+| P3-5 | ✅ **DONE 2026-05-06** — Investor demo flow on prod — `scripts/investor-demo-audit.sh` covers 18 checks (10 UI routes + 6 backend endpoints + Railway origin + GitHub), all green; run before any pitch | aevion-core |
 
 ### Phase 4 — Public launch
 
@@ -275,6 +275,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-06  —    P3-2 ✅ DONE — onepager refreshed (paid E2E live, 114 PR/30d, 10-min demo flow)
+2026-05-06  —    P3-5 ✅ DONE — investor-demo-audit.sh (18/18 green): UI routes, backend, Railway, GitHub
 2026-05-06  —    P3-4 ✅ DONE — Stripe + AEC reward env on Railway, redeploy + smoke 24/24, dashboard trustEdges/aecSummary live
 2026-05-03  —    docs(bank): AEC ↔ fiat boundary rules shipped to main (R1–R4, P3-4 prereq done)
 2026-05-03  #102 feat(platform): P1 follow-up — awards+planet smokes + OpenAPI 0.5.1 + Sentry alerts spec

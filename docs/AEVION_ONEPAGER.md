@@ -16,11 +16,12 @@
 - **AEVION Bank** — автоматические роялти в AEC.
 - **AI Trust Oracle** — B2B API «оригинален ли этот контент» для TikTok/Spotify/YouTube.
 
-## Что уже есть (на 2026-05-01)
+## Что уже есть (на 2026-05-06)
 - **14 production-модулей** в `main`, из них **9 — Tier 2** (webhooks, embed, revoke, transparency, admin, audit, тесты, SDK).
 - **Уникальные техактивы:** ML-DSA-65 (постквантовая подпись), Quantum Shield (Shamir 2-of-3 + Ed25519).
-- **Velocity:** 30 merged PR за 9 дней, 295 коммитов за 6 недель.
-- **Live прод:** `aevion.app` · **Repo:** `github.com/Dossymbek281078/AEVION`.
+- **Платный E2E-flow на проде:** Stripe → Bureau cert → Trust Graph edge → AEC reward (Bronze 50 / Silver 150 / Gold 500 / Platinum 1000). Daily smoke 24/24 в GitHub Actions.
+- **Velocity:** 114 merged PR за 30 дней, 561 коммит за 30 дней.
+- **Live прод:** `aevion.app` (Vercel) + `api-backend` на Railway · **Repo:** `github.com/Dossymbek281078/AEVION`.
 - **Mobile SDK** для QCoreAI: Kotlin + Swift.
 
 ## Рынок
@@ -52,6 +53,14 @@
 
 ## Запрос
 **$5 M seed** · 40% команда (10 разработчиков) · 25% user acquisition · 20% юр+compliance · 15% runway.
+
+## Демо для инвестора (10 минут)
+1. **`aevion.app/qright`** — регистрируем кусок контента → SHA-256 + timestamp.
+2. **`aevion.app/qsign`** — подписываем ML-DSA-65, проверяем подпись через verify.
+3. **`aevion.app/bureau`** — заявка на сертификат, оплата тест-картой `4242 4242 4242 4242` → cert выдан.
+4. **`aevion.app/bureau`** → Trust Graph → claim AEC reward → токены в кошельке.
+5. **`aevion.app/awards`** + **`aevion.app/planet`** — голосование валидаторов + evidenceRoot.
+6. **`aevion.app/bank`** — кошелёк, история транзакций, AEC баланс.
 
 ## Контакты
 `aevion.app` · `github.com/Dossymbek281078/AEVION` · *(добавить email/Telegram)*

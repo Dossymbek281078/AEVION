@@ -111,9 +111,9 @@ export default function AdminPayoutsPage() {
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/qpaynet" className="text-slate-400 hover:text-white text-sm">← QPayNet</Link>
+          <Link href="/qpaynet/admin" className="text-slate-400 hover:text-white text-sm">← Admin</Link>
           <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold">⚙ Admin · Payouts</h1>
+          <h1 className="text-sm font-bold">💸 Payouts</h1>
         </div>
         <Link href="/qpaynet/admin/kyc" className="text-xs text-slate-400 hover:text-white">KYC →</Link>
       </header>

@@ -96,6 +96,8 @@ function Body() {
 
       {items && <FirstHireCelebrationBanner items={items} />}
 
+      <OnboardingNudge />
+
       {items && <TodayDigestTile items={items} />}
 
       <WeeklyDigestTile />
@@ -385,6 +387,89 @@ function SourceBreakdownChart() {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function OnboardingNudge() {
+  const KEY = "qbuild.onboarding.nudgeDismissedUntil.v1";
+  const [done, setDone] = useState<number | null>(null);
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw && Number(raw) > Date.now()) {
+        setHidden(true);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    let cancelled = false;
+    (async () => {
+      const [me, projects, funnel, bookmarks, referrals] = await Promise.all([
+        buildApi.me().catch(() => null),
+        buildApi.listProjects({ mine: true, limit: 5 }).catch(() => null),
+        buildApi.myVacanciesFunnel().catch(() => null),
+        buildApi.listBookmarks().catch(() => null),
+        buildApi.myReferrals().catch(() => null),
+      ]);
+      if (cancelled) return;
+      const profile = me?.profile;
+      const a = !!profile && !!profile.title && !!profile.summary && (profile.skills?.length ?? 0) >= 2 ? 1 : 0;
+      const b = !!projects && projects.items.length > 0 ? 1 : 0;
+      const c = !!funnel && funnel.items.length > 0 ? 1 : 0;
+      const d = !!bookmarks && bookmarks.items.length >= 3 ? 1 : 0;
+      const e = !!referrals && referrals.totalReferred > 0 ? 1 : 0;
+      setDone(a + b + c + d + e);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function dismiss() {
+    try {
+      localStorage.setItem(KEY, String(Date.now() + 14 * 86400_000));
+    } catch {
+      /* ignore */
+    }
+    setHidden(true);
+  }
+
+  if (hidden || done === null || done === 5) return null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-2.5 text-sm">
+      <div className="flex items-center gap-2 text-emerald-100">
+        <span>🎯</span>
+        <span>
+          <span className="font-semibold">{done}/5</span> шагов онбординга пройдено
+        </span>
+        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-emerald-900/40">
+          <div
+            className="h-full bg-emerald-400 transition-all"
+            style={{ width: `${(done / 5) * 100}%` }}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Link
+          href="/build/onboarding"
+          className="rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2.5 py-1 text-xs font-semibold text-emerald-100 hover:bg-emerald-400/25"
+        >
+          Continue →
+        </Link>
+        <button
+          type="button"
+          onClick={dismiss}
+          className="text-[10px] text-emerald-200/60 hover:text-emerald-100"
+          title="Скрыть на 2 недели"
+        >
+          Hide
+        </button>
+      </div>
     </div>
   );
 }

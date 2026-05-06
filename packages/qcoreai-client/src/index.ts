@@ -1241,6 +1241,63 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`exportSessionJson failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  /* ─── V17: ratings + merge ─────────────────────────────────────────── */
+
+  /**
+   * Rate a run with thumbs up (1) or thumbs down (-1).
+   * @example
+   * ```ts
+   * const { summary } = await client.rateRun(runId, 1);
+   * console.log(`+${summary.thumbsUp} 👍  -${summary.thumbsDown} 👎`);
+   * ```
+   */
+  async rateRun(runId: string, rating: 1 | -1, note?: string): Promise<{ rating: { rating: number; note: string | null }; summary: { thumbsUp: number; thumbsDown: number; total: number } }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/rate`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ rating, note }),
+    });
+    if (!res.ok) throw new Error(`rateRun failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get caller's rating + aggregate for a run. */
+  async getRunRating(runId: string): Promise<{ mine: { rating: number; note: string | null } | null; summary: { thumbsUp: number; thumbsDown: number; total: number } }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/rating`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunRating failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List top-rated runs sorted by score (thumbsUp - thumbsDown). */
+  async listTopRatedRuns(limit = 20): Promise<Array<{ runId: string; thumbsUp: number; thumbsDown: number; score: number }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/ratings/top?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listTopRatedRuns failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Merge all runs from sourceSessionId into targetSessionId (then deletes source). */
+  async mergeSessions(targetSessionId: string, sourceSessionId: string): Promise<{ ok: boolean; moved: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(targetSessionId)}/merge`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ sourceSessionId }),
+    });
+    if (!res.ok) throw new Error(`mergeSessions failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Simple single-provider chat (no multi-agent pipeline). */
+  async chat(messages: Array<{ role: string; content: string }>, opts?: { provider?: string; model?: string }): Promise<{ reply: string; provider: string; model: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/chat"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ messages, ...opts }),
+    });
+    if (!res.ok) throw new Error(`chat failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -387,6 +387,12 @@ export default function QCoreMultiAgentPage() {
   const [qrightObjects, setQrightObjects] = useState<QRightObjectLite[] | null>(null);
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
 
+  // V19: agent personas
+  const [personas, setPersonas] = useState<Record<string, { name: string; emoji?: string; color?: string }>>({});
+  const [personaEditRole, setPersonaEditRole] = useState<string | null>(null);
+  const [personaName, setPersonaName] = useState("");
+  const [personaEmoji, setPersonaEmoji] = useState("");
+
   // V18: command palette state
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -487,6 +493,17 @@ export default function QCoreMultiAgentPage() {
           setOverrides(next);
         }
         if (Array.isArray(sessData?.items)) setSessions(sessData.items);
+
+        // V19: load agent personas
+        try {
+          const pRes = await fetch(apiUrl("/api/qcoreai/me/personas"), { headers: bearerHeader() });
+          const pData = await pRes.json().catch(() => ({}));
+          if (Array.isArray(pData?.personas)) {
+            const map: Record<string, { name: string; emoji?: string; color?: string }> = {};
+            for (const p of pData.personas) map[p.roleId] = { name: p.name, emoji: p.emoji, color: p.color };
+            setPersonas(map);
+          }
+        } catch { /* non-critical */ }
 
         // V7-Tmpl: load user's own templates in the background.
         try {
@@ -2505,6 +2522,60 @@ export default function QCoreMultiAgentPage() {
               {/* V7-Budget: monthly spend summary + limit setting */}
               <SpendLimitPanel />
 
+              {/* V19: Agent Personas */}
+              <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.1)", background: "#f8fafc" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontWeight: 800, fontSize: 12, color: "#0f172a", flex: 1 }}>Agent personas</span>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>Custom names for agents</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {["analyst", "writer", "writerB", "critic"].map((role) => {
+                    const persona = personas[role];
+                    const editing = personaEditRole === role;
+                    return (
+                      <div key={role} style={{ position: "relative" }}>
+                        <button
+                          onClick={() => {
+                            if (editing) { setPersonaEditRole(null); return; }
+                            setPersonaEditRole(role);
+                            setPersonaName(persona?.name || "");
+                            setPersonaEmoji(persona?.emoji || "");
+                          }}
+                          style={{
+                            padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            border: editing ? "1px solid #7c3aed" : "1px solid #e2e8f0",
+                            background: editing ? "rgba(124,58,237,0.08)" : "#fff",
+                            color: persona ? "#0f172a" : "#94a3b8",
+                          }}
+                        >
+                          {persona?.emoji ? `${persona.emoji} ` : ""}{persona?.name || role}
+                        </button>
+                        {editing && (
+                          <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 100, marginTop: 4, padding: 10, borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", minWidth: 200 }}>
+                            <input value={personaName} onChange={(e) => setPersonaName(e.target.value)} placeholder="Name…" style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            <input value={personaEmoji} onChange={(e) => setPersonaEmoji(e.target.value)} placeholder="Emoji (opt.)…" maxLength={4} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            <div style={{ display: "flex", gap: 5 }}>
+                              <button onClick={async () => {
+                                if (!personaName.trim()) return;
+                                const res = await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ name: personaName.trim(), emoji: personaEmoji.trim() || null }) });
+                                const d = await res.json().catch(() => ({}));
+                                if (d.persona) { setPersonas((p) => ({ ...p, [role]: { name: d.persona.name, emoji: d.persona.emoji } })); }
+                                setPersonaEditRole(null);
+                              }} style={{ flex: 1, padding: "4px", borderRadius: 5, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                              {personas[role] && <button onClick={async () => {
+                                await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "DELETE", headers: bearerHeader() });
+                                setPersonas((p) => { const n = { ...p }; delete n[role]; return n; });
+                                setPersonaEditRole(null);
+                              }} style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, cursor: "pointer" }}>Reset</button>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Budget cap selector — applies to every strategy. */}
               <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 700 }}>Per-run cap:</span>
@@ -2961,6 +3032,7 @@ export default function QCoreMultiAgentPage() {
                     onCancelRefine={() => { setRefineOpen(null); setRefineText(""); }}
                     onApplyRefine={() => refineRun(run.id, refineText)}
                     onContinue={continueRun}
+                    personas={personas}
                     onSaveTemplate={(runId) => {
                       setSaveTemplateFor(runId);
                       setTemplateNameInput("");
@@ -3953,6 +4025,7 @@ function RunCard({
   onApplyRefine,
   onContinue,
   onSaveTemplate,
+  personas,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -3970,6 +4043,7 @@ function RunCard({
   onApplyRefine?: () => void;
   onContinue?: (runId: string) => void;
   onSaveTemplate?: (runId: string) => void;
+  personas?: Record<string, { name: string; emoji?: string }>;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
@@ -4055,13 +4129,13 @@ function RunCard({
           if ("pair" in item) {
             out.push(
               <div key={`pair-${i}`} className="qc-pair-grid" style={{ marginBottom: 0 }}>
-                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[0])} />
-                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[1])} />
+                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[0])} personas={personas} />
+                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[1])} personas={personas} />
               </div>
             );
             consumedTurns += 2;
           } else {
-            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item)} />);
+            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item)} personas={personas} />);
             consumedTurns += 1;
           }
         });
@@ -4592,8 +4666,9 @@ function GuidanceChip({ item }: { item: GuidanceItem }) {
   );
 }
 
-function AgentTurnCard({ turn, strategy, onSaveToNotebook }: { turn: AgentTurn; strategy: Strategy; onSaveToNotebook?: () => void }) {
+function AgentTurnCard({ turn, strategy, onSaveToNotebook, personas }: { turn: AgentTurn; strategy: Strategy; onSaveToNotebook?: () => void; personas?: Record<string, { name: string; emoji?: string }> }) {
   const s = turnStyle(turn.role, turn.stage, turn.instance, strategy);
+  const persona = personas?.[turn.role === "writer" && turn.instance === "b" ? "writerB" : turn.role];
   const streaming = turn.status === "streaming";
   const stageBadge =
     turn.stage === "revision" ? " (revision)" :
@@ -4620,10 +4695,10 @@ function AgentTurnCard({ turn, strategy, onSaveToNotebook }: { turn: AgentTurn; 
             fontSize: 11, fontWeight: 900,
           }}
         >
-          {s.tag}
+          {persona?.emoji || s.tag}
         </span>
         <span style={{ fontWeight: 800, fontSize: 12, color: s.color }}>
-          {s.label}{stageBadge}
+          {persona?.name || s.label}{stageBadge}
         </span>
         {turn.model && (
           <span style={{ fontSize: 11, color: "#94a3b8" }}>

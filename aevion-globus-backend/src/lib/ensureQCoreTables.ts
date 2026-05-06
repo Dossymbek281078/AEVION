@@ -240,6 +240,19 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Agent personas — custom display names for agent roles per user.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAgentPersona" (
+      "userId"    TEXT NOT NULL,
+      "roleId"    TEXT NOT NULL,
+      "name"      TEXT NOT NULL,
+      "emoji"     TEXT,
+      "color"     TEXT,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "roleId")
+    );
+  `);
+
   // Analytics goals — monthly run count and cost targets per user.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreAnalyticsGoal" (

@@ -303,6 +303,9 @@ ORDER BY notify_attempts DESC LIMIT 20;
 | OpenAPI spec for partners | done — `GET /api/qpaynet/openapi.json` (3.1; admin endpoints intentionally hidden; CORS for third-party explorers) | — |
 | Stripe event.id dedup | done — `qpaynet_stripe_events` table; INSERT ON CONFLICT before any side effect; 30d GC | — |
 | Wallet close API | done — `POST /wallets/:id/close` (zero balance + no pending payouts; terminal) | — |
+| Wallet metadata field | done — `metadata` jsonb on POST/PATCH `/wallets`; max 4KB; partner-supplied | — |
+| Webhook event-id for partner dedup | done — `X-Aevion-Event-Id` stable across all retries (uses delivery row id or pr.id) | — |
+| Stable error code registry | done — `x-error-codes` extension in OpenAPI groups codes by category | — |
 | Audit log PII redaction | done — `QPAYNET_AUDIT_REDACT=1` + `QPAYNET_PII_SALT`; HMAC-hashes IPs/emails | — |
 | Per-tier money limits | done — `QPAYNET_RATE_TIERS=email:limit,...` overrides without code change | — |
 | ALERT_URL paging integration | open — Slack/PagerDuty webhook for reconcile drift / Sentry critical | — |

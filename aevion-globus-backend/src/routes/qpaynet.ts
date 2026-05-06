@@ -143,9 +143,11 @@ async function ensureTables(): Promise<void> {
         currency    TEXT NOT NULL DEFAULT 'KZT',
         balance     BIGINT NOT NULL DEFAULT 0,    -- stored in tiin (1 KZT = 100 tiin)
         status      TEXT NOT NULL DEFAULT 'active',
+        metadata    JSONB,                         -- partner-supplied (merchant_order_id, etc)
         created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_qpw_owner ON qpaynet_wallets (owner_id);
+      ALTER TABLE qpaynet_wallets ADD COLUMN IF NOT EXISTS metadata JSONB;
 
       CREATE TABLE IF NOT EXISTS qpaynet_transactions (
         id          TEXT PRIMARY KEY,
@@ -684,16 +686,29 @@ qpaynetRouter.post("/wallets", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { name = "Мой кошелёк", currency = "KZT" } = req.body as { name?: string; currency?: string };
+  const { name = "Мой кошелёк", currency = "KZT", metadata } = req.body as {
+    name?: string; currency?: string; metadata?: Record<string, unknown>;
+  };
+  // Cap metadata size at 4KB to prevent abuse — partners attach merchant_id,
+  // order_ref, etc. Anything larger and they should use their own DB.
+  let metadataJson: string | null = null;
+  if (metadata && typeof metadata === "object") {
+    const s = JSON.stringify(metadata);
+    if (s.length > 4096) return res.status(400).json({ error: "metadata_too_large", maxBytes: 4096 });
+    metadataJson = s;
+  }
   const pool = getPool();
   const id = randomUUID();
   const ownerId = auth.sub ?? auth.email ?? "anon";
 
   await pool.query(
-    "INSERT INTO qpaynet_wallets (id, owner_id, name, currency) VALUES ($1,$2,$3,$4)",
-    [id, ownerId, name.slice(0, 80), currency.toUpperCase().slice(0, 3)],
+    "INSERT INTO qpaynet_wallets (id, owner_id, name, currency, metadata) VALUES ($1,$2,$3,$4,$5::jsonb)",
+    [id, ownerId, name.slice(0, 80), currency.toUpperCase().slice(0, 3), metadataJson],
   );
-  res.status(201).json({ id, name, currency: currency.toUpperCase(), balance: 0, status: "active" });
+  res.status(201).json({
+    id, name, currency: currency.toUpperCase(), balance: 0, status: "active",
+    ...(metadata ? { metadata } : {}),
+  });
 });
 
 qpaynetRouter.get("/wallets", async (req, res) => {
@@ -703,7 +718,7 @@ qpaynetRouter.get("/wallets", async (req, res) => {
 
   const pool = getPool();
   const result = await pool.query(
-    "SELECT id, name, currency, balance, status, created_at FROM qpaynet_wallets WHERE owner_id=$1 ORDER BY created_at DESC",
+    "SELECT id, name, currency, balance, status, metadata, created_at FROM qpaynet_wallets WHERE owner_id=$1 ORDER BY created_at DESC",
     [auth.sub ?? auth.email ?? "anon"],
   );
   res.json({
@@ -720,7 +735,7 @@ qpaynetRouter.get("/wallets/:id", async (req, res) => {
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
   const w = await pool.query(
-    "SELECT id, name, currency, balance, status, created_at FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
+    "SELECT id, name, currency, balance, status, metadata, created_at FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
     [req.params.id, ownerId],
   );
   if (!w.rows[0]) return res.status(404).json({ error: "wallet_not_found" });
@@ -747,15 +762,39 @@ qpaynetRouter.patch("/wallets/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
 
-  const { name } = req.body as { name?: string };
-  const trimmed = (name ?? "").trim();
-  if (!trimmed || trimmed.length > 80) return res.status(400).json({ error: "name_required_max_80" });
+  const { name, metadata } = req.body as { name?: string; metadata?: Record<string, unknown> | null };
+  const trimmedName = name !== undefined ? (name ?? "").trim() : undefined;
+  if (trimmedName !== undefined && (!trimmedName || trimmedName.length > 80)) {
+    return res.status(400).json({ error: "name_required_max_80" });
+  }
+
+  // Build dynamic UPDATE — partner can change name only, metadata only, or both.
+  // Pass metadata: null to clear; omit field to leave alone.
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  if (trimmedName !== undefined) {
+    params.push(trimmedName);
+    sets.push(`name = $${params.length}`);
+  }
+  if (metadata !== undefined) {
+    if (metadata === null) {
+      sets.push(`metadata = NULL`);
+    } else {
+      const s = JSON.stringify(metadata);
+      if (s.length > 4096) return res.status(400).json({ error: "metadata_too_large", maxBytes: 4096 });
+      params.push(s);
+      sets.push(`metadata = $${params.length}::jsonb`);
+    }
+  }
+  if (sets.length === 0) return res.status(400).json({ error: "no_fields_to_update" });
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
+  params.push(req.params.id, ownerId);
   const r = await pool.query(
-    "UPDATE qpaynet_wallets SET name=$1 WHERE id=$2 AND owner_id=$3 RETURNING id, name",
-    [trimmed, req.params.id, ownerId],
+    `UPDATE qpaynet_wallets SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND owner_id = $${params.length}
+     RETURNING id, name, metadata`,
+    params,
   );
   if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "wallet_not_found" });
   res.json({ ok: true, ...r.rows[0] });
@@ -1547,7 +1586,10 @@ async function fanOutToOwner(
           [encryptSecret(decryptedSecret), s.id],
         ).catch(() => { /* best-effort */ });
       }
-      const result = await fireRequestWebhook(s.url, decryptedSecret, payload);
+      const result = await fireRequestWebhook(s.url, decryptedSecret, payload, {
+        eventId: deliveryId,
+        eventType: eventName,
+      });
       if (result.ok) {
         await pool.query(
           "UPDATE qpaynet_webhook_deliveries SET attempts=1, delivered_at=NOW(), next_retry_at=NULL WHERE id=$1",
@@ -1624,11 +1666,18 @@ async function fireRequestWebhook(
   url: string,
   secret: string,
   payload: Record<string, unknown>,
+  options?: { eventId?: string; eventType?: string },
 ): Promise<{ ok: boolean; status: number; error?: string }> {
   const body = JSON.stringify(payload);
   const timestamp = Math.floor(Date.now() / 1000);
   const signed = `${timestamp}.${body}`;
   const sig = createHmac("sha256", secret).update(signed).digest("hex");
+  // Event-id lets partners dedupe on their side (we may retry up to 5 times,
+  // each with the same event-id). If caller didn't supply one, derive from
+  // the payload's paidTxId — stable across all retries of the same event —
+  // or fall back to random for unscoped fires (smoke tests).
+  const eventId = options?.eventId ?? (payload.paidTxId as string | undefined) ?? randomUUID();
+  const eventType = options?.eventType ?? "payment_request.paid";
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 5000);
@@ -1638,7 +1687,8 @@ async function fireRequestWebhook(
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "AEVION-QPayNet/1.0",
-        "X-Aevion-Event": "payment_request.paid",
+        "X-Aevion-Event": eventType,
+        "X-Aevion-Event-Id": eventId,
         "X-Aevion-Timestamp": String(timestamp),
         "X-Aevion-Signature": `sha256=${sig}`,
       },
@@ -1939,7 +1989,10 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
         [encryptSecret(decryptedSecret), pr.id],
       ).catch(() => { /* migration best-effort */ });
     }
-    fireRequestWebhook(pr.notify_url, decryptedSecret, payload).then(async (result) => {
+    fireRequestWebhook(pr.notify_url, decryptedSecret, payload, {
+      eventId: pr.id,
+      eventType: "payment_request.paid",
+    }).then(async (result) => {
       if (result.ok) {
         await pool.query(
           "UPDATE qpaynet_payment_requests SET notified_at=NOW(), notify_attempts=1, notify_next_retry_at=NULL WHERE id=$1",
@@ -3045,6 +3098,7 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
             currency: { type: "string", example: "KZT" },
             balance: { type: "number", description: "Available balance in KZT" },
             status: { type: "string", enum: ["active", "frozen", "closed"] },
+            metadata: { type: "object", description: "Partner-supplied data (max 4KB)", nullable: true },
           },
         },
         Transaction: {
@@ -3096,8 +3150,8 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
       "/wallets": {
         get: { tags: ["Wallets"], summary: "List my wallets", responses: { "200": { description: "OK" }, "401": { $ref: "#/components/responses/AuthRequired" } } },
         post: {
-          tags: ["Wallets"], summary: "Create wallet",
-          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string" }, currency: { type: "string", default: "KZT" } } } } } },
+          tags: ["Wallets"], summary: "Create wallet (with optional partner metadata)",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string", maxLength: 80 }, currency: { type: "string", default: "KZT" }, metadata: { type: "object", description: "Partner-supplied JSONB; max 4KB. Useful for merchant_order_id, customer_ref, etc." } } } } } },
           responses: { "201": { description: "Created", content: { "application/json": { schema: { $ref: "#/components/schemas/Wallet" } } } } },
         },
       },
@@ -3105,8 +3159,8 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
         parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         get: { tags: ["Wallets"], summary: "Wallet detail (owner)", responses: { "200": { description: "OK" }, "404": { description: "Not found" } } },
         patch: {
-          tags: ["Wallets"], summary: "Rename wallet",
-          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["name"], properties: { name: { type: "string", maxLength: 80 } } } } } },
+          tags: ["Wallets"], summary: "Rename or update metadata. Pass `metadata: null` to clear.",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { name: { type: "string", maxLength: 80 }, metadata: { type: "object", nullable: true } } } } } },
           responses: { "200": { description: "OK" }, "400": { $ref: "#/components/responses/ValidationFailed" } },
         },
       },
@@ -3223,15 +3277,53 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
         get: { tags: ["Public"], summary: "This document", security: [], responses: { "200": { description: "OK" } } },
       },
     },
+    "x-error-codes": {
+      description: "Stable machine-readable error codes returned in `error` field. Designed to be matched directly by partner code without parsing free-form messages.",
+      validation: {
+        validation_failed: "Input failed validation. `field` and `reason` give details.",
+        metadata_too_large: "Wallet metadata > 4096 bytes.",
+      },
+      auth: {
+        auth_required: "Bearer token missing or invalid.",
+        not_admin: "Caller email not in QPAYNET_ADMIN_EMAILS allowlist.",
+        invalid_or_revoked_key: "Merchant API key (X-API-Key) unknown or revoked.",
+      },
+      money: {
+        insufficient_balance: "Wallet balance below requested amount + fee.",
+        wallet_inactive: "Wallet is frozen or closed; money paths reject.",
+        wallet_not_found: "Wallet id does not exist or not owned by caller.",
+        cannot_transfer_to_same_wallet: "fromWalletId === toWalletId.",
+        cannot_charge_own_wallet: "Merchant cannot charge their own wallet via API key.",
+        transfer_amount_exceeds_max: "amount > QPAYNET_MAX_TRANSFER (default 100000 KZT).",
+        daily_deposit_cap_exceeded: "Sum of last 24h deposits would exceed QPAYNET_DAILY_DEPOSIT_CAP.",
+        kyc_required: "Monthly outgoing > QPAYNET_KYC_THRESHOLD; submit KYC at /qpaynet/kyc.",
+      },
+      idempotency: {
+        idempotency_key_body_mismatch: "Same Idempotency-Key but different body (409). Generate a fresh key.",
+      },
+      lifecycle: {
+        balance_must_be_zero: "Wallet close requires zero balance — withdraw or transfer first.",
+        pending_payouts_must_complete: "Wallet close blocked by in-flight payouts.",
+        already_closed: "Wallet already in 'closed' state.",
+        wallet_frozen_contact_support: "Cannot close a frozen wallet — contact support to unfreeze first.",
+        tx_already_refunded: "Original transaction already has a corresponding refund row.",
+        tx_type_not_refundable: "Only deposit / transfer_in / merchant_charge are refundable.",
+        refund_exceeds_original: "Partial refund > original amount.",
+      },
+      rate: {
+        rate_limit_exceeded: "Too many requests. Money limiter: 30/min default; CSV: 5/min; auth-read: 120/min. Tier overrides via QPAYNET_RATE_TIERS.",
+      },
+    },
     "x-webhook-contract": {
       eventTypes: ["payment_request.paid"],
       headers: {
         "X-Aevion-Event": "Event type (e.g. payment_request.paid)",
+        "X-Aevion-Event-Id": "Stable event identifier across retries. Use this as the dedup key on your side — same event-id means same logical event, regardless of how many times we retry.",
         "X-Aevion-Timestamp": "Unix seconds. Reject if older than 5 minutes (replay protection).",
         "X-Aevion-Signature": "sha256=<hex(hmac(secret, `${timestamp}.${rawBody}`))>",
       },
-      retries: "5 attempts, exp-backoff 30s/2m/10m/30m/2h. After exhaustion, dead-letter — visible via /admin/webhook-deliveries.",
-      verification: "Verify signature BEFORE parsing body. Use constant-time comparison. Reject if timestamp drift > 5 minutes.",
+      retries: "5 attempts, exp-backoff 30s/2m/10m/30m/2h. After exhaustion, dead-letter — visible via /admin/webhook-deliveries. Same X-Aevion-Event-Id across all attempts of a logical event.",
+      verification: "Verify signature BEFORE parsing body. Use constant-time comparison. Reject if timestamp drift > 5 minutes. Dedupe by X-Aevion-Event-Id (we recommend INSERT ON CONFLICT DO NOTHING).",
     },
   };
   res.setHeader("Cache-Control", "public, max-age=300");
@@ -3313,7 +3405,10 @@ async function runRetryTick(): Promise<void> {
           [encryptSecret(decryptedSecret), row.id],
         ).catch(() => { /* migration best-effort */ });
       }
-      const result = await fireRequestWebhook(row.notify_url, decryptedSecret, payload);
+      const result = await fireRequestWebhook(row.notify_url, decryptedSecret, payload, {
+        eventId: row.id,
+        eventType: "payment_request.paid",
+      });
       const attempts = (row.notify_attempts ?? 0) + 1;
       if (result.ok) {
         await pool.query(
@@ -3352,7 +3447,10 @@ async function runRetryTick(): Promise<void> {
           [encryptSecret(decryptedSecret), row.sub_id],
         ).catch(() => { /* best-effort */ });
       }
-      const result = await fireRequestWebhook(row.url, decryptedSecret, row.payload);
+      const result = await fireRequestWebhook(row.url, decryptedSecret, row.payload, {
+        eventId: row.id,
+        eventType: row.event,
+      });
       const attempts = (row.attempts ?? 0) + 1;
       if (result.ok) {
         await pool.query(

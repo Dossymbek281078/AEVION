@@ -387,6 +387,11 @@ export default function QCoreMultiAgentPage() {
   const [qrightObjects, setQrightObjects] = useState<QRightObjectLite[] | null>(null);
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
 
+  // V18: command palette state
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const paletteRef = useRef<HTMLInputElement>(null);
+
   // V7-T: id of the run being continued (thread reply context).
   const [continueFromRunId, setContinueFromRunId] = useState<string | null>(null);
   // V7-Tmpl: run templates — save/load named input+strategy bundles.
@@ -426,6 +431,24 @@ export default function QCoreMultiAgentPage() {
   const userScrolledUpRef = useRef(false);
   // Tells `sendCompareAll` to stop firing remaining strategies. Set by Stop.
   const compareAbortRef = useRef(false);
+
+  /* ── ⌘K Command palette ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        setPaletteQuery("");
+      }
+      if (e.key === "Escape") setPaletteOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    if (paletteOpen) setTimeout(() => paletteRef.current?.focus(), 50);
+  }, [paletteOpen]);
 
   /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
@@ -1038,6 +1061,22 @@ export default function QCoreMultiAgentPage() {
       if (activeSessionId === id) newSession();
     } catch (e: any) {
       setGlobalError(e?.message || "Delete failed");
+    }
+  }, [activeSessionId, newSession]);
+
+  const archiveSessionCb = useCallback(async (id: string, archive: boolean) => {
+    try {
+      await fetch(apiUrl(`/api/qcoreai/sessions/${id}/archive`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ archive }),
+      });
+      if (archive) {
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        if (activeSessionId === id) newSession();
+      }
+    } catch (e: any) {
+      setGlobalError(e?.message || "Archive failed");
     }
   }, [activeSessionId, newSession]);
 
@@ -2579,6 +2618,20 @@ export default function QCoreMultiAgentPage() {
             >
               + New session
             </button>
+            <button
+              onClick={() => { setPaletteOpen(true); setPaletteQuery(""); }}
+              title="Open command palette (⌘K / Ctrl+K)"
+              style={{
+                width: "100%", padding: "6px 10px", borderRadius: 8, marginBottom: 10,
+                border: "1px solid #e2e8f0", background: "#f8fafc",
+                color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6, textAlign: "left",
+              }}
+            >
+              <span>⌘</span>
+              <span style={{ flex: 1 }}>Quick search…</span>
+              <kbd style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: "#e2e8f0", color: "#475569" }}>K</kbd>
+            </button>
             <div style={{ position: "relative", marginBottom: 10 }}>
               <input
                 type="search"
@@ -2834,8 +2887,19 @@ export default function QCoreMultiAgentPage() {
                       ⬇
                     </a>
                     <button
+                      onClick={() => archiveSessionCb(s.id, true)}
+                      title="Archive session (hide from list, recoverable)"
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", fontSize: 12,
+                      }}
+                    >
+                      🗄
+                    </button>
+                    <button
                       onClick={() => removeSession(s.id)}
-                      title="Delete session"
+                      title="Delete session permanently"
                       style={{
                         width: 24, borderRadius: 6,
                         border: "1px solid transparent", background: "transparent",
@@ -3275,6 +3339,128 @@ export default function QCoreMultiAgentPage() {
           }
         `}</style>
       </ProductPageShell>
+
+      {/* ⌘K Command palette */}
+      {paletteOpen && (() => {
+        const q = paletteQuery.toLowerCase();
+        const matchedSessions = q
+          ? sessions.filter((s) => s.title.toLowerCase().includes(q)).slice(0, 5)
+          : sessions.slice(0, 5);
+        const NAV_COMMANDS = [
+          { icon: "📊", label: "Analytics", href: "/qcoreai/analytics" },
+          { icon: "🧪", label: "Eval harness", href: "/qcoreai/eval" },
+          { icon: "📝", label: "Prompts library", href: "/qcoreai/prompts" },
+          { icon: "⚡", label: "Batch runs", href: "/qcoreai/batch" },
+          { icon: "🕐", label: "Scheduled batches", href: "/qcoreai/schedule" },
+          { icon: "📓", label: "Notebook", href: "/qcoreai/notebook" },
+          { icon: "🎮", label: "Playground", href: "/qcoreai/playground" },
+          { icon: "⭐", label: "Top rated runs", href: "/qcoreai/top" },
+          { icon: "◈", label: "AI Providers", href: "/qcoreai/providers" },
+          { icon: "📖", label: "API Docs", href: "/qcoreai/docs" },
+          { icon: "⚖️", label: "Compare runs", href: "/qcoreai/compare" },
+          { icon: "🗂️", label: "Workspaces", href: "/qcoreai/workspaces" },
+        ].filter((c) => !q || c.label.toLowerCase().includes(q));
+        return (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 9999,
+              background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+              display: "flex", alignItems: "flex-start", justifyContent: "center",
+              paddingTop: "15vh",
+            }}
+            onClick={() => setPaletteOpen(false)}
+          >
+            <div
+              style={{
+                width: "min(600px, 90vw)", borderRadius: 16,
+                background: "#fff", boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                overflow: "hidden",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                <span style={{ fontSize: 18 }}>⌘</span>
+                <input
+                  ref={paletteRef}
+                  value={paletteQuery}
+                  onChange={(e) => setPaletteQuery(e.target.value)}
+                  placeholder="Search sessions, navigate…"
+                  style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0f172a" }}
+                />
+                <kbd style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" }}>Esc</kbd>
+              </div>
+              <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                {matchedSessions.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Sessions</div>
+                    {matchedSessions.map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          setPaletteOpen(false);
+                          setActiveSessionId(s.id);
+                          loadSession(s.id);
+                        }}
+                        style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontSize: 14 }}>💬</span>
+                        <span style={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{s.title || "(untitled)"}</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>
+                          {new Date(s.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {NAV_COMMANDS.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Navigate</div>
+                    {NAV_COMMANDS.slice(0, 6).map((c) => (
+                      <a
+                        key={c.href}
+                        href={c.href}
+                        style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center", textDecoration: "none", color: "inherit" }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "#f8fafc")}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "")}
+                        onClick={() => setPaletteOpen(false)}
+                      >
+                        <span style={{ fontSize: 14 }}>{c.icon}</span>
+                        <span style={{ fontSize: 13, color: "#0f172a" }}>{c.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {!q && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Actions</div>
+                    {[
+                      { icon: "✨", label: "New session", action: () => { newSession(); setPaletteOpen(false); } },
+                      { icon: "📓", label: "Open notebook", action: () => { window.location.href = "/qcoreai/notebook"; } },
+                      { icon: "🎮", label: "Open playground", action: () => { window.location.href = "/qcoreai/playground"; } },
+                    ].map((a) => (
+                      <div
+                        key={a.label}
+                        onClick={a.action}
+                        style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontSize: 14 }}>{a.icon}</span>
+                        <span style={{ fontSize: 13, color: "#0f172a" }}>{a.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: "8px 16px", borderTop: "1px solid #f1f5f9", fontSize: 10, color: "#94a3b8", display: "flex", gap: 12 }}>
+                <span>↑↓ navigate</span><span>↵ select</span><span>Esc close</span><span>⌘K toggle</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </main>
   );
 }

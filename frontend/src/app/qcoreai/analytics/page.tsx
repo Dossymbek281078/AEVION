@@ -102,6 +102,10 @@ export default function QCoreAnalyticsPage() {
   const [topTags, setTopTags] = useState<TagCount[]>([]);
   const [topSessions, setTopSessions] = useState<Array<{ id: string; title: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>>([]);
   const [tagCosts, setTagCosts] = useState<Array<{ tag: string; runs: number; totalCostUsd: number; avgCostUsd: number }>>([]);
+  const [goal, setGoal] = useState<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null>(null);
+  const [goalEdit, setGoalEdit] = useState(false);
+  const [goalRuns, setGoalRuns] = useState("");
+  const [goalCost, setGoalCost] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -125,6 +129,13 @@ export default function QCoreAnalyticsPage() {
       if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
       const tagCostJson = await tagCostRes.json().catch(() => ({}));
       if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
+
+      // Load analytics goals
+      try {
+        const gRes = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { headers: bearerHeader() });
+        const gData = await gRes.json().catch(() => ({}));
+        if (gData?.goal) setGoal(gData.goal);
+      } catch { /* non-critical */ }
     } catch (e: any) {
       setError(e?.message || "Failed to load analytics");
     }
@@ -250,6 +261,65 @@ export default function QCoreAnalyticsPage() {
               <Tile label="Cost" value={fmtMoney(data.totals.costUsd)} accent="#7c3aed" />
               <Tile label="Compute time" value={fmtDur(data.totals.durationMs)} accent="#ef4444" />
             </section>
+
+            {/* Monthly goals */}
+            {data && (
+              <div style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>🎯 Monthly goals</span>
+                  <button onClick={() => { setGoalEdit((v) => !v); if (!goalEdit) { setGoalRuns(goal?.monthlyRuns?.toString() || ""); setGoalCost(goal?.monthlyCostUsd?.toString() || ""); } }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", color: "#475569" }}>
+                    {goalEdit ? "Cancel" : goal ? "Edit" : "+ Set goals"}
+                  </button>
+                </div>
+                {goalEdit ? (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <label style={{ fontSize: 10, color: "#64748b", display: "block", marginBottom: 2 }}>Monthly runs target</label>
+                      <input type="number" value={goalRuns} onChange={(e) => setGoalRuns(e.target.value)} min={0} placeholder="e.g. 100" style={{ width: 100, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, color: "#64748b", display: "block", marginBottom: 2 }}>Monthly cost target ($)</label>
+                      <input type="number" value={goalCost} onChange={(e) => setGoalCost(e.target.value)} min={0} step={0.1} placeholder="e.g. 5.00" style={{ width: 100, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }} />
+                    </div>
+                    <button onClick={async () => {
+                      const body = { monthlyRuns: goalRuns ? parseInt(goalRuns) : null, monthlyCostUsd: goalCost ? parseFloat(goalCost) : null };
+                      const res = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify(body) });
+                      const d = await res.json().catch(() => ({}));
+                      if (d.goal) { setGoal(d.goal); setGoalEdit(false); }
+                    }} style={{ alignSelf: "flex-end", padding: "5px 14px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                  </div>
+                ) : goal ? (
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                    {goal.monthlyRuns && (
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#475569", marginBottom: 4 }}>
+                          <span>Runs</span>
+                          <span style={{ fontWeight: 700 }}>{data.runs} / {goal.monthlyRuns}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: data.runs >= goal.monthlyRuns ? "#10b981" : "#3b82f6", width: `${Math.min(100, Math.round((data.runs / goal.monthlyRuns) * 100))}%` }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{Math.round((data.runs / goal.monthlyRuns) * 100)}%</div>
+                      </div>
+                    )}
+                    {goal.monthlyCostUsd && (
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#475569", marginBottom: 4 }}>
+                          <span>Cost</span>
+                          <span style={{ fontWeight: 700 }}>{fmtMoney(data.totals.costUsd)} / ${goal.monthlyCostUsd.toFixed(2)}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: data.totals.costUsd >= goal.monthlyCostUsd ? "#ef4444" : "#10b981", width: `${Math.min(100, Math.round((data.totals.costUsd / goal.monthlyCostUsd) * 100))}%` }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{Math.round((data.totals.costUsd / goal.monthlyCostUsd) * 100)}%</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Set monthly run count and cost goals to track your usage against targets.</p>
+                )}
+              </div>
+            )}
 
             {/* Cost over time + 7-day forecast */}
             {timeseries.length > 0 && (

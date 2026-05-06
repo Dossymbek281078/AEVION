@@ -2781,7 +2781,7 @@ export default function CyberChessPage(){
   const effVm=scratchOn?scratchVm:vm;
   const effLm=scratchOn?scratchLm:lm;
 
-  const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"7px 14px",borderRadius:8,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:13,fontWeight:700,cursor:"pointer"}}>{label}</button>);
+  const btn=(label:string,onClick:()=>void,bg:string,fg:string,border?:string)=>(<button onClick={onClick} style={{padding:"10px 18px",borderRadius:9,border:border||`1px solid ${T.border}`,background:bg,color:fg,fontSize:14,fontWeight:800,cursor:"pointer",minHeight:38}}>{label}</button>);
 
   // SSR: render an empty shell. Client-only mount populates the real UI
   // after useEffect runs — this guarantees server HTML === client first paint
@@ -3982,16 +3982,16 @@ export default function CyberChessPage(){
           </div>
           <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
-          {/* Controls */}
-          <div style={{display:"flex",gap:6,marginTop:SPACE[2],flexWrap:"wrap"}}>
-            <Btn size="sm" variant="secondary" icon={<Icon.Flip width={14} height={14}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
-            <Btn size="sm" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
-            <Btn size="sm" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
+          {/* Controls — bigger touch targets per UX feedback (size sm → md, gap 6→8) */}
+          <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
+            <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
+            <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
+            <Btn size="md" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
               title="Показать контроль доски: какие клетки атакованы белыми/чёрными"
               style={showThreatMap?{background:"linear-gradient(135deg,#fef2f2,#ecfdf5)",color:"#0f172a",borderColor:"#a7f3d0",fontWeight:900}:undefined}>
               {showThreatMap?"🌡 Heatmap ON":"🌡 Heatmap"}
             </Btn>
-            <Btn size="sm" variant="secondary" onClick={async()=>{
+            <Btn size="md" variant="secondary" onClick={async()=>{
               try{
                 const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
                 showToast(`🔊 ${text}`,"info");
@@ -4109,7 +4109,7 @@ export default function CyberChessPage(){
               voiceRecRef.current=rec;
               try{rec.start()}catch{showToast("Не удалось запустить микрофон","error")}
             },voiceListening?"#fee2e2":T.surface,voiceListening?T.danger:T.dim)}
-            {(tab==="play"||tab==="coach"||tab==="analysis")&&<Btn size="sm" variant="secondary" onClick={()=>{
+            {(tab==="play"||tab==="coach"||tab==="analysis")&&<Btn size="md" variant="secondary" onClick={()=>{
               const input=prompt("Введи ход в алгебраической нотации (например: e4, Nf3, O-O, exd5):");
               if(!input)return;
               const san=input.trim();
@@ -4119,14 +4119,14 @@ export default function CyberChessPage(){
                 else showToast(`Невозможный ход: ${san}`,"error");
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
             }}>⌨️ Ход текстом</Btn>}
-            {over&&<Btn size="sm" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
+            {over&&<Btn size="md" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
-          {on&&!over&&!setup&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
-            <Btn size="sm" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
-            <Btn size="sm" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
-            <Btn size="sm" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{
+          {on&&!over&&!setup&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
+            <Btn size="md" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="md" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
+            <Btn size="md" variant="secondary" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("No moves","error");return}
               if(think){showToast("AI думает — подожди","error");return}
               const needChessy=tab==="play"&&!hotseat;
@@ -4138,7 +4138,7 @@ export default function CyberChessPage(){
               if(needChessy)spendChessy(3,"takeback");
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
             }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
-            {savedGames.length>0&&(tab==="play"||tab==="coach")&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+            {savedGames.length>0&&(tab==="play"||tab==="coach")&&<Btn size="md" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
           </div>}
           {over&&fenHist.length>2&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
             <Btn size="sm" variant="accent" onClick={()=>{
@@ -4524,32 +4524,33 @@ export default function CyberChessPage(){
             </div>
           </div>}
 
-          {on&&!setup&&(tab==="play"||tab==="coach")&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,fontSize:14,color:T.dim}}>
-            <span style={{color:useSF?T.purple:T.blue}}>●</span> {lv.name} ({lv.elo})
-          </div>}
-          {on&&!setup&&tab==="analysis"&&<div style={{padding:"6px 10px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,fontSize:14,color:T.dim}}>
-            <span style={{color:useSF?T.purple:T.blue}}>●</span> {useSF?`Stockfish depth ${SFD[aiI]||10}`:`Minimax depth ${lv.depth}`} · {lv.name} {lv.elo}
-            {sfOk&&!over&&<span style={{marginLeft:8,color:evalMate!==0?(evalMate>0?T.accent:T.danger):Math.abs(evalCp)<30?T.dim:evalCp>0?T.accent:T.danger,fontWeight:700}}>
-              Eval: {evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp/100).toFixed(2)}
-            </span>}
-          </div>}
-
-          {/* Opening detection */}
-          {currentOpening&&(on&&!setup||tab==="analysis")&&hist.length>0&&<div style={{
-            padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
-            background:"linear-gradient(135deg,#f0fdf4 0%,#ecfdf5 60%,#dcfce7)",
-            border:"1px solid #a7f3d0",
-            boxShadow:"0 2px 8px rgba(5,150,105,0.08), inset 0 1px 0 rgba(255,255,255,0.6)"
+          {/* Single eval / opening strip — replaces the old duplicate "● Клубный (1200)" line
+              for play/coach AND the separate big opening card. Compact one-liner: ECO chip +
+              opening name + eval (Analysis only). The opponent name+elo is already shown in
+              the avatar block above, so no need to repeat it here. */}
+          {on&&!setup&&(tab==="play"||tab==="coach"||tab==="analysis")&&(currentOpening||tab==="analysis")&&<div style={{
+            padding:"6px 10px",borderRadius:7,
+            background:currentOpening?"linear-gradient(90deg,#ecfdf5,#f0fdf4)":T.surface,
+            border:`1px solid ${currentOpening?"#a7f3d0":T.border}`,
+            display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,flexWrap:"wrap",
           }}>
-            <div style={{display:"flex",alignItems:"center",gap:SPACE[2],marginBottom:4}}>
+            {currentOpening&&hist.length>0&&<>
               <span style={{
-                fontSize:11,fontWeight:900,padding:"3px 8px",borderRadius:RADIUS.sm,
+                fontSize:10,fontWeight:900,padding:"2px 6px",borderRadius:4,
                 background:CC.brand,color:"#fff",
-                fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:1
+                fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.8,
               }}>{currentOpening.eco}</span>
-              <span style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.name}</span>
-            </div>
-            <div style={{fontSize:12,color:"#065f46",lineHeight:1.45}}>{currentOpening.desc}</div>
+              <span style={{fontSize:12,fontWeight:800,color:"#065f46"}} title={currentOpening.desc}>{currentOpening.name}</span>
+            </>}
+            {tab==="analysis"&&<>
+              <span style={{flex:1}}/>
+              <span style={{fontSize:11,color:T.dim}}>
+                <span style={{color:useSF?T.purple:T.blue}}>●</span> {useSF?`SF d${SFD[aiI]||10}`:`d${lv.depth}`}
+              </span>
+              {sfOk&&!over&&<span style={{fontSize:11,fontWeight:800,fontFamily:"ui-monospace,monospace",color:evalMate!==0?(evalMate>0?T.accent:T.danger):Math.abs(evalCp)<30?T.dim:evalCp>0?T.accent:T.danger}}>
+                {evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp>0?"+":"")+(evalCp/100).toFixed(2)}
+              </span>}
+            </>}
           </div>}
 
           {/* Game Stats — per-side breakdown with eval graph */}
@@ -4864,7 +4865,13 @@ export default function CyberChessPage(){
                   const qColor=(q?:string)=>q==="blunder"?T.danger:q==="mistake"?"#ea580c":q==="inacc"?"#ca8a04":q==="great"?T.accent:"";
                   // Hover-scrub: snapshot canonical state on first enter, then preview.
                   // Click promotes preview to canonical (browseIdx) and clears the snapshot.
+                  // GATED: disabled during an active live game (when `on && !over` — i.e. clock is
+                  // running and you're playing). Reason: hover would call setGame() mid-drag and
+                  // wipe the drag snapshot, breaking premoves and piece movement. Hover-scrub is
+                  // useful in Analysis / Coach / post-game review — that's when it stays on.
+                  const hoverScrubAllowed=tab==="analysis"||(!on||!!over);
                   const previewMove=(idx:number)=>{
+                    if(!hoverScrubAllowed)return;
                     if(previewLeaveTimer.current){window.clearTimeout(previewLeaveTimer.current);previewLeaveTimer.current=null;}
                     if(!hoverSnapRef.current){hoverSnapRef.current={fen:game.fen(),idx:browseIdx};}
                     try{const g=new Chess(fenHist[idx+1]);setGame(g);sBk(k=>k+1);sLm(null);sSel(null);sVm(new Set());sPreviewIdx(idx);}catch{}

@@ -191,14 +191,85 @@ export default function WorkspaceMediaPane() {
           />
         ) : (
           <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            height: "100%", padding: 20, textAlign: "center",
-            color: "#64748b", fontSize: 12, lineHeight: 1.5,
+            display: "flex", flexDirection: "column",
+            height: "100%", padding: 16, gap: 12,
+            color: "#cbd5e1", fontSize: 12, lineHeight: 1.5,
+            background: "#0f172a", overflowY: "auto",
           }}>
-            {state.tab === "youtube" && "Вставь YouTube URL или ID (11 символов) и нажми Enter"}
-            {state.tab === "twitch"  && "Вставь имя канала Twitch (например: gmhikaru) и нажми Enter"}
-            {state.tab === "url"     && "Вставь любой URL и нажми Enter"}
-            {state.tab === "lichess" && "Lichess TV — прямые трансляции топ-партий"}
+            {/* Что это вообще такое — короткий онбординг */}
+            <div style={{
+              padding: 12, borderRadius: 8,
+              background: "rgba(251,191,36,0.08)",
+              border: "1px solid rgba(251,191,36,0.25)",
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#fbbf24", marginBottom: 4 }}>
+                📺 Stream-режим
+              </div>
+              <div style={{ fontSize: 11.5, color: "#cbd5e1", lineHeight: 1.5 }}>
+                Окно YouTube/Twitch/Lichess <b>прямо рядом с доской</b> — играй и смотри одновременно.
+                Вставь ссылку выше или выбери быстрый пресет ниже.
+              </div>
+            </div>
+
+            {/* Быстрые пресеты — клик грузит сразу */}
+            {state.tab === "youtube" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: 1, color: "#94a3b8", textTransform: "uppercase" }}>Популярные YT-каналы</div>
+                {[
+                  ["jcUJ9Lxv-w0", "▶ GothamChess · разборы (LIVE)"],
+                  ["E0sl9TLbg30", "▶ Hikaru Highlights"],
+                  ["jvsZqOoVVxk", "▶ Daniel Naroditsky speedrun"],
+                  ["HIyR7CtJoZ4", "▶ ChessNetwork"],
+                ].map(([id, label]) => (
+                  <button key={id} onClick={() => apply(id)}
+                    style={{
+                      padding: "8px 10px", borderRadius: 6,
+                      background: "#1e293b", color: "#e2e8f0",
+                      border: "1px solid #334155", fontSize: 11.5, fontWeight: 700,
+                      textAlign: "left", cursor: "pointer",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#334155")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "#1e293b")}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {state.tab === "twitch" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: 1, color: "#94a3b8", textTransform: "uppercase" }}>Популярные Twitch-каналы</div>
+                {[
+                  ["gmhikaru", "🎥 GMHikaru (Hikaru Nakamura)"],
+                  ["chess", "🎥 Chess.com официальный"],
+                  ["botezlive", "🎥 BotezLive (Alexandra & Andrea)"],
+                  ["gothamchess", "🎥 GothamChess (Levy)"],
+                  ["danya", "🎥 Daniel Naroditsky"],
+                ].map(([ch, label]) => (
+                  <button key={ch} onClick={() => apply(ch)}
+                    style={{
+                      padding: "8px 10px", borderRadius: 6,
+                      background: "#1e293b", color: "#e2e8f0",
+                      border: "1px solid #334155", fontSize: 11.5, fontWeight: 700,
+                      textAlign: "left", cursor: "pointer",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#334155")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "#1e293b")}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {state.tab === "url" && (
+              <div style={{ fontSize: 11.5, color: "#94a3b8", padding: "0 4px" }}>
+                Вставь любой URL выше — например ссылку на стрим, дашборд, доску анализа на lichess или PGN viewer. Сайт откроется внутри панели через iframe.
+                Не все сайты разрешают встраивание (X-Frame-Options).
+              </div>
+            )}
+            {state.tab === "lichess" && (
+              <div style={{ fontSize: 11.5, color: "#94a3b8", padding: "0 4px" }}>
+                Lichess TV — прямые трансляции топ-партий мира. Вверху по умолчанию канал «Best». В самом виджете можно переключать каналы (Bullet/Blitz/Rapid/Classical/Chess960…).
+              </div>
+            )}
           </div>
         )}
       </div>

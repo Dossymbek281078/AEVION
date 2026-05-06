@@ -250,6 +250,10 @@ export function useBoardInput(opts: BoardInputOptions) {
         d.active = true;
         ghostPosRef.current = { x: e.clientX, y: e.clientY };
         showGhost(d.from, e.clientX, e.clientY);
+        if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+          // eslint-disable-next-line no-console
+          console.debug("[CC] drag ACTIVATED — ghost should follow cursor");
+        }
       }
       if (d.active) {
         e.preventDefault();
@@ -318,9 +322,20 @@ export function useBoardInput(opts: BoardInputOptions) {
   //    Window-pointerup then handles either drop-on-target OR cross-square tap
   //    fallback via opts.click().
   const onBoardDown = useCallback((e: React.PointerEvent) => {
+    // DEBUG: visible in browser DevTools console (F12). Strip after diagnosing.
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+      // eslint-disable-next-line no-console
+      console.debug("[CC] onBoardDown fired", { button: e.button, pointerType: e.pointerType, x: e.clientX, y: e.clientY });
+    }
     if (e.button !== 0 && e.pointerType === "mouse") return;
     const sq = sqFromBoard(e.clientX, e.clientY);
-    if (!sq) return;
+    if (!sq) {
+      if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+        // eslint-disable-next-line no-console
+        console.debug("[CC] onBoardDown: no square detected — board ref null or pointer outside grid");
+      }
+      return;
+    }
     const o = optsRef.current;
     const boardEl = boardRef.current;
     if (!boardEl) return;
@@ -381,10 +396,21 @@ export function useBoardInput(opts: BoardInputOptions) {
     const p = checkBoard.get(sq);
     const side = o.tab === "analysis" ? o.game.turn() : o.pCol;
     const canDrag = !!p && (o.tab === "analysis" || p.color === side) && !o.over;
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+      // eslint-disable-next-line no-console
+      console.debug("[CC] onBoardDown: canDrag check", {
+        sq, isPM, hasPiece: !!p, pieceColor: p?.color, side, pCol: o.pCol,
+        tab: o.tab, on: o.on, over: o.over, canDrag,
+      });
+    }
     if (!canDrag) return;
 
     e.preventDefault();
     dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, bRect };
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+      // eslint-disable-next-line no-console
+      console.debug("[CC] onBoardDown: drag ARMED — waiting for movement >4px to activate");
+    }
 
     const isMyTurn = o.tab === "analysis" || o.game.turn() === o.pCol;
     if (isMyTurn) {

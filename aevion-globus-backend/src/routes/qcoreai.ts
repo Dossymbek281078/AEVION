@@ -965,6 +965,47 @@ qcoreaiRouter.get("/analytics/export", async (req, res) => {
 });
 
 /**
+/**
+ * GET /api/qcoreai/sessions/:id/export?format=json|md
+ * Bulk export of all runs in a session — useful for offline archival.
+ * Returns a single JSON object with session + all runs + messages, or
+ * a concatenated Markdown document with each run as a section.
+ */
+qcoreaiRouter.get("/sessions/:id/export", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const session = await getSession(String(req.params.id), auth?.sub ?? null);
+    if (!session) return res.status(404).json({ error: "session not found or forbidden" });
+    const runs = await listRuns(session.id, 200);
+    const format = req.query.format === "md" ? "md" : "json";
+    const safeSlug = slugify(session.title || "session").slice(0, 40) || "session";
+    const filename = `qcoreai-session-${safeSlug}.${format}`;
+
+    if (format === "json") {
+      const runsWithMessages = await Promise.all(
+        runs.map(async (run) => ({ run, messages: await listMessages(run.id) }))
+      );
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(JSON.stringify({ session, runs: runsWithMessages }, null, 2));
+      return;
+    }
+
+    let md = `# ${session.title}\n\n*Exported from AEVION QCoreAI · ${new Date().toISOString().slice(0, 10)}*\n\n---\n\n`;
+    for (const run of runs) {
+      const messages = await listMessages(run.id);
+      md += renderRunMarkdown({ session, run, messages });
+      md += "\n\n---\n\n";
+    }
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(md);
+  } catch (err: any) {
+    res.status(500).json({ error: "session export failed", details: err?.message });
+  }
+});
+
+/**
  * GET /api/qcoreai/runs/:id/export?format=json|md
  * Returns a clean, shareable snapshot of a run: agents, messages, final answer,
  * token/cost totals. Useful for investor demos and offline review.

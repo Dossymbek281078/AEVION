@@ -2790,6 +2790,18 @@ export default function QCoreMultiAgentPage() {
                     >
                       ✎
                     </button>
+                    <a
+                      href={apiUrl(`/api/qcoreai/sessions/${s.id}/export?format=md`)}
+                      download
+                      title="Export all runs as Markdown"
+                      style={{
+                        width: 24, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "1px solid transparent", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", fontSize: 11, textDecoration: "none",
+                      }}
+                    >
+                      ⬇
+                    </a>
                     <button
                       onClick={() => removeSession(s.id)}
                       title="Delete session"
@@ -3763,16 +3775,26 @@ function RunCard({
         };
         grouped.forEach((item, i) => {
           flushGuidanceBefore(consumedTurns);
+          const makeNotebookSave = (t: AgentTurn) => !t.content ? undefined : async () => {
+            const tok = typeof window !== "undefined"
+              ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+            if (!tok) return;
+            await fetch(apiUrl("/api/qcoreai/notebook"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+              body: JSON.stringify({ runId: run.id, role: t.role, content: t.content.slice(0, 32000) }),
+            }).catch(() => {});
+          };
           if ("pair" in item) {
             out.push(
               <div key={`pair-${i}`} className="qc-pair-grid" style={{ marginBottom: 0 }}>
-                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} />
-                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} />
+                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[0])} />
+                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[1])} />
               </div>
             );
             consumedTurns += 2;
           } else {
-            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} />);
+            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item)} />);
             consumedTurns += 1;
           }
         });
@@ -4292,7 +4314,7 @@ function GuidanceChip({ item }: { item: GuidanceItem }) {
   );
 }
 
-function AgentTurnCard({ turn, strategy }: { turn: AgentTurn; strategy: Strategy }) {
+function AgentTurnCard({ turn, strategy, onSaveToNotebook }: { turn: AgentTurn; strategy: Strategy; onSaveToNotebook?: () => void }) {
   const s = turnStyle(turn.role, turn.stage, turn.instance, strategy);
   const streaming = turn.status === "streaming";
   const stageBadge =
@@ -4343,6 +4365,15 @@ function AgentTurnCard({ turn, strategy }: { turn: AgentTurn; strategy: Strategy
           )}
           {!streaming && turn.costUsd != null && turn.costUsd > 0 && (
             <span style={{ color: "#0f172a", fontWeight: 700 }}>{formatMoney(turn.costUsd)}</span>
+          )}
+          {!streaming && onSaveToNotebook && turn.content && (
+            <button
+              onClick={onSaveToNotebook}
+              title="Save to notebook"
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#94a3b8", padding: 0 }}
+            >
+              ⊞
+            </button>
           )}
         </div>
       </div>

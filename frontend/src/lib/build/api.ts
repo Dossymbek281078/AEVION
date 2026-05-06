@@ -714,6 +714,17 @@ export const buildApi = {
       total: number;
     }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/timeline`),
 
+  vacancyBoostRoi: (id: string) =>
+    call<{
+      hasBoost: boolean;
+      active: boolean;
+      source: string | null;
+      startedAt: string | null;
+      endsAt: string | null;
+      periodDays: number;
+      apps: { during: number; before: number; delta: number; pct: number | null };
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/boost-roi`),
+
   // Notification preferences
   getNotificationPrefs: () =>
     call<{

@@ -559,6 +559,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
 
           {isOwner && <VacancyTimeline vacancyId={vacancy.id} />}
 
+          {isOwner && <BoostRoiTile vacancyId={vacancy.id} />}
+
           {isOwner && <VacancyEditHistory vacancyId={vacancy.id} />}
 
           {isOwner && <EmbedSnippetBlock vacancyId={vacancy.id} />}
@@ -1968,6 +1970,79 @@ function VacancyEditHistory({ vacancyId }: { vacancyId: string }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.vacancyBoostRoi>> | null>(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .vacancyBoostRoi(vacancyId)
+      .then((r) => {
+        if (!cancelled) setData(r);
+      })
+      .catch(() => {
+        if (!cancelled) setErr(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vacancyId]);
+
+  if (err || !data || !data.hasBoost) return null;
+
+  const { during, before, delta, pct } = data.apps;
+  const positive = delta > 0;
+  const tone = positive
+    ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
+    : delta < 0
+      ? "border-rose-400/30 bg-rose-400/10 text-rose-100"
+      : "border-white/10 bg-white/[0.03] text-slate-200";
+
+  return (
+    <div className="rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-500/10 via-amber-400/5 to-transparent p-4 text-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2 font-semibold text-amber-100">
+          ⚡ Boost ROI
+          {data.active && (
+            <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200">
+              Active
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-amber-200/70">
+          {data.periodDays}d window · {data.source || "boost"}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400">During</div>
+          <div className="mt-0.5 text-xl font-semibold text-white">{during}</div>
+          <div className="text-[10px] text-slate-500">applications</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400">Before</div>
+          <div className="mt-0.5 text-xl font-semibold text-white">{before}</div>
+          <div className="text-[10px] text-slate-500">prior {data.periodDays}d</div>
+        </div>
+        <div className={`rounded-lg border p-2.5 ${tone}`}>
+          <div className="text-[10px] uppercase tracking-wider opacity-70">Delta</div>
+          <div className="mt-0.5 text-xl font-semibold">
+            {positive ? "+" : ""}
+            {delta}
+          </div>
+          <div className="text-[10px] opacity-80">
+            {pct !== null ? `${positive ? "+" : ""}${pct}%` : before === 0 ? "n/a baseline" : "—"}
+          </div>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-amber-200/60">
+        Comparing applications during the boost period vs. the same-length window immediately before.
+      </p>
     </div>
   );
 }

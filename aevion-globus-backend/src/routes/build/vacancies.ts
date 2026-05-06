@@ -835,6 +835,78 @@ vacanciesRouter.delete("/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/vacancies/:id/boost-roi — owner-only. Compares views/apps
+// during the most recent (or active) boost period vs the same-length window
+// immediately before. Returns null fields when there's no boost history.
+vacanciesRouter.get("/:id/boost-roi", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const v = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (v.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (v.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const boost = await pool.query(
+      `SELECT "id","startedAt","endsAt","source"
+       FROM "BuildBoost" WHERE "vacancyId" = $1
+       ORDER BY "startedAt" DESC LIMIT 1`,
+      [id],
+    );
+    if (boost.rowCount === 0) {
+      return ok(res, { hasBoost: false });
+    }
+    const b = boost.rows[0] as { startedAt: string; endsAt: string; source: string };
+
+    const startedAt = new Date(b.startedAt);
+    const endsAt = new Date(b.endsAt);
+    const now = new Date();
+    const periodEnd = endsAt > now ? now : endsAt;
+    const periodLen = periodEnd.getTime() - startedAt.getTime();
+    const beforeEnd = new Date(startedAt);
+    const beforeStart = new Date(startedAt.getTime() - periodLen);
+
+    // We don't track per-day view history — viewCount is a running counter
+    // on BuildVacancy. So we rely on the fact that view increments are
+    // monotonic and we can only compare *applications* directly. Views are
+    // approximated as undefined in the breakdown.
+    const [appsDuring, appsBefore] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS "n" FROM "BuildApplication"
+         WHERE "vacancyId" = $1 AND "createdAt" >= $2 AND "createdAt" <= $3`,
+        [id, startedAt, periodEnd],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "n" FROM "BuildApplication"
+         WHERE "vacancyId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3`,
+        [id, beforeStart, beforeEnd],
+      ),
+    ]);
+
+    const during = Number(appsDuring.rows[0]?.n ?? 0);
+    const before = Number(appsBefore.rows[0]?.n ?? 0);
+    const delta = during - before;
+    const pct = before > 0 ? Math.round(((during - before) / before) * 100) : during > 0 ? 100 : 0;
+
+    return ok(res, {
+      hasBoost: true,
+      active: endsAt > now,
+      source: b.source,
+      startedAt: b.startedAt,
+      endsAt: b.endsAt,
+      periodDays: Math.max(1, Math.round(periodLen / 86400000)),
+      apps: { during, before, delta, pct },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "boost_roi_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/:id/timeline — owner-only chronological feed of
 // vacancy events. No new table; we union 4 existing sources (vacancy itself,
 // applications, boosts, hire orders) and sort by ts desc. Cap 80 events.

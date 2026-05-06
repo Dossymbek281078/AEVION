@@ -672,6 +672,7 @@ export default function QCoreAIPage() {
             { href: "/qcoreai/workspaces", icon: "🗂️", t: "Workspaces",              d: "Share session collections with your team" },
             { href: "/qcoreai/compare",   icon: "⚖️", t: "Run compare",              d: "Side-by-side cost + output diff for any two runs" },
             { href: "/qcoreai/notebook",  icon: "📓", t: "Notebook",                  d: "Annotated snippets from run outputs" },
+            { href: "/qcoreai/providers", icon: "◈",  t: "AI Providers",              d: "Configured models, pricing, and health" },
           ].map(({ href, icon, t, d }) => (
             <a
               key={href}

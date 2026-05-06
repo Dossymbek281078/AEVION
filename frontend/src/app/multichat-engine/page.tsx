@@ -951,6 +951,7 @@ export default function MultichatEnginePage() {
             { href: "/qcoreai/batch",     label: "⚡ Batch runs" },
             { href: "/qcoreai/schedule",  label: "🕐 Scheduled batches" },
             { href: "/qcoreai/notebook",  label: "📓 Notebook" },
+            { href: "/qcoreai/providers", label: "◈ AI Providers" },
           ].map(({ href, label }) => (
             <Link
               key={href}

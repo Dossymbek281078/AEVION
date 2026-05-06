@@ -101,16 +101,18 @@ export default function QCoreAnalyticsPage() {
   const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
   const [topTags, setTopTags] = useState<TagCount[]>([]);
   const [topSessions, setTopSessions] = useState<Array<{ id: string; title: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>>([]);
+  const [tagCosts, setTagCosts] = useState<Array<{ tag: string; runs: number; totalCostUsd: number; avgCostUsd: number }>>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     setError(null);
     try {
-      const [aRes, tsRes, tagRes, sessRes] = await Promise.all([
+      const [aRes, tsRes, tagRes, sessRes, tagCostRes] = await Promise.all([
         fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/analytics/timeseries?days=30"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/tags?limit=15"), { headers: bearerHeader() }),
         fetch(apiUrl("/api/qcoreai/analytics/sessions?days=7&limit=5"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/by-tag?limit=15"), { headers: bearerHeader() }),
       ]);
       const json = await aRes.json();
       if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
@@ -121,6 +123,8 @@ export default function QCoreAnalyticsPage() {
       if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
       const sessJson = await sessRes.json().catch(() => ({}));
       if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
+      const tagCostJson = await tagCostRes.json().catch(() => ({}));
+      if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
     } catch (e: any) {
       setError(e?.message || "Failed to load analytics");
     }
@@ -436,6 +440,32 @@ export default function QCoreAnalyticsPage() {
                 ))}
               </div>
             </Section>
+
+            {/* Per-tag cost breakdown */}
+            {tagCosts.length > 0 && (
+              <Section title="Cost by tag">
+                {(() => {
+                  const maxCost = Math.max(...tagCosts.map((t) => t.totalCostUsd));
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {tagCosts.map((t) => (
+                        <div key={t.tag} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <span style={{ minWidth: 90, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>#{t.tag}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" }}>
+                              <div style={{ height: "100%", borderRadius: 3, background: "#7c3aed", width: maxCost > 0 ? `${(t.totalCostUsd / maxCost) * 100}%` : "0%" }} />
+                            </div>
+                          </div>
+                          <span style={{ width: 40, textAlign: "right", fontSize: 11, color: "#64748b" }}>{t.runs}r</span>
+                          <span style={{ width: 80, textAlign: "right", fontSize: 11, fontWeight: 700, color: "#0f172a" }}>{fmtMoney(t.totalCostUsd)}</span>
+                          <span style={{ width: 70, textAlign: "right", fontSize: 10, color: "#94a3b8" }}>{fmtMoney(t.avgCostUsd)}/run</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
 
             {/* Top sessions by cost (7-day window) */}
             {topSessions.length > 0 && (

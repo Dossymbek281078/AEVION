@@ -178,6 +178,32 @@ applicationsRouter.get("/my", async (req, res) => {
   }
 });
 
+// GET /api/build/applications/mine/interviews — recruiter-side calendar feed.
+// Returns INTERVIEW-labeled applications across all owned vacancies, ordered
+// by labeled-at (which we approximate using updatedAt). Used by /build/calendar.
+applicationsRouter.get("/mine/interviews", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const result = await pool.query(
+      `SELECT a."id", a."status", a."labelKey", a."createdAt", a."updatedAt",
+              a."message", a."matchScore",
+              v."id" AS "vacancyId", v."title" AS "vacancyTitle",
+              prof."name" AS "applicantName", prof."title" AS "applicantHeadline"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "BuildProfile" prof ON prof."userId" = a."userId"
+       WHERE p."clientId" = $1 AND a."labelKey" = 'INTERVIEW'
+       ORDER BY a."updatedAt" DESC LIMIT 200`,
+      [auth.sub],
+    );
+    return ok(res, { items: result.rows, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "interviews_mine_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/applications/by-vacancy/:id — owner only
 // GET /api/build/applications/by-vacancy/:id/export.csv — owner downloads all applicants as CSV
 applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {

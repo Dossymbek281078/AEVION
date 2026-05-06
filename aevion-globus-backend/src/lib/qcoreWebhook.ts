@@ -1,4 +1,54 @@
-import { createHmac } from "crypto";
+import { createHmac, randomUUID } from "crypto";
+import { getPool } from "../lib/dbPool";
+import { ensureQCoreTables, isDbReady } from "../lib/ensureQCoreTables";
+
+const pool = getPool();
+
+/** In-memory fallback for webhook logs when DB is unavailable. */
+const memWebhookLog: WebhookLogRow[] = [];
+
+export type WebhookLogRow = {
+  id: string;
+  userId: string | null;
+  event: string;
+  url: string;
+  statusCode: number | null;
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string;
+};
+
+async function writeWebhookLog(row: Omit<WebhookLogRow, "id" | "createdAt">): Promise<void> {
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+  try {
+    await ensureQCoreTables(pool);
+    if (!isDbReady()) {
+      memWebhookLog.unshift({ ...row, id, createdAt });
+      if (memWebhookLog.length > 200) memWebhookLog.pop();
+      return;
+    }
+    await pool.query(
+      `INSERT INTO "QCoreWebhookLog" ("id","userId","event","url","statusCode","durationMs","error")
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, row.userId, row.event, row.url, row.statusCode, row.durationMs, row.error]
+    );
+  } catch { /* non-critical — never let log failures affect delivery */ }
+}
+
+export async function listWebhookLogs(userId: string | null, limit = 50): Promise<WebhookLogRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return userId
+      ? memWebhookLog.filter((l) => l.userId === userId).slice(0, limit)
+      : memWebhookLog.slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreWebhookLog" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [userId, limit]
+  );
+  return r.rows as WebhookLogRow[];
+}
 
 /**
  * Fire-and-forget webhooks for QCoreAI multi-agent events.
@@ -79,7 +129,8 @@ function resolveTarget(userOverride?: { url: string; secret: string | null } | n
 /** Generic fire-and-forget dispatcher for any QCoreEvent. */
 export async function notifyEvent(
   evt: QCoreEvent,
-  userOverride?: { url: string; secret: string | null } | null
+  userOverride?: { url: string; secret: string | null } | null,
+  userId?: string | null
 ): Promise<void> {
   const target = resolveTarget(userOverride);
   if (!target) return;
@@ -97,6 +148,7 @@ export async function notifyEvent(
     headers["X-QCore-Signature"] = `sha256=${sig}`;
   }
 
+  const t0 = Date.now();
   try {
     const r = await fetch(target.url, {
       method: "POST",
@@ -104,11 +156,15 @@ export async function notifyEvent(
       body,
       signal: AbortSignal.timeout(5_000),
     });
+    const durationMs = Date.now() - t0;
     if (!r.ok) {
       console.warn(`[QCoreAI] webhook (${target.source}) ${target.url} responded ${r.status} for ${evt.event}:${(evt as any).runId}`);
     }
+    void writeWebhookLog({ userId: userId ?? null, event: evt.event, url: target.url, statusCode: r.status, durationMs, error: r.ok ? null : `HTTP ${r.status}` });
   } catch (e: any) {
+    const durationMs = Date.now() - t0;
     console.warn(`[QCoreAI] webhook (${target.source}) ${target.url} failed for ${evt.event}: ${e?.message || e}`);
+    void writeWebhookLog({ userId: userId ?? null, event: evt.event, url: target.url, statusCode: null, durationMs, error: e?.message || String(e) });
   }
 }
 

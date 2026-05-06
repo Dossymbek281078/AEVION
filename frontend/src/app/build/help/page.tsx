@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { HelpClient } from "./HelpClient";
 
 export const metadata: Metadata = {
   title: "QBuild Help — FAQ for workers and employers",
@@ -67,54 +68,8 @@ export default function HelpPage() {
         <Link href="/build" className="text-xs text-slate-400 hover:underline">← QBuild</Link>
         <h1 className="mt-3 text-3xl font-extrabold text-white">Help & FAQ</h1>
         <p className="mt-2 text-sm text-slate-400">Answers to the most common questions.</p>
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <a href="#workers" className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/20">
-            For workers →
-          </a>
-          <a href="#employers" className="rounded-full border border-sky-500/30 bg-sky-500/10 px-4 py-1.5 text-sm font-semibold text-sky-200 hover:bg-sky-500/20">
-            For employers →
-          </a>
-        </div>
-
-        <section className="mt-10" id="workers">
-          <h2 className="mb-5 text-xl font-bold text-white">🔨 Для соискателей</h2>
-          <FaqList items={FAQ_WORKERS} />
-        </section>
-
-        <section className="mt-10" id="employers">
-          <h2 className="mb-5 text-xl font-bold text-white">🏗 Для работодателей</h2>
-          <FaqList items={FAQ_EMPLOYERS} />
-        </section>
-
-        <div className="mt-12 rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center">
-          <p className="text-sm text-slate-300">Не нашли ответ?</p>
-          <div className="mt-3 flex flex-wrap justify-center gap-3">
-            <Link href="/build/messages" className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400">
-              Написать в чат
-            </Link>
-            <Link href="/build/coach" className="rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10">
-              Ask AI Coach
-            </Link>
-          </div>
-        </div>
+        <HelpClient workers={FAQ_WORKERS} employers={FAQ_EMPLOYERS} />
       </div>
     </main>
-  );
-}
-
-function FaqList({ items }: { items: { q: string; a: string }[] }) {
-  return (
-    <div className="space-y-3">
-      {items.map((item, i) => (
-        <details key={i} className="group rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4">
-          <summary className="cursor-pointer list-none font-semibold text-slate-200 marker:hidden">
-            <span className="mr-2 text-emerald-300 transition group-open:rotate-90 inline-block">›</span>
-            {item.q}
-          </summary>
-          <p className="mt-3 pl-5 text-sm text-slate-400 leading-relaxed">{item.a}</p>
-        </details>
-      ))}
-    </div>
   );
 }

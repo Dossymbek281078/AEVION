@@ -54,8 +54,12 @@ import {
   updateSnippet,
   deleteRunsBulk,
   getSessionCostSummary,
+  getRating,
+  getRatingsSummary,
+  listTopRatedRuns,
   mergeSessions,
   pinSession,
+  rateRun,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -2429,6 +2433,50 @@ qcoreaiRouter.delete("/runs/bulk", async (req, res) => {
     res.json({ deleted });
   } catch (err: any) {
     res.status(500).json({ error: "bulk delete failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run ratings — thumbs up (1) / thumbs down (-1)
+   POST  /api/qcoreai/runs/:id/rate     body:{rating:1|-1, note?}
+   GET   /api/qcoreai/runs/:id/rating   get caller's rating + aggregate
+   GET   /api/qcoreai/ratings/top       top-rated runs for the caller
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/rate", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const { rating, note } = req.body || {};
+    if (rating !== 1 && rating !== -1) return res.status(400).json({ error: "rating must be 1 or -1" });
+    const row = await rateRun(String(req.params.id), auth?.sub ?? null, rating as 1 | -1, note);
+    const summary = await getRatingsSummary(String(req.params.id));
+    res.json({ rating: row, summary });
+  } catch (err: any) {
+    res.status(500).json({ error: "rate run failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/runs/:id/rating", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const [mine, summary] = await Promise.all([
+      getRating(String(req.params.id), auth?.sub ?? null),
+      getRatingsSummary(String(req.params.id)),
+    ]);
+    res.json({ mine, summary });
+  } catch (err: any) {
+    res.status(500).json({ error: "get rating failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/ratings/top", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    const items = await listTopRatedRuns(auth?.sub ?? null, limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "top ratings failed", details: err?.message });
   }
 });
 

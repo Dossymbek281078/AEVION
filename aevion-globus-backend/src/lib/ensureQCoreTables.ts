@@ -240,6 +240,20 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Run ratings — user feedback on final answers (thumbs up/down + optional note).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunRating" (
+      "runId"     TEXT NOT NULL,
+      "userId"    TEXT,
+      "rating"    INTEGER NOT NULL CHECK ("rating" IN (1, -1)),
+      "note"      TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("runId", COALESCE("userId", ''))
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunRating_runId_idx" ON "QCoreRunRating" ("runId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunRating_userId_idx" ON "QCoreRunRating" ("userId") WHERE "userId" IS NOT NULL;`);
+
   // Webhook delivery log — auditable record of every POST attempt.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreWebhookLog" (

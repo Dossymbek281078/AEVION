@@ -1,9 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
   title: "AEVION QBuild — Construction & Recruiting",
   description:
     "QBuild is the AEVION marketplace for construction projects, vacancies, and direct contractor messaging. Post projects, hire crews, get hired.",
+  manifest: "/build-manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "QBuild",
+  },
   openGraph: {
     type: "website",
     title: "AEVION QBuild",
@@ -17,6 +23,13 @@ export const metadata: Metadata = {
     description:
       "Marketplace for construction projects, vacancies, and direct contractor messaging.",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 // Brand-level structured data so search engines understand QBuild as a

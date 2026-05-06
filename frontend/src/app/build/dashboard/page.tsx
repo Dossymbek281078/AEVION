@@ -96,6 +96,8 @@ function Body() {
 
       {items && <TodayDigestTile items={items} />}
 
+      <WeeklyDigestTile />
+
       <WhatsNewTile />
 
       <SavedSearchAlerts />
@@ -381,6 +383,76 @@ function SourceBreakdownChart() {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function WeeklyDigestTile() {
+  type W = Awaited<ReturnType<typeof buildApi.weeklyDigest>>;
+  const [data, setData] = useState<W | null>(null);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .weeklyDigest()
+      .then((r) => {
+        if (!cancelled) setData(r);
+      })
+      .catch(() => {
+        if (!cancelled) setErr(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (err || !data) return null;
+  // No movement at all → don't bother showing the tile.
+  const totalNow = data.applications.now + data.vacanciesPosted.now + data.hires.now;
+  const totalPrev = data.applications.prev + data.vacanciesPosted.prev + data.hires.prev;
+  if (totalNow === 0 && totalPrev === 0) return null;
+
+  return (
+    <div className="mb-4 rounded-xl border border-violet-400/30 bg-gradient-to-br from-violet-500/10 via-violet-400/5 to-transparent p-4 text-sm">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="font-semibold text-violet-100">📅 Past 7 days</div>
+        <div className="text-[11px] text-violet-200/70">
+          vs. {new Date(data.windowStart).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+          – previous week
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <DeltaCell label="Applications" now={data.applications.now} prev={data.applications.prev} />
+        <DeltaCell label="Vacancies posted" now={data.vacanciesPosted.now} prev={data.vacanciesPosted.prev} />
+        <DeltaCell label="Hires" now={data.hires.now} prev={data.hires.prev} />
+      </div>
+    </div>
+  );
+}
+
+function DeltaCell({ label, now, prev }: { label: string; now: number; prev: number }) {
+  const change = now - prev;
+  const tone =
+    change > 0
+      ? "text-emerald-300"
+      : change < 0
+        ? "text-rose-300"
+        : "text-slate-400";
+  const arrow = change > 0 ? "▲" : change < 0 ? "▼" : "•";
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="mt-0.5 flex items-baseline gap-1.5">
+        <div className="text-xl font-semibold text-white">{now}</div>
+        <div className={`text-[11px] font-semibold ${tone}`}>
+          {arrow} {Math.abs(change)}
+        </div>
+      </div>
+      <div className="text-[10px] text-slate-500">prev {prev}</div>
     </div>
   );
 }

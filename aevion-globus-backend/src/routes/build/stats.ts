@@ -564,3 +564,73 @@ statsRouter.get("/leaderboard", async (_req, res) => {
     return fail(res, 500, "leaderboard_failed", { details: (err as Error).message });
   }
 });
+
+// GET /api/build/stats/weekly — owner-scoped 7-day rollup for the dashboard.
+// Returns weekly totals and the same window 7 days earlier for delta arrows.
+statsRouter.get("/weekly", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const now = Date.now();
+    const wkStart = new Date(now - 7 * 86400_000);
+    const prevStart = new Date(now - 14 * 86400_000);
+
+    const [appsThis, appsPrev, vacsThis, vacsPrev, hiresThis, hiresPrev] =
+      await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+           JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND a."createdAt" >= $2`,
+          [auth.sub, wkStart],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+           JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND a."createdAt" >= $2 AND a."createdAt" < $3`,
+          [auth.sub, prevStart, wkStart],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS n FROM "BuildVacancy" v
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND v."createdAt" >= $2`,
+          [auth.sub, wkStart],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS n FROM "BuildVacancy" v
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND v."createdAt" >= $2 AND v."createdAt" < $3`,
+          [auth.sub, prevStart, wkStart],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+           JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED' AND a."updatedAt" >= $2`,
+          [auth.sub, wkStart],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+           JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED' AND a."updatedAt" >= $2 AND a."updatedAt" < $3`,
+          [auth.sub, prevStart, wkStart],
+        ),
+      ]);
+
+    function delta(now: number, prev: number) {
+      return { now, prev, change: now - prev };
+    }
+
+    return ok(res, {
+      windowStart: wkStart.toISOString(),
+      windowEnd: new Date(now).toISOString(),
+      applications: delta(appsThis.rows[0].n, appsPrev.rows[0].n),
+      vacanciesPosted: delta(vacsThis.rows[0].n, vacsPrev.rows[0].n),
+      hires: delta(hiresThis.rows[0].n, hiresPrev.rows[0].n),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "stats_weekly_failed", { details: (err as Error).message });
+  }
+});

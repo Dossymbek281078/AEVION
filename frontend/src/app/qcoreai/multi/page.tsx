@@ -482,6 +482,23 @@ export default function QCoreMultiAgentPage() {
     })();
   }, []);
 
+  /* ── V12: inject notebook snippet if coming from ?from=notebook ── */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("from") === "notebook") {
+      const snippet = sessionStorage.getItem("qcore_notebook_inject");
+      if (snippet) {
+        setInput(snippet);
+        sessionStorage.removeItem("qcore_notebook_inject");
+        // Remove the query param without reload
+        url.searchParams.delete("from");
+        window.history.replaceState({}, "", url.toString());
+        setTimeout(() => { if (textareaRef.current) textareaRef.current.focus(); }, 100);
+      }
+    }
+  }, []);
+
   /* ── Lazy-load user's prompts when config panel opens ── */
   useEffect(() => {
     if (!configOpen) return;

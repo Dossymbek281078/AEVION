@@ -1,6 +1,6 @@
 {
   "name": "@aevion/qcoreai-client",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "TypeScript client for AEVION QCoreAI multi-agent pipeline — sync, streaming, refine, tags, eval harness, prompts library, threading, templates, batch runs, scheduled batches, workspaces, cost breakdown, webhook verification.",
   "license": "Apache-2.0",
   "author": "AEVION",

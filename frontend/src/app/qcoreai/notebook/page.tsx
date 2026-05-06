@@ -131,6 +131,14 @@ export default function NotebookPage() {
     try { await navigator.clipboard.writeText(content); } catch { /* noop */ }
   };
 
+  const useInPrompt = (content: string) => {
+    // Store snippet in sessionStorage then navigate to multi page which reads it
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("qcore_notebook_inject", content.slice(0, 8000));
+      window.location.href = "/qcoreai/multi?from=notebook";
+    }
+  };
+
   return (
     <main>
       <Wave1Nav />
@@ -231,6 +239,13 @@ export default function NotebookPage() {
                       <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: "auto" }}>
                         {new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </span>
+                      <button
+                        onClick={() => useInPrompt(s.content)}
+                        title="Use this snippet as prompt in multi-agent"
+                        style={{ border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.06)", borderRadius: 6, cursor: "pointer", fontSize: 10, fontWeight: 700, color: "#0f766e", padding: "2px 7px" }}
+                      >
+                        ↗ Use
+                      </button>
                       <button onClick={() => togglePin(s)} title={s.pinned ? "Unpin" : "Pin"} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 14, color: s.pinned ? "#f59e0b" : "#cbd5e1" }}>★</button>
                       <button onClick={() => copyContent(s.content)} title="Copy" style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#94a3b8" }}>⎘</button>
                       <button onClick={() => openEdit(s)} title="Edit annotation + tags" style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#94a3b8" }}>✎</button>

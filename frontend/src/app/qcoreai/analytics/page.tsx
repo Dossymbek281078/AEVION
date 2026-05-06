@@ -338,6 +338,12 @@ export default function QCoreAnalyticsPage() {
                       <span>{fmtNum(s.tokens)} tok</span>
                       <span>~{fmtDur(s.avgDurationMs)}</span>
                     </div>
+                    {s.runs > 0 && (
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 6, display: "flex", justifyContent: "space-between" }}>
+                        <span>avg cost/run: {fmtMoney(s.costUsd / s.runs)}</span>
+                        <span>avg {fmtNum(Math.round(s.tokens / s.runs))} tok/run</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

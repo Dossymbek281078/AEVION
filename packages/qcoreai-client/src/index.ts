@@ -1149,6 +1149,98 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`runScheduleNow failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  /* ─── V12: Notebook ────────────────────────────────────────────────── */
+
+  /**
+   * Save a snippet from a run to the notebook.
+   * @example
+   * ```ts
+   * const snippet = await client.saveSnippet({
+   *   runId, role: "final", content: finalContent,
+   *   annotation: "Key insight for investor deck", tags: ["investor", "insight"],
+   * });
+   * ```
+   */
+  async saveSnippet(opts: {
+    runId: string;
+    role?: string;
+    content: string;
+    annotation?: string | null;
+    tags?: string[];
+  }): Promise<{ id: string; runId: string; role: string; content: string; annotation: string | null; tags: string[]; pinned: boolean; createdAt: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`saveSnippet failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.snippet;
+  }
+
+  /** List the caller's notebook snippets with optional filters. */
+  async listSnippets(opts?: { q?: string; tag?: string; pinned?: boolean; limit?: number }): Promise<Array<{ id: string; runId: string; role: string; content: string; annotation: string | null; tags: string[]; pinned: boolean; createdAt: string }>> {
+    const p = new URLSearchParams();
+    if (opts?.q) p.set("q", opts.q);
+    if (opts?.tag) p.set("tag", opts.tag);
+    if (opts?.pinned !== undefined) p.set("pinned", String(opts.pinned));
+    if (opts?.limit) p.set("limit", String(opts.limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook?${p}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listSnippets failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Update a notebook snippet's annotation, tags, or pin state. */
+  async updateSnippet(id: string, patch: { annotation?: string | null; tags?: string[]; pinned?: boolean }): Promise<{ id: string; pinned: boolean; annotation: string | null; tags: string[] }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateSnippet failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.snippet;
+  }
+
+  /** Delete a notebook snippet. */
+  async deleteSnippet(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteSnippet failed: ${await safeError(res)}`);
+  }
+
+  /** Get the tag cloud for the caller's notebook. */
+  async notebookTagCloud(): Promise<Array<{ tag: string; count: number }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/tags"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`notebookTagCloud failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /* ─── V12: Session export ──────────────────────────────────────────── */
+
+  /**
+   * Export all runs in a session as a Markdown string.
+   * Useful for archival, documentation, or LLM context injection.
+   */
+  async exportSessionMarkdown(sessionId: string): Promise<string> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/export?format=md`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`exportSessionMarkdown failed: ${await safeError(res)}`);
+    return res.text();
+  }
+
+  /**
+   * Export all runs in a session as a structured JSON object.
+   */
+  async exportSessionJson(sessionId: string): Promise<{ session: object; runs: Array<{ run: object; messages: object[] }> }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/export?format=json`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`exportSessionJson failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

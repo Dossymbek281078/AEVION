@@ -45,6 +45,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/stats", changeFrequency: "hourly", priority: 0.7 },
   { path: "/build/pricing", changeFrequency: "weekly", priority: 0.8 },
   { path: "/build/referrals", changeFrequency: "daily", priority: 0.5 },
+  { path: "/build/salary", changeFrequency: "hourly", priority: 0.75 },
   { path: "/status", changeFrequency: "hourly", priority: 0.5 },
   { path: "/payments", changeFrequency: "weekly", priority: 0.9 },
   { path: "/payments/links", changeFrequency: "weekly", priority: 0.7 },

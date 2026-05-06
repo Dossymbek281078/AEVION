@@ -975,6 +975,19 @@ export const buildApi = {
       skillsMissing?: string[];
       usage?: { input: number; output: number };
     }>("POST", "/api/build/ai/why-match", { applicationId, force }),
+  aiVacancyFeedback: (vacancyId: string) =>
+    call<{
+      score: number;
+      strengths: string[];
+      suggestions: string[];
+      usage?: { input: number; output: number };
+    }>("POST", "/api/build/ai/vacancy-feedback", { vacancyId }),
+  aiDmSuggest: (peerId: string) =>
+    call<{
+      suggestions: string[];
+      cached?: boolean;
+      usage?: { input: number; output: number };
+    }>("POST", "/api/build/ai/dm-suggest", { peerId }),
   loyaltyMe: () =>
     call<{
       hires: number;
@@ -1224,6 +1237,14 @@ export const buildApi = {
         unspecified: number;
       };
     }>("GET", `/api/build/stats/reject-reasons?days=${encodeURIComponent(String(days))}`),
+  weeklyDigest: () =>
+    call<{
+      windowStart: string;
+      windowEnd: string;
+      applications: { now: number; prev: number; change: number };
+      vacanciesPosted: { now: number; prev: number; change: number };
+      hires: { now: number; prev: number; change: number };
+    }>("GET", "/api/build/stats/weekly"),
   recruiterSourceBreakdown: (opts: { days?: number; vacancyId?: string } = {}) => {
     const params = new URLSearchParams();
     if (opts.days != null) params.set("days", String(opts.days));
@@ -1267,6 +1288,18 @@ export const buildApi = {
       "POST",
       `/api/build/admin/partner-keys/${encodeURIComponent(id)}/revoke`,
     ),
+  adminInsights: () =>
+    call<{
+      windowStart: string;
+      windowEnd: string;
+      newUsers: { now: number; prev: number; change: number };
+      newApplications: { now: number; prev: number; change: number };
+      newVacancies: { now: number; prev: number; change: number };
+      hires: { now: number; prev: number; change: number };
+      conversionRate: number | null;
+      topEmployers: { userId: string; name: string | null; hires: number }[];
+      topVacancies: { id: string; title: string; apps: number }[];
+    }>("GET", "/api/build/admin/insights"),
   adminStats: () =>
     call<{
       leads: { total: number; last7d: number };

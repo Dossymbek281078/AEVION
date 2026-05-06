@@ -330,5 +330,78 @@ adminRouter.patch("/flags/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/admin/insights — platform-wide weekly insights for /admin/insights.
+// Returns: weekly delta vs prior week + top 5 employers by hires this week +
+// top 5 vacancies by new applications this week + funnel ratios.
+adminRouter.get("/insights", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const now = Date.now();
+    const wkStart = new Date(now - 7 * 86400_000);
+    const prevStart = new Date(now - 14 * 86400_000);
+
+    const [
+      newUsers, prevNewUsers,
+      newApps, prevNewApps,
+      newVacs, prevNewVacs,
+      hires, prevHires,
+      topEmployers, topVacancies,
+    ] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS n FROM "AEVIONUser" WHERE "createdAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "AEVIONUser" WHERE "createdAt" >= $1 AND "createdAt" < $2`, [prevStart, wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "createdAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "createdAt" >= $1 AND "createdAt" < $2`, [prevStart, wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildVacancy" WHERE "createdAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildVacancy" WHERE "createdAt" >= $1 AND "createdAt" < $2`, [prevStart, wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "status" = 'ACCEPTED' AND "updatedAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "status" = 'ACCEPTED' AND "updatedAt" >= $1 AND "updatedAt" < $2`, [prevStart, wkStart]),
+      pool.query(
+        `SELECT p."clientId" AS "userId", u."name", COUNT(a."id")::int AS "hires"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = p."clientId"
+         WHERE a."status" = 'ACCEPTED' AND a."updatedAt" >= $1
+         GROUP BY p."clientId", u."name"
+         ORDER BY COUNT(a."id") DESC LIMIT 5`,
+        [wkStart],
+      ),
+      pool.query(
+        `SELECT v."id", v."title", COUNT(a."id")::int AS "apps"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         WHERE a."createdAt" >= $1
+         GROUP BY v."id", v."title"
+         ORDER BY COUNT(a."id") DESC LIMIT 5`,
+        [wkStart],
+      ),
+    ]);
+
+    function delta(now: number, prev: number) {
+      return { now, prev, change: now - prev };
+    }
+
+    const newAppsN = newApps.rows[0].n;
+    const hiresN = hires.rows[0].n;
+
+    return ok(res, {
+      windowStart: wkStart.toISOString(),
+      windowEnd: new Date(now).toISOString(),
+      newUsers: delta(newUsers.rows[0].n, prevNewUsers.rows[0].n),
+      newApplications: delta(newAppsN, prevNewApps.rows[0].n),
+      newVacancies: delta(newVacs.rows[0].n, prevNewVacs.rows[0].n),
+      hires: delta(hiresN, prevHires.rows[0].n),
+      conversionRate: newAppsN > 0 ? Math.round((hiresN / newAppsN) * 1000) / 10 : null,
+      topEmployers: topEmployers.rows,
+      topVacancies: topVacancies.rows,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_insights_failed", { details: (err as Error).message });
+  }
+});
+
 // Suppress unused import warning — crypto used for future admin routes
 void crypto;

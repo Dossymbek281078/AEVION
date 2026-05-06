@@ -768,3 +768,170 @@ Summary: ${String(row.summary || "").slice(0, 400) || "(none)"}
     return fail(res, 500, "ai_why_match_failed", { details: (err as Error).message });
   }
 });
+
+// POST /api/build/ai/vacancy-feedback — owner-only quality review of a vacancy.
+// Returns a 0-100 score, what's working, and 3-5 concrete improvement bullets.
+// Body: { vacancyId: string }
+aiRouter.post("/vacancy-feedback", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 64 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
+
+    const r = await pool.query(
+      `SELECT v."id", v."title", v."description", v."skillsJson", v."salary", v."salaryCurrency", v."city",
+              p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId.value],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    const row = r.rows[0];
+    if (row.clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    let skills: string[] = [];
+    try {
+      const parsed = JSON.parse(row.skillsJson ?? "[]");
+      if (Array.isArray(parsed)) skills = parsed.filter((s) => typeof s === "string");
+    } catch {
+      /* ignore */
+    }
+
+    const lines = [
+      `Title: ${row.title}`,
+      `City: ${row.city || "—"}`,
+      `Salary: ${row.salary > 0 ? `${row.salary} ${row.salaryCurrency || "USD"}` : "not posted"}`,
+      `Skills tags: ${skills.length ? skills.join(", ") : "none"}`,
+      "",
+      `Description:`,
+      row.description || "(empty)",
+    ].join("\n");
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — рекрутер-эксперт на платформе AEVION QBuild (стройка/инженерия).
+Тебе дают полный текст вакансии. Оцени её качество с точки зрения кандидата.
+
+Ответь СТРОГО валидным JSON, без markdown, без бэктиков, без преамбулы:
+{
+  "score": <0..100, целое число>,
+  "strengths": ["<плюс 1>", "<плюс 2>"],   // 2–4 коротких bullet
+  "suggestions": ["<совет 1>", "<совет 2>"] // 3–5 коротких конкретных bullet
+}
+
+Критерии оценки:
+- Указана ли зарплата / вилка (без неё − 25 баллов)
+- Конкретность задач (не "выполнение работ", а "монтаж металлоконструкций до 3 тонн")
+- Условия: смены, оплата, проживание, спецодежда
+- Требования: опыт в годах, сертификаты, инструменты
+- Длина: меньше 200 символов = плохо, больше 3000 = тоже плохо
+
+Тон советов — деловой, без вежливых преамбул, прямые рекомендации.
+Язык ответа — русский.`,
+      messages: [{ role: "user", content: lines }],
+      maxTokens: 600,
+      cacheSystem: false,
+    });
+
+    let parsed: { score: number; strengths: string[]; suggestions: string[] } | null = null;
+    try {
+      const txt = reply.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+      parsed = JSON.parse(txt);
+    } catch {
+      /* fall through */
+    }
+    if (!parsed || typeof parsed.score !== "number") {
+      return fail(res, 502, "ai_response_unparseable", { raw: reply.text.slice(0, 200) });
+    }
+
+    return ok(res, {
+      score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+      strengths: (parsed.strengths || []).slice(0, 5).map(String),
+      suggestions: (parsed.suggestions || []).slice(0, 5).map(String),
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_vacancy_feedback_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/dm-suggest — 3 short reply suggestions for a DM thread.
+// Body: { peerId: string }. Reads the last ~10 messages between auth.sub and peerId.
+aiRouter.post("/dm-suggest", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const peerId = vString(req.body?.peerId, "peerId", { min: 1, max: 64 });
+    if (!peerId.ok) return fail(res, 400, peerId.error);
+
+    const r = await pool.query(
+      `SELECT m."senderId", m."content", m."createdAt"
+       FROM "BuildMessage" m
+       WHERE (m."senderId" = $1 AND m."receiverId" = $2)
+          OR (m."senderId" = $2 AND m."receiverId" = $1)
+       ORDER BY m."createdAt" DESC LIMIT 10`,
+      [auth.sub, peerId.value],
+    );
+    const ordered = r.rows.reverse();
+    if (ordered.length === 0) {
+      // Fresh thread — return universal openers without burning a Claude call.
+      return ok(res, {
+        suggestions: [
+          "Здравствуйте! Спасибо за интерес к нашей вакансии. Когда вам удобно созвониться?",
+          "Здравствуйте! Подскажите, пожалуйста, ваш опыт работы и желаемый выход на смены.",
+          "Здравствуйте! Готовы пообщаться по деталям — хотите Zoom или офис?",
+        ],
+        cached: true,
+      });
+    }
+
+    const transcript = ordered
+      .map((m: { senderId: string; content: string }) =>
+        `${m.senderId === auth.sub ? "Я" : "Собеседник"}: ${m.content}`,
+      )
+      .join("\n")
+      .slice(-3000);
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — ассистент рекрутера на платформе AEVION QBuild.
+Тебе дают переписку между рекрутером ("Я") и кандидатом/работодателем ("Собеседник").
+Предложи 3 коротких реплики (1–2 предложения каждая), которые рекрутер может отправить следующим сообщением.
+
+Ответь строго JSON-массивом из 3 строк, без markdown:
+["вариант 1", "вариант 2", "вариант 3"]
+
+Реплики должны:
+- продвигать диалог (предложить созвон, уточнить детали, договориться о слоте)
+- быть на том же языке, что и последнее сообщение собеседника
+- избегать общих фраз вроде "Спасибо за информацию"
+- быть готовы к отправке как есть, без правок`,
+      messages: [{ role: "user", content: transcript }],
+      maxTokens: 400,
+      cacheSystem: false,
+    });
+
+    let suggestions: string[] = [];
+    try {
+      const txt = reply.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+      const arr = JSON.parse(txt);
+      if (Array.isArray(arr)) suggestions = arr.map(String).slice(0, 3);
+    } catch {
+      /* ignore */
+    }
+    if (suggestions.length === 0) {
+      return fail(res, 502, "ai_response_unparseable", { raw: reply.text.slice(0, 200) });
+    }
+
+    return ok(res, {
+      suggestions,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_dm_suggest_failed", { details: (err as Error).message });
+  }
+});

@@ -32,7 +32,7 @@
 > Stripe → Bureau cert → Trust Graph edge → AEC reward
 > Bronze 50 / Silver 150 / Gold 500 / Platinum 1000
 >
-> Daily smoke 24/24. Velocity: 114 PR за 30 дней.
+> Daily smoke 24/24. Velocity: 123 PR за 30 дней.
 
 **4/**
 > AI Trust Oracle — B2B API «оригинален ли этот контент». Аналог Clearbit
@@ -65,11 +65,11 @@ AEVION собирает это в один pipeline в одном UI: `register 
 
 **Что уже работает на проде:**
 
-• 14 production-модулей в `main`, из них 9 — Tier 2 (webhooks, embed, revoke, transparency, admin, audit, тесты, SDK)
+• 16 production-модулей в `main`, из них 9 — Tier 2 (webhooks, embed, revoke, transparency, admin, audit, тесты, SDK)
 • Уникальные техактивы: ML-DSA-65 (постквантовая подпись, NIST FIPS 204), Quantum Shield (Shamir 2-of-3 + Ed25519)
 • Платный E2E flow: Stripe → Bureau cert → Trust Graph edge → AEC reward (Bronze 50 / Silver 150 / Gold 500 / Platinum 1000)
 • Daily smoke 24/24 в GitHub Actions
-• Velocity: 114 merged PR за 30 дней, 561 коммит за 30 дней
+• Velocity: 123 merged PR за 30 дней, 600+ коммит за 30 дней
 
 **Бизнес-модель:** подписки + транзакционные комиссии + Trust Oracle API (B2B) + сертификаты. Целевой ARR год 3 — $180M, оценка ~$1.8B при консервативном 10× мультипликаторе (Snowflake 15-20×, Palantir 18×).
 
@@ -129,7 +129,7 @@ Repo: `github.com/Dossymbek281078/AEVION`
 Live на проде: https://aevion.app
 Repo: github.com/Dossymbek281078/AEVION
 
-Velocity 114 PR/30d, 14 production-модулей.
+Velocity 123 PR/30d, 16 production-модулей.
 
 Ищем reference customers (студии, агентства, фотографы, авторы) — пилот 10 сертификатов бесплатно за 4 недели юзкейса и отзыв.
 

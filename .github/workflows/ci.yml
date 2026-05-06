@@ -26,6 +26,8 @@ jobs:
           cache: npm
           cache-dependency-path: aevion-globus-backend/package-lock.json
       - run: npm install --ignore-scripts
+      - name: Prod env check (NODE_ENV=production guard)
+        run: NODE_ENV=production node scripts/check-prod-env.js || true
       - run: npm run build
       - run: npm test
 

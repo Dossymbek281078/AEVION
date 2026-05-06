@@ -43,7 +43,7 @@ import { getPool, getPoolStats } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
 import { validateOr400 } from "../lib/qpaynetValidate";
-import { encryptSecret, decryptSecret, isEncryptionEnabled } from "../lib/qpaynetCrypto";
+import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 
 export const qpaynetRouter = Router();
 
@@ -1323,7 +1323,7 @@ qpaynetRouter.post("/webhook-subs", async (req, res) => {
 
   await pool.query(
     "INSERT INTO qpaynet_merchant_webhooks (id, owner_id, url, secret, events) VALUES ($1,$2,$3,$4,$5)",
-    [id, ownerId, url, secret, events.slice(0, 200)],
+    [id, ownerId, url, encryptSecret(secret), events.slice(0, 200)],
   );
   res.status(201).json({ id, url, events, secret, message: "Save the secret — it won't be shown again." });
 });
@@ -1358,6 +1358,44 @@ qpaynetRouter.delete("/webhook-subs/:id", async (req, res) => {
 });
 
 // Helper: fan out an event to all active merchant webhooks for an owner.
+// Durable delivery queue for merchant_webhooks fan-out.
+// Without this, fanOutToOwner was Promise.all'ing fire-and-forget and any
+// failed delivery was silently lost — a real prod bug for partners that
+// rely on event consistency.
+let deliveriesTableReady = false;
+async function ensureDeliveriesTable(): Promise<void> {
+  if (deliveriesTableReady) return;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qpaynet_webhook_deliveries (
+        id              TEXT PRIMARY KEY,
+        sub_id          TEXT NOT NULL,
+        owner_id        TEXT NOT NULL,
+        event           TEXT NOT NULL,
+        payload         JSONB NOT NULL,
+        attempts        INTEGER NOT NULL DEFAULT 0,
+        last_error      TEXT,
+        next_retry_at   TIMESTAMPTZ,
+        delivered_at    TIMESTAMPTZ,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_qpwd_due ON qpaynet_webhook_deliveries (next_retry_at)
+        WHERE delivered_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_qpwd_owner ON qpaynet_webhook_deliveries (owner_id, created_at DESC);
+    `);
+    deliveriesTableReady = true;
+  } catch (err) {
+    console.warn("[qpaynet deliveries] table init skipped:", err instanceof Error ? err.message : err);
+  }
+}
+
+// Fan out an event to all active merchant webhooks for an owner.
+//
+// Strategy: persist one row per matching sub, fire the first attempt inline
+// for low latency, then on failure leave the row for the retry tick to pick
+// up. Same pattern as payment_request notifications — a single retry worker
+// drains both queues.
 async function fanOutToOwner(
   pool: ReturnType<typeof getPool>,
   ownerId: string,
@@ -1366,14 +1404,45 @@ async function fanOutToOwner(
 ): Promise<void> {
   try {
     await ensureMerchantWebhooksTable();
+    await ensureDeliveriesTable();
     const r = await pool.query(
-      "SELECT url, secret, events FROM qpaynet_merchant_webhooks WHERE owner_id=$1 AND revoked_at IS NULL",
+      "SELECT id, url, secret, events FROM qpaynet_merchant_webhooks WHERE owner_id=$1 AND revoked_at IS NULL",
       [ownerId],
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subs = r.rows.filter((s: any) => (s.events as string).split(",").map(e => e.trim()).includes(eventName));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await Promise.all(subs.map((s: any) => fireRequestWebhook(s.url, s.secret, payload)));
+    if (subs.length === 0) return;
+
+    const payloadJson = JSON.stringify(payload);
+    await Promise.all(subs.map(async (s: { id: string; url: string; secret: string }) => {
+      const deliveryId = randomUUID();
+      await pool.query(
+        `INSERT INTO qpaynet_webhook_deliveries
+           (id, sub_id, owner_id, event, payload, attempts, next_retry_at)
+         VALUES ($1,$2,$3,$4,$5::jsonb,0,NOW())`,
+        [deliveryId, s.id, ownerId, eventName, payloadJson],
+      );
+      const decryptedSecret = decryptSecret(s.secret) ?? "";
+      if (needsEncryption(s.secret)) {
+        pool.query(
+          "UPDATE qpaynet_merchant_webhooks SET secret=$1 WHERE id=$2",
+          [encryptSecret(decryptedSecret), s.id],
+        ).catch(() => { /* best-effort */ });
+      }
+      const result = await fireRequestWebhook(s.url, decryptedSecret, payload);
+      if (result.ok) {
+        await pool.query(
+          "UPDATE qpaynet_webhook_deliveries SET attempts=1, delivered_at=NOW(), next_retry_at=NULL WHERE id=$1",
+          [deliveryId],
+        );
+      } else {
+        const next = nextRetryAt(1);
+        await pool.query(
+          "UPDATE qpaynet_webhook_deliveries SET attempts=1, last_error=$1, next_retry_at=$2 WHERE id=$3",
+          [result.error?.slice(0, 500) ?? "unknown", next, deliveryId],
+        );
+      }
+    }));
   } catch (err) {
     console.warn("[qpaynet fanout] failed:", err instanceof Error ? err.message : err);
     captureException(err, { source: "qpaynet/fanout", ownerId, eventName });
@@ -1745,6 +1814,13 @@ qpaynetRouter.post("/requests/:token/pay", moneyLimiter, async (req, res) => {
   }
   if (pr.notify_url && pr.notify_secret) {
     const decryptedSecret = decryptSecret(pr.notify_secret) ?? "";
+    // Lazy at-rest migration: encrypt-in-place if env-key just enabled.
+    if (needsEncryption(pr.notify_secret)) {
+      pool.query(
+        "UPDATE qpaynet_payment_requests SET notify_secret=$1 WHERE id=$2",
+        [encryptSecret(decryptedSecret), pr.id],
+      ).catch(() => { /* migration best-effort */ });
+    }
     fireRequestWebhook(pr.notify_url, decryptedSecret, payload).then(async (result) => {
       if (result.ok) {
         await pool.query(
@@ -2253,6 +2329,17 @@ qpaynetRouter.post("/admin/refund", async (req, res) => {
   const reason = parsed.reason as string;
   const requestedAmount = parsed.amount as number | undefined;
 
+  // Idempotency-Key support: keyed by `refund:<adminEmail>` so two admins
+  // can't collide. Replay with same body → cached 200; mismatch → 409.
+  // ref_tx_id check below remains the stricter belt-and-braces dedup.
+  const adminScope = `refund:${auth.email ?? auth.sub ?? "anon"}`;
+  const idemKey = req.headers["idempotency-key"] as string | undefined;
+  const cached = await checkIdempotency(adminScope, idemKey, req.body);
+  if (cached && "conflict" in cached) {
+    return res.status(409).json({ error: "idempotency_key_body_mismatch" });
+  }
+  if (cached) return res.status(cached.status).json(cached.response);
+
   const pool = getPool();
   try {
     const result = await withTx(async (c) => {
@@ -2308,13 +2395,108 @@ qpaynetRouter.post("/admin/refund", async (req, res) => {
       { refundId: result.refundId, originalTxId: txId, amountKzt: result.refundedKzt, reason, by: auth.email }, req);
     void notify(pool, result.ownerId, "refund_issued",
       `Возврат ${result.refundedKzt.toLocaleString("ru-RU")} ₸`, reason, result.refundId);
-    res.json({ ok: true, ...result });
+    const responseBody = { ok: true as const, ...result };
+    await saveIdempotency(adminScope, idemKey, req.body, 200, responseBody);
+    res.json(responseBody);
   } catch (err) {
     if (err instanceof HttpError) return res.status(err.status).json({ error: err.code });
     captureException(err, { route: "qpaynet/admin/refund", txId });
     console.error("[qpaynet/admin/refund] unhandled:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "internal_error" });
   }
+});
+
+// GET /api/qpaynet/admin/refunds — paginated refund history for compliance review.
+qpaynetRouter.get("/admin/refunds", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+  const before = (req.query.before as string | undefined)?.trim();
+  const params: unknown[] = [limit];
+  let where = "type = 'refund'";
+  if (before) {
+    params.push(before);
+    where += ` AND created_at < $${params.length}`;
+  }
+  const pool = getPool();
+  const r = await pool.query(
+    `SELECT t.id, t.wallet_id, t.owner_id, t.amount, t.description, t.ref_tx_id, t.created_at,
+            o.amount AS original_amount, o.type AS original_type, o.created_at AS original_created_at
+     FROM qpaynet_transactions t
+     LEFT JOIN qpaynet_transactions o ON o.id = t.ref_tx_id
+     WHERE ${where}
+     ORDER BY t.created_at DESC
+     LIMIT $1`,
+    params,
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items = r.rows.map((row: any) => ({
+    refundId: row.id,
+    walletId: row.wallet_id,
+    ownerId: row.owner_id,
+    amountKzt: fromTiin(BigInt(row.amount)),
+    description: row.description,
+    originalTxId: row.ref_tx_id,
+    originalAmountKzt: row.original_amount ? fromTiin(BigInt(row.original_amount)) : null,
+    originalType: row.original_type,
+    originalCreatedAt: row.original_created_at ? new Date(row.original_created_at).toISOString() : null,
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
+  const nextCursor = items.length === limit ? items[items.length - 1].createdAt : null;
+  res.json({ items, nextCursor });
+});
+
+// GET /api/qpaynet/admin/webhook-deliveries — operational view for ops to triage
+// failing or pending merchant webhook deliveries. ?status=stuck returns rows
+// that exhausted retries (attempts >= MAX, no delivered_at).
+qpaynetRouter.get("/admin/webhook-deliveries", async (req, res) => {
+  await ensureDeliveriesTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const status = (req.query.status as string | undefined)?.trim();
+  const limit = Math.max(1, Math.min(200, Number(req.query.limit ?? 50)));
+
+  let where = "1=1";
+  if (status === "stuck") where = `delivered_at IS NULL AND attempts >= ${MAX_NOTIFY_ATTEMPTS}`;
+  else if (status === "pending") where = "delivered_at IS NULL AND next_retry_at IS NOT NULL";
+  else if (status === "delivered") where = "delivered_at IS NOT NULL";
+
+  const pool = getPool();
+  const r = await pool.query(
+    `SELECT id, sub_id, owner_id, event, attempts, last_error, next_retry_at, delivered_at, created_at
+     FROM qpaynet_webhook_deliveries
+     WHERE ${where}
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit],
+  );
+  res.json({ items: r.rows });
+});
+
+// POST /api/qpaynet/admin/webhook-deliveries/:id/retry — admin force-retry.
+// Resets attempts to 0 and schedules immediate so the next tick picks it up.
+qpaynetRouter.post("/admin/webhook-deliveries/:id/retry", async (req, res) => {
+  await ensureDeliveriesTable();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  const r = await pool.query(
+    `UPDATE qpaynet_webhook_deliveries
+     SET attempts=0, next_retry_at=NOW(), last_error=NULL, delivered_at=NULL
+     WHERE id=$1 RETURNING id, sub_id`,
+    [req.params.id],
+  );
+  if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "delivery_not_found" });
+  void auditLog(pool, null, "webhook_delivery_force_retry",
+    { deliveryId: r.rows[0].id, subId: r.rows[0].sub_id, by: auth.email }, req);
+  res.json({ ok: true, deliveryId: r.rows[0].id });
 });
 
 // GET /api/qpaynet/admin/payouts/stats — counts by status (for badges)
@@ -2634,19 +2816,30 @@ qpaynetRouter.get("/me/audit", authLimiter, async (req, res) => {
 qpaynetRouter.get("/health", async (_req, res) => {
   try {
     await ensureTables();
+    await ensureDeliveriesTable();
     const pool = getPool();
-    const r = await pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets");
+    const [walletsR, stuckR] = await Promise.all([
+      pool.query("SELECT COUNT(*) AS n FROM qpaynet_wallets"),
+      pool.query(
+        `SELECT COUNT(*)::int AS n
+         FROM qpaynet_webhook_deliveries
+         WHERE delivered_at IS NULL AND attempts >= $1`,
+        [MAX_NOTIFY_ATTEMPTS],
+      ).catch(() => ({ rows: [{ n: 0 }] })),
+    ]);
     const stats = getPoolStats();
-    // Pool exhaustion = degraded but reachable. Surface it so the aggregate
-    // /api/aevion/health flips to degraded and on-call gets paged before
-    // requests start timing out.
-    const degraded = !!stats && stats.waiting > 0;
+    const stuckDeliveries = Number(stuckR.rows[0]?.n ?? 0);
+    // Pool exhaustion or > 50 stuck deliveries = degraded. Surface so the
+    // aggregate /api/aevion/health flips degraded and on-call gets paged
+    // before requests start timing out or partners stop getting events.
+    const degraded = (!!stats && stats.waiting > 0) || stuckDeliveries > 50;
     res.json({
       status: degraded ? "degraded" : "ok",
       service: "qpaynet",
-      wallets: Number(r.rows[0]?.n ?? 0),
+      wallets: Number(walletsR.rows[0]?.n ?? 0),
       pool: stats,
       encryption: isEncryptionEnabled() ? "enabled" : "disabled",
+      stuckWebhookDeliveries: stuckDeliveries,
     });
   } catch (err) {
     res.status(503).json({ status: "error", service: "qpaynet", error: err instanceof Error ? err.message : String(err) });
@@ -2687,7 +2880,14 @@ async function runRetryTick(): Promise<void> {
         description: row.description, paid_by: row.paid_by,
         paid_tx_id: row.paid_tx_id, paid_at: row.paid_at,
       });
-      const result = await fireRequestWebhook(row.notify_url, decryptSecret(row.notify_secret) ?? "", payload);
+      const decryptedSecret = decryptSecret(row.notify_secret) ?? "";
+      if (needsEncryption(row.notify_secret)) {
+        pool.query(
+          "UPDATE qpaynet_payment_requests SET notify_secret=$1 WHERE id=$2",
+          [encryptSecret(decryptedSecret), row.id],
+        ).catch(() => { /* migration best-effort */ });
+      }
+      const result = await fireRequestWebhook(row.notify_url, decryptedSecret, payload);
       const attempts = (row.notify_attempts ?? 0) + 1;
       if (result.ok) {
         await pool.query(
@@ -2698,6 +2898,45 @@ async function runRetryTick(): Promise<void> {
         const next = nextRetryAt(attempts);
         await pool.query(
           "UPDATE qpaynet_payment_requests SET notify_attempts=$1, notify_last_error=$2, notify_next_retry_at=$3 WHERE id=$4",
+          [attempts, result.error?.slice(0, 500) ?? "unknown", next, row.id],
+        );
+      }
+    }
+
+    // Second pass: drain pending merchant_webhooks deliveries.
+    await ensureDeliveriesTable();
+    const dueDeliveries = await pool.query(
+      `SELECT d.id, d.sub_id, d.event, d.payload, d.attempts, m.url, m.secret
+       FROM qpaynet_webhook_deliveries d
+       JOIN qpaynet_merchant_webhooks m ON m.id = d.sub_id
+       WHERE d.delivered_at IS NULL
+         AND d.next_retry_at IS NOT NULL
+         AND d.next_retry_at <= NOW()
+         AND d.attempts < $1
+         AND m.revoked_at IS NULL
+       ORDER BY d.next_retry_at ASC
+       LIMIT $2`,
+      [MAX_NOTIFY_ATTEMPTS, RETRY_BATCH],
+    );
+    for (const row of dueDeliveries.rows) {
+      const decryptedSecret = decryptSecret(row.secret) ?? "";
+      if (needsEncryption(row.secret)) {
+        pool.query(
+          "UPDATE qpaynet_merchant_webhooks SET secret=$1 WHERE id=$2",
+          [encryptSecret(decryptedSecret), row.sub_id],
+        ).catch(() => { /* best-effort */ });
+      }
+      const result = await fireRequestWebhook(row.url, decryptedSecret, row.payload);
+      const attempts = (row.attempts ?? 0) + 1;
+      if (result.ok) {
+        await pool.query(
+          "UPDATE qpaynet_webhook_deliveries SET attempts=$1, delivered_at=NOW(), next_retry_at=NULL, last_error=NULL WHERE id=$2",
+          [attempts, row.id],
+        );
+      } else {
+        const next = nextRetryAt(attempts);
+        await pool.query(
+          "UPDATE qpaynet_webhook_deliveries SET attempts=$1, last_error=$2, next_retry_at=$3 WHERE id=$4",
           [attempts, result.error?.slice(0, 500) ?? "unknown", next, row.id],
         );
       }

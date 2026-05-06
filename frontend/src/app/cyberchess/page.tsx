@@ -29,6 +29,7 @@ import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
+import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
@@ -528,6 +529,8 @@ export default function CyberChessPage(){
   const ratPrevRef=useRef<number|null>(null);
   // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
   const[lichessLoading,sLichessLoading]=useState(false);
+  // Command palette (Ctrl/Cmd+K) — fuzzy-search any action without hunting menus.
+  const[palOpen,sPalOpen]=useState(false);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
@@ -948,6 +951,18 @@ export default function CyberChessPage(){
     const t=window.setTimeout(()=>sRatDelta(null),3800);
     return()=>window.clearTimeout(t);
   },[rat]);
+
+  // Command palette toggle (Ctrl/Cmd+K) — works even from inside inputs (esc clears).
+  useEffect(()=>{
+    const h=(e:KeyboardEvent)=>{
+      if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){
+        e.preventDefault();
+        sPalOpen(o=>!o);
+      }
+    };
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[]);
 
   useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
@@ -2834,6 +2849,22 @@ export default function CyberChessPage(){
           <span>{VARIANTS.find(v=>v.id===variant)?.name}</span>
         </button>}
 
+        {/* Command palette opener — discovery for Ctrl+K. */}
+        <button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
+          style={{
+            display:"inline-flex",alignItems:"center",gap:6,
+            padding:"5px 10px 5px 8px",borderRadius:RADIUS.full,
+            border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,
+            fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
+          }}>
+          <span style={{fontSize:13}}>⌕</span>
+          <span>Команды</span>
+          <kbd style={{
+            fontFamily:"ui-monospace, SFMono-Regular, monospace",fontSize:9.5,fontWeight:800,
+            padding:"1px 5px",borderRadius:3,
+            background:"#fff",color:"#475569",border:`1px solid #cbd5e1`,
+          }}>⌃K</kbd>
+        </button>
         {/* Workspace switcher — always visible in the header. Hint shown via tooltip on each chip. */}
         <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
 
@@ -5957,6 +5988,7 @@ export default function CyberChessPage(){
           ["ПКМ клик","Подсветить клетку · Shift=красный, Ctrl=синий"],
         ]},
         {title:"Глобально",rows:[
+          ["Ctrl+K","⌕ Command Palette — поиск любого действия (▶ play / ◆ puzzle / 🌐 lichess / …)"],
           ["M","Вкл./выкл. звук"],
           ["N","Новая партия (в Play, до старта)"],
           ["R","📚 Открыть / закрыть Репертуар дебютов"],
@@ -7901,6 +7933,79 @@ export default function CyberChessPage(){
     })()}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
+    {/* Command palette (Ctrl/Cmd+K) — fuzzy-search any action, exec on Enter. */}
+    <CommandPalette open={palOpen} onClose={()=>sPalOpen(false)} commands={(()=>{
+      const cmds:PaletteCommand[]=[
+        // ── PLAY ──
+        {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Quick start с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
+        {id:"play-matchme", icon:"⚡", group:"Play", label:"Match Me",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=chessy.owned.master_ai?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-hotseat", icon:"👥", group:"Play", label:"Vs Человек (Hotseat)", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-variants",icon:"🎲", group:"Play", label:"Выбрать вариант шахмат",hint:"Fischer 960 / Atomic / Crazyhouse / +9",   run:()=>sShowVariants(true)},
+        {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
+
+        // ── PUZZLES ──
+        {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${PUZZLES.length.toLocaleString()} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"180 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Lichess Daily Puzzle",hint:"Задача дня с lichess.org (live)",          run:async()=>{
+          if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю Lichess Daily…","info");
+          try{
+            const r=await fetch("https://lichess.org/api/puzzle/daily",{headers:{Accept:"application/json"}});
+            if(!r.ok)throw new Error(`HTTP ${r.status}`);
+            const j=await r.json();
+            const ch=new Chess();const pgnTokens=String(j?.game?.pgn||"").trim().split(/\s+/).filter(Boolean);
+            const ply=Number(j?.puzzle?.initialPly||0);
+            for(let i=0;i<ply&&i<pgnTokens.length;i++){try{ch.move(pgnTokens[i])}catch{break}}
+            const sols:string[]=Array.isArray(j?.puzzle?.solution)?j.puzzle.solution:[];
+            if(!sols.length)throw new Error("no solution");
+            const first=sols[0];const probe=new Chess(ch.fen());
+            const mv=probe.move({from:first.slice(0,2),to:first.slice(2,4),promotion:first.slice(4)||undefined});
+            if(!mv)throw new Error("solution invalid");
+            const fakePz:Puzzle={name:`Lichess Daily · ${j?.puzzle?.id||"?"}`,r:Number(j?.puzzle?.rating)||1500,theme:(j?.puzzle?.themes?.[0]||"tactics") as any,phase:"Middlegame",side:ch.turn() as "w"|"b",goal:"Best move",mateIn:0,fen:ch.fen(),sol:[mv.san]};
+            sTab("puzzles");setGame(new Chess(fakePz.fen));sBk(k=>k+1);sPzCurrent(fakePz);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());sHist([]);sFenHist([fakePz.fen]);sPCol(fakePz.side as any);sFlip(fakePz.side==="b");sOn(true);
+            showToast(`🌐 Lichess Daily · rating ${fakePz.r}`,"success");
+          }catch(e:any){showToast(`Lichess недоступен: ${e?.message||"network"}`,"error")}finally{sLichessLoading(false)}
+        }},
+
+        // ── COACH / TRAINING ──
+        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + знания 45 тем",              run:()=>sTab("coach")},
+        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"45 тем · эндшпили / стратегия / тактика",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
+        {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
+        {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
+        {id:"editor",       icon:"♟",group:"Coach",   label:"Position Editor",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},
+
+        // ── ANALYSIS ──
+        {id:"analysis",     icon:"▲", group:"Analysis", label:"Открыть Анализ",   hint:"Eval bar + Opening Explorer",               run:()=>{sTab("analysis");sShowAnal(true)}},
+        {id:"masters",      icon:"★", group:"Analysis", label:"Партии классиков",hint:"Capablanca / Tal / Carlsen · режим «угадай»",run:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
+        {id:"game-dna",     icon:"🧬",group:"Analysis", label:"Game DNA",         hint:"Стиль игры из последних партий",            run:()=>sShowGameDna(true)},
+        {id:"insights",     icon:"🔬",group:"Analysis", label:"Insights",         hint:"Слабости и сильные стороны",                run:()=>sShowInsights(true)},
+        {id:"share-fen",    icon:"🔗",group:"Analysis", label:"Поделиться позицией (FEN)",hint:"Скопировать ссылку с текущей позицией",hotkey:"S",run:()=>{
+          try{const fen=game.fen();const url=`${window.location.origin}/cyberchess?fen=${encodeURIComponent(fen)}`;
+            navigator.clipboard?.writeText(url).then(()=>showToast("📋 Ссылка скопирована","success"),()=>showToast(`FEN: ${fen}`,"info"));
+          }catch{showToast("Не удалось","error")}
+        }},
+
+        // ── WORKSPACE ──
+        {id:"ws-focus",     icon:"◻", group:"Workspace", label:"Focus — только доска",       hotkey:"1", run:()=>{sWsPreset("focus");showToast("Workspace: focus","info")}},
+        {id:"ws-standard",  icon:"▦", group:"Workspace", label:"Standard — доска + панель", hotkey:"2", run:()=>{sWsPreset("standard");showToast("Workspace: standard","info")}},
+        {id:"ws-stream",    icon:"▶", group:"Workspace", label:"Stream — + YouTube/Twitch", hotkey:"3", run:()=>{sWsPreset("stream");showToast("Workspace: stream","info")}},
+        {id:"ws-study",     icon:"✎", group:"Workspace", label:"Study — + multipv",         hotkey:"4", run:()=>{sWsPreset("study");showToast("Workspace: study","info")}},
+        {id:"ws-coach",     icon:"🎓",group:"Workspace", label:"Coach — + предсказания AI", hotkey:"5", run:()=>{sWsPreset("coach");showToast("Workspace: coach","info")}},
+
+        // ── BOARD / GAME ──
+        {id:"flip",         icon:"⇅", group:"Board", label:"Перевернуть доску",   hotkey:"F", run:()=>sFlip(v=>!v)},
+        {id:"mute",         icon:"🔇",group:"Board", label:"Mute / unmute звук", hotkey:"M", run:()=>sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})},
+        {id:"repertoire",   icon:"📚",group:"Board", label:"Репертуар дебютов",  hotkey:"R", run:()=>sRepertoireOpen(v=>!v)},
+        {id:"hotkeys",      icon:"⌨", group:"Board", label:"Все горячие клавиши",hotkey:"?", run:()=>sShowHelp(v=>!v)},
+
+        // ── SETTINGS ──
+        {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
+        {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
+        {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
+      ];
+      return cmds;
+    })()}/>
     {/* Live rating-delta chip — appears top-right when rat changes (after a game) */}
     {ratDelta&&<div key={ratDelta.ts} style={{
       position:"fixed",top:80,right:60,

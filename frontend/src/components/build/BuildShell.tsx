@@ -173,6 +173,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
             <Link href="/build/pricing" className="hover:text-slate-300">Pricing</Link>
             <Link href="/build/developers" className="hover:text-slate-300">Developers</Link>
             <Link href="/build/changelog" className="hover:text-slate-300">Changelog</Link>
+            <Link href="/build/onboarding" className="hover:text-slate-300">Get started</Link>
           </div>
           <span>© 2026 AEVION QBuild</span>
         </div>

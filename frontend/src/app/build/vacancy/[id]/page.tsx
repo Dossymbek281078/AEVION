@@ -311,10 +311,13 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                 Role description
               </h2>
               {isOwner && (
-                <TranslateVacancyButton
-                  title={vacancy.title}
-                  description={vacancy.description}
-                />
+                <div className="flex items-center gap-1.5">
+                  <VacancyFeedbackButton vacancyId={vacancy.id} />
+                  <TranslateVacancyButton
+                    title={vacancy.title}
+                    description={vacancy.description}
+                  />
+                </div>
               )}
             </div>
             <div
@@ -1542,9 +1545,71 @@ function ShareVacancyBlock({ vacancyId }: { vacancyId: string }) {
             🎯 Copy ref-link
           </button>
         )}
+        <QuickShareButtons getLink={() => buildLink(!!me)} />
         {copied && <span className="text-xs text-emerald-300">Скопировано ✓</span>}
       </div>
     </div>
+  );
+}
+
+function QuickShareButtons({ getLink }: { getLink: () => string }) {
+  function open(url: string) {
+    if (typeof window === "undefined") return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+  function tg() {
+    const u = encodeURIComponent(getLink());
+    open(`https://t.me/share/url?url=${u}&text=${encodeURIComponent("AEVION QBuild — vacancy")}`);
+  }
+  function wa() {
+    const u = encodeURIComponent(`AEVION QBuild — vacancy: ${getLink()}`);
+    open(`https://wa.me/?text=${u}`);
+  }
+  function li() {
+    const u = encodeURIComponent(getLink());
+    open(`https://www.linkedin.com/sharing/share-offsite/?url=${u}`);
+  }
+  function tw() {
+    const u = encodeURIComponent(getLink());
+    open(`https://twitter.com/intent/tweet?url=${u}&text=${encodeURIComponent("Hiring on AEVION QBuild")}`);
+  }
+  const base =
+    "rounded-md border px-2 py-1.5 text-xs font-semibold transition";
+  return (
+    <>
+      <button
+        type="button"
+        onClick={tg}
+        title="Share via Telegram"
+        className={`${base} border-sky-400/40 bg-sky-400/15 text-sky-100 hover:bg-sky-400/25`}
+      >
+        ✈ Telegram
+      </button>
+      <button
+        type="button"
+        onClick={wa}
+        title="Share via WhatsApp"
+        className={`${base} border-emerald-400/40 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/25`}
+      >
+        🟢 WhatsApp
+      </button>
+      <button
+        type="button"
+        onClick={li}
+        title="Share on LinkedIn"
+        className={`${base} border-blue-400/40 bg-blue-400/15 text-blue-100 hover:bg-blue-400/25`}
+      >
+        in LinkedIn
+      </button>
+      <button
+        type="button"
+        onClick={tw}
+        title="Share on X/Twitter"
+        className={`${base} border-white/20 bg-white/10 text-slate-100 hover:bg-white/20`}
+      >
+        𝕏
+      </button>
+    </>
   );
 }
 
@@ -2659,6 +2724,98 @@ function BulkMessageButton({
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.aiVacancyFeedback>> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run() {
+    setOpen(true);
+    if (data || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await buildApi.aiVacancyFeedback(vacancyId);
+      setData(r);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const tone =
+    !data
+      ? "border-cyan-400/40 bg-cyan-400/15 text-cyan-100"
+      : data.score >= 80
+        ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-100"
+        : data.score >= 50
+          ? "border-amber-400/40 bg-amber-400/15 text-amber-100"
+          : "border-rose-400/40 bg-rose-400/15 text-rose-100";
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        title="AI quality review of this vacancy"
+        className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90 disabled:opacity-50 ${tone}`}
+      >
+        {busy ? "…" : data ? `🤖 ${data.score}/100` : "🤖 AI feedback"}
+      </button>
+      {open && (data || err) && (
+        <div className="absolute right-0 top-full z-30 mt-2 w-80 rounded-xl border border-white/10 bg-slate-900 p-4 text-xs shadow-2xl">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="font-semibold text-white">AI quality review</div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-slate-500 hover:text-slate-200"
+            >
+              ✕
+            </button>
+          </div>
+          {err && <p className="text-rose-300">{err}</p>}
+          {data && (
+            <>
+              <div className="mb-2 flex items-baseline gap-2">
+                <div className="text-3xl font-bold text-white">{data.score}</div>
+                <div className="text-[10px] uppercase tracking-wider text-slate-500">/ 100</div>
+              </div>
+              {data.strengths.length > 0 && (
+                <>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+                    Strengths
+                  </div>
+                  <ul className="mb-2 space-y-0.5 pl-4 text-slate-300">
+                    {data.strengths.map((s, i) => (
+                      <li key={i} className="list-disc">{s}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {data.suggestions.length > 0 && (
+                <>
+                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                    Suggestions
+                  </div>
+                  <ul className="space-y-0.5 pl-4 text-slate-300">
+                    {data.suggestions.map((s, i) => (
+                      <li key={i} className="list-disc">{s}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

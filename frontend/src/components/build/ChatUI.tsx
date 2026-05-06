@@ -125,6 +125,13 @@ export function ChatUI({
 
       <form onSubmit={send} className="border-t border-white/10 px-3 py-3">
         {error && <p className="mb-2 text-xs text-rose-300">{error}</p>}
+        <ReplySuggestions
+          peerId={peerId}
+          // Re-fetch when the latest message arrives — but only when the peer's
+          // last message is more recent than the suggestion fetch trigger.
+          messageCount={messages.length}
+          onPick={(text) => setDraft(text)}
+        />
         <div className="flex items-end gap-2">
           <textarea
             value={draft}
@@ -272,6 +279,82 @@ function ScheduleInterviewButton({ onInsert }: { onInsert: (text: string) => voi
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ReplySuggestions({
+  peerId,
+  messageCount,
+  onPick,
+}: {
+  peerId: string;
+  messageCount: number;
+  onPick: (text: string) => void;
+}) {
+  const [items, setItems] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
+
+  async function load() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await buildApi.aiDmSuggest(peerId);
+      setItems(r.suggestions);
+      setCollapsed(false);
+    } catch {
+      setItems([]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Reset suggestions whenever a new message lands or peer changes — they're
+  // stale relative to the latest turn.
+  useEffect(() => {
+    setItems(null);
+    setCollapsed(true);
+  }, [peerId, messageCount]);
+
+  if (collapsed) {
+    return (
+      <div className="mb-2 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={load}
+          disabled={busy}
+          className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-50"
+          title="Generate 3 reply ideas based on the recent thread"
+        >
+          {busy ? "…" : "🤖 Suggest reply"}
+        </button>
+      </div>
+    );
+  }
+
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {items.map((s, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => onPick(s)}
+          className="max-w-full truncate rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] text-cyan-100 hover:bg-cyan-400/20"
+          title={s}
+        >
+          {s.length > 80 ? s.slice(0, 78) + "…" : s}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => setCollapsed(true)}
+        className="text-[10px] text-slate-500 hover:text-slate-300"
+      >
+        ✕
+      </button>
     </div>
   );
 }

@@ -30,6 +30,7 @@ import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
+import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
@@ -531,6 +532,9 @@ export default function CyberChessPage(){
   const[lichessLoading,sLichessLoading]=useState(false);
   // Command palette (Ctrl/Cmd+K) — fuzzy-search any action without hunting menus.
   const[palOpen,sPalOpen]=useState(false);
+  // Position bookmarks — saved FENs the user wants to revisit. Loaded once on mount.
+  const[bookmarks,sBookmarks]=useState<Bookmark[]>([]);
+  useEffect(()=>{sBookmarks(loadBookmarks())},[]);
   const[PUZZLES,sPuzzles]=useState<Puzzle[]>([]);
   // Puzzle system
   const[pzMode,sPzMode]=useState<"learn"|"timed3"|"timed5"|"rush"|"custom">("learn");
@@ -1543,6 +1547,20 @@ export default function CyberChessPage(){
       if(e.key==="m"||e.key==="M"){e.preventDefault();sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})}
       if(e.key==="f"||e.key==="F"){e.preventDefault();sFlip(v=>!v)}
       if(e.key==="?"||(e.key==="/"&&e.shiftKey)){e.preventDefault();sShowHelp(v=>!v)}
+      // Save bookmark (B): persist current FEN to position bookmarks.
+      if(e.key==="b"||e.key==="B"){
+        e.preventDefault();
+        try{
+          const fen=game.fen();
+          if(bookmarks.some(b=>b.fen===fen)){
+            showToast("⭐ Эта позиция уже в закладках","info");
+          }else{
+            const next=addBookmark(bookmarks,fen);
+            sBookmarks(next);
+            showToast(`⭐ Закладка сохранена · всего ${next.length}`,"success");
+          }
+        }catch{showToast("Не удалось сохранить","error")}
+      }
       // Quick-share (S): copy URL with current FEN (?fen=...) so anyone can open this position.
       if(e.key==="s"||e.key==="S"){
         e.preventDefault();
@@ -6067,6 +6085,8 @@ export default function CyberChessPage(){
           ["N","Новая партия (в Play, до старта)"],
           ["R","📚 Открыть / закрыть Репертуар дебютов"],
           ["S","🔗 Скопировать ссылку на текущую позицию (FEN URL)"],
+          ["B","⭐ Сохранить позицию в закладки (Ctrl+K → найти открыть)"],
+          ["Ctrl+V","📋 Вставить FEN / PGN / Lichess URL — авто-загрузка в Анализ"],
           ["1..5","Workspace: Focus / Standard / Stream / Study / Coach"],
           ["Ctrl+Shift+D","Debug HUD (drag-механика)"],
           ["?","Показать / скрыть эту подсказку"],
@@ -8072,12 +8092,46 @@ export default function CyberChessPage(){
         {id:"mute",         icon:"🔇",group:"Board", label:"Mute / unmute звук", hotkey:"M", run:()=>sMuted(v=>{const nv=!v;showToast(nv?"Muted":"Sound on","info");return nv})},
         {id:"repertoire",   icon:"📚",group:"Board", label:"Репертуар дебютов",  hotkey:"R", run:()=>sRepertoireOpen(v=>!v)},
         {id:"hotkeys",      icon:"⌨", group:"Board", label:"Все горячие клавиши",hotkey:"?", run:()=>sShowHelp(v=>!v)},
+        {id:"bookmark-save",icon:"⭐",group:"Board", label:"Сохранить позицию (закладка)",hint:"Текущий FEN в закладки",hotkey:"B", run:()=>{
+          try{const fen=game.fen();if(bookmarks.some(b=>b.fen===fen)){showToast("⭐ Уже в закладках","info")}else{const next=addBookmark(bookmarks,fen);sBookmarks(next);showToast(`⭐ Сохранено · всего ${next.length}`,"success")}}catch{showToast("Ошибка","error")}
+        }},
 
         // ── SETTINGS ──
         {id:"shop",         icon:"💰",group:"Settings", label:"Магазин Chessy",       hint:`Баланс: ${chessy.balance}`,    run:()=>sShowShop(true)},
         {id:"streamer",     icon:"📺",group:"Settings", label:"Streamer Mode toggle", hint:"OBS-ready dark UI",            run:()=>{sStreamerMode(v=>!v);showToast(streamerMode?"Обычный режим":"Streamer mode ON","info")}},
         {id:"multi-panel",  icon:"📺",group:"Settings", label:"Multi-Panel split",    hint:"4 окна с YouTube/Twitch",      run:()=>sShowMultiPanel(true)},
       ];
+      // ── BOOKMARKS — dynamic per-position commands. Each saved FEN gets its own
+      //    "Открыть закладку: <label>" entry. Plus a delete-all utility at the end.
+      for(const bm of bookmarks){
+        cmds.push({
+          id:`bookmark-${bm.id}`,
+          icon:"⭐",
+          group:"Bookmarks",
+          label:`Открыть: ${bm.label}`,
+          hint:bm.note||new Date(bm.ts).toLocaleDateString("ru-RU"),
+          run:()=>{
+            try{
+              const ch=new Chess(bm.fen);
+              setGame(ch);sBk(k=>k+1);sHist([]);sFenHist([ch.fen()]);sLm(null);sSel(null);sVm(new Set());sOver(null);sOn(false);sSetup(false);sTab("analysis");sBrowseIdx(-1);sPCol(ch.turn());sFlip(ch.turn()==="b");
+              showToast(`⭐ ${bm.label}`,"success");
+            }catch{showToast("Закладка повреждена","error")}
+          },
+        });
+      }
+      if(bookmarks.length>0){
+        cmds.push({
+          id:"bookmarks-clear",
+          icon:"🗑",
+          group:"Bookmarks",
+          label:"Очистить все закладки",
+          hint:`Удалить ${bookmarks.length} сохранённых позиций`,
+          run:()=>{
+            if(typeof window!=="undefined"&&!window.confirm(`Удалить все ${bookmarks.length} закладок?`))return;
+            sBookmarks([]);try{localStorage.removeItem("aevion_chess_bookmarks_v1")}catch{}showToast("Закладки очищены","info");
+          },
+        });
+      }
       return cmds;
     })()}/>
     {/* Live rating-delta chip — appears top-right when rat changes (after a game) */}

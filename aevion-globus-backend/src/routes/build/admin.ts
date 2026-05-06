@@ -476,5 +476,91 @@ adminRouter.get("/insights", async (req, res) => {
   }
 });
 
+// GET /api/build/admin/weekly-preview/:userId — admin previews the weekly
+// digest email body that *would* be sent to the given recruiter. Doesn't
+// actually email — that's the cron's job once SMTP is wired. Lets us proof
+// content before turning on delivery.
+adminRouter.get("/weekly-preview/:userId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const userId = String(req.params.userId);
+    const wkStart = new Date(Date.now() - 7 * 86400_000);
+
+    const [user, apps, vacs, hires, topVac] = await Promise.all([
+      pool.query(`SELECT "id","name","email" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [userId]),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."createdAt" >= $2`,
+        [userId, wkStart],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM "BuildVacancy" v
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND v."createdAt" >= $2`,
+        [userId, wkStart],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED' AND a."updatedAt" >= $2`,
+        [userId, wkStart],
+      ),
+      pool.query(
+        `SELECT v."id", v."title", COUNT(a."id")::int AS "apps"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."createdAt" >= $2
+         GROUP BY v."id", v."title"
+         ORDER BY COUNT(a."id") DESC LIMIT 3`,
+        [userId, wkStart],
+      ),
+    ]);
+
+    if (user.rowCount === 0) return fail(res, 404, "user_not_found");
+
+    const recipient = user.rows[0];
+    const a = apps.rows[0].n;
+    const v = vacs.rows[0].n;
+    const h = hires.rows[0].n;
+    const subject = `QBuild · ваша неделя: ${a} откликов, ${h} наймов`;
+
+    const lines: string[] = [
+      `Привет, ${recipient.name || recipient.email}!`,
+      "",
+      `Сводка за последние 7 дней на AEVION QBuild:`,
+      `  • Новых откликов: ${a}`,
+      `  • Опубликовано вакансий: ${v}`,
+      `  • Принято кандидатов: ${h}`,
+    ];
+    if (topVac.rowCount && topVac.rowCount > 0) {
+      lines.push("", "Топ-вакансии по откликам:");
+      for (const r of topVac.rows) {
+        lines.push(`  • ${r.title} — ${r.apps} appls`);
+      }
+    } else {
+      lines.push("", "На этой неделе откликов не было — попробуйте 🚀 Boost для активной вакансии.");
+    }
+    lines.push("", "Открыть dashboard: https://aevion.tech/build/dashboard");
+    lines.push("Отписаться: /build/settings/notifications");
+
+    return ok(res, {
+      to: recipient.email,
+      subject,
+      body: lines.join("\n"),
+      counts: { applications: a, vacanciesPosted: v, hires: h },
+      windowStart: wkStart.toISOString(),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "weekly_preview_failed", { details: (err as Error).message });
+  }
+});
+
 // Suppress unused import warning — crypto used for future admin routes
 void crypto;

@@ -40,6 +40,7 @@ export function BookmarkButton({
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [pulse, setPulse] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -68,6 +69,11 @@ export function BookmarkButton({
         try {
           const r = await buildApi.toggleBookmark({ kind, targetId });
           setSaved(r.saved);
+          if (r.saved) {
+            // Trigger a single 250ms pop animation on save (not on un-save).
+            setPulse(true);
+            setTimeout(() => setPulse(false), 250);
+          }
           // Mutate the module-level cache so other cards repaint correctly.
           if (savedSet) {
             const k = key(kind, targetId);
@@ -81,7 +87,9 @@ export function BookmarkButton({
       }}
       title={saved ? "Remove from saved" : "Save"}
       aria-label={saved ? "Remove from saved" : "Save"}
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border text-sm transition disabled:opacity-50 ${
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border text-sm transition duration-200 disabled:opacity-50 ${
+        pulse ? "scale-125" : "scale-100"
+      } ${
         saved
           ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
           : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-amber-200"

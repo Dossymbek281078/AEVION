@@ -1,6 +1,17 @@
+__pycache__/
+
 # ССЦ РК исходные .docx (~32 МБ) — не коммитим, держим только парсер.
 # Распаковка из C:\Users\user\Downloads\ССЦ РК ... .rar
 ssc-rk-2025/
 
 # Промежуточные распарсенные JSON — копируются в frontend/public/ssc/.
 parsed/
+
+# Скачанные fetch-ksm.py архивы (.rar/.zip, до 200 МБ суммарно)
+ksm-downloads/
+
+# Извлечённое содержимое архивов
+ksm-source/
+
+# Состояние не игнорируем — оно нужно для diff'ов в weekly cron PR.
+!ksm-state.json

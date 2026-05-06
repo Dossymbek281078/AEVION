@@ -1,0 +1,4 @@
+{
+  "items": {},
+  "_note": "Состояние fetch-ksm.py: URL → {filename, size, sha256, fetched_at}. Обновляется автоматически weekly cron'ом (.github/workflows/update-ksm.yml). Пустой = ещё не было ни одного запуска."
+}

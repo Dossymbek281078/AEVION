@@ -1,0 +1,80 @@
+# Раз в неделю проверяет каталог new-shop.ksm.kz на новые редакции
+# нормативных сборников РК (ССЦ, СЦЭМ, СЦЗТ, СЦПГ, ЕСЦ, индексы, ЭСН).
+# Если есть изменения — открывает PR с обновлённым frontend/public/ssc/.
+name: Update KSM normative corpus
+
+on:
+  schedule:
+    - cron: "0 2 * * 0" # Sun 02:00 UTC = 08:00 Almaty
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force re-download even if size unchanged"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fetch-and-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install unrar
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y unrar
+
+      - name: Run fetcher
+        run: |
+          if [ "${{ inputs.force }}" = "true" ]; then
+            python -X utf8 raw-corpus/fetch-ksm.py --force
+          else
+            python -X utf8 raw-corpus/fetch-ksm.py
+          fi
+
+      - name: Detect changes
+        id: diff
+        run: |
+          git add -A frontend/public/ssc/ raw-corpus/ksm-state.json
+          if git diff --staged --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --staged --stat | tee /tmp/diff-stat.txt
+          fi
+
+      - name: Open PR
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/ksm-corpus-update
+          base: feat/smeta-trainer
+          delete-branch: true
+          commit-message: "chore(smeta-trainer): обновление нормативного корпуса РК"
+          title: "chore(smeta-trainer): обновление нормативного корпуса РК"
+          body: |
+            Автоматическое обновление нормативных сборников с
+            [new-shop.ksm.kz](https://new-shop.ksm.kz/egfntd/ntdgo/kds/7.php).
+
+            Срабатывает по weekly cron (вс 02:00 UTC) либо вручную через
+            workflow_dispatch.
+
+            Что изменилось:
+            ```
+            $(cat /tmp/diff-stat.txt 2>/dev/null || echo "(diff stat недоступен)")
+            ```
+
+            **Перед мержем:** убедитесь, что `frontend/public/ssc/ssc-2025-index.json`
+            и страница `/smeta-trainer/ssc` корректно отображают новые версии.
+
+            ⚙️ Сгенерировано .github/workflows/update-ksm.yml

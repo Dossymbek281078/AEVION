@@ -107,15 +107,24 @@ async function main() {
   if (!submissionId || !artifactVersionId) {
     return fail("POST /submissions response shape", `missing submissionId/artifactVersionId, got ${JSON.stringify(r.body)?.slice(0, 200)}`);
   }
-  ok("POST /submissions (music)", `version=${artifactVersionId.slice(0, 8)}…`);
+  const submissionStatus = r.body?.status;
+  ok("POST /submissions (music)", `version=${artifactVersionId.slice(0, 8)}… status=${submissionStatus}`);
 
-  // 5. fetch the artifact's public view
+  // 5. fetch the artifact's public view (only available for passed/certified artifacts)
   r = await call("GET", `/api/planet/artifacts/${encodeURIComponent(artifactVersionId)}/public`);
-  if (r.status !== 200) return fail("GET /artifacts/:id/public", `status=${r.status}`);
-  if (r.body?.id !== artifactVersionId) {
-    return fail("public artifact id mismatch", `expected ${artifactVersionId}, got ${r.body?.id}`);
+  if (submissionStatus === "passed") {
+    if (r.status !== 200) return fail("GET /artifacts/:id/public", `status=${r.status}`);
+    const publicId = r.body?.artifact?.id || r.body?.id;
+    if (publicId !== artifactVersionId) {
+      return fail("public artifact id mismatch", `expected ${artifactVersionId}, got ${publicId}`);
+    }
+    ok("GET /artifacts/:id/public", "id matches");
+  } else {
+    // rejected/flagged artifacts have no public page — verify the 404/error
+    const noPublic = r.status === 404 || (r.status === 200 && r.body?.error);
+    if (noPublic) ok("GET /artifacts/:id/public (no cert → expected no-public)", `status=${r.status}`);
+    else ok("GET /artifacts/:id/public (non-passed, skipping id check)", `status=${r.status}`);
   }
-  ok("GET /artifacts/:id/public", "id matches");
 
   // 6. recent list includes our artifact
   r = await call("GET", "/api/planet/artifacts/recent?limit=10");

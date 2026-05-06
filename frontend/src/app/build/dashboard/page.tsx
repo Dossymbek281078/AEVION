@@ -96,6 +96,8 @@ function Body() {
 
       {items && <TodayDigestTile items={items} />}
 
+      <WhatsNewTile />
+
       <SavedSearchAlerts />
 
       {items && <ClosingSoonBanner items={items} onChanged={() => {
@@ -378,6 +380,78 @@ function SourceBreakdownChart() {
             </li>
           );
         })}
+      </ul>
+    </div>
+  );
+}
+
+function WhatsNewTile() {
+  // Mirror of the most-recent /build/changelog entries — kept as a static
+  // 3-item slice here so the dashboard never has to fetch the page.
+  const NEW: { date: string; title: string; tag: string }[] = [
+    { date: "2026-05-06", tag: "feature", title: "Boost ROI tile + 🔥 Hot vacancies + duplicate-vacancy guard" },
+    { date: "2026-05-06", tag: "feature", title: "Recruiter Today digest tile" },
+    { date: "2026-05-05", tag: "feature", title: "Bulk vacancy import + edit history + republish" },
+  ];
+  const [dismissed, setDismissed] = useState(false);
+  const KEY = "qbuild.whatsNew.dismissedUntil.v1";
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw && Number(raw) > Date.now()) setDismissed(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  if (dismissed) return null;
+
+  function dismiss() {
+    try {
+      localStorage.setItem(KEY, String(Date.now() + 7 * 86400_000));
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-sky-400/30 bg-gradient-to-br from-sky-500/10 via-sky-400/5 to-transparent p-4 text-sm">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-sky-100">✨ What's new</div>
+          <div className="text-[11px] text-sky-200/70">Latest 3 updates on QBuild</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/build/changelog"
+            className="rounded-md border border-sky-400/40 bg-sky-400/15 px-2.5 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-400/25"
+          >
+            See all →
+          </Link>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="text-[10px] text-sky-200/60 hover:text-sky-100"
+            title="Hide for 7 days"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+      <ul className="space-y-1.5">
+        {NEW.map((e, i) => (
+          <li key={i} className="flex items-baseline gap-2 text-xs">
+            <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-1.5 py-0 text-[9px] uppercase tracking-wider text-sky-200">
+              {e.tag}
+            </span>
+            <span className="text-slate-200">{e.title}</span>
+            <span className="ml-auto text-[10px] text-slate-500">
+              {new Date(e.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            </span>
+          </li>
+        ))}
       </ul>
     </div>
   );

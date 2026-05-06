@@ -20,6 +20,8 @@ const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build/messages", label: "Messages", authOnly: true },
   { href: "/build/pricing", label: "Pricing" },
   { href: "/build/loyalty", label: "Loyalty" },
+  { href: "/build/salary", label: "💰 Зарплаты" },
+  { href: "/build/ai-match", label: "🤖 AI Match", authOnly: true },
   { href: "/build/why-aevion", label: "Why us" },
 ];
 

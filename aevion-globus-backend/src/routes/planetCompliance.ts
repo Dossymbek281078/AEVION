@@ -79,6 +79,8 @@ async function ensurePlanetTables() {
       "certificateId" TEXT,
       "validatorResultsJson" JSONB,
       "codeIndexJson" JSONB,
+      "mediaIndexJson" JSONB,
+      "parentVersionId" TEXT,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
@@ -740,6 +742,7 @@ planetComplianceRouter.get("/stats", async (req, res) => {
 });
 
 planetComplianceRouter.post("/submissions", async (req, res) => {
+  try {
   await ensurePlanetTables();
 
   const payload = req.body || {};
@@ -1308,6 +1311,11 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
     validators: validatorResults,
     certificate,
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    const msg = err?.message || "submission_failed";
+    return res.status(500).json({ error: "submission_failed", details: msg });
+  }
 });
 
 planetComplianceRouter.post("/submissions/:submissionId/resubmit", async (req, res) => {

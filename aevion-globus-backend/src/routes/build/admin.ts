@@ -82,6 +82,41 @@ adminRouter.post("/partner-keys", async (req, res) => {
   }
 });
 
+// GET /api/build/admin/partner-keys/usage — last-14d daily hits per key.
+// Returns { items: [{ keyId, label, days: [{ day, hits }] }], windowDays }
+adminRouter.get("/partner-keys/usage", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const days = 14;
+    const r = await pool.query(
+      `SELECT k."id" AS "keyId", k."label", h."day"::text AS "day", h."hits"
+       FROM "BuildPartnerApiKey" k
+       LEFT JOIN "BuildPartnerApiKeyHit" h
+         ON h."keyId" = k."id" AND h."day" >= CURRENT_DATE - ($1::int - 1)
+       WHERE k."revokedAt" IS NULL
+       ORDER BY k."createdAt" DESC, h."day" ASC`,
+      [days],
+    );
+
+    type Bucket = { keyId: string; label: string; days: { day: string; hits: number }[] };
+    const byKey = new Map<string, Bucket>();
+    for (const row of r.rows) {
+      const existing = byKey.get(row.keyId);
+      const k: Bucket = existing ?? { keyId: row.keyId, label: row.label, days: [] };
+      if (row.day && row.hits != null) {
+        k.days.push({ day: String(row.day), hits: Number(row.hits) });
+      }
+      byKey.set(row.keyId, k);
+    }
+    return ok(res, { items: Array.from(byKey.values()), windowDays: days });
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_keys_usage_failed", { details: (err as Error).message });
+  }
+});
+
 // POST /api/build/admin/partner-keys/:id/revoke — revoke a key (idempotent).
 adminRouter.post("/partner-keys/:id/revoke", async (req, res) => {
   try {

@@ -62,6 +62,14 @@ async function requirePartnerKey(req: Request, res: Response, next: NextFunction
         [r.rows[0].id],
       )
       .catch(() => {});
+    void pool
+      .query(
+        `INSERT INTO "BuildPartnerApiKeyHit" ("keyId","day","hits")
+         VALUES ($1, CURRENT_DATE, 1)
+         ON CONFLICT ("keyId","day") DO UPDATE SET "hits" = "BuildPartnerApiKeyHit"."hits" + 1`,
+        [r.rows[0].id],
+      )
+      .catch(() => {});
     return next();
   } catch (err: unknown) {
     return fail(res, 500, "key_check_failed", { details: (err as Error).message });

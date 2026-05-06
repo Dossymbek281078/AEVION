@@ -8,6 +8,7 @@ import { useBuildAuth } from "@/lib/build/auth";
 import { useToast } from "@/components/build/Toast";
 
 type Key = Awaited<ReturnType<typeof buildApi.adminListPartnerKeys>>["items"][number];
+type UsageItem = Awaited<ReturnType<typeof buildApi.adminPartnerKeysUsage>>["items"][number];
 
 export default function PartnerKeysPage() {
   return (
@@ -23,6 +24,8 @@ function Body() {
   const user = useBuildAuth((s) => s.user);
   const toast = useToast();
   const [items, setItems] = useState<Key[] | null>(null);
+  const [usage, setUsage] = useState<Map<string, UsageItem> | null>(null);
+  const [windowDays, setWindowDays] = useState(14);
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [creating, setCreating] = useState(false);
@@ -30,8 +33,15 @@ function Body() {
 
   async function load() {
     try {
-      const r = await buildApi.adminListPartnerKeys();
-      setItems(r.items);
+      const [keys, u] = await Promise.all([
+        buildApi.adminListPartnerKeys(),
+        buildApi.adminPartnerKeysUsage().catch(() => null),
+      ]);
+      setItems(keys.items);
+      if (u) {
+        setWindowDays(u.windowDays);
+        setUsage(new Map(u.items.map((it) => [it.keyId, it])));
+      }
     } catch (e) {
       setError((e as Error).message);
     }
@@ -174,6 +184,7 @@ function Body() {
             <thead className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">Label</th>
+                <th className="px-3 py-2 text-left font-semibold">Last {windowDays}d</th>
                 <th className="px-3 py-2 text-right font-semibold">Calls</th>
                 <th className="px-3 py-2 text-right font-semibold">Last used</th>
                 <th className="px-3 py-2 text-right font-semibold">Status</th>
@@ -186,6 +197,9 @@ function Body() {
                   <td className="px-3 py-2">
                     <div className="text-slate-200">{k.label}</div>
                     <div className="font-mono text-[10px] text-slate-500">id: {k.id.slice(0, 8)}…</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <UsageSparkline days={usage?.get(k.id)?.days || []} window={windowDays} />
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{k.usageCount}</td>
                   <td className="px-3 py-2 text-right text-[11px] text-slate-400">
@@ -219,5 +233,68 @@ function Body() {
         </div>
       )}
     </section>
+  );
+}
+
+function UsageSparkline({ days, window }: { days: { day: string; hits: number }[]; window: number }) {
+  // Build a complete N-day series anchored to today, filling missing days with 0.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const map = new Map(days.map((d) => [d.day, d.hits]));
+  const series: { day: string; hits: number }[] = [];
+  for (let i = window - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 86400_000);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    series.push({ day: key, hits: Number(map.get(key) ?? 0) });
+  }
+
+  const max = Math.max(1, ...series.map((p) => p.hits));
+  const total = series.reduce((s, p) => s + p.hits, 0);
+
+  if (total === 0) {
+    return <div className="text-[10px] text-slate-600">no traffic</div>;
+  }
+
+  const W = 110;
+  const H = 24;
+  const dx = series.length > 1 ? W / (series.length - 1) : W;
+  const points = series.map((p, i) => {
+    const x = i * dx;
+    const y = H - (p.hits / max) * (H - 2) - 1;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  return (
+    <div className="flex items-center gap-2">
+      <svg
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        className="overflow-visible"
+        role="img"
+        aria-label={`Daily hits over the last ${window} days, total ${total}`}
+      >
+        <polyline
+          fill="none"
+          stroke="#34d399"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          points={points.join(" ")}
+        />
+        {series.map((p, i) => (
+          <circle
+            key={p.day}
+            cx={i * dx}
+            cy={H - (p.hits / max) * (H - 2) - 1}
+            r={p.hits > 0 ? 1.5 : 0}
+            fill="#34d399"
+          >
+            <title>{`${p.day}: ${p.hits} hit${p.hits === 1 ? "" : "s"}`}</title>
+          </circle>
+        ))}
+      </svg>
+      <span className="tabular-nums text-[10px] text-slate-500">Σ {total}</span>
+    </div>
   );
 }

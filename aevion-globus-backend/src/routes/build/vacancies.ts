@@ -910,6 +910,102 @@ vacanciesRouter.get("/:id/boost-roi", async (req, res) => {
 // GET /api/build/vacancies/:id/timeline — owner-only chronological feed of
 // vacancy events. No new table; we union 4 existing sources (vacancy itself,
 // applications, boosts, hire orders) and sort by ts desc. Cap 80 events.
+// GET /api/build/vacancies/:id/notes — owner-only private team notes.
+vacanciesRouter.get("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_owner");
+    }
+
+    const r = await pool.query(
+      `SELECT n."id", n."authorUserId", n."body", n."createdAt", u."name" AS "authorName"
+       FROM "BuildVacancyNote" n
+       LEFT JOIN "AEVIONUser" u ON u."id" = n."authorUserId"
+       WHERE n."vacancyId" = $1
+       ORDER BY n."createdAt" DESC LIMIT 100`,
+      [id],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_notes_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/notes — owner adds a private team note.
+vacanciesRouter.post("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const body = vString(req.body?.body, "body", { min: 1, max: 4000 });
+    if (!body.ok) return fail(res, 400, body.error);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_owner");
+    }
+
+    const noteId = `vnote_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const r = await pool.query(
+      `INSERT INTO "BuildVacancyNote" ("id","vacancyId","authorUserId","body")
+       VALUES ($1,$2,$3,$4)
+       RETURNING "id","vacancyId","authorUserId","body","createdAt"`,
+      [noteId, id, auth.sub, body.value],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_note_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/vacancies/:id/notes/:noteId — owner deletes a team note.
+vacanciesRouter.delete("/:id/notes/:noteId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const noteId = String(req.params.noteId);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_owner");
+    }
+
+    const r = await pool.query(
+      `DELETE FROM "BuildVacancyNote" WHERE "id" = $1 AND "vacancyId" = $2 RETURNING "id"`,
+      [noteId, id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "note_not_found");
+    return ok(res, { id: r.rows[0].id, deleted: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_note_delete_failed", { details: (err as Error).message });
+  }
+});
+
 vacanciesRouter.get("/:id/timeline", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);

@@ -322,6 +322,34 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildBulkTemplate_owner_idx" ON "BuildBulkTemplate" ("ownerUserId", "createdAt" DESC);`);
 
+  // BuildPartnerApiKeyHit: daily-aggregated usage per partner key for the
+  // 14-day sparkline on /build/admin/partner-keys. We don't keep per-request
+  // log rows — the table grows at 1 row per (key, day) max.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPartnerApiKeyHit" (
+      "keyId" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "hits" INT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("keyId", "day")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPartnerApiKeyHit_day_idx" ON "BuildPartnerApiKeyHit" ("day" DESC);`);
+
+  // BuildVacancyNote: private team-side notes attached to a vacancy.
+  // Distinct from BuildApplicationNote (per-applicant) — these are about the
+  // role itself ("budget approved up to 5M", "client wants Russian-speakers
+  // only", etc). Visible only to the vacancy owner.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVacancyNote" (
+      "id" TEXT PRIMARY KEY,
+      "vacancyId" TEXT NOT NULL,
+      "authorUserId" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyNote_vacancy_idx" ON "BuildVacancyNote" ("vacancyId", "createdAt" DESC);`);
+
   // BuildNotifPrefs: per-user opt-in/out for QBuild emails.
   // jobAlerts — new vacancy alerts for talent (also gated by BuildJobAlert.active).
   // applicationEmail — recruiter-side: notify on new application to my vacancies.

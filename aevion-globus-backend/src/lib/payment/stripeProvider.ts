@@ -33,6 +33,22 @@ import {
   PaymentStatus,
 } from "./provider";
 
+// Stripe SDK exports `Stripe` as both a class and a namespace with types.
+// Some TS resolutions (notably stricter Railway builds) reject using
+// `Stripe` as a value-type alias, so we capture the class instance type
+// and re-declare the slim shape we actually consume.
+type StripeInstance = InstanceType<typeof Stripe>;
+
+interface MinimalPaymentIntent {
+  id: string;
+  status: string | null;
+  amount: number;
+  currency: string;
+  created: number;
+  metadata?: Record<string, string> | null;
+  last_payment_error?: { message?: string } | null;
+}
+
 function need(envKey: string): string {
   const v = process.env[envKey];
   if (!v || v.trim().length === 0) {
@@ -43,11 +59,13 @@ function need(envKey: string): string {
   return v;
 }
 
-let _stripe: Stripe | null = null;
-function getStripe(): Stripe {
+let _stripe: StripeInstance | null = null;
+function getStripe(): StripeInstance {
   if (_stripe) return _stripe;
   const apiKey = need("STRIPE_SECRET_KEY");
-  _stripe = new Stripe(apiKey, { apiVersion: "2025-04-30.basil" as Stripe.LatestApiVersion });
+  // apiVersion cast widened to string to avoid `Stripe.LatestApiVersion`
+  // namespace lookup (TS2694 on some resolutions).
+  _stripe = new Stripe(apiKey, { apiVersion: "2025-04-30.basil" } as ConstructorParameters<typeof Stripe>[1]);
   return _stripe;
 }
 
@@ -171,7 +189,7 @@ export const stripePaymentProvider: PaymentProvider = {
       throw new Error(`unhandled stripe event type: ${event.type}`);
     }
 
-    const pi = event.data.object as Stripe.PaymentIntent;
+    const pi = event.data.object as MinimalPaymentIntent;
     const bureauIntentId = (pi.metadata && pi.metadata[META_BUREAU_INTENT_ID]) || "";
     if (!bureauIntentId) {
       throw new Error(`stripe event ${event.id}: missing metadata.${META_BUREAU_INTENT_ID}`);

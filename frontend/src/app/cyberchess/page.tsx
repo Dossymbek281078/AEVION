@@ -2097,13 +2097,9 @@ export default function CyberChessPage(){
   // Premove cancel flash: красный pulse на FROM-клетке отменённого премува (~600ms).
   const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
   useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
-  useEffect(()=>{
-    // Animation disabled — pieces snap to new positions instantly. User wanted
-    // no "flying" pieces. AI moves теперь просто appear на dest cell без slide.
-    if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
-    skipNextAnimRef.current=false;
-    return;
-  },[bk,lm]);
+  // Animation effect removed — pieces snap to new positions instantly via
+  // React render. User wanted no "flying" pieces.
+  useEffect(()=>{ skipNextAnimRef.current=false; },[bk]);
   // После mount floating piece — trigger transition через рефлоу, чтобы
   // initial transform (from→to negative offset) уехал в 0,0.
   useEffect(()=>{

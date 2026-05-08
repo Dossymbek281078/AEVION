@@ -27,12 +27,8 @@ import { verificationRouter } from "./build/verification";
 import { publicRouter } from "./build/public";
 import { settingsRouter } from "./build/settings";
 import { salaryStatsRouter } from "./build/salary-stats";
-import { availabilityRouter } from "./build/availability";
-import { storiesRouter } from "./build/stories";
-import { shiftsRouter } from "./build/shifts";
-import { teamHiringRouter } from "./build/team-hiring";
-import { communitiesRouter } from "./build/communities";
-import { videoRoomsRouter } from "./build/video-rooms";
+import { interviewsRouter } from "./build/interviews";
+import { skillBadgesRouter } from "./build/skill-badges";
 
 export const buildRouter = Router();
 
@@ -40,7 +36,9 @@ const globalLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: t
 const messageLimiter = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "message_rate_limit_exceeded" } });
 const leadsLimiter = rateLimit({ windowMs: 60_000, max: 5, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "leads_rate_limit_exceeded" } });
 const applyLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "apply_rate_limit_exceeded" } });
+// communityMsgLimiter available for future use
 const communityMsgLimiter = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "community_rate_limit_exceeded" } });
+void communityMsgLimiter;
 
 buildRouter.use(async (_req, res, next) => {
   try {
@@ -77,34 +75,11 @@ buildRouter.use("/leads", leadsRouter);
 buildRouter.use("/health", healthRouter);
 buildRouter.use("/alerts", alertsRouter);
 buildRouter.use("/verification", verificationRouter);
-// Public partner-facing read-only API. Mounted under /api/build/public/* so
-// /v1/vacancies resolves at /api/build/public/v1/vacancies. Auth is the
-// X-Build-Key header validated inside the public router.
 buildRouter.use("/public", publicRouter);
 buildRouter.use("/settings", settingsRouter);
-// Public salary intelligence (no auth, uses BuildProfile + BuildVacancy
-// existing tables). The /build/salary frontend page (#139) was hitting
-// 404 because this router was authored but never mounted.
+// Public salary intelligence
 buildRouter.use("/salary-stats", salaryStatsRouter);
-// Worker "available now" badge — toggle + list. Schema adds two columns
-// to BuildProfile (availableNow, availableUntil) in lib/build/index.ts.
-buildRouter.use("/availability", availabilityRouter);
-// Site stories — workers post text + media from the job site. New tables
-// BuildStory + BuildStoryLike declared in lib/build/index.ts.
-buildRouter.use("/stories", storiesRouter);
-// Shifts — recruiter schedules a work day for an accepted application;
-// worker checks in / out. New BuildShift table declared in lib/build/index.ts.
-buildRouter.use("/shifts", shiftsRouter);
-// Team / brigade hiring — multi-role requests with role-targeted apply.
-// New tables BuildTeamRequest + BuildTeamApplication.
-buildRouter.use("/team-requests", teamHiringRouter);
-// Communities — topical chat rooms (welders/electricians/etc). Router
-// self-seeds 8 default rooms on first GET. New tables BuildCommunity*.
-// Rate-limit only the message-post endpoint, not reads — same shape as
-// /applications above.
-buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
-buildRouter.use("/communities", communitiesRouter);
-// Video rooms — Daily.co-backed call rooms. Mounted under /video/rooms
-// to match the /build/video frontend page's URL convention. New table
-// BuildVideoRoom in lib/build/index.ts.
-buildRouter.use("/video/rooms", videoRoomsRouter);
+// Interview scheduling
+buildRouter.use("/interviews", interviewsRouter);
+// Skill tests + badges (also handles /skill-tests/* + /skill-badges/*)
+buildRouter.use("/", skillBadgesRouter);

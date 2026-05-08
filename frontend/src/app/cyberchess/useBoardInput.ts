@@ -402,58 +402,41 @@ export function useBoardInput(opts: BoardInputOptions) {
     node.style.transform = `translate3d(${x}px,${y + dy}px,0)`;
   }, []);
 
-  // Imperative hover halo — same idea as ghost. setDragHover() during drag
-  // would re-render the whole 8000-line page on every cell crossing.
-  const haloNodeRef = useRef<HTMLDivElement | null>(null);
-
-  const ensureHaloNode = useCallback((): HTMLDivElement => {
-    if (haloNodeRef.current) return haloNodeRef.current;
-    const node = document.createElement("div");
-    node.id = "cc-drag-halo";
-    node.style.cssText = [
-      "position:fixed", "left:0", "top:0",
-      "pointer-events:none", "z-index:99998",
-      "will-change:transform",
-      "border-radius:50%", "box-sizing:border-box",
-      "transform:translate3d(-9999px,-9999px,0)",
-    ].join(";");
-    document.body.appendChild(node);
-    haloNodeRef.current = node;
-    return node;
-  }, []);
+  // Cell-bg drag highlight — DIRECTLY tints target cell's background.
+  // Previously used a halo node with box-shadow blur which was paint-expensive
+  // and felt laggy. Now: just toggle cell.style.background on cursor move
+  // between cells. Instant DOM mutation, no paint cost beyond color change.
+  const lastHaloCellRef = useRef<HTMLElement | null>(null);
+  const lastHaloOriginalBgRef = useRef<string>("");
 
   const positionHalo = useCallback((sq: Square | null) => {
-    if (!sq) {
-      const n = haloNodeRef.current;
-      if (n) n.style.transform = "translate3d(-9999px,-9999px,0)";
-      return;
+    // Restore previous cell's bg
+    const prev = lastHaloCellRef.current;
+    if (prev) {
+      prev.style.background = lastHaloOriginalBgRef.current;
+      lastHaloCellRef.current = null;
+      lastHaloOriginalBgRef.current = "";
     }
-    const o = optsRef.current;
-    const boardEl = boardRef.current;
-    if (!boardEl) return;
-    const rect = boardEl.getBoundingClientRect();
-    const cw = rect.width / 8;
-    const f = FILES.indexOf(sq[0] as any);
-    const r = 8 - parseInt(sq[1]);
-    const c = o.flip ? 7 - f : f;
-    const rr = o.flip ? 7 - r : r;
-    const cx = rect.left + c * cw + cw / 2;
-    const cy = rect.top + rr * cw + cw / 2;
-    const isLegal = o.vmRef.current.has(sq);
-    const col = isLegal ? "#10b981" : "#94a3b8";
-    const node = ensureHaloNode();
-    node.style.width = `${cw * 0.94}px`;
-    node.style.height = `${cw * 0.94}px`;
-    node.style.border = `3px solid ${col}`;
-    node.style.boxShadow = `0 0 18px ${col}55, inset 0 0 14px ${col}33`;
-    node.style.transform = `translate3d(${cx}px,${cy}px,0) translate(-50%,-50%) scale(0.92)`;
-  }, [ensureHaloNode]);
+    if (!sq || typeof document === "undefined") return;
+    const cell = document.querySelector(`[data-sq="${sq}"]`) as HTMLElement | null;
+    if (!cell) return;
+    lastHaloCellRef.current = cell;
+    lastHaloOriginalBgRef.current = cell.style.background;
+    const isLegal = optsRef.current.vmRef.current.has(sq);
+    // Bright tint — legal: green, illegal: gray. Solid bg = instant visual.
+    cell.style.background = isLegal ? "rgba(16,185,129,0.45)" : "rgba(148,163,184,0.35)";
+  }, []);
 
   const hideGhost = useCallback(() => {
     const node = ghostNodeRef.current;
     if (node) { node.remove(); ghostNodeRef.current = null; }
-    const halo = haloNodeRef.current;
-    if (halo) { halo.remove(); haloNodeRef.current = null; }
+    // Restore previous cell-bg highlight if any
+    const prev = lastHaloCellRef.current;
+    if (prev) {
+      prev.style.background = lastHaloOriginalBgRef.current;
+      lastHaloCellRef.current = null;
+      lastHaloOriginalBgRef.current = "";
+    }
     // Restore any imperatively-hidden source piece (data-ghost-hidden marker)
     if (typeof document !== "undefined") {
       const hidden = document.querySelectorAll('[data-ghost-hidden="1"]');
@@ -469,11 +452,14 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (typeof document !== "undefined") document.body.style.cursor = "";
   }, []);
 
-  // Cleanup on unmount — orphaned ghost/halo would otherwise stay in DOM forever.
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (ghostNodeRef.current) { ghostNodeRef.current.remove(); ghostNodeRef.current = null; }
-      if (haloNodeRef.current) { haloNodeRef.current.remove(); haloNodeRef.current = null; }
+      if (lastHaloCellRef.current) {
+        lastHaloCellRef.current.style.background = lastHaloOriginalBgRef.current;
+        lastHaloCellRef.current = null;
+      }
     };
   }, []);
 

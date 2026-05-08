@@ -61,7 +61,8 @@
       "Bash(npm pack *)",
       "PowerShell(ffprobe *)",
       "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"interviews\"} | Out-String; Write-Host \"DONE\")",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"skill-badges|interviews|build.ts\"} | Out-String; Write-Host \"DONE\")"
     ]
   }
 }

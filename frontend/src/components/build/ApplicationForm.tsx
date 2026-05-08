@@ -34,8 +34,8 @@ export function ApplicationForm({
     try {
       const r = await buildApi.aiCoverLetter({ vacancyId, locale: "ru" });
       setMessage(r.coverLetter);
-      if (r.skillsOverlap.length > 0) {
-        toast.success(`Drafted with skill match: ${r.skillsOverlap.slice(0, 3).join(", ")}`);
+      if ((r.skillsOverlap || []).length > 0) {
+        toast.success(`Drafted with skill match: ${(r.skillsOverlap || []).slice(0, 3).join(", ")}`);
       } else {
         toast.info("Draft ready — review and tweak before sending.");
       }

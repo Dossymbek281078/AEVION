@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
@@ -14,7 +14,7 @@ const STATUS_FILTERS: (VacancyStatus | "ALL")[] = ["ALL", "OPEN", "CLOSED"];
 
 type FeedVacancy = BuildVacancy & { projectCity?: string | null };
 
-export default function VacanciesFeedPage() {
+function VacanciesFeedInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<FeedVacancy[]>([]);
@@ -492,5 +492,14 @@ function SavedSearches({
         </button>
       )}
     </div>
+  );
+}
+
+
+export default function VacanciesFeedPage() {
+  return (
+    <Suspense fallback={<BuildShell><VacancySkeleton /></BuildShell>}>
+      <VacanciesFeedInner />
+    </Suspense>
   );
 }

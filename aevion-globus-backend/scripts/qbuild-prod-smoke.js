@@ -206,15 +206,12 @@ async function runRecruiterFlow() {
   if (r.status === 200 && payload(r.body)?.items?.length >= 1) ok("owner sees application");
   else fail("owner sees application", `status=${r.status}`);
 
-  // Label endpoint ships in the polish layer (PR #124). Soft-check until merged.
   r = await call("PATCH", `/api/build/applications/${appId}/label`, {
     token: client.token,
     body: { labelKey: "INTERVIEW" },
   });
   if (r.status === 200 || r.status === 204) ok("set INTERVIEW label");
-  else if (r.status === 404) {
-    console.log(`  ${String(++step).padStart(2, "0")}  INFO  set INTERVIEW label not deployed yet (404)`);
-  } else fail("set INTERVIEW label", `status=${r.status} body=${JSON.stringify(r.body)?.slice(0, 200)}`);
+  else fail("set INTERVIEW label", `status=${r.status} body=${JSON.stringify(r.body)?.slice(0, 200)}`);
 
   r = await call("PATCH", `/api/build/applications/${appId}`, {
     token: client.token,
@@ -229,30 +226,19 @@ async function runRecruiterFlow() {
 async function runStatsAndPipeline(client) {
   console.log(`\n[Stats + Pipeline]`);
 
-  // Some endpoints below ship in the polish PR (PR #124) and may not exist on
-  // production yet. Tolerate 404 — log as INFO but don't fail the run.
-  async function softCheck(name, fn) {
-    const r = await fn();
-    if (r.status === 200) {
-      ok(name, fmtMs(r.durMs));
-    } else if (r.status === 404) {
-      console.log(`  ${String(++step).padStart(2, "0")}  INFO  ${name} not deployed yet (404)`);
-    } else {
-      fail(name, `status=${r.status}`);
-    }
-  }
+  let r = await call("GET", "/api/build/stats/weekly", { token: client.token });
+  if (r.status === 200) ok("/stats/weekly recruiter", fmtMs(r.durMs));
+  else fail("/stats/weekly recruiter", `status=${r.status}`);
 
-  await softCheck("/stats/weekly recruiter", () =>
-    call("GET", "/api/build/stats/weekly", { token: client.token }),
-  );
-  await softCheck("/applications/mine/pipeline", () =>
-    call("GET", "/api/build/applications/mine/pipeline", { token: client.token }),
-  );
-  await softCheck("/applications/mine/interviews", () =>
-    call("GET", "/api/build/applications/mine/interviews", { token: client.token }),
-  );
+  r = await call("GET", "/api/build/applications/mine/pipeline", { token: client.token });
+  if (r.status === 200) ok("/applications/mine/pipeline", fmtMs(r.durMs));
+  else fail("/applications/mine/pipeline", `status=${r.status}`);
 
-  let r = await call("GET", "/api/build/stats/leaderboard");
+  r = await call("GET", "/api/build/applications/mine/interviews", { token: client.token });
+  if (r.status === 200) ok("/applications/mine/interviews", fmtMs(r.durMs));
+  else fail("/applications/mine/interviews", `status=${r.status}`);
+
+  r = await call("GET", "/api/build/stats/leaderboard");
   if (r.status === 200) ok("/stats/leaderboard public");
   else fail("/stats/leaderboard public", `status=${r.status}`);
 }
@@ -261,12 +247,8 @@ async function runFeeds() {
   console.log(`\n[Feeds & RSS]`);
 
   let r = await call("GET", "/api/build/public/rss/vacancies.xml", { accept: "application/rss+xml" });
-  if (r.status === 200 || r.status === 404) {
-    if (r.status === 200) ok("/public/rss/vacancies.xml");
-    else console.log(`  ${String(++step).padStart(2, "0")}  INFO  RSS feed not deployed yet (404)`);
-  } else {
-    fail("/public/rss/vacancies.xml", `status=${r.status}`);
-  }
+  if (r.status === 200) ok("/public/rss/vacancies.xml");
+  else fail("/public/rss/vacancies.xml", `status=${r.status}`);
 
   r = await call("GET", "/sitemap.xml");
   if (r.status === 200) ok("/sitemap.xml reachable");

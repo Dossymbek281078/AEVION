@@ -116,6 +116,11 @@ async function runPublic() {
   if (r.status === 200) ok("/availability/workers public", fmtMs(r.durMs));
   else fail("/availability/workers public", `status=${r.status}`);
 
+  // Stories — public feed.
+  r = await call("GET", "/api/build/stories?limit=5");
+  if (r.status === 200) ok("/stories public feed", fmtMs(r.durMs));
+  else fail("/stories public feed", `status=${r.status}`);
+
   r = await call("GET", "/api/build/stats");
   if (r.status === 200 && payload(r.body)?.vacancies != null) {
     const p = payload(r.body);
@@ -286,6 +291,26 @@ async function runEngagement(client, worker, vacancyId, appId) {
   r = await call("GET", "/api/build/availability/me", { token: worker.token });
   if (r.status === 200) ok("worker availability self-check");
   else fail("worker availability self-check", `status=${r.status}`);
+
+  // Worker creates a job-site story; client likes it.
+  r = await call("POST", "/api/build/stories", {
+    token: worker.token,
+    body: { content: `Smoke test story ${Date.now()} — site progress photo.` },
+  });
+  const storyId = payload(r.body)?.id;
+  if ((r.status === 200 || r.status === 201) && storyId) ok("worker create story", `id=${storyId.slice(0, 8)}`);
+  else fail("worker create story", `status=${r.status}`);
+
+  if (storyId) {
+    r = await call("POST", `/api/build/stories/${storyId}/like`, { token: client.token });
+    if (r.status === 200 && payload(r.body)?.liked === true) ok("client like story");
+    else fail("client like story", `status=${r.status}`);
+
+    // Cleanup: author deletes their story (cascades to like).
+    r = await call("DELETE", `/api/build/stories/${storyId}`, { token: worker.token });
+    if (r.status === 200) ok("author delete story");
+    else fail("author delete story", `status=${r.status}`);
+  }
 }
 
 async function runStatsAndPipeline(client) {

@@ -152,6 +152,33 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availableUntil" TIMESTAMPTZ;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProfile_availableNow_idx" ON "BuildProfile" ("availableNow", "availableUntil") WHERE "availableNow" = TRUE;`);
 
+  // Site stories: short text + optional image/video posted by workers
+  // from the job-site. Public feed at /api/build/stories backs the
+  // /build/stories page. Like-counter is denormalised on BuildStory and
+  // kept in sync via BuildStoryLike toggle UPDATEs in the route handler.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildStory" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "projectId" TEXT,
+      "content" TEXT NOT NULL,
+      "mediaUrl" TEXT,
+      "mediaType" TEXT,
+      "likeCount" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildStory_user_created_idx" ON "BuildStory" ("userId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildStory_created_idx" ON "BuildStory" ("createdAt" DESC);`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildStoryLike" (
+      "storyId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("storyId", "userId")
+    );
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

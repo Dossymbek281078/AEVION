@@ -50,9 +50,8 @@ function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): 
     const have = new Set(pass1.map(m => m.to));
 
     // Pass 2 — RESCUE: own-piece squares that FROM ATTACKS (= can land on if
-    // opponent captures the own piece first). Use chess.js attackers() which is
-    // O(1) per square, instead of per-square board rebuilds. Massively faster
-    // mid-game when the user has many own pieces still on the board.
+    // opponent captures the own piece first). Pawn forward squares to OWN piece
+    // are added in Pass 3 (pawns don't "attack" forward).
     const board = g.board();
     const fromTypeUpper = piece.type === "p" ? "" : piece.type.toUpperCase();
     for (let r = 0; r < 8; r++) {
@@ -64,13 +63,54 @@ function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): 
         let attackers: Square[] = [];
         try { attackers = g.attackers(sq, pCol); } catch {}
         if (attackers.indexOf(from) === -1) continue;
-        // Synthesize a verbose-shaped move record. It only needs `to` for our
-        // matched.find(m=>m.to===sq) consumer, but we shape the rest minimally.
         pass1.push({
           color: pCol, from, to: sq, piece: piece.type,
           flags: "c", san: `${fromTypeUpper}x${sq}`,
         });
         have.add(sq);
+      }
+    }
+
+    // Pass 3 — PAWN-SPECIFIC: chess.js requires existing enemy piece for pawn
+    // diagonal captures, and existing empty square for forward pushes. For
+    // premoves we are speculative — opponent might:
+    //   • move a piece TO our pawn's diagonal (we'd capture it then)
+    //   • move a piece AWAY from our pawn's forward push (path clears)
+    //   • capture our own piece on the forward push square (path clears)
+    // Add ALL pseudo-legal pawn squares regardless of current contents.
+    if (piece.type === "p") {
+      const fileIdx = FILES.indexOf(from[0] as any);
+      const rank = parseInt(from[1], 10);
+      const dir = pCol === "w" ? 1 : -1;
+      const startRank = pCol === "w" ? 2 : 7;
+      const fwd1 = rank + dir;
+      const fwd2 = rank + 2 * dir;
+      // Forward 1 (any contents — opponent might clear it)
+      if (fwd1 >= 1 && fwd1 <= 8) {
+        const sq = `${FILES[fileIdx]}${fwd1}` as Square;
+        if (!have.has(sq)) {
+          pass1.push({ color: pCol, from, to: sq, piece: "p", flags: "n", san: sq });
+          have.add(sq);
+        }
+      }
+      // Forward 2 (only from starting rank, any contents)
+      if (rank === startRank && fwd2 >= 1 && fwd2 <= 8) {
+        const sq = `${FILES[fileIdx]}${fwd2}` as Square;
+        if (!have.has(sq)) {
+          pass1.push({ color: pCol, from, to: sq, piece: "p", flags: "b", san: sq });
+          have.add(sq);
+        }
+      }
+      // Diagonals (any contents — empty/own/enemy. Empty becomes legal if opp moves there)
+      for (const df of [-1, 1]) {
+        const newFileIdx = fileIdx + df;
+        if (newFileIdx < 0 || newFileIdx > 7) continue;
+        if (fwd1 < 1 || fwd1 > 8) continue;
+        const sq = `${FILES[newFileIdx]}${fwd1}` as Square;
+        if (!have.has(sq)) {
+          pass1.push({ color: pCol, from, to: sq, piece: "p", flags: "c", san: `${from[0]}x${sq}` });
+          have.add(sq);
+        }
       }
     }
     return pass1;
@@ -267,15 +307,16 @@ export function useBoardInput(opts: BoardInputOptions) {
       const srcPieceEl = findSourcePieceEl(from);
       if (srcPieceEl) {
         const clone = srcPieceEl.cloneNode(true) as HTMLElement;
-        // Initial state — exact size of source piece. Animation runs on next
-        // frame to scale UP to 1.22, creating a visible "lift" effect.
+        // Pickup animation: stage 1 (initial) — slightly compressed, 0.9 opacity.
+        // Stage 2 (after reflow): scale up with overshoot bounce. Effect:
+        // фигура "хватается" — слегка сжимается, потом упруго растёт.
         clone.style.cssText = [
           "width:100%", "height:100%",
-          "transform:scale(1.0)",
+          "transform:scale(0.95)",
           "transform-origin:center center",
-          "opacity:0.85",
+          "opacity:0.9",
           "filter:none",
-          "transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1), opacity 80ms ease-out",
+          "transition:transform 110ms cubic-bezier(0.34,1.56,0.64,1), opacity 60ms ease-out",
           "animation:none",
           "pointer-events:none",
           "user-select:none",
@@ -283,12 +324,15 @@ export function useBoardInput(opts: BoardInputOptions) {
         ].join(";");
         clone.removeAttribute("data-ghost-hidden");
         inner.appendChild(clone);
-        // Force reflow then animate to lifted state
+        // Force reflow then animate to lifted state.
+        // Use TWO RAFs to ensure browser paints initial state first → animation
+        // is GUARANTEED visible (single RAF can be too fast; browser may merge
+        // paint and skip the initial frame).
         void clone.offsetWidth;
-        requestAnimationFrame(() => {
-          clone.style.transform = "scale(1.22)";
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          clone.style.transform = "scale(1.25)";
           clone.style.opacity = "1";
-        });
+        }));
       } else {
         // Fallback only — should be rare
         inner.innerHTML = pieceHtml(piece.type, piece.color, getActivePieceSet(), Math.round(cellSz * 1.18));
@@ -467,9 +511,9 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
-      // Drop settle animation — short snap on destination cell so the piece
-      // visibly "lands" instead of just appearing. Defer 2 frames so React's
-      // re-render finishes attaching the piece div first.
+      // Drop settle animation — piece "приземляется" с size 1.25 (matches ghost
+      // lift size at release) → bounces down to 0.92 → settles to 1. Visible
+      // continuity from drag → drop (ghost растёт, piece приземляется).
       if (typeof window !== "undefined") {
         requestAnimationFrame(() => requestAnimationFrame(() => {
           const destCell = document.querySelector(`[data-sq="${to}"]`);
@@ -480,7 +524,7 @@ export function useBoardInput(opts: BoardInputOptions) {
             if (d.style && d.style.width === "88%" && d.style.height === "88%") {
               d.style.animation = "none";
               void d.offsetWidth;
-              d.style.animation = "cc-piece-snap 220ms cubic-bezier(0.34,1.56,0.64,1)";
+              d.style.animation = "cc-piece-drop 220ms cubic-bezier(0.34,1.56,0.64,1)";
               break;
             }
           }

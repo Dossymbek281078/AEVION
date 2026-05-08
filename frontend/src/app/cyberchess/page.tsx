@@ -14,7 +14,7 @@ import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
 import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { computeGameDNA, type GameDNA } from "./gameDna";
-import { useBoardInput } from "./useBoardInput";
+import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
 import { BoardDebugHud } from "./BoardDebugHud";
 import { ldRival, svRival, createRival, learnFromEncounter, rivalGreeting, rivalSummary, type RivalProfile } from "./aiRival";
@@ -4221,7 +4221,51 @@ export default function CyberChessPage(){
                     else if(v.special==="stopvoice"){rec._stop=true;try{rec.stop()}catch{}}
                     break;
                   }
-                  if(v.from&&v.to){
+                  // Determine if this is premove time (AI's turn, game on)
+                  const isPM=tab!=="analysis"&&game.turn()!==pCol&&on&&!over;
+                  if(isPM){
+                    // PREMOVE PATH — validate against virtualGame (with queued premoves applied)
+                    // and add to pms queue. Uses same premoveLegalMoves as drag/click.
+                    if(pmsRef.current.length>=pmLim){showToast(`⚡ Очередь премувов полна (${pmLim})`,"info");matched=true;break}
+                    // Build virtualGame with pCol forced + queued premoves applied
+                    let vG:Chess;
+                    try{
+                      vG=new Chess(game.fen());
+                      const fp=vG.fen().split(" ");fp[1]=pCol;
+                      try{vG.load(fp.join(" "))}catch{}
+                      for(const pm of pmsRef.current){
+                        const fp2=vG.fen().split(" ");fp2[1]=pCol;
+                        try{vG.load(fp2.join(" "))}catch{}
+                        try{vG.move({from:pm.from,to:pm.to,promotion:pm.pr||"q"})}catch{}
+                      }
+                    }catch{vG=new Chess(game.fen())}
+                    if(v.from&&v.to){
+                      const legal=premoveLegalMoves(vG,pCol,v.from as Square);
+                      if(legal.find((m:any)=>m.to===v.to)){
+                        const piece=vG.get(v.from as Square);
+                        const pre:Pre={from:v.from as Square,to:v.to as Square};
+                        const promoRank=pCol==="w"?"8":"1";
+                        if(piece?.type==="p"&&v.to[1]===promoRank)pre.pr="q";
+                        sPms(p=>[...p,pre]);snd("premove");
+                        showToast(`⚡ Премув: ${v.from}→${v.to}`,"success");
+                        matched=true;break;
+                      }
+                    }else if(v.san){
+                      // Try to resolve SAN against virtualGame
+                      try{
+                        const fp3=vG.fen().split(" ");fp3[1]=pCol;
+                        try{vG.load(fp3.join(" "))}catch{}
+                        const mv=vG.move(v.san);
+                        if(mv){
+                          const pre:Pre={from:mv.from as Square,to:mv.to as Square};
+                          if(mv.promotion)pre.pr=mv.promotion as any;
+                          sPms(p=>[...p,pre]);snd("premove");
+                          showToast(`⚡ Премув: ${v.san}`,"success");
+                          matched=true;break;
+                        }
+                      }catch{}
+                    }
+                  }else if(v.from&&v.to){
                     try{const mv=game.move({from:v.from as Square,to:v.to as Square,promotion:"q"});if(mv){exec(v.from as Square,v.to as Square);showToast(`✓ ${v.from}→${v.to}`,"success");matched=true;break}}catch{}
                   }else if(v.san){
                     try{const mv=game.move(v.san);if(mv){game.undo();const legal=game.moves({verbose:true}).find(x=>x.san===mv.san);if(legal){exec(legal.from,legal.to);showToast(`✓ ${v.san}`,"success");matched=true;break}}}catch{}

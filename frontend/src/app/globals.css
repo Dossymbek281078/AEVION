@@ -421,17 +421,10 @@ code {
 .cc-board-cell[style*="cursor: grab"]:hover {
   z-index: 2;
 }
-/* Scale the piece wrapper (second div inside cell) on hover */
+/* Scale the piece wrapper (second div inside cell) on hover — smooth ease-out, no bounce */
 .cc-board-cell[style*="cursor: grab"]:hover > div {
-  transition: transform 0.07s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transform: scale(1.07) !important;
-}
-
-/* ── Ghost piece pop-in when drag begins ──────────────── */
-@keyframes cc-ghost-pop {
-  0%   { transform: scale(0.86); opacity: 0; }
-  60%  { transform: scale(1.12); opacity: 1; }
-  100% { transform: scale(1.06); opacity: 1; }
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(1.06) !important;
 }
 
 /* ── Captured piece pop+fade on the capture square ────── */

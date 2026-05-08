@@ -34,7 +34,7 @@ const ACTIVATION_PX_TOUCH = 10;
 
 type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 
-function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): any[] {
+export function premoveLegalMoves(virtualGame: Chess, pCol: ChessColor, from: Square): any[] {
   try {
     const fen = virtualGame.fen();
     const g = new Chess(fen);

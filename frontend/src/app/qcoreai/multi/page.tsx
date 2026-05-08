@@ -1155,6 +1155,21 @@ export default function QCoreMultiAgentPage() {
     }
   }, [activeSessionId, newSession]);
 
+  const tagSessionPrompt = useCallback(async (s: SessionSummary) => {
+    const current = ((s as any).tags || []).join(", ");
+    const next = typeof window !== "undefined" ? window.prompt("Session tags (comma-separated):", current) : null;
+    if (next === null) return;
+    const tags = next.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    try {
+      await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}/tags`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ tags }),
+      });
+      setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, tags } as any : x)));
+    } catch (e: any) { setGlobalError(e?.message || "Tag failed"); }
+  }, []);
+
   const renameSessionPrompt = useCallback(async (s: SessionSummary) => {
     const next = typeof window !== "undefined" ? window.prompt("Rename session", s.title) : null;
     if (!next || !next.trim() || next.trim() === s.title) return;
@@ -2979,6 +2994,15 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.title || "(untitled)"}
                     </button>
+                    {/* Session tags — quick inline edit on active session */}
+                    {activeSessionId === s.id && (s as any).tags?.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 2 }}>
+                        {((s as any).tags || []).map((t: string) => (
+                          <span key={t} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 999, background: "rgba(124,58,237,0.08)", color: "#6d28d9", border: "1px solid rgba(124,58,237,0.15)" }}>#{t}</span>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Session stats chip + AI summary button */}
                     {activeSessionId === s.id && runs.length > 0 && (() => {
                       const donRuns = runs.filter((r) => r.status !== "running");
@@ -3033,6 +3057,13 @@ export default function QCoreMultiAgentPage() {
                       }}
                     >
                       ★
+                    </button>
+                    <button
+                      onClick={() => tagSessionPrompt(s)}
+                      title="Edit session tags"
+                      style={{ width: 24, borderRadius: 6, border: "1px solid transparent", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 11 }}
+                    >
+                      #
                     </button>
                     <button
                       onClick={() => renameSessionPrompt(s)}

@@ -260,6 +260,22 @@ export default function QCoreAnalyticsPage() {
               <Tile label="Tokens" value={fmtNum(data.totals.tokensIn + data.totals.tokensOut)} accent="#f59e0b" sub={`${fmtNum(data.totals.tokensIn)} in · ${fmtNum(data.totals.tokensOut)} out`} />
               <Tile label="Cost" value={fmtMoney(data.totals.costUsd)} accent="#7c3aed" />
               <Tile label="Compute time" value={fmtDur(data.totals.durationMs)} accent="#ef4444" />
+              {timeseries.length > 0 && (() => {
+                // Calculate active-day streak from timeseries
+                const today = new Date().toISOString().slice(0, 10);
+                let streak = 0;
+                const sorted = [...timeseries].sort((a, b) => b.date.localeCompare(a.date));
+                let expected = today;
+                for (const pt of sorted) {
+                  if (pt.date === expected && pt.runs > 0) {
+                    streak++;
+                    const d = new Date(expected);
+                    d.setDate(d.getDate() - 1);
+                    expected = d.toISOString().slice(0, 10);
+                  } else break;
+                }
+                return streak > 0 ? <Tile label="Day streak 🔥" value={`${streak}d`} accent="#f97316" sub={streak >= 7 ? "Week streak!" : streak >= 30 ? "Month streak!" : "Keep going"} /> : null;
+              })()}
             </section>
 
             {/* Monthly goals */}

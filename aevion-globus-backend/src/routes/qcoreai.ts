@@ -373,6 +373,37 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
   }
 });
 
+/** POST /api/qcoreai/me/webhook/retry — re-fire a previously failed webhook event. */
+qcoreaiRouter.post("/me/webhook/retry", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { event, payload } = req.body || {};
+  if (!event) return res.status(400).json({ error: "event required" });
+  try {
+    const cfg = await getUserWebhook(auth.sub);
+    const envUrl = process.env.QCORE_WEBHOOK_URL?.trim();
+    if (!cfg && !envUrl) return res.status(400).json({ error: "no webhook configured" });
+    const userOverride = cfg ? { url: cfg.url, secret: cfg.secret } : null;
+    const retryEvt = {
+      event: String(event),
+      runId: payload?.runId || "retry",
+      sessionId: payload?.sessionId || "retry",
+      status: payload?.status || "done",
+      strategy: payload?.strategy || "sequential",
+      userInput: payload?.userInput || "Manual retry",
+      finalContent: payload?.finalContent || null,
+      totalDurationMs: payload?.totalDurationMs || 0,
+      totalCostUsd: payload?.totalCostUsd || 0,
+      error: null,
+      finishedAt: new Date().toISOString(),
+    };
+    await notifyEvent(retryEvt as any, userOverride, auth.sub);
+    res.json({ ok: true, sentTo: userOverride?.url || envUrl });
+  } catch (err: any) {
+    res.status(500).json({ error: "retry failed", details: err?.message });
+  }
+});
+
 /* ═══════════════════════════════════════════════════════════════════════
    Notebook collections
    POST   /api/qcoreai/notebook/collections

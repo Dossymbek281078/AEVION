@@ -20,7 +20,7 @@
 - **14 production-модулей** в `main`, из них **9 — Tier 2** (webhooks, embed, revoke, transparency, admin, audit, тесты, SDK).
 - **Уникальные техактивы:** ML-DSA-65 (постквантовая подпись), Quantum Shield (Shamir 2-of-3 + Ed25519).
 - **Платный E2E-flow на проде:** Stripe → Bureau cert → Trust Graph edge → AEC reward (Bronze 50 / Silver 150 / Gold 500 / Platinum 1000). Daily smoke 24/24 в GitHub Actions.
-- **Public API quotas live:** 4 tier (Free / Starter $29 / Pro $199 / Enterprise) с machine-readable mirror на [`aevion.app/api-backend/api/quotas`](https://aevion.app/api-backend/api/quotas). Контракт для B2B sales уже опубликован.
+- **Public API quotas live:** 4 tier (Developer $0 / Build $49 / Scale $249 / Enterprise) с публичной страницей `aevion.app/pricing/api-pricing` и machine-readable mirror [`/api/quotas`](https://aevion.app/api-backend/api/quotas). Контракт для B2B sales опубликован.
 - **Velocity:** 114 merged PR за 30 дней, 561 коммит за 30 дней.
 - **Live прод:** `aevion.app` (Vercel) + `api-backend` на Railway · **Repo:** `github.com/Dossymbek281078/AEVION`.
 - **Mobile SDK** для QCoreAI: Kotlin + Swift.

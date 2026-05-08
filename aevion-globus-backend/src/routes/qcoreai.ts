@@ -807,6 +807,18 @@ qcoreaiRouter.patch("/sessions/:id/pin", async (req, res) => {
   }
 });
 
+/** PATCH /sessions/:id/tags — replace session tag list. */
+qcoreaiRouter.patch("/sessions/:id/tags", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  try {
+    const { tags } = req.body || {};
+    const normalized = Array.isArray(tags) ? tags.slice(0, 10).map((t: unknown) => String(t).trim().toLowerCase().slice(0, 32)).filter(Boolean) : [];
+    if (!isDbReady()) return res.json({ ok: true });
+    await pool.query(`UPDATE "QCoreSession" SET "tags"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND ("userId"=$3 OR "userId" IS NULL)`, [normalized, req.params.id, auth?.sub ?? null]);
+    res.json({ ok: true, tags: normalized });
+  } catch (err: any) { res.status(500).json({ error: "set session tags failed" }); }
+});
+
 /** PATCH /sessions/:id/archive — soft-delete a session (hidden from default list; recoverable). */
 qcoreaiRouter.patch("/sessions/:id/archive", async (req, res) => {
   const auth = verifyBearerOptional(req);

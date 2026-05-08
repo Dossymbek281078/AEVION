@@ -29,6 +29,7 @@ import { settingsRouter } from "./build/settings";
 import { salaryStatsRouter } from "./build/salary-stats";
 import { availabilityRouter } from "./build/availability";
 import { storiesRouter } from "./build/stories";
+import { shiftsRouter } from "./build/shifts";
 
 export const buildRouter = Router();
 
@@ -88,3 +89,6 @@ buildRouter.use("/availability", availabilityRouter);
 // Site stories — workers post text + media from the job site. New tables
 // BuildStory + BuildStoryLike declared in lib/build/index.ts.
 buildRouter.use("/stories", storiesRouter);
+// Shifts — recruiter schedules a work day for an accepted application;
+// worker checks in / out. New BuildShift table declared in lib/build/index.ts.
+buildRouter.use("/shifts", shiftsRouter);

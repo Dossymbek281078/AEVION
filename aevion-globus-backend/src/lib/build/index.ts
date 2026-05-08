@@ -179,6 +179,31 @@ async function _doEnsureBuildTables(): Promise<void> {
     );
   `);
 
+  // BuildShift: scheduled work day for an accepted application. Worker
+  // checks in / checks out via /api/build/shifts/:id/(checkin|checkout).
+  // Without this table the entire /build/shifts page is dead and recruiters
+  // can't track timesheets.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildShift" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "workerId" TEXT NOT NULL,
+      "clientId" TEXT NOT NULL,
+      "shiftDate" TEXT NOT NULL,
+      "startTime" TEXT,
+      "endTime" TEXT,
+      "checkInAt" TIMESTAMPTZ,
+      "checkOutAt" TIMESTAMPTZ,
+      "status" TEXT NOT NULL DEFAULT 'SCHEDULED',
+      "notes" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_worker_date_idx" ON "BuildShift" ("workerId", "shiftDate");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_client_date_idx" ON "BuildShift" ("clientId", "shiftDate");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_app_idx" ON "BuildShift" ("applicationId");`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

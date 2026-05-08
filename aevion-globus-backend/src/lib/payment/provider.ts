@@ -52,6 +52,10 @@ export interface PaymentProvider {
   getIntent(intentId: string): Promise<PaymentResult>;
   parseWebhook(headers: Record<string, string>, rawBody: string): {
     intentId: string;
+    /** Provider-side unique id for this webhook delivery (Stripe `evt_*`).
+     *  Used for at-least-once dedup; if absent, dedup falls back to a hash of
+     *  the raw body. */
+    eventId?: string;
     result: PaymentResult;
   };
 }

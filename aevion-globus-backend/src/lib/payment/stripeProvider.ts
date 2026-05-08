@@ -202,6 +202,7 @@ export const stripePaymentProvider: PaymentProvider = {
 
     return {
       intentId: bureauIntentId,
+      eventId: event.id, // evt_* — surface for the dedup table
       result: {
         status,
         paidAt: status === "paid" ? new Date(pi.created * 1000).toISOString() : null,

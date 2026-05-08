@@ -252,6 +252,23 @@ async function ensureBureauTables(): Promise<void> {
   await pool.query(
     `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_tier_createdAt_idx" ON "BureauTrustEdge" ("tier", "createdAt" DESC);`,
   );
+  // Webhook event dedup. Stripe and Sumsub may redeliver an event after a
+  // network blip; without this table a single payment could double-mint AEC
+  // rewards (the row update is idempotent but a planned future "side-effect
+  // on first delivery" would not be). Insert the event id BEFORE downstream
+  // logic; on conflict we 200 OK without re-running anything.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauWebhookEvent" (
+      "eventId"     TEXT PRIMARY KEY,
+      "kind"        TEXT NOT NULL,        -- 'payment' | 'kyc'
+      "provider"    TEXT NOT NULL,        -- 'stripe' | 'sumsub' | 'stub' ...
+      "intentId"    TEXT,                 -- bureauIntentId or kyc sessionId, for forensics
+      "receivedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauWebhookEvent_kind_receivedAt_idx" ON "BureauWebhookEvent" ("kind", "receivedAt" DESC);`,
+  );
   bureauTablesReady = true;
 }
 
@@ -889,6 +906,31 @@ bureauRouter.get("/dashboard", async (req, res) => {
  * handles signature verification + decoding. We only update status; the
  * client must hit /upgrade/:certId separately to apply Verified tier.
  */
+// Webhook event dedup. Stripe and Sumsub may redeliver an event after a
+// network blip; INSERT...ON CONFLICT DO NOTHING acts as a guard. Returns
+// `true` when this is the first delivery and downstream logic should run.
+// Falls back to a sha256 of the raw body if the provider didn't surface an
+// event id (stub providers in dev/CI).
+async function claimWebhookEventOrSkip(opts: {
+  eventId: string | null;
+  rawBody: string;
+  kind: "payment" | "kyc";
+  provider: string;
+  intentId: string | null;
+}): Promise<boolean> {
+  const id =
+    opts.eventId ||
+    `sha256:${crypto.createHash("sha256").update(opts.rawBody).digest("hex")}`;
+  const r = await pool.query(
+    `INSERT INTO "BureauWebhookEvent" ("eventId","kind","provider","intentId")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("eventId") DO NOTHING
+       RETURNING "eventId"`,
+    [id, opts.kind, opts.provider, opts.intentId],
+  );
+  return r.rowCount === 1; // 1 = freshly inserted, 0 = already seen
+}
+
 // Webhook failure classifier — distinguishes scanner noise from real errors.
 // Used by /payment/webhook and /verify/webhook to gate Sentry capture so
 // alerts fire only when a Stripe/Sumsub-shaped request fails verification or
@@ -925,7 +967,23 @@ bureauRouter.post("/verify/webhook", async (req, res) => {
     // JSON does not match what the provider signed.
     const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
     const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
-    const { sessionId, result } = kyc.parseWebhook(headers, rawBody);
+    const parsed = kyc.parseWebhook(headers, rawBody);
+    const { sessionId, result } = parsed;
+
+    // KYC providers (Sumsub) deliver at-least-once too. Same dedup pattern
+    // as /payment/webhook. We don't have a provider event id from the stub,
+    // but a sha256 of the raw body is good enough — the provider re-sends
+    // the exact same body on retry.
+    const fresh = await claimWebhookEventOrSkip({
+      eventId: (parsed as { eventId?: string }).eventId ?? null,
+      rawBody,
+      kind: "kyc",
+      provider: kyc.id,
+      intentId: sessionId,
+    });
+    if (!fresh) {
+      return res.json({ ok: true, deduped: true });
+    }
 
     await pool.query(
       `UPDATE "BureauVerification"
@@ -975,7 +1033,24 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
     // Falling back to JSON.stringify(req.body) breaks the signature.
     const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
     const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
-    const { intentId, result } = pay.parseWebhook(headers, rawBody);
+    const parsed = pay.parseWebhook(headers, rawBody);
+    const { intentId, result } = parsed;
+    const eventId = parsed.eventId ?? null;
+
+    // Dedup BEFORE any side-effects. Stripe doc'd at-least-once delivery —
+    // a redelivered evt_* must not double-update. Returns 200 OK either way
+    // so the provider doesn't keep retrying.
+    const fresh = await claimWebhookEventOrSkip({
+      eventId,
+      rawBody,
+      kind: "payment",
+      provider: pay.id,
+      intentId,
+    });
+    if (!fresh) {
+      return res.json({ ok: true, deduped: true });
+    }
+
     await pool.query(
       `UPDATE "BureauVerification"
          SET "paymentStatus" = $1,

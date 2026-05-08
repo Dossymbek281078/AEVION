@@ -3522,6 +3522,13 @@ export default function QCoreMultiAgentPage() {
             .qc-sidebar-toggle { display: flex !important; }
             .qc-sidebar-body[data-open="false"] { display: none; }
           }
+          @media (max-width: 640px) {
+            .qc-run-footer { flex-wrap: wrap; gap: 4px !important; }
+            .qc-run-footer a, .qc-run-footer button { font-size: 10px !important; padding: 3px 7px !important; }
+            .qc-agent-card { padding: 8px 10px !important; }
+            .qc-input-row { flex-direction: column; gap: 8px !important; }
+            .qc-input-row button { align-self: stretch; }
+          }
         `}</style>
       </ProductPageShell>
 
@@ -3544,6 +3551,7 @@ export default function QCoreMultiAgentPage() {
           { icon: "📖", label: "API Docs", href: "/qcoreai/docs" },
           { icon: "⚖️", label: "Compare runs", href: "/qcoreai/compare" },
           { icon: "🗂️", label: "Workspaces", href: "/qcoreai/workspaces" },
+          { icon: "🔖", label: "Bookmarks", href: "/qcoreai/bookmarks" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div
@@ -4933,6 +4941,19 @@ function FinalCard({
   const [saved, setSaved] = useState(false);
   const [userRating, setUserRating] = useState<1 | -1 | null>(null);
   const [ratingCounts, setRatingCounts] = useState<{ thumbsUp: number; thumbsDown: number } | null>(null);
+  const [bookmarked, setBookmarked] = useState(false);
+
+  const toggleBookmark = async () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+    if (!token) return;
+    if (bookmarked) {
+      await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      setBookmarked(false);
+    } else {
+      await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({}) }).catch(() => {});
+      setBookmarked(true);
+    }
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -4997,6 +5018,18 @@ function FinalCard({
           {stopped ? "Partial answer (stopped)" : "Final answer"}
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button
+            onClick={toggleBookmark}
+            title={bookmarked ? "Remove bookmark" : "Bookmark this run"}
+            style={{
+              padding: "4px 8px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+              border: `1px solid ${bookmarked ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.15)"}`,
+              background: bookmarked ? "rgba(245,158,11,0.1)" : "#fff",
+              color: bookmarked ? "#92400e" : "#475569",
+            }}
+          >
+            {bookmarked ? "🔖" : "🏷️"}
+          </button>
           <button
             onClick={saveToNotebook}
             title="Save to notebook"

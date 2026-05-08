@@ -3306,3 +3306,45 @@ export async function assignSnippetToCollection(snippetId: string, collectionId:
   const r = await pool.query(`UPDATE "QCoreNotebook" SET "collectionId"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND "ownerUserId"=$3 RETURNING "id"`, [collectionId, snippetId, ownerUserId]);
   return (r.rowCount ?? 0) > 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run bookmarks — star specific runs for quick access.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type BookmarkRow = { runId: string; userId: string; label: string | null; createdAt: string };
+const memBookmarks = new Map<string, BookmarkRow>(); // key = runId:userId
+
+export async function bookmarkRun(runId: string, userId: string, label?: string | null): Promise<BookmarkRow> {
+  await ensureQCoreTables(pool);
+  const key = `${runId}:${userId}`;
+  const row: BookmarkRow = { runId, userId, label: label?.slice(0, 80) ?? null, createdAt: nowIso() };
+  if (!isDbReady()) { memBookmarks.set(key, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCoreRunBookmark" ("runId","userId","label") VALUES ($1,$2,$3)
+     ON CONFLICT ("runId","userId") DO UPDATE SET "label"=$3,"createdAt"=NOW() RETURNING *`,
+    [runId, userId, row.label]
+  );
+  return r.rows[0] as BookmarkRow;
+}
+
+export async function unbookmarkRun(runId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const key = `${runId}:${userId}`;
+  if (!isDbReady()) { const had = memBookmarks.has(key); memBookmarks.delete(key); return had; }
+  const r = await pool.query(`DELETE FROM "QCoreRunBookmark" WHERE "runId"=$1 AND "userId"=$2 RETURNING "runId"`, [runId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listBookmarks(userId: string, limit = 50): Promise<BookmarkRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memBookmarks.values()).filter((b) => b.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  const r = await pool.query(`SELECT * FROM "QCoreRunBookmark" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`, [userId, limit]);
+  return r.rows as BookmarkRow[];
+}
+
+export async function isBookmarked(runId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memBookmarks.has(`${runId}:${userId}`);
+  const r = await pool.query(`SELECT 1 FROM "QCoreRunBookmark" WHERE "runId"=$1 AND "userId"=$2`, [runId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}

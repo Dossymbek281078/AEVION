@@ -32,6 +32,7 @@ import { storiesRouter } from "./build/stories";
 import { shiftsRouter } from "./build/shifts";
 import { teamHiringRouter } from "./build/team-hiring";
 import { communitiesRouter } from "./build/communities";
+import { videoRoomsRouter } from "./build/video-rooms";
 
 export const buildRouter = Router();
 
@@ -103,3 +104,7 @@ buildRouter.use("/team-requests", teamHiringRouter);
 // /applications above.
 buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
 buildRouter.use("/communities", communitiesRouter);
+// Video rooms — Daily.co-backed call rooms. Mounted under /video/rooms
+// to match the /build/video frontend page's URL convention. New table
+// BuildVideoRoom in lib/build/index.ts.
+buildRouter.use("/video/rooms", videoRoomsRouter);

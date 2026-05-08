@@ -321,16 +321,16 @@ export function useBoardInput(opts: BoardInputOptions) {
       const srcPieceEl = findSourcePieceEl(from);
       if (srcPieceEl) {
         const clone = srcPieceEl.cloneNode(true) as HTMLElement;
-        // Smooth ease-out — НИКАКОГО overshoot/bounce. User: «подпрыгивает,
-        // очень отвлекает при игре». cubic-bezier(0.4,0,0.2,1) — Material
-        // standard ease-out, плавный рост к финальному размеру без перехлёста.
+        // No scale, no translateY. Pure horizontal glide — фигура просто
+        // следует за курсором в своём размере. User: «нужно чтобы по
+        // горизонту плыли».
         clone.style.cssText = [
           "width:100%", "height:100%",
-          "transform:scale(0.98) translateY(0)",
+          "transform:none",
           "transform-origin:center center",
-          "opacity:0.92",
+          "opacity:1",
           "filter:none",
-          "transition:transform 110ms cubic-bezier(0.4,0,0.2,1), opacity 60ms ease-out",
+          "transition:none",
           "animation:none",
           "pointer-events:none",
           "user-select:none",
@@ -338,12 +338,6 @@ export function useBoardInput(opts: BoardInputOptions) {
         ].join(";");
         clone.removeAttribute("data-ghost-hidden");
         inner.appendChild(clone);
-        void clone.offsetWidth;
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          // 1.20× + lift -10px — slight detachment, без overshoot.
-          clone.style.transform = "scale(1.20) translateY(-10px)";
-          clone.style.opacity = "1";
-        }));
       } else {
         // Fallback only — should be rare
         inner.innerHTML = pieceHtml(piece.type, piece.color, getActivePieceSet(), Math.round(cellSz * 1.18));
@@ -601,18 +595,13 @@ export function useBoardInput(opts: BoardInputOptions) {
       // и ghost'ом. 50ms — barely perceptible motion, no lag feel.
       executeDrop(d.from, to);
       if (ghostNode) {
-        // Slide via transform (GPU layer). 50ms transition feels snappy.
-        ghostNode.style.transition = "transform 50ms ease-out";
+        // Smooth horizontal slide to destination — no scale change, just
+        // pure 2D motion. Ghost glides от cursor к dest cell center.
+        ghostNode.style.transition = "transform 60ms linear";
         ghostNode.style.transform = `translate3d(${destX}px,${destY}px,0)`;
-        const inner = ghostNode.firstElementChild as HTMLDivElement | null;
-        const clone = inner?.firstElementChild as HTMLElement | null;
-        if (clone) {
-          clone.style.transition = "transform 50ms ease-out";
-          clone.style.transform = "scale(1.0) translateY(0)";
-        }
         const halo = haloNodeRef.current;
         if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        window.setTimeout(() => hideGhost(), 50);
+        window.setTimeout(() => hideGhost(), 60);
       } else {
         hideGhost();
       }

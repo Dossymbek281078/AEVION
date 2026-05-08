@@ -421,11 +421,7 @@ code {
 .cc-board-cell[style*="cursor: grab"]:hover {
   z-index: 2;
 }
-/* Scale the piece wrapper (second div inside cell) on hover — smooth ease-out, no bounce */
-.cc-board-cell[style*="cursor: grab"]:hover > div {
-  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: scale(1.06) !important;
-}
+/* No hover scale — user wants pieces to glide horizontally only, no jumps */
 
 /* ── Captured piece pop+fade on the capture square ────── */
 @keyframes cc-capture-pop {
@@ -434,13 +430,10 @@ code {
   100% { transform: scale(0.40); opacity: 0; }
 }
 
-/* ── Piece "snap" landing — smooth ease-in (no overshoot/bounce) ── */
-@keyframes cc-piece-snap {
-  0%   { transform: scale(0.94); }
-  100% { transform: scale(1); }
-}
+/* Piece snap removed — user wants pieces to glide horizontally only,
+   no scale changes on landing. */
 .cc-piece-snap {
-  animation: cc-piece-snap 140ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: none;
 }
 
 /* ── "Your turn" board flash — fires when AI just moved ── */

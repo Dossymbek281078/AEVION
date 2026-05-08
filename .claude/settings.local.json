@@ -53,7 +53,11 @@
       "Bash(npx vitest *)",
       "Bash(Remove-Item -Force .next/lock -ErrorAction SilentlyContinue)",
       "Bash(xargs grep *)",
-      "Bash(grep -n \"onContinue.*runId\\\\|onSaveTemplate.*runId\\\\|RunCard.*{$\" \"C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/qcoreai/multi/page.tsx\")"
+      "Bash(grep -n \"onContinue.*runId\\\\|onSaveTemplate.*runId\\\\|RunCard.*{$\" \"C:/Users/user/aevion-core/frontend-qcore/frontend/src/app/qcoreai/multi/page.tsx\")",
+      "Bash(npx --no-install tsc --noEmit)",
+      "PowerShell(gh pr *)",
+      "Bash(BASE=https://aevion.app/api-backend bash /c/Users/user/aevion-core/scripts/investor-demo-audit.sh)",
+      "PowerShell(gh run list --repo Dossymbek281078/AEVION --branch main --workflow CI --limit 1 --json conclusion,displayTitle --jq '.[0]' 2>&1)"
     ]
   }
 }

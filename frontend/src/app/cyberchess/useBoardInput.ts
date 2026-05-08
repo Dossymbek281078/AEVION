@@ -284,6 +284,20 @@ export function useBoardInput(opts: BoardInputOptions) {
     return null;
   }, []);
 
+  // Imperative last-move highlight — set cell bg directly via DOM, no waiting
+  // for React to render. T.last = "rgba(217,119,6,0.25)" (orange tint).
+  // React will set the same bg on next render (when lm state propagates) —
+  // no flicker. This eliminates the ~16ms render delay between exec and
+  // visible highlight.
+  const flashLastMove = useCallback((from: Square, to: Square) => {
+    if (typeof document === "undefined") return;
+    const lastBg = "rgba(217,119,6,0.25)";
+    const fromCell = document.querySelector(`[data-sq="${from}"]`) as HTMLElement | null;
+    const toCell = document.querySelector(`[data-sq="${to}"]`) as HTMLElement | null;
+    if (fromCell) fromCell.style.background = lastBg;
+    if (toCell) toCell.style.background = lastBg;
+  }, []);
+
   const showGhost = useCallback((from: Square, x: number, y: number) => {
     const o = optsRef.current;
     // Pre-cleanup: clear any stale [data-ghost-hidden] markers from a previous
@@ -477,6 +491,7 @@ export function useBoardInput(opts: BoardInputOptions) {
             o.sScratchLm({ from: mv.from, to: mv.to });
             o.sScratchSel(null); o.sScratchVm(new Set()); o.sScratchBk(k => k + 1);
             o.snd(mv.captured ? "capture" : "move");
+            flashLastMove(from, to);
           }
         } catch {}
       } else { o.sScratchSel(null); o.sScratchVm(new Set()); }
@@ -516,6 +531,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
+      flashLastMove(from, to);
       // Note: cc-piece-drop animation удалён — он стартовал через RAF×2
       // (~32ms после exec), создавая «появилась → потом начала bounce»
       // несоответствие. Slide на ghost'е уже даёт визуальную непрерывность.
@@ -524,7 +540,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       o.sSel(null); o.selRef.current = null;
       o.sVm(new Set()); o.vmRef.current = new Set();
     }
-  }, []);
+  }, [flashLastMove]);
 
   // ── WINDOW pointer listeners — primary path for move/up/cancel ──────────
   // (v5 architecture — no setPointerCapture, no React handlers on the board
@@ -685,6 +701,7 @@ export function useBoardInput(opts: BoardInputOptions) {
         if (mp?.type === "p" && (sq[1] === "1" || sq[1] === "8")) {
           if (o.autoQueen) o.exec(f, sq, "q"); else o.sPromo({ from: f, to: sq });
         } else { o.exec(f, sq); }
+        flashLastMove(f, sq);
         o.sSel(null); o.selRef.current = null;
         o.sVm(new Set()); o.vmRef.current = new Set();
         return;
@@ -758,7 +775,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       const next = new Set(premoveLegalMoves(o.virtualGame, o.pCol, sq).map((m: any) => m.to));
       o.sVm(next); o.vmRef.current = next;
     }
-  }, [sqFromBoard]);
+  }, [sqFromBoard, showGhost, flashLastMove]);
 
   // ── No-op handlers (kept so page.tsx wiring can still reference them). ──
   const noopHandler = useCallback((_e: React.PointerEvent) => {}, []);

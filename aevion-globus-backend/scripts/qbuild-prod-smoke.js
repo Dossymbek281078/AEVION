@@ -126,6 +126,13 @@ async function runPublic() {
   if (r.status === 200) ok("/team-requests public feed", fmtMs(r.durMs));
   else fail("/team-requests public feed", `status=${r.status}`);
 
+  // Communities — public list (self-seeds 8 defaults on first call).
+  r = await call("GET", "/api/build/communities");
+  const communities = payload(r.body)?.items;
+  if (r.status === 200 && Array.isArray(communities) && communities.length >= 1) {
+    ok("/communities list", `n=${communities.length} ${fmtMs(r.durMs)}`);
+  } else fail("/communities list", `status=${r.status}`);
+
   r = await call("GET", "/api/build/stats");
   if (r.status === 200 && payload(r.body)?.vacancies != null) {
     const p = payload(r.body);
@@ -375,6 +382,28 @@ async function runEngagement(client, worker, vacancyId, appId) {
     if (r.status === 200 && (payload(r.body)?.applications?.length ?? 0) >= 1) ok("team-request detail with apps");
     else fail("team-request detail with apps", `status=${r.status}`);
   }
+
+  // Communities — worker joins welders-kz (auto-seeded) and posts a message.
+  // The community list endpoint already verified the room exists.
+  r = await call("POST", "/api/build/communities/welders-kz/join", { token: worker.token });
+  if (r.status === 200) ok("worker join community welders-kz");
+  else fail("worker join community welders-kz", `status=${r.status}`);
+
+  r = await call("POST", "/api/build/communities/welders-kz/messages", {
+    token: worker.token,
+    body: { content: `Smoke test message ${Date.now()} — checking community works.` },
+  });
+  if (r.status === 200 || r.status === 201) ok("worker post community message");
+  else fail("worker post community message", `status=${r.status}`);
+
+  r = await call("GET", "/api/build/communities/welders-kz");
+  if (r.status === 200 && (payload(r.body)?.messages?.length ?? 0) >= 1) ok("community detail with messages");
+  else fail("community detail with messages", `status=${r.status}`);
+
+  // Cleanup: leave so the join-count doesn't drift on prod.
+  r = await call("POST", "/api/build/communities/welders-kz/leave", { token: worker.token });
+  if (r.status === 200) ok("worker leave community");
+  else fail("worker leave community", `status=${r.status}`);
 }
 
 async function runStatsAndPipeline(client) {

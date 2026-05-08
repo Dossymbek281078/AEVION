@@ -139,9 +139,25 @@ function ReplayContent() {
 
   const reset = () => { setPlaying(false); setStep(0); };
   const skipToEnd = () => { setPlaying(false); setStep(messages.length); };
+  const [timelineView, setTimelineView] = useState(false);
 
   const visible = messages.slice(0, step);
   const progress = messages.length > 0 ? Math.round((step / messages.length) * 100) : 0;
+
+  // Timeline: compute start/end relative to run start for each agent message
+  const runStart = run ? new Date(run.startedAt).getTime() : Date.now();
+  const agentMessages = messages.filter((m) => !["user", "attachments"].includes(m.role));
+  const timelineSpan = agentMessages.length > 0
+    ? agentMessages.reduce((max, m) => Math.max(max, (m.durationMs ?? 0)), 0)
+    : 1;
+  let timelineOffset = 0;
+  const timelineItems = agentMessages.map((m) => {
+    const start = timelineOffset;
+    const dur = m.durationMs ?? 100;
+    timelineOffset += dur;
+    return { msg: m, start, end: start + dur };
+  });
+  const timelineTotal = Math.max(timelineOffset, 1);
 
   if (loading) return <p style={{ color: "#94a3b8", fontSize: 13 }}>Loading run…</p>;
   if (error || !run) return (
@@ -206,6 +222,12 @@ function ReplayContent() {
         >
           ⏭ End
         </button>
+        <button
+          onClick={() => setTimelineView((v) => !v)}
+          style={{ padding: "7px 12px", borderRadius: 8, border: `1px solid ${timelineView ? "#7c3aed" : "#cbd5e1"}`, background: timelineView ? "rgba(124,58,237,0.1)" : "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", color: timelineView ? "#6d28d9" : "#475569" }}
+        >
+          {timelineView ? "▶ Replay view" : "≡ Timeline"}
+        </button>
 
         {/* Speed */}
         <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
@@ -236,6 +258,41 @@ function ReplayContent() {
           </div>
         </div>
       </div>
+
+      {/* Timeline view */}
+      {timelineView && (
+        <div style={{ marginBottom: 20, padding: "16px 0" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 10 }}>Agent timeline (sequential time estimate)</div>
+          <div style={{ position: "relative", height: 60 }}>
+            {timelineItems.map((item, i) => {
+              const color = ROLE_COLOR[item.msg.role]?.color || "#475569";
+              const left = `${(item.start / timelineTotal) * 100}%`;
+              const width = `${Math.max(1, (item.end - item.start) / timelineTotal * 100)}%`;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: "absolute", top: 0, left, width, height: 40,
+                    borderRadius: 6, background: `${color}40`, border: `1px solid ${color}66`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 9, fontWeight: 700, color, overflow: "hidden", padding: "0 3px",
+                  }}
+                  title={`${item.msg.role} · ${fmtMs(item.msg.durationMs)}`}
+                >
+                  {item.msg.role.slice(0, 3)}
+                </div>
+              );
+            })}
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+              <div style={{ height: "100%", background: "#7c3aed", borderRadius: 3, width: `${progress}%`, transition: "width 0.2s" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#94a3b8", marginTop: 4 }}>
+            <span>0ms</span>
+            <span>{fmtMs(timelineTotal)}</span>
+          </div>
+        </div>
+      )}
 
       {/* Message stream */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

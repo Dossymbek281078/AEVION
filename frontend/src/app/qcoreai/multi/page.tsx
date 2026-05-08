@@ -458,18 +458,34 @@ export default function QCoreMultiAgentPage() {
   // Tells `sendCompareAll` to stop firing remaining strategies. Set by Stop.
   const compareAbortRef = useRef(false);
 
-  /* ── ⌘K Command palette ── */
+  /* ── ⌘K Command palette + keyboard shortcuts ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // ⌘K / Ctrl+K — palette
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
         setPaletteQuery("");
+        return;
       }
-      if (e.key === "Escape") setPaletteOpen(false);
+      if (e.key === "Escape") { setPaletteOpen(false); return; }
+      // Skip if focused on input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // n — new session
+      if (e.key === "n" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); newSession(); return; }
+      // / — focus search or palette
+      if (e.key === "/" && !e.metaKey) { e.preventDefault(); setPaletteOpen(true); setPaletteQuery(""); return; }
+      // 1/2/3 — strategy shortcuts
+      if (e.key === "1") { e.preventDefault(); setStrategy("sequential"); return; }
+      if (e.key === "2") { e.preventDefault(); setStrategy("parallel"); return; }
+      if (e.key === "3") { e.preventDefault(); setStrategy("debate"); return; }
+      // ? — show shortcuts tooltip
+      if (e.key === "?") { e.preventDefault(); alert("Keyboard shortcuts:\nn — New session\n/ — Search\n⌘K — Command palette\n1/2/3 — Sequential/Parallel/Debate"); return; }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -2944,14 +2960,36 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.title || "(untitled)"}
                     </button>
-                    {/* Session stats chip — shown only for the active session */}
+                    {/* Session stats chip + AI summary button */}
                     {activeSessionId === s.id && runs.length > 0 && (() => {
                       const donRuns = runs.filter((r) => r.status !== "running");
                       const totalCost = donRuns.reduce((a, r) => a + (r.totalCostUsd ?? 0), 0);
-                      if (totalCost === 0 && donRuns.length === 0) return null;
                       return (
-                        <span style={{ fontSize: 9, color: "#94a3b8", whiteSpace: "nowrap" }}>
-                          {donRuns.length}r · {totalCost > 0 ? `$${totalCost.toFixed(4)}` : "$0"}
+                        <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          {donRuns.length > 0 && (
+                            <span style={{ fontSize: 9, color: "#94a3b8", whiteSpace: "nowrap" }}>
+                              {donRuns.length}r · {totalCost > 0 ? `$${totalCost.toFixed(4)}` : "$0"}
+                            </span>
+                          )}
+                          <button
+                            title="AI summary of this session"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const recentRuns = donRuns.slice(-5);
+                              const ctx = recentRuns.map((r) => `Q: ${r.userInput?.slice(0, 100)}\nA: ${r.finalContent?.slice(0, 200) || "(no answer)"}`).join("\n\n");
+                              if (!ctx) return;
+                              const res = await fetch(apiUrl("/api/qcoreai/chat"), {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", ...bearerHeader() },
+                                body: JSON.stringify({ messages: [{ role: "user", content: `Summarise this AI session in 2-3 sentences:\n\n${ctx}` }] }),
+                              }).catch(() => null);
+                              const d = await res?.json().catch(() => ({}));
+                              if (d?.reply) alert(`Session summary:\n\n${d.reply}`);
+                            }}
+                            style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#94a3b8", padding: 0 }}
+                          >
+                            ∑
+                          </button>
                         </span>
                       );
                     })()}

@@ -102,6 +102,7 @@ export default function QCoreAnalyticsPage() {
   const [topTags, setTopTags] = useState<TagCount[]>([]);
   const [topSessions, setTopSessions] = useState<Array<{ id: string; title: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>>([]);
   const [tagCosts, setTagCosts] = useState<Array<{ tag: string; runs: number; totalCostUsd: number; avgCostUsd: number }>>([]);
+  const [providerLatency, setProviderLatency] = useState<Array<{ provider: string; avgDurationMs: number; minDurationMs: number; maxDurationMs: number; calls: number }>>([]);
   const [goal, setGoal] = useState<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null>(null);
   const [goalEdit, setGoalEdit] = useState(false);
   const [goalRuns, setGoalRuns] = useState("");
@@ -129,6 +130,13 @@ export default function QCoreAnalyticsPage() {
       if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
       const tagCostJson = await tagCostRes.json().catch(() => ({}));
       if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
+
+      // Provider latency
+      try {
+        const latRes = await fetch(apiUrl("/api/qcoreai/analytics/provider-latency"), { headers: bearerHeader() });
+        const latData = await latRes.json().catch(() => ({}));
+        if (Array.isArray(latData?.items)) setProviderLatency(latData.items);
+      } catch { /* non-critical */ }
 
       // Load analytics goals
       try {
@@ -461,6 +469,28 @@ export default function QCoreAnalyticsPage() {
               </div>
             </Section>
 
+            {/* Provider latency */}
+            {providerLatency.length > 0 && (
+              <Section title="Provider latency (avg ms/call)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(() => {
+                    const maxAvg = Math.max(...providerLatency.map((p) => p.avgDurationMs));
+                    return providerLatency.map((p) => (
+                      <div key={p.provider} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <span style={{ minWidth: 80, fontSize: 12, fontWeight: 700, color: PROVIDER_COLORS[p.provider] || "#475569" }}>{providerLabel[p.provider] || p.provider}</span>
+                        <div style={{ flex: 1 }}>
+                          <Bar value={p.avgDurationMs} max={maxAvg} color={PROVIDER_COLORS[p.provider] || "#475569"} height={6} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", minWidth: 60, textAlign: "right" }}>{Math.round(p.avgDurationMs)}ms</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 40 }}>{p.calls} calls</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 60 }}>{Math.round(p.minDurationMs)}–{Math.round(p.maxDurationMs)}ms</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </Section>
+            )}
+
             {/* Model breakdown table */}
             <Section title="Top models">
               <div style={{ overflowX: "auto" }}>
@@ -636,10 +666,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Bar({ value, max, color }: { value: number; max: number; color: string }) {
+function Bar({ value, max, color, height = 8 }: { value: number; max: number; color: string; height?: number }) {
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 2;
   return (
-    <div style={{ height: 10, background: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
+    <div style={{ height, background: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
       <div
         style={{
           width: `${pct}%`,

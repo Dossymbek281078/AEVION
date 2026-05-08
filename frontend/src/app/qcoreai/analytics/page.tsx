@@ -361,6 +361,56 @@ export default function QCoreAnalyticsPage() {
               </Section>
             )}
 
+            {/* Activity heatmap (last 12 weeks) */}
+            {timeseries.length > 0 && (
+              <Section title="Activity heatmap">
+                {(() => {
+                  const today = new Date();
+                  const weeks = 12;
+                  const cells: Array<{ date: string; runs: number; cost: number }> = [];
+                  for (let i = weeks * 7 - 1; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(d.getDate() - i);
+                    const dateStr = d.toISOString().slice(0, 10);
+                    const pt = timeseries.find((p) => p.date === dateStr);
+                    cells.push({ date: dateStr, runs: pt?.runs ?? 0, cost: pt?.costUsd ?? 0 });
+                  }
+                  const maxRuns = Math.max(1, ...cells.map((c) => c.runs));
+                  return (
+                    <div>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${weeks}, 1fr)`, gap: 2 }}>
+                        {Array.from({ length: weeks }, (_, w) => (
+                          <div key={w} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {cells.slice(w * 7, w * 7 + 7).map((c) => {
+                              const intensity = c.runs === 0 ? 0 : Math.max(0.15, c.runs / maxRuns);
+                              return (
+                                <div
+                                  key={c.date}
+                                  title={`${c.date}: ${c.runs} run${c.runs !== 1 ? "s" : ""} · ${c.cost > 0 ? `$${c.cost.toFixed(4)}` : "$0"}`}
+                                  style={{
+                                    width: "100%", aspectRatio: "1",
+                                    borderRadius: 2,
+                                    background: c.runs === 0 ? "#f1f5f9" : `rgba(124,58,237,${intensity})`,
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 6, fontSize: 10, color: "#94a3b8", alignItems: "center" }}>
+                        <span>Less</span>
+                        {[0, 0.2, 0.5, 0.8, 1].map((v) => (
+                          <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: v === 0 ? "#f1f5f9" : `rgba(124,58,237,${v})` }} />
+                        ))}
+                        <span>More</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
             {/* Top tags chart */}
             {topTags.length > 0 && (
               <Section title="Top tags">
@@ -492,6 +542,36 @@ export default function QCoreAnalyticsPage() {
             )}
 
             {/* Model breakdown table */}
+            {/* Duration distribution histogram */}
+            {data.recent.length >= 5 && (
+              <Section title="Duration distribution">
+                {(() => {
+                  const durations = data.recent.filter((r) => r.totalDurationMs).map((r) => r.totalDurationMs!);
+                  if (durations.length < 3) return null;
+                  const BUCKETS = [0, 2000, 5000, 10000, 20000, 60000, Infinity];
+                  const labels = ["<2s", "2-5s", "5-10s", "10-20s", "20-60s", ">60s"];
+                  const counts = new Array(BUCKETS.length - 1).fill(0);
+                  for (const d of durations) {
+                    for (let i = 0; i < BUCKETS.length - 1; i++) {
+                      if (d >= BUCKETS[i] && d < BUCKETS[i + 1]) { counts[i]++; break; }
+                    }
+                  }
+                  const maxCount = Math.max(1, ...counts);
+                  return (
+                    <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 80 }}>
+                      {counts.map((cnt, i) => (
+                        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 9, color: "#94a3b8" }}>{cnt}</span>
+                          <div style={{ width: "100%", height: Math.max(2, (cnt / maxCount) * 60), background: cnt > 0 ? "#4338ca" : "#f1f5f9", borderRadius: "3px 3px 0 0" }} />
+                          <span style={{ fontSize: 9, color: "#94a3b8", textAlign: "center" }}>{labels[i]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
             <Section title="Top models">
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#fff", borderRadius: 10, overflow: "hidden" }}>

@@ -712,6 +712,15 @@ export default function QCoreEvalSuitePage() {
           >
             Delete suite
           </button>
+          <button
+            onClick={() => {
+              const url = `${typeof window !== "undefined" ? window.location.origin : ""}/qcoreai/eval/${suite.id}`;
+              navigator.clipboard.writeText(url).then(() => alert(`Suite link copied!\n${url}`)).catch(() => {});
+            }}
+            style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+          >
+            🔗 Copy link
+          </button>
         </div>
       </ProductPageShell>
     </main>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
@@ -9,7 +9,9 @@ import { buildApi, type BuildVacancy } from "@/lib/build/api";
 export default function VacancyComparePage() {
   return (
     <BuildShell>
-      <Body />
+      <Suspense fallback={<p className="text-slate-400">Loading…</p>}>
+        <Body />
+      </Suspense>
     </BuildShell>
   );
 }

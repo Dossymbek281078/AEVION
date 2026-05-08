@@ -53,7 +53,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // already-curated list of brand-name profiles worth indexing. Capped
   // server-side at 20+20, so cheap to fetch.
   const [origin, projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
-    getOrigin(),
+    Promise.resolve(BASE_URL),
     fetchIds("/api/build/projects?limit=500&status=OPEN"),
     fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
     fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })

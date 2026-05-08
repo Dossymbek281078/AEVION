@@ -28,7 +28,6 @@ async function ensureSentry(): Promise<SentryShape | null> {
   try {
     // The dependency is optional — if it isn't installed, dynamic import
     // throws and we fall back to console-only.
-    // @ts-expect-error optional dep
     const mod = await import("@sentry/browser");
     const s = (mod as { default?: SentryShape } & SentryShape).default ?? mod;
     s.init({

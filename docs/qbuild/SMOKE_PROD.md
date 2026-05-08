@@ -27,11 +27,10 @@ wired as `npm run smoke:qbuild-prod`.
 9. `GET /api/build/vacancies/:id` — fetch by id
 10. `POST /api/build/applications` — worker applies
 11. `GET /api/build/applications/by-vacancy/:id` — owner sees the application
-12. `PATCH /api/build/applications/:id/label` — owner sets `INTERVIEW` (soft — ships in #124)
+12. `PATCH /api/build/applications/:id/label` — owner sets `INTERVIEW`
 13. `PATCH /api/build/applications/:id` — owner moves status to `ACCEPTED`
 
-**Stats + pipeline** (soft-checks — endpoints from the polish layer; tolerated
-as INFO if not yet deployed):
+**Stats + pipeline**:
 
 14. `GET /api/build/stats/weekly` — recruiter 7-day delta
 15. `GET /api/build/applications/mine/pipeline` — kanban data
@@ -40,8 +39,8 @@ as INFO if not yet deployed):
 
 **Feeds**:
 
-18. `GET /api/build/public/rss/vacancies.xml` — RSS feed (soft)
-19. `GET /sitemap.xml` — sitemap reachability (soft)
+18. `GET /api/build/public/rss/vacancies.xml` — RSS feed
+19. `GET /sitemap.xml` — sitemap reachability (soft — host-specific 404 tolerated)
 
 **Cleanup** (always):
 
@@ -91,7 +90,14 @@ ARTIFACT=docs/qbuild/SMOKE_PROD_$(date +%s).json npm run smoke:qbuild-prod
 
 ## Soft vs hard checks
 
-The pipeline / interviews / weekly endpoints ship in the polish-layer PR
-(#124) but are not yet on `main`. The smoke logs them as `INFO` if the
-deploy returns 404, so existing prod runs stay green. Once #124 merges,
-those rows flip to `PASS` automatically.
+Almost every step is a hard PASS/FAIL. The only soft step is `/sitemap.xml`
+— it returns 404 when the smoke goes through the `/api-backend` rewrite
+because the sitemap lives at the apex (`aevion.app/sitemap.xml`), not under
+the API path. INFO-logged, doesn't fail the run.
+
+## Known prior bug (caught by this harness)
+
+`/applications/mine/pipeline` and `/applications/mine/interviews` returned
+500 (`column a.matchScore does not exist`) on prod until the schema-bootstrap
+fix in PR #126 added the column and populated it on apply. If you see those
+two failing again, suspect a schema regression first.

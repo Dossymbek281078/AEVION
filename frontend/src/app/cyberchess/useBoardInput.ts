@@ -591,29 +591,26 @@ export function useBoardInput(opts: BoardInputOptions) {
       const destX = d.bRect.l + tCol * cw + cw / 2;
       const destY = d.bRect.t + tRow * cw + cw / 2;
       const ghostNode = ghostNodeRef.current;
-      // ⚡ Exec IMMEDIATELY on release — last-move highlight + dest piece appear
-      // instantly. Ghost continues sliding for visual continuity but doesn't
-      // block the state update. Раньше exec ждал 150ms slide → highlight
-      // запаздывал. Теперь highlight в момент release, ghost overlap'ит
-      // с появляющейся фигурой → seamless.
+      // ⚡ Snappy slide — 50ms total. Ghost flies from cursor to dest cell
+      // center быстро. Exec в одной же frame с release (instant highlight +
+      // piece). Ghost overlap'ит с piece на финале slide и удаляется.
+      // Раньше 100-150ms slide создавал perception лага между actual move
+      // и ghost'ом. 50ms — barely perceptible motion, no lag feel.
       executeDrop(d.from, to);
       if (ghostNode) {
-        // Slide ghost from cursor → destination cell center over 100ms.
-        // 150ms felt slow (ghost lagged behind the piece-already-visible).
-        // 100ms — fast enough to feel responsive, slow enough to read motion.
-        ghostNode.style.transition = "left 100ms cubic-bezier(0.25,0.46,0.45,0.94), top 100ms cubic-bezier(0.25,0.46,0.45,0.94)";
+        ghostNode.style.transition = "left 50ms ease-out, top 50ms ease-out";
         ghostNode.style.left = `${destX}px`;
         ghostNode.style.top = `${destY}px`;
         const inner = ghostNode.firstElementChild as HTMLDivElement | null;
         const clone = inner?.firstElementChild as HTMLElement | null;
         if (clone) {
-          clone.style.transition = "transform 100ms cubic-bezier(0.25,0.46,0.45,0.94)";
+          clone.style.transition = "transform 50ms ease-out";
           clone.style.transform = "scale(1.0) translateY(0)";
         }
         const halo = haloNodeRef.current;
         if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        // Remove ghost after slide ends.
-        window.setTimeout(() => hideGhost(), 100);
+        // Hide ghost as soon as slide arrives — overlaps 1 frame with rendered piece.
+        window.setTimeout(() => hideGhost(), 50);
       } else {
         hideGhost();
       }

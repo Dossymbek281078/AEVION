@@ -32,6 +32,26 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/referrals", changeFrequency: "daily", priority: 0.5 },
   { path: "/build/leaderboard", changeFrequency: "daily", priority: 0.6 },
   { path: "/build/help", changeFrequency: "weekly", priority: 0.5 },
+  { path: "/build/salary", changeFrequency: "hourly", priority: 0.75 },
+  { path: "/build/ai-match", changeFrequency: "weekly", priority: 0.65 },
+  // HealthAI standalone pages
+  { path: "/healthai", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/healthai/screener", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/healthai/plan", changeFrequency: "weekly", priority: 0.65 },
+  // QCoreAI
+  { path: "/qcoreai/budget", changeFrequency: "monthly", priority: 0.55 },
+  // QPayNet
+  { path: "/qpaynet", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/qpaynet/merchant", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/qpaynet/transactions", changeFrequency: "daily", priority: 0.6 },
+  { path: "/qpaynet/request", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/qpaynet/requests", changeFrequency: "weekly", priority: 0.55 },
+  // QContract
+  { path: "/qcontract", changeFrequency: "weekly", priority: 0.75 },
+  // Smeta Trainer
+  { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
+  // Launch status
+  { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];
 
 async function fetchIds(path: string, idField: string = "id"): Promise<string[]> {
@@ -51,13 +71,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Pull employer IDs from the leaderboard endpoint — that's a public,
   // already-curated list of brand-name profiles worth indexing. Capped
   // server-side at 20+20, so cheap to fetch.
-<<<<<<< Updated upstream
-  const [origin, projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
-    Promise.resolve(BASE_URL),
-=======
   const origin = BASE_URL;
   const [projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
->>>>>>> Stashed changes
     fetchIds("/api/build/projects?limit=500&status=OPEN"),
     fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
     fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })

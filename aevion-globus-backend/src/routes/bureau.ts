@@ -889,6 +889,30 @@ bureauRouter.get("/dashboard", async (req, res) => {
  * handles signature verification + decoding. We only update status; the
  * client must hit /upgrade/:certId separately to apply Verified tier.
  */
+// Webhook failure classifier — distinguishes scanner noise from real errors.
+// Used by /payment/webhook and /verify/webhook to gate Sentry capture so
+// alerts fire only when a Stripe/Sumsub-shaped request fails verification or
+// downstream logic, not when random crawlers hit the URL.
+function classifyWebhookFailure(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("missing stripe-signature") || m.includes("missing x-payload-digest")) {
+    return "no_signature_header";
+  }
+  if (m.includes("signature") || m.includes("constructevent") || m.includes("hmac")) {
+    return "signature_invalid";
+  }
+  if (m.includes("metadata.bureauintentid") || m.includes("missing metadata")) {
+    return "metadata_missing";
+  }
+  if (m.includes("unhandled stripe event")) {
+    return "unhandled_event";
+  }
+  if (m.includes("env is not set") || m.includes("not yet implemented")) {
+    return "config_missing";
+  }
+  return "unknown";
+}
+
 bureauRouter.post("/verify/webhook", async (req, res) => {
   try {
     await ensureBureauTables();
@@ -925,7 +949,11 @@ bureauRouter.post("/verify/webhook", async (req, res) => {
     res.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "kyc webhook failed";
-    console.error("[Bureau] kyc webhook:", msg);
+    const failure = classifyWebhookFailure(msg);
+    console.error("[Bureau] kyc webhook:", failure, msg);
+    if (failure !== "no_signature_header") {
+      captureBureauError(err, { route: `verify/webhook:${failure}` });
+    }
     res.status(400).json({ ok: false, error: msg });
   }
 });
@@ -958,7 +986,14 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
     res.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "payment webhook failed";
-    console.error("[Bureau] payment webhook:", msg);
+    // Classify so Sentry alerts distinguish real signature-mismatch (means
+    // wrong webhook secret on our side OR compromised attempt) from random
+    // scanners hitting the URL with no stripe-signature header at all.
+    const failure = classifyWebhookFailure(msg);
+    console.error("[Bureau] payment webhook:", failure, msg);
+    if (failure !== "no_signature_header") {
+      captureBureauError(err, { route: `payment/webhook:${failure}` });
+    }
     res.status(400).json({ ok: false, error: msg });
   }
 });

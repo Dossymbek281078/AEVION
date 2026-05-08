@@ -41,7 +41,10 @@ Group rules by severity. Each row: trigger condition + routing + reason.
 | ID | Trigger | Action | Why |
 |---|---|---|---|
 | P1-BUREAU-KYC | `service:bureau route:verify/start` issue count > 5 in 1 hour | Slack #aevion-alerts | KYC provider down or misconfigured — Verified-tier upgrades blocked. |
-| P1-BUREAU-PAYMENT | `service:bureau route:payment/intent` OR `route:payment/webhook` issue count > 3 in 1 hour | Slack #aevion-alerts | Stripe integration broken — cert payments fail, P3-4 revenue path down. Check `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` first. |
+| P1-BUREAU-PAYMENT | `service:bureau route:payment/intent` OR `route:payment/webhook*` issue count > 3 in 1 hour | Slack #aevion-alerts | Stripe integration broken — cert payments fail, P3-4 revenue path down. Check `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` first. |
+| P1-BUREAU-WEBHOOK-SIG | `service:bureau route:payment/webhook:signature_invalid` (any) | Slack #aevion-alerts | Stripe webhook secret mismatch (we rotated and forgot to update Stripe destination, or attacker probing). High-urgency: legit payments aren't propagating. |
+| P1-BUREAU-WEBHOOK-CONFIG | `service:bureau route:*/webhook:config_missing` (any) | Slack #aevion-alerts | Provider env var missing — `BUREAU_PAYMENT_PROVIDER=stripe` set but `STRIPE_*_KEY` not. Fail loud. |
+| P1-BUREAU-WEBHOOK-METADATA | `service:bureau route:payment/webhook:metadata_missing` count > 1 in 1 hour | Slack #aevion-alerts | Stripe event missing `metadata.bureauIntentId` — checkout sessions created outside our flow OR createIntent regressed. Manual reconciliation needed. |
 | P1-BUREAU-CLAIM | `service:bureau route:trust-edges-claim-aec` (any) | Slack #aevion-alerts | AEC reward claim failing — user paid for cert but didn't get incentive. Sub-issue but trust-eroding. Often reveals aev wallet ownership_mismatch (race with QPayNet). |
 | P1-PLANET-CERT | `service:planet route:cert*` issue count > 5 in 1 hour | Slack #aevion-alerts | Quorum certification path broken — Awards payouts stall. |
 | P1-AWARDS-FINALIZE | `service:awards route:finalize` (any) | Slack #aevion-alerts | Season finalize is rare + critical (mints medals + triggers payouts). Any error worth a human look. |

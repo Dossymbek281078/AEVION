@@ -21,13 +21,13 @@ wired as `npm run smoke:qbuild-prod`.
 
 4. `POST /api/auth/register` — `smoke-client+<ts>@aevion.test`
 5. `POST /api/auth/register` — `smoke-worker+<ts>@aevion.test`
-6. `POST /api/build/profile` — worker upserts profile with skills
+6. `POST /api/build/profiles` — worker upserts profile with skills
 7. `POST /api/build/projects` — client creates project
 8. `POST /api/build/vacancies` — client creates vacancy under that project
 9. `GET /api/build/vacancies/:id` — fetch by id
 10. `POST /api/build/applications` — worker applies
 11. `GET /api/build/applications/by-vacancy/:id` — owner sees the application
-12. `PATCH /api/build/applications/:id/label` — owner sets `INTERVIEW`
+12. `PATCH /api/build/applications/:id/label` — owner sets `INTERVIEW` (soft — ships in #124)
 13. `PATCH /api/build/applications/:id` — owner moves status to `ACCEPTED`
 
 **Stats + pipeline** (soft-checks — endpoints from the polish layer; tolerated

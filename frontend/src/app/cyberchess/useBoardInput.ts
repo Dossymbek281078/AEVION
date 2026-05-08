@@ -283,6 +283,17 @@ export function useBoardInput(opts: BoardInputOptions) {
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
     const o = optsRef.current;
+    // Pre-cleanup: clear any stale [data-ghost-hidden] markers from a previous
+    // botched drag (e.g., focus loss during drag). Without this, subsequent
+    // drags can pick up DOM where the source piece is still imperatively
+    // hidden, breaking visual feedback for moves 2+.
+    if (typeof document !== "undefined") {
+      document.querySelectorAll('[data-ghost-hidden="1"]').forEach(el => {
+        const h = el as HTMLElement;
+        h.style.opacity = "";
+        delete h.dataset.ghostHidden;
+      });
+    }
     const pieceSrc = o.scratchOn && o.scratchGame
       ? o.scratchGame
       : (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on ? o.virtualGame : o.game);
@@ -307,16 +318,16 @@ export function useBoardInput(opts: BoardInputOptions) {
       const srcPieceEl = findSourcePieceEl(from);
       if (srcPieceEl) {
         const clone = srcPieceEl.cloneNode(true) as HTMLElement;
-        // Pickup animation: stage 1 (initial) — slightly compressed, 0.9 opacity.
-        // Stage 2 (after reflow): scale up with overshoot bounce. Effect:
-        // фигура "хватается" — слегка сжимается, потом упруго растёт.
+        // Stage 1 (initial): exact size at rest, opacity 0.9.
+        // Stage 2 (after reflow): scale up + ФИЗИЧЕСКИ ПОДНИМАЕТСЯ через
+        // translateY(-14px) → user видит явный отрыв от клетки.
         clone.style.cssText = [
           "width:100%", "height:100%",
-          "transform:scale(0.95)",
+          "transform:scale(0.95) translateY(0)",
           "transform-origin:center center",
           "opacity:0.9",
           "filter:none",
-          "transition:transform 110ms cubic-bezier(0.34,1.56,0.64,1), opacity 60ms ease-out",
+          "transition:transform 130ms cubic-bezier(0.34,1.56,0.64,1), opacity 60ms ease-out",
           "animation:none",
           "pointer-events:none",
           "user-select:none",
@@ -324,13 +335,10 @@ export function useBoardInput(opts: BoardInputOptions) {
         ].join(";");
         clone.removeAttribute("data-ghost-hidden");
         inner.appendChild(clone);
-        // Force reflow then animate to lifted state.
-        // Use TWO RAFs to ensure browser paints initial state first → animation
-        // is GUARANTEED visible (single RAF can be too fast; browser may merge
-        // paint and skip the initial frame).
         void clone.offsetWidth;
         requestAnimationFrame(() => requestAnimationFrame(() => {
-          clone.style.transform = "scale(1.25)";
+          // 1.30× + lift -14px — clear physical detachment from the cell.
+          clone.style.transform = "scale(1.30) translateY(-14px)";
           clone.style.opacity = "1";
         }));
       } else {
@@ -574,24 +582,61 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (!d || d.pid !== e.pointerId) return;
       dragRef.current = null;
       const wasActive = d.active;
-      hideGhost();
       if (!wasActive) {
-        // Tap with no drag. Same-square tap is already handled by onBoardDown's
-        // priority logic — calling click() again would deselect what we just
-        // selected. Cross-square taps (rare — finger lifted on a different
-        // square without crossing the drag threshold) DO need click() to fire.
+        // Tap with no drag — hide ghost + delegate to click().
+        hideGhost();
         const sq = sqFromRect(e.clientX, e.clientY, d.bRect) || sqFromBoard(e.clientX, e.clientY);
         if (sq && sq !== d.from) optsRef.current.click(sq);
         return;
       }
-      // Drag activated — drop on target.
       recentDragRef.current = Date.now();
       const to = sqFromRect(e.clientX, e.clientY, d.bRect) || sqFromBoard(e.clientX, e.clientY);
       if (!to || to === d.from) {
-        // Drop on origin → keep selection so click-to-move still works after a misfire.
+        // Drop on origin → snap ghost back to source center, then hide.
+        hideGhost();
         return;
       }
-      executeDrop(d.from, to);
+      // Compute destination cell center in viewport coords for the slide animation
+      const toFile = FILES.indexOf(to[0] as any);
+      const toRank = 8 - parseInt(to[1], 10);
+      const flip = optsRef.current.flip;
+      const tCol = flip ? 7 - toFile : toFile;
+      const tRow = flip ? 7 - toRank : toRank;
+      const cw = d.bRect.cw;
+      const destX = d.bRect.l + tCol * cw + cw / 2;
+      const destY = d.bRect.t + tRow * cw + cw / 2;
+      const ghostNode = ghostNodeRef.current;
+      if (ghostNode) {
+        // Slide the ghost smoothly from current position to destination cell
+        // center over 150ms. This gives the user a clear visual of "the piece
+        // flying to where I dropped it" — лёгкий полёт к клетке.
+        ghostNode.style.transition = "left 150ms cubic-bezier(0.25,0.46,0.45,0.94), top 150ms cubic-bezier(0.25,0.46,0.45,0.94)";
+        ghostNode.style.left = `${destX}px`;
+        ghostNode.style.top = `${destY}px`;
+        // During slide, also dampen the lift (scale back from 1.30 to 1) so
+        // arrival visually merges with the destination piece's drop snap.
+        const inner = ghostNode.firstElementChild as HTMLDivElement | null;
+        const clone = inner?.firstElementChild as HTMLElement | null;
+        if (clone) {
+          clone.style.transition = "transform 150ms cubic-bezier(0.25,0.46,0.45,0.94)";
+          clone.style.transform = "scale(1.05) translateY(0)";
+        }
+        // Hide halo immediately (no point during slide)
+        const halo = haloNodeRef.current;
+        if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
+        // After slide arrives, exec the move. Wait 2 RAFs after exec so React
+        // renders the destination piece BEFORE we hide the ghost — seamless
+        // handoff: ghost is at dest cell, dest piece materializes there with
+        // cc-piece-drop bounce animation, ghost is removed.
+        window.setTimeout(() => {
+          executeDrop(d.from, to);
+          requestAnimationFrame(() => requestAnimationFrame(() => hideGhost()));
+        }, 150);
+      } else {
+        // No ghost (shouldn't happen on activated drag) — exec immediately
+        executeDrop(d.from, to);
+        hideGhost();
+      }
     };
 
     const onCancel = (e: PointerEvent) => {

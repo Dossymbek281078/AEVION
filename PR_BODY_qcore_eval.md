@@ -103,7 +103,7 @@ Build: tsc clean. Pack: 18.4 kB / 6 files (was 14.8 kB).
 - [ ] Manual: delete suite, confirm history disappears
 - [ ] SDK smoke (after publish or `npm link`):
   ```ts
-  const client = new QCoreClient({ baseUrl: "https://api.aevion.io", token });
+  const client = new QCoreClient({ baseUrl: "https://api.aevion.app", token });
   const suite = await client.createEvalSuite({ name: "Demo", cases: [
     { id: "1", input: "What is 2+2?", judge: { type: "contains", needle: "4" } }
   ]});

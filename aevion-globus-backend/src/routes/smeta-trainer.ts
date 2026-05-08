@@ -114,7 +114,7 @@ smetaTrainerRouter.post("/lms/lesson-complete", (req, res) => {
   if (!lessonRef) return res.status(400).json({ error: "lessonRef required" });
 
   const levelNum = LESSON_LEVEL_MAP[lessonRef] ?? null;
-  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
   const deepLink = levelNum
     ? `${frontendBase}/smeta-trainer/level/${levelNum}?lesson=${encodeURIComponent(lessonRef)}`
     : `${frontendBase}/smeta-trainer`;

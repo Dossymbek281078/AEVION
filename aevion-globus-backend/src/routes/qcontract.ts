@@ -321,7 +321,7 @@ qcontractRouter.post("/documents", async (req, res) => {
     ],
   );
 
-  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
   res.status(201).json({
     id,
     accessToken,
@@ -361,7 +361,7 @@ qcontractRouter.get("/documents", async (req, res) => {
     params,
   );
 
-  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
   res.json({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     documents: result.rows.map((r: any) => ({

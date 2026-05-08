@@ -144,7 +144,7 @@ X-Api-Key: qpn_live_...
               Вставьте iframe на любой сайт — получатели смогут оплатить через AEVION без интеграции:
             </p>
             <code className="block bg-slate-800 text-violet-300 text-xs p-4 rounded-xl font-mono whitespace-pre-wrap break-all">{`<iframe
-  src="https://aevion.kz/qpaynet/widget/${wallets[0].id}?amount=990&desc=Подписка"
+  src="https://aevion.app/qpaynet/widget/${wallets[0].id}?amount=990&desc=Подписка"
   width="380" height="360" frameborder="0"
   style="border-radius:16px"
 ></iframe>`}</code>

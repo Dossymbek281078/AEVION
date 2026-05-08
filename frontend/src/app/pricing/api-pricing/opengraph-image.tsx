@@ -101,7 +101,7 @@ export default async function Image() {
             <Item label="$15.00" hint="/1k IP register" />
             <Item label="$0.50" hint="/1k LLM tokens" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/api-pricing</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/api-pricing</div>
         </div>
       </div>
     ),

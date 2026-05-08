@@ -3442,7 +3442,7 @@ planetComplianceRouter.get("/og.svg", planetEmbedRateLimit, async (req, res) => 
         <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
       </g>
     </g>
-    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / planet</text>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / planet</text>
   </g>
 </svg>`;
 
@@ -3542,7 +3542,7 @@ planetComplianceRouter.get("/certificates/:certId/changelog.rss", planetEmbedRat
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
 
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const selfUrl = `${proto}://${host}/api/planet/certificates/${encodeURIComponent(certId)}/changelog.rss`;
 
     const certRow = await pool.query(
@@ -3635,7 +3635,7 @@ planetComplianceRouter.get("/sitemap.xml", planetEmbedRateLimit, async (req, res
   try {
     await ensurePlanetTables();
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
     const today = new Date().toISOString().slice(0, 10);
 

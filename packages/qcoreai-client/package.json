@@ -4,7 +4,7 @@
   "description": "TypeScript client for AEVION QCoreAI multi-agent pipeline — sync, streaming, refine, tags, eval harness, prompts library, threading, templates, batch runs, scheduled batches, workspaces, cost breakdown, webhook verification.",
   "license": "Apache-2.0",
   "author": "AEVION",
-  "homepage": "https://aevion.io/qcoreai",
+  "homepage": "https://aevion.app/qcoreai",
   "repository": {
     "type": "git",
     "url": "https://github.com/Dossymbek281078/AEVION.git",

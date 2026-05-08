@@ -598,7 +598,7 @@ function persistApplication(file: string, app: ProgramApplication) {
   appendFileSync(file, JSON.stringify(app) + "\n", "utf8");
 }
 
-const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL?.trim() || "hello@aevion.io";
+const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL?.trim() || "hello@aevion.app";
 
 const PROGRAM_LABELS: Record<ProgramApplication["kind"], { label: string; eta: string; subject: string }> = {
   affiliate: {
@@ -992,7 +992,7 @@ function refCode(email: string, scope: "aff" | "prt"): string {
   );
 }
 
-const SITE_BASE = process.env.PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+const SITE_BASE = process.env.PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 function magicLinkHtml(
   appName: string,

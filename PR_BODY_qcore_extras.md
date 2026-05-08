@@ -82,11 +82,11 @@ These features were originally on `qcore-multi-agent` alongside the now-merged V
 - [ ] Manual: share any run, click `</> Embed` → paste iframe in sandbox HTML, see read-only widget.
 - [ ] Manual: WS smoke from browser console:
       ```js
-      const ws = new WebSocket("wss://api.aevion.io/api/qcoreai/ws");
+      const ws = new WebSocket("wss://api.aevion.app/api/qcoreai/ws");
       ws.onmessage = e => console.log(e.data);
       ws.onopen = () => ws.send(JSON.stringify({type:"start", input:"hi", strategy:"sequential"}));
       ```
-- [ ] Smoke: `QCORE_BASE=https://api.aevion.io ./aevion-globus-backend/scripts/qcore-smoke.sh` (post-deploy)
+- [ ] Smoke: `QCORE_BASE=https://api.aevion.app ./aevion-globus-backend/scripts/qcore-smoke.sh` (post-deploy)
 
 ## Commits
 

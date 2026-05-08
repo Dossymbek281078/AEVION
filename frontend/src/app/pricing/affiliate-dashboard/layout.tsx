@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     title: "AEVION Affiliate Dashboard",
     description: "Реферальная статистика, payouts, ссылки.",
     type: "website",
-    url: "https://aevion.io/pricing/affiliate-dashboard",
+    url: "https://aevion.app/pricing/affiliate-dashboard",
     siteName: "AEVION",
   },
   alternates: {

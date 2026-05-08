@@ -157,7 +157,7 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
           "@aevion/planet-client",
           "@aevion/bureau-client",
         ],
-        docs: "https://aevion.com/docs/sdk",
+        docs: "https://aevion.app/docs/sdk",
       },
       generatedAt: new Date().toISOString(),
     },
@@ -170,7 +170,7 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
  */
 /** GET /api/aevion/sitemap.xml — platform-wide XML sitemap index. */
 aevionHubRouter.get("/sitemap.xml", (_req, res) => {
-  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
   const modules = [
     "/qright", "/qsign", "/bureau", "/qcoreai", "/cyberchess",
     "/planet", "/awards", "/bank", "/healthai", "/qtrade", "/quantum-shield",

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "AEVION Partner Program",
     description: "Reseller 30% · System Integrator 20% rev share · Agency white-label.",
     type: "website",
-    url: "https://aevion.io/pricing/partners",
+    url: "https://aevion.app/pricing/partners",
     siteName: "AEVION",
   },
   twitter: {

@@ -100,7 +100,7 @@ export default async function Image() {
             <Card icon="📚" label="Профессор" hint="Course license" />
             <Card icon="🏛" label="Университет" hint="Sponsorship" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/edu</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/edu</div>
         </div>
       </div>
     ),

@@ -103,7 +103,7 @@ export default async function Image() {
             <Tile letter="Gh" color="#181717" />
             <Tile letter="St" color="#635bff" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/integrations</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/integrations</div>
         </div>
       </div>
     ),

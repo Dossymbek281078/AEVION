@@ -27,7 +27,7 @@ function getTransport() {
   });
 }
 
-const FROM = process.env.SMTP_FROM || "AEVION QBuild <noreply@aevion.io>";
+const FROM = process.env.SMTP_FROM || "AEVION QBuild <noreply@aevion.app>";
 const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 /** Fire-and-forget send — never throws. */

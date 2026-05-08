@@ -1071,7 +1071,7 @@ modulesRouter.get("/changelog.rss", modulesEmbedRateLimit, async (req, res) => {
     );
 
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const selfUrl = `${proto}://${host}/api/modules/changelog.rss`;
     const siteUrl = `${proto}://${host}/modules`;
 
@@ -1313,7 +1313,7 @@ modulesRouter.get("/:id/changelog.rss", modulesEmbedRateLimit, async (req, res) 
     }
 
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const selfUrl = `${proto}://${host}/api/modules/${encodeURIComponent(id)}/changelog.rss`;
     const siteUrl = `${proto}://${host}/modules/${encodeURIComponent(id)}`;
     const moduleName = base?.name || id;
@@ -1395,7 +1395,7 @@ modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
   try {
     const enriched = await loadAllEnriched();
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
 
     function esc(s: string): string {
@@ -1526,7 +1526,7 @@ modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (req, res) => {
         <text x="20" y="64" font-size="14" font-weight="700" fill="#cbd5e1">PORTAL ONLY</text>
       </g>
     </g>
-    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / modules</text>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / modules</text>
   </g>
 </svg>`;
 
@@ -1563,7 +1563,7 @@ modulesRouter.get("/tags/:tag/changelog.rss", modulesEmbedRateLimit, async (req,
       .map((p) => p.id);
 
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const selfUrl = `${proto}://${host}/api/modules/tags/${encodeURIComponent(tag)}/changelog.rss`;
     const siteUrl = `${proto}://${host}/modules/tags/${encodeURIComponent(tag)}`;
 

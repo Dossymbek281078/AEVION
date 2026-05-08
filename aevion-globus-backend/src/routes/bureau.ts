@@ -1877,7 +1877,7 @@ bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (req, res) => {
         <text x="20" y="64" font-size="14" font-weight="700" fill="#cbd5e1">ANONYMOUS</text>
       </g>
     </g>
-    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / bureau</text>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / bureau</text>
   </g>
 </svg>`;
 
@@ -1898,7 +1898,7 @@ bureauRouter.get("/cert/:certId/changelog.rss", bureauEmbedRateLimit, async (req
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
 
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const selfUrl = `${proto}://${host}/api/bureau/cert/${encodeURIComponent(certId)}/changelog.rss`;
     const siteUrl = `${proto}://${host}/bureau/cert/${encodeURIComponent(certId)}`;
 
@@ -1982,7 +1982,7 @@ bureauRouter.get("/sitemap.xml", bureauEmbedRateLimit, async (req, res) => {
   try {
     await ensureBureauTables();
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
     const today = new Date().toISOString().slice(0, 10);
 
@@ -2458,7 +2458,7 @@ bureauRouter.post("/admin/notary/seed", async (req, res) => {
       licenseNumber: "KZ-NOTARY-2024-001",
       jurisdiction: "KZ",
       city: "Almaty",
-      contactEmail: "bekzhanov@demo.bureau.aevion.io",
+      contactEmail: "bekzhanov@demo.bureau.aevion.app",
       monthlyVolumeLimit: 500,
     },
     {
@@ -2467,7 +2467,7 @@ bureauRouter.post("/admin/notary/seed", async (req, res) => {
       licenseNumber: "KZ-NOTARY-2024-002",
       jurisdiction: "KZ",
       city: "Astana",
-      contactEmail: "moldakhmetova@demo.bureau.aevion.io",
+      contactEmail: "moldakhmetova@demo.bureau.aevion.app",
       monthlyVolumeLimit: 300,
     },
     {
@@ -2476,7 +2476,7 @@ bureauRouter.post("/admin/notary/seed", async (req, res) => {
       licenseNumber: "EU-NOTARY-2024-001",
       jurisdiction: "EU",
       city: "Tallinn",
-      contactEmail: "petrov@demo.bureau.aevion.io",
+      contactEmail: "petrov@demo.bureau.aevion.app",
       monthlyVolumeLimit: 200,
     },
   ];

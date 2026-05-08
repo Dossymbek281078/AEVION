@@ -103,7 +103,7 @@ export default async function Image() {
             <Tag label="BYOK" />
             <Tag label="RBAC" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/glossary</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/glossary</div>
         </div>
       </div>
     ),

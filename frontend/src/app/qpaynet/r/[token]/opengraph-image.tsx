@@ -120,7 +120,7 @@ export default async function PayRequestOg({ params }: { params: { token: string
             fontWeight: 700,
           }}
         >
-          <div style={{ display: "flex" }}>aevion.kz/qpaynet</div>
+          <div style={{ display: "flex" }}>aevion.app/qpaynet</div>
           <div style={{ display: "flex", color: accent }}>безопасные платежи</div>
         </div>
       </div>

@@ -1678,8 +1678,8 @@ export default function PricingPage() {
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
           {tp("faq.subtitle")}{" "}
-          <a href="mailto:hello@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
-            hello@aevion.io
+          <a href="mailto:hello@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
+            hello@aevion.app
           </a>
           .
         </p>

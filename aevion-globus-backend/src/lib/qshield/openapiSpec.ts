@@ -14,7 +14,7 @@ export const QSHIELD_OPENAPI = {
       "with HMAC-SHA256 per-shard authentication, key rotation, and a " +
       "distributed_v2 policy (witness CID + author offline shard) so the " +
       "server alone cannot forge reconstruction.",
-    contact: { name: "AEVION", url: "https://aevion.com" },
+    contact: { name: "AEVION", url: "https://aevion.app" },
     license: { name: "Proprietary" },
   },
   servers: [

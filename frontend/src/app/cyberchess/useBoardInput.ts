@@ -168,6 +168,8 @@ export function useBoardInput(opts: BoardInputOptions) {
   }, []);
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
+    // eslint-disable-next-line no-console
+    console.log("[CC] showGhost CALLED", {from, x, y});
     ghostPosRef.current = { x, y };
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";
@@ -176,6 +178,8 @@ export function useBoardInput(opts: BoardInputOptions) {
     // ref to be attached, then write the transform.
     requestAnimationFrame(() => {
       const el = ghostRef.current;
+      // eslint-disable-next-line no-console
+      console.log("[CC] showGhost RAF check", {ghostRefAttached: !!el});
       if (!el) return;
       const { x: gx, y: gy } = ghostPosRef.current;
       const isTouch = dragRef.current?.ptype === "touch";
@@ -185,6 +189,8 @@ export function useBoardInput(opts: BoardInputOptions) {
   }, []);
 
   const hideGhost = useCallback(() => {
+    // eslint-disable-next-line no-console
+    console.log("[CC] hideGhost CALLED", new Error().stack?.split("\n").slice(1,4).join(" | "));
     if (ghostRafRef.current !== null) { cancelAnimationFrame(ghostRafRef.current); ghostRafRef.current = null; }
     setGhostFrom(null);
     setDragHover(null);
@@ -252,7 +258,7 @@ export function useBoardInput(opts: BoardInputOptions) {
         showGhost(d.from, e.clientX, e.clientY);
         if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
           // eslint-disable-next-line no-console
-          console.debug("[CC] drag ACTIVATED — ghost should follow cursor");
+          console.log("[CC] drag ACTIVATED — ghost should follow cursor");
         }
       }
       if (d.active) {
@@ -325,14 +331,14 @@ export function useBoardInput(opts: BoardInputOptions) {
     // DEBUG: visible in browser DevTools console (F12). Strip after diagnosing.
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.debug("[CC] onBoardDown fired", { button: e.button, pointerType: e.pointerType, x: e.clientX, y: e.clientY });
+      console.log("[CC] onBoardDown fired", { button: e.button, pointerType: e.pointerType, x: e.clientX, y: e.clientY });
     }
     if (e.button !== 0 && e.pointerType === "mouse") return;
     const sq = sqFromBoard(e.clientX, e.clientY);
     if (!sq) {
       if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
         // eslint-disable-next-line no-console
-        console.debug("[CC] onBoardDown: no square detected — board ref null or pointer outside grid");
+        console.log("[CC] onBoardDown: no square detected — board ref null or pointer outside grid");
       }
       return;
     }
@@ -398,7 +404,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     const canDrag = !!p && (o.tab === "analysis" || p.color === side) && !o.over;
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.debug("[CC] onBoardDown: canDrag check", {
+      console.log("[CC] onBoardDown: canDrag check", {
         sq, isPM, hasPiece: !!p, pieceColor: p?.color, side, pCol: o.pCol,
         tab: o.tab, on: o.on, over: o.over, canDrag,
       });
@@ -409,7 +415,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, bRect };
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.debug("[CC] onBoardDown: drag ARMED — waiting for movement >4px to activate");
+      console.log("[CC] onBoardDown: drag ARMED — waiting for movement >4px to activate");
     }
 
     const isMyTurn = o.tab === "analysis" || o.game.turn() === o.pCol;

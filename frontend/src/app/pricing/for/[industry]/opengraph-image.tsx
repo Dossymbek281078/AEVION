@@ -116,7 +116,7 @@ export default async function Image({ params }: { params: Promise<{ industry: st
           <div style={{ fontSize: 22, fontWeight: 800, opacity: 0.92 }}>
             27 модулей · единая подписка · открытое API
           </div>
-          <div style={{ fontSize: 16, opacity: 0.7 }}>aevion.io/pricing/for/{industry}</div>
+          <div style={{ fontSize: 16, opacity: 0.7 }}>aevion.app/pricing/for/{industry}</div>
         </div>
       </div>
     ),

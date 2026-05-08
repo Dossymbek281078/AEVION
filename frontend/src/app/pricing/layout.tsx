@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "Цифровая собственность, AI, подписи и платежи: всё, за что обычно платите 4 разным вендорам — теперь в AEVION с экономией до 84%.",
     type: "website",
-    url: "https://aevion.io/pricing",
+    url: "https://aevion.app/pricing",
     siteName: "AEVION",
   },
   twitter: {

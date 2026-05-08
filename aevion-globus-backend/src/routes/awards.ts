@@ -1375,7 +1375,7 @@ awardsRouter.get("/og.svg", awardsEmbedRateLimit, async (req, res) => {
         <text x="20" y="64" font-size="14" font-weight="700" fill="#cbd5e1">ENTRIES</text>
       </g>
     </g>
-    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.tech / awards</text>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / awards</text>
   </g>
 </svg>`;
 
@@ -1397,7 +1397,7 @@ awardsRouter.get("/seasons/:seasonId/changelog.rss", awardsEmbedRateLimit, async
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
 
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const selfUrl = `${proto}://${host}/api/awards/seasons/${encodeURIComponent(seasonId)}/changelog.rss`;
     const siteUrl = `${proto}://${host}/awards/results?seasonId=${encodeURIComponent(seasonId)}`;
 
@@ -1492,7 +1492,7 @@ awardsRouter.get("/sitemap.xml", awardsEmbedRateLimit, async (req, res) => {
   try {
     await ensureAwardsTables();
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
-    const host = (req.headers.host as string) || "aevion.tech";
+    const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
     const today = new Date().toISOString().slice(0, 10);
 

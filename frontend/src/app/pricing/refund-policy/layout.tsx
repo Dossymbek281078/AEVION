@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "14 дней money-back, прорейтинг даунгрейдов, экспорт данных, retain-период 90 дней.",
     type: "website",
-    url: "https://aevion.io/pricing/refund-policy",
+    url: "https://aevion.app/pricing/refund-policy",
     siteName: "AEVION",
   },
   twitter: {

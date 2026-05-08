@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "Enterprise-grade защита: SOC 2 Type II, GDPR, 152-ФЗ, PCI DSS. Шесть уровней безопасности, резидентность данных в EU/RU/KZ и программа Bug Bounty.",
     type: "website",
-    url: "https://aevion.io/pricing/security",
+    url: "https://aevion.app/pricing/security",
     siteName: "AEVION",
   },
   twitter: {

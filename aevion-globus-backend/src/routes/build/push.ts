@@ -26,7 +26,7 @@ async function getWebPush() {
   const wp = (await import("web-push")).default;
   const pub = process.env.VAPID_PUBLIC_KEY?.trim();
   const priv = process.env.VAPID_PRIVATE_KEY?.trim();
-  const subject = process.env.VAPID_SUBJECT?.trim() || "mailto:noreply@aevion.io";
+  const subject = process.env.VAPID_SUBJECT?.trim() || "mailto:noreply@aevion.app";
   if (pub && priv) {
     wp.setVapidDetails(subject, pub, priv);
     _wpReady = true;

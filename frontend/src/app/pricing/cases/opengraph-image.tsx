@@ -101,7 +101,7 @@ export default async function Image() {
             <Stat value="0" label="IP-disputes за 18 мес" />
             <Stat value="−68%" label="time-to-market" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/cases</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/cases</div>
         </div>
       </div>
     ),

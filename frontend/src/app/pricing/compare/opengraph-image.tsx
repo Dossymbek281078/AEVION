@@ -101,7 +101,7 @@ export default async function Image() {
             <Tier name="BUSINESS" price="$99" highlight={false} />
             <Tier name="ENTERPRISE" price="по запросу" highlight={false} />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/compare</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/compare</div>
         </div>
       </div>
     ),

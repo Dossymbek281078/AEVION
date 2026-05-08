@@ -10,7 +10,7 @@
 1. Go to https://www.namecheap.com
 2. Search for `aevion.app`
 3. If available — buy ($12-15/year)
-4. If taken — try: `aevion.io`, `aevion.co`, `getaevion.com`, `useaevion.com`
+4. If taken — try: `aevion.app`, `aevion.co`, `getaevion.app`, `useaevion.app`
 
 ### Option B: Google Domains
 1. Go to https://domains.google.com

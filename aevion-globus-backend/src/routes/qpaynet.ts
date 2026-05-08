@@ -452,7 +452,7 @@ async function sendNotifEmail(
       secure: Number(process.env.SMTP_PORT || 587) === 465,
       auth: { user, pass },
     });
-    const from = process.env.SMTP_FROM || "AEVION QPayNet <noreply@aevion.io>";
+    const from = process.env.SMTP_FROM || "AEVION QPayNet <noreply@aevion.app>";
     const tpl = EMAIL_TEMPLATES[kind] ?? { subjectPrefix: "AEVION QPayNet", ctaText: "Открыть QPayNet", ctaPath: "/qpaynet" };
     const subject = `${tpl.subjectPrefix} — ${title}`;
     const html = `
@@ -1871,7 +1871,7 @@ qpaynetRouter.post("/requests", async (req, res) => {
     [id, ownerId, toWalletId, token, tiin, description, note?.trim() ?? null, expiresAt ?? null, notifyUrl ?? null, notifySecretStored],
   );
 
-  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
   res.status(201).json({
     id, token,
     payUrl: `${frontendBase}/qpaynet/r/${token}`,
@@ -1897,7 +1897,7 @@ qpaynetRouter.get("/requests", async (req, res) => {
     [ownerId],
   );
 
-  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.kz").replace(/\/$/, "");
+  const frontendBase = (process.env.FRONTEND_URL ?? "https://aevion.app").replace(/\/$/, "");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   res.json({ requests: result.rows.map((r: any) => ({
     ...r,

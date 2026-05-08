@@ -1,6 +1,6 @@
 # QCoreAI for Kotlin / Android
 
-Native Kotlin client for [AEVION QCoreAI](https://aevion.io/qcoreai) — a multi-agent LLM pipeline with sequential / parallel / debate strategies, eval harness, and a prompts library.
+Native Kotlin client for [AEVION QCoreAI](https://aevion.app/qcoreai) — a multi-agent LLM pipeline with sequential / parallel / debate strategies, eval harness, and a prompts library.
 
 Single-file SDK (~310 LOC). Only deps are `kotlinx-coroutines` + `kotlinx-serialization-json` + the JDK 11 `HttpClient`. Works on Android (API 24+ via desugar) and any JVM 11+.
 
@@ -25,7 +25,7 @@ import io.aevion.qcoreai.QCoreClient
 import kotlinx.coroutines.runBlocking
 
 val client = QCoreClient(
-    baseUrl = "https://api.aevion.io",
+    baseUrl = "https://api.aevion.app",
     token = System.getenv("AEVION_TOKEN")
 )
 

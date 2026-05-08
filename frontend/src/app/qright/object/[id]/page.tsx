@@ -280,13 +280,13 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
         "@type": "ListItem",
         position: 1,
         name: "AEVION",
-        item: origin || "https://aevion.tech",
+        item: origin || "https://aevion.app",
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "QRight",
-        item: origin ? `${origin}/qright` : "https://aevion.tech/qright",
+        item: origin ? `${origin}/qright` : "https://aevion.app/qright",
       },
       {
         "@type": "ListItem",

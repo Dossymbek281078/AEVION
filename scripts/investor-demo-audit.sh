@@ -48,6 +48,7 @@ check "AEV stats"          "$API/api/aev/stats"
 check "Bureau health"      "$API/api/bureau/health"
 check "Bureau notaries"    "$API/api/bureau/notaries"
 check "QCoreAI providers"  "$API/api/qcoreai/providers"
+check "Public API quotas"  "$API/api/quotas"
 check "Bureau dashboard (auth required)"  "$API/api/bureau/dashboard"  401
 
 echo

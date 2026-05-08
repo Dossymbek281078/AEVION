@@ -149,7 +149,7 @@ without explicit user direction.
 
 | ID | Task | Window | Blocker |
 |---|---|---|---|
-| P0-1 | Custom domain on Vercel (`aevion.app` or `aevion.tech`) — DNS cutover | aevion-core | DNS |
+| P0-1 | Custom domain on Vercel (`aevion.app` or `aevion.app`) — DNS cutover | aevion-core | DNS |
 | P0-2 | Remove SSO gating from Vercel preview / prod (per memory `reference_prod_deploy_state_2026-05-03`) | aevion-core | infra access |
 | ~~P0-3~~ | ~~Env audit~~ ✅ done in PR #92 — see `docs/PROD_ENV_CHECKLIST.md` + `npm run check:prod-env` | aevion-backend-modules | — |
 | P0-3a | Wire `npm run check:prod-env` into the Railway deploy pre-step | aevion-core / infra | P0-3 |

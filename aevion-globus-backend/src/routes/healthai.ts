@@ -1981,7 +1981,7 @@ const DOCTOR_REFERRALS: DoctorReferral[] = [
     city: "*",
     specialty: "general",
     telemedicine: true,
-    url: "https://aevion.com/healthai/telehealth",
+    url: "https://aevion.app/healthai/telehealth",
   },
 ];
 

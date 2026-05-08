@@ -216,13 +216,13 @@ export default async function AwardsEntryPage({ params }: Props) {
         "@type": "ListItem",
         position: 1,
         name: "AEVION",
-        item: origin || "https://aevion.tech",
+        item: origin || "https://aevion.app",
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Awards",
-        item: origin ? `${origin}/awards` : "https://aevion.tech/awards",
+        item: origin ? `${origin}/awards` : "https://aevion.app/awards",
       },
       {
         "@type": "ListItem",

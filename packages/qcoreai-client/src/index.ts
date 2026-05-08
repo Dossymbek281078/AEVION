@@ -18,7 +18,7 @@
  * import { QCoreClient } from "@aevion/qcoreai-client";
  *
  * const client = new QCoreClient({
- *   baseUrl: "https://api.aevion.io",
+ *   baseUrl: "https://api.aevion.app",
  *   token: process.env.AEVION_TOKEN,
  * });
  *
@@ -257,7 +257,7 @@ export type BatchDetail = {
 };
 
 export type ClientOptions = {
-  /** Base URL of the AEVION backend, e.g. "https://api.aevion.io". */
+  /** Base URL of the AEVION backend, e.g. "https://api.aevion.app". */
   baseUrl: string;
   /** Optional bearer JWT — required for owner-scoped endpoints (runs, tags, webhook). */
   token?: string;

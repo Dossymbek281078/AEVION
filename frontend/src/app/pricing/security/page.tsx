@@ -445,7 +445,7 @@ export default function SecurityPage() {
             Сообщить об уязвимости
           </Link>
           <a
-            href="mailto:security@aevion.io"
+            href="mailto:security@aevion.app"
             style={{
               display: "inline-block",
               padding: "12px 24px",
@@ -458,7 +458,7 @@ export default function SecurityPage() {
               fontSize: 14,
             }}
           >
-            security@aevion.io
+            security@aevion.app
           </a>
         </div>
       </section>
@@ -553,8 +553,8 @@ export default function SecurityPage() {
         </Link>
         <div style={{ fontSize: 12, color: "#94a3b8" }}>
           Вопросы?{" "}
-          <a href="mailto:security@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
-            security@aevion.io
+          <a href="mailto:security@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
+            security@aevion.app
           </a>
         </div>
       </div>

@@ -136,7 +136,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/cases</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/cases</div>
         </div>
       </div>
     ),

@@ -225,13 +225,13 @@ export default async function BureauCertPage({ params }: Props) {
         "@type": "ListItem",
         position: 1,
         name: "AEVION",
-        item: origin || "https://aevion.tech",
+        item: origin || "https://aevion.app",
       },
       {
         "@type": "ListItem",
         position: 2,
         name: "Bureau",
-        item: origin ? `${origin}/bureau` : "https://aevion.tech/bureau",
+        item: origin ? `${origin}/bureau` : "https://aevion.app/bureau",
       },
       {
         "@type": "ListItem",

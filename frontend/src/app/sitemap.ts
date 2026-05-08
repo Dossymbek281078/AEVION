@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getApiBase } from "@/lib/apiBase";
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 const TIERS = ["free", "pro", "business", "enterprise"];
 const INDUSTRIES = ["banks", "startups", "government", "creators", "law-firms"];

@@ -18,7 +18,7 @@ const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
   : join(process.cwd(), "data", "subscriptions.jsonl");
 
 const RESEND_KEY = process.env.RESEND_API_KEY?.trim();
-const FROM_EMAIL = process.env.FROM_EMAIL?.trim() || "AEVION <hello@aevion.io>";
+const FROM_EMAIL = process.env.FROM_EMAIL?.trim() || "AEVION <hello@aevion.app>";
 const FRONTEND_URL = process.env.FRONTEND_URL?.trim() || "http://localhost:3000";
 
 export interface Subscription {
@@ -142,7 +142,7 @@ function welcomeHtml(sub: Subscription): string {
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
           <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin:0">
             ID подписки: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${sub.id}</code><br/>
-            Поддержка: <a href="mailto:hello@aevion.io" style="color:#0d9488">hello@aevion.io</a>
+            Поддержка: <a href="mailto:hello@aevion.app" style="color:#0d9488">hello@aevion.app</a>
           </p>
         </td></tr>
       </table>
@@ -166,7 +166,7 @@ ${sub.modules.length > 0 ? sub.modules.join(" · ") : "Все 27 модулей 
 Открыть QRight: ${FRONTEND_URL}/qright
 
 ID подписки: ${sub.id}
-Поддержка: hello@aevion.io
+Поддержка: hello@aevion.app
 `;
 }
 

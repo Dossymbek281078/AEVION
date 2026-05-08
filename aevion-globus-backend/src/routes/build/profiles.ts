@@ -217,10 +217,14 @@ profilesRouter.post("/profiles", async (req, res) => {
   }
 });
 
-// GET /api/build/profiles/:id — public profile + experiences + education + rating
-profilesRouter.get("/profiles/:id", async (req, res) => {
+// GET /api/build/profiles/:id — public profile + experiences + education + rating.
+// Express matches in registration order; this generic `:id` route would
+// otherwise swallow `/profiles/search` (line 414), so any literal segment
+// reserved for a sibling route must be passed through with `next("route")`.
+profilesRouter.get("/profiles/:id", async (req, res, next) => {
   try {
     const id = String(req.params.id);
+    if (id === "search") return next("route");
     const result = await pool.query(
       `SELECT p."id", p."userId", p."name", p."city", p."description", p."buildRole", p."createdAt",
               p."title", p."summary", p."skillsJson", p."languagesJson",

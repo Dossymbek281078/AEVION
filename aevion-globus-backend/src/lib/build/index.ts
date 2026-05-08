@@ -144,6 +144,13 @@ async function _doEnsureBuildTables(): Promise<void> {
   // on the public profile. Replaces HH "wall of text" cover letters with
   // a face + voice — recruiters skim 10× faster.
   await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "introVideoUrl" TEXT;`);
+  // "Available Now" / quick-callable badge for workers. Toggled via
+  // /api/build/availability — surfaces them at top of talent search and
+  // tags the public profile with a green pill while availableUntil is in
+  // the future. Without these columns the availability router 500s.
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availableNow" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`ALTER TABLE "BuildProfile" ADD COLUMN IF NOT EXISTS "availableUntil" TIMESTAMPTZ;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildProfile_availableNow_idx" ON "BuildProfile" ("availableNow", "availableUntil") WHERE "availableNow" = TRUE;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (

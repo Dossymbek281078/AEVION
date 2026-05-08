@@ -258,6 +258,20 @@ def main(force: bool = False) -> int:
         if rc != 0:
             print("  NDCS indexes parser failed (non-fatal)", file=sys.stderr)
 
+    # ССЦ Методика (общие положения) — парсится отдельно
+    methodology_changed = any("8.04-08" in c for c in changed)
+    if methodology_changed:
+        print("==> running SSC methodology parser")
+        rc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "parse-ssc-methodology.py")],
+                            cwd=str(ROOT)).returncode
+        if rc != 0:
+            print("  SSC methodology parser failed (non-fatal)", file=sys.stderr)
+        # ССЦ-09 Кн.51 PDF
+        rc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "parse-ssc-pdf.py")],
+                            cwd=str(ROOT)).returncode
+        if rc != 0:
+            print("  SSC PDF parser failed (non-fatal)", file=sys.stderr)
+
     print(f"==> done. Updated: {', '.join(changed[:5])}{'…' if len(changed) > 5 else ''}")
     return 0
 

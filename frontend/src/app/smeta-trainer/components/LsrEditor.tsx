@@ -15,13 +15,15 @@ import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
 import { VorView } from "./VorView";
 import { Ks2View } from "./Ks2View";
+import { Ks3View } from "./Ks3View";
+import { useKs2Periods } from "../lib/useKs2Periods";
 import { AiChat } from "./AiChat";
 import { StickyTotals } from "./StickyTotals";
 import { GeomHint } from "./GeomHint";
 import { DefectActView } from "./DefectActView";
 import { ExportButton } from "./ExportButton";
 
-type Tab = "lsr" | "defect" | "vor" | "ssr" | "ks2" | "print";
+type Tab = "lsr" | "defect" | "vor" | "ssr" | "ks2" | "ks3" | "print";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "defect", label: "📋 Дефектная вед." },
@@ -29,6 +31,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "vor",   label: "ВОР" },
   { key: "ssr",   label: "НР + СП" },
   { key: "ks2",   label: "КС-2" },
+  { key: "ks3",   label: "КС-3" },
   { key: "print", label: "🖨 Печать" },
 ];
 
@@ -43,6 +46,7 @@ export function LsrEditor({ initialLsr }: Props) {
   const [drawerOpen, setDrawerOpen]         = useState(false);
   const [useSscPrices, setUseSscPrices]     = useState(false);
 
+  const { periods: ks2Periods } = useKs2Periods(lsr.id);
   const learningObject = useMemo(() => findObject(lsr.objectId), [lsr.objectId]);
   const calc           = useMemo(() => calcLsr(lsr, { useSscPrices }), [lsr, useSscPrices]);
   // Параллельный расчёт «как было бы по учебным ценам» — только если включён ССЦ-режим,
@@ -232,6 +236,7 @@ export function LsrEditor({ initialLsr }: Props) {
           )}
           {activeTab === "ssr" && <SsrView calc={calc} />}
           {activeTab === "ks2" && <Ks2View calc={calc} />}
+          {activeTab === "ks3" && <Ks3View calc={calc} ks2Periods={ks2Periods} />}
           {activeTab === "print" && (
             <div className="p-4 space-y-4">
               <div className="flex gap-2 items-center print:hidden">

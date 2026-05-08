@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { LsrCalc, Ks2Period } from "../lib/types";
 import { formatKzt } from "../lib/calc";
 import { findRate } from "../lib/corpus";
+import { useKs2Periods } from "../lib/useKs2Periods";
 
 interface Props {
   calc: LsrCalc;
@@ -15,7 +16,7 @@ const MONTH_PRESETS = [
 ];
 
 export function Ks2View({ calc }: Props) {
-  const [periods, setPeriods] = useState<Ks2Period[]>([]);
+  const { periods, setPeriods } = useKs2Periods(calc.lsr.id);
   const [activePeriodId, setActivePeriodId] = useState<string | null>(null);
   const [newPeriodName, setNewPeriodName] = useState("");
 

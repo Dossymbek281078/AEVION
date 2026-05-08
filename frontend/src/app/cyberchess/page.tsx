@@ -2202,15 +2202,12 @@ export default function CyberChessPage(){
     // Bullet 0pm: 250+5×80  =  650ms · 5pm: 250ms
     // Blitz  0pm: 320+5×100 =  820ms · 5pm: 320ms
     // Rapid  0pm: 400+5×120 = 1000ms · 5pm: 400ms
-    // TEMP — testing mode: жёсткая задержка AI 20s, чтобы успеть протестировать
-    // механики хода/премува. Управляется через localStorage:
-    //   localStorage.setItem("aevion_chess_ai_delay_ms","20000")  ← включить 20с
-    //   localStorage.removeItem("aevion_chess_ai_delay_ms")        ← вернуть нормально
-    // По умолчанию (без ключа) включено 20s — снять когда тестирование завершится.
-    const lsKey="aevion_chess_ai_delay_ms";
-    let testDelay=20000;
-    try{const v=typeof window!=="undefined"?localStorage.getItem(lsKey):null; if(v!==null) testDelay=parseInt(v,10)||0;}catch{}
-    const delay=testDelay>0?testDelay:Math.max(rawDelay,premoveFloor);
+    // TEMP — TESTING: жёсткая задержка AI 20 секунд для отладки механик
+    // хода/премува. Снять когда тестирование закончится (заменить на
+    // Math.max(rawDelay, premoveFloor)). Без localStorage indirection чтобы
+    // случайно застрявший ключ не отключил задержку.
+    const delay=20000;
+    void rawDelay; void premoveFloor; // suppress unused-var warnings
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece

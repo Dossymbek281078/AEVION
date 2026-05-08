@@ -184,11 +184,13 @@ export function useBoardInput(opts: BoardInputOptions) {
     ].join(";");
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
+    // 115% size — фигура "поднята" и явно крупнее клетки, как у lichess.
+    // Сильный drop-shadow + accent glow → невозможно пропустить во время drag.
     inner.style.cssText = [
-      "width:100%", "height:100%",
+      "width:115%", "height:115%",
       "transform:translate(-50%,-50%)",
       "transform-origin:center center",
-      "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6))",
+      "filter:drop-shadow(0 18px 28px rgba(0,0,0,0.65)) drop-shadow(0 0 22px rgba(5,150,105,0.55)) drop-shadow(0 4px 8px rgba(0,0,0,0.4))",
       "pointer-events:none",
       "display:flex", "align-items:center", "justify-content:center",
     ].join(";");
@@ -212,10 +214,11 @@ export function useBoardInput(opts: BoardInputOptions) {
       return;
     }
     const boardEl = boardRef.current;
-    const sz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
+    const cellSz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
+    const sz = Math.round(cellSz * 1.15); // 115% — поднятая фигура крупнее клетки
     const node = ensureGhostNode();
-    node.style.width = `${sz}px`;
-    node.style.height = `${sz}px`;
+    node.style.width = `${cellSz}px`;
+    node.style.height = `${cellSz}px`;
     const inner = node.firstElementChild as HTMLDivElement | null;
     const setId = getActivePieceSet();
     if (inner) {

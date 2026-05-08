@@ -1102,5 +1102,17 @@
     "rows": 2223,
     "materials": 1809,
     "size_bytes": 426415
+  },
+  {
+    "slug": "ssc-2025-09-common-book51",
+    "file": "Книга 51 Инженерное оборудование рус.pdf",
+    "region": null,
+    "region_slug": "common",
+    "book": "51",
+    "issue": null,
+    "kind": "rates",
+    "rows": 7119,
+    "materials": 6557,
+    "size_bytes": 1448229
   }
 ]

@@ -40,7 +40,30 @@ SOURCE_BOOKS = [
     "ssc-2025-common-book5-3-v2", # оборудование 3
     "ssc-2025-common-book5-4-v2", # оборудование 4
     "ssc-2025-common-book6-v2",   # отделочные
+    "ssc-2025-09-common-book51",  # ССЦ-09: инженерное оборудование (насосы, баки, котлы)
 ]
+
+# Ручной mapping для материалов, которые fuzzy-матчер не находит:
+# либо из-за специфической номенклатуры, либо потому что нет точного аналога.
+# Ключ — точное (name, unit) из seed.json. Значение — ССЦ-код или None если
+# материала действительно нет в нормативной базе (берётся фактически из счёта).
+MANUAL_OVERRIDES: dict[tuple[str, str], str | None] = {
+    # Метизы — есть в общих Кн.2 ССЦ
+    ("Болт с гайкой и шайбой ГОСТ ISO 8992-2015 оцинкованный", "кг"): "217-108-0301",
+    ("Гвоздь ГОСТ 283-75 строительный", "кг"): "217-108-0101",
+    ("Винт ГОСТ ISO 8992-2015 с полукруглой головкой", "кг"): "217-106-0105",
+    # Линолеум — есть в Кн.2
+    ("Линолеум", "м²"): "233-101-0201",
+    # Гипсокартон — в Кн.2 как "панель отделочная"
+    ("Лист ГКЛ 12.5 мм", "м²"): "232-101-0501",
+    # Пленка — в Кн.6 (Алматы Кн.7-v2)
+    ("Плёнка пароизоляционная", "м²"): "261-107-0515",
+    # None = материал не нормируется ССЦ, цена берётся фактически
+    ("Обои бумажные", "м²"): None,
+    ("Обои виниловые", "м²"): None,
+    ("Гарнитура туалетная", "шт"): None,
+    ("Бумага ролевая", "т"): None,
+}
 
 # нормализация единиц (seed → ССЦ)
 UNIT_ALIASES = {
@@ -214,6 +237,14 @@ def best_candidate(name: str, unit: str, books: dict[str, list[dict]],
     if best_s >= min_score: return best
     return None
 
+def lookup_by_code(books: dict[str, list[dict]], code: str) -> dict | None:
+    """Найти строку ССЦ по точному коду в любой из загруженных книг."""
+    for slug, rows in books.items():
+        for r in rows:
+            if r.get("code") == code and not r.get("isGroup"):
+                return {**r, "_slug": slug}
+    return None
+
 def main() -> int:
     print("==> loading SSC books")
     books = {slug: load_book(slug) for slug in SOURCE_BOOKS}
@@ -223,7 +254,33 @@ def main() -> int:
     print(f"==> matching {len(materials)} unique materials from seed")
     matched = []
     unmatched = []
+    manual_count = 0
+    manual_skipped = 0
     for name, unit in materials:
+        # 1. Manual override (приоритет — точная привязка от человека)
+        key = (name, unit)
+        if key in MANUAL_OVERRIDES:
+            code = MANUAL_OVERRIDES[key]
+            if code is None:
+                # явно помечено как «не нормируется ССЦ»
+                unmatched.append({"name": name, "unit": unit, "reason": "не нормируется ССЦ (factory)"})
+                manual_skipped += 1
+                continue
+            row = lookup_by_code(books, code)
+            if row:
+                matched.append({
+                    "name": name, "unit": unit,
+                    "sscCode": row["code"], "sscName": row["name"],
+                    "sscBook": row["_slug"],
+                    "score": 1.0, "manual": True,
+                    "smetnaya": row.get("smetnaya"),
+                    "otpusknaya": row.get("otpusknaya"),
+                })
+                manual_count += 1
+                continue
+            else:
+                print(f"  WARN: manual override {key} → {code} not found", file=sys.stderr)
+        # 2. Fuzzy матч
         cand = best_candidate(name, unit, books)
         if cand:
             matched.append({
@@ -246,7 +303,7 @@ def main() -> int:
         "unmatched": unmatched,
     }
     OUT.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"==> matched={len(matched)} unmatched={len(unmatched)}")
+    print(f"==> matched={len(matched)} (manual={manual_count}) unmatched={len(unmatched)} (manual_skip={manual_skipped})")
     print(f"    written: {OUT.relative_to(ROOT)}")
     if matched:
         print("\n  examples (matched):")

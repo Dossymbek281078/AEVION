@@ -64,15 +64,25 @@ def safe_url(url: str) -> str:
     path = quote(parts.path, safe="/%")
     return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
 
-def http_get(url: str, dest: Path | None = None) -> bytes | None:
-    req = Request(safe_url(url), headers={"User-Agent": USER_AGENT})
-    with urlopen(req, timeout=300) as r:
-        if dest is None:
-            return r.read()
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with open(dest, "wb") as f:
-            shutil.copyfileobj(r, f)
-        return None
+def http_get(url: str, dest: Path | None = None, retries: int = 3) -> bytes | None:
+    last_err: Exception | None = None
+    for attempt in range(retries):
+        try:
+            req = Request(safe_url(url), headers={"User-Agent": USER_AGENT})
+            with urlopen(req, timeout=300) as r:
+                if dest is None:
+                    return r.read()
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with open(dest, "wb") as f:
+                    shutil.copyfileobj(r, f)
+                return None
+        except Exception as e:
+            last_err = e
+            if attempt + 1 < retries:
+                wait = 2 ** attempt
+                print(f"  retry {attempt + 1}/{retries} after {wait}s ({e})", file=sys.stderr)
+                import time as _t; _t.sleep(wait)
+    raise last_err  # type: ignore[misc]
 
 def http_head_size(url: str) -> int | None:
     """HEAD-запрос для получения размера без скачивания."""

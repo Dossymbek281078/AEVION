@@ -1419,6 +1419,12 @@ export default function QCoreMultiAgentPage() {
                 totalCostUsd: payload.totalCostUsd,
               } : r))
             );
+            // Cost alert — notify if run exceeded per-run cap threshold
+            if (maxCostUsd > 0 && payload.totalCostUsd > maxCostUsd * 0.8) {
+              const pct = Math.round((payload.totalCostUsd / maxCostUsd) * 100);
+              setGlobalError(`⚠ Run cost $${payload.totalCostUsd.toFixed(4)} (${pct}% of $${maxCostUsd} cap)`);
+              setTimeout(() => setGlobalError(null), 6000);
+            }
             break;
           case "sse_end":
             break;

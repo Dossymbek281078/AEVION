@@ -32,6 +32,26 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/referrals", changeFrequency: "daily", priority: 0.5 },
   { path: "/build/leaderboard", changeFrequency: "daily", priority: 0.6 },
   { path: "/build/help", changeFrequency: "weekly", priority: 0.5 },
+  { path: "/build/salary", changeFrequency: "hourly", priority: 0.75 },
+  { path: "/build/ai-match", changeFrequency: "weekly", priority: 0.65 },
+  // HealthAI standalone pages
+  { path: "/healthai", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/healthai/screener", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/healthai/plan", changeFrequency: "weekly", priority: 0.65 },
+  // QCoreAI
+  { path: "/qcoreai/budget", changeFrequency: "monthly", priority: 0.55 },
+  // QPayNet
+  { path: "/qpaynet", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/qpaynet/merchant", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/qpaynet/transactions", changeFrequency: "daily", priority: 0.6 },
+  { path: "/qpaynet/request", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/qpaynet/requests", changeFrequency: "weekly", priority: 0.55 },
+  // QContract
+  { path: "/qcontract", changeFrequency: "weekly", priority: 0.75 },
+  // Smeta Trainer
+  { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
+  // Launch status
+  { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];
 
 async function fetchIds(path: string, idField: string = "id"): Promise<string[]> {

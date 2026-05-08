@@ -169,10 +169,24 @@ export function useBoardInput(opts: BoardInputOptions) {
   // position:fixed children — left/top remain viewport-relative.
   // Inner div carries the (-50%,-50%) centering AND the scale pop animation;
   // outer holds just left/top. No transform-property collision possible.
+  // ensureGhostNode — guarantees a fresh, clean ghost container in document.body.
+  // Cleans up any orphaned #cc-drag-ghost from previous HMR sessions or aborted
+  // drags. Returns the outer <div> ready to receive a piece clone.
   const ensureGhostNode = useCallback((): HTMLDivElement => {
+    if (typeof document === "undefined") {
+      // SSR safety
+      return null as unknown as HTMLDivElement;
+    }
+    // 1. Remove any orphaned ghosts from previous instances (HMR / aborted drags)
+    const orphans = document.querySelectorAll("#cc-drag-ghost");
+    orphans.forEach(el => {
+      if (el !== ghostNodeRef.current) el.remove();
+    });
+    // 2. If our ref still points to a node IN the DOM, reuse it
     if (ghostNodeRef.current && document.body.contains(ghostNodeRef.current)) {
       return ghostNodeRef.current;
     }
+    // 3. Otherwise create fresh
     const node = document.createElement("div");
     node.id = "cc-drag-ghost";
     node.style.cssText = [
@@ -181,16 +195,15 @@ export function useBoardInput(opts: BoardInputOptions) {
       "will-change:left,top",
       "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
       "margin:0", "padding:0", "border:0", "background:transparent",
+      "contain:layout", // isolate layout
     ].join(";");
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
-    // 115% size — фигура "поднята" и явно крупнее клетки, как у lichess.
-    // Сильный drop-shadow + accent glow → невозможно пропустить во время drag.
     inner.style.cssText = [
-      "width:115%", "height:115%",
+      "width:100%", "height:100%",
       "transform:translate(-50%,-50%)",
       "transform-origin:center center",
-      "filter:drop-shadow(0 18px 28px rgba(0,0,0,0.65)) drop-shadow(0 0 22px rgba(5,150,105,0.55)) drop-shadow(0 4px 8px rgba(0,0,0,0.4))",
+      "filter:drop-shadow(0 18px 28px rgba(0,0,0,0.65)) drop-shadow(0 0 22px rgba(5,150,105,0.55))",
       "pointer-events:none",
       "display:flex", "align-items:center", "justify-content:center",
     ].join(";");
@@ -198,6 +211,34 @@ export function useBoardInput(opts: BoardInputOptions) {
     document.body.appendChild(node);
     ghostNodeRef.current = node;
     return node;
+  }, []);
+
+  // findSourcePieceEl — locate the actual rendering piece <div> for a given
+  // square. Robust strategy: try data-sq cell, then walk descendants looking
+  // for the canonical 88%/88%-sized piece wrapper. Falls back to ANY div with
+  // an SVG/glyph descendant, in case React render shape changes.
+  const findSourcePieceEl = useCallback((from: Square): HTMLElement | null => {
+    if (typeof document === "undefined") return null;
+    const cell = document.querySelector(`[data-sq="${from}"]`);
+    if (!cell) return null;
+    // Strategy 1: direct child with width:88% height:88% inline style
+    const children = cell.children;
+    for (let i = 0; i < children.length; i++) {
+      const c = children[i] as HTMLElement;
+      if (c.style && c.style.width === "88%" && c.style.height === "88%") {
+        return c;
+      }
+    }
+    // Strategy 2: any descendant div containing an SVG (cburnett set) or
+    // a span with chess glyph (unicode sets). This is the rendering wrapper.
+    const divs = cell.querySelectorAll("div");
+    for (let i = 0; i < divs.length; i++) {
+      const d = divs[i] as HTMLElement;
+      if (d.style && d.style.width === "88%") return d;
+      // SVG-bearing wrapper as last resort
+      if (d.querySelector(":scope > svg, :scope > div > span")) return d;
+    }
+    return null;
   }, []);
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
@@ -215,26 +256,43 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
     const boardEl = boardRef.current;
     const cellSz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
-    const sz = Math.round(cellSz * 1.15);
     const node = ensureGhostNode();
+    if (!node) return;
+    // Outer is sized to the cell. Inner is 100% of outer + lift via scale.
     node.style.width = `${cellSz}px`;
     node.style.height = `${cellSz}px`;
     const inner = node.firstElementChild as HTMLDivElement | null;
     if (inner) {
-      // Используем Unicode chess glyph напрямую — гарантированно рендерится
-      // в любом браузере без проблем SVG namespace. На доске всё равно
-      // продолжают работать SVG cburnett (через React-Piece) — только ghost
-      // теперь использует glyph рендер для надёжности.
-      const GLYPH: Record<string, string> = {
-        p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚",
-      };
-      const g = GLYPH[piece.type] || "?";
-      const fillCol = piece.color === "w" ? "#ffffff" : "#1f2937";
-      const strokeCol = piece.color === "w" ? "#0f172a" : "#0f172a";
-      const fs = Math.round(sz * 0.95);
       inner.replaceChildren();
-      inner.innerHTML = `<span style="font-size:${fs}px;line-height:1;font-family:'Noto Sans Symbols 2','Segoe UI Symbol','Apple Symbols','DejaVu Sans',sans-serif;font-weight:900;color:${fillCol};-webkit-text-stroke:1.5px ${strokeCol};text-shadow:0 2px 4px rgba(0,0,0,0.4);transform:translateY(-3%);display:inline-block;user-select:none;pointer-events:none;">${g}</span>`;
-      void getActivePieceSet; void pieceHtml; // imports kept; not needed for ghost
+      const srcPieceEl = findSourcePieceEl(from);
+      if (srcPieceEl) {
+        const clone = srcPieceEl.cloneNode(true) as HTMLElement;
+        // Initial state — exact size of source piece. Animation runs on next
+        // frame to scale UP to 1.22, creating a visible "lift" effect.
+        clone.style.cssText = [
+          "width:100%", "height:100%",
+          "transform:scale(1.0)",
+          "transform-origin:center center",
+          "opacity:0.85",
+          "filter:none",
+          "transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1), opacity 80ms ease-out",
+          "animation:none",
+          "pointer-events:none",
+          "user-select:none",
+          "-webkit-user-drag:none",
+        ].join(";");
+        clone.removeAttribute("data-ghost-hidden");
+        inner.appendChild(clone);
+        // Force reflow then animate to lifted state
+        void clone.offsetWidth;
+        requestAnimationFrame(() => {
+          clone.style.transform = "scale(1.22)";
+          clone.style.opacity = "1";
+        });
+      } else {
+        // Fallback only — should be rare
+        inner.innerHTML = pieceHtml(piece.type, piece.color, getActivePieceSet(), Math.round(cellSz * 1.18));
+      }
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
@@ -243,40 +301,33 @@ export function useBoardInput(opts: BoardInputOptions) {
     ghostPosRef.current = { x, y };
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.log("[CC] IMPERATIVE GHOST CREATED", {
-        from, x, y, sz,
+      console.log("[CC] GHOST shown", {
+        from, x, y, cellSz,
         piece: `${piece.color}${piece.type}`,
-        inDOM: document.body.contains(node),
-        parent: node.parentElement?.tagName,
-        innerChildren: inner?.children.length,
-        firstChildTag: inner?.firstElementChild?.tagName,
+        innerHTML: inner?.innerHTML.slice(0, 80),
         rect: node.getBoundingClientRect(),
       });
     }
     setGhostFrom(from);
-    // Imperative hide of source cell piece — React render для setGhostFrom
-    // занимает 50-150ms на большом дереве cyberchess, на это время source piece
-    // и ghost оба видны. Через DOM mutation скрываем мгновенно.
+    // Imperative source-cell hide — instant, doesn't wait for React render.
+    // Use querySelectorAll for robustness against future React-render shape changes.
     if (typeof document !== "undefined") {
       const srcCell = document.querySelector(`[data-sq="${from}"]`);
-      const srcPiece = srcCell?.querySelector(":scope > div:not([style*='radial-gradient'])") as HTMLElement | null;
-      // Cell layout: dot div (only on empty squares), piece div (88%×88%, has filter), pmIdx, coords
-      // Piece div has style="...transform...filter:drop-shadow..." — find via filter
-      const allChildren = srcCell?.children;
-      if (allChildren) {
-        for (let i = 0; i < allChildren.length; i++) {
-          const c = allChildren[i] as HTMLElement;
-          if (c.style.filter && c.style.filter.includes("drop-shadow") && c.style.width === "88%") {
+      if (srcCell) {
+        const allDivs = srcCell.querySelectorAll("div");
+        for (let i = 0; i < allDivs.length; i++) {
+          const c = allDivs[i] as HTMLElement;
+          if (c.style && c.style.width === "88%" && c.style.height === "88%") {
             c.dataset.ghostHidden = "1";
             c.style.opacity = "0";
+            c.style.transition = "opacity 60ms linear"; // smoother than instant
             break;
           }
         }
       }
-      void srcPiece; // unused fallback
       document.body.style.cursor = "grabbing";
     }
-  }, [ensureGhostNode]);
+  }, [ensureGhostNode, findSourcePieceEl]);
 
   // moveGhost — direct DOM update, called from window pointermove. No React.
   const moveGhost = useCallback((x: number, y: number) => {
@@ -416,6 +467,25 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
+      // Drop settle animation — short snap on destination cell so the piece
+      // visibly "lands" instead of just appearing. Defer 2 frames so React's
+      // re-render finishes attaching the piece div first.
+      if (typeof window !== "undefined") {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const destCell = document.querySelector(`[data-sq="${to}"]`);
+          if (!destCell) return;
+          const divs = destCell.querySelectorAll("div");
+          for (let i = 0; i < divs.length; i++) {
+            const d = divs[i] as HTMLElement;
+            if (d.style && d.style.width === "88%" && d.style.height === "88%") {
+              d.style.animation = "none";
+              void d.offsetWidth;
+              d.style.animation = "cc-piece-snap 220ms cubic-bezier(0.34,1.56,0.64,1)";
+              break;
+            }
+          }
+        }));
+      }
     } else {
       o.sSel(null); o.selRef.current = null;
       o.sVm(new Set()); o.vmRef.current = new Set();

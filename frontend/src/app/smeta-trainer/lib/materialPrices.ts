@@ -198,3 +198,71 @@ export function listMatched(): MaterialMatch[] {
 export function listUnmatched(): MaterialUnmatched[] {
   return map.unmatched as MaterialUnmatched[];
 }
+
+// ── ССЦ catalog autocomplete (для ResourceEditor) ────────────────────────
+// Лениво подгружает приоритетные книги ССЦ, индексирует имена в плоский
+// список. Используется для datalist/suggest при наборе имени материала.
+
+type SscCatalogItem = {
+  code: string;
+  name: string;
+  unit: string;
+  smetnaya: number;
+};
+
+let catalog: SscCatalogItem[] | null = null;
+let catalogLoading: Promise<SscCatalogItem[]> | null = null;
+
+const CATALOG_BOOKS = [
+  "ssc-2025-almaty-book1-v2",
+  "ssc-2025-almaty-book7-v2",
+  "ssc-2025-common-book2-v2",
+  "ssc-2025-common-book3-v2",
+  "ssc-2025-common-book6-v2",
+];
+
+export async function loadSscCatalog(): Promise<SscCatalogItem[]> {
+  if (catalog) return catalog;
+  if (catalogLoading) return catalogLoading;
+  catalogLoading = (async () => {
+    const out: SscCatalogItem[] = [];
+    for (const slug of CATALOG_BOOKS) {
+      try {
+        const res = await fetch(`/ssc/${slug}.json`);
+        if (!res.ok) continue;
+        const data = (await res.json()) as { rows: Array<{ code: string; name: string; unit: string; smetnaya?: number; isGroup?: boolean }> };
+        for (const r of data.rows) {
+          if (r.isGroup) continue;
+          if (r.smetnaya == null || r.smetnaya <= 0) continue;
+          out.push({ code: r.code, name: r.name, unit: r.unit, smetnaya: r.smetnaya });
+        }
+      } catch { /* skip */ }
+    }
+    catalog = out;
+    return out;
+  })();
+  return catalogLoading;
+}
+
+/** Поиск в каталоге ССЦ по имени (substring + опциональный фильтр по ед. изм.). */
+export function searchSscCatalog(query: string, unit?: string, limit = 20): SscCatalogItem[] {
+  if (!catalog) return [];
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const out: SscCatalogItem[] = [];
+  const wantUnit = (unit ?? "").trim();
+  const UNIT_EQ: Record<string, string> = { "м3": "м³", "м³": "м3", "м2": "м²", "м²": "м2", "шт": "шт.", "шт.": "шт" };
+  function unitOk(u: string) {
+    if (!wantUnit) return true;
+    if (u === wantUnit) return true;
+    return UNIT_EQ[u] === wantUnit || UNIT_EQ[wantUnit] === u;
+  }
+  for (const it of catalog) {
+    if (!unitOk(it.unit)) continue;
+    if (it.name.toLowerCase().includes(q)) {
+      out.push(it);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}

@@ -37,33 +37,58 @@ type MachineFile = {
 // В прод-сборке init() будет вызван при первом рендере страницы /smeta-trainer
 // (см. вызов из LsrEditor useEffect ниже).
 
-let laborByRank: Map<number, LaborRate> | null = null;
+// Лента: regionCode → groupCode → rank → rate
+let laborByRegionGroupRank: Map<string, Map<string, Map<number, LaborRate>>> | null = null;
 let machinesByName: Map<string, MachineRow> | null = null;
 let initStarted = false;
 let initPromise: Promise<void> | null = null;
 
 const REGION_ALMATY = "02";
-const GROUP_FALLBACK = "003"; // отделочные — самая частая группа в учебном корпусе
+const GROUP_FALLBACK = "003"; // отделочные — fallback если category не сматчена
+
+/** Маппинг категории работ из seed.json → группа СЦЗТ.
+ *  Группы СЦЗТ:
+ *   001 — Земляные работы и устройство земляных конструкций
+ *   002 — Несущие и ограждающие конструкции
+ *   003 — Отделочные и изоляционные
+ *   004 — Внутренние и наружные инженерные системы
+ *   005 — Специальные строительные и монтажные
+ *   006 — Спецработы в грунтах, конструкций
+ *   007 — Монтаж оборудования
+ *   009 — Ремонт зданий и сооружений
+ */
+export const CATEGORY_TO_LABOR_GROUP: Record<string, string> = {
+  "общестроительные": "002",
+  "ремонтно-строительные": "009",
+  "монтаж-оборудования": "007",
+  "электромонтажные": "005",
+  "сантехнические": "004",
+  "отделочные": "003",
+  "земляные": "001",
+  "кровельные": "002",
+  "демонтажные": "009",
+};
 
 async function init(): Promise<void> {
   if (initStarted) return initPromise!;
   initStarted = true;
   initPromise = (async () => {
-    // Truд
+    // Труд: индексируем все регионы + группы (полный СЦЗТ)
     try {
       const res = await fetch("/normatives/sczt-2025.json");
       if (res.ok) {
         const data = (await res.json()) as LaborFile;
-        const m = new Map<number, LaborRate>();
-        // По группе FALLBACK + Алматы — у нас только один разряд на rank
+        const root = new Map<string, Map<string, Map<number, LaborRate>>>();
         for (const r of data.rates) {
-          if (r.regionCode !== REGION_ALMATY) continue;
-          if (r.groupCode !== GROUP_FALLBACK) continue;
-          m.set(r.rank, r);
+          let regMap = root.get(r.regionCode);
+          if (!regMap) { regMap = new Map(); root.set(r.regionCode, regMap); }
+          let grpMap = regMap.get(r.groupCode);
+          if (!grpMap) { grpMap = new Map(); regMap.set(r.groupCode, grpMap); }
+          grpMap.set(Math.round(r.rank * 10) / 10, r);
         }
-        laborByRank = m;
+        laborByRegionGroupRank = root;
       }
-    } catch { /* offline — оставим null, будет fallback на учебные цены */ }
+    } catch { /* offline */ }
     // Машины
     try {
       const res = await fetch("/normatives/szem-2025-almaty.json");
@@ -100,14 +125,25 @@ export function extractRank(name: string): number | null {
   return parseFloat(m[1].replace(",", "."));
 }
 
-/** Найти ставку СЦЗТ для рабочего по имени. */
-export function findLaborRate(name: string): { sczt: number; sts: number; rank: number; groupCode: string } | null {
-  if (!laborByRank) return null;
+/** Найти ставку СЦЗТ для рабочего по имени и (опционально) категории работ.
+ *  category — из seed.json (например, "отделочные") → группа СЦЗТ через
+ *  CATEGORY_TO_LABOR_GROUP. Если category не задана или не сматчена —
+ *  fallback на 003 (отделочные). region — slug ("almaty" по умолчанию). */
+export function findLaborRate(
+  name: string,
+  category?: string,
+  regionCode: string = REGION_ALMATY,
+): { sczt: number; sts: number; rank: number; groupCode: string } | null {
+  if (!laborByRegionGroupRank) return null;
   const rank = extractRank(name);
   if (rank == null) return null;
-  // СЦЗТ имеет шаг 0.1 (1.0, 1.1, ..., 8.0). Округляем до ближайшего.
   const key = Math.round(rank * 10) / 10;
-  const rec = laborByRank.get(key);
+  const groupCode = (category && CATEGORY_TO_LABOR_GROUP[category]) || GROUP_FALLBACK;
+  const regMap = laborByRegionGroupRank.get(regionCode) ?? laborByRegionGroupRank.get(REGION_ALMATY);
+  if (!regMap) return null;
+  // Пробуем выбранную группу, потом fallback
+  let rec = regMap.get(groupCode)?.get(key);
+  if (!rec) rec = regMap.get(GROUP_FALLBACK)?.get(key);
   if (!rec) return null;
   return { sczt: rec.sczt, sts: rec.sts, rank: rec.rank, groupCode: rec.groupCode };
 }
@@ -138,9 +174,9 @@ export function findMachineRate(name: string): { smetnaya: number; sscName: stri
 }
 
 export const laborMachineMeta = () => ({
-  laborLoaded: laborByRank !== null,
+  laborLoaded: laborByRegionGroupRank !== null,
   machinesLoaded: machinesByName !== null,
-  laborCount: laborByRank?.size ?? 0,
+  laborRegions: laborByRegionGroupRank?.size ?? 0,
   machineCount: machinesByName?.size ?? 0,
 });
 

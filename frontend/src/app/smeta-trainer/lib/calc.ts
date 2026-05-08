@@ -47,10 +47,13 @@ export function appliedCoefMultiplier(position: SmetaPosition): number {
 
 /** Базисная структура: разнесение по компонентам ФОТ/ЭМ/Материалы.
  *  Принимает массив ресурсов напрямую — это позволяет использовать
- *  переопределённые ресурсы из SmetaPosition.resourceOverrides. */
+ *  переопределённые ресурсы из SmetaPosition.resourceOverrides.
+ *  category — из rate.category или section.category, для маппинга
+ *  на правильную группу СЦЗТ при useSscPrices. */
 export function resourcesStructure(
   resources: readonly Resource[],
   opts: CalcOptions = {},
+  category?: string,
 ): { fot: number; em: number; emMachinistWage: number; materials: number; sscMatched: number; sscTotal: number } {
   let fot = 0;
   let em = 0;
@@ -70,7 +73,7 @@ export function resourcesStructure(
           sscMatched++;
         }
       } else if (r.kind === "труд") {
-        const lr = findLaborRate(r.name);
+        const lr = findLaborRate(r.name, category);
         if (lr && lr.sczt > 0) {
           unitPrice = lr.sczt;
           sscMatched++;
@@ -103,7 +106,7 @@ export function rateBaseStructure(
   rate: Rate,
   opts: CalcOptions = {},
 ): { fot: number; em: number; emMachinistWage: number; materials: number; sscMatched: number; sscTotal: number } {
-  return resourcesStructure(rate.resources, opts);
+  return resourcesStructure(rate.resources, opts, rate.category);
 }
 
 /** Расчёт одной позиции. */
@@ -115,9 +118,10 @@ export function calcPosition(
   const rate = findRate(position.rateCode);
   if (!rate) return null;
 
-  // Если у позиции есть resourceOverrides — используем их вместо нормативных
+  // Если у позиции есть resourceOverrides — используем их вместо нормативных.
+  // Категория для маппинга на группу СЦЗТ — берём из расценки (rate.category).
   const effectiveResources = position.resourceOverrides ?? rate.resources;
-  const struct = resourcesStructure(effectiveResources, opts);
+  const struct = resourcesStructure(effectiveResources, opts, rate.category);
   const baseDirect = struct.fot + struct.em + struct.materials;
   const coefMul = appliedCoefMultiplier(position);
 

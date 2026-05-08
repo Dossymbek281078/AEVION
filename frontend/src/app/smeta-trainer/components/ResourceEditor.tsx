@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Resource, Rate, SmetaPosition } from "../lib/types";
-import { findSscMatch } from "../lib/materialPrices";
+import { findSscMatch, loadSscCatalog, searchSscCatalog } from "../lib/materialPrices";
 import { formatKzt } from "../lib/calc";
 
 interface Props {
@@ -32,6 +32,9 @@ export function ResourceEditor({ position, rate, onSave, onReset, onClose }: Pro
   // Копия для локального редактирования
   const [resources, setResources] = useState<Resource[]>(() => initial.map((r) => ({ ...r })));
   const isOverridden = !!position.resourceOverrides;
+  const [catalogReady, setCatalogReady] = useState(false);
+  // Управляем какая строка показывает datalist suggest
+  const [suggestForRow, setSuggestForRow] = useState<number | null>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -40,6 +43,19 @@ export function ResourceEditor({ position, rate, onSave, onReset, onClose }: Pro
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Лениво подгружаем каталог ССЦ для автокомплита
+  useEffect(() => {
+    loadSscCatalog().then(() => setCatalogReady(true));
+  }, []);
+
+  // Кэш suggest по (i, query, unit) → список
+  const suggestRow = suggestForRow != null ? resources[suggestForRow] : null;
+  const suggestions = useMemo(() => {
+    if (!catalogReady || suggestRow == null) return [];
+    if (suggestRow.kind !== "материал") return [];
+    return searchSscCatalog(suggestRow.name, suggestRow.unit, 20);
+  }, [catalogReady, suggestRow?.name, suggestRow?.unit, suggestRow?.kind]);
 
   function update(idx: number, patch: Partial<Resource>) {
     setResources((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -173,12 +189,39 @@ export function ResourceEditor({ position, rate, onSave, onReset, onClose }: Pro
                         {KIND_ICON[r.kind]}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5">
+                    <td className="px-2 py-1.5 relative">
                       <input
                         value={r.name}
                         onChange={(e) => update(i, { name: e.target.value })}
+                        onFocus={() => setSuggestForRow(r.kind === "материал" ? i : null)}
+                        onBlur={() => setTimeout(() => setSuggestForRow((cur) => (cur === i ? null : cur)), 150)}
                         className="w-full border border-transparent hover:border-slate-200 focus:border-emerald-400 rounded px-1.5 py-0.5 text-xs"
+                        autoComplete="off"
                       />
+                      {/* Подсказки автокомплита из ССЦ для текущей строки */}
+                      {suggestForRow === i && r.kind === "материал" && suggestions.length > 0 && (
+                        <div className="absolute left-2 right-2 top-full mt-0.5 z-20 bg-white border border-slate-300 rounded shadow-lg max-h-64 overflow-auto">
+                          {suggestions.map((s) => (
+                            <button
+                              key={s.code}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                update(i, { name: s.name, unit: s.unit, basePrice: s.smetnaya });
+                                setSuggestForRow(null);
+                              }}
+                              className="w-full text-left px-2 py-1.5 text-[11px] hover:bg-emerald-50 border-b last:border-b-0 flex items-baseline gap-2"
+                            >
+                              <span className="font-mono text-slate-400 text-[10px] w-24 shrink-0">{s.code}</span>
+                              <span className="flex-1 text-slate-800 truncate">{s.name}</span>
+                              <span className="text-slate-500 text-[10px] w-12 shrink-0">{s.unit}</span>
+                              <span className="text-emerald-700 font-semibold tabular-nums w-20 shrink-0 text-right">
+                                {formatKzt(s.smetnaya)}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {r.kind === "материал" && sscMatch && (
                         <div className="text-[10px] text-slate-400 mt-0.5 px-1.5">
                           ССЦ: <span className="font-mono">{sscMatch.sscCode}</span>{" "}

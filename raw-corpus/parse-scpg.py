@@ -25,7 +25,7 @@ SRC_CANDIDATES = [
 ]
 OUT = ROOT / "frontend" / "public" / "normatives" / "scpg-2025-auto.json"
 
-CODE_RE = re.compile(r"^411-\d{3}-\d{2}$")
+CODE_RE = re.compile(r"^41\d-\d{3}-\d{2}$")
 
 def _num(s: str | None) -> int | None:
     if not s: return None

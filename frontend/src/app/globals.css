@@ -441,21 +441,13 @@ code {
   100% { transform: scale(0.40); opacity: 0; }
 }
 
-/* ── Piece "snap" landing animation after a drop/move ── */
+/* ── Piece "snap" landing — smooth ease-in (no overshoot/bounce) ── */
 @keyframes cc-piece-snap {
-  0%   { transform: scale(0.85); }
-  55%  { transform: scale(1.15); }
+  0%   { transform: scale(0.94); }
   100% { transform: scale(1); }
 }
 .cc-piece-snap {
-  animation: cc-piece-snap 180ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-/* User-drop landing — starts BIG (matches ghost lift size) and settles down,
-   creating a clear "приземлилась" effect after drag drop. */
-@keyframes cc-piece-drop {
-  0%   { transform: scale(1.25); }
-  55%  { transform: scale(0.92); }
-  100% { transform: scale(1); }
+  animation: cc-piece-snap 140ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 /* ── "Your turn" board flash — fires when AI just moved ── */

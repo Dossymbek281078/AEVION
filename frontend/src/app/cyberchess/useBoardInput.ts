@@ -321,16 +321,16 @@ export function useBoardInput(opts: BoardInputOptions) {
       const srcPieceEl = findSourcePieceEl(from);
       if (srcPieceEl) {
         const clone = srcPieceEl.cloneNode(true) as HTMLElement;
-        // Stage 1 (initial): exact size at rest, opacity 0.9.
-        // Stage 2 (after reflow): scale up + ФИЗИЧЕСКИ ПОДНИМАЕТСЯ через
-        // translateY(-14px) → user видит явный отрыв от клетки.
+        // Smooth ease-out — НИКАКОГО overshoot/bounce. User: «подпрыгивает,
+        // очень отвлекает при игре». cubic-bezier(0.4,0,0.2,1) — Material
+        // standard ease-out, плавный рост к финальному размеру без перехлёста.
         clone.style.cssText = [
           "width:100%", "height:100%",
-          "transform:scale(0.95) translateY(0)",
+          "transform:scale(0.98) translateY(0)",
           "transform-origin:center center",
-          "opacity:0.9",
+          "opacity:0.92",
           "filter:none",
-          "transition:transform 130ms cubic-bezier(0.34,1.56,0.64,1), opacity 60ms ease-out",
+          "transition:transform 110ms cubic-bezier(0.4,0,0.2,1), opacity 60ms ease-out",
           "animation:none",
           "pointer-events:none",
           "user-select:none",
@@ -340,8 +340,8 @@ export function useBoardInput(opts: BoardInputOptions) {
         inner.appendChild(clone);
         void clone.offsetWidth;
         requestAnimationFrame(() => requestAnimationFrame(() => {
-          // 1.30× + lift -14px — clear physical detachment from the cell.
-          clone.style.transform = "scale(1.30) translateY(-14px)";
+          // 1.20× + lift -10px — slight detachment, без overshoot.
+          clone.style.transform = "scale(1.20) translateY(-10px)";
           clone.style.opacity = "1";
         }));
       } else {

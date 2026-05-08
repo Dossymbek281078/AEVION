@@ -4051,15 +4051,9 @@ export default function CyberChessPage(){
               {turnFlashKey>0&&<div key={`tflash-${turnFlashKey}`}
                 className="cc-turn-flash"
                 style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:6,borderRadius:6}}/>}
-              {/* Hover halo — кольцо на cell под курсором во время drag (lichess-style) */}
-              {dragHover&&(()=>{
-                const hf=FILES.indexOf(dragHover[0]);
-                const hr=8-parseInt(dragHover[1]);
-                const hc=flip?7-hf:hf;const hrr=flip?7-hr:hr;
-                const isLegal=vm.has(dragHover);
-                const ringCol=isLegal?"#10b981":"#94a3b8";
-                return <div className={isLegal?"cc-hover-pulse":undefined} style={{position:"absolute",left:`${hc*12.5}%`,top:`${hrr*12.5}%`,width:"12.5%",height:"12.5%",pointerEvents:"none",zIndex:5,boxSizing:"border-box",border:`3px solid ${ringCol}`,borderRadius:"50%",transform:"scale(0.92)",boxShadow:`0 0 18px ${ringCol}55, inset 0 0 14px ${ringCol}33`}}/>;
-              })()}
+              {/* Hover halo — теперь imperative DOM-нода в useBoardInput,
+                  чтобы не триггерить ре-рендер 8000-строчного дерева на каждом
+                  пересечении клетки во время drag. */}
               {/* Ghost moved to sibling of main so overflow:hidden of board cannot clip it */}
 
               {/* Move slide animation — летящая фигура поверх board */}

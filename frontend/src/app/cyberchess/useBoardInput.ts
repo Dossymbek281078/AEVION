@@ -215,25 +215,69 @@ export function useBoardInput(opts: BoardInputOptions) {
     node.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
   }, []);
 
+  // Imperative hover halo — same idea as ghost. setDragHover() during drag
+  // would re-render the whole 8000-line page on every cell crossing.
+  const haloNodeRef = useRef<HTMLDivElement | null>(null);
+
+  const ensureHaloNode = useCallback((): HTMLDivElement => {
+    if (haloNodeRef.current) return haloNodeRef.current;
+    const node = document.createElement("div");
+    node.id = "cc-drag-halo";
+    node.style.cssText = [
+      "position:fixed", "left:0", "top:0",
+      "pointer-events:none", "z-index:99998",
+      "will-change:transform",
+      "border-radius:50%", "box-sizing:border-box",
+      "transform:translate3d(-9999px,-9999px,0)",
+    ].join(";");
+    document.body.appendChild(node);
+    haloNodeRef.current = node;
+    return node;
+  }, []);
+
+  const positionHalo = useCallback((sq: Square | null) => {
+    if (!sq) {
+      const n = haloNodeRef.current;
+      if (n) n.style.transform = "translate3d(-9999px,-9999px,0)";
+      return;
+    }
+    const o = optsRef.current;
+    const boardEl = boardRef.current;
+    if (!boardEl) return;
+    const rect = boardEl.getBoundingClientRect();
+    const cw = rect.width / 8;
+    const f = FILES.indexOf(sq[0] as any);
+    const r = 8 - parseInt(sq[1]);
+    const c = o.flip ? 7 - f : f;
+    const rr = o.flip ? 7 - r : r;
+    const cx = rect.left + c * cw + cw / 2;
+    const cy = rect.top + rr * cw + cw / 2;
+    const isLegal = o.vmRef.current.has(sq);
+    const col = isLegal ? "#10b981" : "#94a3b8";
+    const node = ensureHaloNode();
+    node.style.width = `${cw * 0.94}px`;
+    node.style.height = `${cw * 0.94}px`;
+    node.style.border = `3px solid ${col}`;
+    node.style.boxShadow = `0 0 18px ${col}55, inset 0 0 14px ${col}33`;
+    node.style.transform = `translate3d(${cx}px,${cy}px,0) translate(-50%,-50%) scale(0.92)`;
+  }, [ensureHaloNode]);
+
   const hideGhost = useCallback(() => {
     const node = ghostNodeRef.current;
-    if (node) {
-      node.remove();
-      ghostNodeRef.current = null;
-    }
+    if (node) { node.remove(); ghostNodeRef.current = null; }
+    const halo = haloNodeRef.current;
+    if (halo) { halo.remove(); haloNodeRef.current = null; }
     setGhostFrom(null);
     setDragHover(null);
     dragHoverIntRef.current = null;
     if (typeof document !== "undefined") document.body.style.cursor = "";
   }, []);
 
-  // Cleanup on unmount — orphaned ghost would otherwise stay in DOM forever.
+  // Cleanup on unmount — orphaned ghost/halo would otherwise stay in DOM forever.
   useEffect(() => {
     return () => {
-      if (ghostNodeRef.current) {
-        ghostNodeRef.current.remove();
-        ghostNodeRef.current = null;
-      }
+      if (ghostNodeRef.current) { ghostNodeRef.current.remove(); ghostNodeRef.current = null; }
+      if (haloNodeRef.current) { haloNodeRef.current.remove(); haloNodeRef.current = null; }
     };
   }, []);
 
@@ -323,7 +367,8 @@ export function useBoardInput(opts: BoardInputOptions) {
         const target = hover && hover !== d.from ? hover : null;
         if (target !== dragHoverIntRef.current) {
           dragHoverIntRef.current = target;
-          setDragHover(target);
+          // Imperative halo — no setDragHover, no React render thrashing.
+          positionHalo(target);
         }
       }
     };
@@ -373,7 +418,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
     };
-  }, [executeDrop, moveGhost, hideGhost, showGhost, sqFromBoard, sqFromRect]);
+  }, [executeDrop, moveGhost, hideGhost, showGhost, sqFromBoard, sqFromRect, positionHalo]);
 
   // ── onPointerDown — v5 verbatim. Synchronous preventDefault path runs the
   //    chess priority logic (priority-1 = exec on legal tap target, priority-2

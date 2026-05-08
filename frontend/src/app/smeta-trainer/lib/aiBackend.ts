@@ -138,7 +138,120 @@ export function getCachedProviders(): ProviderInfo[] | null { return cachedProvi
 
 interface ChatRequestMsg { role: "system" | "user" | "assistant"; content: string; }
 
-/** Спросить AI с учётом контекста сметы. */
+function buildMessages(
+  question: string,
+  history: AiMessage[],
+  lsr: Lsr,
+  calc: LsrCalc,
+  notices: AiNotice[],
+  extraSystem?: string,
+): ChatRequestMsg[] {
+  const messages: ChatRequestMsg[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: lsrSnapshot(lsr, calc, notices) },
+  ];
+  if (extraSystem) messages.push({ role: "system", content: extraSystem });
+  for (const m of history.slice(-8)) {
+    messages.push({ role: m.role, content: m.text });
+  }
+  messages.push({ role: "user", content: question });
+  return messages;
+}
+
+/** Streaming-ответ через SSE. onChunk вызывается на каждый text-чанк.
+ *  Возвращает финальный объединённый ответ + метаданные модели.
+ *  При HTTP error / stub mode / отсутствии ключа — fallback на askConsultant
+ *  и возвращает результат как одно сообщение через onChunk. */
+export async function streamLLM(
+  question: string,
+  history: AiMessage[],
+  lsr: Lsr,
+  calc: LsrCalc,
+  notices: AiNotice[],
+  opts: {
+    provider?: string;
+    extraSystem?: string;
+    onChunk: (text: string) => void;
+    signal?: AbortSignal;
+  },
+): Promise<{ text: string; provider?: string; model?: string }> {
+  const messages = buildMessages(question, history, lsr, calc, notices, opts.extraSystem);
+  try {
+    const res = await fetch(`${API_BASE}/api/qcoreai/chat-stream`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "text/event-stream" },
+      body: JSON.stringify({ messages, temperature: 0.5, provider: opts.provider }),
+      signal: opts.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const ct = res.headers.get("content-type") ?? "";
+    // Stub mode: backend вернёт обычный JSON, а не SSE
+    if (!ct.includes("event-stream")) {
+      const data = (await res.json()) as { mode?: string; reply?: string };
+      if (data.mode === "stub") {
+        cachedStatus = "stub";
+        const fallback = askConsultant(question, lsr, calc);
+        opts.onChunk(fallback.text);
+        return { text: fallback.text };
+      }
+      // Иначе считаем, что это вообще не stream — выдаём как есть
+      opts.onChunk(data.reply ?? "");
+      return { text: data.reply ?? "" };
+    }
+    if (!res.body) throw new Error("no response body");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let total = "";
+    let provider: string | undefined;
+    let model: string | undefined;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // Делим на SSE-блоки (\n\n)
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) >= 0) {
+        const block = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        // парсим только data: строки
+        for (const line of block.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const ev = JSON.parse(data) as
+              | { kind: "text"; text: string }
+              | { kind: "done"; model?: string; provider?: string }
+              | { kind: "error"; message: string };
+            if (ev.kind === "text") {
+              total += ev.text;
+              opts.onChunk(ev.text);
+            } else if (ev.kind === "done") {
+              provider = ev.provider;
+              model = ev.model;
+            } else if (ev.kind === "error") {
+              throw new Error(ev.message);
+            }
+          } catch {
+            // не валидный JSON — игнорируем
+          }
+        }
+      }
+    }
+    cachedStatus = "live";
+    return { text: total, provider, model };
+  } catch (err) {
+    // Fallback
+    cachedStatus = (err as Error).name === "AbortError" ? cachedStatus : "offline";
+    const fallback = askConsultant(question, lsr, calc);
+    opts.onChunk(fallback.text);
+    return { text: fallback.text };
+  }
+}
+
+/** Спросить AI с учётом контекста сметы (non-streaming). */
 export async function askLLM(
   question: string,
   history: AiMessage[],

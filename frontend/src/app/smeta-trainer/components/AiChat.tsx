@@ -1,15 +1,16 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import type { AiNotice, Lsr, LsrCalc } from "../lib/types";
 import { QUICK_QUESTIONS, type AiMessage } from "../lib/aiConsultant";
 import {
-  askLLM,
   checkBackend,
   clearChatHistory,
   loadChatHistory,
   saveChatHistory,
+  streamLLM,
   type BackendStatus,
+  type ProviderInfo,
 } from "../lib/aiBackend";
 
 interface Props {
@@ -17,6 +18,13 @@ interface Props {
   lsr: Lsr;
   calc: LsrCalc;
 }
+
+/** Внешний API: открыть чат с предзаполненным вопросом про конкретную позицию. */
+export interface AiChatHandle {
+  askAboutPosition: (rateCode: string, positionId: string) => void;
+}
+
+const PROVIDER_KEY = "aevion-smeta-aichat-provider-v1";
 
 const SEVERITY_STYLE = {
   error:   "bg-red-50 border-red-200 text-red-800",
@@ -33,15 +41,18 @@ const WELCOME_MESSAGE: AiMessage = {
   ts: 0, // 0 — приветственное, не сохраняется в history
 };
 
-export function AiChat({ notices, lsr, calc }: Props) {
+export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices, lsr, calc }, ref) {
   // History persisted per LSR id
   const [messages, setMessages] = useState<AiMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  const [streamingText, setStreamingText] = useState(""); // текущий incremental ответ
   const [tab, setTab] = useState<"chat" | "notices">("notices");
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
-  const [providerName, setProviderName] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Load history on mount + when LSR changes
   useEffect(() => {
@@ -56,18 +67,48 @@ export function AiChat({ notices, lsr, calc }: Props) {
     if (real.length > 0) saveChatHistory(lsr.id, real);
   }, [messages, lsr.id]);
 
-  // Probe backend on mount
+  // Probe backend on mount + restore selected provider
   useEffect(() => {
     checkBackend().then((r) => {
       setBackendStatus(r.status);
-      const cfg = r.providers.find((p) => p.configured);
-      setProviderName(cfg?.name ?? null);
+      setProviders(r.providers);
+      // Restore выбор из localStorage, если он configured; иначе первый configured
+      const saved = typeof window !== "undefined" ? localStorage.getItem(PROVIDER_KEY) : null;
+      const validSaved = saved && r.providers.find((p) => p.id === saved && p.configured) ? saved : null;
+      const fallback = r.providers.find((p) => p.configured)?.id ?? null;
+      setSelectedProvider(validSaved ?? fallback);
     });
   }, []);
 
+  function changeProvider(id: string) {
+    setSelectedProvider(id);
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem(PROVIDER_KEY, id); } catch {}
+    }
+  }
+
+  // Внешний API через ref — открыть чат с вопросом про позицию
+  useImperativeHandle(ref, () => ({
+    askAboutPosition(rateCode: string, positionId: string) {
+      setTab("chat");
+      const found = lsr.sections
+        .flatMap((s) => s.positions)
+        .find((p) => p.id === positionId);
+      const sectionTitle = lsr.sections.find((s) => s.positions.some((p) => p.id === positionId))?.title;
+      const overrideHint = found?.resourceOverrides ? " (с изменёнными ресурсами)" : "";
+      const q = `Расскажи про позицию ${rateCode} (объём ${found?.volume ?? "?"}) в разделе «${sectionTitle ?? "?"}»${overrideHint}: что это за работа, какие могут быть подводные камни, и правильно ли я её применил в этой смете?`;
+      setInput(q);
+      // Auto-focus input через requestAnimationFrame
+      requestAnimationFrame(() => {
+        const el = document.getElementById("ai-chat-input") as HTMLInputElement | null;
+        el?.focus();
+      });
+    },
+  }), [lsr]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thinking]);
+  }, [messages, thinking, streamingText]);
 
   async function send(question: string) {
     if (!question.trim() || thinking) return;
@@ -76,18 +117,40 @@ export function AiChat({ notices, lsr, calc }: Props) {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setThinking(true);
+    setStreamingText("");
+
+    const ac = new AbortController();
+    abortRef.current = ac;
 
     try {
-      const reply = await askLLM(question, historyBefore, lsr, calc, notices);
-      setMessages((prev) => [...prev, reply]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: "Ошибка обращения к AI. Попробуйте ещё раз.", ts: Date.now() },
-      ]);
+      let buffer = "";
+      const result = await streamLLM(question, historyBefore, lsr, calc, notices, {
+        provider: selectedProvider ?? undefined,
+        signal: ac.signal,
+        onChunk: (txt) => {
+          buffer += txt;
+          setStreamingText(buffer);
+        },
+      });
+      // финализируем — добавляем cleane сообщение в history, очищаем стрим-буфер
+      setMessages((prev) => [...prev, { role: "assistant", text: result.text, ts: Date.now() }]);
+      setStreamingText("");
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", text: "Ошибка обращения к AI. Попробуйте ещё раз.", ts: Date.now() },
+        ]);
+      }
+      setStreamingText("");
     } finally {
       setThinking(false);
+      abortRef.current = null;
     }
+  }
+
+  function stopStreaming() {
+    abortRef.current?.abort();
   }
 
   function resetChat() {
@@ -96,39 +159,24 @@ export function AiChat({ notices, lsr, calc }: Props) {
     setMessages([WELCOME_MESSAGE]);
   }
 
+  const configuredProviders = providers.filter((p) => p.configured);
+
   const errorCount = notices.filter((n) => n.severity === "error").length;
   const warnCount  = notices.filter((n) => n.severity === "warning").length;
 
   return (
     <aside className="w-72 shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
       {/* Шапка */}
-      <div className="shrink-0 px-3 py-2.5 border-b border-slate-200 bg-slate-900">
+      <div className="shrink-0 px-3 py-2 border-b border-slate-200 bg-slate-900 space-y-1.5">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-white">Консультант</div>
-            <div
-              className="text-[10px] text-slate-400 truncate"
-              title={
-                backendStatus === "live"
-                  ? `LLM ${providerName ?? "configured"} — живой режим`
-                  : backendStatus === "stub"
-                    ? "Backend есть, но нет API-ключа AI — работает локальная KB"
-                    : backendStatus === "offline"
-                      ? "Backend недоступен — работает локальная KB"
-                      : "проверка…"
-              }
-            >
-              {backendStatus === "live" && (
-                <span className="text-emerald-400">● live · {providerName?.split(" ")[0] ?? "AI"}</span>
-              )}
-              {backendStatus === "stub" && (
-                <span className="text-amber-400">● local · нет API-ключа</span>
-              )}
-              {backendStatus === "offline" && (
-                <span className="text-slate-500">● offline</span>
-              )}
-              {backendStatus === null && <span>проверка…</span>}
+            <div className="text-[10px] truncate">
+              {backendStatus === "live" && <span className="text-emerald-400">● live</span>}
+              {backendStatus === "stub" && <span className="text-amber-400">● local · нет API-ключа</span>}
+              {backendStatus === "offline" && <span className="text-slate-500">● offline</span>}
+              {backendStatus === null && <span className="text-slate-500">проверка…</span>}
             </div>
           </div>
           {messages.filter((m) => m.ts !== 0).length > 0 && (
@@ -141,6 +189,24 @@ export function AiChat({ notices, lsr, calc }: Props) {
             </button>
           )}
         </div>
+        {/* Переключатель моделей — только если есть выбор (>1 configured) */}
+        {configuredProviders.length > 1 && backendStatus === "live" && (
+          <select
+            value={selectedProvider ?? ""}
+            onChange={(e) => changeProvider(e.target.value)}
+            className="w-full bg-slate-800 text-white text-[10px] border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none focus:border-emerald-500"
+            disabled={thinking}
+          >
+            {configuredProviders.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+        {configuredProviders.length === 1 && backendStatus === "live" && (
+          <div className="text-[10px] text-slate-400">
+            Модель: <span className="text-white">{configuredProviders[0].name}</span>
+          </div>
+        )}
       </div>
 
       {/* Табы */}
@@ -218,8 +284,10 @@ export function AiChat({ notices, lsr, calc }: Props) {
             ))}
             {thinking && (
               <div className="flex justify-start">
-                <div className="bg-slate-100 rounded-xl px-3 py-2 text-xs text-slate-400">
-                  <span className="animate-pulse">печатает...</span>
+                <div className="bg-slate-100 rounded-xl px-3 py-2 text-xs text-slate-800 max-w-[90%] leading-relaxed">
+                  {streamingText
+                    ? <>{streamingText}<span className="inline-block w-1.5 h-3 bg-slate-500 ml-0.5 animate-pulse" /></>
+                    : <span className="text-slate-400 animate-pulse">подключаюсь…</span>}
                 </div>
               </div>
             )}
@@ -242,22 +310,34 @@ export function AiChat({ notices, lsr, calc }: Props) {
           {/* Инпут */}
           <div className="shrink-0 p-2 border-t border-slate-200 flex gap-1.5">
             <input
+              id="ai-chat-input"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-              placeholder="Задайте вопрос…"
-              className="flex-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              placeholder={thinking ? "Печатает ответ…" : "Задайте вопрос…"}
+              disabled={thinking}
+              className="flex-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-slate-100"
             />
-            <button
-              onClick={() => send(input)}
-              disabled={!input.trim() || thinking}
-              className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-40"
-            >
-              ↑
-            </button>
+            {thinking ? (
+              <button
+                onClick={stopStreaming}
+                className="px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700"
+                title="Прервать ответ"
+              >
+                ◼
+              </button>
+            ) : (
+              <button
+                onClick={() => send(input)}
+                disabled={!input.trim()}
+                className="px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-40"
+              >
+                ↑
+              </button>
+            )}
           </div>
         </>
       )}
     </aside>
   );
-}
+});

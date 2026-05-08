@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { initLaborMachinePrices } from "../lib/laborMachinePrices";
 import type { Lsr, LsrMeta, Rate, SmetaPosition, AppliedCoefficient } from "../lib/types";
 import { calcLsr } from "../lib/calc";
@@ -21,7 +21,7 @@ import { ResourceEditor } from "./ResourceEditor";
 import { findRate } from "../lib/corpus";
 import type { Resource } from "../lib/types";
 import { useKs2Periods } from "../lib/useKs2Periods";
-import { AiChat } from "./AiChat";
+import { AiChat, type AiChatHandle } from "./AiChat";
 import { StickyTotals } from "./StickyTotals";
 import { GeomHint } from "./GeomHint";
 import { DefectActView } from "./DefectActView";
@@ -51,6 +51,7 @@ export function LsrEditor({ initialLsr }: Props) {
   const [useSscPrices, setUseSscPrices]     = useState(false);
   const [editResources, setEditResources]   = useState<{ sectionId: string; posId: string } | null>(null);
   const [pricesLoaded, setPricesLoaded]     = useState(0); // bump после init для пересчёта calc
+  const aiChatRef = useRef<AiChatHandle>(null);
 
   useEffect(() => {
     initLaborMachinePrices().then(() => setPricesLoaded((n) => n + 1));
@@ -236,6 +237,7 @@ export function LsrEditor({ initialLsr }: Props) {
                 onRemove={removePosition}
                 onUpdateCoefs={updateCoefs}
                 onEditResources={(sectionId, posId) => setEditResources({ sectionId, posId })}
+                onAskAi={(rateCode, posId) => aiChatRef.current?.askAboutPosition(rateCode, posId)}
               />
             </div>
           )}
@@ -270,7 +272,7 @@ export function LsrEditor({ initialLsr }: Props) {
       </div>
 
       {/* ── Правая панель: AI-консультант ───────────────────── */}
-      <AiChat notices={notices} lsr={lsr} calc={calc} />
+      <AiChat ref={aiChatRef} notices={notices} lsr={lsr} calc={calc} />
 
       {/* ── Drawer поиска расценок ──────────────────────────── */}
       <RateDrawer

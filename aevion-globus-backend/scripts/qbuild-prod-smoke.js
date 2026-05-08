@@ -162,6 +162,15 @@ async function runRecruiterFlow() {
   if (r.status === 200 || r.status === 201) ok("worker profile upsert");
   else fail("worker profile upsert", `status=${r.status}`);
 
+  // Upsert client profile too — talent search gates on requester having a
+  // BuildProfile row, otherwise returns 404 profile_not_found.
+  r = await call("POST", "/api/build/profiles", {
+    token: client.token,
+    body: { name: "Smoke Client", buildRole: "CLIENT" },
+  });
+  if (r.status === 200 || r.status === 201) ok("client profile upsert");
+  else fail("client profile upsert", `status=${r.status}`);
+
   r = await call("POST", "/api/build/projects", {
     token: client.token,
     body: {
@@ -223,6 +232,39 @@ async function runRecruiterFlow() {
   return { client, worker, projectId, vacancyId, appId };
 }
 
+async function runEngagement(client, worker, vacancyId, appId) {
+  console.log(`\n[Engagement: bookmarks + notes + talent search]`);
+
+  // Worker bookmarks the vacancy
+  let r = await call("POST", "/api/build/bookmarks", {
+    token: worker.token,
+    body: { kind: "VACANCY", targetId: vacancyId },
+  });
+  if (r.status === 200 || r.status === 201) ok("worker bookmark vacancy");
+  else fail("worker bookmark vacancy", `status=${r.status}`);
+
+  r = await call("GET", "/api/build/bookmarks", { token: worker.token });
+  if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("worker list bookmarks");
+  else fail("worker list bookmarks", `status=${r.status}`);
+
+  // Owner adds a private note on the application
+  r = await call("POST", `/api/build/applications/${appId}/notes`, {
+    token: client.token,
+    body: { body: "Smoke note: candidate looks promising for day shift." },
+  });
+  if (r.status === 200 || r.status === 201) ok("owner add application note");
+  else fail("owner add application note", `status=${r.status}`);
+
+  r = await call("GET", `/api/build/applications/${appId}/notes`, { token: client.token });
+  if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("owner list application notes");
+  else fail("owner list application notes", `status=${r.status}`);
+
+  // Talent search — recruiter-side discovery (bumps plan usage counter)
+  r = await call("GET", "/api/build/profiles/search?role=WORKER&limit=10", { token: client.token });
+  if (r.status === 200) ok("recruiter talent search", fmtMs(r.durMs));
+  else fail("recruiter talent search", `status=${r.status}`);
+}
+
 async function runStatsAndPipeline(client) {
   console.log(`\n[Stats + Pipeline]`);
 
@@ -274,6 +316,7 @@ async function main() {
   await runPublic();
   const flow = await runRecruiterFlow();
   if (flow) {
+    await runEngagement(flow.client, flow.worker, flow.vacancyId, flow.appId);
     await runStatsAndPipeline(flow.client);
   }
   await runFeeds();

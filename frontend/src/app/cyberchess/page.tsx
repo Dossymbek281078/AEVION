@@ -2098,18 +2098,12 @@ export default function CyberChessPage(){
   const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
   useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
   useEffect(()=>{
+    // Animation disabled — pieces snap to new positions instantly. User wanted
+    // no "flying" pieces. AI moves теперь просто appear на dest cell без slide.
     if(!lm||!lm.from||!lm.to||lm.from===lm.to)return;
-    const key=`${lm.from}-${lm.to}-${bk}`;
-    if(lmKeyRef.current===key)return;
-    lmKeyRef.current=key;
-    // Свой ход — анимация скипается. Юзер сам только что отпустил мышь/тапнул, ему нужен мгновенный отклик.
-    if(skipNextAnimRef.current){skipNextAnimRef.current=false;return;}
-    const pc=game.get(lm.to as Square);
-    if(!pc)return;
-    sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:pc,key:Date.now()});
-    const id=window.setTimeout(()=>sMoveAnim(null),200);
-    return()=>window.clearTimeout(id);
-  },[bk,lm,game]);
+    skipNextAnimRef.current=false;
+    return;
+  },[bk,lm]);
   // После mount floating piece — trigger transition через рефлоу, чтобы
   // initial transform (from→to negative offset) уехал в 0,0.
   useEffect(()=>{

@@ -57,7 +57,11 @@
       "Bash(npx --no-install tsc --noEmit)",
       "PowerShell(gh pr *)",
       "Bash(BASE=https://aevion.app/api-backend bash /c/Users/user/aevion-core/scripts/investor-demo-audit.sh)",
-      "PowerShell(gh run list --repo Dossymbek281078/AEVION --branch main --workflow CI --limit 1 --json conclusion,displayTitle --jq '.[0]' 2>&1)"
+      "PowerShell(gh run list --repo Dossymbek281078/AEVION --branch main --workflow CI --limit 1 --json conclusion,displayTitle --jq '.[0]' 2>&1)",
+      "Bash(npm pack *)",
+      "PowerShell(ffprobe *)",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"interviews\"} | Out-String; Write-Host \"DONE\")",
+      "PowerShell(New-Item *)"
     ]
   }
 }

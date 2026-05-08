@@ -240,13 +240,13 @@ export function useBoardInput(opts: BoardInputOptions) {
     ].join(";");
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
-    // Lighter shadow — single drop-shadow (was double with large blurs that
-    // ate paint time during fast motion, causing the ghost to trail cursor).
+    // No filter, no shadow — drop-shadow на SVG требует пересчёта на каждый
+    // paint что вызывает trail курсора. Без filter ghost всегда follows
+    // курсор pixel-perfect. Простой опаковый клон piece'а.
     inner.style.cssText = [
       "width:100%", "height:100%",
       "transform:translate(-50%,-50%)",
       "transform-origin:center center",
-      "filter:drop-shadow(0 10px 14px rgba(0,0,0,0.55))",
       "pointer-events:none",
       "display:flex", "align-items:center", "justify-content:center",
     ].join(";");
@@ -610,19 +610,11 @@ export function useBoardInput(opts: BoardInputOptions) {
       // Раньше 100-150ms slide создавал perception лага между actual move
       // и ghost'ом. 50ms — barely perceptible motion, no lag feel.
       executeDrop(d.from, to);
-      if (ghostNode) {
-        // Pure horizontal slide to dest cell — 60ms линейно.
-        ghostNode.style.transition = "transform 60ms linear";
-        ghostNode.style.transform = `translate3d(${destX}px,${destY}px,0)`;
-        const halo = haloNodeRef.current;
-        if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        // 90ms total — slide 60ms + small buffer для React render. Если React
-        // отрендерил быстро — overlap 30ms, ghost накрывает piece, smooth.
-        // Если медленно — небольшой gap, но без drag-overhead от Observer.
-        window.setTimeout(() => hideGhost(), 90);
-      } else {
-        hideGhost();
-      }
+      // No slide animation — ghost мгновенно скрывается. flashLastMove
+      // выставляет highlight, React рендерит piece на dest через 16-50ms.
+      // Никаких "подлетающих" анимаций.
+      hideGhost();
+      void destX; void destY;
     };
 
     const onCancel = (e: PointerEvent) => {

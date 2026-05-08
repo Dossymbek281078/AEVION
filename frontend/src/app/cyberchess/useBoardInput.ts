@@ -611,13 +611,50 @@ export function useBoardInput(opts: BoardInputOptions) {
       // и ghost'ом. 50ms — barely perceptible motion, no lag feel.
       executeDrop(d.from, to);
       if (ghostNode) {
-        // Smooth horizontal slide to destination — no scale change, just
-        // pure 2D motion. Ghost glides от cursor к dest cell center.
+        // Pure horizontal slide to dest cell — 60ms линейно.
         ghostNode.style.transition = "transform 60ms linear";
         ghostNode.style.transform = `translate3d(${destX}px,${destY}px,0)`;
         const halo = haloNodeRef.current;
         if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        window.setTimeout(() => hideGhost(), 60);
+        // Wait for React to actually render the dest piece BEFORE hiding ghost.
+        // На тяжёлом дереве cyberchess React render может занимать 50-100ms.
+        // Если убрать ghost раньше → gap (ghost ушёл, piece ещё не появился).
+        // MutationObserver watches dest cell — hide ghost когда внутри
+        // появится piece div (88%×88%). Fallback timeout 250ms на случай
+        // если observer не сработает.
+        const destCell = document.querySelector(`[data-sq="${to}"]`) as HTMLElement | null;
+        let hidden = false;
+        const safeHide = () => { if (hidden) return; hidden = true; hideGhost(); };
+        if (destCell && typeof MutationObserver !== "undefined") {
+          const checkPiece = () => {
+            const divs = destCell.querySelectorAll("div");
+            for (let i = 0; i < divs.length; i++) {
+              const dv = divs[i] as HTMLElement;
+              if (dv.style && dv.style.width === "88%" && dv.style.height === "88%") {
+                return true;
+              }
+            }
+            return false;
+          };
+          // First check — React might already have rendered synchronously
+          if (checkPiece()) {
+            // Piece already there. Wait for slide to finish then hide.
+            window.setTimeout(safeHide, 60);
+          } else {
+            const observer = new MutationObserver(() => {
+              if (checkPiece()) {
+                observer.disconnect();
+                // Hide ghost slightly after React render — let slide finish if still in motion
+                window.setTimeout(safeHide, 20);
+              }
+            });
+            observer.observe(destCell, { childList: true, subtree: true });
+            // Fallback: hide after 250ms regardless
+            window.setTimeout(() => { observer.disconnect(); safeHide(); }, 250);
+          }
+        } else {
+          window.setTimeout(safeHide, 80);
+        }
       } else {
         hideGhost();
       }

@@ -111,6 +111,11 @@ async function runPublic() {
   if (r.status === 200) ok("/salary-stats public", fmtMs(r.durMs));
   else fail("/salary-stats public", `status=${r.status}`);
 
+  // Availability badge — public list of currently-available workers.
+  r = await call("GET", "/api/build/availability/workers");
+  if (r.status === 200) ok("/availability/workers public", fmtMs(r.durMs));
+  else fail("/availability/workers public", `status=${r.status}`);
+
   r = await call("GET", "/api/build/stats");
   if (r.status === 200 && payload(r.body)?.vacancies != null) {
     const p = payload(r.body);
@@ -268,6 +273,19 @@ async function runEngagement(client, worker, vacancyId, appId) {
   r = await call("GET", "/api/build/profiles/search?role=WORKER&limit=10", { token: client.token });
   if (r.status === 200) ok("recruiter talent search", fmtMs(r.durMs));
   else fail("recruiter talent search", `status=${r.status}`);
+
+  // Worker toggles "available now" badge — uses BuildProfile.availableNow
+  // column added alongside the availability router mount.
+  r = await call("POST", "/api/build/availability", {
+    token: worker.token,
+    body: { on: true, hours: 8 },
+  });
+  if (r.status === 200) ok("worker availability ON");
+  else fail("worker availability ON", `status=${r.status}`);
+
+  r = await call("GET", "/api/build/availability/me", { token: worker.token });
+  if (r.status === 200) ok("worker availability self-check");
+  else fail("worker availability self-check", `status=${r.status}`);
 }
 
 async function runStatsAndPipeline(client) {

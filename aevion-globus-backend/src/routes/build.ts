@@ -27,6 +27,7 @@ import { verificationRouter } from "./build/verification";
 import { publicRouter } from "./build/public";
 import { settingsRouter } from "./build/settings";
 import { salaryStatsRouter } from "./build/salary-stats";
+import { availabilityRouter } from "./build/availability";
 
 export const buildRouter = Router();
 
@@ -80,3 +81,6 @@ buildRouter.use("/settings", settingsRouter);
 // existing tables). The /build/salary frontend page (#139) was hitting
 // 404 because this router was authored but never mounted.
 buildRouter.use("/salary-stats", salaryStatsRouter);
+// Worker "available now" badge — toggle + list. Schema adds two columns
+// to BuildProfile (availableNow, availableUntil) in lib/build/index.ts.
+buildRouter.use("/availability", availabilityRouter);

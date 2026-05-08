@@ -4677,6 +4677,18 @@ function RunCard({
                   ⬇ JSON
                 </a>
                 <a
+                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=csv`}
+                  download
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid #cbd5e1",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Download as CSV"
+                >
+                  ⬇ CSV
+                </a>
+                <a
                   href={`/qcoreai/compare?a=${run.id}`}
                   style={{
                     padding: "5px 10px", borderRadius: 8,

@@ -173,7 +173,19 @@ export default function BatchDetailPage() {
               Total: ${batch.totalCostUsd.toFixed(4)}
             </span>
             {batch.status === "running" && (
-              <span style={{ fontSize: 11, color: "#4338ca", fontWeight: 700 }}>Auto-refresh 3s</span>
+              <>
+                <span style={{ fontSize: 11, color: "#4338ca", fontWeight: 700 }}>Auto-refresh 3s</span>
+                <button
+                  onClick={async () => {
+                    if (!confirm("Cancel this batch? Running items will be marked as failed.")) return;
+                    await fetch(apiUrl(`/api/qcoreai/batch/${batchId}`), { method: "DELETE", headers: bearerHeader() }).catch(() => {});
+                    loadBatch();
+                  }}
+                  style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                >
+                  ✕ Cancel
+                </button>
+              </>
             )}
           </div>
         </div>

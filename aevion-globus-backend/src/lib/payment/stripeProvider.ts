@@ -43,11 +43,11 @@ function need(envKey: string): string {
   return v;
 }
 
-let _stripe: Stripe | null = null;
-function getStripe(): Stripe {
+let _stripe: InstanceType<typeof Stripe> | null = null;
+function getStripe(): InstanceType<typeof Stripe> {
   if (_stripe) return _stripe;
   const apiKey = need("STRIPE_SECRET_KEY");
-  _stripe = new Stripe(apiKey, { apiVersion: "2025-04-30.basil" as Stripe.LatestApiVersion });
+  _stripe = new Stripe(apiKey, { apiVersion: "2025-04-30.basil" as any });
   return _stripe;
 }
 
@@ -171,7 +171,7 @@ export const stripePaymentProvider: PaymentProvider = {
       throw new Error(`unhandled stripe event type: ${event.type}`);
     }
 
-    const pi = event.data.object as Stripe.PaymentIntent;
+    const pi = event.data.object as { id: string; metadata?: Record<string, string>; amount: number; currency: string; status: string; created?: number; last_payment_error?: { message?: string } | null };
     const bureauIntentId = (pi.metadata && pi.metadata[META_BUREAU_INTENT_ID]) || "";
     if (!bureauIntentId) {
       throw new Error(`stripe event ${event.id}: missing metadata.${META_BUREAU_INTENT_ID}`);
@@ -184,7 +184,7 @@ export const stripePaymentProvider: PaymentProvider = {
       intentId: bureauIntentId,
       result: {
         status,
-        paidAt: status === "paid" ? new Date(pi.created * 1000).toISOString() : null,
+        paidAt: status === "paid" ? new Date((pi.created ?? Date.now() / 1000) * 1000).toISOString() : null,
         reason: pi.last_payment_error?.message ?? null,
         raw: {
           id: pi.id,

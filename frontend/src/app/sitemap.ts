@@ -51,13 +51,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Pull employer IDs from the leaderboard endpoint — that's a public,
   // already-curated list of brand-name profiles worth indexing. Capped
   // server-side at 20+20, so cheap to fetch.
-<<<<<<< Updated upstream
-  const [origin, projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
-    Promise.resolve(BASE_URL),
-=======
   const origin = BASE_URL;
   const [projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
->>>>>>> Stashed changes
     fetchIds("/api/build/projects?limit=500&status=OPEN"),
     fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
     fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })

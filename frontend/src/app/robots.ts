@@ -8,7 +8,17 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/admin/", "/api/", "/api-backend/", "/pay/", "/r/", "/account/", "/_next/"],
+        disallow: [
+          "/admin/",
+          "/api/",
+          "/api-backend/",
+          "/pay/",
+          "/r/",
+          "/account/",
+          "/_next/",
+          "/qpaynet/admin/",
+          "/qpaynet/admin",
+        ],
       },
     ],
     sitemap: [

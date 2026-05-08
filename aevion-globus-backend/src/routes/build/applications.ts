@@ -106,12 +106,38 @@ applicationsRouter.post("/", async (req, res) => {
       typeof sourceTagRaw === "string" && sourceTagRaw.trim().length > 0
         ? sourceTagRaw.trim().toLowerCase().slice(0, 64) : null;
 
+    // Skill-overlap match score: % of vacancy's required skills that the
+    // candidate has on their profile. Cached on the application row so
+    // /mine/pipeline and /mine/interviews can render it without recomputing
+    // per request. NULL when either side has no skills declared.
+    let matchScore: number | null = null;
+    try {
+      const vSkills: string[] = safeParseJson(vacancy.rows[0].skillsJson, []);
+      if (vSkills.length > 0) {
+        const profRes = await pool.query(
+          `SELECT "skillsJson" FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
+          [auth.sub],
+        );
+        const aSkills: string[] = profRes.rowCount
+          ? safeParseJson(profRes.rows[0].skillsJson, [])
+          : [];
+        if (aSkills.length > 0) {
+          const aLower = new Set(aSkills.map((s) => s.toLowerCase().trim()));
+          let hits = 0;
+          for (const v of vSkills) if (aLower.has(v.toLowerCase().trim())) hits++;
+          matchScore = Math.round((hits / vSkills.length) * 100);
+        }
+      }
+    } catch {
+      /* matchScore stays null on any compute error */
+    }
+
     const id = crypto.randomUUID();
     try {
       const result = await pool.query(
-        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId","sourceTag")
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId, sourceTag],
+        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId","sourceTag","matchScore")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId, sourceTag, matchScore],
       );
 
       if (questions.length > 0 && process.env.ANTHROPIC_API_KEY) {

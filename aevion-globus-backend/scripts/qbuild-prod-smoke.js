@@ -106,6 +106,11 @@ async function runPublic() {
   if (r.status === 200) ok("/health 200", fmtMs(r.durMs));
   else return fail("/health 200", `status=${r.status}`);
 
+  // Salary intelligence — public, no auth. Was unmounted until issue #139.
+  r = await call("GET", "/api/build/salary-stats?q=welder");
+  if (r.status === 200) ok("/salary-stats public", fmtMs(r.durMs));
+  else fail("/salary-stats public", `status=${r.status}`);
+
   r = await call("GET", "/api/build/stats");
   if (r.status === 200 && payload(r.body)?.vacancies != null) {
     const p = payload(r.body);

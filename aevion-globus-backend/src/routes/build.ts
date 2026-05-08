@@ -26,6 +26,7 @@ import { alertsRouter } from "./build/alerts";
 import { verificationRouter } from "./build/verification";
 import { publicRouter } from "./build/public";
 import { settingsRouter } from "./build/settings";
+import { salaryStatsRouter } from "./build/salary-stats";
 
 export const buildRouter = Router();
 
@@ -75,3 +76,7 @@ buildRouter.use("/verification", verificationRouter);
 // X-Build-Key header validated inside the public router.
 buildRouter.use("/public", publicRouter);
 buildRouter.use("/settings", settingsRouter);
+// Public salary intelligence (no auth, uses BuildProfile + BuildVacancy
+// existing tables). The /build/salary frontend page (#139) was hitting
+// 404 because this router was authored but never mounted.
+buildRouter.use("/salary-stats", salaryStatsRouter);

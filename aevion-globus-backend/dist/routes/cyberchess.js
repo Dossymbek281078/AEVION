@@ -8,6 +8,7 @@ const csv_1 = require("../lib/csv");
 const ecosystemStore_1 = require("../lib/ecosystemStore");
 const pagination_1 = require("../lib/pagination");
 const webhookSig_1 = require("../lib/webhookSig");
+const qsignSecret_1 = require("../lib/qsignSecret");
 const ecosystem_1 = require("./ecosystem");
 function sendCsv(res, baseName, rows) {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -92,14 +93,16 @@ exports.cyberchessRouter.get("/upcoming", async (_req, res) => {
 // Webhook called by the tournament service when a tournament finalizes.
 // Validates a shared secret, then appends a ChessPrize per podium spot.
 // Idempotent on (tournamentId, place, email).
-const WEBHOOK_SECRET = process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook";
+// Lazy resolution: throwing at module load would crash the server on a
+// misconfigured prod deploy.
+const getWebhookSecret = () => (0, qsignSecret_1.requireProdSecret)("CYBERCHESS_WEBHOOK_SECRET", "dev-chess-webhook");
 exports.cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     const verdict = (0, webhookSig_1.verifyWebhookSig)({
         signature: req.headers["x-aevion-signature"],
         timestamp: req.headers["x-aevion-timestamp"],
         legacySecret: req.headers["x-cyberchess-secret"],
         body: req.body,
-        secret: WEBHOOK_SECRET,
+        secret: getWebhookSecret(),
     });
     if (!verdict.ok) {
         return res.status(401).json({ error: "invalid webhook signature", reason: verdict.reason });

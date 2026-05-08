@@ -176,6 +176,27 @@ export default function QCoreEvalListPage() {
             >
               {createOpen ? "Close" : "+ New suite"}
             </button>
+            <button
+              onClick={async () => {
+                const TEMPLATES = [
+                  { name: "Quality check", description: "Basic quality: length + coherence", cases: [
+                    { id: "q1", name: "Min length", input: "Explain quantum entanglement in simple terms.", judge: { type: "min_length", chars: 100 } },
+                    { id: "q2", name: "Contains key term", input: "What is entropy?", judge: { type: "contains", needle: "energy" } },
+                  ]},
+                ];
+                const tpl = TEMPLATES[0];
+                await fetch(apiUrl("/api/qcoreai/eval/suites"), {
+                  method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() },
+                  body: JSON.stringify({ name: tpl.name, description: tpl.description, strategy: "sequential", cases: tpl.cases }),
+                }).then(async (r) => {
+                  if (r.ok) { const d = await r.json(); setSuites((p) => [d.suite, ...p]); }
+                });
+              }}
+              title="Create a starter quality-check eval suite"
+              style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.08)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              📋 Use template
+            </button>
           </div>
         </div>
 

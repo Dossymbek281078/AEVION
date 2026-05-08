@@ -299,6 +299,10 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // Session archiving — soft-delete with ability to restore. Archived sessions hidden from default list.
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMPTZ;`);
 
+  // Session tags — free-form labels on sessions for grouping.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_tags_gin_idx" ON "QCoreSession" USING GIN ("tags");`);
+
   // Run bookmarks — user can star specific runs for quick re-access.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreRunBookmark" (

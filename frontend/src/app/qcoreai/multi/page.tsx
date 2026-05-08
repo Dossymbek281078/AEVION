@@ -1561,6 +1561,25 @@ export default function QCoreMultiAgentPage() {
     }, 0);
   }, [strategy, overrides, maxRevisions]);
 
+  /** Clone a run into a brand-new session — preserves input + config. */
+  const cloneToNewSession = useCallback((run: RunState) => {
+    newSession();
+    const cfg = run.agentConfig || {};
+    const nextStrategy: Strategy = cfg.strategy === "parallel" ? "parallel" : cfg.strategy === "debate" ? "debate" : (run.strategy as Strategy) || strategy;
+    setStrategy(nextStrategy);
+    if (cfg.overrides && typeof cfg.overrides === "object") {
+      const pick = (k: ConfigRoleId) => {
+        const v = (cfg.overrides as any)?.[k];
+        return v && typeof v === "object" && v.provider ? { provider: v.provider, model: v.model || "" } : overrides[k];
+      };
+      setOverrides({ analyst: pick("analyst"), writer: pick("writer"), writerB: pick("writerB"), critic: pick("critic") });
+    }
+    setTimeout(() => {
+      setInput(run.userInput || "");
+      if (textareaRef.current) { textareaRef.current.focus(); textareaRef.current.scrollIntoView({ behavior: "smooth" }); }
+    }, 100);
+  }, [newSession, strategy, overrides]);
+
   /** Restore a past run's config + resend its prompt — the "Rerun" button. */
   const rerun = useCallback((run: RunState) => {
     const cfg = run.agentConfig || {};
@@ -3101,6 +3120,7 @@ export default function QCoreMultiAgentPage() {
                     run={run}
                     onLoadDetails={run.persisted && run.turns.length === 0 ? () => expandRunDetails(run.id) : undefined}
                     onRerun={() => rerun(run)}
+                    onClone={() => cloneToNewSession(run)}
                     onEdit={() => editAndResend(run)}
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
@@ -4149,6 +4169,7 @@ function RunCard({
   run,
   onLoadDetails,
   onRerun,
+  onClone,
   onEdit,
   onShare,
   onUnshare,
@@ -4167,6 +4188,7 @@ function RunCard({
   run: RunState;
   onLoadDetails?: () => void;
   onRerun?: () => void;
+  onClone?: () => void;
   onEdit?: () => void;
   onShare?: () => void;
   onUnshare?: () => void;
@@ -4624,6 +4646,15 @@ function RunCard({
                 title="Re-run this prompt with the same settings"
               >
                 ↻ Rerun
+              </button>
+            )}
+            {onClone && run.status !== "running" && (
+              <button
+                onClick={onClone}
+                style={{ padding: "5px 10px", borderRadius: 8, background: "#fff", border: "1px solid #cbd5e1", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                title="Clone to new session — same prompt + config, fresh context"
+              >
+                ⧉ Clone
               </button>
             )}
             {run.persisted && run.id && !run.id.startsWith("tmp_") && (

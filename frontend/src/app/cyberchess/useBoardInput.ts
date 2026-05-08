@@ -180,10 +180,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       "pointer-events:none", "z-index:2147483647",
       "will-change:left,top",
       "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
-      "margin:0", "padding:0", "border:0",
-      // DEBUG: bright outline so the outer container is impossible to miss even
-      // if SVG content fails to render. Remove once drag visual is confirmed.
-      "background:rgba(255,0,0,0.18)", "outline:3px solid red",
+      "margin:0", "padding:0", "border:0", "background:transparent",
     ].join(";");
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
@@ -194,8 +191,6 @@ export function useBoardInput(opts: BoardInputOptions) {
       "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6))",
       "pointer-events:none",
       "display:flex", "align-items:center", "justify-content:center",
-      // DEBUG: yellow fill so user sees inner box even if SVG namespace fails.
-      "background:rgba(255,235,59,0.35)",
     ].join(";");
     node.appendChild(inner);
     document.body.appendChild(node);
@@ -513,7 +508,8 @@ export function useBoardInput(opts: BoardInputOptions) {
       const p = o.scratchGame.get(sq);
       if (!p || p.color !== o.scratchGame.turn()) return;
       e.preventDefault();
-      dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, bRect };
+      dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: true, bRect };
+      showGhost(sq, e.clientX, e.clientY);
       o.sScratchSel(sq);
       o.sScratchVm(new Set(o.scratchGame.moves({ square: sq, verbose: true }).map(m => m.to)));
       return;
@@ -586,10 +582,15 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (!canDrag) return;
 
     e.preventDefault();
-    dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: false, bRect };
+    dragRef.current = { from: sq, sx: e.clientX, sy: e.clientY, pid: e.pointerId, ptype: e.pointerType || "mouse", active: true, bRect };
+    // Show ghost IMMEDIATELY — no threshold wait. Lichess/chess.com behavior:
+    // фигура поднимается на первом же pointerdown, без ожидания движения 6px.
+    // d.active=true сразу: pointerup → executeDrop (если to !== from), либо
+    // priority-логика onBoardDown уже обработала бы tap-to-exec до этой точки.
+    showGhost(sq, e.clientX, e.clientY);
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.log("[CC] onBoardDown: drag ARMED — waiting for movement >4px to activate");
+      console.log("[CC] onBoardDown: drag ARMED + ghost shown immediately");
     }
 
     const isMyTurn = o.tab === "analysis" || o.game.turn() === o.pCol;

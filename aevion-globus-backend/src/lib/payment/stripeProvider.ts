@@ -1,24 +1,36 @@
 /**
- * Stripe payment provider — production skeleton.
+ * Stripe payment provider — production implementation.
  *
- * Wire this up by setting:
+ * Activate via env:
  *   BUREAU_PAYMENT_PROVIDER=stripe
- *   STRIPE_SECRET_KEY=sk_live_...
+ *   STRIPE_SECRET_KEY=sk_(test|live)_...
  *   STRIPE_WEBHOOK_SECRET=whsec_...
- *   STRIPE_BUREAU_PRODUCT_PRICE=price_...   # configured in Stripe dashboard
+ *   AEVION_PUBLIC_BASE_URL=https://aevion.app   (used for success/cancel redirects)
  *
  * Reference:
- *   https://docs.stripe.com/api/checkout/sessions
+ *   https://docs.stripe.com/api/checkout/sessions/create
+ *   https://docs.stripe.com/api/checkout/sessions/retrieve
  *   https://docs.stripe.com/webhooks/signatures
  *
- * Until the env keys are present, this provider throws on every call.
- * Switch back to BUREAU_PAYMENT_PROVIDER=stub for local dev.
+ * Mapping notes:
+ * - We generate our own `bureauIntentId` (UUID) and pass it through Stripe
+ *   `payment_intent_data.metadata.bureauIntentId`. The webhook then has it on
+ *   `payment_intent.metadata.bureauIntentId`, letting parseWebhook stay
+ *   synchronous (no Stripe API roundtrip needed).
+ * - The Checkout Session's id is stored locally as `stripeCheckoutSessionId`
+ *   (in metadata) so getIntent() can retrieve it for polling.
+ * - In createIntent we return `{ intentId: bureauIntentId, checkoutUrl: session.url }`.
+ *   Bureau code stores `intentId` as `paymentIntentId`; the webhook updates
+ *   the same row WHERE paymentIntentId = bureauIntentId.
  */
+import Stripe from "stripe";
+import { randomUUID } from "node:crypto";
 import {
   PaymentIntent,
   PaymentIntentInput,
   PaymentProvider,
   PaymentResult,
+  PaymentStatus,
 } from "./provider";
 
 function need(envKey: string): string {
@@ -31,33 +43,158 @@ function need(envKey: string): string {
   return v;
 }
 
+let _stripe: Stripe | null = null;
+function getStripe(): Stripe {
+  if (_stripe) return _stripe;
+  const apiKey = need("STRIPE_SECRET_KEY");
+  _stripe = new Stripe(apiKey, { apiVersion: "2025-04-30.basil" as Stripe.LatestApiVersion });
+  return _stripe;
+}
+
+function publicBaseUrl(): string {
+  return (
+    process.env.AEVION_PUBLIC_BASE_URL?.trim().replace(/\/+$/, "") ||
+    "https://aevion.app"
+  );
+}
+
+function mapStripeStatus(piStatus: string | null | undefined): PaymentStatus {
+  switch (piStatus) {
+    case "succeeded":
+      return "paid";
+    case "processing":
+    case "requires_capture":
+      return "processing";
+    case "canceled":
+      return "expired";
+    case "requires_payment_method":
+    case "requires_confirmation":
+    case "requires_action":
+      return "unpaid";
+    default:
+      return "unpaid";
+  }
+}
+
+// Bureau intent id stored in Stripe payment_intent metadata so the webhook
+// can map back to our row without an extra API call.
+const META_BUREAU_INTENT_ID = "bureauIntentId";
+const META_BUREAU_REFERENCE = "bureauReference";
+
 export const stripePaymentProvider: PaymentProvider = {
   id: "stripe",
 
-  async createIntent(_input: PaymentIntentInput): Promise<PaymentIntent> {
-    need("STRIPE_SECRET_KEY");
-    // TODO: stripe.checkout.sessions.create({
-    //   mode: 'payment',
-    //   line_items: [{ price: STRIPE_BUREAU_PRODUCT_PRICE, quantity: 1 }],
-    //   metadata: { reference: input.reference },
-    //   customer_email: input.email,
-    //   success_url, cancel_url,
-    // })
-    // TODO: return { intentId: session.id, checkoutUrl: session.url, ... }
-    throw new Error("Stripe provider not yet implemented — populate createIntent");
+  async createIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
+    const stripe = getStripe();
+    const bureauIntentId = randomUUID();
+    const base = publicBaseUrl();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: input.currency.toLowerCase(),
+            unit_amount: input.amountCents,
+            product_data: {
+              name: input.description,
+            },
+          },
+        },
+      ],
+      // Customer email pre-fills the form when present.
+      ...(input.email ? { customer_email: input.email } : {}),
+      // client_reference_id is searchable on Stripe side; useful for ops.
+      client_reference_id: input.reference.slice(0, 200),
+      metadata: {
+        [META_BUREAU_INTENT_ID]: bureauIntentId,
+        [META_BUREAU_REFERENCE]: input.reference,
+      },
+      // Same metadata on the embedded PaymentIntent so the webhook payload has it.
+      payment_intent_data: {
+        metadata: {
+          [META_BUREAU_INTENT_ID]: bureauIntentId,
+          [META_BUREAU_REFERENCE]: input.reference,
+        },
+        description: input.description,
+      },
+      success_url: `${base}/bureau?paid=1&reference=${encodeURIComponent(input.reference)}`,
+      cancel_url: `${base}/bureau?paid=0&reference=${encodeURIComponent(input.reference)}`,
+    });
+
+    return {
+      intentId: bureauIntentId,
+      checkoutUrl: session.url ?? `${base}/bureau`,
+      status: "unpaid",
+      amountCents: input.amountCents,
+      currency: input.currency,
+    };
   },
 
-  async getIntent(_intentId: string): Promise<PaymentResult> {
-    need("STRIPE_SECRET_KEY");
-    // TODO: stripe.checkout.sessions.retrieve(intentId)
-    // TODO: map session.payment_status (paid/unpaid) → PaymentStatus
-    throw new Error("Stripe provider not yet implemented — populate getIntent");
+  async getIntent(bureauIntentId: string): Promise<PaymentResult> {
+    const stripe = getStripe();
+    // Look up the PaymentIntent via search on metadata. Stripe Search API
+    // requires an index; metadata.<key>:'<val>' is supported.
+    const search = await stripe.paymentIntents.search({
+      query: `metadata['${META_BUREAU_INTENT_ID}']:'${bureauIntentId}'`,
+      limit: 1,
+    });
+    if (search.data.length === 0) {
+      return { status: "unpaid", paidAt: null, reason: "not_found", raw: null };
+    }
+    const pi = search.data[0];
+    return {
+      status: mapStripeStatus(pi.status),
+      paidAt: pi.status === "succeeded" ? new Date(pi.created * 1000).toISOString() : null,
+      reason: pi.last_payment_error?.message ?? null,
+      raw: { id: pi.id, status: pi.status, amount: pi.amount, currency: pi.currency },
+    };
   },
 
-  parseWebhook(_headers: Record<string, string>, _rawBody: string) {
-    need("STRIPE_WEBHOOK_SECRET");
-    // TODO: stripe.webhooks.constructEvent(rawBody, sigHeader, STRIPE_WEBHOOK_SECRET)
-    // TODO: handle checkout.session.completed event
-    throw new Error("Stripe provider not yet implemented — populate parseWebhook with signature verification");
+  parseWebhook(headers: Record<string, string>, rawBody: string) {
+    const stripe = getStripe();
+    const secret = need("STRIPE_WEBHOOK_SECRET");
+    const sig = headers["stripe-signature"];
+    if (!sig) throw new Error("missing stripe-signature header");
+
+    // constructEvent throws on bad signature — bureau route catches and returns 400.
+    const event = stripe.webhooks.constructEvent(rawBody, sig, secret);
+
+    // We listen for payment_intent.succeeded + payment_intent.payment_failed
+    // (the events configured at https://dashboard.stripe.com/webhooks).
+    if (
+      event.type !== "payment_intent.succeeded" &&
+      event.type !== "payment_intent.payment_failed"
+    ) {
+      throw new Error(`unhandled stripe event type: ${event.type}`);
+    }
+
+    const pi = event.data.object as Stripe.PaymentIntent;
+    const bureauIntentId = (pi.metadata && pi.metadata[META_BUREAU_INTENT_ID]) || "";
+    if (!bureauIntentId) {
+      throw new Error(`stripe event ${event.id}: missing metadata.${META_BUREAU_INTENT_ID}`);
+    }
+
+    const status: PaymentStatus =
+      event.type === "payment_intent.succeeded" ? "paid" : "failed";
+
+    return {
+      intentId: bureauIntentId,
+      result: {
+        status,
+        paidAt: status === "paid" ? new Date(pi.created * 1000).toISOString() : null,
+        reason: pi.last_payment_error?.message ?? null,
+        raw: {
+          id: pi.id,
+          status: pi.status,
+          amount: pi.amount,
+          currency: pi.currency,
+          eventId: event.id,
+          eventType: event.type,
+        },
+      } satisfies PaymentResult,
+    };
   },
 };

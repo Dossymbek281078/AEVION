@@ -14,7 +14,7 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
 import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
@@ -897,7 +897,10 @@ bureauRouter.post("/verify/webhook", async (req, res) => {
     for (const [k, val] of Object.entries(req.headers)) {
       headers[k.toLowerCase()] = Array.isArray(val) ? val.join(",") : String(val ?? "");
     }
-    const rawBody = JSON.stringify(req.body ?? {});
+    // Same raw-body discipline as /payment/webhook — HMAC over re-serialised
+    // JSON does not match what the provider signed.
+    const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
     const { sessionId, result } = kyc.parseWebhook(headers, rawBody);
 
     await pool.query(
@@ -939,7 +942,11 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
     for (const [k, val] of Object.entries(req.headers)) {
       headers[k.toLowerCase()] = Array.isArray(val) ? val.join(",") : String(val ?? "");
     }
-    const rawBody = JSON.stringify(req.body ?? {});
+    // Stripe webhook signature verification requires the EXACT raw bytes
+    // received. express.json() stashes them on req.rawBody (see src/index.ts).
+    // Falling back to JSON.stringify(req.body) breaks the signature.
+    const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
     const { intentId, result } = pay.parseWebhook(headers, rawBody);
     await pool.query(
       `UPDATE "BureauVerification"
@@ -1384,8 +1391,10 @@ function isBureauAdmin(req: Request): { ok: boolean; email: string | null; reaso
   if (!auth.startsWith("Bearer ")) return { ok: false, email: null, reason: "no-bearer" };
   const token = auth.slice(7).trim();
   try {
-    const secret = process.env.JWT_SECRET || "dev-secret-change-me";
-    const decoded = jwt.verify(token, secret) as Record<string, unknown>;
+    // Single source of truth for JWT secret across the codebase. Throws in
+    // production if AUTH_JWT_SECRET is unset/weak — better fail loud than
+    // silently accept tokens signed with a public default.
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as Record<string, unknown>;
     const email = String(decoded.email || "").toLowerCase();
     const role = String(decoded.role || "").toLowerCase();
     if (role === "admin") return { ok: true, email, reason: null };

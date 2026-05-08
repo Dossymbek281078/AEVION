@@ -228,6 +228,11 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "answersJson" TEXT NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiScoresJson" TEXT;`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiScoreOverall" INTEGER;`);
+  // Cached skill-overlap match score — % of vacancy required-skills the
+  // candidate has on their profile. Computed in /by-vacancy and read by
+  // /mine/pipeline + /mine/interviews + /ai/why-match. Without this column
+  // those routes return 500 ("column a.matchScore does not exist").
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "matchScore" REAL;`);
   // Referral tracking: if the candidate clicked through a "share"
   // link with ?ref=<userId>, we capture who drove the application.
   // Used downstream for referrer rewards / leaderboard.

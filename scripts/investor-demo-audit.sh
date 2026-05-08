@@ -40,6 +40,7 @@ check "Bank"            "$UI/bank"
 check "QPayNet"         "$UI/qpaynet"
 check "QCoreAI"         "$UI/qcoreai"
 check "Cyberchess"      "$UI/cyberchess"
+check "Launch Status"   "$UI/launch-status"
 
 echo
 echo "[Backend health — Railway via aevion.app proxy]"

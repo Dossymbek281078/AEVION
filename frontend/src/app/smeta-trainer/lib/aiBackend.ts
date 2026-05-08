@@ -325,3 +325,57 @@ export function clearChatHistory(lsrId: string): void {
     localStorage.removeItem(HISTORY_KEY_PREFIX + lsrId);
   } catch {}
 }
+
+// ── Pinned-заметки (закреплённые цитаты AI) ───────────────────────────
+const PINS_KEY_PREFIX = "aevion-smeta-aichat-pins-v1:";
+
+export interface PinnedNote {
+  id: string;
+  text: string;
+  ts: number;
+  /** Откуда — может быть rateCode позиции, к которой относится цитата. */
+  context?: string;
+}
+
+export function loadPinnedNotes(lsrId: string): PinnedNote[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PINS_KEY_PREFIX + lsrId);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as PinnedNote[];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+export function pinNote(lsrId: string, note: Omit<PinnedNote, "id" | "ts">): PinnedNote {
+  const all = loadPinnedNotes(lsrId);
+  const rec: PinnedNote = {
+    id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    ts: Date.now(),
+    ...note,
+  };
+  // Дедуп: если такой текст уже есть, не дублируем
+  if (all.some((p) => p.text === rec.text)) return rec;
+  all.push(rec);
+  try {
+    localStorage.setItem(PINS_KEY_PREFIX + lsrId, JSON.stringify(all.slice(-50)));
+  } catch {}
+  return rec;
+}
+
+export function unpinNote(lsrId: string, id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const all = loadPinnedNotes(lsrId).filter((p) => p.id !== id);
+    localStorage.setItem(PINS_KEY_PREFIX + lsrId, JSON.stringify(all));
+  } catch {}
+}
+
+export function clearPinnedNotes(lsrId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(PINS_KEY_PREFIX + lsrId);
+  } catch {}
+}

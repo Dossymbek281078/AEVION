@@ -7,11 +7,16 @@ import {
   checkBackend,
   clearChatHistory,
   loadChatHistory,
+  loadPinnedNotes,
+  pinNote,
   saveChatHistory,
   streamLLM,
+  unpinNote,
   type BackendStatus,
+  type PinnedNote,
   type ProviderInfo,
 } from "../lib/aiBackend";
+import { Markdown } from "./Markdown";
 
 interface Props {
   notices: AiNotice[];
@@ -25,6 +30,20 @@ export interface AiChatHandle {
 }
 
 const PROVIDER_KEY = "aevion-smeta-aichat-provider-v1";
+const DEEP_KEY = "aevion-smeta-aichat-deep-v1";
+
+const DEEP_ANALYSIS_PROMPT = `РЕЖИМ ГЛУБОКОГО АНАЛИЗА. Действуй последовательно как
+команда экспертов:
+
+1. **Аналитик**: разложи вопрос/задачу на 3-5 подвопросов, выдели нормативную
+   рамку (НПА РК, пункты), найди риски и подводные камни.
+2. **Исполнитель**: дай развёрнутый ответ с расчётами/примерами/цитатами,
+   используя контекст текущей сметы студента.
+3. **Критик**: проверь свой же ответ — нет ли логических разрывов, упущенных
+   нормативов, ошибок в расчёте? Если нашёл — поправь явно.
+
+Структурируй ответ заголовками (## Аналитик / ## Исполнитель / ## Критик).
+Будь подробным, но без воды. Цитируй конкретные пункты НПА РК.`;
 
 const SEVERITY_STYLE = {
   error:   "bg-red-50 border-red-200 text-red-800",
@@ -47,10 +66,12 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [streamingText, setStreamingText] = useState(""); // текущий incremental ответ
-  const [tab, setTab] = useState<"chat" | "notices">("notices");
+  const [tab, setTab] = useState<"chat" | "notices" | "pinned">("notices");
+  const [pins, setPins] = useState<PinnedNote[]>([]);
   const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [deepMode, setDeepMode] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -59,7 +80,23 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
     const saved = loadChatHistory(lsr.id);
     if (saved.length > 0) setMessages([WELCOME_MESSAGE, ...saved]);
     else setMessages([WELCOME_MESSAGE]);
+    setPins(loadPinnedNotes(lsr.id));
   }, [lsr.id]);
+
+  function pinMessage(m: AiMessage) {
+    pinNote(lsr.id, { text: m.text });
+    setPins(loadPinnedNotes(lsr.id));
+  }
+  function unpinMessage(id: string) {
+    unpinNote(lsr.id, id);
+    setPins(loadPinnedNotes(lsr.id));
+  }
+  function copyAllPinsToClipboard() {
+    const txt = pins.map((p, i) => `${i + 1}. ${p.text}`).join("\n\n---\n\n");
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(txt);
+    }
+  }
 
   // Persist history (без приветственного сообщения с ts=0)
   useEffect(() => {
@@ -78,7 +115,20 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
       const fallback = r.providers.find((p) => p.configured)?.id ?? null;
       setSelectedProvider(validSaved ?? fallback);
     });
+    // Restore deep mode
+    const dm = typeof window !== "undefined" ? localStorage.getItem(DEEP_KEY) : null;
+    if (dm === "1") setDeepMode(true);
   }, []);
+
+  function toggleDeep() {
+    setDeepMode((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        try { localStorage.setItem(DEEP_KEY, next ? "1" : "0"); } catch {}
+      }
+      return next;
+    });
+  }
 
   function changeProvider(id: string) {
     setSelectedProvider(id);
@@ -126,6 +176,7 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
       let buffer = "";
       const result = await streamLLM(question, historyBefore, lsr, calc, notices, {
         provider: selectedProvider ?? undefined,
+        extraSystem: deepMode ? DEEP_ANALYSIS_PROMPT : undefined,
         signal: ac.signal,
         onChunk: (txt) => {
           buffer += txt;
@@ -189,22 +240,39 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
             </button>
           )}
         </div>
-        {/* Переключатель моделей — только если есть выбор (>1 configured) */}
-        {configuredProviders.length > 1 && backendStatus === "live" && (
-          <select
-            value={selectedProvider ?? ""}
-            onChange={(e) => changeProvider(e.target.value)}
-            className="w-full bg-slate-800 text-white text-[10px] border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none focus:border-emerald-500"
-            disabled={thinking}
-          >
-            {configuredProviders.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        )}
-        {configuredProviders.length === 1 && backendStatus === "live" && (
-          <div className="text-[10px] text-slate-400">
-            Модель: <span className="text-white">{configuredProviders[0].name}</span>
+        {/* Переключатель моделей и режим */}
+        {backendStatus === "live" && (
+          <div className="flex items-center gap-1.5">
+            {configuredProviders.length > 1 ? (
+              <select
+                value={selectedProvider ?? ""}
+                onChange={(e) => changeProvider(e.target.value)}
+                className="flex-1 min-w-0 bg-slate-800 text-white text-[10px] border border-slate-700 rounded px-1.5 py-0.5 focus:outline-none focus:border-emerald-500"
+                disabled={thinking}
+              >
+                {configuredProviders.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            ) : configuredProviders.length === 1 ? (
+              <div className="flex-1 min-w-0 text-[10px] text-slate-400 truncate">
+                <span className="text-white">{configuredProviders[0].name}</span>
+              </div>
+            ) : <div className="flex-1" />}
+            <button
+              onClick={toggleDeep}
+              disabled={thinking}
+              className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                deepMode
+                  ? "bg-purple-600 text-white border-purple-500 hover:bg-purple-700"
+                  : "bg-slate-800 text-slate-300 border-slate-700 hover:text-white"
+              }`}
+              title={deepMode
+                ? "Глубокий анализ ВКЛ — Аналитик→Исполнитель→Критик. Ответы дольше и подробнее."
+                : "Включить глубокий анализ — Аналитик→Исполнитель→Критик"}
+            >
+              {deepMode ? "🔬 deep" : "deep"}
+            </button>
           </div>
         )}
       </div>
@@ -213,20 +281,29 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
       <div className="shrink-0 flex border-b border-slate-200">
         <button
           onClick={() => setTab("notices")}
-          className={`flex-1 py-1.5 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors ${tab === "notices" ? "bg-white text-slate-800 border-b-2 border-emerald-500" : "bg-slate-50 text-slate-500 hover:text-slate-700"}`}
+          className={`flex-1 py-1.5 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors ${tab === "notices" ? "bg-white text-slate-800 border-b-2 border-emerald-500" : "bg-slate-50 text-slate-500 hover:text-slate-700"}`}
         >
-          Замечания
+          Замеч.
           {(errorCount + warnCount) > 0 && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${errorCount > 0 ? "bg-red-500 text-white" : "bg-amber-400 text-white"}`}>
+            <span className={`rounded-full px-1 py-0 text-[9px] font-bold ${errorCount > 0 ? "bg-red-500 text-white" : "bg-amber-400 text-white"}`}>
               {errorCount + warnCount}
             </span>
           )}
         </button>
         <button
           onClick={() => setTab("chat")}
-          className={`flex-1 py-1.5 text-[11px] font-medium transition-colors ${tab === "chat" ? "bg-white text-slate-800 border-b-2 border-emerald-500" : "bg-slate-50 text-slate-500 hover:text-slate-700"}`}
+          className={`flex-1 py-1.5 text-[10px] font-medium transition-colors ${tab === "chat" ? "bg-white text-slate-800 border-b-2 border-emerald-500" : "bg-slate-50 text-slate-500 hover:text-slate-700"}`}
         >
-          💬 Спросить AI
+          💬 AI
+        </button>
+        <button
+          onClick={() => setTab("pinned")}
+          className={`flex-1 py-1.5 text-[10px] font-medium flex items-center justify-center gap-1 transition-colors ${tab === "pinned" ? "bg-white text-slate-800 border-b-2 border-emerald-500" : "bg-slate-50 text-slate-500 hover:text-slate-700"}`}
+        >
+          📌 Замет.
+          {pins.length > 0 && (
+            <span className="rounded-full px-1 py-0 text-[9px] font-bold bg-amber-400 text-white">{pins.length}</span>
+          )}
         </button>
       </div>
 
@@ -262,13 +339,15 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
           {/* История */}
           <div className="flex-1 overflow-auto p-3 space-y-3">
             {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} group/msg`}>
+                <div className={`max-w-[92%] rounded-xl px-3 py-2 text-xs leading-relaxed relative ${
                   m.role === "user"
                     ? "bg-emerald-600 text-white rounded-br-sm"
                     : "bg-slate-100 text-slate-800 rounded-bl-sm"
                 }`}>
-                  <div>{m.text}</div>
+                  {m.role === "assistant"
+                    ? <Markdown text={m.text} />
+                    : <div className="whitespace-pre-wrap">{m.text}</div>}
                   {m.refs && m.refs.length > 0 && (
                     <div className="mt-1.5 pt-1.5 border-t border-slate-200 text-[10px] text-slate-500 space-y-0.5">
                       {m.refs.map((r, ri) => <div key={ri}>📖 {r}</div>)}
@@ -279,14 +358,25 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
                       💡 {m.tip}
                     </div>
                   )}
+                  {/* Pin-кнопка для assistant-сообщений */}
+                  {m.role === "assistant" && m.ts !== 0 && (
+                    <button
+                      onClick={() => pinMessage(m)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-300 text-[10px] opacity-0 group-hover/msg:opacity-100 transition-opacity"
+                      title="Закрепить как заметку"
+                    >📌</button>
+                  )}
                 </div>
               </div>
             ))}
             {thinking && (
               <div className="flex justify-start">
-                <div className="bg-slate-100 rounded-xl px-3 py-2 text-xs text-slate-800 max-w-[90%] leading-relaxed">
+                <div className="bg-slate-100 rounded-xl px-3 py-2 text-xs text-slate-800 max-w-[92%] leading-relaxed">
                   {streamingText
-                    ? <>{streamingText}<span className="inline-block w-1.5 h-3 bg-slate-500 ml-0.5 animate-pulse" /></>
+                    ? <>
+                        <Markdown text={streamingText} />
+                        <span className="inline-block w-1.5 h-3 bg-slate-500 ml-0.5 animate-pulse" />
+                      </>
                     : <span className="text-slate-400 animate-pulse">подключаюсь…</span>}
                 </div>
               </div>
@@ -337,6 +427,50 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
             )}
           </div>
         </>
+      )}
+
+      {/* Закреплённые заметки */}
+      {tab === "pinned" && (
+        <div className="flex-1 overflow-auto p-3 space-y-2">
+          {pins.length === 0 ? (
+            <div className="text-center text-slate-400 py-8">
+              <div className="text-2xl mb-2">📌</div>
+              <div className="text-xs">Заметок пока нет</div>
+              <div className="text-[11px] text-slate-300 mt-1 px-2 leading-snug">
+                В чате наведи на ответ AI и нажми 📌 — цитата сохранится здесь.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between text-[10px] text-slate-500 px-1">
+                <span>{pins.length} {pins.length === 1 ? "заметка" : "заметки"}</span>
+                <button
+                  onClick={copyAllPinsToClipboard}
+                  className="text-emerald-600 hover:text-emerald-800"
+                  title="Скопировать все заметки в буфер"
+                >
+                  ⧉ копировать всё
+                </button>
+              </div>
+              {pins.map((p) => (
+                <div key={p.id} className="border border-amber-200 bg-amber-50/50 rounded-lg p-2 group/pin relative">
+                  <div className="text-[10px] text-slate-500 mb-0.5">
+                    {new Date(p.ts).toLocaleString("ru-RU")}
+                    {p.context && <span className="ml-1.5 font-mono">• {p.context}</span>}
+                  </div>
+                  <div className="text-xs text-slate-800 leading-relaxed">
+                    <Markdown text={p.text} />
+                  </div>
+                  <button
+                    onClick={() => unpinMessage(p.id)}
+                    className="absolute top-1.5 right-1.5 text-slate-300 hover:text-red-500 text-[11px] opacity-0 group-hover/pin:opacity-100 transition-opacity"
+                    title="Удалить заметку"
+                  >✕</button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
       )}
     </aside>
   );

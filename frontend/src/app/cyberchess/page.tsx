@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -8067,22 +8066,11 @@ export default function CyberChessPage(){
     </Modal>
 
     </ProductPageShell>
-    {/* Ghost piece — rendered OUTSIDE the board div so overflow:hidden cannot clip it.
-        position:fixed + zIndex:9999 → always visible on top of everything. */}
-    {ghostFrom&&typeof document!=="undefined"&&(()=>{
-      const gp=(scratchOn&&scratchGame?scratchGame:virtualGame).get(ghostFrom)||game.get(ghostFrom);
-      if(!gp)return null;
-      const gx=ghostPosRef.current.x;const gy=ghostPosRef.current.y;
-      // Portal to document.body — guarantees no transformed ancestor breaks position:fixed.
-      return createPortal(
-        <div ref={ghostRef} style={{position:"fixed",left:0,top:0,width:"clamp(60px,9vw,92px)",height:"clamp(60px,9vw,92px)",transform:`translate3d(${gx}px,${gy}px,0) translate(-50%,-50%)`,pointerEvents:"none",zIndex:99999,willChange:"transform"}}>
-          <div style={{width:"100%",height:"100%",animation:"cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards",filter:"drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))"}}>
-            <Piece type={gp.type as any} color={gp.color as any}/>
-          </div>
-        </div>,
-        document.body
-      );
-    })()}
+    {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
+        document.createElement → document.body.appendChild → direct transform on
+        pointermove. Bypasses React entirely so the ghost follows the cursor with
+        zero render lag (lichess / chess.com architecture). The source-cell hide
+        is still driven by the ghostFrom React state below. */}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
     {/* Command palette (Ctrl/Cmd+K) — fuzzy-search any action, exec on Enter. */}

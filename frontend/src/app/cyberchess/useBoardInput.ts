@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Chess, type Square, type Color as ChessColor } from "chess.js";
+import { pieceHtml, getActivePieceSet } from "./Pieces";
 
 const FILES = ["a","b","c","d","e","f","g","h"] as const;
 const ACTIVATION_PX_MOUSE = 6;
@@ -125,7 +126,6 @@ export function useBoardInput(opts: BoardInputOptions) {
   const dragRef  = useRef<DragState | null>(null);
   const recentDragRef    = useRef(0);
   const ghostPosRef      = useRef({ x: 0, y: 0 });
-  const ghostRafRef      = useRef<number | null>(null);
   const dragHoverIntRef  = useRef<Square | null>(null);
   const bDownHandledRef  = useRef(0); // kept for back-compat with page.tsx onClick guard
 
@@ -156,42 +156,85 @@ export function useBoardInput(opts: BoardInputOptions) {
     return `${FILES[b.flip ? 7 - fx : fx]}${(b.flip ? fy : 7 - fy) + 1}` as Square;
   }, []);
 
-  // ── Ghost helpers ────────────────────────────────────────────────────────
-  // On touch, the user's finger covers the dragged piece. Lift the ghost ~60px
-  // above the touch point so the piece is always visible.
-  const flushGhostPos = useCallback(() => {
-    ghostRafRef.current = null;
-    const el = ghostRef.current;
-    if (!el) return;
-    const { x, y } = ghostPosRef.current;
-    const isTouch = dragRef.current?.ptype === "touch";
-    const dy = isTouch ? -60 : 0;
-    el.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
+  // ── Ghost helpers — IMPERATIVE DOM (lichess-style, bypass React) ──────────
+  // The cyberchess page tree is large (~8000 LoC). Routing the drag visual
+  // through React state added 50–150 ms render lag — user perceived "ghost
+  // doesn't appear". We now create the ghost <div> via document.createElement
+  // and update its transform on every pointermove WITHOUT touching React.
+  // ghostFrom state remains, but only so the source cell can hide its piece.
+  const ghostNodeRef = useRef<HTMLDivElement | null>(null);
+
+  const ensureGhostNode = useCallback((): HTMLDivElement => {
+    if (ghostNodeRef.current) return ghostNodeRef.current;
+    const node = document.createElement("div");
+    node.id = "cc-drag-ghost";
+    node.style.cssText = [
+      "position:fixed", "left:0", "top:0",
+      "pointer-events:none", "z-index:99999",
+      "will-change:transform", "transition:none",
+      "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))",
+      "transform:translate3d(-9999px,-9999px,0)",
+      "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
+    ].join(";");
+    document.body.appendChild(node);
+    ghostNodeRef.current = node;
+    return node;
   }, []);
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
+    const o = optsRef.current;
+    // Source piece — virtualGame for premove drag, scratchGame for scratch, else game.
+    const pieceSrc = o.scratchOn && o.scratchGame
+      ? o.scratchGame
+      : (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on ? o.virtualGame : o.game);
+    const piece = pieceSrc.get(from) || o.game.get(from);
+    if (!piece) return;
+    const boardEl = boardRef.current;
+    const sz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
+    const node = ensureGhostNode();
+    node.style.width = `${sz}px`;
+    node.style.height = `${sz}px`;
+    const setId = getActivePieceSet();
+    node.innerHTML = pieceHtml(piece.type, piece.color, setId, sz);
+    const isTouch = dragRef.current?.ptype === "touch";
+    const dy = isTouch ? -60 : 0;
+    node.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
+    node.style.animation = "cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards";
     ghostPosRef.current = { x, y };
+    // React state — ONLY so the source cell can hide its piece.
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";
-    // Force-flush an initial position immediately so the ghost doesn't appear
-    // for one frame at (0,0) before the first RAF runs. Wait one RAF for the
-    // ref to be attached, then write the transform.
-    requestAnimationFrame(() => {
-      const el = ghostRef.current;
-      if (!el) return;
-      const { x: gx, y: gy } = ghostPosRef.current;
-      const isTouch = dragRef.current?.ptype === "touch";
-      const off = isTouch ? -60 : 0;
-      el.style.transform = `translate3d(${gx}px,${gy + off}px,0) translate(-50%,-50%)`;
-    });
+  }, [ensureGhostNode]);
+
+  // moveGhost — direct DOM transform, called from window pointermove. No React.
+  const moveGhost = useCallback((x: number, y: number) => {
+    const node = ghostNodeRef.current;
+    if (!node) return;
+    const isTouch = dragRef.current?.ptype === "touch";
+    const dy = isTouch ? -60 : 0;
+    node.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
   }, []);
 
   const hideGhost = useCallback(() => {
-    if (ghostRafRef.current !== null) { cancelAnimationFrame(ghostRafRef.current); ghostRafRef.current = null; }
+    const node = ghostNodeRef.current;
+    if (node) {
+      node.remove();
+      ghostNodeRef.current = null;
+    }
     setGhostFrom(null);
     setDragHover(null);
     dragHoverIntRef.current = null;
     if (typeof document !== "undefined") document.body.style.cursor = "";
+  }, []);
+
+  // Cleanup on unmount — orphaned ghost would otherwise stay in DOM forever.
+  useEffect(() => {
+    return () => {
+      if (ghostNodeRef.current) {
+        ghostNodeRef.current.remove();
+        ghostNodeRef.current = null;
+      }
+    };
   }, []);
 
   // ── Drop / premove application (drag path only) ─────────────────────────
@@ -274,8 +317,8 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (d.active) {
         e.preventDefault();
         ghostPosRef.current = { x: e.clientX, y: e.clientY };
-        if (ghostRafRef.current === null)
-          ghostRafRef.current = requestAnimationFrame(flushGhostPos);
+        // IMPERATIVE: move the DOM node directly, no React, no RAF batching.
+        moveGhost(e.clientX, e.clientY);
         const hover = sqFromRect(e.clientX, e.clientY, d.bRect);
         const target = hover && hover !== d.from ? hover : null;
         if (target !== dragHoverIntRef.current) {
@@ -330,7 +373,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
     };
-  }, [executeDrop, flushGhostPos, hideGhost, showGhost, sqFromBoard, sqFromRect]);
+  }, [executeDrop, moveGhost, hideGhost, showGhost, sqFromBoard, sqFromRect]);
 
   // ── onPointerDown — v5 verbatim. Synchronous preventDefault path runs the
   //    chess priority logic (priority-1 = exec on legal tap target, priority-2

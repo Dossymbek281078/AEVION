@@ -1421,9 +1421,9 @@ qcoreaiRouter.get("/sessions/:id/export", async (req, res) => {
 });
 
 /**
- * GET /api/qcoreai/runs/:id/export?format=json|md
- * Returns a clean, shareable snapshot of a run: agents, messages, final answer,
- * token/cost totals. Useful for investor demos and offline review.
+/**
+ * GET /api/qcoreai/runs/:id/export?format=json|md|csv
+ * csv: each message as a row (role, stage, content, tokens, cost, duration)
  */
 qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
   try {
@@ -1433,14 +1433,26 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
     const session = await getSession(run.sessionId, auth?.sub ?? null);
     if (!session) return res.status(403).json({ error: "forbidden" });
     const messages = await listMessages(run.id);
-    const format = (req.query.format === "md" ? "md" : "json") as "md" | "json";
+    const fmt = req.query.format === "md" ? "md" : req.query.format === "csv" ? "csv" : "json";
     const safeSlug = slugify(session.title || "run").slice(0, 40) || "run";
-    const filename = `qcoreai-${safeSlug}-${run.id.slice(0, 8)}.${format}`;
+    const filename = `qcoreai-${safeSlug}-${run.id.slice(0, 8)}.${fmt}`;
 
-    if (format === "json") {
+    if (fmt === "json") {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(JSON.stringify({ session, run, messages }, null, 2));
+      return;
+    }
+
+    if (fmt === "csv") {
+      const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [
+        ["role", "stage", "instance", "provider", "model", "content", "tokensIn", "tokensOut", "costUsd", "durationMs"].join(","),
+        ...messages.map((m) => [m.role, m.stage, m.instance, m.provider, m.model, m.content, m.tokensIn, m.tokensOut, m.costUsd, m.durationMs].map(escape).join(",")),
+      ].join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(rows);
       return;
     }
 
@@ -2565,6 +2577,23 @@ qcoreaiRouter.get("/batch/:id", async (req, res) => {
     res.json({ batch, runs: runSummaries });
   } catch (err: any) {
     res.status(500).json({ error: "get batch failed", details: err?.message });
+  }
+});
+
+/** DELETE /api/qcoreai/batch/:id — cancel a running batch (marks as error, stops future processing). */
+qcoreaiRouter.delete("/batch/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const batch = await getBatch(String(req.params.id));
+    if (!batch) return res.status(404).json({ error: "batch not found" });
+    if (batch.ownerUserId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    if (batch.status !== "running") return res.status(400).json({ error: "batch is not running" });
+    // Mark as error — pending runs will detect this and stop
+    await updateBatchProgress(batch.id, { failedDelta: batch.totalRuns - batch.completedRuns - batch.failedRuns });
+    res.json({ ok: true, cancelled: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "cancel batch failed", details: err?.message });
   }
 });
 

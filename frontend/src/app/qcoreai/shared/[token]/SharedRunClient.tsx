@@ -421,6 +421,24 @@ export default function SharedRunClient() {
             >
               ⬇ Download Markdown
             </a>
+            <a
+              href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=csv`}
+              download
+              style={{ color: "#0e7490", fontWeight: 700, textDecoration: "none", fontSize: 11 }}
+            >
+              ⬇ CSV
+            </a>
+            <button
+              onClick={() => {
+                const iframe = `<iframe src="${typeof window !== 'undefined' ? window.location.origin : ''}/qcoreai/embed/${typeof window !== 'undefined' ? window.location.pathname.split('/').pop() : ''}" width="100%" height="600" frameborder="0" style="border-radius:12px"></iframe>`;
+                navigator.clipboard.writeText(iframe).catch(() => {});
+                alert('Embed code copied to clipboard!');
+              }}
+              style={{ border: "none", background: "transparent", color: "#6d28d9", fontWeight: 700, fontSize: 11, cursor: "pointer" }}
+              title="Copy embed iframe code"
+            >
+              &lt;/&gt; Embed
+            </button>
           </span>
         </footer>
         {showCost && costBreakdown && (

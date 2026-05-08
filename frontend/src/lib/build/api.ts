@@ -1700,8 +1700,6 @@ export const buildApi = {
     call<{ draft: AiVacancyDraft }>("POST", "/api/build/ai/generate-vacancy", input),
   aiMatchVacancy: (input: { profileText: string; vacancyText: string }) =>
     call<{ match: { score: number; label: string; strengths: string[]; gaps: string[]; tip: string } }>("POST", "/api/build/ai/match-vacancy", input),
-  aiCoverLetterFromText: (input: { profileText: string; vacancyText: string; tone?: string }) =>
-    call<{ letter: string; coverLetter?: string }>("POST", "/api/build/ai/cover-letter", input),
   aiScoreApplication: (input: { applicationId: string; vacancyContext?: string }) =>
     call<{ score: number; summary: string; redFlags: string[] }>("POST", "/api/build/ai/score-application", input),
 

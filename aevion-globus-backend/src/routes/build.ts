@@ -30,6 +30,7 @@ import { salaryStatsRouter } from "./build/salary-stats";
 import { availabilityRouter } from "./build/availability";
 import { storiesRouter } from "./build/stories";
 import { shiftsRouter } from "./build/shifts";
+import { teamHiringRouter } from "./build/team-hiring";
 
 export const buildRouter = Router();
 
@@ -92,3 +93,6 @@ buildRouter.use("/stories", storiesRouter);
 // Shifts — recruiter schedules a work day for an accepted application;
 // worker checks in / out. New BuildShift table declared in lib/build/index.ts.
 buildRouter.use("/shifts", shiftsRouter);
+// Team / brigade hiring — multi-role requests with role-targeted apply.
+// New tables BuildTeamRequest + BuildTeamApplication.
+buildRouter.use("/team-requests", teamHiringRouter);

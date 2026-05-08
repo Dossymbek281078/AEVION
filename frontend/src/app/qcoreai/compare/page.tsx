@@ -7,6 +7,21 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
+/** Simple word-level diff — returns spans with add/remove/same highlighting */
+function wordDiff(textA: string, textB: string): React.ReactNode[] {
+  const wordsA = textA.split(/(\s+)/);
+  const wordsB = textB.split(/(\s+)/);
+  const setA = new Set(wordsA.map(w => w.toLowerCase()));
+  const setB = new Set(wordsB.map(w => w.toLowerCase()));
+  return wordsB.map((word, i) => {
+    const lw = word.toLowerCase();
+    const style: React.CSSProperties = /^\s+$/.test(word) ? {} :
+      !setA.has(lw) ? { background: "rgba(16,185,129,0.2)", borderRadius: 2, padding: "0 1px" } :
+      setA.has(lw) && !setB.has(lw) ? { background: "rgba(239,68,68,0.15)", textDecoration: "line-through", borderRadius: 2 } : {};
+    return <span key={i} style={style}>{word}</span>;
+  });
+}
+
 function bearerHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
   const t = localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token");
@@ -130,6 +145,7 @@ function CompareContent() {
   const [loadingA, setLoadingA] = useState(false);
   const [loadingB, setLoadingB] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
 
   const fetchRun = useCallback(async (id: string, setter: (d: RunData | null) => void, setLoading: (b: boolean) => void) => {
     if (!id.trim()) { setter(null); return; }
@@ -226,6 +242,29 @@ function CompareContent() {
             }}>
               Duration: {fmtMs(Math.abs(durDiff))} {durDiff > 0 ? "▲ B slower" : "▼ B faster"}
             </span>
+          )}
+        </div>
+      )}
+
+      {/* Word diff section */}
+      {dataA?.run.finalContent && dataB?.run.finalContent && (
+        <div style={{ marginBottom: 14 }}>
+          <button
+            onClick={() => setShowDiff((v) => !v)}
+            style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(124,58,237,0.3)", background: showDiff ? "rgba(124,58,237,0.1)" : "#fff", color: "#6d28d9" }}
+          >
+            {showDiff ? "Hide" : "≠ Show"} word diff (A→B)
+          </button>
+          {showDiff && (
+            <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(124,58,237,0.2)", background: "rgba(124,58,237,0.03)", fontSize: 13, lineHeight: 1.7 }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 6 }}>
+                <span style={{ background: "rgba(16,185,129,0.2)", padding: "1px 5px", borderRadius: 3, marginRight: 8 }}>green = in B not in A</span>
+                <span style={{ background: "rgba(239,68,68,0.15)", padding: "1px 5px", borderRadius: 3, textDecoration: "line-through" }}>red = in A not in B</span>
+              </div>
+              <div style={{ whiteSpace: "pre-wrap" }}>
+                {wordDiff(dataA.run.finalContent!, dataB.run.finalContent!)}
+              </div>
+            </div>
           )}
         </div>
       )}

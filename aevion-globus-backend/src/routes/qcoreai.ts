@@ -1307,6 +1307,39 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
 });
 
 /**
+ * GET /api/qcoreai/analytics/provider-latency?limit=10
+ * Average latency per provider from agent messages.
+ */
+qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!isDbReady() || !auth?.sub) {
+      return res.json({ items: [] });
+    }
+    const limit = Math.min(20, parseInt(String(req.query.limit || "10"), 10) || 10);
+    const r = await pool.query(
+      `SELECT m."provider",
+              AVG(m."durationMs") AS "avgDurationMs",
+              MIN(m."durationMs") AS "minDurationMs",
+              MAX(m."durationMs") AS "maxDurationMs",
+              COUNT(*)::int AS "calls",
+              AVG(m."costUsd") AS "avgCostUsd"
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id"=m."runId"
+       JOIN "QCoreSession" s ON s."id"=r."sessionId"
+       WHERE s."userId"=$1 AND m."provider" IS NOT NULL AND m."durationMs" IS NOT NULL
+       GROUP BY m."provider"
+       ORDER BY "avgDurationMs" ASC
+       LIMIT $2`,
+      [auth.sub, limit]
+    );
+    res.json({ items: r.rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "provider-latency failed", details: err?.message });
+  }
+});
+
+/**
  * GET /api/qcoreai/analytics/by-tag?limit=20
  * Per-tag cost + run count breakdown for the caller's runs.
  */

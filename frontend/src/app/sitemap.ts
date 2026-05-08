@@ -22,6 +22,12 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/planet", changeFrequency: "daily", priority: 0.8 },
   { path: "/awards", changeFrequency: "daily", priority: 0.8 },
   { path: "/qcoreai", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/qcoreai/multi", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/qcoreai/playground", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/qcoreai/optimize", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/qcoreai/pipeline", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/qcoreai/docs", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/qcoreai/providers", changeFrequency: "weekly", priority: 0.55 },
   { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
   // QBuild static routes
   { path: "/build", changeFrequency: "daily", priority: 1.0 },

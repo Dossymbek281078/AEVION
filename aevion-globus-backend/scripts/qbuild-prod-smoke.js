@@ -311,6 +311,35 @@ async function runEngagement(client, worker, vacancyId, appId) {
     if (r.status === 200) ok("author delete story");
     else fail("author delete story", `status=${r.status}`);
   }
+
+  // Shifts — full schedule → check-in → check-out cycle. Requires the
+  // application to be ACCEPTED (which it was earlier in the recruiter flow).
+  const tomorrow = new Date(Date.now() + 86400_000).toISOString().slice(0, 10);
+  r = await call("POST", "/api/build/shifts", {
+    token: client.token,
+    body: { applicationId: appId, shiftDate: tomorrow, startTime: "09:00", endTime: "18:00" },
+  });
+  const shiftId = payload(r.body)?.id;
+  if ((r.status === 200 || r.status === 201) && shiftId) ok("client schedule shift", `id=${shiftId.slice(0, 8)}`);
+  else fail("client schedule shift", `status=${r.status} body=${JSON.stringify(r.body)?.slice(0, 200)}`);
+
+  if (shiftId) {
+    r = await call("PATCH", `/api/build/shifts/${shiftId}/checkin`, {
+      token: worker.token,
+      body: { lat: 51.0901, lng: 71.4108 },
+    });
+    if (r.status === 200 && payload(r.body)?.status === "STARTED") ok("worker check-in");
+    else fail("worker check-in", `status=${r.status}`);
+
+    r = await call("PATCH", `/api/build/shifts/${shiftId}/checkout`, { token: worker.token });
+    if (r.status === 200 && payload(r.body)?.status === "DONE") ok("worker check-out");
+    else fail("worker check-out", `status=${r.status}`);
+  }
+
+  // Both sides see the shift on /my
+  r = await call("GET", "/api/build/shifts/my", { token: client.token });
+  if (r.status === 200) ok("client list shifts/my", fmtMs(r.durMs));
+  else fail("client list shifts/my", `status=${r.status}`);
 }
 
 async function runStatsAndPipeline(client) {

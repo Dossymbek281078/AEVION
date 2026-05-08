@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { LsrCalc } from "../lib/types";
 import { formatKzt } from "../lib/calc";
+import { exportKs3ToCsv } from "../lib/exportLsr";
 
 interface Props {
   calc: LsrCalc;
@@ -173,7 +174,7 @@ export function Ks3View({ calc, ks2Periods = [] }: Props) {
         </div>
       </div>
 
-      {/* Выбор периода + начала года */}
+      {/* Выбор периода + начала года + экспорт */}
       <div className="bg-white border rounded-lg p-3 flex flex-wrap items-center gap-4">
         <div>
           <label className="text-[10px] text-slate-500 uppercase block mb-0.5">
@@ -202,6 +203,16 @@ export function Ks3View({ calc, ks2Periods = [] }: Props) {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+        </div>
+        <div className="ml-auto">
+          <button
+            onClick={() => exportKs3ToCsv(calc.lsr, calc, ks2Periods, activePeriodId ?? undefined, yearStart ?? undefined)}
+            disabled={!activePeriodId}
+            className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded hover:bg-emerald-700 disabled:opacity-50"
+            title="Скачать справку КС-3 в CSV (открывается в Excel)"
+          >
+            ⬇ Экспорт КС-3 в CSV
+          </button>
         </div>
       </div>
 

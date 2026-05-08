@@ -272,6 +272,22 @@ def main(force: bool = False) -> int:
         if rc != 0:
             print("  SSC PDF parser failed (non-fatal)", file=sys.stderr)
 
+    # СЦЗТ — затраты труда (PDF, региональные ставки по разрядам)
+    if any("8.04-13" in c for c in changed):
+        print("==> running SCZT (labor) parser")
+        rc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "parse-sczt.py")],
+                            cwd=str(ROOT)).returncode
+        if rc != 0:
+            print("  SCZT parser failed (non-fatal)", file=sys.stderr)
+
+    # СЦЭМ — машины (PDF, по регионам, парсим только Алматы для учебного режима)
+    if any("8.04-11" in c for c in changed):
+        print("==> running SZEM (machines) parser")
+        rc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "parse-szem.py")],
+                            cwd=str(ROOT)).returncode
+        if rc != 0:
+            print("  SZEM parser failed (non-fatal)", file=sys.stderr)
+
     print(f"==> done. Updated: {', '.join(changed[:5])}{'…' if len(changed) > 5 else ''}")
     return 0
 

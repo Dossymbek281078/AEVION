@@ -16,6 +16,7 @@
 
 import type {
   Rate,
+  Resource,
   SmetaPosition,
   SmetaSection,
   Lsr,
@@ -27,6 +28,7 @@ import type {
 } from "./types";
 import { findRate, findOverhead, findIndex } from "./corpus";
 import { findSscMatch } from "./materialPrices";
+import { findLaborRate, findMachineRate } from "./laborMachinePrices";
 
 const VAT_RATE = 0.12;
 
@@ -43,9 +45,11 @@ export function appliedCoefMultiplier(position: SmetaPosition): number {
   return position.coefficients.reduce((acc, c) => acc * c.value, 1);
 }
 
-/** Базисная структура расценки: разнесение baseCostPerUnit по компонентам. */
-export function rateBaseStructure(
-  rate: Rate,
+/** Базисная структура: разнесение по компонентам ФОТ/ЭМ/Материалы.
+ *  Принимает массив ресурсов напрямую — это позволяет использовать
+ *  переопределённые ресурсы из SmetaPosition.resourceOverrides. */
+export function resourcesStructure(
+  resources: readonly Resource[],
   opts: CalcOptions = {},
 ): { fot: number; em: number; emMachinistWage: number; materials: number; sscMatched: number; sscTotal: number } {
   let fot = 0;
@@ -55,14 +59,26 @@ export function rateBaseStructure(
   let sscMatched = 0;
   let sscTotal = 0;
 
-  for (const r of rate.resources) {
+  for (const r of resources) {
     let unitPrice = r.basePrice;
-    if (r.kind === "материал") {
+    if (opts.useSscPrices) {
       sscTotal++;
-      if (opts.useSscPrices) {
+      if (r.kind === "материал") {
         const m = findSscMatch(r.name, r.unit);
         if (m && m.smetnaya > 0) {
           unitPrice = m.smetnaya;
+          sscMatched++;
+        }
+      } else if (r.kind === "труд") {
+        const lr = findLaborRate(r.name);
+        if (lr && lr.sczt > 0) {
+          unitPrice = lr.sczt;
+          sscMatched++;
+        }
+      } else if (r.kind === "машины") {
+        const mr = findMachineRate(r.name);
+        if (mr && mr.smetnaya > 0) {
+          unitPrice = mr.smetnaya;
           sscMatched++;
         }
       }
@@ -72,8 +88,6 @@ export function rateBaseStructure(
       fot += cost;
     } else if (r.kind === "машины") {
       em += cost;
-      // ЗП машинистов идёт в ФОТ, но числится внутри ЭМ.
-      // Считаем отдельно для корректного применения индексов.
       const wage = (r.machinistWageRate ?? 0) * r.qtyPerUnit;
       emMachinistWage += wage;
     } else if (r.kind === "материал") {
@@ -82,6 +96,14 @@ export function rateBaseStructure(
   }
 
   return { fot, em, emMachinistWage, materials, sscMatched, sscTotal };
+}
+
+/** Базисная структура расценки: использует resourceOverrides если они заданы. */
+export function rateBaseStructure(
+  rate: Rate,
+  opts: CalcOptions = {},
+): { fot: number; em: number; emMachinistWage: number; materials: number; sscMatched: number; sscTotal: number } {
+  return resourcesStructure(rate.resources, opts);
 }
 
 /** Расчёт одной позиции. */
@@ -93,7 +115,9 @@ export function calcPosition(
   const rate = findRate(position.rateCode);
   if (!rate) return null;
 
-  const struct = rateBaseStructure(rate, opts);
+  // Если у позиции есть resourceOverrides — используем их вместо нормативных
+  const effectiveResources = position.resourceOverrides ?? rate.resources;
+  const struct = resourcesStructure(effectiveResources, opts);
   const baseDirect = struct.fot + struct.em + struct.materials;
   const coefMul = appliedCoefMultiplier(position);
 

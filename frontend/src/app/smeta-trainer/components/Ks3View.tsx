@@ -175,7 +175,7 @@ export function Ks3View({ calc, ks2Periods = [] }: Props) {
       </div>
 
       {/* Выбор периода + начала года + экспорт */}
-      <div className="bg-white border rounded-lg p-3 flex flex-wrap items-center gap-4">
+      <div className="bg-white border rounded-lg p-3 flex flex-wrap items-center gap-4 print:hidden">
         <div>
           <label className="text-[10px] text-slate-500 uppercase block mb-0.5">
             Отчётный период
@@ -204,7 +204,15 @@ export function Ks3View({ calc, ks2Periods = [] }: Props) {
             ))}
           </select>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => window.print()}
+            disabled={!activePeriodId}
+            className="px-3 py-1.5 bg-slate-700 text-white text-xs font-semibold rounded hover:bg-slate-800 disabled:opacity-50"
+            title="Печать справки КС-3 (или сохранение в PDF из диалога принтера)"
+          >
+            🖨 Печать / PDF
+          </button>
           <button
             onClick={() => exportKs3ToCsv(calc.lsr, calc, ks2Periods, activePeriodId ?? undefined, yearStart ?? undefined)}
             disabled={!activePeriodId}

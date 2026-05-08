@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { initLaborMachinePrices } from "../lib/laborMachinePrices";
 import type { Lsr, LsrMeta, Rate, SmetaPosition, AppliedCoefficient } from "../lib/types";
 import { calcLsr } from "../lib/calc";
 import { formatKzt } from "../lib/calc";
@@ -16,6 +17,9 @@ import { SsrView } from "./SsrView";
 import { VorView } from "./VorView";
 import { Ks2View } from "./Ks2View";
 import { Ks3View } from "./Ks3View";
+import { ResourceEditor } from "./ResourceEditor";
+import { findRate } from "../lib/corpus";
+import type { Resource } from "../lib/types";
 import { useKs2Periods } from "../lib/useKs2Periods";
 import { AiChat } from "./AiChat";
 import { StickyTotals } from "./StickyTotals";
@@ -45,10 +49,16 @@ export function LsrEditor({ initialLsr }: Props) {
   const [activeSectionId, setActiveSectionId] = useState<string>(initialLsr.sections[0]?.id ?? "");
   const [drawerOpen, setDrawerOpen]         = useState(false);
   const [useSscPrices, setUseSscPrices]     = useState(false);
+  const [editResources, setEditResources]   = useState<{ sectionId: string; posId: string } | null>(null);
+  const [pricesLoaded, setPricesLoaded]     = useState(0); // bump после init для пересчёта calc
+
+  useEffect(() => {
+    initLaborMachinePrices().then(() => setPricesLoaded((n) => n + 1));
+  }, []);
 
   const { periods: ks2Periods } = useKs2Periods(lsr.id);
   const learningObject = useMemo(() => findObject(lsr.objectId), [lsr.objectId]);
-  const calc           = useMemo(() => calcLsr(lsr, { useSscPrices }), [lsr, useSscPrices]);
+  const calc           = useMemo(() => calcLsr(lsr, { useSscPrices }), [lsr, useSscPrices, pricesLoaded]);
   // Параллельный расчёт «как было бы по учебным ценам» — только если включён ССЦ-режим,
   // чтобы показать дельту. Скрываем оверхед когда тоггл выключен.
   const eduCalc        = useMemo(
@@ -161,7 +171,7 @@ export function LsrEditor({ initialLsr }: Props) {
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Табы + мета */}
-        <div className="shrink-0 bg-white border-b border-slate-200 flex items-center gap-0 px-3">
+        <div className="shrink-0 bg-white border-b border-slate-200 flex items-center gap-0 px-3 print:hidden">
           {TABS.map(({ key, label }) => (
             <button
               key={key}
@@ -225,6 +235,7 @@ export function LsrEditor({ initialLsr }: Props) {
                 onChangeVolume={changeVolume}
                 onRemove={removePosition}
                 onUpdateCoefs={updateCoefs}
+                onEditResources={(sectionId, posId) => setEditResources({ sectionId, posId })}
               />
             </div>
           )}
@@ -268,6 +279,32 @@ export function LsrEditor({ initialLsr }: Props) {
         onClose={() => setDrawerOpen(false)}
         onPick={(rate) => { addPosition(rate); }}
       />
+
+      {/* ── Редактор ресурсов позиции ────────────────────────── */}
+      {editResources && (() => {
+        const sec = lsr.sections.find((s) => s.id === editResources.sectionId);
+        const pos = sec?.positions.find((p) => p.id === editResources.posId);
+        const rate = pos ? findRate(pos.rateCode) : null;
+        if (!sec || !pos || !rate) {
+          // Не удалось найти позицию — закрываем тихо
+          setTimeout(() => setEditResources(null), 0);
+          return null;
+        }
+        return (
+          <ResourceEditor
+            position={pos}
+            rate={rate}
+            onSave={(resources: Resource[]) => {
+              updatePosition(sec.id, pos.id, { resourceOverrides: resources });
+            }}
+            onReset={() => {
+              updatePosition(sec.id, pos.id, { resourceOverrides: undefined });
+              setEditResources(null);
+            }}
+            onClose={() => setEditResources(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

@@ -288,6 +288,14 @@ def main(force: bool = False) -> int:
         if rc != 0:
             print("  SZEM parser failed (non-fatal)", file=sys.stderr)
 
+    # СЦПГ — перевозки грузов (PDF, парсим только автомобильные)
+    if any("8.04-12" in c for c in changed):
+        print("==> running SCPG (freight) parser")
+        rc = subprocess.run([sys.executable, "-X", "utf8", str(ROOT / "parse-scpg.py")],
+                            cwd=str(ROOT)).returncode
+        if rc != 0:
+            print("  SCPG parser failed (non-fatal)", file=sys.stderr)
+
     print(f"==> done. Updated: {', '.join(changed[:5])}{'…' if len(changed) > 5 else ''}")
     return 0
 

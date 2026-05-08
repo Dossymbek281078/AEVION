@@ -60,10 +60,14 @@ import {
   createPipeline,
   deleteCollection,
   listCollections,
+  bookmarkRun,
   deletePipeline,
   getPipeline,
   getRating,
+  isBookmarked,
+  listBookmarks,
   listPipelines,
+  unbookmarkRun,
   listPublicPipelines,
   updatePipeline,
   usePipeline,
@@ -1303,6 +1307,39 @@ qcoreaiRouter.get("/runs/:id/cost-breakdown", async (req, res) => {
     res.json({ breakdown, totalCostUsd, totalTokensIn, totalTokensOut, byProvider });
   } catch (err: any) {
     res.status(500).json({ error: "cost breakdown failed", details: err?.message });
+  }
+});
+
+/**
+ * GET /api/qcoreai/analytics/agent-performance
+ * Performance scores per agent role based on runs rated ≥1.
+ * Score = avg rating weighted by call count.
+ */
+qcoreaiRouter.get("/analytics/agent-performance", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!isDbReady() || !auth?.sub) return res.json({ items: [] });
+    const r = await pool.query(
+      `SELECT m."role",
+              COUNT(DISTINCT m."runId")::int AS "runs",
+              AVG(m."costUsd") AS "avgCostUsd",
+              AVG(m."durationMs") AS "avgDurationMs",
+              COALESCE(AVG(rt."rating"), 0) AS "avgRating",
+              COUNT(rt."rating")::int AS "ratedRuns"
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON r."id"=m."runId"
+       JOIN "QCoreSession" s ON s."id"=r."sessionId"
+       LEFT JOIN "QCoreRunRating" rt ON rt."runId"=m."runId"
+       WHERE s."userId"=$1
+         AND m."role" NOT IN ('user','final','guidance','attachments')
+         AND m."costUsd" IS NOT NULL
+       GROUP BY m."role"
+       ORDER BY "avgRating" DESC, "runs" DESC`,
+      [auth.sub]
+    );
+    res.json({ items: r.rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "agent-performance failed", details: err?.message });
   }
 });
 
@@ -2841,6 +2878,42 @@ qcoreaiRouter.delete("/runs/bulk", async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "bulk delete failed", details: err?.message });
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run bookmarks — star runs for quick access
+   POST   /api/qcoreai/runs/:id/bookmark
+   DELETE /api/qcoreai/runs/:id/bookmark
+   GET    /api/qcoreai/bookmarks
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/bookmark", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const { label } = req.body || {};
+    const bk = await bookmarkRun(String(req.params.id), auth.sub, label ?? null);
+    res.status(201).json({ bookmark: bk });
+  } catch (err: any) { res.status(500).json({ error: "bookmark failed" }); }
+});
+
+qcoreaiRouter.delete("/runs/:id/bookmark", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await unbookmarkRun(String(req.params.id), auth.sub);
+    res.json({ ok });
+  } catch (err: any) { res.status(500).json({ error: "unbookmark failed" }); }
+});
+
+qcoreaiRouter.get("/bookmarks", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const limit = Math.min(100, parseInt(String(req.query.limit || "50"), 10) || 50);
+    const items = await listBookmarks(auth.sub, limit);
+    res.json({ items });
+  } catch (err: any) { res.status(500).json({ error: "list bookmarks failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

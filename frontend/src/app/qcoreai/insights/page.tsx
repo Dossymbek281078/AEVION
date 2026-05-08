@@ -35,16 +35,22 @@ function Bar({ value, max, color, height = 8 }: { value: number; max: number; co
   );
 }
 
+type AgentPerf = { role: string; runs: number; avgCostUsd: number; avgDurationMs: number; avgRating: number; ratedRuns: number };
+
 export default function InsightsPage() {
   const [data, setData] = useState<Insights | null>(null);
+  const [agentPerf, setAgentPerf] = useState<AgentPerf[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(apiUrl("/api/qcoreai/insights"), { headers: bearerHeader() })
-      .then((r) => r.json())
-      .then((d) => setData(d))
-      .catch((e) => setError(e?.message || "Failed"))
+    Promise.all([
+      fetch(apiUrl("/api/qcoreai/insights"), { headers: bearerHeader() }).then((r) => r.json()),
+      fetch(apiUrl("/api/qcoreai/analytics/agent-performance"), { headers: bearerHeader() }).then((r) => r.json()).catch(() => ({ items: [] })),
+    ]).then(([d, ap]) => {
+      setData(d);
+      if (Array.isArray(ap?.items)) setAgentPerf(ap.items);
+    }).catch((e) => setError(e?.message || "Failed"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -169,6 +175,33 @@ export default function InsightsPage() {
                 </div>
               )}
             </div>
+
+            {/* Agent performance score */}
+            {agentPerf.length > 0 && (
+              <div style={{ padding: 20, borderRadius: 14, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
+                <h2 style={{ fontSize: 15, fontWeight: 800, margin: "0 0 14px", color: "#0f172a" }}>🏆 Agent performance score</h2>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                  {agentPerf.map((a) => {
+                    const color = ROLE_COLORS[a.role] || "#475569";
+                    const score = Math.max(-1, Math.min(1, a.avgRating));
+                    const scorePct = ((score + 1) / 2) * 100;
+                    return (
+                      <div key={a.role} style={{ padding: 12, borderRadius: 10, border: `1px solid ${color}33`, background: `${color}06`, textAlign: "center" }}>
+                        <div style={{ fontWeight: 800, fontSize: 13, color, marginBottom: 6 }}>{a.role}</div>
+                        <div style={{ height: 4, borderRadius: 2, background: "#f1f5f9", overflow: "hidden", marginBottom: 6 }}>
+                          <div style={{ height: "100%", background: score >= 0 ? "#10b981" : "#ef4444", width: `${Math.abs(scorePct - 50) * 2}%`, marginLeft: score < 0 ? "0%" : "50%" }} />
+                        </div>
+                        <div style={{ fontSize: 11, color: score > 0 ? "#065f46" : score < 0 ? "#991b1b" : "#64748b", fontWeight: 700 }}>
+                          {score > 0 ? "+" : ""}{score.toFixed(2)} avg rating
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{a.runs} runs · {a.ratedRuns} rated</div>
+                        <div style={{ fontSize: 10, color: "#94a3b8" }}>{a.avgDurationMs ? `${Math.round(a.avgDurationMs)}ms` : "—"} avg</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {data.topAgentCosts.length === 0 && data.strategyRatings.length === 0 && (
               <div style={{ padding: 40, borderRadius: 14, border: "1px dashed #e2e8f0", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>

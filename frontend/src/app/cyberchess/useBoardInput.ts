@@ -164,28 +164,29 @@ export function useBoardInput(opts: BoardInputOptions) {
   // ghostFrom state remains, but only so the source cell can hide its piece.
   const ghostNodeRef = useRef<HTMLDivElement | null>(null);
 
-  // Two-layer ghost: outer = position (translate), inner = scale pop animation.
-  // Mixing translate + scale on a single element breaks because CSS animations
-  // override inline transform during/after run (animation-fill-mode: forwards
-  // permanently locks the final keyframe's transform value, killing translate).
+  // Position via left/top (NOT transform). Some Next.js page wrappers emit a
+  // `transform: translate(0)` for transitions which silently re-roots
+  // position:fixed children — left/top remain viewport-relative.
+  // Inner div carries the (-50%,-50%) centering AND the scale pop animation;
+  // outer holds just left/top. No transform-property collision possible.
   const ensureGhostNode = useCallback((): HTMLDivElement => {
     if (ghostNodeRef.current) return ghostNodeRef.current;
     const node = document.createElement("div");
     node.id = "cc-drag-ghost";
     node.style.cssText = [
-      "position:fixed", "left:0", "top:0",
-      "pointer-events:none", "z-index:99999",
-      "will-change:transform", "transition:none",
-      "transform:translate3d(-9999px,-9999px,0)",
+      "position:fixed", "left:-9999px", "top:-9999px",
+      "pointer-events:none", "z-index:2147483647", // max int32 — above all
+      "will-change:left,top",
       "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
+      "margin:0", "padding:0", "border:0", "background:transparent",
     ].join(";");
-    // Inner element holds piece + scale-pop animation. Separated so the outer
-    // translate isn't clobbered by the keyframes (transform property collision).
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
     inner.style.cssText = [
       "width:100%", "height:100%",
-      "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))",
+      "transform:translate(-50%,-50%)", // centers ghost on outer's left/top point
+      "transform-origin:center center",
+      "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6))",
       "pointer-events:none",
     ].join(";");
     node.appendChild(inner);
@@ -196,7 +197,6 @@ export function useBoardInput(opts: BoardInputOptions) {
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
     const o = optsRef.current;
-    // Source piece — virtualGame for premove drag, scratchGame for scratch, else game.
     const pieceSrc = o.scratchOn && o.scratchGame
       ? o.scratchGame
       : (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on ? o.virtualGame : o.game);
@@ -217,32 +217,28 @@ export function useBoardInput(opts: BoardInputOptions) {
     const setId = getActivePieceSet();
     if (inner) {
       inner.innerHTML = pieceHtml(piece.type, piece.color, setId, sz);
-      // Restart pop animation by toggling
-      inner.style.animation = "none";
-      // force reflow
-      void inner.offsetWidth;
-      inner.style.animation = "cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards";
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
-    node.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
+    node.style.left = `${x}px`;
+    node.style.top = `${y + dy}px`;
     ghostPosRef.current = { x, y };
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.log("[CC] IMPERATIVE GHOST CREATED", {from, x, y, sz, piece: `${piece.color}${piece.type}`, inDOM: document.body.contains(node)});
+      console.log("[CC] IMPERATIVE GHOST CREATED", {from, x, y, sz, piece: `${piece.color}${piece.type}`, inDOM: document.body.contains(node), parent: node.parentElement?.tagName});
     }
-    // React state — ONLY so the source cell can hide its piece.
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";
   }, [ensureGhostNode]);
 
-  // moveGhost — direct DOM transform, called from window pointermove. No React.
+  // moveGhost — direct DOM update, called from window pointermove. No React.
   const moveGhost = useCallback((x: number, y: number) => {
     const node = ghostNodeRef.current;
     if (!node) return;
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
-    node.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
+    node.style.left = `${x}px`;
+    node.style.top = `${y + dy}px`;
   }, []);
 
   // Imperative hover halo — same idea as ghost. setDragHover() during drag

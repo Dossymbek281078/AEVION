@@ -595,12 +595,19 @@ export function useBoardInput(opts: BoardInputOptions) {
       // piece). Ghost overlap'ит с piece на финале slide и удаляется.
       // Раньше 100-150ms slide создавал perception лага между actual move
       // и ghost'ом. 50ms — barely perceptible motion, no lag feel.
+      // Clear hover halo BEFORE exec — иначе hideGhost восстановит halo
+      // cell's original bg, перезаписав оранжевый highlight от flashLastMove.
+      positionHalo(null);
       executeDrop(d.from, to);
-      // No slide animation — ghost мгновенно скрывается. flashLastMove
-      // выставляет highlight, React рендерит piece на dest через 16-50ms.
-      // Никаких "подлетающих" анимаций.
-      hideGhost();
-      void destX; void destY;
+      // Soft horizontal slide для smoothness — 80ms linear, чисто
+      // горизонтальное движение к центру dest клетки. Никаких scale/lift.
+      if (ghostNode) {
+        ghostNode.style.transition = "transform 80ms linear";
+        ghostNode.style.transform = `translate3d(${destX}px,${destY}px,0)`;
+        window.setTimeout(() => hideGhost(), 80);
+      } else {
+        hideGhost();
+      }
     };
 
     const onCancel = (e: PointerEvent) => {

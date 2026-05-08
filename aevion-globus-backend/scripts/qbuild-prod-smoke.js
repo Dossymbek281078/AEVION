@@ -121,6 +121,11 @@ async function runPublic() {
   if (r.status === 200) ok("/stories public feed", fmtMs(r.durMs));
   else fail("/stories public feed", `status=${r.status}`);
 
+  // Team requests — public open feed.
+  r = await call("GET", "/api/build/team-requests?limit=5");
+  if (r.status === 200) ok("/team-requests public feed", fmtMs(r.durMs));
+  else fail("/team-requests public feed", `status=${r.status}`);
+
   r = await call("GET", "/api/build/stats");
   if (r.status === 200 && payload(r.body)?.vacancies != null) {
     const p = payload(r.body);
@@ -340,6 +345,36 @@ async function runEngagement(client, worker, vacancyId, appId) {
   r = await call("GET", "/api/build/shifts/my", { token: client.token });
   if (r.status === 200) ok("client list shifts/my", fmtMs(r.durMs));
   else fail("client list shifts/my", `status=${r.status}`);
+
+  // Team request — client posts a brigade request, worker applies for one role.
+  r = await call("POST", "/api/build/team-requests", {
+    token: client.token,
+    body: {
+      title: `Smoke brigade ${Date.now()}`,
+      description: "Welding + assembly crew, 2 weeks duration, day shift.",
+      city: "Astana",
+      roles: [
+        { specialty: "Welder", count: 2, salary: 4500 },
+        { specialty: "Helper", count: 3, salary: 2800 },
+      ],
+    },
+  });
+  const teamReqId = payload(r.body)?.id;
+  if ((r.status === 200 || r.status === 201) && teamReqId) ok("client post team-request", `id=${teamReqId.slice(0, 8)}`);
+  else fail("client post team-request", `status=${r.status}`);
+
+  if (teamReqId) {
+    r = await call("POST", `/api/build/team-requests/${teamReqId}/apply`, {
+      token: worker.token,
+      body: { roleIndex: 0, message: "Готов выйти на сварочные работы." },
+    });
+    if (r.status === 200 || r.status === 201) ok("worker apply for team role 0");
+    else fail("worker apply for team role 0", `status=${r.status}`);
+
+    r = await call("GET", `/api/build/team-requests/${teamReqId}`);
+    if (r.status === 200 && (payload(r.body)?.applications?.length ?? 0) >= 1) ok("team-request detail with apps");
+    else fail("team-request detail with apps", `status=${r.status}`);
+  }
 }
 
 async function runStatsAndPipeline(client) {

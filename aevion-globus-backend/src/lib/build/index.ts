@@ -204,6 +204,42 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_client_date_idx" ON "BuildShift" ("clientId", "shiftDate");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildShift_app_idx" ON "BuildShift" ("applicationId");`);
 
+  // Team / brigade hiring — client posts a multi-role request, multiple
+  // workers apply for specific roles. Backs /build/team-requests page.
+  // rolesJson stores [{specialty, count, salary?}] denormalised, parsed
+  // at read time (the per-role aggregation queries are write-rare).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildTeamRequest" (
+      "id" TEXT PRIMARY KEY,
+      "clientId" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL,
+      "rolesJson" TEXT NOT NULL DEFAULT '[]',
+      "city" TEXT,
+      "startDate" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'OPEN',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTeamRequest_status_idx" ON "BuildTeamRequest" ("status", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTeamRequest_client_idx" ON "BuildTeamRequest" ("clientId", "createdAt" DESC);`);
+  // BuildTeamApplication: one row per (request × applicant × role-index).
+  // Composite UNIQUE prevents the same worker applying to the same role
+  // twice (route catches 23505 → 409 already_applied_for_this_role).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildTeamApplication" (
+      "id" TEXT PRIMARY KEY,
+      "teamRequestId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "roleIndex" INTEGER NOT NULL,
+      "message" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildTeamApplication_uniq" ON "BuildTeamApplication" ("teamRequestId", "userId", "roleIndex");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTeamApplication_request_idx" ON "BuildTeamApplication" ("teamRequestId", "createdAt" DESC);`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

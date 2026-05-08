@@ -293,6 +293,30 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVideoRoom_host_idx" ON "BuildVideoRoom" ("hostId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVideoRoom_guest_idx" ON "BuildVideoRoom" ("guestId", "createdAt" DESC) WHERE "guestId" IS NOT NULL;`);
 
+  // Payment calendar — lightweight expected-payouts ledger between client
+  // and worker on an accepted application. Replaces HH-style "wages later"
+  // black hole with a concrete schedule both parties can see and check.
+  // Status enum: PENDING → PAID (worker confirms) | CANCELED (client only)
+  // | OVERDUE (computed from dueDate at read time, not stored).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPaymentEvent" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "clientId" TEXT NOT NULL,
+      "workerId" TEXT NOT NULL,
+      "amount" DOUBLE PRECISION NOT NULL,
+      "currency" TEXT NOT NULL DEFAULT 'RUB',
+      "dueDate" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "note" TEXT,
+      "paidAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_client_due_idx" ON "BuildPaymentEvent" ("clientId", "dueDate" ASC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_worker_due_idx" ON "BuildPaymentEvent" ("workerId", "dueDate" ASC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_app_idx" ON "BuildPaymentEvent" ("applicationId");`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

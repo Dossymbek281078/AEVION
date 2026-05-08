@@ -33,6 +33,7 @@ import { shiftsRouter } from "./build/shifts";
 import { teamHiringRouter } from "./build/team-hiring";
 import { communitiesRouter } from "./build/communities";
 import { videoRoomsRouter } from "./build/video-rooms";
+import { paymentCalendarRouter } from "./build/payment-calendar";
 
 export const buildRouter = Router();
 
@@ -108,3 +109,8 @@ buildRouter.use("/communities", communitiesRouter);
 // to match the /build/video frontend page's URL convention. New table
 // BuildVideoRoom in lib/build/index.ts.
 buildRouter.use("/video/rooms", videoRoomsRouter);
+// Payment calendar — expected payouts ledger between client and worker
+// on an ACCEPTED application. Replaces HH-style "wages later" black hole
+// with concrete schedule both parties can see and check off. New table
+// BuildPaymentEvent in lib/build/index.ts.
+buildRouter.use("/payment-calendar", paymentCalendarRouter);

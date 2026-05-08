@@ -2500,7 +2500,15 @@ qpaynetRouter.get("/payouts", async (req, res) => {
 function isAdmin(email: string | undefined): boolean {
   const adminEmails = (process.env.QPAYNET_ADMIN_EMAILS ?? "")
     .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-  if (adminEmails.length === 0) return true; // open in dev when env unset
+  if (adminEmails.length === 0) {
+    // Was: `return true` — fail-OPEN in dev. That's a foot-gun on prod
+    // because forgetting QPAYNET_ADMIN_EMAILS would silently turn every
+    // signed-in user into an admin (KYC override, payout reject, etc.).
+    // Production now fails closed; dev still gets the convenience by
+    // setting NODE_ENV=development (the default).
+    if (process.env.NODE_ENV === "production") return false;
+    return true;
+  }
   return adminEmails.includes((email ?? "").toLowerCase());
 }
 

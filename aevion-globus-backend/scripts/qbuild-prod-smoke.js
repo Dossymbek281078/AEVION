@@ -404,6 +404,26 @@ async function runEngagement(client, worker, vacancyId, appId) {
   r = await call("POST", "/api/build/communities/welders-kz/leave", { token: worker.token });
   if (r.status === 200) ok("worker leave community");
   else fail("worker leave community", `status=${r.status}`);
+
+  // Video rooms — client creates a room (stub URL when DAILY_API_KEY
+  // unset — that's OK for smoke), then ends it.
+  r = await call("POST", "/api/build/video/rooms", {
+    token: client.token,
+    body: { guestId: worker.userId },
+  });
+  const roomId = payload(r.body)?.id;
+  if ((r.status === 200 || r.status === 201) && roomId) ok("client create video room", `id=${roomId.slice(0, 8)}`);
+  else fail("client create video room", `status=${r.status}`);
+
+  if (roomId) {
+    r = await call("GET", "/api/build/video/rooms/my", { token: client.token });
+    if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("client list video rooms");
+    else fail("client list video rooms", `status=${r.status}`);
+
+    r = await call("PATCH", `/api/build/video/rooms/${roomId}/end`, { token: client.token });
+    if (r.status === 200 && payload(r.body)?.status === "ENDED") ok("host end video room");
+    else fail("host end video room", `status=${r.status}`);
+  }
 }
 
 async function runStatsAndPipeline(client) {

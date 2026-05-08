@@ -273,6 +273,26 @@ async function _doEnsureBuildTables(): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildCommunityMessage_room_idx" ON "BuildCommunityMessage" ("communityId", "createdAt" DESC);`);
 
+  // Video rooms — Daily.co-backed 1:1 or small-group video calls between
+  // recruiter and worker. Backs /build/video page and the 📞 invite-to-call
+  // button in DM threads. Falls back to a stub URL if DAILY_API_KEY is
+  // unset (dev mode); prod requires the env to be configured.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVideoRoom" (
+      "id" TEXT PRIMARY KEY,
+      "hostId" TEXT NOT NULL,
+      "guestId" TEXT,
+      "roomName" TEXT NOT NULL,
+      "roomUrl" TEXT NOT NULL,
+      "scheduledAt" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'OPEN',
+      "endedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVideoRoom_host_idx" ON "BuildVideoRoom" ("hostId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVideoRoom_guest_idx" ON "BuildVideoRoom" ("guestId", "createdAt" DESC) WHERE "guestId" IS NOT NULL;`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

@@ -55,7 +55,11 @@ import {
   deleteRunsBulk,
   getSessionCostSummary,
   archiveSession,
+  assignSnippetToCollection,
+  createCollection,
   createPipeline,
+  deleteCollection,
+  listCollections,
   deletePipeline,
   getPipeline,
   getRating,
@@ -366,6 +370,110 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "webhook log failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Notebook collections
+   POST   /api/qcoreai/notebook/collections
+   GET    /api/qcoreai/notebook/collections
+   DELETE /api/qcoreai/notebook/collections/:id
+   PATCH  /api/qcoreai/notebook/:snippetId/collection  body:{collectionId}
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/notebook/collections", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { name, description, color } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  try {
+    const c = await createCollection({ ownerUserId: auth.sub, name: String(name), description: description ?? null, color: color ?? null });
+    res.status(201).json({ collection: c });
+  } catch (err: any) { res.status(500).json({ error: "create collection failed" }); }
+});
+
+qcoreaiRouter.get("/notebook/collections", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try { res.json({ items: await listCollections(auth.sub) }); }
+  catch (err: any) { res.status(500).json({ error: "list collections failed" }); }
+});
+
+qcoreaiRouter.delete("/notebook/collections/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deleteCollection(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found" });
+    res.json({ deleted: true });
+  } catch (err: any) { res.status(500).json({ error: "delete collection failed" }); }
+});
+
+qcoreaiRouter.patch("/notebook/:snippetId/collection", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { collectionId } = req.body || {};
+  try {
+    const ok = await assignSnippetToCollection(String(req.params.snippetId), collectionId || null, auth.sub);
+    if (!ok) return res.status(404).json({ error: "snippet not found" });
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: "assign failed" }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run Insights — aggregate patterns from the caller's runs
+   GET /api/qcoreai/insights
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/insights", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  try {
+    if (!isDbReady() || !auth?.sub) {
+      return res.json({ topAgentCosts: [], strategyRatings: [], avgCostByHour: [] });
+    }
+
+    const [agentCosts, strategyRatings, hourly] = await Promise.all([
+      // Top agent roles by avg cost per turn
+      pool.query(`
+        SELECT m."role", AVG(m."costUsd") AS "avgCostUsd", SUM(m."costUsd") AS "totalCostUsd",
+               COUNT(*)::int AS "calls", AVG(m."durationMs") AS "avgDurationMs"
+        FROM "QCoreMessage" m
+        JOIN "QCoreRun" r ON r."id"=m."runId"
+        JOIN "QCoreSession" s ON s."id"=r."sessionId"
+        WHERE s."userId"=$1 AND m."costUsd" IS NOT NULL AND m."role" NOT IN ('user','final','guidance','attachments')
+        GROUP BY m."role"
+        ORDER BY "totalCostUsd" DESC LIMIT 10`, [auth.sub]),
+
+      // Strategy by avg rating score
+      pool.query(`
+        SELECT r."strategy",
+               AVG(CASE WHEN rt."rating"=1 THEN 1.0 WHEN rt."rating"=-1 THEN -1.0 ELSE 0 END) AS "avgRating",
+               COUNT(DISTINCT r."id")::int AS "runs",
+               AVG(r."totalCostUsd") AS "avgCostUsd"
+        FROM "QCoreRun" r
+        JOIN "QCoreSession" s ON s."id"=r."sessionId"
+        LEFT JOIN "QCoreRunRating" rt ON rt."runId"=r."id"
+        WHERE s."userId"=$1 AND r."strategy" IS NOT NULL
+        GROUP BY r."strategy" ORDER BY "avgRating" DESC`, [auth.sub]),
+
+      // Avg cost by hour of day (when do expensive runs happen?)
+      pool.query(`
+        SELECT EXTRACT(HOUR FROM r."startedAt") AS "hour",
+               AVG(r."totalCostUsd") AS "avgCostUsd",
+               COUNT(*)::int AS "runs"
+        FROM "QCoreRun" r
+        JOIN "QCoreSession" s ON s."id"=r."sessionId"
+        WHERE s."userId"=$1 AND r."totalCostUsd" IS NOT NULL
+        GROUP BY "hour" ORDER BY "hour"`, [auth.sub]),
+    ]);
+
+    res.json({
+      topAgentCosts: agentCosts.rows,
+      strategyRatings: strategyRatings.rows,
+      avgCostByHour: hourly.rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "insights failed", details: err?.message });
   }
 });
 

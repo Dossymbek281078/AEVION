@@ -240,6 +240,22 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Notebook collections — named groups of snippets.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreNotebookCollection" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "color"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebookCollection_owner_idx" ON "QCoreNotebookCollection" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`ALTER TABLE "QCoreNotebook" ADD COLUMN IF NOT EXISTS "collectionId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_collection_idx" ON "QCoreNotebook" ("collectionId") WHERE "collectionId" IS NOT NULL;`);
+
   // Custom pipelines — user-defined multi-step agent chains saved as named configs.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCorePipeline" (

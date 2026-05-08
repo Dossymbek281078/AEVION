@@ -35,9 +35,14 @@ function tagColor(tag: string): string {
   return `hsl(${h},60%,35%)`;
 }
 
+type Collection = { id: string; name: string; description: string | null; color: string | null };
+
 export default function NotebookPage() {
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [tags, setTags] = useState<Array<{ tag: string; count: number }>>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [activeCollection, setActiveCollection] = useState<string | null>(null);
+  const [newCollName, setNewCollName] = useState("");
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [activeTag, setActiveTag] = useState("");
@@ -47,6 +52,16 @@ export default function NotebookPage() {
   const [editTags, setEditTags] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadCollections = useCallback(async () => {
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/notebook/collections"), { headers: bearerHeader() });
+      const d = await r.json().catch(() => ({}));
+      if (Array.isArray(d?.items)) setCollections(d.items);
+    } catch { /* non-critical */ }
+  }, []);
+
+  useEffect(() => { loadCollections(); }, [loadCollections]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,6 +190,36 @@ export default function NotebookPage() {
             >
               ⬇ Export MD ({snippets.length})
             </button>
+          </div>
+        </div>
+
+        {/* Collections */}
+        <div style={{ marginBottom: 14, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>Collections:</span>
+          <button
+            onClick={() => setActiveCollection(null)}
+            style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1px solid ${activeCollection === null ? "#0f172a" : "#e2e8f0"}`, background: activeCollection === null ? "#0f172a" : "#fff", color: activeCollection === null ? "#fff" : "#64748b" }}
+          >
+            All
+          </button>
+          {collections.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setActiveCollection(activeCollection === c.id ? null : c.id)}
+              style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1px solid ${activeCollection === c.id ? (c.color || "#4338ca") : "#e2e8f0"}`, background: activeCollection === c.id ? (c.color ? `${c.color}20` : "rgba(67,56,202,0.1)") : "#fff", color: activeCollection === c.id ? (c.color || "#4338ca") : "#64748b" }}
+            >
+              {c.name}
+              <button onClick={async (e) => { e.stopPropagation(); await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ marginLeft: 5, border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5" }}>×</button>
+            </button>
+          ))}
+          <div style={{ display: "flex", gap: 4 }}>
+            <input value={newCollName} onChange={(e) => setNewCollName(e.target.value)} onKeyDown={async (e) => {
+              if (e.key === "Enter" && newCollName.trim()) {
+                const r = await fetch(apiUrl("/api/qcoreai/notebook/collections"), { method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ name: newCollName.trim() }) });
+                const d = await r.json().catch(() => ({}));
+                if (d.collection) { setCollections((p) => [...p, d.collection]); setNewCollName(""); }
+              }
+            }} placeholder="+ New collection…" style={{ padding: "3px 8px", borderRadius: 999, border: "1px dashed #e2e8f0", fontSize: 11, outline: "none", width: 120 }} />
           </div>
         </div>
 

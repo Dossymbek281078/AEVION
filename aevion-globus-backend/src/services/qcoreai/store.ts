@@ -3260,3 +3260,49 @@ export async function usePipeline(id: string): Promise<PipelineRow | null> {
   const r = await pool.query(`UPDATE "QCorePipeline" SET "useCount"="useCount"+1,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`, [id]);
   return (r.rows[0] as PipelineRow) || null;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Notebook Collections — named groups of snippets.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type CollectionRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memCollections = new Map<string, CollectionRow>();
+
+export async function createCollection(opts: { ownerUserId: string; name: string; description?: string | null; color?: string | null }): Promise<CollectionRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: CollectionRow = { id, ownerUserId: opts.ownerUserId, name: opts.name.slice(0, 80), description: opts.description ?? null, color: opts.color?.slice(0, 20) ?? null, createdAt: nowIso(), updatedAt: nowIso() };
+  if (!isDbReady()) { memCollections.set(id, row); return row; }
+  const r = await pool.query(`INSERT INTO "QCoreNotebookCollection" ("id","ownerUserId","name","description","color") VALUES ($1,$2,$3,$4,$5) RETURNING *`, [id, row.ownerUserId, row.name, row.description, row.color]);
+  return r.rows[0] as CollectionRow;
+}
+
+export async function listCollections(ownerUserId: string): Promise<CollectionRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memCollections.values()).filter((c) => c.ownerUserId === ownerUserId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const r = await pool.query(`SELECT * FROM "QCoreNotebookCollection" WHERE "ownerUserId"=$1 ORDER BY "updatedAt" DESC`, [ownerUserId]);
+  return r.rows as CollectionRow[];
+}
+
+export async function deleteCollection(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) { const c = memCollections.get(id); if (!c || c.ownerUserId !== ownerUserId) return false; memCollections.delete(id); return true; }
+  const r = await pool.query(`DELETE FROM "QCoreNotebookCollection" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`, [id, ownerUserId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function assignSnippetToCollection(snippetId: string, collectionId: string | null, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) { const s = memNotebook.get(snippetId); if (!s || s.ownerUserId !== ownerUserId) return false; (s as any).collectionId = collectionId; return true; }
+  const r = await pool.query(`UPDATE "QCoreNotebook" SET "collectionId"=$1,"updatedAt"=NOW() WHERE "id"=$2 AND "ownerUserId"=$3 RETURNING "id"`, [collectionId, snippetId, ownerUserId]);
+  return (r.rowCount ?? 0) > 0;
+}

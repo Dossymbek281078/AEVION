@@ -256,6 +256,27 @@ export type BatchDetail = {
   runs: BatchRunSummary[];
 };
 
+export type PipelineStep = {
+  role: string;
+  name?: string;
+  systemPrompt?: string;
+  provider?: string;
+  model?: string;
+  temperature?: number;
+};
+
+export type Pipeline = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  steps: PipelineStep[];
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ClientOptions = {
   /** Base URL of the AEVION backend, e.g. "https://api.aevion.io". */
   baseUrl: string;
@@ -1297,6 +1318,85 @@ export class QCoreClient {
     });
     if (!res.ok) throw new Error(`chat failed: ${await safeError(res)}`);
     return res.json();
+  }
+
+  /* ─── V20: Custom pipelines ────────────────────────────────────────── */
+
+  /** Create a custom multi-step agent pipeline. */
+  async createPipeline(opts: { name: string; description?: string | null; steps: PipelineStep[]; isPublic?: boolean }): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/pipelines"), { method: "POST", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`createPipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** List own pipelines. */
+  async listPipelines(): Promise<Pipeline[]> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/pipelines"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listPipelines failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Browse public pipelines. */
+  async listPublicPipelines(query?: string, limit = 20): Promise<Pipeline[]> {
+    const p = new URLSearchParams();
+    if (query) p.set("q", query);
+    p.set("limit", String(limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/public?${p}`));
+    if (!res.ok) throw new Error(`listPublicPipelines failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Get pipeline by id. */
+  async getPipeline(id: string): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getPipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** Update pipeline. Owner-only. */
+  async updatePipeline(id: string, patch: { name?: string; description?: string | null; steps?: PipelineStep[]; isPublic?: boolean }): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}`), { method: "PATCH", headers: this.headers(), body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(`updatePipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** Delete pipeline. Owner-only. */
+  async deletePipeline(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}`), { method: "DELETE", headers: this.headers() });
+    if (!res.ok) throw new Error(`deletePipeline failed: ${await safeError(res)}`);
+  }
+
+  /** Apply pipeline (bumps useCount). */
+  async usePipeline(id: string): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}/use`), { method: "POST", headers: this.headers() });
+    if (!res.ok) throw new Error(`usePipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** Archive a session (soft-delete). */
+  async archiveSession(sessionId: string, archive = true): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/archive`), { method: "PATCH", headers: this.headers(), body: JSON.stringify({ archive }) });
+    if (!res.ok) throw new Error(`archiveSession failed: ${await safeError(res)}`);
+  }
+
+  /** List archived sessions. */
+  async listArchivedSessions(): Promise<Array<{ id: string; title: string; updatedAt: string; archivedAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/sessions/archived"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listArchivedSessions failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Set agent persona (custom name/emoji for a role). */
+  async setPersona(roleId: string, persona: { name: string; emoji?: string; color?: string }): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/personas/${encodeURIComponent(roleId)}`), { method: "PUT", headers: this.headers(), body: JSON.stringify(persona) });
+    if (!res.ok) throw new Error(`setPersona failed: ${await safeError(res)}`);
+  }
+
+  /** Get all agent personas. */
+  async listPersonas(): Promise<Array<{ roleId: string; name: string; emoji: string | null; color: string | null }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/personas"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listPersonas failed: ${await safeError(res)}`);
+    return (await res.json()).personas || [];
   }
 }
 

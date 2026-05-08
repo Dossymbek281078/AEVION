@@ -3145,3 +3145,118 @@ export async function listTopRatedRuns(userId: string | null, limit = 20): Promi
   );
   return r.rows as Array<{ runId: string; thumbsUp: number; thumbsDown: number; score: number }>;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Custom pipelines — user-defined multi-step agent chains.
+   Each step: { role, name?, systemPrompt?, provider?, model?, temperature? }
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type PipelineStep = {
+  role: string;
+  name?: string;
+  systemPrompt?: string;
+  provider?: string;
+  model?: string;
+  temperature?: number;
+};
+
+export type PipelineRow = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  steps: PipelineStep[];
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memPipelines = new Map<string, PipelineRow>();
+
+export async function createPipeline(opts: {
+  ownerUserId: string;
+  name: string;
+  description?: string | null;
+  steps: PipelineStep[];
+  isPublic?: boolean;
+}): Promise<PipelineRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: PipelineRow = {
+    id, ownerUserId: opts.ownerUserId,
+    name: opts.name.slice(0, 80),
+    description: opts.description?.slice(0, 400) ?? null,
+    steps: opts.steps.slice(0, 10),
+    isPublic: opts.isPublic ?? false,
+    useCount: 0,
+    createdAt: nowIso(), updatedAt: nowIso(),
+  };
+  if (!isDbReady()) { memPipelines.set(id, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCorePipeline" ("id","ownerUserId","name","description","steps","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [id, row.ownerUserId, row.name, row.description, JSON.stringify(row.steps), row.isPublic]
+  );
+  return r.rows[0] as PipelineRow;
+}
+
+export async function listPipelines(ownerUserId: string): Promise<PipelineRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memPipelines.values()).filter((p) => p.ownerUserId === ownerUserId).sort((a,b) => b.updatedAt.localeCompare(a.updatedAt));
+  const r = await pool.query(`SELECT * FROM "QCorePipeline" WHERE "ownerUserId"=$1 ORDER BY "updatedAt" DESC`, [ownerUserId]);
+  return r.rows as PipelineRow[];
+}
+
+export async function listPublicPipelines(q?: string, limit = 20): Promise<PipelineRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const qlo = q?.toLowerCase() || "";
+    return Array.from(memPipelines.values()).filter((p) => p.isPublic && (!qlo || p.name.toLowerCase().includes(qlo))).sort((a,b) => b.useCount - a.useCount).slice(0, limit);
+  }
+  if (q?.trim()) {
+    const r = await pool.query(`SELECT * FROM "QCorePipeline" WHERE "isPublic"=TRUE AND "name" ILIKE $1 ORDER BY "useCount" DESC LIMIT $2`, [`%${q.trim()}%`, limit]);
+    return r.rows as PipelineRow[];
+  }
+  const r = await pool.query(`SELECT * FROM "QCorePipeline" WHERE "isPublic"=TRUE ORDER BY "useCount" DESC LIMIT $1`, [limit]);
+  return r.rows as PipelineRow[];
+}
+
+export async function getPipeline(id: string): Promise<PipelineRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memPipelines.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCorePipeline" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as PipelineRow) || null;
+}
+
+export async function updatePipeline(id: string, ownerUserId: string, patch: Partial<Pick<PipelineRow,"name"|"description"|"steps"|"isPublic">>): Promise<PipelineRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const p = memPipelines.get(id);
+    if (!p || p.ownerUserId !== ownerUserId) return null;
+    const up = { ...p, ...patch, updatedAt: nowIso() };
+    memPipelines.set(id, up); return up;
+  }
+  const sets: string[] = ["\"updatedAt\"=NOW()"];
+  const vals: unknown[] = [id, ownerUserId]; let idx = 3;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(patch.name); }
+  if (patch.description !== undefined) { sets.push(`"description"=$${idx++}`); vals.push(patch.description); }
+  if (patch.steps !== undefined) { sets.push(`"steps"=$${idx++}`); vals.push(JSON.stringify(patch.steps)); }
+  if (patch.isPublic !== undefined) { sets.push(`"isPublic"=$${idx++}`); vals.push(patch.isPublic); }
+  const r = await pool.query(`UPDATE "QCorePipeline" SET ${sets.join(",")} WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING *`, vals);
+  return (r.rows[0] as PipelineRow) || null;
+}
+
+export async function deletePipeline(id: string, ownerUserId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) { const p = memPipelines.get(id); if (!p || p.ownerUserId !== ownerUserId) return false; memPipelines.delete(id); return true; }
+  const r = await pool.query(`DELETE FROM "QCorePipeline" WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`, [id, ownerUserId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function usePipeline(id: string): Promise<PipelineRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) { const p = memPipelines.get(id); if (!p) return null; p.useCount++; return p; }
+  const r = await pool.query(`UPDATE "QCorePipeline" SET "useCount"="useCount"+1,"updatedAt"=NOW() WHERE "id"=$1 RETURNING *`, [id]);
+  return (r.rows[0] as PipelineRow) || null;
+}

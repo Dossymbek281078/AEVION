@@ -240,6 +240,23 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
   await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // Custom pipelines — user-defined multi-step agent chains saved as named configs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePipeline" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "steps"       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "useCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePipeline_owner_idx" ON "QCorePipeline" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePipeline_public_idx" ON "QCorePipeline" ("isPublic", "useCount" DESC);`);
+
   // Agent personas — custom display names for agent roles per user.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreAgentPersona" (

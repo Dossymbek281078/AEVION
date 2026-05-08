@@ -676,6 +676,8 @@ export default function QCoreAIPage() {
             { href: "/qcoreai/docs",      icon: "📖", t: "API Reference",              d: "Full endpoint documentation with request/response" },
             { href: "/qcoreai/playground", icon: "🎮", t: "Prompt Playground",         d: "Test a prompt against multiple providers at once" },
             { href: "/qcoreai/top",        icon: "⭐", t: "Top Rated Runs",            d: "Community leaderboard by 👍/👎 feedback score" },
+            { href: "/qcoreai/pipeline",   icon: "⚙️", t: "Pipeline Builder",           d: "Design custom multi-step agent chains" },
+            { href: "/qcoreai/optimize",   icon: "✨", t: "Prompt Optimizer",            d: "AI-powered prompt improvement suggestions" },
           ].map(({ href, icon, t, d }) => (
             <a
               key={href}

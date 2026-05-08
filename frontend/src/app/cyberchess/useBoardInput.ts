@@ -606,35 +606,31 @@ export function useBoardInput(opts: BoardInputOptions) {
       const destX = d.bRect.l + tCol * cw + cw / 2;
       const destY = d.bRect.t + tRow * cw + cw / 2;
       const ghostNode = ghostNodeRef.current;
+      // ⚡ Exec IMMEDIATELY on release — last-move highlight + dest piece appear
+      // instantly. Ghost continues sliding for visual continuity but doesn't
+      // block the state update. Раньше exec ждал 150ms slide → highlight
+      // запаздывал. Теперь highlight в момент release, ghost overlap'ит
+      // с появляющейся фигурой → seamless.
+      executeDrop(d.from, to);
       if (ghostNode) {
-        // Slide the ghost smoothly from current position to destination cell
-        // center over 150ms. This gives the user a clear visual of "the piece
-        // flying to where I dropped it" — лёгкий полёт к клетке.
+        // Slide ghost smoothly from current cursor pos to destination cell
+        // center over 150ms. The dest piece is already visible (via exec).
+        // Ghost flies to overlap with it, then is removed.
         ghostNode.style.transition = "left 150ms cubic-bezier(0.25,0.46,0.45,0.94), top 150ms cubic-bezier(0.25,0.46,0.45,0.94)";
         ghostNode.style.left = `${destX}px`;
         ghostNode.style.top = `${destY}px`;
-        // During slide, also dampen the lift (scale back from 1.30 to 1) so
-        // arrival visually merges with the destination piece's drop snap.
         const inner = ghostNode.firstElementChild as HTMLDivElement | null;
         const clone = inner?.firstElementChild as HTMLElement | null;
         if (clone) {
           clone.style.transition = "transform 150ms cubic-bezier(0.25,0.46,0.45,0.94)";
           clone.style.transform = "scale(1.05) translateY(0)";
         }
-        // Hide halo immediately (no point during slide)
         const halo = haloNodeRef.current;
         if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        // After slide arrives, exec the move. Wait 2 RAFs after exec so React
-        // renders the destination piece BEFORE we hide the ghost — seamless
-        // handoff: ghost is at dest cell, dest piece materializes there with
-        // cc-piece-drop bounce animation, ghost is removed.
-        window.setTimeout(() => {
-          executeDrop(d.from, to);
-          requestAnimationFrame(() => requestAnimationFrame(() => hideGhost()));
-        }, 150);
+        // Remove ghost after slide ends — dest piece by then has its
+        // cc-piece-drop bounce running, so the handoff is seamless.
+        window.setTimeout(() => hideGhost(), 150);
       } else {
-        // No ghost (shouldn't happen on activated drag) — exec immediately
-        executeDrop(d.from, to);
         hideGhost();
       }
     };

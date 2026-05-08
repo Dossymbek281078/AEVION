@@ -476,7 +476,7 @@ export default function CyberChessPage(){
   const vmRef=useRef<Set<string>>(new Set());
   useEffect(()=>{selRef.current=sel},[sel]);
   useEffect(()=>{vmRef.current=vm},[vm]);
-  const[pmLim,sPmLim]=useState(10);
+  const[pmLim,sPmLim]=useState(30);
   const[aiI,sAiI]=useState(2);
   const[pCol,sPCol]=useState<ChessColor>("w");
   const[tcI,sTcI]=useState(9); // 5+0 default
@@ -3280,7 +3280,7 @@ export default function CyberChessPage(){
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                 <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ Премувы</span>
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
-                  {[3,5,10,20].map(n=><button key={n} onClick={()=>sPmLim(n)}
+                  {[10,20,30,50].map(n=><button key={n} onClick={()=>sPmLim(n)}
                     style={{padding:"4px 12px",borderRadius:RADIUS.full,fontSize:12,fontWeight:pmLim===n?900:700,
                       border:"none",
                       background:pmLim===n?"#fff":"transparent",
@@ -7706,7 +7706,7 @@ export default function CyberChessPage(){
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>⚡ Очередь премувов</div>
             <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim,fontWeight:600}}>
               <span>Лимит: <b style={{color:CC.text}}>{pmLim}</b></span>
-              <input type="range" min={1} max={20} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
+              <input type="range" min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
             </label>
           </div>
           <div>

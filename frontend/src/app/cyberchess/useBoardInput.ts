@@ -519,25 +519,10 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
-      // Drop settle animation — piece "приземляется" с size 1.25 (matches ghost
-      // lift size at release) → bounces down to 0.92 → settles to 1. Visible
-      // continuity from drag → drop (ghost растёт, piece приземляется).
-      if (typeof window !== "undefined") {
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          const destCell = document.querySelector(`[data-sq="${to}"]`);
-          if (!destCell) return;
-          const divs = destCell.querySelectorAll("div");
-          for (let i = 0; i < divs.length; i++) {
-            const d = divs[i] as HTMLElement;
-            if (d.style && d.style.width === "88%" && d.style.height === "88%") {
-              d.style.animation = "none";
-              void d.offsetWidth;
-              d.style.animation = "cc-piece-drop 220ms cubic-bezier(0.34,1.56,0.64,1)";
-              break;
-            }
-          }
-        }));
-      }
+      // Note: cc-piece-drop animation удалён — он стартовал через RAF×2
+      // (~32ms после exec), создавая «появилась → потом начала bounce»
+      // несоответствие. Slide на ghost'е уже даёт визуальную непрерывность.
+      // Финальная piece просто появляется на dest без дополнительной анимации.
     } else {
       o.sSel(null); o.selRef.current = null;
       o.sVm(new Set()); o.vmRef.current = new Set();
@@ -613,23 +598,22 @@ export function useBoardInput(opts: BoardInputOptions) {
       // с появляющейся фигурой → seamless.
       executeDrop(d.from, to);
       if (ghostNode) {
-        // Slide ghost smoothly from current cursor pos to destination cell
-        // center over 150ms. The dest piece is already visible (via exec).
-        // Ghost flies to overlap with it, then is removed.
-        ghostNode.style.transition = "left 150ms cubic-bezier(0.25,0.46,0.45,0.94), top 150ms cubic-bezier(0.25,0.46,0.45,0.94)";
+        // Slide ghost from cursor → destination cell center over 100ms.
+        // 150ms felt slow (ghost lagged behind the piece-already-visible).
+        // 100ms — fast enough to feel responsive, slow enough to read motion.
+        ghostNode.style.transition = "left 100ms cubic-bezier(0.25,0.46,0.45,0.94), top 100ms cubic-bezier(0.25,0.46,0.45,0.94)";
         ghostNode.style.left = `${destX}px`;
         ghostNode.style.top = `${destY}px`;
         const inner = ghostNode.firstElementChild as HTMLDivElement | null;
         const clone = inner?.firstElementChild as HTMLElement | null;
         if (clone) {
-          clone.style.transition = "transform 150ms cubic-bezier(0.25,0.46,0.45,0.94)";
-          clone.style.transform = "scale(1.05) translateY(0)";
+          clone.style.transition = "transform 100ms cubic-bezier(0.25,0.46,0.45,0.94)";
+          clone.style.transform = "scale(1.0) translateY(0)";
         }
         const halo = haloNodeRef.current;
         if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        // Remove ghost after slide ends — dest piece by then has its
-        // cc-piece-drop bounce running, so the handoff is seamless.
-        window.setTimeout(() => hideGhost(), 150);
+        // Remove ghost after slide ends.
+        window.setTimeout(() => hideGhost(), 100);
       } else {
         hideGhost();
       }

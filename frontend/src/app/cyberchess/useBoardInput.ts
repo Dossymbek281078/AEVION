@@ -265,19 +265,17 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (inner) {
       inner.replaceChildren();
       const srcPieceEl = findSourcePieceEl(from);
-      let cloneSucceeded = false;
       if (srcPieceEl) {
         const clone = srcPieceEl.cloneNode(true) as HTMLElement;
-        // ⚠ REPLACE inline style entirely — don't override piecewise. Inherited
-        // transition/animation from the React piece would otherwise animate our
-        // scale change instead of applying instantly.
+        // Initial state — exact size of source piece. Animation runs on next
+        // frame to scale UP to 1.22, creating a visible "lift" effect.
         clone.style.cssText = [
           "width:100%", "height:100%",
-          "transform:scale(1.22)", // 22% lift — clearly larger than cell
+          "transform:scale(1.0)",
           "transform-origin:center center",
-          "opacity:1",
+          "opacity:0.85",
           "filter:none",
-          "transition:none",
+          "transition:transform 120ms cubic-bezier(0.34,1.56,0.64,1), opacity 80ms ease-out",
           "animation:none",
           "pointer-events:none",
           "user-select:none",
@@ -285,12 +283,16 @@ export function useBoardInput(opts: BoardInputOptions) {
         ].join(";");
         clone.removeAttribute("data-ghost-hidden");
         inner.appendChild(clone);
-        cloneSucceeded = true;
+        // Force reflow then animate to lifted state
+        void clone.offsetWidth;
+        requestAnimationFrame(() => {
+          clone.style.transform = "scale(1.22)";
+          clone.style.opacity = "1";
+        });
       } else {
         // Fallback only — should be rare
         inner.innerHTML = pieceHtml(piece.type, piece.color, getActivePieceSet(), Math.round(cellSz * 1.18));
       }
-      void cloneSucceeded;
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
@@ -465,6 +467,25 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
+      // Drop settle animation — short snap on destination cell so the piece
+      // visibly "lands" instead of just appearing. Defer 2 frames so React's
+      // re-render finishes attaching the piece div first.
+      if (typeof window !== "undefined") {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const destCell = document.querySelector(`[data-sq="${to}"]`);
+          if (!destCell) return;
+          const divs = destCell.querySelectorAll("div");
+          for (let i = 0; i < divs.length; i++) {
+            const d = divs[i] as HTMLElement;
+            if (d.style && d.style.width === "88%" && d.style.height === "88%") {
+              d.style.animation = "none";
+              void d.offsetWidth;
+              d.style.animation = "cc-piece-snap 220ms cubic-bezier(0.34,1.56,0.64,1)";
+              break;
+            }
+          }
+        }));
+      }
     } else {
       o.sSel(null); o.selRef.current = null;
       o.sVm(new Set()); o.vmRef.current = new Set();

@@ -209,7 +209,7 @@ parity + docs/runbook.
 | P4-1 | DNS cutover announcement | aevion-core | **draft ready** — `docs/PHASE4_LAUNCH_ANNOUNCEMENT.md` (Twitter thread, LinkedIn post, habr structure, Telegram template, pre-launch checklist). Publishes after P3-1 + P3-3 first paying customer |
 | P4-2 | First press wave (TechCrunch / Forbes RU / habr) | aevion-core |
 | P4-3 | Reference customer case study published | aevion-core |
-| P4-4 | Open API quotas + paid tier rollout | aevion-backend-modules |
+| P4-4 | Open API quotas + paid tier rollout | aevion-backend-modules | **design done 2026-05-08** — `docs/api/PUBLIC_API_QUOTAS.md` (4 tiers Free/Starter/Pro/Enterprise, 7 endpoint surface, key format `aev_(test\|live)_*`) + `GET /api/quotas` machine-readable mirror. Phase B (issuance) + Phase C (enforcement) gated on first paying B2B customer to avoid vaporware |
 
 ### Phase 5 — Vision modules (post-launch)
 
@@ -275,6 +275,8 @@ If the user insists on more code work in this window, candidates are:
 If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
+2026-05-08  —    P4-4 design — public API quotas (4 tiers) + GET /api/quotas + design doc PUBLIC_API_QUOTAS.md
+2026-05-06  —    P3-1 voiceover ready — 9 mp3 sections via ElevenLabs founder voice clone (~2.5 min, 2.3 MB)
 2026-05-06  —    P3-1 script ready — investor demo 8-min recording script with timecodes
 2026-05-06  —    P3-3 ✅ DONE — reference customer pack: ICP, 30-day playbook, pilot offer, onboarding checklist
 2026-05-06  —    P4-1 draft — Phase 4 launch announcement (Twitter/LinkedIn/habr/Telegram + pre-launch checklist)

@@ -22,6 +22,7 @@ export const smetaTrainerRouter = Router();
 
 const STUDENTS_FILE = "smeta_students.json";
 const ATTEMPTS_FILE = "smeta_attempts.json";
+const OVERRIDES_FILE = "smeta_material_overrides.json";
 
 // ── Rate limits ────────────────────────────────────────────────────
 const writeLimiter = rateLimit({
@@ -103,6 +104,28 @@ async function loadAttempts(): Promise<AttemptRecord[]> {
 }
 async function saveAttempts(a: AttemptRecord[]): Promise<void> {
   await writeJsonFile(ATTEMPTS_FILE, a);
+}
+
+// ── Material overrides (shared by curator) ────────────────────────────
+type OverrideRecord = {
+  name: string;
+  unit: string;
+  sscCode: string | null;     // null = explicit "не нормируется ССЦ"
+  sscName?: string;
+  smetnaya?: number;
+  otpusknaya?: number | null;
+  sscBook?: string;
+  setBy: string | null;        // userId or null (anonymous)
+  setAt: number;
+};
+function overrideKey(name: string, unit: string): string {
+  return `${name.toLowerCase().trim()}|${unit.trim()}`;
+}
+async function loadOverrides(): Promise<Record<string, OverrideRecord>> {
+  return readJsonFile<Record<string, OverrideRecord>>(OVERRIDES_FILE, {});
+}
+async function saveOverrides(o: Record<string, OverrideRecord>): Promise<void> {
+  await writeJsonFile(OVERRIDES_FILE, o);
 }
 
 function isValidDeviceId(s: unknown): s is string {
@@ -272,4 +295,59 @@ smetaTrainerRouter.get("/stats", readLimiter, async (_req, res) => {
     perLevel,
     lastUpdate: list.reduce((m, s) => Math.max(m, s.updatedAt), 0),
   });
+});
+
+// ── GET /material-overrides ────────────────────────────────────────
+// Публичный список shared-привязок (любой студент видит то, что куратор закрепил).
+smetaTrainerRouter.get("/material-overrides", readLimiter, async (_req, res) => {
+  const all = await loadOverrides();
+  res.json({ overrides: Object.values(all) });
+});
+
+// ── POST /material-overrides ───────────────────────────────────────
+// body: { name, unit, sscCode (string|null), sscName?, smetnaya?, otpusknaya?, sscBook? }
+// Запись доступна только при авторизации (JWT в Authorization: Bearer ...).
+// Это «куратор/админ» — для shared overrides нужна явная привязка к userId.
+smetaTrainerRouter.post("/material-overrides", writeLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const { name, unit, sscCode, sscName, smetnaya, otpusknaya, sscBook } = req.body ?? {};
+  if (typeof name !== "string" || name.length < 1 || name.length > 200) {
+    return res.status(400).json({ error: "bad_name" });
+  }
+  if (typeof unit !== "string" || unit.length < 1 || unit.length > 20) {
+    return res.status(400).json({ error: "bad_unit" });
+  }
+  if (sscCode !== null && (typeof sscCode !== "string" || !/^\d{3}-\d{3}-\d{4}$/.test(sscCode))) {
+    return res.status(400).json({ error: "bad_sscCode" });
+  }
+  const all = await loadOverrides();
+  const rec: OverrideRecord = {
+    name, unit, sscCode,
+    sscName: typeof sscName === "string" ? sscName.slice(0, 200) : undefined,
+    smetnaya: typeof smetnaya === "number" && smetnaya >= 0 ? smetnaya : undefined,
+    otpusknaya: typeof otpusknaya === "number" ? otpusknaya : null,
+    sscBook: typeof sscBook === "string" ? sscBook.slice(0, 80) : undefined,
+    setBy: userId,
+    setAt: Date.now(),
+  };
+  all[overrideKey(name, unit)] = rec;
+  await saveOverrides(all);
+  res.json({ override: rec });
+});
+
+// ── DELETE /material-overrides ─────────────────────────────────────
+// query: ?name=...&unit=...
+smetaTrainerRouter.delete("/material-overrides", writeLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const name = String(req.query.name ?? "");
+  const unit = String(req.query.unit ?? "");
+  if (!name || !unit) return res.status(400).json({ error: "bad_query" });
+  const all = await loadOverrides();
+  const key = overrideKey(name, unit);
+  if (!(key in all)) return res.status(404).json({ error: "not_found" });
+  delete all[key];
+  await saveOverrides(all);
+  res.json({ ok: true });
 });

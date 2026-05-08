@@ -1,9 +1,12 @@
 /**
  * Подкладывание реальных цен ССЦ РК 8.04-08-2025 к материалам учебных расценок.
  *
- * Map материал → ССЦ-код генерится Python-скриптом raw-corpus/match-seed-to-ssc.py
- * fuzzy-матчингом (пересечение значимых токенов + совпадение единицы измерения).
- * Покрытие сейчас ~58% (147/254 материалов). Остальное — учебная цена fallback.
+ * Источники в порядке приоритета:
+ *  1. User overrides (localStorage, ставит куратор/студент через UI)
+ *  2. Auto-map из material-ssc-map.json (генерится Python-скриптом
+ *     raw-corpus/match-seed-to-ssc.py)
+ *
+ * Покрытие auto-map ~64% (163/254). Overrides поднимают вручную.
  */
 
 import map from "../data/material-ssc-map.json";
@@ -19,26 +22,149 @@ export type MaterialMatch = {
   score: number;
   smetnaya: number;
   otpusknaya: number | null;
+  manual?: boolean;
 };
 
 export type MaterialUnmatched = {
   name: string;
   unit: string;
+  reason?: string;
 };
+
+/** Override от пользователя — может быть привязка к ССЦ-коду или явный skip. */
+export type MaterialOverride = {
+  name: string;
+  unit: string;
+  sscCode: string | null;     // null = не нормируется ССЦ (manual skip)
+  sscName?: string;           // подсказка для UI
+  smetnaya?: number;
+  otpusknaya?: number | null;
+  sscBook?: string;
+  setBy?: string | null;      // дата ISO (local) или userId (shared)
+  setAt?: number;             // unix ms (для shared)
+  source?: "local" | "shared"; // откуда — localStorage или backend (shared by curator)
+};
+
+const OVERRIDES_KEY = "aevion-smeta-overrides-v1";
+const SHARED_CACHE_KEY = "aevion-smeta-overrides-shared-v1"; // снимок shared с backend
 
 const matchedIndex = new Map<string, MaterialMatch>();
 for (const m of map.materials as MaterialMatch[]) {
-  matchedIndex.set(`${m.name.toLowerCase()}|${m.unit}`, m);
+  matchedIndex.set(makeKey(m.name, m.unit), m);
 }
 
 const unmatchedIndex = new Set<string>();
 for (const m of map.unmatched as MaterialUnmatched[]) {
-  unmatchedIndex.add(`${m.name.toLowerCase()}|${m.unit}`);
+  unmatchedIndex.add(makeKey(m.name, m.unit));
 }
 
-/** Найти ССЦ-цену для материала (по имени + единице). */
+function makeKey(name: string, unit: string): string {
+  return `${name.toLowerCase().trim()}|${unit.trim()}`;
+}
+
+// ── overrides storage ─────────────────────────────────────────────────────
+// Слияние: shared (с backend, кеш в localStorage) ⊕ local (этот браузер).
+// Local имеет приоритет если конфликт по ключу.
+
+function loadShared(): Record<string, MaterialOverride> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(SHARED_CACHE_KEY);
+    if (!raw) return {};
+    const arr = JSON.parse(raw) as MaterialOverride[];
+    const out: Record<string, MaterialOverride> = {};
+    for (const o of arr) out[makeKey(o.name, o.unit)] = { ...o, source: "shared" };
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function loadLocal(): Record<string, MaterialOverride> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(OVERRIDES_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw) as Record<string, MaterialOverride>;
+    const out: Record<string, MaterialOverride> = {};
+    for (const [k, v] of Object.entries(obj)) out[k] = { ...v, source: "local" };
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Запоминает снимок shared overrides (вызывается из mapping page при загрузке). */
+export function cacheSharedOverrides(arr: MaterialOverride[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SHARED_CACHE_KEY, JSON.stringify(arr));
+  } catch {}
+}
+
+function loadOverrides(): Record<string, MaterialOverride> {
+  return { ...loadShared(), ...loadLocal() }; // local перебивает shared
+}
+
+function saveLocalOverrides(o: Record<string, MaterialOverride>): void {
+  if (typeof window === "undefined") return;
+  try {
+    // Сохраняем только local-записи, без shared-кеша
+    const onlyLocal: Record<string, MaterialOverride> = {};
+    for (const [k, v] of Object.entries(o)) {
+      if (v.source !== "shared") onlyLocal[k] = v;
+    }
+    localStorage.setItem(OVERRIDES_KEY, JSON.stringify(onlyLocal));
+  } catch {}
+}
+
+export function getOverride(name: string, unit: string): MaterialOverride | null {
+  return loadOverrides()[makeKey(name, unit)] ?? null;
+}
+
+export function setOverride(o: MaterialOverride): void {
+  const local = loadLocal();
+  local[makeKey(o.name, o.unit)] = {
+    ...o,
+    setBy: new Date().toISOString(),
+    source: "local",
+  };
+  saveLocalOverrides(local);
+}
+
+export function clearOverride(name: string, unit: string): void {
+  const local = loadLocal();
+  delete local[makeKey(name, unit)];
+  saveLocalOverrides(local);
+}
+
+export function listOverrides(): MaterialOverride[] {
+  return Object.values(loadOverrides());
+}
+
+// ── lookups ───────────────────────────────────────────────────────────────
+
+/** Найти ССЦ-привязку для материала (по имени + единице).
+ *  Учитывает overrides поверх auto-map. */
 export function findSscMatch(name: string, unit: string): MaterialMatch | null {
-  return matchedIndex.get(`${name.toLowerCase()}|${unit}`) ?? null;
+  const ov = getOverride(name, unit);
+  if (ov) {
+    if (ov.sscCode === null) return null; // explicit skip
+    if (typeof ov.smetnaya === "number") {
+      return {
+        name, unit,
+        sscCode: ov.sscCode,
+        sscName: ov.sscName ?? "(override)",
+        sscBook: ov.sscBook ?? "(override)",
+        score: 1,
+        smetnaya: ov.smetnaya,
+        otpusknaya: ov.otpusknaya ?? null,
+        manual: true,
+      };
+    }
+    // Override без цены — fallback на auto если она там есть
+  }
+  return matchedIndex.get(makeKey(name, unit)) ?? null;
 }
 
 /** Получить эффективную цену + источник. */

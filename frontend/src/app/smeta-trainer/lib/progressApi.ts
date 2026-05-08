@@ -169,4 +169,47 @@ export async function pingBackend(): Promise<boolean> {
   }
 }
 
+// ── Shared material overrides (curator-set) ──────────────────────────
+export type SharedOverride = {
+  name: string;
+  unit: string;
+  sscCode: string | null;
+  sscName?: string;
+  smetnaya?: number;
+  otpusknaya?: number | null;
+  sscBook?: string;
+  setBy: string | null;
+  setAt: number;
+};
+
+export async function fetchSharedOverrides(): Promise<SharedOverride[]> {
+  const r = await api<{ overrides: SharedOverride[] }>(`/api/smeta-trainer/material-overrides`);
+  return r.overrides;
+}
+
+/** Требует JWT в Authorization: Bearer ... — куратор/админ. */
+export async function pushSharedOverride(
+  payload: Omit<SharedOverride, "setBy" | "setAt">,
+  jwt: string,
+): Promise<SharedOverride> {
+  const r = await api<{ override: SharedOverride }>(
+    `/api/smeta-trainer/material-overrides`,
+    {
+      method: "POST",
+      headers: { authorization: `Bearer ${jwt}` },
+      body: JSON.stringify(payload),
+    },
+  );
+  return r.override;
+}
+
+export async function deleteSharedOverride(
+  name: string, unit: string, jwt: string,
+): Promise<void> {
+  await api<{ ok: true }>(
+    `/api/smeta-trainer/material-overrides?name=${encodeURIComponent(name)}&unit=${encodeURIComponent(unit)}`,
+    { method: "DELETE", headers: { authorization: `Bearer ${jwt}` } },
+  );
+}
+
 export { BackendUnavailableError };

@@ -55,7 +55,14 @@ import {
   deleteRunsBulk,
   getSessionCostSummary,
   archiveSession,
+  createPipeline,
+  deletePipeline,
+  getPipeline,
   getRating,
+  listPipelines,
+  listPublicPipelines,
+  updatePipeline,
+  usePipeline,
   getRatingsSummary,
   listTopRatedRuns,
   mergeSessions,
@@ -360,6 +367,87 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "webhook log failed", details: err?.message });
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Custom pipelines — user-defined multi-step agent chains
+   POST   /api/qcoreai/pipelines
+   GET    /api/qcoreai/pipelines
+   GET    /api/qcoreai/pipelines/public?q=
+   GET    /api/qcoreai/pipelines/:id
+   PATCH  /api/qcoreai/pipelines/:id
+   DELETE /api/qcoreai/pipelines/:id
+   POST   /api/qcoreai/pipelines/:id/use
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/pipelines", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { name, description, steps, isPublic } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  if (!Array.isArray(steps) || steps.length < 1) return res.status(400).json({ error: "steps[] required" });
+  try {
+    const p = await createPipeline({ ownerUserId: auth.sub, name: String(name), description: description ?? null, steps, isPublic: Boolean(isPublic) });
+    res.status(201).json({ pipeline: p });
+  } catch (err: any) { res.status(500).json({ error: "create pipeline failed" }); }
+});
+
+qcoreaiRouter.get("/pipelines/public", async (req, res) => {
+  try {
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    res.json({ items: await listPublicPipelines(q, limit) });
+  } catch (err: any) { res.status(500).json({ error: "list public pipelines failed" }); }
+});
+
+qcoreaiRouter.get("/pipelines", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try { res.json({ items: await listPipelines(auth.sub) }); }
+  catch (err: any) { res.status(500).json({ error: "list pipelines failed" }); }
+});
+
+qcoreaiRouter.get("/pipelines/:id", async (req, res) => {
+  try {
+    const p = await getPipeline(String(req.params.id));
+    if (!p) return res.status(404).json({ error: "not found" });
+    const auth = verifyBearerOptional(req);
+    if (!p.isPublic && p.ownerUserId !== auth?.sub) return res.status(403).json({ error: "forbidden" });
+    res.json({ pipeline: p });
+  } catch (err: any) { res.status(500).json({ error: "get pipeline failed" }); }
+});
+
+qcoreaiRouter.patch("/pipelines/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { name, description, steps, isPublic } = req.body || {};
+  try {
+    const p = await updatePipeline(String(req.params.id), auth.sub, {
+      ...(name !== undefined && { name: String(name) }),
+      ...(description !== undefined && { description }),
+      ...(steps !== undefined && { steps }),
+      ...(isPublic !== undefined && { isPublic: Boolean(isPublic) }),
+    });
+    if (!p) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ pipeline: p });
+  } catch (err: any) { res.status(500).json({ error: "update pipeline failed" }); }
+});
+
+qcoreaiRouter.delete("/pipelines/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deletePipeline(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) { res.status(500).json({ error: "delete pipeline failed" }); }
+});
+
+qcoreaiRouter.post("/pipelines/:id/use", async (req, res) => {
+  try {
+    const p = await usePipeline(String(req.params.id));
+    res.json({ pipeline: p });
+  } catch (err: any) { res.status(500).json({ error: "use pipeline failed" }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

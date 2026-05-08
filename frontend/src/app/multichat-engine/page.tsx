@@ -955,6 +955,8 @@ export default function MultichatEnginePage() {
             { href: "/qcoreai/docs",       label: "📖 API Docs" },
             { href: "/qcoreai/playground", label: "🎮 Playground" },
             { href: "/qcoreai/top",        label: "⭐ Top Rated" },
+            { href: "/qcoreai/pipeline",   label: "⚙️ Pipeline Builder" },
+            { href: "/qcoreai/optimize",   label: "✨ Optimizer" },
           ].map(({ href, label }) => (
             <Link
               key={href}

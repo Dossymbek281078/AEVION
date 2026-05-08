@@ -522,19 +522,41 @@ export default function QCoreMultiAgentPage() {
     })();
   }, []);
 
-  /* ── V12: inject notebook snippet if coming from ?from=notebook ── */
+  /* ── V12: inject notebook snippet + V20: pipeline inject ── */
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    if (url.searchParams.get("from") === "notebook") {
+    const from = url.searchParams.get("from");
+
+    if (from === "notebook") {
       const snippet = sessionStorage.getItem("qcore_notebook_inject");
       if (snippet) {
         setInput(snippet);
         sessionStorage.removeItem("qcore_notebook_inject");
-        // Remove the query param without reload
         url.searchParams.delete("from");
         window.history.replaceState({}, "", url.toString());
         setTimeout(() => { if (textareaRef.current) textareaRef.current.focus(); }, 100);
+      }
+    } else if (from === "pipeline") {
+      const raw = sessionStorage.getItem("qcore_pipeline_inject");
+      if (raw) {
+        try {
+          const steps = JSON.parse(raw) as Array<{ role: string; name?: string; systemPrompt?: string; provider?: string; model?: string }>;
+          // Map pipeline steps to overrides — use first writer step for writer, first critic for critic etc.
+          const overrideMap: Record<string, { provider: string; model: string }> = {};
+          for (const step of steps) {
+            const key = step.role === "writer" ? "writer" : step.role === "analyst" ? "analyst" : step.role === "critic" ? "critic" : null;
+            if (key && step.provider && step.model && !overrideMap[key]) {
+              overrideMap[key] = { provider: step.provider, model: step.model };
+            }
+          }
+          if (Object.keys(overrideMap).length > 0) {
+            setOverrides((prev) => ({ ...prev, ...overrideMap }));
+          }
+        } catch { /* ignore invalid */ }
+        sessionStorage.removeItem("qcore_pipeline_inject");
+        url.searchParams.delete("from");
+        window.history.replaceState({}, "", url.toString());
       }
     }
   }, []);

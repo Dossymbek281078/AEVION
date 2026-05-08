@@ -1398,6 +1398,66 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`listPersonas failed: ${await safeError(res)}`);
     return (await res.json()).personas || [];
   }
+
+  /* ─── V22: collections + insights + retry ──────────────────────────── */
+
+  /** Create a notebook collection. */
+  async createNotebookCollection(opts: { name: string; description?: string | null; color?: string | null }): Promise<{ id: string; name: string; description: string | null; color: string | null }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/collections"), { method: "POST", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`createNotebookCollection failed: ${await safeError(res)}`);
+    return (await res.json()).collection;
+  }
+
+  /** List notebook collections. */
+  async listNotebookCollections(): Promise<Array<{ id: string; name: string; description: string | null; color: string | null }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/collections"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listNotebookCollections failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Assign a snippet to a collection (null to remove). */
+  async assignSnippetToCollection(snippetId: string, collectionId: string | null): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/${encodeURIComponent(snippetId)}/collection`), { method: "PATCH", headers: this.headers(), body: JSON.stringify({ collectionId }) });
+    if (!res.ok) throw new Error(`assignSnippetToCollection failed: ${await safeError(res)}`);
+  }
+
+  /** Get run insights: agent costs, strategy ratings, hourly cost patterns. */
+  async getRunInsights(): Promise<{
+    topAgentCosts: Array<{ role: string; avgCostUsd: number; totalCostUsd: number; calls: number; avgDurationMs: number }>;
+    strategyRatings: Array<{ strategy: string; avgRating: number; runs: number; avgCostUsd: number }>;
+    avgCostByHour: Array<{ hour: number; avgCostUsd: number; runs: number }>;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/insights"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunInsights failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Retry a failed webhook event. */
+  async retryWebhook(event: string): Promise<{ ok: boolean; sentTo: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/webhook/retry"), { method: "POST", headers: this.headers(), body: JSON.stringify({ event }) });
+    if (!res.ok) throw new Error(`retryWebhook failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get webhook delivery log. */
+  async getWebhookLog(limit = 50): Promise<Array<{ id: string; event: string; statusCode: number | null; durationMs: number | null; error: string | null; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/webhook/log?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getWebhookLog failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Set analytics goal (monthly run count and/or cost target). */
+  async setAnalyticsGoal(opts: { monthlyRuns?: number | null; monthlyCostUsd?: number | null }): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`setAnalyticsGoal failed: ${await safeError(res)}`);
+  }
+
+  /** Get analytics goal. */
+  async getAnalyticsGoal(): Promise<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/analytics-goal"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getAnalyticsGoal failed: ${await safeError(res)}`);
+    return (await res.json()).goal;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

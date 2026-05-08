@@ -387,6 +387,26 @@ export default function QCoreMultiAgentPage() {
   const [qrightObjects, setQrightObjects] = useState<QRightObjectLite[] | null>(null);
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
 
+  // V22: prompt history (localStorage)
+  const [promptHistory, setPromptHistory] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const h = JSON.parse(localStorage.getItem("qcore_prompt_history") || "[]");
+      if (Array.isArray(h)) setPromptHistory(h.slice(0, 20));
+    } catch { /* noop */ }
+  }, []);
+
+  const addToHistory = (text: string) => {
+    if (!text.trim() || text.length < 10) return;
+    setPromptHistory((prev) => {
+      const next = [text.slice(0, 200), ...prev.filter((p) => p !== text)].slice(0, 20);
+      try { localStorage.setItem("qcore_prompt_history", JSON.stringify(next)); } catch { /* noop */ }
+      return next;
+    });
+  };
+
   // V19: agent personas
   const [personas, setPersonas] = useState<Record<string, { name: string; emoji?: string; color?: string }>>({});
   const [personaEditRole, setPersonaEditRole] = useState<string | null>(null);
@@ -1146,6 +1166,7 @@ export default function QCoreMultiAgentPage() {
     // it so they don't lose what they wrote.
     const clearedFromInput = !text;
     if (clearedFromInput) setInput("");
+    addToHistory(msg);
     setGlobalError(null);
     setBusy(true);
     // Reset the manual-scroll flag for this new run — they want to follow it.
@@ -3406,6 +3427,38 @@ export default function QCoreMultiAgentPage() {
                   >
                     📋 Templates
                   </button>
+                  {promptHistory.length > 0 && (
+                    <div style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryOpen((v) => !v)}
+                        title="Recent prompts"
+                        style={{
+                          padding: "6px 10px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)",
+                          background: historyOpen ? "rgba(15,23,42,0.08)" : "#fff",
+                          color: "#475569", fontWeight: 700, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap",
+                        }}
+                      >
+                        🕐 History
+                      </button>
+                      {historyOpen && (
+                        <div style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 4, width: 320, maxHeight: 280, overflowY: "auto", background: "#fff", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.1)", zIndex: 100 }}>
+                          <div style={{ padding: "8px 12px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>Recent prompts</span>
+                            <button onClick={() => { setPromptHistory([]); localStorage.removeItem("qcore_prompt_history"); setHistoryOpen(false); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#fca5a5" }}>Clear</button>
+                          </div>
+                          {promptHistory.map((h, i) => (
+                            <div key={i} onClick={() => { setInput(h); setHistoryOpen(false); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                              style={{ padding: "7px 12px", cursor: "pointer", fontSize: 12, color: "#0f172a", borderTop: "1px solid #f8fafc", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
+                              {h}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -3605,6 +3658,22 @@ function WebhookLogPanel() {
               <span style={{ color: "#cbd5e1" }}>
                 {new Date(l.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
               </span>
+              {(!l.statusCode || l.statusCode >= 300) && (
+                <button
+                  onClick={async () => {
+                    await fetch(apiUrl("/api/qcoreai/me/webhook/retry"), {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", ...bearerHeader() },
+                      body: JSON.stringify({ event: l.event }),
+                    });
+                    load();
+                  }}
+                  title="Retry this event"
+                  style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#4338ca", fontWeight: 700, padding: "1px 4px" }}
+                >
+                  ↻
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -4891,6 +4960,28 @@ function FinalCard({
           >
             {saved ? "Saved ✓" : "⊞ Notebook"}
           </button>
+          <a
+            href={`/qcoreai/eval`}
+            onClick={async (e) => {
+              // Quick create eval suite with this run's input as test case
+              e.preventDefault();
+              const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+              if (!token) { window.location.href = "/qcoreai/eval"; return; }
+              try {
+                const res = await fetch(apiUrl("/api/qcoreai/eval/suites"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ name: `Quick eval - ${new Date().toLocaleDateString()}`, cases: [{ id: `q-${runId}`, name: "From run", input: content.slice(0, 4000), judge: { type: "min_length", chars: 20 } }] }),
+                });
+                const d = await res.json().catch(() => ({}));
+                if (res.ok && d.suite?.id) { window.location.href = `/qcoreai/eval/${d.suite.id}`; } else { window.location.href = "/qcoreai/eval"; }
+              } catch { window.location.href = "/qcoreai/eval"; }
+            }}
+            style={{ padding: "4px 10px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.2)", background: "#fff", color: "#6d28d9", fontSize: 11, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}
+            title="Create quick eval case from this run"
+          >
+            🧪 Eval
+          </a>
           {onContinue && (
             <button
               onClick={() => onContinue(runId)}

@@ -140,8 +140,27 @@ export default function PipelinePage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
           {/* Builder */}
           <div style={{ borderRadius: 14, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", padding: 20 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 14, color: "#0f172a" }}>
-              {editId ? "✎ Edit pipeline" : "+ New pipeline"}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ fontWeight: 800, fontSize: 14, color: "#0f172a", flex: 1 }}>
+                {editId ? "✎ Edit pipeline" : "+ New pipeline"}
+              </span>
+              <label style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                ↑ Import JSON
+                <input type="file" accept=".json" style={{ display: "none" }} onChange={(e) => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    try {
+                      const d = JSON.parse(ev.target?.result as string);
+                      if (d.name) setPName(d.name);
+                      if (d.description) setPDesc(d.description);
+                      if (Array.isArray(d.steps)) setSteps(d.steps);
+                    } catch { alert("Invalid pipeline JSON"); }
+                  };
+                  reader.readAsText(file);
+                  e.target.value = "";
+                }} />
+              </label>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
@@ -245,6 +264,11 @@ export default function PipelinePage() {
                     <div style={{ display: "flex", gap: 5 }}>
                       <button onClick={() => applyToMulti(p)} style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>▶ Use</button>
                       <button onClick={() => startEdit(p)} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 10, cursor: "pointer" }}>✎</button>
+                      <button onClick={() => {
+                        const blob = new Blob([JSON.stringify({ name: p.name, description: p.description, steps: p.steps }, null, 2)], { type: "application/json" });
+                        const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+                        a.download = `pipeline-${p.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.json`; a.click();
+                      }} title="Export as JSON" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: 10, cursor: "pointer" }}>⬇</button>
                       <button onClick={() => del(p.id)} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 10, cursor: "pointer" }}>×</button>
                     </div>
                   </div>

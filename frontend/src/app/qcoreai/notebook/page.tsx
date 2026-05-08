@@ -50,6 +50,8 @@ export default function NotebookPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editAnnotation, setEditAnnotation] = useState("");
   const [editTags, setEditTags] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => setSelectedIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -190,6 +192,17 @@ export default function NotebookPage() {
             >
               ⬇ Export MD ({snippets.length})
             </button>
+            {selectedIds.size > 0 && (
+              <Link
+                href={`/qcoreai/notebook/to-eval?ids=${Array.from(selectedIds).join(",")}`}
+                style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, textDecoration: "none", border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.08)", color: "#6d28d9", whiteSpace: "nowrap" }}
+              >
+                🧪 Eval ({selectedIds.size})
+              </Link>
+            )}
+            {selectedIds.size === 0 && (
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>Click snippets to select for eval</span>
+            )}
           </div>
         </div>
 
@@ -293,13 +306,14 @@ export default function NotebookPage() {
                     key={s.id}
                     style={{
                       borderRadius: 12,
-                      border: `1px solid ${s.pinned ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.1)"}`,
-                      background: s.pinned ? "rgba(245,158,11,0.03)" : "#fff",
+                      border: `1px solid ${selectedIds.has(s.id) ? "rgba(124,58,237,0.5)" : s.pinned ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.1)"}`,
+                      background: selectedIds.has(s.id) ? "rgba(124,58,237,0.04)" : s.pinned ? "rgba(245,158,11,0.03)" : "#fff",
                       padding: "12px 14px",
                     }}
                   >
                     {/* Header */}
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <input type="checkbox" checked={selectedIds.has(s.id)} onChange={() => toggleSelect(s.id)} style={{ cursor: "pointer", marginRight: 2 }} />
                       <span style={{ fontWeight: 800, fontSize: 10, padding: "2px 7px", borderRadius: 999, background: `${ROLE_COLORS[s.role] || "#475569"}15`, color: ROLE_COLORS[s.role] || "#475569" }}>
                         {s.role}
                       </span>

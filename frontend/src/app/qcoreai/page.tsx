@@ -678,6 +678,7 @@ export default function QCoreAIPage() {
             { href: "/qcoreai/top",        icon: "⭐", t: "Top Rated Runs",            d: "Community leaderboard by 👍/👎 feedback score" },
             { href: "/qcoreai/pipeline",   icon: "⚙️", t: "Pipeline Builder",           d: "Design custom multi-step agent chains" },
             { href: "/qcoreai/optimize",   icon: "✨", t: "Prompt Optimizer",            d: "AI-powered prompt improvement suggestions" },
+            { href: "/qcoreai/insights",   icon: "🔍", t: "Run Insights",                d: "Agent costs, strategy ratings, peak hours" },
           ].map(({ href, icon, t, d }) => (
             <a
               key={href}

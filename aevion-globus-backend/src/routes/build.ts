@@ -27,6 +27,10 @@ import { verificationRouter } from "./build/verification";
 import { publicRouter } from "./build/public";
 import { settingsRouter } from "./build/settings";
 import { salaryStatsRouter } from "./build/salary-stats";
+import { availabilityRouter } from "./build/availability";
+import { storiesRouter } from "./build/stories";
+import { shiftsRouter } from "./build/shifts";
+import { teamHiringRouter } from "./build/team-hiring";
 import { interviewsRouter } from "./build/interviews";
 import { skillBadgesRouter } from "./build/skill-badges";
 
@@ -36,9 +40,7 @@ const globalLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: t
 const messageLimiter = rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "message_rate_limit_exceeded" } });
 const leadsLimiter = rateLimit({ windowMs: 60_000, max: 5, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "leads_rate_limit_exceeded" } });
 const applyLimiter = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "apply_rate_limit_exceeded" } });
-// communityMsgLimiter available for future use
 const communityMsgLimiter = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { success: false, error: "community_rate_limit_exceeded" } });
-void communityMsgLimiter;
 
 buildRouter.use(async (_req, res, next) => {
   try {
@@ -77,9 +79,12 @@ buildRouter.use("/alerts", alertsRouter);
 buildRouter.use("/verification", verificationRouter);
 buildRouter.use("/public", publicRouter);
 buildRouter.use("/settings", settingsRouter);
-// Public salary intelligence
 buildRouter.use("/salary-stats", salaryStatsRouter);
-// Interview scheduling
+buildRouter.use("/availability", availabilityRouter);
+buildRouter.use("/stories", storiesRouter);
+buildRouter.use("/shifts", shiftsRouter);
+buildRouter.use("/team-requests", teamHiringRouter);
 buildRouter.use("/interviews", interviewsRouter);
-// Skill tests + badges (also handles /skill-tests/* + /skill-badges/*)
 buildRouter.use("/", skillBadgesRouter);
+
+void communityMsgLimiter;

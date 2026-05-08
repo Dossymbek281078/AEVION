@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { LEVEL1_LSR } from "../lib/levels";
 import { calcLsr } from "../lib/calc";
 import { useProgress } from "../lib/useProgress";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { Ks2View } from "./Ks2View";
+import { LessonViewer } from "./LessonViewer";
 
 const DOPRABOTY_LSR = {
   ...LEVEL1_LSR,
@@ -32,13 +34,17 @@ const JOURNAL = [
   { month: "Ноябрь 2026",   note: "Финальная окраска. t°=-5°C. Применить зимнее удорожание." },
 ];
 
-type KsTab = "main" | "dop";
+type KsTab = "main" | "dop" | "theory";
 
 export function Level3View() {
   const { setLevel } = useProgress();
   const [ksTab, setKsTab] = useState<KsTab>("main");
   const mainCalc = useMemo(() => calcLsr(LEVEL1_LSR), []);
   const dopCalc = useMemo(() => calcLsr(DOPRABOTY_LSR), []);
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(3).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(3) : 0;
+  void lessonsTick;
 
   function handleZachet() {
     setLevel(3, { status: "done", completedAt: new Date().toISOString() });
@@ -96,7 +102,15 @@ export function Level3View() {
       {/* Правая область */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="shrink-0 border-b border-slate-200 bg-white flex px-4">
-          {([["main", "КС-2 Основной договор"], ["dop", "КС-2 Допработы (август)"]] as const).map(([key, label]) => (
+          {(
+            [
+              ["main", "КС-2 Основной договор"],
+              ["dop", "КС-2 Допработы (август)"],
+              ...(lessonsCount > 0
+                ? ([["theory", `📚 Теория (${Math.round(lessonsCompletion * 100)}%)`]] as const)
+                : []),
+            ] as ReadonlyArray<readonly [KsTab, string]>
+          ).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setKsTab(key)}
@@ -106,9 +120,15 @@ export function Level3View() {
             </button>
           ))}
         </div>
-        <div className="flex-1 overflow-auto">
-          <Ks2View calc={ksTab === "main" ? mainCalc : dopCalc} />
-        </div>
+        {ksTab === "theory" ? (
+          <div className="flex-1 overflow-hidden" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={3} />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <Ks2View calc={ksTab === "main" ? mainCalc : dopCalc} />
+          </div>
+        )}
       </div>
     </div>
   );

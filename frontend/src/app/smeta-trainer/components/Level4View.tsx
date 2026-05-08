@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import { calcLsr, formatKzt } from "../lib/calc";
 import { useProgress } from "../lib/useProgress";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { LsrFormHeader } from "./LsrFormHeader";
 import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
+import { LessonViewer } from "./LessonViewer";
 import type { Lsr } from "../lib/types";
 
 // 4 ЛСР для полного комплекта
@@ -114,7 +116,11 @@ const SSR_CHAPTERS = [
 
 export function Level4View() {
   const { setLevel } = useProgress();
-  const [activeView, setActiveView] = useState<"ssr" | string>("ssr");
+  const [activeView, setActiveView] = useState<"ssr" | "theory" | string>("ssr");
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(4).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(4) : 0;
+  void lessonsTick;
 
   const calcs = useMemo(
     () => Object.fromEntries(LSRS.map((l) => [l.id, calcLsr(l)])),
@@ -149,6 +155,15 @@ export function Level4View() {
           >
             📊 Сводный сметный расчёт (ССР)
           </button>
+          {lessonsCount > 0 && (
+            <button
+              onClick={() => setActiveView("theory")}
+              className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "theory" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
+            >
+              📚 Теория уровня
+              <span className="ml-1 text-[9px] opacity-70">({Math.round(lessonsCompletion * 100)}%)</span>
+            </button>
+          )}
           {LSRS.map((l) => (
             <button
               key={l.id}
@@ -173,7 +188,12 @@ export function Level4View() {
       </aside>
 
       {/* Основная область */}
-      <div className="flex-1 overflow-auto">
+      <div className={`flex-1 ${activeView === "theory" ? "overflow-hidden" : "overflow-auto"}`}>
+        {activeView === "theory" && (
+          <div className="h-full" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={4} />
+          </div>
+        )}
         {activeView === "ssr" && (
           <div className="p-4 max-w-4xl mx-auto space-y-4">
             <div className="border border-slate-300 bg-white">

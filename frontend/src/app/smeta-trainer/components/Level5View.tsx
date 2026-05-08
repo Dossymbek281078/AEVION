@@ -7,9 +7,11 @@ import { calcLsr } from "../lib/calc";
 import { runAiAdvisor } from "../lib/ai";
 import { findObject } from "../lib/corpus";
 import { useProgress } from "../lib/useProgress";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { LsrFormHeader } from "./LsrFormHeader";
 import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
+import { LessonViewer } from "./LessonViewer";
 
 const PASS_THRESHOLD = 5;
 
@@ -19,7 +21,11 @@ export function Level5View() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [showHints, setShowHints] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"smeta" | "ssr" | "checklist">("smeta");
+  const [activeTab, setActiveTab] = useState<"smeta" | "ssr" | "checklist" | "theory">("smeta");
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(5).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(5) : 0;
+  void lessonsTick;
 
   const calc = useMemo(() => calcLsr(LEVEL5_LSR), []);
   const object = useMemo(() => findObject(LEVEL5_LSR.objectId), []);
@@ -123,7 +129,16 @@ export function Level5View() {
       {/* Основная область */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="shrink-0 border-b border-slate-200 bg-white flex px-4">
-          {([["smeta", "Смета (читать)"], ["ssr", "НР + СП"], ["checklist", "Чеклист ошибок"]] as const).map(([key, label]) => (
+          {(
+            [
+              ["smeta", "Смета (читать)"],
+              ["ssr", "НР + СП"],
+              ["checklist", "Чеклист ошибок"],
+              ...(lessonsCount > 0
+                ? ([["theory", `📚 Теория (${Math.round(lessonsCompletion * 100)}%)`]] as const)
+                : []),
+            ] as ReadonlyArray<readonly ["smeta" | "ssr" | "checklist" | "theory", string]>
+          ).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -137,7 +152,12 @@ export function Level5View() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className={`flex-1 ${activeTab === "theory" ? "overflow-hidden" : "overflow-auto"}`}>
+          {activeTab === "theory" && (
+            <div className="h-full" onClick={() => setLessonsTick((n) => n + 1)}>
+              <LessonViewer level={5} />
+            </div>
+          )}
           {activeTab === "smeta" && (
             <div className="p-4 space-y-4">
               <div className="bg-red-50 border border-red-200 rounded px-3 py-2 text-xs text-red-700">

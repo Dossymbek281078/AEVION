@@ -3,7 +3,9 @@
 import { useState, useMemo } from "react";
 import { useProgress } from "../lib/useProgress";
 import { applyDemoFill } from "../lib/demoFill";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { LsrEditor } from "./LsrEditor";
+import { LessonViewer } from "./LessonViewer";
 import type { Lsr } from "../lib/types";
 
 const INITIAL_LSR: Lsr = {
@@ -48,9 +50,14 @@ const STEPS = [
 export function Level2View() {
   const { setLevel } = useProgress();
   const [showTask, setShowTask] = useState(true);
+  const [mode, setMode] = useState<"editor" | "theory">("editor");
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [lsr, setLsr] = useState(INITIAL_LSR);
   const [demoApplied, setDemoApplied] = useState(false);
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(2).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(2) : 0;
+  void lessonsTick;
 
   function handleDemo() {
     if (confirm("Заполнить смету примером? Текущие данные будут заменены демо-данными.")) {
@@ -84,6 +91,25 @@ export function Level2View() {
             <span className="text-xs font-bold text-amber-800 uppercase">Задание — уровень 2</span>
             <button onClick={() => setShowTask(false)} className="text-amber-400 hover:text-amber-700 text-xs">скрыть</button>
           </div>
+          {lessonsCount > 0 && (
+            <div className="px-3 pt-3">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setMode("editor")}
+                  className={`flex-1 text-[11px] px-2 py-1.5 rounded font-medium ${mode === "editor" ? "bg-amber-200 text-amber-900" : "bg-white text-amber-700 hover:bg-amber-100"}`}
+                >
+                  ✏️ Редактор
+                </button>
+                <button
+                  onClick={() => setMode("theory")}
+                  className={`flex-1 text-[11px] px-2 py-1.5 rounded font-medium ${mode === "theory" ? "bg-amber-200 text-amber-900" : "bg-white text-amber-700 hover:bg-amber-100"}`}
+                >
+                  📚 Теория
+                  <span className="ml-1 text-[9px] opacity-70">{Math.round(lessonsCompletion * 100)}%</span>
+                </button>
+              </div>
+            </div>
+          )}
           <div className="p-3 space-y-1">
             <p className="text-xs text-amber-700 mb-3">
               Составьте ЛСР «Отделочные работы крыла Б школы №47». Отмечайте шаги по мере выполнения.
@@ -140,10 +166,16 @@ export function Level2View() {
             <button onClick={() => setShowTask(true)} className="text-amber-600 underline">показать задание</button>
           </div>
         )}
-        {/* key сбрасывает LsrEditor когда применяется demo — иначе useLocalSmeta не перечитает initialLsr */}
-        <div className="flex-1 overflow-hidden">
-          <LsrEditor key={demoApplied ? "demo" : "fresh"} initialLsr={lsr} />
-        </div>
+        {mode === "theory" ? (
+          <div className="flex-1 overflow-hidden" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={2} />
+          </div>
+        ) : (
+          /* key сбрасывает LsrEditor когда применяется demo — иначе useLocalSmeta не перечитает initialLsr */
+          <div className="flex-1 overflow-hidden">
+            <LsrEditor key={demoApplied ? "demo" : "fresh"} initialLsr={lsr} />
+          </div>
+        )}
       </div>
     </div>
   );

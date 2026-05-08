@@ -2,7 +2,15 @@
 
 import { useRef, useState, useEffect } from "react";
 import type { AiNotice, Lsr, LsrCalc } from "../lib/types";
-import { askConsultant, QUICK_QUESTIONS, type AiMessage } from "../lib/aiConsultant";
+import { QUICK_QUESTIONS, type AiMessage } from "../lib/aiConsultant";
+import {
+  askLLM,
+  checkBackend,
+  clearChatHistory,
+  loadChatHistory,
+  saveChatHistory,
+  type BackendStatus,
+} from "../lib/aiBackend";
 
 interface Props {
   notices: AiNotice[];
@@ -16,36 +24,76 @@ const SEVERITY_STYLE = {
   info:    "bg-blue-50 border-blue-200 text-blue-800",
 };
 
+const WELCOME_MESSAGE: AiMessage = {
+  role: "assistant",
+  text:
+    "Привет! Я — AI-консультант по сметному делу РК. Вижу твою текущую смету и могу " +
+    "объяснить любое правило, проверить объёмы или подсказать что добавить. Задавай " +
+    "вопросы или нажми быструю кнопку ниже.",
+  ts: 0, // 0 — приветственное, не сохраняется в history
+};
+
 export function AiChat({ notices, lsr, calc }: Props) {
-  const [messages, setMessages] = useState<AiMessage[]>([
-    {
-      role: "assistant",
-      text: "Привет! Я — AI-консультант по сметному делу РК. Вижу твою текущую смету и могу объяснить любое правило, проверить объёмы или подсказать что добавить. Задавай вопросы или нажми кнопку ниже.",
-      ts: Date.now(),
-    },
-  ]);
+  // History persisted per LSR id
+  const [messages, setMessages] = useState<AiMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const [tab, setTab] = useState<"chat" | "notices">("notices");
+  const [backendStatus, setBackendStatus] = useState<BackendStatus | null>(null);
+  const [providerName, setProviderName] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Load history on mount + when LSR changes
+  useEffect(() => {
+    const saved = loadChatHistory(lsr.id);
+    if (saved.length > 0) setMessages([WELCOME_MESSAGE, ...saved]);
+    else setMessages([WELCOME_MESSAGE]);
+  }, [lsr.id]);
+
+  // Persist history (без приветственного сообщения с ts=0)
+  useEffect(() => {
+    const real = messages.filter((m) => m.ts !== 0);
+    if (real.length > 0) saveChatHistory(lsr.id, real);
+  }, [messages, lsr.id]);
+
+  // Probe backend on mount
+  useEffect(() => {
+    checkBackend().then((r) => {
+      setBackendStatus(r.status);
+      const cfg = r.providers.find((p) => p.configured);
+      setProviderName(cfg?.name ?? null);
+    });
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, thinking]);
 
-  function send(question: string) {
-    if (!question.trim()) return;
+  async function send(question: string) {
+    if (!question.trim() || thinking) return;
     const userMsg: AiMessage = { role: "user", text: question, ts: Date.now() };
+    const historyBefore = messages.filter((m) => m.ts !== 0);
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setThinking(true);
 
-    // Симулируем задержку "печатает..."
-    setTimeout(() => {
-      const reply = askConsultant(question, lsr, calc);
+    try {
+      const reply = await askLLM(question, historyBefore, lsr, calc, notices);
       setMessages((prev) => [...prev, reply]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "Ошибка обращения к AI. Попробуйте ещё раз.", ts: Date.now() },
+      ]);
+    } finally {
       setThinking(false);
-    }, 600 + Math.random() * 400);
+    }
+  }
+
+  function resetChat() {
+    if (!confirm("Очистить всю историю чата?")) return;
+    clearChatHistory(lsr.id);
+    setMessages([WELCOME_MESSAGE]);
   }
 
   const errorCount = notices.filter((n) => n.severity === "error").length;
@@ -57,10 +105,41 @@ export function AiChat({ notices, lsr, calc }: Props) {
       <div className="shrink-0 px-3 py-2.5 border-b border-slate-200 bg-slate-900">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-[10px] font-bold shrink-0">AI</div>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-white">Консультант</div>
-            <div className="text-[10px] text-slate-400">Сметное дело РК</div>
+            <div
+              className="text-[10px] text-slate-400 truncate"
+              title={
+                backendStatus === "live"
+                  ? `LLM ${providerName ?? "configured"} — живой режим`
+                  : backendStatus === "stub"
+                    ? "Backend есть, но нет API-ключа AI — работает локальная KB"
+                    : backendStatus === "offline"
+                      ? "Backend недоступен — работает локальная KB"
+                      : "проверка…"
+              }
+            >
+              {backendStatus === "live" && (
+                <span className="text-emerald-400">● live · {providerName?.split(" ")[0] ?? "AI"}</span>
+              )}
+              {backendStatus === "stub" && (
+                <span className="text-amber-400">● local · нет API-ключа</span>
+              )}
+              {backendStatus === "offline" && (
+                <span className="text-slate-500">● offline</span>
+              )}
+              {backendStatus === null && <span>проверка…</span>}
+            </div>
           </div>
+          {messages.filter((m) => m.ts !== 0).length > 0 && (
+            <button
+              onClick={resetChat}
+              className="text-slate-500 hover:text-red-400 text-[10px] shrink-0"
+              title="Очистить историю чата"
+            >
+              ⟲
+            </button>
+          )}
         </div>
       </div>
 

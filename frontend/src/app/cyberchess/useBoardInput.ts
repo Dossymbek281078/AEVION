@@ -164,6 +164,10 @@ export function useBoardInput(opts: BoardInputOptions) {
   // ghostFrom state remains, but only so the source cell can hide its piece.
   const ghostNodeRef = useRef<HTMLDivElement | null>(null);
 
+  // Two-layer ghost: outer = position (translate), inner = scale pop animation.
+  // Mixing translate + scale on a single element breaks because CSS animations
+  // override inline transform during/after run (animation-fill-mode: forwards
+  // permanently locks the final keyframe's transform value, killing translate).
   const ensureGhostNode = useCallback((): HTMLDivElement => {
     if (ghostNodeRef.current) return ghostNodeRef.current;
     const node = document.createElement("div");
@@ -172,10 +176,19 @@ export function useBoardInput(opts: BoardInputOptions) {
       "position:fixed", "left:0", "top:0",
       "pointer-events:none", "z-index:99999",
       "will-change:transform", "transition:none",
-      "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))",
       "transform:translate3d(-9999px,-9999px,0)",
       "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
     ].join(";");
+    // Inner element holds piece + scale-pop animation. Separated so the outer
+    // translate isn't clobbered by the keyframes (transform property collision).
+    const inner = document.createElement("div");
+    inner.id = "cc-drag-ghost-inner";
+    inner.style.cssText = [
+      "width:100%", "height:100%",
+      "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6)) drop-shadow(0 0 16px rgba(5,150,105,0.4))",
+      "pointer-events:none",
+    ].join(";");
+    node.appendChild(inner);
     document.body.appendChild(node);
     ghostNodeRef.current = node;
     return node;
@@ -188,19 +201,36 @@ export function useBoardInput(opts: BoardInputOptions) {
       ? o.scratchGame
       : (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on ? o.virtualGame : o.game);
     const piece = pieceSrc.get(from) || o.game.get(from);
-    if (!piece) return;
+    if (!piece) {
+      if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+        // eslint-disable-next-line no-console
+        console.log("[CC] showGhost: no piece on", from);
+      }
+      return;
+    }
     const boardEl = boardRef.current;
     const sz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
     const node = ensureGhostNode();
     node.style.width = `${sz}px`;
     node.style.height = `${sz}px`;
+    const inner = node.firstElementChild as HTMLDivElement | null;
     const setId = getActivePieceSet();
-    node.innerHTML = pieceHtml(piece.type, piece.color, setId, sz);
+    if (inner) {
+      inner.innerHTML = pieceHtml(piece.type, piece.color, setId, sz);
+      // Restart pop animation by toggling
+      inner.style.animation = "none";
+      // force reflow
+      void inner.offsetWidth;
+      inner.style.animation = "cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards";
+    }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
     node.style.transform = `translate3d(${x}px,${y + dy}px,0) translate(-50%,-50%)`;
-    node.style.animation = "cc-ghost-pop 90ms cubic-bezier(0.34,1.56,0.64,1) forwards";
     ghostPosRef.current = { x, y };
+    if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
+      // eslint-disable-next-line no-console
+      console.log("[CC] IMPERATIVE GHOST CREATED", {from, x, y, sz, piece: `${piece.color}${piece.type}`, inDOM: document.body.contains(node)});
+    }
     // React state — ONLY so the source cell can hide its piece.
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";

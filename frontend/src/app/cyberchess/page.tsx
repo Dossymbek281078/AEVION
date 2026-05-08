@@ -391,7 +391,7 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1,transition:"background 0.12s"}}>
-    {iV&&!hasPiece&&<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"radial-gradient(circle, rgba(5,150,105,0.78) 0%, rgba(5,150,105,0.55) 55%, rgba(5,150,105,0.25) 100%)",position:"absolute",boxShadow:"0 0 14px rgba(5,150,105,0.45), inset 0 0 5px rgba(5,150,105,0.3)",pointerEvents:"none"}}/>}
+    {iV&&!hasPiece&&<div style={{width:"24%",height:"24%",borderRadius:"50%",background:"rgba(15,23,42,0.22)",position:"absolute",pointerEvents:"none"}}/>}
     {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:isLifted?"scale(1.18) translateY(-3px)":"none",filter:isLifted?"drop-shadow(0 8px 14px rgba(0,0,0,0.5)) drop-shadow(0 0 12px rgba(5,150,105,0.55))":(isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))"),opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"transform 0.08s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
@@ -2107,7 +2107,7 @@ export default function CyberChessPage(){
     const pc=game.get(lm.to as Square);
     if(!pc)return;
     sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:pc,key:Date.now()});
-    const id=window.setTimeout(()=>sMoveAnim(null),160);
+    const id=window.setTimeout(()=>sMoveAnim(null),200);
     return()=>window.clearTimeout(id);
   },[bk,lm,game]);
   // После mount floating piece — trigger transition через рефлоу, чтобы
@@ -2118,7 +2118,7 @@ export default function CyberChessPage(){
     // force reflow
     void el.offsetWidth;
     // Pure ease-out без overshoot — фигура «приземляется» плавно, без bounce-эффекта.
-    el.style.transition="transform 140ms cubic-bezier(0.22,0.61,0.36,1)";
+    el.style.transition="transform 180ms cubic-bezier(0.25,0.46,0.45,0.94)";
     el.style.transform="translate(0,0)";
   },[moveAnim?.key]);
 
@@ -2202,7 +2202,15 @@ export default function CyberChessPage(){
     // Bullet 0pm: 250+5×80  =  650ms · 5pm: 250ms
     // Blitz  0pm: 320+5×100 =  820ms · 5pm: 320ms
     // Rapid  0pm: 400+5×120 = 1000ms · 5pm: 400ms
-    const delay=Math.max(rawDelay,premoveFloor);
+    // TEMP — testing mode: жёсткая задержка AI 20s, чтобы успеть протестировать
+    // механики хода/премува. Управляется через localStorage:
+    //   localStorage.setItem("aevion_chess_ai_delay_ms","20000")  ← включить 20с
+    //   localStorage.removeItem("aevion_chess_ai_delay_ms")        ← вернуть нормально
+    // По умолчанию (без ключа) включено 20s — снять когда тестирование завершится.
+    const lsKey="aevion_chess_ai_delay_ms";
+    let testDelay=20000;
+    try{const v=typeof window!=="undefined"?localStorage.getItem(lsKey):null; if(v!==null) testDelay=parseInt(v,10)||0;}catch{}
+    const delay=testDelay>0?testDelay:Math.max(rawDelay,premoveFloor);
     const fenAtTrigger=game.fen();
     // Power Drop / Crazyhouse: AI may choose to drop a piece instead of moving
     // Strategy: with prob = 0.25 (Crazyhouse) or 0.4 (PowerDrop, since rarer), drop highest-value piece

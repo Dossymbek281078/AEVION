@@ -4758,19 +4758,7 @@ export default function CyberChessPage(){
 
           {/* "Анализ варианта" — moved DOWN below the move list per UX feedback. */}
 
-          {pms.length>0&&!scratchOn&&<div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#eff6ff,#f0f9ff)",border:"1px solid #bfdbfe"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{fontSize:13,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.blue}}>⚡ Premove queue · {pms.length}</span>
-              <button onClick={()=>{sPms([]);sPmSel(null);snd("premove");}} title="Очистить все премувы (Esc)" style={{padding:"3px 9px",borderRadius:6,border:"1px solid #fecaca",background:"#fff5f5",color:T.danger,fontSize:11,fontWeight:800,cursor:"pointer",letterSpacing:0.3}}>✕ Очистить все</button>
-            </div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{pms.map((p,i)=>(
-              <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 4px 2px 8px",borderRadius:5,fontFamily:"monospace",fontSize:13,fontWeight:700,background:"#fff",color:T.blue,border:"1px solid #dbeafe"}}>
-                <span>{p.from}→{p.to}</span>
-                <button onClick={()=>{sPms(v=>v.filter((_,j)=>j!==i));snd("premove");}} title={`Удалить премув ${p.from}→${p.to}`} style={{display:"flex",alignItems:"center",justifyContent:"center",width:18,height:18,borderRadius:9,border:"none",background:"transparent",color:T.dim,fontSize:12,fontWeight:900,cursor:"pointer",lineHeight:1,padding:0}} onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fee2e2";(e.currentTarget as HTMLElement).style.color=T.danger}} onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color=T.dim}}>✕</button>
-              </span>
-            ))}</div>
-            <div style={{fontSize:9.5,color:T.dim,fontStyle:"italic",marginTop:5}}>ПКМ по клетке премува · ✕ на чипе · Esc — всё снять</div>
-          </div>}
+          {/* Дубль премув-панели удалён — есть единая строка выше move list (line ~4900). */}
 
           {(capB.length>0||capW.length>0)&&tab==="analysis"&&<div style={{padding:"8px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.border}`}}>
             <div style={{fontSize:13,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,marginBottom:4}}>⚔ Captured</div>

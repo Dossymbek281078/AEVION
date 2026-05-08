@@ -170,24 +170,32 @@ export function useBoardInput(opts: BoardInputOptions) {
   // Inner div carries the (-50%,-50%) centering AND the scale pop animation;
   // outer holds just left/top. No transform-property collision possible.
   const ensureGhostNode = useCallback((): HTMLDivElement => {
-    if (ghostNodeRef.current) return ghostNodeRef.current;
+    if (ghostNodeRef.current && document.body.contains(ghostNodeRef.current)) {
+      return ghostNodeRef.current;
+    }
     const node = document.createElement("div");
     node.id = "cc-drag-ghost";
     node.style.cssText = [
       "position:fixed", "left:-9999px", "top:-9999px",
-      "pointer-events:none", "z-index:2147483647", // max int32 — above all
+      "pointer-events:none", "z-index:2147483647",
       "will-change:left,top",
       "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
-      "margin:0", "padding:0", "border:0", "background:transparent",
+      "margin:0", "padding:0", "border:0",
+      // DEBUG: bright outline so the outer container is impossible to miss even
+      // if SVG content fails to render. Remove once drag visual is confirmed.
+      "background:rgba(255,0,0,0.18)", "outline:3px solid red",
     ].join(";");
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
     inner.style.cssText = [
       "width:100%", "height:100%",
-      "transform:translate(-50%,-50%)", // centers ghost on outer's left/top point
+      "transform:translate(-50%,-50%)",
       "transform-origin:center center",
       "filter:drop-shadow(0 14px 24px rgba(0,0,0,0.6))",
       "pointer-events:none",
+      "display:flex", "align-items:center", "justify-content:center",
+      // DEBUG: yellow fill so user sees inner box even if SVG namespace fails.
+      "background:rgba(255,235,59,0.35)",
     ].join(";");
     node.appendChild(inner);
     document.body.appendChild(node);
@@ -216,7 +224,27 @@ export function useBoardInput(opts: BoardInputOptions) {
     const inner = node.firstElementChild as HTMLDivElement | null;
     const setId = getActivePieceSet();
     if (inner) {
-      inner.innerHTML = pieceHtml(piece.type, piece.color, setId, sz);
+      const html = pieceHtml(piece.type, piece.color, setId, sz);
+      // SVG strings parsed via innerHTML on an HTML element CAN lose their
+      // namespace, leaving an empty container. Use DOMParser explicitly when
+      // the content is SVG; importNode preserves the SVG namespace correctly.
+      inner.replaceChildren(); // clear
+      if (html.trim().startsWith("<svg")) {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "image/svg+xml");
+          const svgEl = doc.documentElement;
+          if (svgEl && svgEl.nodeName.toLowerCase() === "svg") {
+            inner.appendChild(document.importNode(svgEl, true));
+          } else {
+            inner.innerHTML = html; // fallback
+          }
+        } catch {
+          inner.innerHTML = html;
+        }
+      } else {
+        inner.innerHTML = html;
+      }
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
@@ -225,7 +253,15 @@ export function useBoardInput(opts: BoardInputOptions) {
     ghostPosRef.current = { x, y };
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.log("[CC] IMPERATIVE GHOST CREATED", {from, x, y, sz, piece: `${piece.color}${piece.type}`, inDOM: document.body.contains(node), parent: node.parentElement?.tagName});
+      console.log("[CC] IMPERATIVE GHOST CREATED", {
+        from, x, y, sz,
+        piece: `${piece.color}${piece.type}`,
+        inDOM: document.body.contains(node),
+        parent: node.parentElement?.tagName,
+        innerChildren: inner?.children.length,
+        firstChildTag: inner?.firstElementChild?.tagName,
+        rect: node.getBoundingClientRect(),
+      });
     }
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";

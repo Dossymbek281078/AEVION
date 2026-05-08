@@ -5,7 +5,9 @@ import { LEVEL1_LSR } from "../lib/levels";
 import { calcLsr } from "../lib/calc";
 import { useProgress } from "../lib/useProgress";
 import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
+import { useKs2Periods } from "../lib/useKs2Periods";
 import { Ks2View } from "./Ks2View";
+import { Ks3View } from "./Ks3View";
 import { LessonViewer } from "./LessonViewer";
 
 const DOPRABOTY_LSR = {
@@ -34,13 +36,15 @@ const JOURNAL = [
   { month: "Ноябрь 2026",   note: "Финальная окраска. t°=-5°C. Применить зимнее удорожание." },
 ];
 
-type KsTab = "main" | "dop" | "theory";
+type KsTab = "main" | "dop" | "ks3-main" | "ks3-dop" | "theory";
 
 export function Level3View() {
   const { setLevel } = useProgress();
   const [ksTab, setKsTab] = useState<KsTab>("main");
   const mainCalc = useMemo(() => calcLsr(LEVEL1_LSR), []);
   const dopCalc = useMemo(() => calcLsr(DOPRABOTY_LSR), []);
+  const { periods: mainPeriods } = useKs2Periods(LEVEL1_LSR.id);
+  const { periods: dopPeriods } = useKs2Periods(DOPRABOTY_LSR.id);
   const [lessonsTick, setLessonsTick] = useState(0);
   const lessonsCount = getLessonsForLevel(3).length;
   const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(3) : 0;
@@ -104,8 +108,10 @@ export function Level3View() {
         <div className="shrink-0 border-b border-slate-200 bg-white flex px-4">
           {(
             [
-              ["main", "КС-2 Основной договор"],
-              ["dop", "КС-2 Допработы (август)"],
+              ["main", "КС-2 Основной"],
+              ["dop", "КС-2 Допработы"],
+              ["ks3-main", `КС-3 Основной${mainPeriods.length > 0 ? ` (${mainPeriods.length})` : ""}`],
+              ["ks3-dop", `КС-3 Допработы${dopPeriods.length > 0 ? ` (${dopPeriods.length})` : ""}`],
               ...(lessonsCount > 0
                 ? ([["theory", `📚 Теория (${Math.round(lessonsCompletion * 100)}%)`]] as const)
                 : []),
@@ -114,7 +120,7 @@ export function Level3View() {
             <button
               key={key}
               onClick={() => setKsTab(key)}
-              className={`px-4 py-2.5 text-xs font-medium border-b-2 ${ksTab === key ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap ${ksTab === key ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
             >
               {label}
             </button>
@@ -124,9 +130,16 @@ export function Level3View() {
           <div className="flex-1 overflow-hidden" onClick={() => setLessonsTick((n) => n + 1)}>
             <LessonViewer level={3} />
           </div>
-        ) : (
+        ) : ksTab === "main" || ksTab === "dop" ? (
           <div className="flex-1 overflow-auto">
             <Ks2View calc={ksTab === "main" ? mainCalc : dopCalc} />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <Ks3View
+              calc={ksTab === "ks3-main" ? mainCalc : dopCalc}
+              ks2Periods={ksTab === "ks3-main" ? mainPeriods : dopPeriods}
+            />
           </div>
         )}
       </div>

@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LEVELS } from "../lib/levels";
 import { useProgress } from "../lib/useProgress";
+import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "../lib/lessons";
 import type { LevelStatus } from "../lib/useProgress";
 
 const statusLabel: Record<LevelStatus, string> = {
@@ -31,6 +33,24 @@ export function LevelHome() {
   const done = Object.values(progress.levels).filter((l) => l.status === "done").length;
   const total = LEVELS.length;
 
+  // Прогресс уроков считаем на клиенте (после mount), чтобы не было гидратационного рассинхрона
+  const [lessonsState, setLessonsState] = useState<{ done: number; total: number; perLevel: Record<number, { done: number; total: number; pct: number }> } | null>(null);
+  useEffect(() => {
+    const lp = loadLessonProgress();
+    let totalLessons = 0;
+    let doneLessons = 0;
+    const perLevel: Record<number, { done: number; total: number; pct: number }> = {};
+    LEVELS.forEach((lv) => {
+      const lessons = getLessonsForLevel(lv.num);
+      const t = lessons.length;
+      const d = lessons.filter((l) => lp[l.id]?.completed).length;
+      totalLessons += t;
+      doneLessons += d;
+      perLevel[lv.num] = { done: d, total: t, pct: t > 0 ? levelLessonsCompletion(lv.num) : 0 };
+    });
+    setLessonsState({ done: doneLessons, total: totalLessons, perLevel });
+  }, [progress]);
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-slate-50 p-6">
       {/* Заголовок курса */}
@@ -45,18 +65,42 @@ export function LevelHome() {
                 Сквозной кейс — Капитальный ремонт школы №47, г. Алматы · 5 уровней · 88 учебных часов
               </p>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-emerald-600">{done}/{total}</div>
-              <div className="text-xs text-slate-400">уровней зачтено</div>
+            <div className="text-right flex gap-5">
+              <div>
+                <div className="text-2xl font-bold text-emerald-600">{done}/{total}</div>
+                <div className="text-xs text-slate-400">уровней зачтено</div>
+              </div>
+              {lessonsState && lessonsState.total > 0 && (
+                <div>
+                  <div className="text-2xl font-bold text-sky-600">{lessonsState.done}/{lessonsState.total}</div>
+                  <div className="text-xs text-slate-400">уроков пройдено</div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div className="mt-4 h-2 bg-slate-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all"
-              style={{ width: `${(done / total) * 100}%` }}
-            />
+          {/* Progress bars */}
+          <div className="mt-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 w-16 shrink-0">Зачёты</span>
+              <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all"
+                  style={{ width: `${(done / total) * 100}%` }}
+                />
+              </div>
+            </div>
+            {lessonsState && lessonsState.total > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500 w-16 shrink-0">Теория</span>
+                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-sky-500 rounded-full transition-all"
+                    style={{ width: `${(lessonsState.done / lessonsState.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Справочники */}
@@ -150,6 +194,17 @@ export function LevelHome() {
                       <span>⏱ ~{level.timeHours} ч</span>
                       <span className="text-slate-300">·</span>
                       <span>✓ {level.zachetCriteria}</span>
+                      {lessonsState?.perLevel[level.num] && lessonsState.perLevel[level.num].total > 0 && (
+                        <>
+                          <span className="text-slate-300">·</span>
+                          <span className="inline-flex items-center gap-1">
+                            📚 {lessonsState.perLevel[level.num].done}/{lessonsState.perLevel[level.num].total}
+                            {lessonsState.perLevel[level.num].pct === 1 && (
+                              <span className="text-emerald-600 font-semibold">✓</span>
+                            )}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 

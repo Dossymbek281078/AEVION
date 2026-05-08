@@ -28,6 +28,7 @@ import { publicRouter } from "./build/public";
 import { settingsRouter } from "./build/settings";
 import { salaryStatsRouter } from "./build/salary-stats";
 import { availabilityRouter } from "./build/availability";
+import { storiesRouter } from "./build/stories";
 
 export const buildRouter = Router();
 
@@ -84,3 +85,6 @@ buildRouter.use("/salary-stats", salaryStatsRouter);
 // Worker "available now" badge — toggle + list. Schema adds two columns
 // to BuildProfile (availableNow, availableUntil) in lib/build/index.ts.
 buildRouter.use("/availability", availabilityRouter);
+// Site stories — workers post text + media from the job site. New tables
+// BuildStory + BuildStoryLike declared in lib/build/index.ts.
+buildRouter.use("/stories", storiesRouter);

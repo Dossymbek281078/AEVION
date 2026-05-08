@@ -215,34 +215,26 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
     const boardEl = boardRef.current;
     const cellSz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
-    const sz = Math.round(cellSz * 1.15); // 115% — поднятая фигура крупнее клетки
+    const sz = Math.round(cellSz * 1.15);
     const node = ensureGhostNode();
     node.style.width = `${cellSz}px`;
     node.style.height = `${cellSz}px`;
     const inner = node.firstElementChild as HTMLDivElement | null;
-    const setId = getActivePieceSet();
     if (inner) {
-      const html = pieceHtml(piece.type, piece.color, setId, sz);
-      // SVG strings parsed via innerHTML on an HTML element CAN lose their
-      // namespace, leaving an empty container. Use DOMParser explicitly when
-      // the content is SVG; importNode preserves the SVG namespace correctly.
-      inner.replaceChildren(); // clear
-      if (html.trim().startsWith("<svg")) {
-        try {
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, "image/svg+xml");
-          const svgEl = doc.documentElement;
-          if (svgEl && svgEl.nodeName.toLowerCase() === "svg") {
-            inner.appendChild(document.importNode(svgEl, true));
-          } else {
-            inner.innerHTML = html; // fallback
-          }
-        } catch {
-          inner.innerHTML = html;
-        }
-      } else {
-        inner.innerHTML = html;
-      }
+      // Используем Unicode chess glyph напрямую — гарантированно рендерится
+      // в любом браузере без проблем SVG namespace. На доске всё равно
+      // продолжают работать SVG cburnett (через React-Piece) — только ghost
+      // теперь использует glyph рендер для надёжности.
+      const GLYPH: Record<string, string> = {
+        p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚",
+      };
+      const g = GLYPH[piece.type] || "?";
+      const fillCol = piece.color === "w" ? "#ffffff" : "#1f2937";
+      const strokeCol = piece.color === "w" ? "#0f172a" : "#0f172a";
+      const fs = Math.round(sz * 0.95);
+      inner.replaceChildren();
+      inner.innerHTML = `<span style="font-size:${fs}px;line-height:1;font-family:'Noto Sans Symbols 2','Segoe UI Symbol','Apple Symbols','DejaVu Sans',sans-serif;font-weight:900;color:${fillCol};-webkit-text-stroke:1.5px ${strokeCol};text-shadow:0 2px 4px rgba(0,0,0,0.4);transform:translateY(-3%);display:inline-block;user-select:none;pointer-events:none;">${g}</span>`;
+      void getActivePieceSet; void pieceHtml; // imports kept; not needed for ghost
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
@@ -262,7 +254,28 @@ export function useBoardInput(opts: BoardInputOptions) {
       });
     }
     setGhostFrom(from);
-    if (typeof document !== "undefined") document.body.style.cursor = "grabbing";
+    // Imperative hide of source cell piece — React render для setGhostFrom
+    // занимает 50-150ms на большом дереве cyberchess, на это время source piece
+    // и ghost оба видны. Через DOM mutation скрываем мгновенно.
+    if (typeof document !== "undefined") {
+      const srcCell = document.querySelector(`[data-sq="${from}"]`);
+      const srcPiece = srcCell?.querySelector(":scope > div:not([style*='radial-gradient'])") as HTMLElement | null;
+      // Cell layout: dot div (only on empty squares), piece div (88%×88%, has filter), pmIdx, coords
+      // Piece div has style="...transform...filter:drop-shadow..." — find via filter
+      const allChildren = srcCell?.children;
+      if (allChildren) {
+        for (let i = 0; i < allChildren.length; i++) {
+          const c = allChildren[i] as HTMLElement;
+          if (c.style.filter && c.style.filter.includes("drop-shadow") && c.style.width === "88%") {
+            c.dataset.ghostHidden = "1";
+            c.style.opacity = "0";
+            break;
+          }
+        }
+      }
+      void srcPiece; // unused fallback
+      document.body.style.cursor = "grabbing";
+    }
   }, [ensureGhostNode]);
 
   // moveGhost — direct DOM update, called from window pointermove. No React.
@@ -327,6 +340,15 @@ export function useBoardInput(opts: BoardInputOptions) {
     if (node) { node.remove(); ghostNodeRef.current = null; }
     const halo = haloNodeRef.current;
     if (halo) { halo.remove(); haloNodeRef.current = null; }
+    // Restore any imperatively-hidden source piece (data-ghost-hidden marker)
+    if (typeof document !== "undefined") {
+      const hidden = document.querySelectorAll('[data-ghost-hidden="1"]');
+      hidden.forEach(el => {
+        const h = el as HTMLElement;
+        h.style.opacity = "";
+        delete h.dataset.ghostHidden;
+      });
+    }
     setGhostFrom(null);
     setDragHover(null);
     dragHoverIntRef.current = null;

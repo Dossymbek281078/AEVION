@@ -28,8 +28,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Chess, type Square, type Color as ChessColor } from "chess.js";
 
 const FILES = ["a","b","c","d","e","f","g","h"] as const;
-const ACTIVATION_PX_MOUSE = 4;
-const ACTIVATION_PX_TOUCH = 8;
+const ACTIVATION_PX_MOUSE = 6;
+const ACTIVATION_PX_TOUCH = 10;
 
 type Pre = { from: Square; to: Square; pr?: "q"|"r"|"b"|"n" };
 
@@ -91,6 +91,8 @@ export interface BoardInputOptions {
   pmLim: number;
   pmsRef: React.MutableRefObject<Pre[]>;
   pmSelRef: React.MutableRefObject<Square | null>;
+  selRef: React.MutableRefObject<Square | null>;
+  vmRef: React.MutableRefObject<Set<string>>;
   scratchOn: boolean;
   scratchGame: Chess | null;
   autoQueen: boolean;
@@ -168,8 +170,6 @@ export function useBoardInput(opts: BoardInputOptions) {
   }, []);
 
   const showGhost = useCallback((from: Square, x: number, y: number) => {
-    // eslint-disable-next-line no-console
-    console.log("[CC] showGhost CALLED", {from, x, y});
     ghostPosRef.current = { x, y };
     setGhostFrom(from);
     if (typeof document !== "undefined") document.body.style.cursor = "grabbing";
@@ -178,8 +178,6 @@ export function useBoardInput(opts: BoardInputOptions) {
     // ref to be attached, then write the transform.
     requestAnimationFrame(() => {
       const el = ghostRef.current;
-      // eslint-disable-next-line no-console
-      console.log("[CC] showGhost RAF check", {ghostRefAttached: !!el});
       if (!el) return;
       const { x: gx, y: gy } = ghostPosRef.current;
       const isTouch = dragRef.current?.ptype === "touch";
@@ -189,8 +187,6 @@ export function useBoardInput(opts: BoardInputOptions) {
   }, []);
 
   const hideGhost = useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log("[CC] hideGhost CALLED", new Error().stack?.split("\n").slice(1,4).join(" | "));
     if (ghostRafRef.current !== null) { cancelAnimationFrame(ghostRafRef.current); ghostRafRef.current = null; }
     setGhostFrom(null);
     setDragHover(null);
@@ -221,13 +217,24 @@ export function useBoardInput(opts: BoardInputOptions) {
       // Premove drop
       if (o.pmsRef.current.length >= o.pmLim) return;
       const piece = o.virtualGame.get(from);
-      if (!piece || piece.color !== o.pCol) { o.sPmSel(null); o.sVm(new Set()); return; }
+      if (!piece || piece.color !== o.pCol) {
+        o.sPmSel(null); o.pmSelRef.current = null;
+        o.sVm(new Set()); o.vmRef.current = new Set();
+        return;
+      }
       const legal = premoveLegalMoves(o.virtualGame, o.pCol, from);
       const matched = legal.find((m: any) => m.to === to);
-      if (!matched) { o.sPmSel(null); o.sVm(new Set()); return; }
+      if (!matched) {
+        o.sPmSel(null); o.pmSelRef.current = null;
+        o.sVm(new Set()); o.vmRef.current = new Set();
+        return;
+      }
       const pre: Pre = { from, to };
       if (piece.type === "p" && to[1] === (o.pCol === "w" ? "8" : "1")) pre.pr = "q";
-      o.sPms(v => [...v, pre]); o.sPmSel(null); o.sVm(new Set()); o.snd("premove");
+      o.sPms(v => [...v, pre]); o.pmsRef.current = [...o.pmsRef.current, pre];
+      o.sPmSel(null); o.pmSelRef.current = null;
+      o.sVm(new Set()); o.vmRef.current = new Set();
+      o.snd("premove");
       return;
     }
     // Normal move
@@ -240,7 +247,10 @@ export function useBoardInput(opts: BoardInputOptions) {
       if (mp?.type === "p" && (to[1] === "1" || to[1] === "8")) {
         if (o.autoQueen) o.exec(from, to, "q"); else o.sPromo({ from, to });
       } else { o.exec(from, to); }
-    } else { o.sSel(null); o.sVm(new Set()); }
+    } else {
+      o.sSel(null); o.selRef.current = null;
+      o.sVm(new Set()); o.vmRef.current = new Set();
+    }
   }, []);
 
   // ── WINDOW pointer listeners — primary path for move/up/cancel ──────────
@@ -361,21 +371,29 @@ export function useBoardInput(opts: BoardInputOptions) {
 
     const isPM = o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over;
 
+    // Read latest sel/vm via refs so a fast follow-up click sees fresh state
+    // (refs are updated synchronously below when sSel/sVm are called from this hook).
+    const curSel = o.selRef.current;
+    const curVm = o.vmRef.current;
+    const curPmSel = o.pmSelRef.current;
+    const curPms = o.pmsRef.current;
+
     if (!o.over && !o.editorMode) {
       // Priority-1: tap-to-exec (your turn, sel set, this sq is a legal target).
-      if (!isPM && o.sel && o.vm.has(sq)) {
-        const f = o.sel;
+      if (!isPM && curSel && curVm.has(sq)) {
+        const f = curSel;
         const mp = o.game.get(f);
         e.preventDefault();
         if (mp?.type === "p" && (sq[1] === "1" || sq[1] === "8")) {
           if (o.autoQueen) o.exec(f, sq, "q"); else o.sPromo({ from: f, to: sq });
         } else { o.exec(f, sq); }
-        o.sSel(null); o.sVm(new Set());
+        o.sSel(null); o.selRef.current = null;
+        o.sVm(new Set()); o.vmRef.current = new Set();
         return;
       }
       // Priority-2: complete a queued premove selection.
-      if (isPM && o.pmSelRef.current && sq !== o.pmSelRef.current && o.pmsRef.current.length < o.pmLim) {
-        const f = o.pmSelRef.current;
+      if (isPM && curPmSel && sq !== curPmSel && curPms.length < o.pmLim) {
+        const f = curPmSel;
         const piece = o.virtualGame.get(f);
         if (piece && piece.color === o.pCol) {
           const legal = premoveLegalMoves(o.virtualGame, o.pCol, f);
@@ -384,16 +402,22 @@ export function useBoardInput(opts: BoardInputOptions) {
             const pre: Pre = { from: f, to: sq };
             if (piece.type === "p" && sq[1] === (o.pCol === "w" ? "8" : "1")) pre.pr = "q";
             e.preventDefault();
-            o.sPms(v => [...v, pre]); o.sPmSel(null); o.sVm(new Set()); o.snd("premove");
+            o.sPms(v => [...v, pre]);
+            o.pmsRef.current = [...curPms, pre];
+            o.sPmSel(null); o.pmSelRef.current = null;
+            o.sVm(new Set()); o.vmRef.current = new Set();
+            o.snd("premove");
             return;
           }
         }
-        o.sPmSel(null); o.sVm(new Set());
+        o.sPmSel(null); o.pmSelRef.current = null;
+        o.sVm(new Set()); o.vmRef.current = new Set();
       }
       // Priority-3: tap same selected piece → deselect.
-      if (!isPM && o.sel === sq && !o.vm.has(sq)) {
+      if (!isPM && curSel === sq && !curVm.has(sq)) {
         e.preventDefault();
-        o.sSel(null); o.sVm(new Set());
+        o.sSel(null); o.selRef.current = null;
+        o.sVm(new Set()); o.vmRef.current = new Set();
         return;
       }
     }
@@ -420,14 +444,16 @@ export function useBoardInput(opts: BoardInputOptions) {
 
     const isMyTurn = o.tab === "analysis" || o.game.turn() === o.pCol;
     if (isMyTurn) {
-      o.sSel(sq);
+      o.sSel(sq); o.selRef.current = sq;
       const all = o.game.moves({ square: sq, verbose: true });
       const filtered = (o.variant === "diceblade" && o.dicePieceType && o.filterMovesByDice)
         ? o.filterMovesByDice(all, o.dicePieceType) : all;
-      o.sVm(new Set(filtered.map((m: any) => m.to)));
+      const next = new Set(filtered.map((m: any) => m.to));
+      o.sVm(next); o.vmRef.current = next;
     } else if (o.on) {
-      o.sPmSel(sq);
-      o.sVm(new Set(premoveLegalMoves(o.virtualGame, o.pCol, sq).map((m: any) => m.to)));
+      o.sPmSel(sq); o.pmSelRef.current = sq;
+      const next = new Set(premoveLegalMoves(o.virtualGame, o.pCol, sq).map((m: any) => m.to));
+      o.sVm(next); o.vmRef.current = next;
     }
   }, [sqFromBoard]);
 

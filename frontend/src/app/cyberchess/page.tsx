@@ -469,6 +469,14 @@ export default function CyberChessPage(){
   const pmSelRef=useRef<Square|null>(null);
   useEffect(()=>{pmsRef.current=pms},[pms]);
   useEffect(()=>{pmSelRef.current=pmSel},[pmSel]);
+  // Refs mirroring sel/vm — read by useBoardInput priority logic.
+  // Updated synchronously inside the hook when sSel/sVm are called from there,
+  // so a fast follow-up click sees fresh state without waiting for re-render.
+  // useEffect catches up external changes (exec, new game, etc).
+  const selRef=useRef<Square|null>(null);
+  const vmRef=useRef<Set<string>>(new Set());
+  useEffect(()=>{selRef.current=sel},[sel]);
+  useEffect(()=>{vmRef.current=vm},[vm]);
   const[pmLim,sPmLim]=useState(10);
   const[aiI,sAiI]=useState(2);
   const[pCol,sPCol]=useState<ChessColor>("w");
@@ -2849,7 +2857,7 @@ export default function CyberChessPage(){
   const _bi = useBoardInput({
     game, virtualGame, pCol, on, over, flip, tab,
     sel, vm, pms, pmSel, pmLim,
-    pmsRef, pmSelRef,
+    pmsRef, pmSelRef, selRef, vmRef,
     scratchOn, scratchGame, autoQueen, hotseat, variant,
     dicePieceType: dicePieceType || null,
     editorMode,

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
 import { rateLimit } from "../lib/rateLimit";
+import { getQSignSecret } from "../lib/qsignSecret";
 
 export const qsignRouter = Router();
 
@@ -15,23 +16,8 @@ export const qsignRouter = Router();
  * reference these paths. New integrations MUST use v2.
  */
 
-/**
- * Resolve the signing secret. Fails closed in production if QSIGN_SECRET is
- * unset or weak — until 2026-05-08 we silently fell back to a public default
- * "dev-qsign-secret", letting anyone with the OSS source forge signatures.
- */
-function getQSignSecret(): string {
-  const secret = process.env.QSIGN_SECRET;
-  if (process.env.NODE_ENV === "production") {
-    if (!secret || secret.length < 32 || secret.startsWith("dev-")) {
-      throw new Error(
-        "QSIGN_SECRET is missing or weak in production — refusing to sign/verify with a default. Set QSIGN_SECRET to a 32+ char random string.",
-      );
-    }
-    return secret;
-  }
-  return secret || "dev-qsign-secret";
-}
+// QSign secret resolution moved to lib/qsignSecret.ts so planetCompliance and
+// other call sites share the same fail-closed gate.
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB — enough for invoices/receipts
 

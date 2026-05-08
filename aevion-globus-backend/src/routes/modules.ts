@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../lib/authJwt";
 import { projects } from "../data/projects";
 import {
   enrichProjects,
@@ -94,8 +95,9 @@ function verifyBearerOptional(req: any): { sub: string; email?: string; role?: s
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return null;
   try {
-    const secret = process.env.AUTH_JWT_SECRET || "dev-auth-secret";
-    return jwt.verify(token, secret) as any;
+    // Single source of truth: lib/authJwt#getJwtSecret refuses dev defaults
+    // and weak secrets in production. HS256 pinned to prevent alg-confusion.
+    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as any;
   } catch {
     return null;
   }

@@ -1,6 +1,8 @@
 import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../lib/authJwt";
+import { getQSignSecret } from "../lib/qsignSecret";
 import { canonicalizeCodeFiles, type CodeFileInput, type CodeIndex } from "../lib/planetCodeCanon";
 import {
   canonicalizeMediaInput,
@@ -424,9 +426,9 @@ function requireAuth(req: any, res: any) {
     res.status(401).json({ error: "missing bearer token" });
     return null;
   }
-  const secret = process.env.AUTH_JWT_SECRET || "dev-auth-secret";
   try {
-    return jwt.verify(token, secret) as any;
+    // Shared secret resolution, fails closed in prod, HS256 pinned.
+    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as any;
   } catch (e: any) {
     res.status(401).json({ error: "invalid token", details: e?.message });
     return null;
@@ -436,7 +438,7 @@ function requireAuth(req: any, res: any) {
 const VALID_ARTIFACT_TYPES = new Set(["movie", "music", "code", "web"]);
 
 function productSecretFor(productKey: string) {
-  const base = process.env.QSIGN_SECRET || "dev-qsign-secret";
+  const base = getQSignSecret();
   return `${base}:${productKey}`;
 }
 
@@ -2258,7 +2260,7 @@ planetComplianceRouter.post("/artifacts/:artifactVersionId/votes/snapshot", asyn
     rootHash: root,
     voteCount: leaves.length,
   };
-  const signature = hmacSha256Hex(process.env.QSIGN_SECRET || "dev-qsign-secret", stableStringify(sigPayload));
+  const signature = hmacSha256Hex(getQSignSecret(), stableStringify(sigPayload));
 
   try {
     await pool.query(

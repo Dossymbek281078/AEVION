@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { getPool } from "../lib/dbPool";
-import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
 import {
   HMAC_KEY_VERSION,
   SHAMIR_SHARDS,
@@ -531,8 +531,9 @@ function isQShieldAdmin(req: Request): { ok: boolean; email: string | null; reas
   if (!auth.startsWith("Bearer ")) return { ok: false, email: null, reason: "no-bearer" };
   const token = auth.slice(7).trim();
   try {
-    const secret = process.env.JWT_SECRET || "dev-secret-change-me";
-    const decoded = jwt.verify(token, secret) as Record<string, unknown>;
+    // Same fix as pipeline.ts — wrong env name + insecure fallback unified
+    // through getJwtSecret(). HS256 pinned to block alg-confusion forgery.
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as Record<string, unknown>;
     const email = String(decoded.email || "").toLowerCase();
     const role = String(decoded.role || "").toLowerCase();
     if (role === "admin") return { ok: true, email, reason: null };

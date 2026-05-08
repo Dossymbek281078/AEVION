@@ -4,6 +4,7 @@ import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
 import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
+import { requireProdSecret } from "../lib/qsignSecret";
 import {
   ensureEcosystemLoaded,
   planetCerts,
@@ -56,7 +57,7 @@ planetPayoutsRouter.get("/payouts.csv", requireAuth, async (req, res) => {
   sendCsv(res, "planet-payouts", rows);
 });
 
-const WEBHOOK_SECRET = process.env.PLANET_WEBHOOK_SECRET || "dev-planet-webhook";
+const getWebhookSecret = () => requireProdSecret("PLANET_WEBHOOK_SECRET", "dev-planet-webhook");
 
 const seenWebhookIds = new Set<string>();
 
@@ -66,7 +67,7 @@ planetPayoutsRouter.post("/payouts/certify-webhook", async (req, res) => {
     timestamp: req.headers["x-aevion-timestamp"],
     legacySecret: req.headers["x-planet-secret"],
     body: req.body,
-    secret: WEBHOOK_SECRET,
+    secret: getWebhookSecret(),
   });
   if (!verdict.ok) {
     return res.status(401).json({ error: "invalid webhook signature", reason: verdict.reason });

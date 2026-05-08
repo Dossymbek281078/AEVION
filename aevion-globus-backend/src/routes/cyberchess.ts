@@ -10,6 +10,7 @@ import {
 } from "../lib/ecosystemStore";
 import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
+import { requireProdSecret } from "../lib/qsignSecret";
 import {
   chessPrizes,
   ensureEcosystemLoaded,
@@ -108,7 +109,9 @@ cyberchessRouter.get("/upcoming", async (_req, res) => {
 // Webhook called by the tournament service when a tournament finalizes.
 // Validates a shared secret, then appends a ChessPrize per podium spot.
 // Idempotent on (tournamentId, place, email).
-const WEBHOOK_SECRET = process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook";
+// Lazy resolution: throwing at module load would crash the server on a
+// misconfigured prod deploy.
+const getWebhookSecret = () => requireProdSecret("CYBERCHESS_WEBHOOK_SECRET", "dev-chess-webhook");
 
 cyberchessRouter.post("/tournament-finalized", async (req, res) => {
   const verdict = verifyWebhookSig({
@@ -116,7 +119,7 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     timestamp: req.headers["x-aevion-timestamp"],
     legacySecret: req.headers["x-cyberchess-secret"],
     body: req.body,
-    secret: WEBHOOK_SECRET,
+    secret: getWebhookSecret(),
   });
   if (!verdict.ok) {
     return res.status(401).json({ error: "invalid webhook signature", reason: verdict.reason });

@@ -4,6 +4,7 @@ import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
 import { paginate, parsePageOpts } from "../lib/pagination";
 import { verifyWebhookSig } from "../lib/webhookSig";
+import { requireProdSecret } from "../lib/qsignSecret";
 import {
   ensureEcosystemLoaded,
   royaltyEvents,
@@ -58,9 +59,9 @@ qrightRoyaltiesRouter.get("/royalties.csv", requireAuth, async (req, res) => {
 });
 
 // Webhook is *not* requireAuth-gated: called by trusted external rights
-// services using the shared webhook secret. The secret is read from
-// QRIGHT_WEBHOOK_SECRET; falls back to a dev value so tests work locally.
-const WEBHOOK_SECRET = process.env.QRIGHT_WEBHOOK_SECRET || "dev-qright-webhook";
+// services using the shared webhook secret. Resolved lazily through
+// requireProdSecret() so prod-misconfig fails per-request, not at boot.
+const getWebhookSecret = () => requireProdSecret("QRIGHT_WEBHOOK_SECRET", "dev-qright-webhook");
 
 const seenWebhookIds = new Set<string>();
 
@@ -70,7 +71,7 @@ qrightRoyaltiesRouter.post("/royalties/verify-webhook", async (req, res) => {
     timestamp: req.headers["x-aevion-timestamp"],
     legacySecret: req.headers["x-qright-secret"],
     body: req.body,
-    secret: WEBHOOK_SECRET,
+    secret: getWebhookSecret(),
   });
   if (!verdict.ok) {
     return res.status(401).json({ error: "invalid webhook signature", reason: verdict.reason });

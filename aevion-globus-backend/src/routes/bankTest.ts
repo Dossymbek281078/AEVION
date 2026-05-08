@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { createHmac, randomUUID } from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { requireProdSecret } from "../lib/qsignSecret";
 function requireAuth(req: any, res: any, next: any) { const p = verifyBearerOptional(req); if (!p) return res.status(401).json({ error: "auth required" }); (req as any).auth = p; next(); }
 import { stableStringify } from "../lib/stableStringify";
 
@@ -26,9 +27,13 @@ export const bankTestRouter = Router();
 const PORT = process.env.PORT || 4001;
 const SELF_BASE = `http://127.0.0.1:${PORT}`;
 
-const QRIGHT_SECRET = process.env.QRIGHT_WEBHOOK_SECRET || "dev-qright-webhook";
-const CHESS_SECRET = process.env.CYBERCHESS_WEBHOOK_SECRET || "dev-chess-webhook";
-const PLANET_SECRET = process.env.PLANET_WEBHOOK_SECRET || "dev-planet-webhook";
+// Webhook secrets resolved lazily — module-load eager throw would crash the
+// whole server on startup if any one of these envs isn't set in prod. Per-
+// request resolution lets the route fail with a clean 500 while keeping the
+// rest of the backend up.
+const getQrightSecret = () => requireProdSecret("QRIGHT_WEBHOOK_SECRET", "dev-qright-webhook");
+const getChessSecret = () => requireProdSecret("CYBERCHESS_WEBHOOK_SECRET", "dev-chess-webhook");
+const getPlanetSecret = () => requireProdSecret("PLANET_WEBHOOK_SECRET", "dev-planet-webhook");
 
 function ownerEmail(req: Request): string {
   return req.auth?.email ?? "test@aevion.test";
@@ -47,7 +52,7 @@ bankTestRouter.post("/test-webhook/qright", requireAuth, async (req, res, next) 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-QRight-Secret": QRIGHT_SECRET,
+        "X-QRight-Secret": getQrightSecret(),
       },
       body: JSON.stringify({
         eventId,
@@ -73,7 +78,7 @@ bankTestRouter.post("/test-webhook/chess", requireAuth, async (req, res, next) =
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-CyberChess-Secret": CHESS_SECRET,
+        "X-CyberChess-Secret": getChessSecret(),
       },
       body: JSON.stringify({
         tournamentId,
@@ -96,7 +101,7 @@ bankTestRouter.post("/test-webhook/planet", requireAuth, async (req, res, next) 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Planet-Secret": PLANET_SECRET,
+        "X-Planet-Secret": getPlanetSecret(),
       },
       body: JSON.stringify({
         eventId,
@@ -160,7 +165,7 @@ bankTestRouter.post("/hmac-self-test", requireAuth, async (req, res, next) => {
           period: "2026-Q2",
           amount: 4.5,
         },
-        QRIGHT_SECRET,
+        getQrightSecret(),
       ),
     );
 
@@ -172,7 +177,7 @@ bankTestRouter.post("/hmac-self-test", requireAuth, async (req, res, next) => {
           tournamentId: `hmac_tour_${Date.now()}_${shortId()}`,
           podium: [{ email, place: 1, amount: 22 }],
         },
-        CHESS_SECRET,
+        getChessSecret(),
       ),
     );
 
@@ -186,7 +191,7 @@ bankTestRouter.post("/hmac-self-test", requireAuth, async (req, res, next) => {
           artifactVersionId: `hmac_art_${shortId()}`,
           amount: 1.5,
         },
-        PLANET_SECRET,
+        getPlanetSecret(),
       ),
     );
 

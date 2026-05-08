@@ -1,7 +1,7 @@
 ﻿import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import {
@@ -2208,8 +2208,10 @@ function isPipelineAdmin(req: Request): { ok: boolean; email: string | null; rea
   if (!auth.startsWith("Bearer ")) return { ok: false, email: null, reason: "no-bearer" };
   const token = auth.slice(7).trim();
   try {
-    const secret = process.env.JWT_SECRET || "dev-secret-change-me";
-    const decoded = jwt.verify(token, secret) as Record<string, unknown>;
+    // Was: process.env.JWT_SECRET || "dev-secret-change-me" — wrong env var
+    // name AND public default. Now uses unified getJwtSecret() which fails
+    // closed in prod and pins HS256 algorithm.
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as Record<string, unknown>;
     const email = String(decoded.email || "").toLowerCase();
     const role = String(decoded.role || "").toLowerCase();
     if (role === "admin") return { ok: true, email, reason: null };

@@ -11,6 +11,7 @@ import {
   type PlanKey,
 } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
 
 type Cycle = "MONTHLY" | "YEARLY";
 const YEARLY_DISCOUNT = 0.2; // 20% off → 2 months free
@@ -37,6 +38,7 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<PlanKey | null>(null);
+  const toast = useToast();
 
   const refreshOrders = async () => {
     if (!token) return;
@@ -90,7 +92,7 @@ export default function PricingPage() {
         }, 100);
       }
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     } finally {
       setBusyKey(null);
     }
@@ -105,8 +107,9 @@ export default function PricingPage() {
       ]);
       setSub(s.subscription);
       setOrders(o.items);
+      toast.success("Order paid ✓");
     } catch (e) {
-      alert((e as Error).message);
+      toast.error((e as Error).message);
     }
   }
 

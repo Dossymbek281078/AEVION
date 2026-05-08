@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { buildApi, BuildApiError } from "@/lib/build/api";
+import { isEmail } from "@/lib/build/validate";
 
 const COPY = {
   ru: {
@@ -12,6 +13,7 @@ const COPY = {
     submit: "Подписаться",
     done: "Готово — скоро напишем 👋",
     already: "Этот email уже в списке.",
+    invalidEmail: "Похоже, email введён неверно",
   },
   en: {
     title: "Get QBuild updates",
@@ -21,6 +23,7 @@ const COPY = {
     submit: "Subscribe",
     done: "All set — we'll be in touch 👋",
     already: "This email is already on the list.",
+    invalidEmail: "Looks like an invalid email",
   },
 };
 
@@ -56,6 +59,10 @@ export function LeadForm({ lang }: { lang: "ru" | "en" }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    if (!isEmail(email)) {
+      setError(t.invalidEmail);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {

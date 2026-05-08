@@ -50,6 +50,20 @@ function Body() {
         </div>
       </Section>
 
+      <Section title="Notifications">
+        <p className="text-xs text-slate-400">
+          Vacancy alerts, application emails, weekly digest, product updates.
+        </p>
+        <div className="pt-2">
+          <Link
+            href="/build/settings/notifications"
+            className="rounded-md border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+          >
+            Manage notifications →
+          </Link>
+        </div>
+      </Section>
+
       <ChangePasswordForm />
 
       <Section title="Subscription">

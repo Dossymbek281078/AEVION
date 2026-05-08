@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 import { ProjectCard } from "@/components/build/ProjectCard";
+import { Skeleton } from "@/components/build/Skeleton";
 import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
@@ -67,6 +68,7 @@ export default function BuildHomePage() {
   return (
     <BuildShell>
       {hydrated && !token && <LandingHero publicStats={publicStats} />}
+      {hydrated && token && <SmartSuggestions />}
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -89,6 +91,10 @@ export default function BuildHomePage() {
         <Stat label="In progress" value={stats.active} tone="amber" />
         <Stat label="Vacancies" value={stats.vacancies} />
       </div>
+
+      <LiveActivityBand />
+
+      <FeaturedEmployers />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
@@ -133,9 +139,27 @@ export default function BuildHomePage() {
         </p>
       )}
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
+      {loading && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <Skeleton width="70%" height={16} />
+              <Skeleton width="100%" height={11} className="mt-3" />
+              <Skeleton width="85%" height={11} className="mt-1.5" />
+              <div className="mt-3 flex justify-between">
+                <Skeleton width={70} height={11} />
+                <Skeleton width={50} height={11} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {!loading && projects.length === 0 && (
+      {!loading && projects.length === 0 && mineOnly && token && (
+        <FirstProjectCta />
+      )}
+
+      {!loading && projects.length === 0 && !(mineOnly && token) && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
           <p className="text-sm text-slate-400">
             No projects match these filters. Try clearing the search or{" "}
@@ -153,6 +177,51 @@ export default function BuildHomePage() {
         ))}
       </div>
     </BuildShell>
+  );
+}
+
+function SmartSuggestions() {
+  const [items, setItems] = useState<import("@/lib/build/api").BuildVacancy[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    // Load profile to get skills, then suggest matching vacancies
+    import("@/lib/build/api").then(({ buildApi }) => {
+      buildApi.me().then((m) => {
+        const skills = m.profile?.skills ?? [];
+        if (skills.length === 0) { setLoaded(true); return; }
+        const skill = skills[0];
+        return buildApi.listVacancies({ status: "OPEN", skill, limit: 4 }).then((r) => {
+          setItems(r.items);
+          setLoaded(true);
+        });
+      }).catch(() => setLoaded(true));
+    });
+  }, []);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <div className="mb-8 rounded-xl border border-sky-500/20 bg-sky-500/5 p-5">
+      <div className="mb-3 text-xs font-bold uppercase tracking-wider text-sky-300">
+        ✨ Suggested for you
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((v) => (
+          <Link
+            key={v.id}
+            href={`/build/vacancy/${encodeURIComponent(v.id)}`}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 transition hover:border-sky-500/30 hover:bg-sky-500/5"
+          >
+            <div className="font-semibold text-white text-sm">{v.title}</div>
+            <div className="mt-0.5 text-xs text-slate-400">
+              {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+              {v.city ? ` · ${v.city}` : ""}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -223,6 +292,78 @@ function LandingHero({ publicStats }: { publicStats: { vacancies: number; candid
   );
 }
 
+function LiveActivityBand() {
+  const [items, setItems] = useState<
+    { kind: "VACANCY" | "APPLICATION" | "HIRE"; title: string; city: string | null; at: string }[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      buildApi
+        .liveActivity()
+        .then((r) => {
+          if (!cancelled) setItems(r.items);
+        })
+        .catch(() => {});
+    }
+    load();
+    // Refresh every 60s so a long-open tab feels alive without burning DB.
+    const t = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+
+  if (items.length === 0) return null;
+
+  function relative(at: string): string {
+    const ms = Date.now() - new Date(at).getTime();
+    const m = Math.floor(ms / 60_000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  return (
+    <div className="mb-6 overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04]">
+      <div className="flex items-center gap-2 border-b border-emerald-500/15 px-3 py-1.5">
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200">
+          Live · last 20 events
+        </span>
+      </div>
+      <ul className="divide-y divide-white/5 max-h-48 overflow-y-auto">
+        {items.map((e, i) => {
+          const tone =
+            e.kind === "HIRE"
+              ? "text-emerald-300"
+              : e.kind === "VACANCY"
+                ? "text-sky-300"
+                : "text-fuchsia-300";
+          const verb =
+            e.kind === "HIRE"
+              ? "✓ hired for"
+              : e.kind === "VACANCY"
+                ? "+ posted"
+                : "→ applied to";
+          return (
+            <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+              <span className={`shrink-0 font-semibold ${tone}`}>{verb}</span>
+              <span className="min-w-0 flex-1 truncate text-slate-200">{e.title}</span>
+              {e.city && <span className="shrink-0 text-slate-500">📍 {e.city}</span>}
+              <span className="shrink-0 text-slate-500">{relative(e.at)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function LiveStat({ n, label }: { n: number; label: string }) {
   return (
     <div className="flex items-baseline gap-1.5">
@@ -243,6 +384,141 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "em
     <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
       <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${toneCls}`}>{value}</div>
+    </div>
+  );
+}
+
+function FeaturedEmployers() {
+  const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.featuredEmployers>>["items"]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildApi
+      .featuredEmployers()
+      .then((r) => {
+        if (!cancelled) {
+          setItems(r.items);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <section className="mb-6">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+          Featured employers
+        </h2>
+        <Link href="/build/leaderboard" className="text-[11px] text-emerald-300 hover:underline">
+          See all →
+        </Link>
+      </div>
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {items.map((e) => (
+          <Link
+            key={e.userId}
+            href={`/build/employer/${encodeURIComponent(e.userId)}`}
+            className="group shrink-0 rounded-xl border border-white/10 bg-white/[0.03] p-3 transition hover:border-emerald-500/30 hover:bg-white/[0.06]"
+            style={{ minWidth: 200, maxWidth: 240 }}
+          >
+            <div className="flex items-center gap-2">
+              {e.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={e.photoUrl}
+                  alt={e.name ?? ""}
+                  width={36}
+                  height={36}
+                  className="h-9 w-9 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-bold text-emerald-200">
+                  {(e.name ?? "?").charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1">
+                  <span className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
+                    {e.name ?? "Anonymous"}
+                  </span>
+                  {e.verifiedAt && (
+                    <span className="text-[10px] text-sky-300" title="Verified">✓</span>
+                  )}
+                </div>
+                {e.city && <div className="truncate text-[10px] text-slate-400">📍 {e.city}</div>}
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+              <span>
+                {e.openVacancies > 0 ? (
+                  <span className="text-emerald-300">{e.openVacancies} open</span>
+                ) : (
+                  <span className="text-slate-500">no open roles</span>
+                )}
+              </span>
+              <span>
+                {e.hires > 0 && <span>{e.hires} hires</span>}
+                {e.avgRating > 0 && (
+                  <span className="ml-1.5 text-amber-300">★ {e.avgRating.toFixed(1)}</span>
+                )}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FirstProjectCta() {
+  return (
+    <div className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent p-8 text-center">
+      <div className="text-5xl">🏗</div>
+      <h2 className="mt-4 text-xl font-bold text-white">Запустите первый проект на QBuild</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-slate-300">
+        Проект — это контейнер для одной или нескольких вакансий. Один проект может содержать
+        бригады разных специальностей: сварщики, монтажники, прорабы.
+      </p>
+      <div className="mt-5 grid mx-auto max-w-md gap-2 text-left text-xs text-slate-300 sm:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-base">📝</div>
+          <div className="mt-1 font-semibold text-white">Опишите объект</div>
+          <p className="mt-0.5 text-[11px] text-slate-400">Город, бюджет, сроки</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-base">👥</div>
+          <div className="mt-1 font-semibold text-white">Добавьте вакансии</div>
+          <p className="mt-0.5 text-[11px] text-slate-400">С зарплатой и навыками</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-base">✓</div>
+          <div className="mt-1 font-semibold text-white">Получайте отклики</div>
+          <p className="mt-0.5 text-[11px] text-slate-400">AI-скоринг + bulk-actions</p>
+        </div>
+      </div>
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <Link
+          href="/build/create-project"
+          className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400"
+        >
+          + Создать первый проект
+        </Link>
+        <Link
+          href="/build/onboarding"
+          className="rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+        >
+          5-step онбординг
+        </Link>
+      </div>
     </div>
   );
 }

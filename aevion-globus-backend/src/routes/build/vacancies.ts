@@ -1,5 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
+import { dispatchJobAlerts } from "./alerts";
 import {
   buildPool as pool,
   ok,
@@ -70,13 +71,24 @@ vacanciesRouter.post("/", async (req, res) => {
       ? req.body.questions.map((q: unknown) => String(q).trim()).filter((q: string) => q.length > 0 && q.length <= 200).slice(0, 5)
       : [];
 
+    // Optional expiry date (ISO string). Default: 60 days if not provided.
+    let expiresAt: Date | null = null;
+    if (req.body?.expiresAt) {
+      try { expiresAt = new Date(String(req.body.expiresAt)); } catch { /* ignore */ }
+    }
+    if (!expiresAt || isNaN(expiresAt.getTime())) {
+      expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days default
+    }
+
     const id = crypto.randomUUID();
     const result = await pool.query(
-      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions)],
+      `INSERT INTO "BuildVacancy" ("id","projectId","title","description","salary","skillsJson","city","salaryCurrency","questionsJson","expiresAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, JSON.stringify(questions), expiresAt],
     );
     const row = result.rows[0];
+    // Fire job alerts asynchronously — non-blocking
+    void dispatchJobAlerts({ id: row.id, title: row.title, description: row.description, skillsJson: row.skillsJson, city: row.city, salary: row.salary }).catch(() => {});
     return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]), questions: safeParseJson(row.questionsJson, [] as string[]) }, 201);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_create_failed", { details: (err as Error).message });
@@ -93,6 +105,11 @@ vacanciesRouter.get("/", async (req, res) => {
       const v = vEnum(req.query.status, "status", VACANCY_STATUSES);
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value); where.push(`v."status" = $${params.length}`);
+    } else {
+      // Default behavior: exclude ARCHIVED from the public feed. Recruiters
+      // can still see their own archived vacancies via the dashboard endpoint
+      // (mine/funnel) which doesn't filter by status.
+      where.push(`v."status" <> 'ARCHIVED'`);
     }
     if (typeof req.query.projectStatus === "string") {
       const v = vEnum(req.query.projectStatus, "projectStatus", PROJECT_STATUSES);
@@ -111,6 +128,18 @@ vacanciesRouter.get("/", async (req, res) => {
       if (!v.ok) return fail(res, 400, v.error);
       params.push(v.value); where.push(`v."salary" >= $${params.length}`);
     }
+    if (req.query.maxSalary !== undefined) {
+      const v = vNumber(req.query.maxSalary, "maxSalary", { min: 0, max: 1e12 });
+      if (!v.ok) return fail(res, 400, v.error);
+      // Salary 0 means "not specified" — exclude from the upper-bound filter
+      // so the candidate can still see roles where the recruiter hasn't set
+      // a number rather than seeing an empty list.
+      params.push(v.value); where.push(`(v."salary" <= $${params.length} OR v."salary" = 0)`);
+    }
+    if (typeof req.query.currency === "string" && req.query.currency.trim()) {
+      params.push(req.query.currency.trim().toUpperCase().slice(0, 8));
+      where.push(`UPPER(COALESCE(v."salaryCurrency", 'USD')) = $${params.length}`);
+    }
     if (typeof req.query.skill === "string" && req.query.skill.trim()) {
       params.push(`%"${req.query.skill.trim().toLowerCase()}"%`);
       where.push(`lower(v."skillsJson") ILIKE $${params.length}`);
@@ -128,7 +157,7 @@ vacanciesRouter.get("/", async (req, res) => {
 
     const result = await pool.query(
       `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status", v."createdAt",
-              v."skillsJson",
+              v."skillsJson", v."expiresAt",
               p."title" AS "projectTitle", p."status" AS "projectStatus", p."city" AS "projectCity", p."clientId",
               (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "applicationsCount",
               (SELECT MAX(b."endsAt") FROM "BuildBoost" b WHERE b."vacancyId" = v."id" AND b."endsAt" > NOW()) AS "boostUntil"
@@ -148,6 +177,73 @@ vacanciesRouter.get("/", async (req, res) => {
   }
 });
 
+// POST /api/build/vacancies/:id/invite — owner invites a candidate by email
+vacanciesRouter.post("/:id/invite", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const emailVal = vString(req.body?.email, "email", { min: 3, max: 200 });
+    if (!emailVal.ok) return fail(res, 400, emailVal.error);
+
+    const owner = await pool.query(
+      `SELECT v."title", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const apiKey = process.env.RESEND_API_KEY;
+    if (apiKey) {
+      const recruiter = await pool.query(`SELECT "name" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [auth.sub]);
+      const recruiterName = recruiter.rows[0]?.name || "An employer";
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: "QBuild <noreply@aevion.tech>",
+          to: emailVal.value,
+          subject: `You've been invited to apply — ${owner.rows[0].title}`,
+          text: `Hi,\n\n${recruiterName} thinks you'd be a great fit for:\n\n"${owner.rows[0].title}"\n\nApply here: https://aevion.tech/build/vacancy/${id}\n\n— AEVION QBuild`,
+        }),
+      }).catch(() => {});
+    }
+
+    return ok(res, { invited: true, email: emailVal.value });
+  } catch (err: unknown) {
+    return fail(res, 500, "invite_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/skills/popular — top N skills from open vacancies for autocomplete
+vacanciesRouter.get("/skills/popular", async (_req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT "skillsJson" FROM "BuildVacancy" WHERE "status" = 'OPEN' LIMIT 500`,
+    );
+    const freq: Record<string, number> = {};
+    for (const row of r.rows as { skillsJson: string }[]) {
+      try {
+        const skills: string[] = JSON.parse(row.skillsJson);
+        for (const s of skills) {
+          const key = s.trim().toLowerCase();
+          if (key) freq[key] = (freq[key] ?? 0) + 1;
+        }
+      } catch { /* skip bad JSON */ }
+    }
+    const top = Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 40)
+      .map(([skill, count]) => ({ skill, count }));
+    return ok(res, { items: top });
+  } catch (err: unknown) {
+    return fail(res, 500, "skills_popular_failed", { details: (err as Error).message });
+  }
+});
+
 // GET /api/build/vacancies/by-project/:id
 vacanciesRouter.get("/by-project/:id", async (req, res) => {
   try {
@@ -162,6 +258,101 @@ vacanciesRouter.get("/by-project/:id", async (req, res) => {
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "vacancies_list_failed", { details: (err as Error).message });
+  }
+});
+
+// --- Vacancy templates -----------------------------------------------------
+// IMPORTANT: these single-segment paths MUST be registered BEFORE the
+// generic /:id route below, otherwise Express matches "/templates" against
+// /:id with id="templates" and the dedicated handler never fires.
+
+// GET /api/build/vacancies/templates — caller's saved templates.
+vacanciesRouter.get("/templates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const r = await pool.query(
+      `SELECT "id","name","title","description","skillsJson","salary","salaryCurrency",
+              "city","questionsJson","createdAt"
+       FROM "BuildVacancyTemplate"
+       WHERE "ownerUserId" = $1
+       ORDER BY "createdAt" DESC LIMIT 100`,
+      [auth.sub],
+    );
+    const items = r.rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      skills: safeParseJson(row.skillsJson, [] as string[]),
+      questions: safeParseJson(row.questionsJson, [] as string[]),
+    }));
+    return ok(res, { items, total: items.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "templates_list_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/templates — save a new template.
+vacanciesRouter.post("/templates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const name = vString(req.body?.name, "name", { min: 2, max: 200 });
+    if (!name.ok) return fail(res, 400, name.error);
+    const title = vString(req.body?.title, "title", { min: 3, max: 200 });
+    if (!title.ok) return fail(res, 400, title.error);
+    const description = vString(req.body?.description, "description", { min: 10, max: 10_000 });
+    if (!description.ok) return fail(res, 400, description.error);
+
+    const salary = req.body?.salary != null
+      ? Math.max(0, Math.round(Number(req.body.salary) || 0))
+      : 0;
+    const salaryCurrency = typeof req.body?.salaryCurrency === "string"
+      ? String(req.body.salaryCurrency).slice(0, 8)
+      : null;
+    const city = typeof req.body?.city === "string" && req.body.city.trim()
+      ? String(req.body.city).slice(0, 100)
+      : null;
+
+    const skills = Array.isArray(req.body?.skills)
+      ? (req.body.skills as unknown[]).filter((s): s is string => typeof s === "string").map((s) => s.slice(0, 60)).slice(0, 30)
+      : [];
+    const questions = Array.isArray(req.body?.questions)
+      ? (req.body.questions as unknown[]).filter((q): q is string => typeof q === "string").map((q) => q.slice(0, 500)).slice(0, 10)
+      : [];
+
+    const id = crypto.randomUUID();
+    const r = await pool.query(
+      `INSERT INTO "BuildVacancyTemplate"
+         ("id","ownerUserId","name","title","description","skillsJson","salary","salaryCurrency","city","questionsJson")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        id, auth.sub, name.value, title.value, description.value,
+        JSON.stringify(skills), salary, salaryCurrency, city, JSON.stringify(questions),
+      ],
+    );
+    return ok(res, r.rows[0], 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "template_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/vacancies/templates/:id
+vacanciesRouter.delete("/templates/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const r = await pool.query(
+      `DELETE FROM "BuildVacancyTemplate"
+       WHERE "id" = $1 AND ("ownerUserId" = $2 OR $3 = TRUE)
+       RETURNING "id"`,
+      [id, auth.sub, auth.role === "ADMIN"],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "template_not_found_or_not_owned");
+    return ok(res, { id });
+  } catch (err: unknown) {
+    return fail(res, 500, "template_delete_failed", { details: (err as Error).message });
   }
 });
 
@@ -183,6 +374,121 @@ vacanciesRouter.get("/:id", async (req, res) => {
     return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]), questions: safeParseJson(row.questionsJson, [] as string[]) });
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_fetch_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/mine/funnel
+// Recruiter overview: every vacancy the caller owns plus funnel counts
+// (views, total apps, pending, accepted, rejected). Used by /build/dashboard.
+vacanciesRouter.get("/mine/funnel", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const r = await pool.query(
+      `SELECT v."id", v."title", v."status", v."salary", v."salaryCurrency",
+              v."viewCount", v."createdAt", v."expiresAt", v."projectId",
+              p."title" AS "projectTitle",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id")::int AS "appsTotal",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING')::int AS "appsPending",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'ACCEPTED')::int AS "appsAccepted",
+              (SELECT COUNT(*) FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'REJECTED')::int AS "appsRejected",
+              (SELECT MIN(a."createdAt") FROM "BuildApplication" a WHERE a."vacancyId" = v."id" AND a."status" = 'PENDING') AS "oldestPendingAt",
+              (SELECT AVG(EXTRACT(EPOCH FROM (a."updatedAt" - a."createdAt")))
+               FROM "BuildApplication" a
+               WHERE a."vacancyId" = v."id"
+                 AND a."status" <> 'PENDING'
+                 AND a."updatedAt" > a."createdAt" + INTERVAL '1 second')::float AS "avgResponseSeconds"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE p."clientId" = $1
+       ORDER BY v."status" ASC, v."createdAt" DESC`,
+      [auth.sub],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancies_mine_funnel_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/:id/similar
+// Public: returns up to 6 OPEN vacancies that overlap on skills (or fall back
+// to same-city if the source vacancy has no skills declared). Used by the
+// "Similar vacancies" widget on the detail page to keep candidates engaged
+// when the current role doesn't fit.
+vacanciesRouter.get("/:id/similar", async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    const src = await pool.query(
+      `SELECT v."id", v."skillsJson", p."city" AS "projectCity"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (src.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    const skills = safeParseJson(src.rows[0].skillsJson, [] as string[]);
+    const city = src.rows[0].projectCity ? String(src.rows[0].projectCity) : null;
+
+    // Pull a candidate set, score in JS — keeps the SQL simple while still
+    // letting us rank by overlap count.
+    const limit = 60;
+    let rows: Record<string, unknown>[];
+    if (skills.length > 0) {
+      const orClauses = skills.map((_s, i) => `lower(v."skillsJson") LIKE $${i + 2}`).join(" OR ");
+      const params: unknown[] = [id, ...skills.map((s) => `%"${s.toLowerCase()}"%`)];
+      const r = await pool.query(
+        `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status",
+                v."createdAt", v."skillsJson", v."expiresAt",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN' AND v."id" <> $1 AND (${orClauses})
+         ORDER BY v."createdAt" DESC
+         LIMIT ${limit}`,
+        params,
+      );
+      rows = r.rows;
+    } else if (city) {
+      const r = await pool.query(
+        `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status",
+                v."createdAt", v."skillsJson", v."expiresAt",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN' AND v."id" <> $1 AND p."city" ILIKE $2
+         ORDER BY v."createdAt" DESC
+         LIMIT 6`,
+        [id, city],
+      );
+      rows = r.rows;
+    } else {
+      const r = await pool.query(
+        `SELECT v."id", v."projectId", v."title", v."description", v."salary", v."status",
+                v."createdAt", v."skillsJson", v."expiresAt",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."status" = 'OPEN' AND v."id" <> $1
+         ORDER BY v."createdAt" DESC
+         LIMIT 6`,
+        [id],
+      );
+      rows = r.rows;
+    }
+
+    const skillSet = new Set(skills.map((s) => s.toLowerCase()));
+    const scored = rows
+      .map((row: Record<string, unknown>) => {
+        const rowSkills = safeParseJson(row.skillsJson, [] as string[]);
+        const overlap = rowSkills.filter((s) => skillSet.has(s.toLowerCase()));
+        return { ...row, skills: rowSkills, overlapCount: overlap.length, overlapSkills: overlap };
+      })
+      .sort((a, b) => b.overlapCount - a.overlapCount)
+      .slice(0, 6);
+
+    return ok(res, { items: scored, total: scored.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_similar_failed", { details: (err as Error).message });
   }
 });
 
@@ -299,28 +605,603 @@ vacanciesRouter.post("/:id/boost", async (req, res) => {
   }
 });
 
-// PATCH /api/build/vacancies/:id — toggle status
+// POST /api/build/vacancies/bulk — create up to 50 vacancies under one project
+// from a parsed array. Owner-only on the project. Returns per-row errors so
+// the UI can surface partial failures rather than rolling back everything.
+vacanciesRouter.post("/bulk", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const projectId = vString(req.body?.projectId, "projectId", { min: 1, max: 200 });
+    if (!projectId.ok) return fail(res, 400, projectId.error);
+    const rowsInput = Array.isArray(req.body?.rows) ? req.body.rows : null;
+    if (!rowsInput || rowsInput.length === 0) {
+      return fail(res, 400, "rows_required");
+    }
+    if (rowsInput.length > 50) {
+      return fail(res, 400, "too_many_rows", { limit: 50, got: rowsInput.length });
+    }
+
+    const project = await pool.query(
+      `SELECT "id","clientId" FROM "BuildProject" WHERE "id" = $1 LIMIT 1`,
+      [projectId.value],
+    );
+    if (project.rowCount === 0) return fail(res, 404, "project_not_found");
+    if (project.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_project_owner_can_bulk_post");
+    }
+
+    const created: { id: string; title: string }[] = [];
+    const errors: { index: number; error: string }[] = [];
+
+    for (let i = 0; i < rowsInput.length; i++) {
+      const r = rowsInput[i];
+      const title = vString(r?.title, "title", { min: 3, max: 200 });
+      if (!title.ok) { errors.push({ index: i, error: title.error }); continue; }
+      const description = vString(r?.description, "description", { min: 10, max: 10_000 });
+      if (!description.ok) { errors.push({ index: i, error: description.error }); continue; }
+      const salaryRaw = r?.salary;
+      const salary = salaryRaw == null || salaryRaw === ""
+        ? { ok: true as const, value: 0 }
+        : vNumber(salaryRaw, "salary", { min: 0, max: 1e12 });
+      if (salary.ok === false) { errors.push({ index: i, error: salary.error }); continue; }
+      const skills = Array.isArray(r?.skills)
+        ? r.skills.map((s: unknown) => String(s).trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 30)
+        : typeof r?.skills === "string"
+          ? r.skills.split(/[;,|]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0 && s.length <= 60).slice(0, 30)
+          : [];
+      const city = r?.city == null ? null : String(r.city).trim().slice(0, 100) || null;
+      const salaryCurrency = typeof r?.salaryCurrency === "string"
+        ? r.salaryCurrency.trim().slice(0, 8) || "RUB"
+        : "RUB";
+      const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+
+      try {
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO "BuildVacancy"
+             ("id","projectId","title","description","salary","status","skillsJson","city","salaryCurrency","expiresAt")
+           VALUES ($1,$2,$3,$4,$5,'OPEN',$6,$7,$8,$9)`,
+          [id, projectId.value, title.value, description.value, salary.value, JSON.stringify(skills), city, salaryCurrency, expiresAt],
+        );
+        created.push({ id, title: title.value });
+      } catch (e) {
+        errors.push({ index: i, error: (e as Error).message });
+      }
+    }
+
+    return ok(res, { created: created.length, items: created, errors });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancies_bulk_failed", { details: (err as Error).message });
+  }
+});
+
+// PATCH /api/build/vacancies/:id — owner-only edits.
+// Accepts a partial body with any of: status / title / description / salary.
+// Each substantive change is logged to BuildVacancyEdit for the owner-only
+// changelog endpoint below.
 vacanciesRouter.patch("/:id", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
     const id = String(req.params.id);
-    const status = vEnum(req.body?.status, "status", VACANCY_STATUSES);
-    if (!status.ok) return fail(res, 400, status.error);
 
     const row = await pool.query(
-      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+      `SELECT v.*, p."clientId" FROM "BuildVacancy" v
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
       [id],
     );
     if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
     if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "only_project_owner_can_update_vacancy");
 
-    const result = await pool.query(`UPDATE "BuildVacancy" SET "status" = $1 WHERE "id" = $2 RETURNING *`, [status.value, id]);
+    const updates: { col: string; value: unknown; before: unknown; after: unknown }[] = [];
+    if (req.body?.status !== undefined) {
+      const v = vEnum(req.body.status, "status", VACANCY_STATUSES);
+      if (!v.ok) return fail(res, 400, v.error);
+      if (row.rows[0].status !== v.value) {
+        updates.push({ col: "status", value: v.value, before: row.rows[0].status, after: v.value });
+      }
+    }
+    if (req.body?.title !== undefined) {
+      const v = vString(req.body.title, "title", { min: 3, max: 200 });
+      if (!v.ok) return fail(res, 400, v.error);
+      if (row.rows[0].title !== v.value) {
+        updates.push({ col: "title", value: v.value, before: row.rows[0].title, after: v.value });
+      }
+    }
+    if (req.body?.description !== undefined) {
+      const v = vString(req.body.description, "description", { min: 10, max: 10_000 });
+      if (!v.ok) return fail(res, 400, v.error);
+      if (row.rows[0].description !== v.value) {
+        updates.push({ col: "description", value: v.value, before: row.rows[0].description, after: v.value });
+      }
+    }
+    if (req.body?.salary !== undefined) {
+      const v = vNumber(req.body.salary, "salary", { min: 0, max: 1e12 });
+      if (!v.ok) return fail(res, 400, v.error);
+      if (Number(row.rows[0].salary) !== v.value) {
+        updates.push({ col: "salary", value: v.value, before: row.rows[0].salary, after: v.value });
+      }
+    }
+
+    if (updates.length === 0) {
+      return ok(res, row.rows[0]);
+    }
+
+    const setSql = updates.map((u, i) => `"${u.col}" = $${i + 1}`).join(", ");
+    const setParams = updates.map((u) => u.value);
+    setParams.push(id);
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET ${setSql} WHERE "id" = $${updates.length + 1} RETURNING *`,
+      setParams,
+    );
+
+    // Append changelog row (one per PATCH, even if multiple fields changed).
+    const changes: Record<string, { before: unknown; after: unknown }> = {};
+    for (const u of updates) changes[u.col] = { before: u.before, after: u.after };
+    void pool.query(
+      `INSERT INTO "BuildVacancyEdit" ("id","vacancyId","editorId","changesJson")
+       VALUES ($1,$2,$3,$4)`,
+      [crypto.randomUUID(), id, auth.sub, JSON.stringify(changes)],
+    ).catch(() => {});
+
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
     return fail(res, 500, "vacancy_update_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/:id/history — owner-only changelog.
+vacanciesRouter.get("/:id/history", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const r = await pool.query(
+      `SELECT e."id", e."editorId", e."changesJson", e."createdAt",
+              u."name" AS "editorName"
+       FROM "BuildVacancyEdit" e
+       LEFT JOIN "AEVIONUser" u ON u."id" = e."editorId"
+       WHERE e."vacancyId" = $1
+       ORDER BY e."createdAt" DESC LIMIT 100`,
+      [id],
+    );
+    const items = r.rows.map((row: Record<string, unknown>) => {
+      let changes: Record<string, { before: unknown; after: unknown }> = {};
+      try { changes = JSON.parse(String(row.changesJson)); } catch { /* ignore */ }
+      return {
+        id: row.id,
+        editorId: row.editorId,
+        editorName: row.editorName,
+        createdAt: row.createdAt,
+        changes,
+      };
+    });
+    return ok(res, { items, total: items.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_history_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/vacancies/:id — owner can delete a vacancy that has
+// zero applications. The "zero apps" guard exists because deleting a
+// vacancy with applications would orphan candidate records, hire fees
+// and CSV history. For vacancies with applications we recommend
+// PATCH status=CLOSED via the existing patch endpoint instead.
+vacanciesRouter.delete("/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId",
+              (SELECT COUNT(*)::int FROM "BuildApplication" a WHERE a."vacancyId" = v."id") AS "appsCount"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_delete");
+    }
+    if (Number(owner.rows[0].appsCount) > 0) {
+      return fail(res, 409, "vacancy_has_applications", {
+        appsCount: Number(owner.rows[0].appsCount),
+        hint: "Close the vacancy instead (PATCH status=CLOSED) to preserve the application history.",
+      });
+    }
+
+    // Cascade-delete supporting rows that don't have FK to applications:
+    // bookmarks pointing at this vacancy and any boost rows.
+    await pool.query(`DELETE FROM "BuildBoost" WHERE "vacancyId" = $1`, [id]).catch(() => {});
+    await pool.query(`DELETE FROM "BuildBookmark" WHERE "kind" = 'VACANCY' AND "targetId" = $1`, [id]).catch(() => {});
+    await pool.query(`DELETE FROM "BuildVacancy" WHERE "id" = $1`, [id]);
+    return ok(res, { id });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_delete_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/:id/boost-roi — owner-only. Compares views/apps
+// during the most recent (or active) boost period vs the same-length window
+// immediately before. Returns null fields when there's no boost history.
+vacanciesRouter.get("/:id/boost-roi", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const v = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (v.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (v.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    const boost = await pool.query(
+      `SELECT "id","startedAt","endsAt","source"
+       FROM "BuildBoost" WHERE "vacancyId" = $1
+       ORDER BY "startedAt" DESC LIMIT 1`,
+      [id],
+    );
+    if (boost.rowCount === 0) {
+      return ok(res, { hasBoost: false });
+    }
+    const b = boost.rows[0] as { startedAt: string; endsAt: string; source: string };
+
+    const startedAt = new Date(b.startedAt);
+    const endsAt = new Date(b.endsAt);
+    const now = new Date();
+    const periodEnd = endsAt > now ? now : endsAt;
+    const periodLen = periodEnd.getTime() - startedAt.getTime();
+    const beforeEnd = new Date(startedAt);
+    const beforeStart = new Date(startedAt.getTime() - periodLen);
+
+    // We don't track per-day view history — viewCount is a running counter
+    // on BuildVacancy. So we rely on the fact that view increments are
+    // monotonic and we can only compare *applications* directly. Views are
+    // approximated as undefined in the breakdown.
+    const [appsDuring, appsBefore] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS "n" FROM "BuildApplication"
+         WHERE "vacancyId" = $1 AND "createdAt" >= $2 AND "createdAt" <= $3`,
+        [id, startedAt, periodEnd],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS "n" FROM "BuildApplication"
+         WHERE "vacancyId" = $1 AND "createdAt" >= $2 AND "createdAt" < $3`,
+        [id, beforeStart, beforeEnd],
+      ),
+    ]);
+
+    const during = Number(appsDuring.rows[0]?.n ?? 0);
+    const before = Number(appsBefore.rows[0]?.n ?? 0);
+    const delta = during - before;
+    const pct = before > 0 ? Math.round(((during - before) / before) * 100) : during > 0 ? 100 : 0;
+
+    return ok(res, {
+      hasBoost: true,
+      active: endsAt > now,
+      source: b.source,
+      startedAt: b.startedAt,
+      endsAt: b.endsAt,
+      periodDays: Math.max(1, Math.round(periodLen / 86400000)),
+      apps: { during, before, delta, pct },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "boost_roi_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/vacancies/:id/timeline — owner-only chronological feed of
+// vacancy events. No new table; we union 4 existing sources (vacancy itself,
+// applications, boosts, hire orders) and sort by ts desc. Cap 80 events.
+// GET /api/build/vacancies/:id/notes — owner-only private team notes.
+vacanciesRouter.get("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_owner");
+    }
+
+    const r = await pool.query(
+      `SELECT n."id", n."authorUserId", n."body", n."createdAt", u."name" AS "authorName"
+       FROM "BuildVacancyNote" n
+       LEFT JOIN "AEVIONUser" u ON u."id" = n."authorUserId"
+       WHERE n."vacancyId" = $1
+       ORDER BY n."createdAt" DESC LIMIT 100`,
+      [id],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_notes_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/notes — owner adds a private team note.
+vacanciesRouter.post("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const body = vString(req.body?.body, "body", { min: 1, max: 4000 });
+    if (!body.ok) return fail(res, 400, body.error);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_owner");
+    }
+
+    const noteId = `vnote_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const r = await pool.query(
+      `INSERT INTO "BuildVacancyNote" ("id","vacancyId","authorUserId","body")
+       VALUES ($1,$2,$3,$4)
+       RETURNING "id","vacancyId","authorUserId","body","createdAt"`,
+      [noteId, id, auth.sub, body.value],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_note_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/vacancies/:id/notes/:noteId — owner deletes a team note.
+vacanciesRouter.delete("/:id/notes/:noteId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const noteId = String(req.params.noteId);
+
+    const owner = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_owner");
+    }
+
+    const r = await pool.query(
+      `DELETE FROM "BuildVacancyNote" WHERE "id" = $1 AND "vacancyId" = $2 RETURNING "id"`,
+      [noteId, id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "note_not_found");
+    return ok(res, { id: r.rows[0].id, deleted: true });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_note_delete_failed", { details: (err as Error).message });
+  }
+});
+
+vacanciesRouter.get("/:id/timeline", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT v."id", v."createdAt", v."status", p."clientId", p."title" AS "projectTitle"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    type Event = {
+      kind: "VACANCY_CREATED" | "BOOST_STARTED" | "BOOST_ENDED" | "APPLICATION_RECEIVED" | "APPLICATION_ACCEPTED" | "APPLICATION_REJECTED" | "HIRE_FEE";
+      ts: string;
+      title: string;
+      meta?: Record<string, unknown>;
+    };
+    const events: Event[] = [];
+
+    events.push({
+      kind: "VACANCY_CREATED",
+      ts: String(owner.rows[0].createdAt),
+      title: "Vacancy posted",
+      meta: { projectTitle: owner.rows[0].projectTitle },
+    });
+
+    const apps = await pool.query(
+      `SELECT a."id", a."status", a."createdAt", a."updatedAt", a."rejectReason",
+              u."name" AS "applicantName"
+       FROM "BuildApplication" a
+       JOIN "AEVIONUser" u ON u."id" = a."userId"
+       WHERE a."vacancyId" = $1
+       ORDER BY a."createdAt" DESC LIMIT 200`,
+      [id],
+    );
+    for (const a of apps.rows as { id: string; status: string; createdAt: string; updatedAt: string; rejectReason: string | null; applicantName: string }[]) {
+      events.push({
+        kind: "APPLICATION_RECEIVED",
+        ts: a.createdAt,
+        title: `Application from ${a.applicantName}`,
+        meta: { applicationId: a.id },
+      });
+      // Detect status change events from updatedAt > createdAt + 1s.
+      // Note: we only know the final status, not intermediate flips. For a
+      // PENDING row updatedAt may equal createdAt — skip in that case.
+      if (a.status !== "PENDING" && new Date(a.updatedAt).getTime() - new Date(a.createdAt).getTime() > 1000) {
+        events.push({
+          kind: a.status === "ACCEPTED" ? "APPLICATION_ACCEPTED" : "APPLICATION_REJECTED",
+          ts: a.updatedAt,
+          title: `${a.applicantName} ${a.status === "ACCEPTED" ? "accepted" : "rejected"}`,
+          meta: { applicationId: a.id, rejectReason: a.rejectReason ?? undefined },
+        });
+      }
+    }
+
+    const boosts = await pool.query(
+      `SELECT "id","startedAt","endsAt","source" FROM "BuildBoost"
+       WHERE "vacancyId" = $1 ORDER BY "startedAt" DESC LIMIT 50`,
+      [id],
+    );
+    for (const b of boosts.rows as { id: string; startedAt: string; endsAt: string; source: string }[]) {
+      events.push({
+        kind: "BOOST_STARTED",
+        ts: b.startedAt,
+        title: `Boost activated (${b.source})`,
+        meta: { endsAt: b.endsAt, boostId: b.id },
+      });
+      if (new Date(b.endsAt) <= new Date()) {
+        events.push({
+          kind: "BOOST_ENDED",
+          ts: b.endsAt,
+          title: "Boost expired",
+          meta: { boostId: b.id },
+        });
+      }
+    }
+
+    // Hire fee orders are tied to vacancy via metaJson.vacancyId.
+    const hires = await pool.query(
+      `SELECT "id","createdAt","amount","currency","status","metaJson"
+       FROM "BuildOrder" WHERE "kind" = 'HIRE_FEE' AND "userId" = $1
+       ORDER BY "createdAt" DESC LIMIT 50`,
+      [auth.sub],
+    );
+    for (const o of hires.rows as { id: string; createdAt: string; amount: number; currency: string; status: string; metaJson: string }[]) {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(o.metaJson) as Record<string, unknown>; } catch {}
+      if (meta.vacancyId !== id) continue;
+      events.push({
+        kind: "HIRE_FEE",
+        ts: o.createdAt,
+        title: `Hire fee · ${o.amount.toLocaleString()} ${o.currency} (${o.status})`,
+        meta: { orderId: o.id, status: o.status },
+      });
+    }
+
+    events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    return ok(res, { events: events.slice(0, 80), total: events.length });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_timeline_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/republish — owner reopens a CLOSED vacancy.
+// Resets status -> OPEN and pushes expiresAt out by 30 days from now.
+// Useful when a hire fell through or the role re-opened.
+vacanciesRouter.post("/:id/republish", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const row = await pool.query(
+      `SELECT v."id", v."status", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_republish");
+    }
+    if (row.rows[0].status === "OPEN") {
+      return fail(res, 409, "vacancy_already_open");
+    }
+
+    // Respect plan vacancy slot limits — republishing counts as an active slot.
+    if (auth.role !== "ADMIN") {
+      const plan = await getUserPlan(auth.sub);
+      if (!isUnlimited(plan.vacancySlots)) {
+        const active = await pool.query(
+          `SELECT COUNT(*)::int AS c FROM "BuildVacancy" v
+           JOIN "BuildProject" p ON p."id" = v."projectId"
+           WHERE p."clientId" = $1 AND v."status" = 'OPEN'`,
+          [auth.sub],
+        );
+        const used = active.rows[0]?.c ?? 0;
+        if (used >= plan.vacancySlots) {
+          return fail(res, 403, "plan_vacancy_limit_reached", { planKey: plan.key, limit: plan.vacancySlots, used, upgradeUrl: "/build/pricing" });
+        }
+      }
+    }
+
+    const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET "status" = 'OPEN', "expiresAt" = $1 WHERE "id" = $2 RETURNING *`,
+      [newExpiry, id],
+    );
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_republish_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/extend — owner pushes expiresAt out by N days
+// (default 30, capped at 180). Cheaper than republish for OPEN vacancies that
+// just need a longer runway.
+vacanciesRouter.post("/:id/extend", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const rawDays = Number(req.body?.days ?? 30);
+    const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(180, Math.floor(rawDays))) : 30;
+
+    const row = await pool.query(
+      `SELECT v."id", v."status", v."expiresAt", p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId" WHERE v."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_extend");
+    }
+    if (row.rows[0].status === "ARCHIVED") {
+      return fail(res, 409, "vacancy_archived");
+    }
+
+    // Anchor on max(now, currentExpiry) so extending an already-future expiry
+    // adds genuine extra time rather than collapsing to "now + days".
+    const current = row.rows[0].expiresAt ? new Date(row.rows[0].expiresAt) : null;
+    const anchor = current && current.getTime() > Date.now() ? current : new Date();
+    const newExpiry = new Date(anchor.getTime() + days * 86400_000);
+
+    const result = await pool.query(
+      `UPDATE "BuildVacancy" SET "expiresAt" = $1 WHERE "id" = $2 RETURNING *`,
+      [newExpiry, id],
+    );
+    return ok(res, { vacancy: result.rows[0], extendedDays: days, newExpiresAt: newExpiry.toISOString() });
+  } catch (err: unknown) {
+    return fail(res, 500, "vacancy_extend_failed", { details: (err as Error).message });
   }
 });
 

@@ -91,7 +91,7 @@ export type LeaderboardRow = {
   specialty?: string | null;
 };
 export type ProjectStatus = "OPEN" | "IN_PROGRESS" | "DONE";
-export type VacancyStatus = "OPEN" | "CLOSED";
+export type VacancyStatus = "OPEN" | "CLOSED" | "ARCHIVED";
 export type ApplicationStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
 export type ShiftPreference = "DAY" | "NIGHT" | "FLEX" | "ANY";
@@ -247,6 +247,7 @@ export type BuildVacancy = {
   salaryCurrency?: string | null;
   questions?: string[];
   viewCount?: number;
+  expiresAt?: string | null;
 };
 
 export type ApplicationAiScores = {
@@ -281,7 +282,15 @@ export type BuildApplication = {
   aiScoresJson?: string | null;
   aiScoreOverall?: number | null;
   rejectReason?: string | null;
+  vacancyStatus?: VacancyStatus;
+  vacancyExpiresAt?: string | null;
+  labelKey?: ApplicationLabel | null;
+  sourceTag?: string | null;
+  aiWhyMatch?: string | null;
+  snoozedUntil?: string | null;
 };
+
+export type ApplicationLabel = "SHORTLIST" | "INTERVIEW" | "OFFER" | "HOLD" | "TOP_PICK";
 
 export type BuildMessage = {
   id: string;
@@ -435,7 +444,7 @@ export class BuildApiError extends Error {
 }
 
 async function call<T>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
   init?: { auth?: boolean; signal?: AbortSignal },
@@ -608,6 +617,27 @@ export const buildApi = {
       files: BuildFile[];
       client: { id: string; email: string; name: string; city: string | null; buildRole: BuildRole | null } | null;
     }>("GET", `/api/build/projects/${encodeURIComponent(id)}`, undefined, { auth: false }),
+  salaryStats: (skill?: string) =>
+    call<{ skill: string | null; avg: number; median: number; min: number; max: number; count: number }>(
+      "GET",
+      `/api/build/stats/salary${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`,
+      undefined,
+      { auth: false },
+    ),
+  inviteCandidate: (vacancyId: string, email: string) =>
+    call<{ invited: boolean; email: string }>(
+      "POST", `/api/build/vacancies/${encodeURIComponent(vacancyId)}/invite`, { email },
+    ),
+  popularSkills: () =>
+    call<{ items: { skill: string; count: number }[] }>(
+      "GET", "/api/build/vacancies/skills/popular", undefined, { auth: false },
+    ),
+  projectAnalytics: (id: string) =>
+    call<{
+      vacancies: { total: number; open: number; closed: number; totalViews: number };
+      applications: { total: number; accepted: number; pending: number; rejected: number; conversionRate: number };
+      reviews: { avgRating: number; count: number };
+    }>("GET", `/api/build/projects/${encodeURIComponent(id)}/analytics`),
   updateProject: (id: string, patch: Partial<{ title: string; description: string; budget: number; status: ProjectStatus; city: string | null }>) =>
     call<BuildProject>("PATCH", `/api/build/projects/${encodeURIComponent(id)}`, patch),
 
@@ -618,6 +648,8 @@ export const buildApi = {
     q?: string;
     city?: string;
     minSalary?: number;
+    maxSalary?: number;
+    currency?: string;
     skill?: string;
     sort?: "recent" | "salary" | "popular";
     limit?: number;
@@ -628,6 +660,8 @@ export const buildApi = {
     if (q?.q) params.set("q", q.q);
     if (q?.city) params.set("city", q.city);
     if (q?.minSalary != null) params.set("minSalary", String(q.minSalary));
+    if (q?.maxSalary != null) params.set("maxSalary", String(q.maxSalary));
+    if (q?.currency) params.set("currency", q.currency);
     if (q?.skill) params.set("skill", q.skill);
     if (q?.sort) params.set("sort", q.sort);
     if (q?.limit) params.set("limit", String(q.limit));
@@ -660,8 +694,201 @@ export const buildApi = {
     call<BuildVacancy>("GET", `/api/build/vacancies/${encodeURIComponent(id)}`, undefined, { auth: false }),
   updateVacancy: (id: string, status: VacancyStatus) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, { status }),
+  myVacanciesFunnel: () =>
+    call<{
+      items: {
+        id: string;
+        title: string;
+        status: VacancyStatus;
+        salary: number;
+        salaryCurrency: string | null;
+        viewCount: number | null;
+        createdAt: string;
+        expiresAt: string | null;
+        projectId: string;
+        projectTitle: string;
+        appsTotal: number;
+        appsPending: number;
+        appsAccepted: number;
+        appsRejected: number;
+        oldestPendingAt: string | null;
+        avgResponseSeconds: number | null;
+      }[];
+      total: number;
+    }>("GET", "/api/build/vacancies/mine/funnel"),
+  similarVacancies: (vacancyId: string) =>
+    call<{
+      items: (BuildVacancy & {
+        overlapCount: number;
+        overlapSkills: string[];
+        projectCity?: string | null;
+      })[];
+      total: number;
+    }>(
+      "GET",
+      `/api/build/vacancies/${encodeURIComponent(vacancyId)}/similar`,
+      undefined,
+      { auth: false },
+    ),
+  bulkCreateVacancies: (input: {
+    projectId: string;
+    rows: { title: string; description: string; salary?: number; city?: string; skills?: string | string[]; salaryCurrency?: string }[];
+  }) =>
+    call<{
+      created: number;
+      items: { id: string; title: string }[];
+      errors: { index: number; error: string }[];
+    }>("POST", "/api/build/vacancies/bulk", input),
+  vacancyHistory: (id: string) =>
+    call<{
+      items: {
+        id: string;
+        editorId: string;
+        editorName: string | null;
+        createdAt: string;
+        changes: Record<string, { before: unknown; after: unknown }>;
+      }[];
+      total: number;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/history`),
   patchVacancy: (id: string, fields: Partial<{ status: VacancyStatus; title: string; description: string; salary: number }>) =>
     call<BuildVacancy>("PATCH", `/api/build/vacancies/${encodeURIComponent(id)}`, fields),
+  listVacancyTemplates: () =>
+    call<{
+      items: {
+        id: string;
+        name: string;
+        title: string;
+        description: string;
+        skills: string[];
+        salary: number;
+        salaryCurrency: string | null;
+        city: string | null;
+        questions: string[];
+        createdAt: string;
+      }[];
+      total: number;
+    }>("GET", "/api/build/vacancies/templates"),
+  saveVacancyTemplate: (input: {
+    name: string;
+    title: string;
+    description: string;
+    skills?: string[];
+    salary?: number;
+    salaryCurrency?: string | null;
+    city?: string | null;
+    questions?: string[];
+  }) =>
+    call<{ id: string; name: string }>(
+      "POST",
+      "/api/build/vacancies/templates",
+      input,
+    ),
+  deleteVacancyTemplate: (id: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/vacancies/templates/${encodeURIComponent(id)}`,
+    ),
+  deleteVacancy: (id: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/vacancies/${encodeURIComponent(id)}`,
+    ),
+  duplicateVacancy: (id: string, targetProjectId: string) =>
+    call<BuildVacancy>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(id)}/duplicate`,
+      { projectId: targetProjectId },
+    ),
+  republishVacancy: (id: string) =>
+    call<BuildVacancy>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(id)}/republish`,
+    ),
+  extendVacancy: (id: string, days = 30) =>
+    call<{ vacancy: BuildVacancy; extendedDays: number; newExpiresAt: string }>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(id)}/extend`,
+      { days },
+    ),
+  vacancyTimeline: (id: string) =>
+    call<{
+      events: {
+        kind:
+          | "VACANCY_CREATED"
+          | "BOOST_STARTED"
+          | "BOOST_ENDED"
+          | "APPLICATION_RECEIVED"
+          | "APPLICATION_ACCEPTED"
+          | "APPLICATION_REJECTED"
+          | "HIRE_FEE";
+        ts: string;
+        title: string;
+        meta?: Record<string, unknown>;
+      }[];
+      total: number;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/timeline`),
+
+  vacancyNotes: (vacancyId: string) =>
+    call<{
+      items: {
+        id: string;
+        authorUserId: string;
+        authorName: string | null;
+        body: string;
+        createdAt: string;
+      }[];
+      total: number;
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notes`),
+  addVacancyNote: (vacancyId: string, body: string) =>
+    call<{
+      id: string;
+      vacancyId: string;
+      authorUserId: string;
+      body: string;
+      createdAt: string;
+    }>(
+      "POST",
+      `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notes`,
+      { body },
+    ),
+  deleteVacancyNote: (vacancyId: string, noteId: string) =>
+    call<{ id: string; deleted: true }>(
+      "DELETE",
+      `/api/build/vacancies/${encodeURIComponent(vacancyId)}/notes/${encodeURIComponent(noteId)}`,
+    ),
+  vacancyBoostRoi: (id: string) =>
+    call<{
+      hasBoost: boolean;
+      active: boolean;
+      source: string | null;
+      startedAt: string | null;
+      endsAt: string | null;
+      periodDays: number;
+      apps: { during: number; before: number; delta: number; pct: number | null };
+    }>("GET", `/api/build/vacancies/${encodeURIComponent(id)}/boost-roi`),
+
+  // Notification preferences
+  getNotificationPrefs: () =>
+    call<{
+      jobAlerts: boolean;
+      applicationEmail: boolean;
+      weeklyDigest: boolean;
+      marketing: boolean;
+      updatedAt?: string;
+    }>("GET", "/api/build/settings/notifications"),
+  setNotificationPrefs: (input: Partial<{
+    jobAlerts: boolean;
+    applicationEmail: boolean;
+    weeklyDigest: boolean;
+    marketing: boolean;
+  }>) =>
+    call<{
+      jobAlerts: boolean;
+      applicationEmail: boolean;
+      weeklyDigest: boolean;
+      marketing: boolean;
+      updatedAt: string;
+    }>("PUT", "/api/build/settings/notifications", input),
   matchCandidates: (vacancyId: string) =>
     call<{
       items: (TalentRow & { matchScore: number; matchedSkills: string[] })[];
@@ -682,8 +909,43 @@ export const buildApi = {
     message?: string;
     answers?: string[];
     referredByUserId?: string;
+    sourceTag?: string;
   }) => call<BuildApplication>("POST", "/api/build/applications", input),
+  applyVacancy: (input: { vacancyId: string; message?: string; sourceTag?: string; referredByUserId?: string }) =>
+    call<BuildApplication>("POST", "/api/build/applications", input),
   myApplications: () => call<{ items: BuildApplication[]; total: number }>("GET", "/api/build/applications/my"),
+  myPipeline: () =>
+    call<{
+      items: {
+        id: string;
+        labelKey: ApplicationLabel | null;
+        matchScore: number | null;
+        createdAt: string;
+        updatedAt: string;
+        vacancyId: string;
+        vacancyTitle: string;
+        applicantName: string | null;
+        applicantHeadline: string | null;
+      }[];
+      total: number;
+    }>("GET", "/api/build/applications/mine/pipeline"),
+  myInterviews: () =>
+    call<{
+      items: {
+        id: string;
+        status: string;
+        labelKey: string | null;
+        createdAt: string;
+        updatedAt: string;
+        message: string | null;
+        matchScore: number | null;
+        vacancyId: string;
+        vacancyTitle: string;
+        applicantName: string | null;
+        applicantHeadline: string | null;
+      }[];
+      total: number;
+    }>("GET", "/api/build/applications/mine/interviews"),
   applicationsByVacancy: (vacancyId: string) =>
     call<{ items: BuildApplication[]; total: number }>(
       "GET",
@@ -694,6 +956,109 @@ export const buildApi = {
       "PATCH",
       `/api/build/applications/${encodeURIComponent(id)}`,
       { status, ...(rejectReason ? { rejectReason } : {}) },
+    ),
+  snoozeApplication: (id: string, days: number) =>
+    call<{ snoozedUntil: string | null }>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/snooze`,
+      { days },
+    ),
+  flagApplication: (id: string, reason: string, note?: string) =>
+    call<{ id: string }>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/flag`,
+      { reason, ...(note ? { note } : {}) },
+    ),
+  adminListFlags: (status: "open" | "dismissed" | "actioned" = "open") =>
+    call<{
+      items: {
+        id: string;
+        applicationId: string;
+        reporterUserId: string;
+        reason: string;
+        note: string | null;
+        status: string;
+        createdAt: string;
+        resolvedAt: string | null;
+        resolvedBy: string | null;
+        reporterName: string | null;
+        candidateId: string | null;
+        candidateName: string | null;
+        vacancyId: string | null;
+        vacancyTitle: string | null;
+      }[];
+      total: number;
+    }>("GET", `/api/build/admin/flags?status=${encodeURIComponent(status)}`),
+  adminResolveFlag: (id: string, status: "dismissed" | "actioned") =>
+    call<{ id: string; status: string }>(
+      "PATCH",
+      `/api/build/admin/flags/${encodeURIComponent(id)}`,
+      { status },
+    ),
+  withdrawApplication: (id: string) =>
+    call<BuildApplication>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/withdraw`,
+    ),
+  bulkUpdateApplicationStatus: (
+    ids: string[],
+    status: "ACCEPTED" | "REJECTED",
+    rejectReason?: string,
+  ) =>
+    call<{ updated: number; skipped: string[]; status: string }>(
+      "POST",
+      "/api/build/applications/bulk-status",
+      { ids, status, ...(rejectReason ? { rejectReason } : {}) },
+    ),
+  setApplicationLabel: (id: string, labelKey: ApplicationLabel | null) =>
+    call<BuildApplication>(
+      "PATCH",
+      `/api/build/applications/${encodeURIComponent(id)}/label`,
+      { labelKey },
+    ),
+  listBulkTemplates: () =>
+    call<{
+      items: { id: string; name: string; body: string; createdAt: string }[];
+      total: number;
+    }>("GET", "/api/build/bulk-templates"),
+  saveBulkTemplate: (input: { name: string; body: string }) =>
+    call<{ id: string; name: string; body: string; createdAt: string }>(
+      "POST",
+      "/api/build/bulk-templates",
+      input,
+    ),
+  deleteBulkTemplate: (id: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/bulk-templates/${encodeURIComponent(id)}`,
+    ),
+  bulkMessageApplicants: (vacancyId: string, content: string, status: "PENDING" | "ACCEPTED" | "REJECTED" | "ALL" = "PENDING") =>
+    call<{ sent: number; recipients: string[] }>(
+      "POST",
+      `/api/build/applications/bulk-message/${encodeURIComponent(vacancyId)}`,
+      { content, status },
+    ),
+  applicationNotes: (id: string) =>
+    call<{
+      items: { id: string; applicationId: string; authorUserId: string; body: string; isPinned: boolean; createdAt: string }[];
+      total: number;
+    }>("GET", `/api/build/applications/${encodeURIComponent(id)}/notes`),
+  addApplicationNote: (id: string, body: string) =>
+    call<{ id: string; applicationId: string; authorUserId: string; body: string; isPinned: boolean; createdAt: string }>(
+      "POST",
+      `/api/build/applications/${encodeURIComponent(id)}/notes`,
+      { body },
+    ),
+  pinApplicationNote: (id: string, noteId: string, isPinned: boolean) =>
+    call<{ id: string; isPinned: boolean }>(
+      "PATCH",
+      `/api/build/applications/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
+      { isPinned },
+    ),
+  deleteApplicationNote: (id: string, noteId: string) =>
+    call<{ id: string }>(
+      "DELETE",
+      `/api/build/applications/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,
     ),
 
   // Messages
@@ -741,6 +1106,56 @@ export const buildApi = {
       improved: string;
       usage: { input: number; output: number };
     }>("POST", "/api/build/ai/improve-text", input),
+  aiInterviewPrep: (applicationId: string) =>
+    call<{
+      questions: { q: string; hint: string }[];
+      skillOverlap: string[];
+      missingSkills: string[];
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/interview-prep", { applicationId }),
+  aiTranslateVacancy: (input: {
+    title: string;
+    description: string;
+    targetLocales?: ("ru" | "en" | "kz")[];
+  }) =>
+    call<{
+      translations: Record<string, { title: string; description: string }>;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/translate-vacancy", input),
+  aiShortlist: (vacancyId: string) =>
+    call<{
+      items: { applicationId: string; rank: number; reasoning: string }[];
+      summary: string;
+      total: number;
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/shortlist", { vacancyId }),
+  aiCoverLetter: (input: { vacancyId: string; locale?: "ru" | "en" | "kz" }) =>
+    call<{
+      coverLetter: string;
+      skillsOverlap: string[];
+      usage: { input: number; output: number };
+    }>("POST", "/api/build/ai/cover-letter", input),
+  aiWhyMatch: (applicationId: string, force = false) =>
+    call<{
+      explanation: string;
+      cached: boolean;
+      skillsOverlap?: string[];
+      skillsMissing?: string[];
+      usage?: { input: number; output: number };
+    }>("POST", "/api/build/ai/why-match", { applicationId, force }),
+  aiVacancyFeedback: (vacancyId: string) =>
+    call<{
+      score: number;
+      strengths: string[];
+      suggestions: string[];
+      usage?: { input: number; output: number };
+    }>("POST", "/api/build/ai/vacancy-feedback", { vacancyId }),
+  aiDmSuggest: (peerId: string) =>
+    call<{
+      suggestions: string[];
+      cached?: boolean;
+      usage?: { input: number; output: number };
+    }>("POST", "/api/build/ai/dm-suggest", { peerId }),
   loyaltyMe: () =>
     call<{
       hires: number;
@@ -901,6 +1316,25 @@ export const buildApi = {
         applicantName: string | null;
       }[];
     }>("GET", "/api/build/referrals/me"),
+  // Job alerts
+  myAlert: () =>
+    call<{ alert: { id: string; keywords: string; skills: string; city: string | null; active: boolean } | null }>(
+      "GET", "/api/build/alerts/me",
+    ),
+  upsertAlert: (input: { keywords?: string; skills?: string; city?: string }) =>
+    call<{ alert: { id: string; keywords: string; skills: string; city: string | null; active: boolean } }>(
+      "POST", "/api/build/alerts", input,
+    ),
+  deleteAlert: () => call<{ unsubscribed: boolean }>("DELETE", "/api/build/alerts/me"),
+
+  // Verification
+  myVerification: () =>
+    call<{ request: { id: string; status: string; note: string | null; adminNote: string | null } | null }>(
+      "GET", "/api/build/verification/my",
+    ),
+  requestVerification: (note?: string) =>
+    call<{ request: { id: string; status: string } }>("POST", "/api/build/verification/request", { note }),
+
   publicStats: () =>
     call<{ vacancies: number; candidates: number; projects: number }>(
       "GET",
@@ -918,6 +1352,150 @@ export const buildApi = {
       cashback: { totalAev: number; entries: number };
       timestamp: string;
     }>("GET", "/api/build/stats", undefined, { auth: false }),
+  liveActivity: () =>
+    call<{
+      items: { kind: "VACANCY" | "APPLICATION" | "HIRE"; title: string; city: string | null; at: string }[];
+      total: number;
+    }>("GET", "/api/build/stats/activity", undefined, { auth: false }),
+  buildStatsTimeseries: () =>
+    call<{
+      vacancies: { day: string; n: number }[];
+      applications: { day: string; n: number }[];
+      projects: { day: string; n: number }[];
+    }>("GET", "/api/build/stats/timeseries", undefined, { auth: false }),
+  exportAll: () =>
+    call<{
+      generatedAt: string;
+      ownerUserId: string;
+      counts: { projects: number; vacancies: number; applications: number; reviews: number };
+      datasets: {
+        projects: Record<string, unknown>[];
+        vacancies: Record<string, unknown>[];
+        applications: Record<string, unknown>[];
+        reviews: Record<string, unknown>[];
+      };
+    }>("GET", "/api/build/stats/export/all"),
+  featuredEmployers: () =>
+    call<{
+      items: {
+        userId: string;
+        name: string | null;
+        title: string | null;
+        city: string | null;
+        photoUrl: string | null;
+        verifiedAt: string | null;
+        hires: number;
+        openVacancies: number;
+        avgRating: number;
+        reviewCount: number;
+      }[];
+      total: number;
+    }>("GET", "/api/build/stats/featured-employers", undefined, { auth: false }),
+  rejectReasonsBreakdown: (days = 90) =>
+    call<{
+      days: number;
+      total: number;
+      buckets: {
+        overqualified: number;
+        "missing-skill": number;
+        "salary-mismatch": number;
+        location: number;
+        timing: number;
+        other: number;
+        unspecified: number;
+      };
+    }>("GET", `/api/build/stats/reject-reasons?days=${encodeURIComponent(String(days))}`),
+  weeklyDigest: () =>
+    call<{
+      windowStart: string;
+      windowEnd: string;
+      applications: { now: number; prev: number; change: number };
+      vacanciesPosted: { now: number; prev: number; change: number };
+      hires: { now: number; prev: number; change: number };
+    }>("GET", "/api/build/stats/weekly"),
+  recruiterSourceBreakdown: (opts: { days?: number; vacancyId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.days != null) params.set("days", String(opts.days));
+    if (opts.vacancyId) params.set("vacancyId", opts.vacancyId);
+    const qs = params.toString();
+    return call<{
+      days: number;
+      total: number;
+      buckets: {
+        organic: { count: number; details: { tag: string; count: number }[] };
+        utm: { count: number; details: { tag: string; count: number }[] };
+        ref: { count: number; details: { tag: string; count: number }[] };
+        widget: { count: number; details: { tag: string; count: number }[] };
+        other: { count: number; details: { tag: string; count: number }[] };
+      };
+    }>("GET", `/api/build/stats/sources${qs ? "?" + qs : ""}`);
+  },
+  adminListPartnerKeys: () =>
+    call<{
+      items: {
+        id: string;
+        label: string;
+        scopesJson: string;
+        ownerUserId: string | null;
+        lastUsedAt: string | null;
+        usageCount: number;
+        revokedAt: string | null;
+        createdAt: string;
+      }[];
+      total: number;
+    }>("GET", "/api/build/admin/partner-keys"),
+  adminPartnerKeysUsage: () =>
+    call<{
+      windowDays: number;
+      items: {
+        keyId: string;
+        label: string;
+        days: { day: string; hits: number }[];
+      }[];
+    }>("GET", "/api/build/admin/partner-keys/usage"),
+  adminCreatePartnerKey: (label: string) =>
+    call<{
+      id: string;
+      label: string;
+      plaintext: string;
+      createdAt: string;
+    }>("POST", "/api/build/admin/partner-keys", { label }),
+  adminRevokePartnerKey: (id: string) =>
+    call<{ id: string; revokedAt: string }>(
+      "POST",
+      `/api/build/admin/partner-keys/${encodeURIComponent(id)}/revoke`,
+    ),
+  adminRotatePartnerKey: (id: string) =>
+    call<{
+      id: string;
+      label: string;
+      plaintext: string;
+      replacedKeyId: string;
+      createdAt: string;
+    }>(
+      "POST",
+      `/api/build/admin/partner-keys/${encodeURIComponent(id)}/rotate`,
+    ),
+  adminWeeklyPreview: (userId: string) =>
+    call<{
+      to: string;
+      subject: string;
+      body: string;
+      counts: { applications: number; vacanciesPosted: number; hires: number };
+      windowStart: string;
+    }>("GET", `/api/build/admin/weekly-preview/${encodeURIComponent(userId)}`),
+  adminInsights: () =>
+    call<{
+      windowStart: string;
+      windowEnd: string;
+      newUsers: { now: number; prev: number; change: number };
+      newApplications: { now: number; prev: number; change: number };
+      newVacancies: { now: number; prev: number; change: number };
+      hires: { now: number; prev: number; change: number };
+      conversionRate: number | null;
+      topEmployers: { userId: string; name: string | null; hires: number }[];
+      topVacancies: { id: string; title: string; apps: number }[];
+    }>("GET", "/api/build/admin/insights"),
   adminStats: () =>
     call<{
       leads: { total: number; last7d: number };

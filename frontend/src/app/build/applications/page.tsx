@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildApplication, type ApplicationStatus } from "@/lib/build/api";
+import { Skeleton } from "@/components/build/Skeleton";
+import { useToast } from "@/components/build/Toast";
 
 const STATUS_COLOR: Record<ApplicationStatus, string> = {
   PENDING: "text-amber-200 bg-amber-500/10 border-amber-500/20",
@@ -31,6 +33,7 @@ function Body() {
   const [items, setItems] = useState<BuildApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<ApplicationStatus | "ALL">("ALL");
+  const toast = useToast();
 
   useEffect(() => {
     buildApi
@@ -39,6 +42,18 @@ function Body() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  async function withdraw(id: string) {
+    if (!confirm("Withdraw this application? The employer will be notified.")) return;
+    try {
+      await buildApi.withdrawApplication(id);
+      toast.success("Application withdrawn");
+      const r = await buildApi.myApplications();
+      setItems(r.items);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const filtered = filter === "ALL" ? items : items.filter((a) => a.status === filter);
 
@@ -66,6 +81,8 @@ function Body() {
         </Link>
       </div>
 
+      <ClosingSoonBanner items={items} />
+
       <div className="mb-5 flex flex-wrap gap-2">
         {(["ALL", "PENDING", "ACCEPTED", "REJECTED"] as const).map((s) => (
           <button
@@ -83,7 +100,20 @@ function Body() {
         ))}
       </div>
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
+      {loading && (
+        <div className="space-y-3" aria-busy="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex justify-between">
+                <Skeleton width="50%" height={16} />
+                <Skeleton width={80} height={20} />
+              </div>
+              <Skeleton width="80%" height={11} className="mt-3" />
+              <Skeleton width="30%" height={11} className="mt-1.5" />
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && filtered.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
@@ -104,14 +134,60 @@ function Body() {
 
       <div className="space-y-3">
         {filtered.map((a) => (
-          <ApplicationCard key={a.id} app={a} />
+          <ApplicationCard key={a.id} app={a} onWithdraw={() => withdraw(a.id)} />
         ))}
       </div>
     </div>
   );
 }
 
-function ApplicationCard({ app }: { app: BuildApplication }) {
+function ClosingSoonBanner({ items }: { items: BuildApplication[] }) {
+  const closingSoon = items
+    .filter((a) => a.status === "PENDING" && a.vacancyStatus === "OPEN" && a.vacancyExpiresAt)
+    .map((a) => ({
+      ...a,
+      daysLeft: Math.ceil(
+        (new Date(a.vacancyExpiresAt!).getTime() - Date.now()) / 86400000,
+      ),
+    }))
+    .filter((a) => a.daysLeft >= 0 && a.daysLeft <= 3);
+
+  if (closingSoon.length === 0) return null;
+
+  return (
+    <div className="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+      <div className="text-xs font-semibold uppercase tracking-wider text-amber-200">
+        ⏰ Closing soon
+      </div>
+      <p className="mt-1 text-sm text-amber-100">
+        {closingSoon.length === 1
+          ? "1 vacancy you applied to is closing in the next 3 days. The recruiter may stop reviewing once it expires."
+          : `${closingSoon.length} vacancies you applied to are closing within 3 days.`}
+      </p>
+      <ul className="mt-2 space-y-0.5 text-xs">
+        {closingSoon.slice(0, 5).map((a) => (
+          <li key={a.id}>
+            <Link
+              href={`/build/vacancy/${encodeURIComponent(a.vacancyId)}`}
+              className="text-amber-200 hover:underline"
+            >
+              {a.vacancyTitle ?? "Vacancy"} —{" "}
+              {a.daysLeft === 0 ? "ends today" : `${a.daysLeft} day${a.daysLeft === 1 ? "" : "s"} left`}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ApplicationCard({
+  app,
+  onWithdraw,
+}: {
+  app: BuildApplication;
+  onWithdraw: () => void;
+}) {
   const statusCls = STATUS_COLOR[app.status];
   const icon = STATUS_ICON[app.status];
 
@@ -183,6 +259,15 @@ function ApplicationCard({ app }: { app: BuildApplication }) {
               Trial tasks
             </Link>
           </>
+        )}
+        {app.status === "PENDING" && (
+          <button
+            type="button"
+            onClick={onWithdraw}
+            className="rounded-md border border-rose-500/20 bg-rose-500/5 px-3 py-1 text-xs text-rose-200/80 transition hover:bg-rose-500/10"
+          >
+            Withdraw
+          </button>
         )}
       </div>
     </div>

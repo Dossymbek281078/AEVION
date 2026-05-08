@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type HydratedBookmark } from "@/lib/build/api";
+import { Skeleton } from "@/components/build/Skeleton";
 
 type Tab = "VACANCY" | "CANDIDATE";
 
@@ -76,28 +77,46 @@ function SavedBody() {
         </p>
       )}
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
-
-      {!loading && items.length === 0 && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
-          <p className="text-sm text-slate-400">
-            No saved {tab === "VACANCY" ? "vacancies" : "candidates"} yet. ★ a card on{" "}
-            <Link
-              href={tab === "VACANCY" ? "/build/vacancies" : "/build/talent"}
-              className="text-emerald-300 underline"
-            >
-              {tab === "VACANCY" ? "/build/vacancies" : "/build/talent"}
-            </Link>{" "}
-            to add one.
-          </p>
+      {loading && (
+        <div className="grid gap-3 sm:grid-cols-2" aria-busy="true">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <Skeleton width="60%" height={14} />
+              <Skeleton width="40%" height={11} className="mt-2" />
+              <div className="mt-3 flex justify-between">
+                <Skeleton width={60} height={11} />
+                <Skeleton width={80} height={11} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {items.map((b) => (
-          <SavedRow key={b.id} bookmark={b} />
-        ))}
-      </div>
+      {!loading && items.length === 0 && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-10 text-center">
+          <div className="text-5xl">{tab === "VACANCY" ? "🔖" : "👥"}</div>
+          <p className="mt-3 text-sm text-slate-300">
+            No saved {tab === "VACANCY" ? "vacancies" : "candidates"} yet.
+          </p>
+          <p className="mt-1.5 text-xs text-slate-500">
+            ★ on any card to bookmark it for later.
+          </p>
+          <Link
+            href={tab === "VACANCY" ? "/build/vacancies" : "/build/talent"}
+            className="mt-4 inline-block rounded-md bg-emerald-500 px-4 py-2 text-xs font-semibold text-emerald-950 hover:bg-emerald-400"
+          >
+            {tab === "VACANCY" ? "Browse vacancies →" : "Browse talent →"}
+          </Link>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {items.map((b) => (
+            <SavedRow key={b.id} bookmark={b} />
+          ))}
+        </div>
+      )}
     </>
   );
 }

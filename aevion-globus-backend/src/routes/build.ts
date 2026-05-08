@@ -22,21 +22,10 @@ import { statsRouter } from "./build/stats";
 import { adminRouter } from "./build/admin";
 import { leadsRouter } from "./build/leads";
 import { healthRouter } from "./build/health";
-// v2 killer-feature sub-routers
-import { availabilityRouter } from "./build/availability";
-import { salaryStatsRouter } from "./build/salary-stats";
-import { portfolioPhotosRouter } from "./build/portfolio-photos";
-import { communitiesRouter } from "./build/communities";
-import { teamHiringRouter } from "./build/team-hiring";
-import { shiftsRouter } from "./build/shifts";
-import { documentsRouter } from "./build/documents";
-import { videoRoomsRouter } from "./build/video-rooms";
-import { contractsRouter } from "./build/contracts";
-// v3 killer-feature sub-routers
-import { pushRouter } from "./build/push";
-import { safetyBriefingRouter } from "./build/safety-briefing";
-import { storiesRouter } from "./build/stories";
-import { paymentCalendarRouter } from "./build/payment-calendar";
+import { alertsRouter } from "./build/alerts";
+import { verificationRouter } from "./build/verification";
+import { publicRouter } from "./build/public";
+import { settingsRouter } from "./build/settings";
 
 export const buildRouter = Router();
 
@@ -79,21 +68,10 @@ buildRouter.use("/admin", adminRouter);
 buildRouter.post("/leads", leadsLimiter);
 buildRouter.use("/leads", leadsRouter);
 buildRouter.use("/health", healthRouter);
-
-// ── v2 killer features ─────────────────────────────────────────────────
-buildRouter.use("/availability", availabilityRouter);
-buildRouter.use("/salary-stats", salaryStatsRouter);
-buildRouter.use("/portfolio/photos", portfolioPhotosRouter);
-buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
-buildRouter.use("/communities", communitiesRouter);
-buildRouter.use("/team-requests", teamHiringRouter);
-buildRouter.use("/shifts", shiftsRouter);
-buildRouter.use("/documents", documentsRouter);
-buildRouter.use("/video", videoRoomsRouter);
-buildRouter.use("/applications", contractsRouter);
-
-// ── v3 killer features ─────────────────────────────────────────────────
-buildRouter.use("/push", pushRouter);
-buildRouter.use("/safety-briefing", safetyBriefingRouter);
-buildRouter.use("/stories", storiesRouter);
-buildRouter.use("/payment-calendar", paymentCalendarRouter);
+buildRouter.use("/alerts", alertsRouter);
+buildRouter.use("/verification", verificationRouter);
+// Public partner-facing read-only API. Mounted under /api/build/public/* so
+// /v1/vacancies resolves at /api/build/public/v1/vacancies. Auth is the
+// X-Build-Key header validated inside the public router.
+buildRouter.use("/public", publicRouter);
+buildRouter.use("/settings", settingsRouter);

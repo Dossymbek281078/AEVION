@@ -55,6 +55,9 @@
 ## Запрос
 **$5 M seed** · 40% команда (10 разработчиков) · 25% user acquisition · 20% юр+compliance · 15% runway.
 
+## Live status (для проверки в любой момент)
+- **`aevion.app/launch-status`** — live dashboard: backend health, 29 модулей с тиром, public API контракт, ссылка на daily smoke в GitHub Actions. Auto-refresh каждые 60 сек.
+
 ## Демо для инвестора (10 минут)
 1. **`aevion.app/qright`** — регистрируем кусок контента → SHA-256 + timestamp.
 2. **`aevion.app/qsign`** — подписываем ML-DSA-65, проверяем подпись через verify.

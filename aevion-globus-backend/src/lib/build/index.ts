@@ -212,6 +212,7 @@ async function _doEnsureBuildTables(): Promise<void> {
   // letter" with structured signal.
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "questionsJson" TEXT NOT NULL DEFAULT '[]';`);
   await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "viewCount" INT NOT NULL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE "BuildVacancy" ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMPTZ;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildApplication" (
@@ -232,6 +233,159 @@ async function _doEnsureBuildTables(): Promise<void> {
   // Used downstream for referrer rewards / leaderboard.
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "referredByUserId" TEXT;`);
   await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "rejectReason" TEXT;`);
+  // BuildPartnerApiKey: read-only API key for partner sites that want to
+  // syndicate the QBuild vacancy feed (e.g. an employer's own careers page).
+  // Stores a sha256 hash of the key, never the plaintext. The key itself
+  // (qb_pk_*) is shown to the admin once at creation time.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPartnerApiKey" (
+      "id" TEXT PRIMARY KEY,
+      "label" TEXT NOT NULL,
+      "keyHash" TEXT NOT NULL UNIQUE,
+      "scopesJson" TEXT NOT NULL DEFAULT '["vacancies:read"]',
+      "ownerUserId" TEXT,
+      "lastUsedAt" TIMESTAMPTZ,
+      "usageCount" INTEGER NOT NULL DEFAULT 0,
+      "revokedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPartnerApiKey_hash_idx" ON "BuildPartnerApiKey" ("keyHash") WHERE "revokedAt" IS NULL;`);
+
+  // BuildVacancyTemplate: recruiter-saved reusable vacancy blueprint.
+  // Stores the same fields a vacancy needs (title/description/skills/salary/
+  // questions) so a future post can spin up from the template instead of
+  // typing it again. Per-user, no project binding — the template can be
+  // applied to any project the recruiter owns.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVacancyTemplate" (
+      "id" TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL,
+      "skillsJson" TEXT NOT NULL DEFAULT '[]',
+      "salary" INTEGER NOT NULL DEFAULT 0,
+      "salaryCurrency" TEXT,
+      "city" TEXT,
+      "questionsJson" TEXT NOT NULL DEFAULT '[]',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyTemplate_owner_idx" ON "BuildVacancyTemplate" ("ownerUserId", "createdAt" DESC);`);
+
+  // BuildApplicationFlag: a recruiter (or anyone with auth) flags an
+  // application as spam / abuse / fake. Admin moderation queue resolves it.
+  // status: open / dismissed / actioned. resolvedBy + resolvedAt audit.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildApplicationFlag" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "reporterUserId" TEXT NOT NULL,
+      "reason" TEXT NOT NULL,
+      "note" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'open',
+      "resolvedBy" TEXT,
+      "resolvedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationFlag_status_idx" ON "BuildApplicationFlag" ("status", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationFlag_app_idx" ON "BuildApplicationFlag" ("applicationId");`);
+
+  // BuildVacancyEdit: append-only changelog of recruiter edits to a vacancy.
+  // Each row stores a JSON snapshot of which fields changed (before/after).
+  // Visible to the vacancy owner only — not part of the public API.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVacancyEdit" (
+      "id" TEXT PRIMARY KEY,
+      "vacancyId" TEXT NOT NULL,
+      "editorId" TEXT NOT NULL,
+      "changesJson" TEXT NOT NULL DEFAULT '{}',
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyEdit_vacancy_idx" ON "BuildVacancyEdit" ("vacancyId", "createdAt" DESC);`);
+
+  // BuildBulkTemplate: recruiter-saved message templates for bulk DMs.
+  // When a recruiter writes "Спасибо за отклик, мы свяжемся в течение 48
+  // часов" the same way 50 times, this lets them save it once and reuse.
+  // Per-user; max 30 enforced in the route.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildBulkTemplate" (
+      "id" TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildBulkTemplate_owner_idx" ON "BuildBulkTemplate" ("ownerUserId", "createdAt" DESC);`);
+
+  // BuildPartnerApiKeyHit: daily-aggregated usage per partner key for the
+  // 14-day sparkline on /build/admin/partner-keys. We don't keep per-request
+  // log rows — the table grows at 1 row per (key, day) max.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPartnerApiKeyHit" (
+      "keyId" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "hits" INT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("keyId", "day")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPartnerApiKeyHit_day_idx" ON "BuildPartnerApiKeyHit" ("day" DESC);`);
+
+  // BuildVacancyNote: private team-side notes attached to a vacancy.
+  // Distinct from BuildApplicationNote (per-applicant) — these are about the
+  // role itself ("budget approved up to 5M", "client wants Russian-speakers
+  // only", etc). Visible only to the vacancy owner.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVacancyNote" (
+      "id" TEXT PRIMARY KEY,
+      "vacancyId" TEXT NOT NULL,
+      "authorUserId" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVacancyNote_vacancy_idx" ON "BuildVacancyNote" ("vacancyId", "createdAt" DESC);`);
+
+  // BuildNotifPrefs: per-user opt-in/out for QBuild emails.
+  // jobAlerts — new vacancy alerts for talent (also gated by BuildJobAlert.active).
+  // applicationEmail — recruiter-side: notify on new application to my vacancies.
+  // weeklyDigest — periodic summary email (cron not yet wired).
+  // marketing — product updates / launches.
+  // Defaults assume opt-in (true) so existing behavior is preserved when no row exists.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildNotifPrefs" (
+      "userId" TEXT PRIMARY KEY,
+      "jobAlerts" BOOLEAN NOT NULL DEFAULT TRUE,
+      "applicationEmail" BOOLEAN NOT NULL DEFAULT TRUE,
+      "weeklyDigest" BOOLEAN NOT NULL DEFAULT TRUE,
+      "marketing" BOOLEAN NOT NULL DEFAULT TRUE,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // AI "why match" cached explanation. Populated on demand by /ai/why-match —
+  // we cache it on the application row so re-opening the same candidate
+  // doesn't re-spend tokens.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "aiWhyMatch" TEXT;`);
+
+  // Recruiter "snooze until" — temporarily hide a PENDING application from
+  // the default view without rejecting it. Helps clear the queue when the
+  // recruiter is waiting on the candidate (e.g. test task in flight).
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "snoozedUntil" TIMESTAMPTZ;`);
+
+  // Application source tag — where the candidate landed from. Free-form
+  // string (organic | widget | utm:linkedin | utm:google | referral) so
+  // analytics can bucket without schema migrations.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "sourceTag" TEXT;`);
+
+  // Recruiter-only label e.g. SHORTLIST / INTERVIEW / HOLD / TOP_PICK.
+  // Kept as a free-form short string rather than an enum so we can add
+  // labels without schema migrations.
+  await pool.query(`ALTER TABLE "BuildApplication" ADD COLUMN IF NOT EXISTS "labelKey" TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildApplication_vacancy_user_uniq" ON "BuildApplication" ("vacancyId", "userId");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_user_created_idx" ON "BuildApplication" ("userId", "createdAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplication_vacancy_status_idx" ON "BuildApplication" ("vacancyId", "status");`);
@@ -469,6 +623,54 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildReview_project_idx"
     ON "BuildReview" ("projectId", "createdAt" DESC);`);
 
+  // BuildJobAlert: candidate subscribes to receive email when a new vacancy
+  // matches their keywords/skills. Fire-and-forget via Resend when POST /vacancies.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildJobAlert" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "email" TEXT NOT NULL,
+      "keywords" TEXT NOT NULL DEFAULT '',
+      "skills" TEXT NOT NULL DEFAULT '',
+      "city" TEXT,
+      "active" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildJobAlert_user_uniq" ON "BuildJobAlert" ("userId");`);
+
+  // BuildVerificationRequest: candidate submits a request for the ✓ verified badge.
+  // Admin reviews from /build/admin/users or a dedicated queue.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildVerificationRequest" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL UNIQUE,
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "note" TEXT,
+      "adminNote" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildVerifReq_status_idx" ON "BuildVerificationRequest" ("status", "createdAt" DESC);`);
+
+  // BuildApplicationNote: private recruiter notes attached to an application.
+  // Visible only to the vacancy owner (or ADMIN). Used by the recruiter to
+  // jot impressions, screening status, etc. without polluting the candidate-
+  // facing rejectReason field.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildApplicationNote" (
+      "id" TEXT PRIMARY KEY,
+      "applicationId" TEXT NOT NULL,
+      "authorUserId" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "isPinned" BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`ALTER TABLE "BuildApplicationNote" ADD COLUMN IF NOT EXISTS "isPinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildApplicationNote_app_idx" ON "BuildApplicationNote" ("applicationId", "isPinned" DESC, "createdAt" DESC);`);
+
   // Idempotent seed of the 4 default plans. ON CONFLICT DO NOTHING so
   // operators can edit a plan in DB without it being clobbered on boot.
   await pool.query(
@@ -522,7 +724,11 @@ async function _doEnsureBuildTables(): Promise<void> {
 export const buildPool = pool;
 
 export const PROJECT_STATUSES = ["OPEN", "IN_PROGRESS", "DONE"] as const;
-export const VACANCY_STATUSES = ["OPEN", "CLOSED"] as const;
+// ARCHIVED is "closed and hidden" — owner explicitly hides the vacancy from
+// public feeds (RSS, partner API, /build/vacancies, employer page) but keeps
+// the row + its application history for analytics. Republish moves it back
+// to OPEN and resets expiry.
+export const VACANCY_STATUSES = ["OPEN", "CLOSED", "ARCHIVED"] as const;
 export const APPLICATION_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
 export const BUILD_ROLES = ["CLIENT", "CONTRACTOR", "WORKER", "ADMIN"] as const;
 export const SHIFT_PREFERENCES = ["DAY", "NIGHT", "FLEX", "ANY"] as const;
@@ -792,13 +998,19 @@ export async function maybeCleanupExpiredBoosts(): Promise<number> {
   if (now - lastCleanupAt < CLEANUP_COOLDOWN_MS) return 0;
   lastCleanupAt = now;
   try {
-    const r = await pool.query(
-      `DELETE FROM "BuildBoost" WHERE "endsAt" < NOW() - INTERVAL '7 days'`,
-    );
-    return r.rowCount ?? 0;
+    const [boosts, vacancies] = await Promise.all([
+      pool.query(`DELETE FROM "BuildBoost" WHERE "endsAt" < NOW() - INTERVAL '7 days'`),
+      // Auto-close vacancies whose expiresAt has passed
+      pool.query(
+        `UPDATE "BuildVacancy" SET "status" = 'CLOSED'
+         WHERE "status" = 'OPEN' AND "expiresAt" IS NOT NULL AND "expiresAt" < NOW()`,
+      ),
+    ]);
+    const total = (boosts.rowCount ?? 0) + (vacancies.rowCount ?? 0);
+    if (total > 0) console.info(`[build] cleanup: removed ${boosts.rowCount} old boosts, closed ${vacancies.rowCount} expired vacancies`);
+    return total;
   } catch (err) {
-    // Don't break user-facing requests over a maintenance task.
-    console.warn("[build] expired-boost cleanup failed:", (err as Error).message);
+    console.warn("[build] cleanup failed:", (err as Error).message);
     return 0;
   }
 }

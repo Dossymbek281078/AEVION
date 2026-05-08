@@ -264,161 +264,674 @@ ${kindGuide[kind]}
   }
 });
 
-// POST /api/build/ai/generate-vacancy — turn a one-line brief into a
-// structured BuildVacancy draft (title + skills[] + description +
-// salary range guess). Recruiter UI calls this from the "create vacancy"
-// flow so they don't have to fight a blank textarea.
-aiRouter.post("/generate-vacancy", aiRateLimiter, async (req, res) => {
+// POST /api/build/ai/shortlist
+// Body: { vacancyId: string }
+// Owner-only. Reads ALL pending applications + per-applicant AI scores +
+// profiles, asks Claude to pick the top 3 candidates and explain why.
+// Returns { items: [{ applicationId, rank, reasoning }], summary }.
+aiRouter.post("/shortlist", aiRateLimiter, async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
-    const brief = vString(req.body?.brief, "brief", { min: 5, max: 800 });
-    if (!brief.ok) return fail(res, 400, brief.error);
-    const city = req.body?.city == null ? null : String(req.body.city).trim().slice(0, 100);
-    const localeRaw = typeof req.body?.locale === "string" ? req.body.locale : "ru";
-    const locale = ["ru", "en", "kz"].includes(localeRaw) ? localeRaw : "ru";
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 64 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
 
-    const { callClaude } = await import("../../lib/build/ai");
+    const owner = await pool.query(
+      `SELECT v."title", v."description", v."skillsJson", p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId.value],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_shortlist");
+    }
 
-    const sys = `Ты — HR-эксперт стройплощадки на платформе AEVION QBuild.
-Получаешь короткий бриф вакансии от работодателя и возвращаешь СТРОГИЙ JSON со схемой:
-{
-  "title": string,            // 4–80 символов, конкретно (не "Сотрудник", а "Сварщик 5 разряда")
-  "skills": string[],         // 3–8 конкретных навыков
-  "description": string,      // 60–800 символов: задачи, требования, условия (смены, оплата, тип занятости)
-  "salaryMin": number|null,   // оценка по рынку, ${city ? `город: ${city}` : "Россия/СНГ"}
-  "salaryMax": number|null,
-  "salaryCurrency": "RUB"|"KZT"|"USD",
-  "questions": string[]       // 3–5 коротких квалификационных вопросов кандидату
-}
+    const apps = await pool.query(
+      `SELECT a."id", a."message", a."aiScoreOverall", a."matchScore" AS "_matchScore",
+              u."name" AS "applicantName",
+              bp."title", bp."summary", bp."skillsJson", bp."experienceYears", bp."city"
+       FROM "BuildApplication" a
+       LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+       WHERE a."vacancyId" = $1 AND a."status" = 'PENDING'
+       ORDER BY a."createdAt" DESC
+       LIMIT 30`,
+      [vacancyId.value],
+    );
 
-Правила:
-- Не выдумывай факты, которых нет в брифе. Если не указано "сменно/вахта" — пиши "обсуждаемо".
-- Зарплата — вилка по рынку, не точная цифра. Если бриф не упоминает уровень — bias к низу–середине.
-- Язык всех полей: ${locale === "en" ? "English" : locale === "kz" ? "Kazakh (cyrillic)" : "Russian"}.
-- Никакого markdown, никакого text вне JSON. Только raw JSON.
-- Не пиши \`\`\`json\`\`\`-обёртку.`;
-
-    const reply = await callClaude({
-      systemPrompt: sys,
-      messages: [{ role: "user", content: brief.value }],
-      maxTokens: 1024,
-      cacheSystem: true,
-    });
-
-    const cleaned = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      return fail(res, 502, "ai_returned_invalid_json", {
-        sample: cleaned.slice(0, 200),
+    if (apps.rowCount === 0) {
+      return ok(res, {
+        items: [],
+        summary: "No pending applications to shortlist yet.",
       });
     }
+
+    type AppRow = {
+      id: string;
+      message: string | null;
+      aiScoreOverall: number | null;
+      applicantName: string;
+      title: string | null;
+      summary: string | null;
+      skillsJson: string;
+      experienceYears: number | null;
+      city: string | null;
+    };
+
+    const rows = apps.rows as AppRow[];
+    const v = owner.rows[0];
+    const requiredSkills = safeParseJson(v.skillsJson, [] as string[]);
+
+    const candidatesPayload = rows
+      .map((r, i) => {
+        const skills = safeParseJson(r.skillsJson, [] as string[]);
+        return [
+          `--- Candidate #${i + 1} (id: ${r.id}) ---`,
+          `Name: ${r.applicantName ?? "—"}`,
+          `Headline: ${r.title ?? "—"}`,
+          `Years exp: ${r.experienceYears ?? 0}`,
+          `City: ${r.city ?? "—"}`,
+          `Skills: ${skills.join(", ") || "—"}`,
+          `AI score (per-application screening): ${r.aiScoreOverall ?? "—"}/100`,
+          `Cover note: ${(r.message ?? "").slice(0, 400) || "—"}`,
+          `Profile summary: ${(r.summary ?? "").slice(0, 400) || "—"}`,
+        ].join("\n");
+      })
+      .join("\n\n");
+
+    const userPayload = `VACANCY: ${v.title}
+Description: ${String(v.description).slice(0, 600)}
+Required skills: ${requiredSkills.join(", ") || "—"}
+
+PENDING APPLICATIONS (${rows.length}):
+${candidatesPayload}
+
+Pick up to 3 strongest candidates. Возвращай только JSON в формате:
+{"summary": "1-2 sentences overall pool quality", "picks": [{"applicationId": "...", "rank": 1, "reasoning": "1-2 sentences why"}, ...]}
+Никаких преамбул, никакого markdown.`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — старший рекрутер на платформе AEVION QBuild (стройка/инженерия).
+Тебе показан список кандидатов на конкретную вакансию + их скоры и резюме.
+Задача: выбрать топ-3 (или меньше, если меньше достойных), объяснить почему.
+
+Жёсткие правила:
+- Опирайся на навыки + годы опыта + конкретику в cover note + AI score.
+- Не выдумывай данные, которых нет.
+- Кратко (1-2 предложения на обоснование).
+- Возвращай только валидный JSON. Никакого текста до/после.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 1500,
+      cacheSystem: false,
+    });
+
+    const stripped = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: { summary?: string; picks?: { applicationId: string; rank: number; reasoning: string }[] } = {};
+    try {
+      parsed = JSON.parse(stripped) as typeof parsed;
+    } catch {
+      return fail(res, 502, "ai_shortlist_invalid_json", { details: stripped.slice(0, 200) });
+    }
+
+    const validIds = new Set(rows.map((r) => r.id));
+    const picks = (parsed.picks ?? [])
+      .filter((p) => validIds.has(p.applicationId))
+      .slice(0, 3)
+      .sort((a, b) => a.rank - b.rank);
+
     return ok(res, {
-      draft: parsed,
+      items: picks,
+      summary: parsed.summary ?? "",
+      total: rows.length,
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_generate_vacancy_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_shortlist_failed", { details: (err as Error).message });
   }
 });
 
-// POST /api/build/ai/match-vacancy — score how well a candidate profile
-// matches a vacancy. UI on /build/ai-match shows the score + breakdown.
-aiRouter.post("/match-vacancy", aiRateLimiter, async (req, res) => {
+// POST /api/build/ai/interview-prep
+// Body: { applicationId: string }
+// Owner-only (verified against the application's parent vacancy). Claude
+// reads the vacancy + the candidate's profile + cover note and returns
+// 5 likely-to-be-useful interview questions with one-line rationale each.
+// Saves the recruiter from cold-typing into ChatGPT before every call.
+aiRouter.post("/interview-prep", aiRateLimiter, async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
-    const profileText = vString(req.body?.profileText, "profileText", { min: 20, max: 4000 });
-    if (!profileText.ok) return fail(res, 400, profileText.error);
-    const vacancyText = vString(req.body?.vacancyText, "vacancyText", { min: 20, max: 4000 });
-    if (!vacancyText.ok) return fail(res, 400, vacancyText.error);
+    const applicationId = vString(req.body?.applicationId, "applicationId", { min: 1, max: 64 });
+    if (!applicationId.ok) return fail(res, 400, applicationId.error);
+
+    const r = await pool.query(
+      `SELECT a."id", a."message", a."userId" AS "candidateId",
+              v."title", v."description", v."skillsJson",
+              p."clientId",
+              u."name" AS "candidateName",
+              bp."title" AS "candidateHeadline", bp."summary" AS "candidateSummary",
+              bp."skillsJson" AS "candidateSkillsJson", bp."experienceYears" AS "candidateYears"
+       FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "AEVIONUser" u ON u."id" = a."userId"
+       LEFT JOIN "BuildProfile" bp ON bp."userId" = a."userId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [applicationId.value],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    const row = r.rows[0];
+    if (row.clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_prep");
+    }
+
+    const reqSkills = safeParseJson(row.skillsJson, [] as string[]);
+    const candSkills = safeParseJson(row.candidateSkillsJson, [] as string[]);
+    const candSet = new Set(candSkills.map((s: string) => s.toLowerCase()));
+    const overlap = reqSkills.filter((s: string) => candSet.has(s.toLowerCase()));
+    const missing = reqSkills.filter((s: string) => !candSet.has(s.toLowerCase()));
+
+    const userPayload = `VACANCY: ${row.title}
+Description: ${String(row.description).slice(0, 500)}
+Required skills: ${reqSkills.join(", ") || "—"}
+
+CANDIDATE: ${row.candidateName ?? "—"}
+Headline: ${row.candidateHeadline ?? "—"}
+Years experience: ${row.candidateYears ?? 0}
+Skills declared: ${candSkills.join(", ") || "—"}
+Skill overlap with vacancy: ${overlap.join(", ") || "(none)"}
+Skills declared on vacancy that the candidate did NOT list: ${missing.join(", ") || "(none)"}
+Profile summary: ${String(row.candidateSummary ?? "").slice(0, 400) || "—"}
+Cover note: ${String(row.message ?? "").slice(0, 400) || "—"}
+
+Сгенерируй 5 вопросов для интервью.`;
 
     const { callClaude } = await import("../../lib/build/ai");
-    const sys = `Ты — рекрутер на стройплощадке платформы AEVION QBuild.
-Получаешь две блока текста: профиль кандидата и описание вакансии. Возвращаешь СТРОГИЙ JSON:
-{
-  "score": number,             // 0-100, насколько профиль подходит
-  "label": string,              // короткая метка ("Сильное совпадение", "Частичное", "Не подходит")
-  "strengths": string[],        // 2-5 пунктов, что у кандидата совпадает с требованиями
-  "gaps": string[],             // 0-5 пунктов, чего не хватает
-  "tip": string                 // одно предложение совета кандидату для отклика
-}
-
-Правила:
-- Не выдумывай факты, которых нет в текстах. Если в профиле нет упоминания навыка — это gap.
-- score < 50 ⇒ label "Не подходит"; 50-79 ⇒ "Частичное совпадение"; 80+ ⇒ "Сильное совпадение".
-- Никакого markdown, никакой обёртки \`\`\`json\`\`\`. Только raw JSON.
-- Язык ответа: русский.`;
-
     const reply = await callClaude({
-      systemPrompt: sys,
-      messages: [{ role: "user", content: `ПРОФИЛЬ:\n${profileText.value}\n\n---\n\nВАКАНСИЯ:\n${vacancyText.value}` }],
-      maxTokens: 800,
-      cacheSystem: true,
+      systemPrompt: `Ты — старший рекрутер на платформе AEVION QBuild (стройка/инженерия).
+Твоя задача: подготовить рекрутеру 5 вопросов для интервью с конкретным кандидатом.
+
+Жёсткие правила:
+- Вопросы должны быть конкретны для этой связки vacancy + candidate.
+  Не "расскажите о себе" — а "вы упомянули X, как именно вы делали Y".
+- 1-2 вопроса должны проверять навык, заявленный в вакансии, но НЕ
+  заявленный кандидатом (если такой есть).
+- 1-2 вопроса должны углубить заявленный опыт кандидата.
+- 1 вопрос про soft skills / motivation, привязанный к роли.
+- К каждому вопросу — короткая (≤15 слов) подсказка для рекрутера, что
+  именно проверяется.
+- Возвращай только JSON:
+  {"questions": [{"q": "...", "hint": "..."}, ...]}
+- Никаких преамбул, никакого markdown.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 1200,
+      cacheSystem: false,
     });
 
-    const cleaned = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
-    let parsed: unknown;
+    const stripped = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: { questions?: { q: string; hint: string }[] } = {};
     try {
-      parsed = JSON.parse(cleaned);
+      parsed = JSON.parse(stripped) as typeof parsed;
     } catch {
-      return fail(res, 502, "ai_returned_invalid_json", { sample: cleaned.slice(0, 200) });
+      return fail(res, 502, "ai_interview_prep_invalid_json", { details: stripped.slice(0, 200) });
     }
+
+    const questions = (parsed.questions ?? [])
+      .filter((q) => typeof q?.q === "string" && typeof q?.hint === "string")
+      .slice(0, 5);
+
     return ok(res, {
-      match: parsed,
+      questions,
+      skillOverlap: overlap,
+      missingSkills: missing,
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_match_vacancy_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_interview_prep_failed", { details: (err as Error).message });
   }
 });
 
-// POST /api/build/ai/cover-letter — generate a tailored cover letter from
-// profile + vacancy. UI on /build/ai-match offers tone presets.
+// POST /api/build/ai/translate-vacancy
+// Body: { title: string, description: string, targetLocales?: string[] }
+// Returns { translations: { [locale]: { title, description } } } for the
+// requested locales (defaults to ["ru", "en", "kz"] minus whatever locale
+// the source is already in).
+//
+// Stateless — caller decides whether to persist the result. We keep it
+// stateless so a recruiter can preview translations on a draft vacancy
+// before saving, and because storing them per-vacancy would balloon
+// schema across modules we don't own here.
+aiRouter.post("/translate-vacancy", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const title = vString(req.body?.title, "title", { min: 3, max: 200 });
+    if (!title.ok) return fail(res, 400, title.error);
+    const description = vString(req.body?.description, "description", { min: 10, max: 10_000 });
+    if (!description.ok) return fail(res, 400, description.error);
+
+    const allLocales = ["ru", "en", "kz"] as const;
+    type Loc = (typeof allLocales)[number];
+    const requested: Loc[] = Array.isArray(req.body?.targetLocales)
+      ? (req.body.targetLocales as unknown[]).filter((x): x is Loc =>
+          allLocales.includes(x as Loc),
+        )
+      : ["ru", "en", "kz"];
+    if (requested.length === 0) return fail(res, 400, "no_target_locales");
+
+    const labels: Record<Loc, string> = {
+      ru: "Russian (Russia)",
+      en: "English (US)",
+      kz: "Kazakh (cyrillic)",
+    };
+
+    const userPayload = `SOURCE TITLE: ${title.value}
+
+SOURCE DESCRIPTION:
+${description.value}
+
+Translate into the following locales: ${requested.map((l) => labels[l]).join(", ")}.
+
+Return ONLY valid JSON in this exact shape, no markdown, no preamble:
+{"translations": {${requested.map((l) => `"${l}": {"title": "...", "description": "..."}`).join(", ")}}}`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `You are a professional construction-industry translator for AEVION QBuild.
+
+Hard rules:
+- Translate the vacancy title and description into the requested locales.
+- Preserve technical terms (welding, scaffolding, AutoCAD, etc.) — use the
+  natural local form, do not translate brand names.
+- Match the register of the source (formal job posting), no marketing fluff.
+- Keep paragraph breaks. No markdown headings.
+- Return ONLY a JSON object — no preamble, no code fences.
+- Do not invent facts that aren't in the source.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 2200,
+      cacheSystem: false,
+    });
+
+    const stripped = reply.text.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
+    let parsed: { translations?: Record<string, { title?: string; description?: string }> } = {};
+    try {
+      parsed = JSON.parse(stripped) as typeof parsed;
+    } catch {
+      return fail(res, 502, "ai_translate_invalid_json", { details: stripped.slice(0, 200) });
+    }
+
+    const translations: Record<string, { title: string; description: string }> = {};
+    for (const loc of requested) {
+      const t = parsed.translations?.[loc];
+      if (t && typeof t.title === "string" && typeof t.description === "string") {
+        translations[loc] = { title: t.title, description: t.description };
+      }
+    }
+
+    return ok(res, {
+      translations,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_translate_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/cover-letter
+// Body: { vacancyId: string, locale?: "ru" | "en" | "kz" }
+// Generates a tailored cover note from the user's profile + vacancy. The
+// candidate sees a draft they can edit before submitting — never auto-submits.
 aiRouter.post("/cover-letter", aiRateLimiter, async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
 
-    const profileText = vString(req.body?.profileText, "profileText", { min: 20, max: 4000 });
-    if (!profileText.ok) return fail(res, 400, profileText.error);
-    const vacancyText = vString(req.body?.vacancyText, "vacancyText", { min: 20, max: 4000 });
-    if (!vacancyText.ok) return fail(res, 400, vacancyText.error);
-    const toneRaw = typeof req.body?.tone === "string" ? req.body.tone : "professional";
-    const tone = ["professional", "friendly", "concise"].includes(toneRaw) ? toneRaw : "professional";
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 64 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
+    const locale = typeof req.body?.locale === "string" ? req.body.locale.trim().slice(0, 8) : "ru";
 
-    const toneGuide: Record<string, string> = {
-      professional: "Деловой тон. Сухо, по делу, без эмоций. 4-6 предложений.",
-      friendly: "Тёплый дружелюбный тон, но без панибратства. 4-6 предложений.",
-      concise: "Максимально коротко: 2-3 предложения. Только опыт + готов начать.",
-    };
+    const [vRow, pRow] = await Promise.all([
+      pool.query(
+        `SELECT v."title", v."description", v."skillsJson", v."salary", v."salaryCurrency", v."city",
+                p."title" AS "projectTitle", p."city" AS "projectCity"
+         FROM "BuildVacancy" v
+         LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE v."id" = $1 LIMIT 1`,
+        [vacancyId.value],
+      ),
+      pool.query(
+        `SELECT "name","title","summary","skillsJson","experienceYears","city"
+         FROM "BuildProfile" WHERE "userId" = $1 LIMIT 1`,
+        [auth.sub],
+      ),
+    ]);
+    if (vRow.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (pRow.rowCount === 0) return fail(res, 400, "profile_required_for_ai_cover_letter");
+
+    const v = vRow.rows[0];
+    const p = pRow.rows[0];
+    const vacancySkills = safeParseJson(v.skillsJson, [] as string[]);
+    const profileSkills = safeParseJson(p.skillsJson, [] as string[]);
+    const overlap = vacancySkills.filter((s: string) =>
+      profileSkills.some((ps: string) => ps.toLowerCase() === s.toLowerCase()),
+    );
+
+    const userPayload = `VACANCY:
+Title: ${v.title}
+Project: ${v.projectTitle || "—"}
+City: ${v.city || v.projectCity || "—"}
+Salary: ${v.salary > 0 ? `${v.salary} ${v.salaryCurrency || "USD"}` : "не указано"}
+Description:
+${v.description}
+Required skills: ${vacancySkills.join(", ") || "—"}
+
+CANDIDATE PROFILE:
+Name: ${p.name}
+Headline: ${p.title || "—"}
+City: ${p.city || "—"}
+Years experience: ${p.experienceYears ?? 0}
+Skills: ${profileSkills.join(", ") || "—"}
+Skills overlap with vacancy: ${overlap.join(", ") || "(none)"}
+Summary:
+${p.summary || "—"}
+
+Сформируй сопроводительное. 3–5 коротких предложений. Без markdown.`;
 
     const { callClaude } = await import("../../lib/build/ai");
     const reply = await callClaude({
-      systemPrompt: `Ты — редактор сопроводительных писем для строителей на платформе AEVION QBuild.
-Получаешь профиль кандидата и описание вакансии. Возвращаешь готовое сопроводительное письмо ПРОСТЫМ ТЕКСТОМ (без markdown, без подписи "С уважением, ...", без email-шапки).
+      systemPrompt: `Ты — карьерный консультант на платформе AEVION QBuild (стройка/инженерные роли).
+Сгенерируй сопроводительное письмо к отклику от лица кандидата.
 
-${toneGuide[tone]}
-
-Правила:
-- Используй только факты из профиля. Не выдумывай работодателей, годы, проекты.
-- Связывай конкретные навыки кандидата с конкретными требованиями вакансии.
-- Без преамбулы вроде "Вот письмо:". Только сам текст.
-- Язык: русский.`,
-      messages: [{ role: "user", content: `ПРОФИЛЬ:\n${profileText.value}\n\n---\n\nВАКАНСИЯ:\n${vacancyText.value}` }],
-      maxTokens: 800,
-      cacheSystem: true,
+Жёсткие правила:
+- 3–5 коротких предложений, разговорный, профессиональный.
+- Опирайся ТОЛЬКО на данные из профиля. Никаких вымышленных компаний, объектов, цифр.
+- Если в профиле нет нужного навыка — НЕ заявляй, что он есть.
+- Подсвети 1–2 совпадения между навыками вакансии и профилем.
+- Заверши готовностью обсудить детали и выйти.
+- Ответ строго на ${locale === "en" ? "English" : locale === "kz" ? "Kazakh" : "Russian"}.
+- Без преамбул типа "Вот письмо:". Только сам текст.
+- Без markdown.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 700,
+      cacheSystem: false,
     });
 
     return ok(res, {
       coverLetter: reply.text.trim(),
+      skillsOverlap: overlap,
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
     return fail(res, 500, "ai_cover_letter_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/why-match
+// Body: { applicationId: string, force?: boolean }
+// Recruiter-side: explains in 2-3 sentences why a specific candidate matches
+// (or doesn't match) a vacancy. Cached on BuildApplication.aiWhyMatch so
+// re-opening the same candidate doesn't burn tokens. Pass force:true to
+// regenerate.
+aiRouter.post("/why-match", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const applicationId = vString(req.body?.applicationId, "applicationId", { min: 1, max: 64 });
+    if (!applicationId.ok) return fail(res, 400, applicationId.error);
+    const force = req.body?.force === true;
+
+    const r = await pool.query(
+      `SELECT a."id", a."message", a."aiWhyMatch", a."matchScore",
+              v."title" AS "vacancyTitle", v."description" AS "vacancyDesc",
+              v."skillsJson" AS "vacancySkillsJson",
+              p."clientId",
+              prof."name" AS "candidateName", prof."title" AS "candidateHeadline",
+              prof."skillsJson" AS "candidateSkillsJson",
+              prof."experienceYears", prof."summary"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "BuildProfile" prof ON prof."userId" = a."userId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [applicationId.value],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    const row = r.rows[0];
+    if (row.clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    if (!force && row.aiWhyMatch) {
+      return ok(res, { explanation: row.aiWhyMatch, cached: true });
+    }
+
+    const vSkills = safeParseJson(row.vacancySkillsJson, [] as string[]);
+    const cSkills = safeParseJson(row.candidateSkillsJson, [] as string[]);
+    const overlap = vSkills.filter((s: string) =>
+      cSkills.some((cs: string) => cs.toLowerCase() === s.toLowerCase()),
+    );
+    const missing = vSkills.filter((s: string) => !overlap.includes(s));
+
+    const userPayload = `VACANCY:
+Title: ${row.vacancyTitle}
+Description: ${String(row.vacancyDesc || "").slice(0, 1000)}
+Required skills: ${vSkills.join(", ") || "—"}
+
+CANDIDATE:
+Name: ${row.candidateName || "Anonymous"}
+Headline: ${row.candidateHeadline || "—"}
+Years experience: ${row.experienceYears ?? 0}
+Skills: ${cSkills.join(", ") || "—"}
+Skills match: ${overlap.join(", ") || "(none)"}
+Skills missing: ${missing.join(", ") || "(none)"}
+Match score: ${row.matchScore ?? "n/a"}
+Cover note: ${String(row.message || "").slice(0, 400) || "(none)"}
+Summary: ${String(row.summary || "").slice(0, 400) || "(none)"}
+
+Объясни в 2-3 предложениях, насколько кандидат подходит. Без markdown, без списков.`;
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — рекрутинг-ассистент AEVION QBuild. Объясняешь рекрутеру, почему кандидат подходит (или не подходит) к вакансии.
+
+Жёсткие правила:
+- 2-3 предложения, по сути.
+- Опирайся ТОЛЬКО на предоставленные данные. Никаких выдумок про опыт или сертификаты.
+- Назови 1-2 сильные стороны и 1 риск/пробел.
+- Без markdown, без эмодзи, без списков.
+- Тональность нейтральная и трезвая, без пафоса.
+- Если match очень слабый — скажи это прямо.
+- Ответ на русском.`,
+      messages: [{ role: "user", content: userPayload }],
+      maxTokens: 400,
+      cacheSystem: false,
+    });
+
+    const explanation = reply.text.trim().slice(0, 2000);
+    await pool.query(
+      `UPDATE "BuildApplication" SET "aiWhyMatch" = $1 WHERE "id" = $2`,
+      [explanation, applicationId.value],
+    );
+
+    return ok(res, {
+      explanation,
+      cached: false,
+      skillsOverlap: overlap,
+      skillsMissing: missing,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_why_match_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/vacancy-feedback — owner-only quality review of a vacancy.
+// Returns a 0-100 score, what's working, and 3-5 concrete improvement bullets.
+// Body: { vacancyId: string }
+aiRouter.post("/vacancy-feedback", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const vacancyId = vString(req.body?.vacancyId, "vacancyId", { min: 1, max: 64 });
+    if (!vacancyId.ok) return fail(res, 400, vacancyId.error);
+
+    const r = await pool.query(
+      `SELECT v."id", v."title", v."description", v."skillsJson", v."salary", v."salaryCurrency", v."city",
+              p."clientId"
+       FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId.value],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    const row = r.rows[0];
+    if (row.clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
+
+    let skills: string[] = [];
+    try {
+      const parsed = JSON.parse(row.skillsJson ?? "[]");
+      if (Array.isArray(parsed)) skills = parsed.filter((s) => typeof s === "string");
+    } catch {
+      /* ignore */
+    }
+
+    const lines = [
+      `Title: ${row.title}`,
+      `City: ${row.city || "—"}`,
+      `Salary: ${row.salary > 0 ? `${row.salary} ${row.salaryCurrency || "USD"}` : "not posted"}`,
+      `Skills tags: ${skills.length ? skills.join(", ") : "none"}`,
+      "",
+      `Description:`,
+      row.description || "(empty)",
+    ].join("\n");
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — рекрутер-эксперт на платформе AEVION QBuild (стройка/инженерия).
+Тебе дают полный текст вакансии. Оцени её качество с точки зрения кандидата.
+
+Ответь СТРОГО валидным JSON, без markdown, без бэктиков, без преамбулы:
+{
+  "score": <0..100, целое число>,
+  "strengths": ["<плюс 1>", "<плюс 2>"],   // 2–4 коротких bullet
+  "suggestions": ["<совет 1>", "<совет 2>"] // 3–5 коротких конкретных bullet
+}
+
+Критерии оценки:
+- Указана ли зарплата / вилка (без неё − 25 баллов)
+- Конкретность задач (не "выполнение работ", а "монтаж металлоконструкций до 3 тонн")
+- Условия: смены, оплата, проживание, спецодежда
+- Требования: опыт в годах, сертификаты, инструменты
+- Длина: меньше 200 символов = плохо, больше 3000 = тоже плохо
+
+Тон советов — деловой, без вежливых преамбул, прямые рекомендации.
+Язык ответа — русский.`,
+      messages: [{ role: "user", content: lines }],
+      maxTokens: 600,
+      cacheSystem: false,
+    });
+
+    let parsed: { score: number; strengths: string[]; suggestions: string[] } | null = null;
+    try {
+      const txt = reply.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+      parsed = JSON.parse(txt);
+    } catch {
+      /* fall through */
+    }
+    if (!parsed || typeof parsed.score !== "number") {
+      return fail(res, 502, "ai_response_unparseable", { raw: reply.text.slice(0, 200) });
+    }
+
+    return ok(res, {
+      score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+      strengths: (parsed.strengths || []).slice(0, 5).map(String),
+      suggestions: (parsed.suggestions || []).slice(0, 5).map(String),
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_vacancy_feedback_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/ai/dm-suggest — 3 short reply suggestions for a DM thread.
+// Body: { peerId: string }. Reads the last ~10 messages between auth.sub and peerId.
+aiRouter.post("/dm-suggest", aiRateLimiter, async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const peerId = vString(req.body?.peerId, "peerId", { min: 1, max: 64 });
+    if (!peerId.ok) return fail(res, 400, peerId.error);
+
+    const r = await pool.query(
+      `SELECT m."senderId", m."content", m."createdAt"
+       FROM "BuildMessage" m
+       WHERE (m."senderId" = $1 AND m."receiverId" = $2)
+          OR (m."senderId" = $2 AND m."receiverId" = $1)
+       ORDER BY m."createdAt" DESC LIMIT 10`,
+      [auth.sub, peerId.value],
+    );
+    const ordered = r.rows.reverse();
+    if (ordered.length === 0) {
+      // Fresh thread — return universal openers without burning a Claude call.
+      return ok(res, {
+        suggestions: [
+          "Здравствуйте! Спасибо за интерес к нашей вакансии. Когда вам удобно созвониться?",
+          "Здравствуйте! Подскажите, пожалуйста, ваш опыт работы и желаемый выход на смены.",
+          "Здравствуйте! Готовы пообщаться по деталям — хотите Zoom или офис?",
+        ],
+        cached: true,
+      });
+    }
+
+    const transcript = ordered
+      .map((m: { senderId: string; content: string }) =>
+        `${m.senderId === auth.sub ? "Я" : "Собеседник"}: ${m.content}`,
+      )
+      .join("\n")
+      .slice(-3000);
+
+    const { callClaude } = await import("../../lib/build/ai");
+    const reply = await callClaude({
+      systemPrompt: `Ты — ассистент рекрутера на платформе AEVION QBuild.
+Тебе дают переписку между рекрутером ("Я") и кандидатом/работодателем ("Собеседник").
+Предложи 3 коротких реплики (1–2 предложения каждая), которые рекрутер может отправить следующим сообщением.
+
+Ответь строго JSON-массивом из 3 строк, без markdown:
+["вариант 1", "вариант 2", "вариант 3"]
+
+Реплики должны:
+- продвигать диалог (предложить созвон, уточнить детали, договориться о слоте)
+- быть на том же языке, что и последнее сообщение собеседника
+- избегать общих фраз вроде "Спасибо за информацию"
+- быть готовы к отправке как есть, без правок`,
+      messages: [{ role: "user", content: transcript }],
+      maxTokens: 400,
+      cacheSystem: false,
+    });
+
+    let suggestions: string[] = [];
+    try {
+      const txt = reply.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+      const arr = JSON.parse(txt);
+      if (Array.isArray(arr)) suggestions = arr.map(String).slice(0, 3);
+    } catch {
+      /* ignore */
+    }
+    if (suggestions.length === 0) {
+      return fail(res, 502, "ai_response_unparseable", { raw: reply.text.slice(0, 200) });
+    }
+
+    return ok(res, {
+      suggestions,
+      usage: { input: reply.inputTokens, output: reply.outputTokens },
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "ai_dm_suggest_failed", { details: (err as Error).message });
   }
 });

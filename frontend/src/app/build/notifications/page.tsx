@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
+import { Skeleton } from "@/components/build/Skeleton";
 
 type NotifItem = {
   id: string;
@@ -87,7 +88,17 @@ function Body() {
         )}
       </div>
 
-      {loading && <p className="text-sm text-slate-400">Loading…</p>}
+      {loading && (
+        <div className="space-y-2" aria-busy="true">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+              <Skeleton width="55%" height={13} />
+              <Skeleton width="90%" height={11} className="mt-2" />
+              <Skeleton width="20%" height={10} className="mt-2" />
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && items.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">

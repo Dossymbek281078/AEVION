@@ -276,6 +276,8 @@ If a user asks "is X done?" check this list **before** starting work on it.
 
 ```
 2026-05-08  —    P4-4 design — public API quotas (4 tiers) + GET /api/quotas + design doc PUBLIC_API_QUOTAS.md
+2026-05-08  —    Launch-status page live — /launch-status auto-refresh dashboard (backend, modules, API quotas, CI links)
+2026-05-08  —    P4-4 v1.1.0 — quotas tier names aligned with public pricing (Developer/Build/Scale/Enterprise)
 2026-05-06  —    P3-1 voiceover ready — 9 mp3 sections via ElevenLabs founder voice clone (~2.5 min, 2.3 MB)
 2026-05-06  —    P3-1 script ready — investor demo 8-min recording script with timecodes
 2026-05-06  —    P3-3 ✅ DONE — reference customer pack: ICP, 30-day playbook, pilot offer, onboarding checklist

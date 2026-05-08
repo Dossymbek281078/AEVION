@@ -247,3 +247,67 @@ messagingRouter.post("/notifications/mark-read", async (req, res) => {
     return fail(res, 500, "notifications_mark_read_failed", { details: (err as Error).message });
   }
 });
+
+// GET /api/build/bulk-templates — list current user's saved templates.
+messagingRouter.get("/bulk-templates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const r = await pool.query(
+      `SELECT "id","name","body","createdAt" FROM "BuildBulkTemplate"
+       WHERE "ownerUserId" = $1 ORDER BY "createdAt" DESC`,
+      [auth.sub],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "bulk_templates_list_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/bulk-templates — save a new template (max 30 per user).
+messagingRouter.post("/bulk-templates", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const name = vString(req.body?.name, "name", { min: 1, max: 80 });
+    if (!name.ok) return fail(res, 400, name.error);
+    const body = vString(req.body?.body, "body", { min: 1, max: 4000 });
+    if (!body.ok) return fail(res, 400, body.error);
+
+    const cnt = await pool.query(
+      `SELECT COUNT(*)::int AS "n" FROM "BuildBulkTemplate" WHERE "ownerUserId" = $1`,
+      [auth.sub],
+    );
+    if (Number(cnt.rows[0]?.n ?? 0) >= 30) {
+      return fail(res, 409, "bulk_template_limit_reached", { limit: 30 });
+    }
+
+    const id = crypto.randomUUID();
+    const r = await pool.query(
+      `INSERT INTO "BuildBulkTemplate" ("id","ownerUserId","name","body")
+       VALUES ($1,$2,$3,$4) RETURNING "id","name","body","createdAt"`,
+      [id, auth.sub, name.value, body.value],
+    );
+    return ok(res, r.rows[0], 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "bulk_template_create_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/bulk-templates/:id — owner-only.
+messagingRouter.delete("/bulk-templates/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const r = await pool.query(
+      `DELETE FROM "BuildBulkTemplate" WHERE "id" = $1 AND "ownerUserId" = $2 RETURNING "id"`,
+      [id, auth.sub],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "template_not_found");
+    return ok(res, { id });
+  } catch (err: unknown) {
+    return fail(res, 500, "bulk_template_delete_failed", { details: (err as Error).message });
+  }
+});

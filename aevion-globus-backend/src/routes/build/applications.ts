@@ -98,12 +98,20 @@ applicationsRouter.post("/", async (req, res) => {
       typeof referredByRaw === "string" && referredByRaw.trim().length > 0 && referredByRaw.trim() !== auth.sub
         ? referredByRaw.trim().slice(0, 200) : null;
 
+    // Source attribution. Accept "organic" / "widget" / "utm:linkedin" /
+    // "referral" / etc. Free-form string capped at 64 chars; analytics queries
+    // bucket by prefix. Empty / missing → null (organic implied).
+    const sourceTagRaw = req.body?.sourceTag;
+    const sourceTag =
+      typeof sourceTagRaw === "string" && sourceTagRaw.trim().length > 0
+        ? sourceTagRaw.trim().toLowerCase().slice(0, 64) : null;
+
     const id = crypto.randomUUID();
     try {
       const result = await pool.query(
-        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId")
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId],
+        `INSERT INTO "BuildApplication" ("id","vacancyId","userId","message","answersJson","referredByUserId","sourceTag")
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [id, vacancyId.value, auth.sub, message.value || null, JSON.stringify(answers), referredByUserId, sourceTag],
       );
 
       if (questions.length > 0 && process.env.ANTHROPIC_API_KEY) {
@@ -114,6 +122,12 @@ applicationsRouter.post("/", async (req, res) => {
           questions, answers, candidateUserId: auth.sub,
         });
       }
+
+      // Notify employer via webhook env (fire-and-forget)
+      void notifyNewApplication(vacancy.rows[0].clientId, {
+        applicationId: id, vacancyId: vacancyId.value, vacancyTitle: vacancy.rows[0].title,
+        candidateId: auth.sub,
+      }).catch(() => {});
 
       return ok(res, result.rows[0], 201);
     } catch (err: unknown) {
@@ -126,13 +140,32 @@ applicationsRouter.post("/", async (req, res) => {
   }
 });
 
+async function notifyNewApplication(
+  employerId: string,
+  data: { applicationId: string; vacancyId: string; vacancyTitle: string; candidateId: string },
+): Promise<void> {
+  const webhookUrl = process.env.BUILD_APPLICATION_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  const secret = process.env.BUILD_PAYMENT_WEBHOOK_SECRET ?? "";
+  const payload = JSON.stringify({ event: "application.new", ...data, ts: Date.now() });
+  const sig = `sha256=${crypto.createHmac("sha256", secret).update(payload).digest("hex")}`;
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Aevion-Signature": sig, "X-Employer-Id": employerId },
+    body: payload,
+    signal: AbortSignal.timeout(5000),
+  });
+}
+
 // GET /api/build/applications/my
 applicationsRouter.get("/my", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;
     const result = await pool.query(
-      `SELECT a.*, v."title" AS "vacancyTitle", v."salary", p."id" AS "projectId", p."title" AS "projectTitle"
+      `SELECT a.*, v."title" AS "vacancyTitle", v."salary",
+              v."status" AS "vacancyStatus", v."expiresAt" AS "vacancyExpiresAt",
+              p."id" AS "projectId", p."title" AS "projectTitle"
        FROM "BuildApplication" a
        LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
        LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
@@ -142,6 +175,58 @@ applicationsRouter.get("/my", async (req, res) => {
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "applications_my_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/applications/mine/pipeline — all PENDING applications across
+// the recruiter's vacancies, lightweight for the kanban view at /build/pipeline.
+// Returns id + applicantName + vacancyTitle + labelKey + matchScore, ordered
+// by labelKey priority then most-recent.
+applicationsRouter.get("/mine/pipeline", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const result = await pool.query(
+      `SELECT a."id", a."labelKey", a."matchScore", a."createdAt", a."updatedAt",
+              v."id" AS "vacancyId", v."title" AS "vacancyTitle",
+              prof."name" AS "applicantName", prof."title" AS "applicantHeadline"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "BuildProfile" prof ON prof."userId" = a."userId"
+       WHERE p."clientId" = $1 AND a."status" = 'PENDING'
+       ORDER BY a."updatedAt" DESC LIMIT 500`,
+      [auth.sub],
+    );
+    return ok(res, { items: result.rows, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "pipeline_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/applications/mine/interviews — recruiter-side calendar feed.
+// Returns INTERVIEW-labeled applications across all owned vacancies, ordered
+// by labeled-at (which we approximate using updatedAt). Used by /build/calendar.
+applicationsRouter.get("/mine/interviews", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const result = await pool.query(
+      `SELECT a."id", a."status", a."labelKey", a."createdAt", a."updatedAt",
+              a."message", a."matchScore",
+              v."id" AS "vacancyId", v."title" AS "vacancyTitle",
+              prof."name" AS "applicantName", prof."title" AS "applicantHeadline"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       LEFT JOIN "BuildProfile" prof ON prof."userId" = a."userId"
+       WHERE p."clientId" = $1 AND a."labelKey" = 'INTERVIEW'
+       ORDER BY a."updatedAt" DESC LIMIT 200`,
+      [auth.sub],
+    );
+    return ok(res, { items: result.rows, total: result.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "interviews_mine_failed", { details: (err as Error).message });
   }
 });
 
@@ -163,10 +248,10 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
     if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") return fail(res, 403, "not_owner");
 
     const rows = await pool.query(
-      `SELECT a."id", a."status", a."createdAt", a."message", a."rejectReason",
+      `SELECT a."id", a."status", a."labelKey", a."createdAt", a."message", a."rejectReason",
               a."aiScoreOverall", a."matchScore",
               u."name" AS "applicantName", u."email" AS "applicantEmail",
-              p."title" AS "profileTitle", p."city", p."experienceYears"
+              p."title" AS "profileTitle", p."city", p."experienceYears", p."skillsJson"
        FROM "BuildApplication" a
        JOIN "AEVIONUser" u ON u."id" = a."userId"
        LEFT JOIN "BuildProfile" p ON p."userId" = a."userId"
@@ -175,10 +260,14 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
       [id],
     );
 
-    const header = ["id", "status", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "aiScore", "matchScore", "message", "rejectReason"].join(",");
+    const header = ["id", "status", "label", "createdAt", "name", "email", "city", "experienceYears", "profileTitle", "skills", "aiScore", "matchScore", "message", "rejectReason"].join(",");
     const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const skillsList = (j: unknown) => {
+      if (typeof j !== "string") return "";
+      try { return (JSON.parse(j) as string[]).join("; "); } catch { return ""; }
+    };
     const body = rows.rows.map((r: Record<string, unknown>) =>
-      [r.id, r.status, r.createdAt, r.applicantName, r.applicantEmail, r.city, r.experienceYears, r.profileTitle, r.aiScoreOverall, r.matchScore, r.message, r.rejectReason]
+      [r.id, r.status, r.labelKey, r.createdAt, r.applicantName, r.applicantEmail, r.city, r.experienceYears, r.profileTitle, skillsList(r.skillsJson), r.aiScoreOverall, r.matchScore, r.message, r.rejectReason]
         .map(escape)
         .join(","),
     ).join("\n");
@@ -346,6 +435,448 @@ applicationsRouter.patch("/:id", async (req, res) => {
   }
 });
 
+// GET /api/build/applications/:id/notes — vacancy owner reads private notes.
+applicationsRouter.get("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_read_notes");
+    }
+
+    const r = await pool.query(
+      `SELECT "id","applicationId","authorUserId","body","isPinned","createdAt"
+       FROM "BuildApplicationNote"
+       WHERE "applicationId" = $1
+       ORDER BY "isPinned" DESC, "createdAt" DESC
+       LIMIT 200`,
+      [id],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "application_notes_fetch_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/applications/:id/notes — vacancy owner writes a note.
+applicationsRouter.post("/:id/notes", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const body = vString(req.body?.body, "body", { min: 1, max: 4000 });
+    if (!body.ok) return fail(res, 400, body.error);
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_add_notes");
+    }
+
+    const noteId = crypto.randomUUID();
+    const r = await pool.query(
+      `INSERT INTO "BuildApplicationNote" ("id","applicationId","authorUserId","body")
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [noteId, id, auth.sub, body.value],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_note_create_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/applications/bulk-status
+// Owner-only. Bulk-update status (e.g. ACCEPTED or REJECTED) for several
+// applications at once. Each application is verified to belong to a vacancy
+// owned by the caller; rows that fail the check are silently skipped (their
+// id is returned in skipped[]). Caps at 50 per call.
+//
+// We do NOT fire hire fees from this endpoint — too easy to trigger expensive
+// operations in bulk by accident. Bulk ACCEPT just flips status and emails;
+// individual Accept on the row keeps the fee logic.
+applicationsRouter.post("/bulk-status", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const ids = Array.isArray(req.body?.ids)
+      ? (req.body.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 50)
+      : [];
+    if (ids.length === 0) return fail(res, 400, "ids_required");
+
+    const status = vEnum(req.body?.status, "status", APPLICATION_STATUSES);
+    if (!status.ok) return fail(res, 400, status.error);
+    if (status.value === "PENDING") return fail(res, 400, "cannot_bulk_revert_to_pending");
+
+    const rejectReason = status.value === "REJECTED" && typeof req.body?.rejectReason === "string"
+      ? req.body.rejectReason.slice(0, 500)
+      : null;
+
+    // Load owner for each application in one query.
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const owned = await pool.query(
+      `SELECT a."id", a."userId", p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" IN (${placeholders})`,
+      ids,
+    );
+
+    const ownedSet = new Set<string>();
+    const skipped: string[] = [];
+    const candidateIdsByApp: Record<string, string> = {};
+    for (const row of owned.rows as { id: string; userId: string; clientId: string }[]) {
+      if (row.clientId === auth.sub || auth.role === "ADMIN") {
+        ownedSet.add(row.id);
+        candidateIdsByApp[row.id] = row.userId;
+      } else {
+        skipped.push(row.id);
+      }
+    }
+    for (const id of ids) {
+      if (!ownedSet.has(id) && !skipped.includes(id)) skipped.push(id);
+    }
+    const okIds = ids.filter((id) => ownedSet.has(id));
+    if (okIds.length === 0) return ok(res, { updated: 0, skipped });
+
+    const updatePlaceholders = okIds.map((_, i) => `$${i + 2}`).join(",");
+    const params: unknown[] = [status.value, ...okIds];
+    let extra = "";
+    if (rejectReason !== null) {
+      params.push(rejectReason);
+      extra = `, "rejectReason" = $${params.length}`;
+    }
+    await pool.query(
+      `UPDATE "BuildApplication"
+       SET "status" = $1, "updatedAt" = NOW()${extra}
+       WHERE "id" IN (${updatePlaceholders})`,
+      params,
+    );
+
+    // Fire-and-forget candidate emails for each
+    for (const id of okIds) {
+      const candidateId = candidateIdsByApp[id];
+      if (candidateId) {
+        void notifyCandidate(candidateId, status.value as "ACCEPTED" | "REJECTED").catch(() => {});
+      }
+    }
+
+    return ok(res, { updated: okIds.length, skipped, status: status.value });
+  } catch (err: unknown) {
+    return fail(res, 500, "applications_bulk_status_failed", { details: (err as Error).message });
+  }
+});
+
+// PATCH /api/build/applications/:id/label
+// Owner-only. Sets a recruiter-private label on the application
+// (SHORTLIST/INTERVIEW/OFFER/HOLD/TOP_PICK or null to clear). Doesn't move the
+// application status, so it doesn't email the candidate or fire hire fees.
+const ALLOWED_LABELS = new Set(["SHORTLIST", "INTERVIEW", "OFFER", "HOLD", "TOP_PICK"]);
+applicationsRouter.patch("/:id/label", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+
+    const labelRaw = req.body?.labelKey;
+    let labelKey: string | null = null;
+    if (labelRaw === null || labelRaw === "" || labelRaw === undefined) {
+      labelKey = null;
+    } else if (typeof labelRaw === "string" && ALLOWED_LABELS.has(labelRaw)) {
+      labelKey = labelRaw;
+    } else {
+      return fail(res, 400, "invalid_label");
+    }
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildApplication" a
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_label");
+    }
+
+    const r = await pool.query(
+      `UPDATE "BuildApplication" SET "labelKey" = $2, "updatedAt" = NOW()
+       WHERE "id" = $1 RETURNING *`,
+      [id, labelKey],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_label_failed", { details: (err as Error).message });
+  }
+});
+
+// PATCH /api/build/applications/:id/notes/:noteId — toggle isPinned.
+applicationsRouter.patch("/:id/notes/:noteId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const noteId = String(req.params.noteId);
+    if (typeof req.body?.isPinned !== "boolean") {
+      return fail(res, 400, "isPinned_required");
+    }
+    const isPinned: boolean = req.body.isPinned;
+
+    const note = await pool.query(
+      `SELECT n."authorUserId", p."clientId"
+       FROM "BuildApplicationNote" n
+       LEFT JOIN "BuildApplication" a ON a."id" = n."applicationId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE n."id" = $1 AND n."applicationId" = $2 LIMIT 1`,
+      [noteId, id],
+    );
+    if (note.rowCount === 0) return fail(res, 404, "note_not_found");
+    if (note.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_pin");
+    }
+
+    const r = await pool.query(
+      `UPDATE "BuildApplicationNote" SET "isPinned" = $2 WHERE "id" = $1 RETURNING *`,
+      [noteId, isPinned],
+    );
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_note_pin_failed", { details: (err as Error).message });
+  }
+});
+
+// DELETE /api/build/applications/:id/notes/:noteId — owner or note author deletes.
+applicationsRouter.delete("/:id/notes/:noteId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const noteId = String(req.params.noteId);
+
+    const note = await pool.query(
+      `SELECT n."authorUserId", p."clientId"
+       FROM "BuildApplicationNote" n
+       LEFT JOIN "BuildApplication" a ON a."id" = n."applicationId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE n."id" = $1 AND n."applicationId" = $2 LIMIT 1`,
+      [noteId, id],
+    );
+    if (note.rowCount === 0) return fail(res, 404, "note_not_found");
+    const { authorUserId, clientId } = note.rows[0];
+    if (authorUserId !== auth.sub && clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_owner_or_author_can_delete_note");
+    }
+    await pool.query(`DELETE FROM "BuildApplicationNote" WHERE "id" = $1`, [noteId]);
+    return ok(res, { id: noteId });
+  } catch (err: unknown) {
+    return fail(res, 500, "application_note_delete_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/vacancies/:id/bulk-message
+// Owner sends the same DM to every applicant matching `status` (default PENDING).
+// Mounted under /applications because it derives the recipient set from
+// applications, even though the URL parameter is a vacancyId. We also expose
+// it under /vacancies via the alias below in vacancies.ts.
+applicationsRouter.post("/bulk-message/:vacancyId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const vacancyId = String(req.params.vacancyId);
+
+    const content = vString(req.body?.content, "content", { min: 1, max: 4000 });
+    if (!content.ok) return fail(res, 400, content.error);
+    const statusFilter = typeof req.body?.status === "string"
+      ? String(req.body.status).toUpperCase()
+      : "PENDING";
+    if (!["PENDING", "ACCEPTED", "REJECTED", "ALL"].includes(statusFilter)) {
+      return fail(res, 400, "invalid_status_filter");
+    }
+
+    const owner = await pool.query(
+      `SELECT p."clientId" FROM "BuildVacancy" v
+       LEFT JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [vacancyId],
+    );
+    if (owner.rowCount === 0) return fail(res, 404, "vacancy_not_found");
+    if (owner.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_vacancy_owner_can_bulk_message");
+    }
+
+    const params: unknown[] = [vacancyId];
+    let extra = "";
+    if (statusFilter !== "ALL") {
+      params.push(statusFilter);
+      extra = ` AND a."status" = $2`;
+    }
+    const recipients = await pool.query(
+      `SELECT DISTINCT a."userId" FROM "BuildApplication" a
+       WHERE a."vacancyId" = $1${extra} AND a."userId" <> '${auth.sub.replace(/'/g, "''")}'`,
+      params,
+    );
+
+    const ids: string[] = recipients.rows.map((r: Record<string, unknown>) => String(r.userId));
+    if (ids.length === 0) return ok(res, { sent: 0, recipients: [] });
+
+    // Cap at 200 per call so a runaway loop can't spam.
+    const capped = ids.slice(0, 200);
+    let sent = 0;
+    for (const rid of capped) {
+      try {
+        const id = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO "BuildMessage" ("id","senderId","receiverId","content") VALUES ($1,$2,$3,$4)`,
+          [id, auth.sub, rid, content.value],
+        );
+        sent += 1;
+      } catch {
+        // Continue on per-row errors (e.g. unique violation, deleted user)
+      }
+    }
+    return ok(res, { sent, recipients: capped });
+  } catch (err: unknown) {
+    return fail(res, 500, "bulk_message_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/applications/:id/withdraw — candidate withdraws their own application.
+// Status moves to REJECTED with a rejectReason of "(withdrawn by candidate)" so the
+// recruiter still sees it in their pipeline. We don't introduce a new status to keep
+// the existing analytics/CSV stable.
+applicationsRouter.post("/:id/withdraw", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const row = await pool.query(
+      `SELECT "id","userId","status" FROM "BuildApplication" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (row.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (row.rows[0].userId !== auth.sub) {
+      return fail(res, 403, "only_applicant_can_withdraw");
+    }
+    if (row.rows[0].status === "ACCEPTED") {
+      return fail(res, 409, "cannot_withdraw_accepted_application");
+    }
+
+    const result = await pool.query(
+      `UPDATE "BuildApplication"
+       SET "status" = 'REJECTED', "rejectReason" = '(withdrawn by candidate)', "updatedAt" = NOW()
+       WHERE "id" = $1 RETURNING *`,
+      [id],
+    );
+    return ok(res, result.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_withdraw_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/applications/:id/snooze — recruiter hides a PENDING
+// application until N days from now. Pass days=0 (or negative) to clear.
+applicationsRouter.post("/:id/snooze", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    const id = String(req.params.id);
+    const daysRaw = Number(req.body?.days);
+    const days = Number.isFinite(daysRaw) ? Math.max(-1, Math.min(60, Math.round(daysRaw))) : 7;
+
+    const r = await pool.query(
+      `SELECT a."id", p."clientId" FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    if (r.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_owner_can_snooze");
+    }
+
+    if (days <= 0) {
+      await pool.query(`UPDATE "BuildApplication" SET "snoozedUntil" = NULL WHERE "id" = $1`, [id]);
+      return ok(res, { snoozedUntil: null });
+    }
+    const until = new Date(Date.now() + days * 86400000);
+    await pool.query(
+      `UPDATE "BuildApplication" SET "snoozedUntil" = $1 WHERE "id" = $2`,
+      [until, id],
+    );
+    return ok(res, { snoozedUntil: until.toISOString() });
+  } catch (err: unknown) {
+    return fail(res, 500, "application_snooze_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/applications/:id/flag — flag an application for moderation.
+// Anyone authenticated who can see the application (owner / candidate / admin)
+// can raise a flag. Admin queue resolves via /api/build/admin/flags.
+applicationsRouter.post("/:id/flag", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const id = String(req.params.id);
+    const reason = vString(req.body?.reason, "reason", { min: 2, max: 64 });
+    if (!reason.ok) return fail(res, 400, reason.error);
+    const note = req.body?.note == null
+      ? { ok: true as const, value: null }
+      : vString(req.body.note, "note", { max: 500, allowEmpty: true });
+    if (note.ok === false) return fail(res, 400, note.error);
+
+    // Verify the application exists and the caller has any relationship to
+    // it (vacancy owner OR the candidate themself OR admin). Otherwise we
+    // could become a spam vector.
+    const r = await pool.query(
+      `SELECT a."id", a."userId", p."clientId"
+       FROM "BuildApplication" a
+       JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE a."id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "application_not_found");
+    const row = r.rows[0];
+    const isParticipant = row.userId === auth.sub || row.clientId === auth.sub;
+    if (!isParticipant && auth.role !== "ADMIN") {
+      return fail(res, 403, "not_authorized_to_flag");
+    }
+
+    const flagId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "BuildApplicationFlag" ("id","applicationId","reporterUserId","reason","note")
+       VALUES ($1,$2,$3,$4,$5)`,
+      [flagId, id, auth.sub, reason.value, note.value || null],
+    );
+    return ok(res, { id: flagId }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "application_flag_failed", { details: (err as Error).message });
+  }
+});
+
 async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECTED") {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return; // email not configured
@@ -357,12 +888,12 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
       ? "Your application was accepted — AEVION QBuild"
       : "Update on your application — AEVION QBuild";
     const text = status === "ACCEPTED"
-      ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.app/build/applications\n\n— AEVION QBuild`
-      : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.app/build/vacancies\n\n— AEVION QBuild`;
+      ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.tech/build/applications\n\n— AEVION QBuild`
+      : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.tech/build/vacancies\n\n— AEVION QBuild`;
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: email, subject, text }),
+      body: JSON.stringify({ from: "QBuild <noreply@aevion.tech>", to: email, subject, text }),
     });
     console.info(`[build] email sent to ${email} (${status})`);
   } catch (e) {

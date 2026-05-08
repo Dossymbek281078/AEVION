@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -10,6 +11,14 @@ import {
 } from "../../lib/build";
 
 export const reviewsRouter = Router();
+
+const reviewPostLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "review_rate_limit_exceeded" },
+});
 
 type ReviewDirection = "CLIENT_TO_WORKER" | "WORKER_TO_CLIENT";
 
@@ -49,7 +58,7 @@ async function resolveReviewDirection(
 }
 
 // POST /api/build/reviews
-reviewsRouter.post("/", async (req, res) => {
+reviewsRouter.post("/", reviewPostLimiter, async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
     if (!auth) return;

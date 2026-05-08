@@ -23,6 +23,7 @@ adminRouter.get("/stats", async (req, res) => {
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" WHERE "status" = 'OPEN'`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" WHERE "status" = 'PENDING'`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "AEVIONUser" WHERE "createdAt" > NOW() - INTERVAL '7 days'`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVerificationRequest" WHERE "status" = 'PENDING'`).catch(() => ({ rows: [{ n: 0 }] })),
     ]);
     return ok(res, {
       leads: { total: Number(r[0].rows[0].n), last7d: Number(r[1].rows[0].n) },
@@ -32,9 +33,144 @@ adminRouter.get("/stats", async (req, res) => {
       profiles: { total: Number(r[7].rows[0].n) },
       vacancies: { open: Number(r[8].rows[0].n) },
       applications: { pending: Number(r[9].rows[0].n) },
+      verificationPending: Number(r[11].rows[0].n),
     });
   } catch (err: unknown) {
     return fail(res, 500, "admin_stats_failed", { details: (err as Error).message });
+  }
+});
+
+// --- Partner API key management (admin) ----------------------------------
+// GET /api/build/admin/partner-keys — list all keys (without plaintext).
+adminRouter.get("/partner-keys", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const r = await pool.query(
+      `SELECT "id","label","scopesJson","ownerUserId","lastUsedAt","usageCount","revokedAt","createdAt"
+       FROM "BuildPartnerApiKey" ORDER BY "createdAt" DESC LIMIT 200`,
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_keys_list_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/admin/partner-keys — mint a new key. Plaintext returned
+// ONCE in the response (qb_pk_*); the DB stores only sha256(plaintext).
+adminRouter.post("/partner-keys", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const label = typeof req.body?.label === "string" ? String(req.body.label).trim().slice(0, 200) : "";
+    if (label.length < 2) return fail(res, 400, "label_required");
+
+    const id = crypto.randomUUID();
+    const plaintext = `qb_pk_${crypto.randomBytes(24).toString("base64url")}`;
+    const keyHash = crypto.createHash("sha256").update(plaintext).digest("hex");
+
+    const r = await pool.query(
+      `INSERT INTO "BuildPartnerApiKey" ("id","label","keyHash") VALUES ($1,$2,$3) RETURNING *`,
+      [id, label, keyHash],
+    );
+    return ok(res, { ...r.rows[0], plaintext }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_key_create_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/partner-keys/usage — last-14d daily hits per key.
+// Returns { items: [{ keyId, label, days: [{ day, hits }] }], windowDays }
+adminRouter.get("/partner-keys/usage", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const days = 14;
+    const r = await pool.query(
+      `SELECT k."id" AS "keyId", k."label", h."day"::text AS "day", h."hits"
+       FROM "BuildPartnerApiKey" k
+       LEFT JOIN "BuildPartnerApiKeyHit" h
+         ON h."keyId" = k."id" AND h."day" >= CURRENT_DATE - ($1::int - 1)
+       WHERE k."revokedAt" IS NULL
+       ORDER BY k."createdAt" DESC, h."day" ASC`,
+      [days],
+    );
+
+    type Bucket = { keyId: string; label: string; days: { day: string; hits: number }[] };
+    const byKey = new Map<string, Bucket>();
+    for (const row of r.rows) {
+      const existing = byKey.get(row.keyId);
+      const k: Bucket = existing ?? { keyId: row.keyId, label: row.label, days: [] };
+      if (row.day && row.hits != null) {
+        k.days.push({ day: String(row.day), hits: Number(row.hits) });
+      }
+      byKey.set(row.keyId, k);
+    }
+    return ok(res, { items: Array.from(byKey.values()), windowDays: days });
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_keys_usage_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/admin/partner-keys/:id/rotate — revoke + mint new key with same label.
+// Returns the new key's plaintext (one-time). Old key id stays in DB for audit.
+adminRouter.post("/partner-keys/:id/rotate", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const id = String(req.params.id);
+
+    const existing = await pool.query(
+      `SELECT "id","label","revokedAt" FROM "BuildPartnerApiKey" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (existing.rowCount === 0) return fail(res, 404, "key_not_found");
+    if (existing.rows[0].revokedAt) {
+      return fail(res, 409, "key_already_revoked");
+    }
+
+    await pool.query(
+      `UPDATE "BuildPartnerApiKey" SET "revokedAt" = NOW() WHERE "id" = $1`,
+      [id],
+    );
+
+    const newId = crypto.randomUUID();
+    const plaintext = `qb_pk_${crypto.randomBytes(24).toString("base64url")}`;
+    const keyHash = crypto.createHash("sha256").update(plaintext).digest("hex");
+    const labelWithSuffix = `${existing.rows[0].label} (rotated)`.slice(0, 200);
+
+    const r = await pool.query(
+      `INSERT INTO "BuildPartnerApiKey" ("id","label","keyHash") VALUES ($1,$2,$3) RETURNING *`,
+      [newId, labelWithSuffix, keyHash],
+    );
+    return ok(res, { ...r.rows[0], plaintext, replacedKeyId: id }, 201);
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_key_rotate_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/admin/partner-keys/:id/revoke — revoke a key (idempotent).
+adminRouter.post("/partner-keys/:id/revoke", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const id = String(req.params.id);
+    const r = await pool.query(
+      `UPDATE "BuildPartnerApiKey" SET "revokedAt" = COALESCE("revokedAt", NOW())
+       WHERE "id" = $1 RETURNING *`,
+      [id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "key_not_found");
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "partner_key_revoke_failed", { details: (err as Error).message });
   }
 });
 
@@ -192,6 +328,237 @@ adminRouter.delete("/users/:id/verify", async (req, res) => {
     return ok(res, { userId, verified: false });
   } catch (err: unknown) {
     return fail(res, 500, "admin_unverify_failed", { details: (err as Error).message });
+  }
+});
+
+// POST /api/build/admin/vacancies/close-expired — bulk close vacancies past expiresAt
+adminRouter.post("/vacancies/close-expired", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+    const r = await pool.query(
+      `UPDATE "BuildVacancy" SET "status" = 'CLOSED'
+       WHERE "status" = 'OPEN' AND "expiresAt" IS NOT NULL AND "expiresAt" < NOW()
+       RETURNING "id"`,
+    );
+    return ok(res, { closed: r.rowCount, ids: r.rows.map((row: { id: string }) => row.id) });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_close_expired_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/flags?status=open — application moderation queue.
+adminRouter.get("/flags", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const status = typeof req.query.status === "string" ? req.query.status : "open";
+    const r = await pool.query(
+      `SELECT f."id", f."applicationId", f."reporterUserId", f."reason", f."note",
+              f."status", f."createdAt", f."resolvedAt", f."resolvedBy",
+              ru."name" AS "reporterName",
+              a."userId" AS "candidateId",
+              ca."name" AS "candidateName",
+              a."vacancyId", v."title" AS "vacancyTitle"
+       FROM "BuildApplicationFlag" f
+       LEFT JOIN "AEVIONUser" ru ON ru."id" = f."reporterUserId"
+       LEFT JOIN "BuildApplication" a ON a."id" = f."applicationId"
+       LEFT JOIN "AEVIONUser" ca ON ca."id" = a."userId"
+       LEFT JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+       WHERE f."status" = $1
+       ORDER BY f."createdAt" DESC LIMIT 200`,
+      [status],
+    );
+    return ok(res, { items: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_flags_failed", { details: (err as Error).message });
+  }
+});
+
+// PATCH /api/build/admin/flags/:id — resolve a flag (admin).
+adminRouter.patch("/flags/:id", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const id = String(req.params.id);
+    const next = typeof req.body?.status === "string" ? req.body.status : "";
+    if (next !== "dismissed" && next !== "actioned") {
+      return fail(res, 400, "status_must_be_dismissed_or_actioned");
+    }
+    const r = await pool.query(
+      `UPDATE "BuildApplicationFlag"
+       SET "status" = $1, "resolvedBy" = $2, "resolvedAt" = NOW()
+       WHERE "id" = $3 RETURNING "id","status"`,
+      [next, auth.sub, id],
+    );
+    if (r.rowCount === 0) return fail(res, 404, "flag_not_found");
+    return ok(res, r.rows[0]);
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_flag_resolve_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/insights — platform-wide weekly insights for /admin/insights.
+// Returns: weekly delta vs prior week + top 5 employers by hires this week +
+// top 5 vacancies by new applications this week + funnel ratios.
+adminRouter.get("/insights", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const now = Date.now();
+    const wkStart = new Date(now - 7 * 86400_000);
+    const prevStart = new Date(now - 14 * 86400_000);
+
+    const [
+      newUsers, prevNewUsers,
+      newApps, prevNewApps,
+      newVacs, prevNewVacs,
+      hires, prevHires,
+      topEmployers, topVacancies,
+    ] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS n FROM "AEVIONUser" WHERE "createdAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "AEVIONUser" WHERE "createdAt" >= $1 AND "createdAt" < $2`, [prevStart, wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "createdAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "createdAt" >= $1 AND "createdAt" < $2`, [prevStart, wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildVacancy" WHERE "createdAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildVacancy" WHERE "createdAt" >= $1 AND "createdAt" < $2`, [prevStart, wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "status" = 'ACCEPTED' AND "updatedAt" >= $1`, [wkStart]),
+      pool.query(`SELECT COUNT(*)::int AS n FROM "BuildApplication" WHERE "status" = 'ACCEPTED' AND "updatedAt" >= $1 AND "updatedAt" < $2`, [prevStart, wkStart]),
+      pool.query(
+        `SELECT p."clientId" AS "userId", u."name", COUNT(a."id")::int AS "hires"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         JOIN "AEVIONUser" u ON u."id" = p."clientId"
+         WHERE a."status" = 'ACCEPTED' AND a."updatedAt" >= $1
+         GROUP BY p."clientId", u."name"
+         ORDER BY COUNT(a."id") DESC LIMIT 5`,
+        [wkStart],
+      ),
+      pool.query(
+        `SELECT v."id", v."title", COUNT(a."id")::int AS "apps"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         WHERE a."createdAt" >= $1
+         GROUP BY v."id", v."title"
+         ORDER BY COUNT(a."id") DESC LIMIT 5`,
+        [wkStart],
+      ),
+    ]);
+
+    function delta(now: number, prev: number) {
+      return { now, prev, change: now - prev };
+    }
+
+    const newAppsN = newApps.rows[0].n;
+    const hiresN = hires.rows[0].n;
+
+    return ok(res, {
+      windowStart: wkStart.toISOString(),
+      windowEnd: new Date(now).toISOString(),
+      newUsers: delta(newUsers.rows[0].n, prevNewUsers.rows[0].n),
+      newApplications: delta(newAppsN, prevNewApps.rows[0].n),
+      newVacancies: delta(newVacs.rows[0].n, prevNewVacs.rows[0].n),
+      hires: delta(hiresN, prevHires.rows[0].n),
+      conversionRate: newAppsN > 0 ? Math.round((hiresN / newAppsN) * 1000) / 10 : null,
+      topEmployers: topEmployers.rows,
+      topVacancies: topVacancies.rows,
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "admin_insights_failed", { details: (err as Error).message });
+  }
+});
+
+// GET /api/build/admin/weekly-preview/:userId — admin previews the weekly
+// digest email body that *would* be sent to the given recruiter. Doesn't
+// actually email — that's the cron's job once SMTP is wired. Lets us proof
+// content before turning on delivery.
+adminRouter.get("/weekly-preview/:userId", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+    if (auth.role !== "ADMIN") return fail(res, 403, "admin_only");
+
+    const userId = String(req.params.userId);
+    const wkStart = new Date(Date.now() - 7 * 86400_000);
+
+    const [user, apps, vacs, hires, topVac] = await Promise.all([
+      pool.query(`SELECT "id","name","email" FROM "AEVIONUser" WHERE "id" = $1 LIMIT 1`, [userId]),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."createdAt" >= $2`,
+        [userId, wkStart],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM "BuildVacancy" v
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND v."createdAt" >= $2`,
+        [userId, wkStart],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."status" = 'ACCEPTED' AND a."updatedAt" >= $2`,
+        [userId, wkStart],
+      ),
+      pool.query(
+        `SELECT v."id", v."title", COUNT(a."id")::int AS "apps"
+         FROM "BuildApplication" a
+         JOIN "BuildVacancy" v ON v."id" = a."vacancyId"
+         JOIN "BuildProject" p ON p."id" = v."projectId"
+         WHERE p."clientId" = $1 AND a."createdAt" >= $2
+         GROUP BY v."id", v."title"
+         ORDER BY COUNT(a."id") DESC LIMIT 3`,
+        [userId, wkStart],
+      ),
+    ]);
+
+    if (user.rowCount === 0) return fail(res, 404, "user_not_found");
+
+    const recipient = user.rows[0];
+    const a = apps.rows[0].n;
+    const v = vacs.rows[0].n;
+    const h = hires.rows[0].n;
+    const subject = `QBuild · ваша неделя: ${a} откликов, ${h} наймов`;
+
+    const lines: string[] = [
+      `Привет, ${recipient.name || recipient.email}!`,
+      "",
+      `Сводка за последние 7 дней на AEVION QBuild:`,
+      `  • Новых откликов: ${a}`,
+      `  • Опубликовано вакансий: ${v}`,
+      `  • Принято кандидатов: ${h}`,
+    ];
+    if (topVac.rowCount && topVac.rowCount > 0) {
+      lines.push("", "Топ-вакансии по откликам:");
+      for (const r of topVac.rows) {
+        lines.push(`  • ${r.title} — ${r.apps} appls`);
+      }
+    } else {
+      lines.push("", "На этой неделе откликов не было — попробуйте 🚀 Boost для активной вакансии.");
+    }
+    lines.push("", "Открыть dashboard: https://aevion.tech/build/dashboard");
+    lines.push("Отписаться: /build/settings/notifications");
+
+    return ok(res, {
+      to: recipient.email,
+      subject,
+      body: lines.join("\n"),
+      counts: { applications: a, vacanciesPosted: v, hires: h },
+      windowStart: wkStart.toISOString(),
+    });
+  } catch (err: unknown) {
+    return fail(res, 500, "weekly_preview_failed", { details: (err as Error).message });
   }
 });
 

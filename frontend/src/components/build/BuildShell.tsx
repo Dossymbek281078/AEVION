@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBuildAuth } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
+import { ToastProvider } from "./Toast";
+import { HeaderSearch } from "./HeaderSearch";
+import { CompareBar } from "./CompareBar";
 
 const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build", label: "Projects" },
@@ -15,13 +18,17 @@ const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build/trials", label: "Trials", authOnly: true },
   { href: "/build/reviews", label: "Reviews", authOnly: true },
   { href: "/build/saved", label: "Saved", authOnly: true },
+  { href: "/build/dashboard", label: "Dashboard", authOnly: true },
   { href: "/build/create-project", label: "New project", authOnly: true },
   { href: "/build/profile", label: "Profile", authOnly: true },
   { href: "/build/messages", label: "Messages", authOnly: true },
+  { href: "/build/pipeline", label: "Pipeline", authOnly: true },
+  { href: "/build/calendar", label: "Calendar", authOnly: true },
   { href: "/build/pricing", label: "Pricing" },
   { href: "/build/loyalty", label: "Loyalty" },
-  { href: "/build/salary", label: "💰 Зарплаты" },
-  { href: "/build/ai-match", label: "🤖 AI Match", authOnly: true },
+  { href: "/build/leaderboard", label: "Leaderboard" },
+  { href: "/build/success-stories", label: "Success Stories" },
+  { href: "/build/help", label: "Help" },
   { href: "/build/why-aevion", label: "Why us" },
 ];
 
@@ -38,18 +45,54 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
   const user = useBuildAuth((s) => s.user);
   const logout = useBuildAuth((s) => s.logout);
   const hydrated = useBuildAuth((s) => s.hydrated);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Auto-close the drawer on route change so taps on a link feel instant.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the drawer is open.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (drawerOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [drawerOpen]);
+
+  const visibleNav = NAV.filter((n) => !n.authOnly || !!user);
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/build" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
-            <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
-            <span className="text-slate-400">AEVION Construction & Recruiting</span>
-          </Link>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Open menu"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(true)}
+              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-slate-200 hover:bg-white/10 sm:hidden"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="6" x2="20" y2="6" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="18" x2="20" y2="18" />
+              </svg>
+            </button>
+            <Link href="/build" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
+              <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
+              <span className="hidden text-slate-400 sm:inline">AEVION Construction & Recruiting</span>
+            </Link>
+          </div>
 
           <nav className="hidden items-center gap-1 sm:flex">
-            {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
+            {visibleNav.slice(0, 7).map((n) => {
               const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
               return (
                 <Link
@@ -63,7 +106,21 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            {visibleNav.length > 7 && (
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                className="rounded-md px-3 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                aria-label="More menu"
+              >
+                More…
+              </button>
+            )}
           </nav>
+
+          <div className="hidden md:block">
+            <HeaderSearch />
+          </div>
 
           <div className="flex items-center gap-2 text-xs">
             {hydrated && user ? (
@@ -92,16 +149,140 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
             )}
           </div>
         </div>
+      </header>
 
-        <nav className="flex items-center gap-1 overflow-x-auto border-t border-white/5 px-4 py-2 sm:hidden">
-          {NAV.filter((n) => !n.authOnly || !!user).map((n) => {
+      <NavDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        items={visibleNav}
+        pathname={pathname}
+        signedIn={!!user}
+        onLogout={logout}
+      />
+
+      <main className="mx-auto max-w-6xl px-4 pt-6 pb-24 sm:pb-6">{children}</main>
+      {hydrated && user && <MobileBottomNav pathname={pathname} />}
+      <CompareBar />
+      {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
+      <footer className="border-t border-white/5 mt-8">
+        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
+          <div className="flex flex-wrap gap-4">
+            <Link href="/build/help" className="hover:text-slate-300">Help</Link>
+            <Link href="/build/stats" className="hover:text-slate-300">Platform stats</Link>
+            <Link href="/build/leaderboard" className="hover:text-slate-300">Leaderboard</Link>
+            <Link href="/build/success-stories" className="hover:text-slate-300">Success stories</Link>
+            <Link href="/build/why-aevion" className="hover:text-slate-300">Why AEVION</Link>
+            <Link href="/build/pricing" className="hover:text-slate-300">Pricing</Link>
+            <Link href="/build/developers" className="hover:text-slate-300">Developers</Link>
+            <Link href="/build/changelog" className="hover:text-slate-300">Changelog</Link>
+            <Link href="/build/onboarding" className="hover:text-slate-300">Get started</Link>
+          </div>
+          <span>© 2026 AEVION QBuild</span>
+        </div>
+      </footer>
+    </div>
+    </ToastProvider>
+  );
+}
+
+function MobileBottomNav({ pathname }: { pathname: string }) {
+  const tabs: { href: string; label: string; icon: string }[] = [
+    { href: "/build", label: "Home", icon: "🏠" },
+    { href: "/build/vacancies", label: "Feed", icon: "📋" },
+    { href: "/build/messages", label: "Chats", icon: "💬" },
+    { href: "/build/dashboard", label: "Stats", icon: "📊" },
+    { href: "/build/profile", label: "Me", icon: "👤" },
+  ];
+  return (
+    <nav
+      aria-label="Bottom navigation"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/95 backdrop-blur sm:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <ul className="mx-auto grid max-w-md grid-cols-5">
+        {tabs.map((t) => {
+          const active =
+            t.href === "/build"
+              ? pathname === "/build"
+              : pathname === t.href || pathname.startsWith(`${t.href}/`);
+          return (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition ${
+                  active ? "text-emerald-300" : "text-slate-400 hover:text-slate-200"
+                }`}
+                aria-current={active ? "page" : undefined}
+              >
+                <span className="text-base leading-none" aria-hidden="true">
+                  {t.icon}
+                </span>
+                <span>{t.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+function NavDrawer({
+  open,
+  onClose,
+  items,
+  pathname,
+  signedIn,
+  onLogout,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: { href: string; label: string }[];
+  pathname: string;
+  signedIn: boolean;
+  onLogout: () => void;
+}) {
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        aria-hidden={!open}
+        onClick={onClose}
+      />
+      <aside
+        role="dialog"
+        aria-label="Navigation menu"
+        aria-modal="true"
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-white/10 bg-slate-950 shadow-2xl transition-transform ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            <span className="rounded-md bg-emerald-500 px-2 py-0.5 text-emerald-950">QBuild</span>
+            <span className="text-slate-400">Menu</span>
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-sm text-slate-200 hover:bg-white/10"
+          >
+            ×
+          </button>
+        </div>
+        <nav className="flex-1 overflow-y-auto px-2 py-3">
+          {items.map((n) => {
             const active = pathname === n.href || (n.href !== "/build" && pathname.startsWith(n.href));
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                className={`shrink-0 rounded-md px-3 py-1.5 text-xs ${
-                  active ? "bg-white/10 text-white" : "text-slate-400"
+                onClick={onClose}
+                className={`block rounded-md px-3 py-2 text-sm transition ${
+                  active ? "bg-emerald-500/15 text-emerald-200" : "text-slate-300 hover:bg-white/5"
                 }`}
               >
                 {n.label}
@@ -109,11 +290,22 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
-      {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
-    </div>
+        {signedIn && (
+          <div className="border-t border-white/10 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => {
+                onLogout();
+                onClose();
+              }}
+              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-200"
+            >
+              Log out
+            </button>
+          </div>
+        )}
+      </aside>
+    </>
   );
 }
 

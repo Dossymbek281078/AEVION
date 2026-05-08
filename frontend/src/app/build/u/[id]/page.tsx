@@ -5,6 +5,7 @@ import { VideoEmbed } from "@/components/build/VideoEmbed";
 import { StarsDisplay } from "@/components/build/StarRating";
 import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
 import { ShareProfileButton } from "@/components/build/ShareProfileButton";
+import { ProfileShareQR } from "@/components/build/ProfileShareQR";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ type Bundle = {
   email: string | null;
   avgRating?: number;
   reviewCount?: number;
+  achievementBadges?: { key: string; label: string; emoji: string; description: string }[];
   experiences: {
     id: string;
     title: string;
@@ -151,6 +153,7 @@ export default async function PublicProfilePage({ params }: Props) {
             ← Talent search
           </Link>
           <div className="flex items-center gap-2">
+            <ProfileShareQR userId={id} name={data.name} />
             <ShareProfileButton userId={id} />
             <a
               href={`${getApiBase()}/api/build/profiles/${encodeURIComponent(id)}/resume.pdf`}
@@ -160,6 +163,14 @@ export default async function PublicProfilePage({ params }: Props) {
             >
               ⬇ Resume PDF
             </a>
+            <Link
+              href={`/build/u/${encodeURIComponent(id)}/resume`}
+              target="_blank"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+              title="Open print-friendly resume with QR code"
+            >
+              🖨 Print
+            </Link>
           </div>
         </div>
 
@@ -207,6 +218,23 @@ export default async function PublicProfilePage({ params }: Props) {
             )}
           </div>
         </header>
+
+        {data.achievementBadges && data.achievementBadges.length > 0 && (
+          <Section title="Achievements">
+            <div className="flex flex-wrap gap-2">
+              {data.achievementBadges.map((b) => (
+                <span
+                  key={b.key}
+                  title={b.description}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-100"
+                >
+                  <span aria-hidden="true">{b.emoji}</span>
+                  <span className="font-medium">{b.label}</span>
+                </span>
+              ))}
+            </div>
+          </Section>
+        )}
 
         {data.introVideoUrl && (
           <Section title="Intro video">
@@ -415,9 +443,51 @@ export default async function PublicProfilePage({ params }: Props) {
           initialAvg={data.avgRating}
           initialCount={data.reviewCount}
         />
+
+        {data.skills.length > 0 && <MatchingVacanciesBlock skill={data.skills[0]} />}
       </div>
     </main>
   );
+}
+
+async function MatchingVacanciesBlock({ skill }: { skill: string }) {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/build/vacancies?status=OPEN&skill=${encodeURIComponent(skill)}&limit=3`,
+      { cache: "no-store", signal: AbortSignal.timeout(4000) },
+    );
+    if (!res.ok) return null;
+    const j = await res.json();
+    const items = j?.data?.items as { id: string; title: string; salary: number; city: string | null }[];
+    if (!items || items.length === 0) return null;
+    return (
+      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+        <h2 className="mb-3 text-sm font-semibold text-white">
+          Open vacancies matching «{skill}»
+        </h2>
+        <div className="space-y-2">
+          {items.map((v) => (
+            <Link
+              key={v.id}
+              href={`/build/vacancy/${encodeURIComponent(v.id)}`}
+              className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-4 py-2.5 text-sm transition hover:border-white/20"
+            >
+              <span className="text-white">{v.title}</span>
+              <span className="text-emerald-300">
+                {v.salary > 0 ? `$${v.salary.toLocaleString()}` : "—"}
+                {v.city ? ` · ${v.city}` : ""}
+              </span>
+            </Link>
+          ))}
+        </div>
+        <Link href={`/build/vacancies?skill=${encodeURIComponent(skill)}`} className="mt-3 inline-block text-xs text-emerald-300 hover:underline">
+          See all →
+        </Link>
+      </div>
+    );
+  } catch {
+    return null;
+  }
 }
 
 function KV({ k, children }: { k: string; children: React.ReactNode }) {

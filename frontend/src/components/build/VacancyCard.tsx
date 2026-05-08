@@ -1,24 +1,60 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import type { BuildVacancy } from "@/lib/build/api";
+import { buildApi } from "@/lib/build/api";
+import { useBuildAuth } from "@/lib/build/auth";
 import { BookmarkButton } from "./BookmarkButton";
+import { deriveApplySource, deriveReferrerUserId } from "@/lib/build/applySource";
 
 export function VacancyCard({
   vacancy,
   showProject = false,
-  matchScore,
+  hot = false,
 }: {
   vacancy: BuildVacancy;
   showProject?: boolean;
-  matchScore?: number | null;
+  hot?: boolean;
 }) {
+  const token = useBuildAuth((s) => s.token);
+  const me = useBuildAuth((s) => s.user);
+  const [applied, setApplied] = useState(false);
+  const [busy, setBusy] = useState(false);
+
   const isClosed = vacancy.status === "CLOSED";
+  const isOwner = me?.id === vacancy.clientId;
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
-  const daysAgo = Math.floor((Date.now() - new Date(vacancy.createdAt).getTime()) / 86400000);
+  const hasQuestions = (vacancy.questions?.length ?? 0) > 0;
+  const daysLeft = vacancy.expiresAt
+    ? Math.ceil((new Date(vacancy.expiresAt).getTime() - Date.now()) / 86400000)
+    : null;
+  const expiringSoon = daysLeft != null && daysLeft >= 0 && daysLeft <= 7 && !isClosed;
+
+  async function quickApply(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!token || applied || busy || isOwner) return;
+    setBusy(true);
+    try {
+      await buildApi.applyVacancy({
+        vacancyId: vacancy.id,
+        sourceTag: deriveApplySource(),
+        referredByUserId: deriveReferrerUserId(),
+      });
+      setApplied(true);
+    } catch {
+      // If has questions or already applied, navigate to full page
+      window.location.href = `/build/vacancy/${encodeURIComponent(vacancy.id)}`;
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Link
       href={`/build/vacancy/${encodeURIComponent(vacancy.id)}`}
-      className={`group block rounded-xl border p-4 transition ${
+      className={`group relative block rounded-xl border p-4 transition ${
         isClosed
           ? "border-white/5 bg-white/[0.02] opacity-60"
           : isFeatured
@@ -26,33 +62,21 @@ export function VacancyCard({
             : "border-white/10 bg-white/5 hover:border-emerald-500/30 hover:bg-white/10"
       }`}
     >
-      {/* Top badges row */}
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+      <div className="mb-2 flex flex-wrap gap-1">
         {isFeatured && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
-            ★ В топе
-          </span>
+          <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+            ★ Featured
+          </div>
         )}
-        {matchScore != null && (
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            matchScore >= 80 ? "bg-emerald-500/20 text-emerald-300" :
-            matchScore >= 50 ? "bg-amber-500/20 text-amber-300" :
-            "bg-white/5 text-slate-400"
-          }`}>
-            {matchScore}% совпадение
-          </span>
-        )}
-        {daysAgo === 0 && (
-          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-            Сегодня
-          </span>
-        )}
-        {vacancy.city && (
-          <span className="text-[11px] text-slate-500">📍 {vacancy.city}</span>
+        {hot && !isClosed && (
+          <div
+            className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-200"
+            title="Trending — high applicant interest right now"
+          >
+            🔥 Hot
+          </div>
         )}
       </div>
-
-      {/* Title + salary */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h4 className="truncate text-base font-semibold text-white group-hover:text-emerald-200 transition">
@@ -81,28 +105,24 @@ export function VacancyCard({
           <BookmarkButton kind="VACANCY" targetId={vacancy.id} />
         </div>
       </div>
-
-      {/* Description */}
-      <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-slate-400">{vacancy.description}</p>
-
-      {/* Skills */}
-      {vacancy.skills && vacancy.skills.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {vacancy.skills.slice(0, 5).map((s) => (
-            <span key={s} className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-slate-400">
-              {s}
+      <p className="mt-2 line-clamp-2 text-sm text-slate-300">{vacancy.description}</p>
+      <div className="mt-3 flex items-center justify-between gap-2 text-xs text-slate-400">
+        <span className="flex items-center gap-2">
+          {new Date(vacancy.createdAt).toLocaleDateString()}
+          {expiringSoon && (
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                daysLeft! <= 1
+                  ? "bg-rose-500/20 text-rose-200"
+                  : daysLeft! <= 3
+                    ? "bg-amber-500/20 text-amber-200"
+                    : "bg-amber-500/10 text-amber-300"
+              }`}
+              title={`Closes ${new Date(vacancy.expiresAt!).toLocaleDateString()}`}
+            >
+              {daysLeft === 0 ? "ends today" : `${daysLeft}d left`}
             </span>
-          ))}
-          {vacancy.skills.length > 5 && (
-            <span className="text-[11px] text-slate-500">+{vacancy.skills.length - 5}</span>
           )}
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-        <span>
-          {daysAgo === 0 ? "сегодня" : daysAgo === 1 ? "вчера" : `${daysAgo} дн. назад`}
         </span>
         {typeof vacancy.applicationsCount === "number" && (
           <span className="flex items-center gap-1">
@@ -114,6 +134,29 @@ export function VacancyCard({
           </span>
         )}
       </div>
+
+      {token && !isOwner && !isClosed && (
+        <div className="mt-3 flex items-center gap-2" onClick={(e) => e.preventDefault()}>
+          {applied ? (
+            <span className="text-xs font-semibold text-emerald-300">✓ Applied</span>
+          ) : hasQuestions ? (
+            <Link
+              href={`/build/vacancy/${encodeURIComponent(vacancy.id)}`}
+              className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
+            >
+              Apply →
+            </Link>
+          ) : (
+            <button
+              onClick={quickApply}
+              disabled={busy}
+              className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30 disabled:opacity-50"
+            >
+              {busy ? "…" : "Quick apply"}
+            </button>
+          )}
+        </div>
+      )}
     </Link>
   );
 }

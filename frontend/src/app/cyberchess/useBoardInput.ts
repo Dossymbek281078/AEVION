@@ -200,6 +200,26 @@ export function useBoardInput(opts: BoardInputOptions) {
     return node;
   }, []);
 
+  // Find the source piece DOM element on the board. Returns the piece div
+  // (the one styled width:88% with drop-shadow filter) inside the cell with
+  // matching data-sq attribute. If found we have a guaranteed-renderable
+  // element to clone. If not found (cell empty / not in DOM), null.
+  const findSourcePieceEl = useCallback((from: Square): HTMLElement | null => {
+    if (typeof document === "undefined") return null;
+    const cell = document.querySelector(`[data-sq="${from}"]`);
+    if (!cell) return null;
+    const children = cell.children;
+    for (let i = 0; i < children.length; i++) {
+      const c = children[i] as HTMLElement;
+      // Piece div is styled width:88% height:88% with filter:drop-shadow.
+      // Skip dot div (30% empty-square indicator), pmIdx badge, coord labels.
+      if (c.style && c.style.width === "88%" && c.style.height === "88%") {
+        return c;
+      }
+    }
+    return null;
+  }, []);
+
   const showGhost = useCallback((from: Square, x: number, y: number) => {
     const o = optsRef.current;
     const pieceSrc = o.scratchOn && o.scratchGame
@@ -215,26 +235,34 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
     const boardEl = boardRef.current;
     const cellSz = boardEl ? Math.round(boardEl.getBoundingClientRect().width / 8) : 80;
-    const sz = Math.round(cellSz * 1.15);
     const node = ensureGhostNode();
     node.style.width = `${cellSz}px`;
     node.style.height = `${cellSz}px`;
     const inner = node.firstElementChild as HTMLDivElement | null;
     if (inner) {
-      // Используем Unicode chess glyph напрямую — гарантированно рендерится
-      // в любом браузере без проблем SVG namespace. На доске всё равно
-      // продолжают работать SVG cburnett (через React-Piece) — только ghost
-      // теперь использует glyph рендер для надёжности.
-      const GLYPH: Record<string, string> = {
-        p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚",
-      };
-      const g = GLYPH[piece.type] || "?";
-      const fillCol = piece.color === "w" ? "#ffffff" : "#1f2937";
-      const strokeCol = piece.color === "w" ? "#0f172a" : "#0f172a";
-      const fs = Math.round(sz * 0.95);
       inner.replaceChildren();
-      inner.innerHTML = `<span style="font-size:${fs}px;line-height:1;font-family:'Noto Sans Symbols 2','Segoe UI Symbol','Apple Symbols','DejaVu Sans',sans-serif;font-weight:900;color:${fillCol};-webkit-text-stroke:1.5px ${strokeCol};text-shadow:0 2px 4px rgba(0,0,0,0.4);transform:translateY(-3%);display:inline-block;user-select:none;pointer-events:none;">${g}</span>`;
-      void getActivePieceSet; void pieceHtml; // imports kept; not needed for ghost
+      // STRATEGY: clone the piece DOM element directly off the board. The
+      // board piece is already rendering correctly (React Piece with proper
+      // SVG namespace, font, whatever). Cloning gives us a DEFINITELY-visible
+      // ghost — no SVG namespace issues, no font fallback issues, nothing.
+      const srcPieceEl = findSourcePieceEl(from);
+      if (srcPieceEl) {
+        const clone = srcPieceEl.cloneNode(true) as HTMLElement;
+        // Reset clone styles for ghost positioning + 115% lift
+        clone.style.width = "100%";
+        clone.style.height = "100%";
+        clone.style.transform = "scale(1.18)";
+        clone.style.opacity = "1";
+        clone.style.filter = "drop-shadow(0 18px 28px rgba(0,0,0,0.7)) drop-shadow(0 0 22px rgba(5,150,105,0.6))";
+        clone.style.animation = "none";
+        clone.removeAttribute("data-ghost-hidden");
+        inner.appendChild(clone);
+      } else {
+        // Fallback: pieceHtml (SVG/glyph) if board cell DOM is unavailable.
+        // Should be rare — only happens if drag fires before initial render.
+        const html = pieceHtml(piece.type, piece.color, getActivePieceSet(), Math.round(cellSz * 1.15));
+        inner.innerHTML = html;
+      }
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
@@ -243,40 +271,33 @@ export function useBoardInput(opts: BoardInputOptions) {
     ghostPosRef.current = { x, y };
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
-      console.log("[CC] IMPERATIVE GHOST CREATED", {
-        from, x, y, sz,
+      console.log("[CC] IMPERATIVE GHOST CREATED via clone", {
+        from, x, y, cellSz,
         piece: `${piece.color}${piece.type}`,
-        inDOM: document.body.contains(node),
-        parent: node.parentElement?.tagName,
-        innerChildren: inner?.children.length,
-        firstChildTag: inner?.firstElementChild?.tagName,
+        cloneSucceeded: !!findSourcePieceEl(from),
+        innerHTML: inner?.innerHTML.slice(0, 100),
         rect: node.getBoundingClientRect(),
       });
     }
     setGhostFrom(from);
-    // Imperative hide of source cell piece — React render для setGhostFrom
-    // занимает 50-150ms на большом дереве cyberchess, на это время source piece
-    // и ghost оба видны. Через DOM mutation скрываем мгновенно.
+    // Imperative source-cell hide — React render для setGhostFrom 50-150ms.
+    // Через DOM mutation скрываем мгновенно, чтобы piece реально "поднимался".
     if (typeof document !== "undefined") {
       const srcCell = document.querySelector(`[data-sq="${from}"]`);
-      const srcPiece = srcCell?.querySelector(":scope > div:not([style*='radial-gradient'])") as HTMLElement | null;
-      // Cell layout: dot div (only on empty squares), piece div (88%×88%, has filter), pmIdx, coords
-      // Piece div has style="...transform...filter:drop-shadow..." — find via filter
-      const allChildren = srcCell?.children;
-      if (allChildren) {
+      if (srcCell) {
+        const allChildren = srcCell.children;
         for (let i = 0; i < allChildren.length; i++) {
           const c = allChildren[i] as HTMLElement;
-          if (c.style.filter && c.style.filter.includes("drop-shadow") && c.style.width === "88%") {
+          if (c.style && c.style.width === "88%" && c.style.height === "88%") {
             c.dataset.ghostHidden = "1";
             c.style.opacity = "0";
             break;
           }
         }
       }
-      void srcPiece; // unused fallback
       document.body.style.cursor = "grabbing";
     }
-  }, [ensureGhostNode]);
+  }, [ensureGhostNode, findSourcePieceEl]);
 
   // moveGhost — direct DOM update, called from window pointermove. No React.
   const moveGhost = useCallback((x: number, y: number) => {

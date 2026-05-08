@@ -214,36 +214,39 @@ export function useBoardInput(opts: BoardInputOptions) {
   // drags. Returns the outer <div> ready to receive a piece clone.
   const ensureGhostNode = useCallback((): HTMLDivElement => {
     if (typeof document === "undefined") {
-      // SSR safety
       return null as unknown as HTMLDivElement;
     }
-    // 1. Remove any orphaned ghosts from previous instances (HMR / aborted drags)
     const orphans = document.querySelectorAll("#cc-drag-ghost");
     orphans.forEach(el => {
       if (el !== ghostNodeRef.current) el.remove();
     });
-    // 2. If our ref still points to a node IN the DOM, reuse it
     if (ghostNodeRef.current && document.body.contains(ghostNodeRef.current)) {
       return ghostNodeRef.current;
     }
-    // 3. Otherwise create fresh
+    // ⚡ GPU-accelerated positioning: transform: translate3d() + will-change.
+    // left/top causes layout (CPU). transform on a translateZ layer is composited
+    // by the GPU — mouse movement during drag follows in <1ms, no lag.
+    // Outer carries position via transform. Inner carries centering (-50%,-50%).
+    // Two separate elements so transforms don't collide.
     const node = document.createElement("div");
     node.id = "cc-drag-ghost";
     node.style.cssText = [
-      "position:fixed", "left:-9999px", "top:-9999px",
+      "position:fixed", "left:0", "top:0",
       "pointer-events:none", "z-index:2147483647",
-      "will-change:left,top",
+      "will-change:transform",
+      "transform:translate3d(-9999px,-9999px,0)",
       "user-select:none", "-webkit-user-select:none", "-webkit-user-drag:none",
       "margin:0", "padding:0", "border:0", "background:transparent",
-      "contain:layout", // isolate layout
     ].join(";");
     const inner = document.createElement("div");
     inner.id = "cc-drag-ghost-inner";
+    // Lighter shadow — single drop-shadow (was double with large blurs that
+    // ate paint time during fast motion, causing the ghost to trail cursor).
     inner.style.cssText = [
       "width:100%", "height:100%",
       "transform:translate(-50%,-50%)",
       "transform-origin:center center",
-      "filter:drop-shadow(0 18px 28px rgba(0,0,0,0.65)) drop-shadow(0 0 22px rgba(5,150,105,0.55))",
+      "filter:drop-shadow(0 10px 14px rgba(0,0,0,0.55))",
       "pointer-events:none",
       "display:flex", "align-items:center", "justify-content:center",
     ].join(";");
@@ -348,8 +351,8 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
-    node.style.left = `${x}px`;
-    node.style.top = `${y + dy}px`;
+    // GPU compositor: transform: translate3d() — instant repaint, no layout
+    node.style.transform = `translate3d(${x}px,${y + dy}px,0)`;
     ghostPosRef.current = { x, y };
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG !== false) {
       // eslint-disable-next-line no-console
@@ -381,14 +384,14 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
   }, [ensureGhostNode, findSourcePieceEl]);
 
-  // moveGhost — direct DOM update, called from window pointermove. No React.
+  // moveGhost — GPU-composited transform update on every pointermove.
+  // No layout, no paint of other elements. Cursor follow is <1ms.
   const moveGhost = useCallback((x: number, y: number) => {
     const node = ghostNodeRef.current;
     if (!node) return;
     const isTouch = dragRef.current?.ptype === "touch";
     const dy = isTouch ? -60 : 0;
-    node.style.left = `${x}px`;
-    node.style.top = `${y + dy}px`;
+    node.style.transform = `translate3d(${x}px,${y + dy}px,0)`;
   }, []);
 
   // Imperative hover halo — same idea as ghost. setDragHover() during drag
@@ -598,9 +601,9 @@ export function useBoardInput(opts: BoardInputOptions) {
       // и ghost'ом. 50ms — barely perceptible motion, no lag feel.
       executeDrop(d.from, to);
       if (ghostNode) {
-        ghostNode.style.transition = "left 50ms ease-out, top 50ms ease-out";
-        ghostNode.style.left = `${destX}px`;
-        ghostNode.style.top = `${destY}px`;
+        // Slide via transform (GPU layer). 50ms transition feels snappy.
+        ghostNode.style.transition = "transform 50ms ease-out";
+        ghostNode.style.transform = `translate3d(${destX}px,${destY}px,0)`;
         const inner = ghostNode.firstElementChild as HTMLDivElement | null;
         const clone = inner?.firstElementChild as HTMLElement | null;
         if (clone) {
@@ -609,7 +612,6 @@ export function useBoardInput(opts: BoardInputOptions) {
         }
         const halo = haloNodeRef.current;
         if (halo) halo.style.transform = "translate3d(-9999px,-9999px,0)";
-        // Hide ghost as soon as slide arrives — overlaps 1 frame with rendered piece.
         window.setTimeout(() => hideGhost(), 50);
       } else {
         hideGhost();

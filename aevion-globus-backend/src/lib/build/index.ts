@@ -240,6 +240,39 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "BuildTeamApplication_uniq" ON "BuildTeamApplication" ("teamRequestId", "userId", "roleIndex");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildTeamApplication_request_idx" ON "BuildTeamApplication" ("teamRequestId", "createdAt" DESC);`);
 
+  // Communities — Slack-style topical chat rooms scoped to construction
+  // specialties. Backs /build/communities pages. The communitiesRouter
+  // self-seeds 8 default rooms on first GET (welders/electricians/etc),
+  // so as long as the tables exist the page works out of the box.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildCommunity" (
+      "id" TEXT PRIMARY KEY,
+      "slug" TEXT NOT NULL UNIQUE,
+      "name" TEXT NOT NULL,
+      "specialty" TEXT,
+      "memberCount" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildCommunityMember" (
+      "communityId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("communityId", "userId")
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildCommunityMessage" (
+      "id" TEXT PRIMARY KEY,
+      "communityId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "content" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildCommunityMessage_room_idx" ON "BuildCommunityMessage" ("communityId", "createdAt" DESC);`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

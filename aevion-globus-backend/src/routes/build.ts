@@ -31,6 +31,7 @@ import { availabilityRouter } from "./build/availability";
 import { storiesRouter } from "./build/stories";
 import { shiftsRouter } from "./build/shifts";
 import { teamHiringRouter } from "./build/team-hiring";
+import { communitiesRouter } from "./build/communities";
 
 export const buildRouter = Router();
 
@@ -96,3 +97,9 @@ buildRouter.use("/shifts", shiftsRouter);
 // Team / brigade hiring — multi-role requests with role-targeted apply.
 // New tables BuildTeamRequest + BuildTeamApplication.
 buildRouter.use("/team-requests", teamHiringRouter);
+// Communities — topical chat rooms (welders/electricians/etc). Router
+// self-seeds 8 default rooms on first GET. New tables BuildCommunity*.
+// Rate-limit only the message-post endpoint, not reads — same shape as
+// /applications above.
+buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
+buildRouter.use("/communities", communitiesRouter);

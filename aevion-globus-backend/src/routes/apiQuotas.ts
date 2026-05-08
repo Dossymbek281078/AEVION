@@ -13,49 +13,61 @@ import { Router } from "express";
 
 export const apiQuotasRouter = Router();
 
-const QUOTAS_VERSION = "1.0.0";
+const QUOTAS_VERSION = "1.1.0";
 const PUBLISHED_AT = "2026-05-08";
 
+// Tiers MUST stay in sync with frontend/src/app/pricing/api-pricing/page.tsx
+// (VOLUME_TIERS const). Names and prices align with the public pricing page;
+// rate limits + SLA + key issuance limits are added here as the backend
+// contract.
 const TIERS = [
   {
-    id: "free",
-    name: "Free",
+    id: "developer",
+    name: "Developer",
     priceUsdMonthly: 0,
-    rateLimit: { perMinute: 100, perDay: 10_000 },
+    monthlyCalls: 10_000,
+    rateLimit: { perMinute: 100 },
     sla: { uptime: null, supportResponseHours: null, channel: "community" },
     commercialUse: false,
-    overageUsd: null,
-    bestFor: "Discovery, prototyping, hobby projects",
+    perCallDiscount: null,
+    keyLimit: 1,
+    bestFor: "Прототипы, SDK-тесты, hobby projects",
   },
   {
-    id: "starter",
-    name: "Starter",
-    priceUsdMonthly: 29,
-    rateLimit: { perMinute: 500, perDay: 100_000 },
+    id: "build",
+    name: "Build",
+    priceUsdMonthly: 49,
+    monthlyCalls: 100_000,
+    rateLimit: { perMinute: 500 },
     sla: { uptime: 99.0, supportResponseHours: 48, channel: "email" },
     commercialUse: true,
-    overageUsd: 0.001,
-    bestFor: "Indie SaaS, single-product B2B integrations",
+    perCallDiscount: 0.15,
+    keyLimit: 5,
+    bestFor: "Запуск, MVP, single-product B2B",
   },
   {
-    id: "pro",
-    name: "Pro",
-    priceUsdMonthly: 199,
-    rateLimit: { perMinute: 2000, perDay: 1_000_000 },
+    id: "scale",
+    name: "Scale",
+    priceUsdMonthly: 249,
+    monthlyCalls: 1_000_000,
+    rateLimit: { perMinute: 2000 },
     sla: { uptime: 99.5, supportResponseHours: 24, channel: "email+slack" },
     commercialUse: true,
-    overageUsd: 0.0005,
-    bestFor: "Production SaaS, content platforms, marketplace listings",
+    perCallDiscount: 0.30,
+    keyLimit: 10,
+    bestFor: "Production SaaS, content platforms, marketplace",
   },
   {
     id: "enterprise",
     name: "Enterprise",
     priceUsdMonthly: null,
-    rateLimit: { perMinute: null, perDay: null },
+    monthlyCalls: null,
+    rateLimit: { perMinute: null },
     sla: { uptime: 99.9, supportResponseHours: 4, channel: "dedicated-rep" },
     commercialUse: true,
-    overageUsd: null,
-    bestFor: "TikTok / Spotify / YouTube-class deployments, governments",
+    perCallDiscount: 0.50,
+    keyLimit: null,
+    bestFor: "TikTok/Spotify/YouTube-class, governments, on-prem, BYO-key",
   },
 ] as const;
 
@@ -133,8 +145,9 @@ apiQuotasRouter.get("/", (_req, res) => {
     tiers: TIERS,
     endpoints: ENDPOINTS,
     notes: [
-      "Free tier requests above 100/min return HTTP 429 with Retry-After.",
-      "Paid tier overage billed monthly via Stripe; first $5 absorbed.",
+      "Developer tier requests above 100/min return HTTP 429 with Retry-After.",
+      "Paid tier monthly call quota — overage at per-endpoint rate-card with tier discount applied.",
+      "Per-endpoint pricing & detailed quotas: https://aevion.app/pricing/api-pricing",
       "Enterprise quotas negotiated per-contract; contact api@aevion.app.",
       "Per-request cost units are weighted: heavy endpoints (verify, snapshot) count 2; default 1.",
       "QPayNet merchant keys (qpn_live_*) are a separate per-merchant system, not part of this tier matrix.",

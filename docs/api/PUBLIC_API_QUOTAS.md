@@ -3,7 +3,10 @@
 > Source-of-truth for AEVION's public API tier matrix. Machine-readable mirror:
 > [`GET /api/quotas`](https://aevion.app/api-backend/api/quotas).
 >
-> **Version:** 1.0.0 · **Published:** 2026-05-08 · **Owner:** `aevion-backend-modules`
+> **Version:** 1.1.0 · **Published:** 2026-05-08 · **Owner:** `aevion-backend-modules`
+>
+> Public-facing pricing page: [`aevion.app/pricing/api-pricing`](https://aevion.app/pricing/api-pricing).
+> Tier names + monthly quotas in this doc are kept in sync with that page.
 
 ---
 
@@ -27,16 +30,16 @@ change one MUST change the other.
 
 ## 2. Tier matrix
 
-| Tier | Price (USD/mo) | Rate limit | Daily cap | SLA uptime | Support | Overage | Best for |
-|---|---:|---:|---:|---:|---|---:|---|
-| **Free** | $0 | 100/min | 10 000 | — | community | — | Discovery, prototyping, hobby |
-| **Starter** | $29 | 500/min | 100 000 | 99.0% | email 48h | $0.001/req | Indie SaaS, single-product B2B |
-| **Pro** | $199 | 2 000/min | 1 000 000 | 99.5% | email 24h + Slack | $0.0005/req | Production SaaS, marketplaces |
-| **Enterprise** | custom | unlimited | unlimited | 99.9% | dedicated rep, 4h | per-contract | TikTok-class, governments |
+| Tier | Price (USD/mo) | Monthly calls | Rate limit | SLA uptime | Support | Per-call discount | Keys | Best for |
+|---|---:|---:|---:|---:|---|---:|---:|---|
+| **Developer** | $0 | 10 000 | 100/min | — | community | — | 1 | Прототипы, SDK-тесты, hobby |
+| **Build** | $49 | 100 000 | 500/min | 99.0% | email 48h | -15% | 5 | Запуск, MVP, single-product B2B |
+| **Scale** | $249 | 1 000 000 | 2 000/min | 99.5% | email 24h + Slack | -30% | 10 | Production SaaS, marketplaces |
+| **Enterprise** | custom | unlimited | unlimited | 99.9% | dedicated rep, 4h | -50%+ | unlimited | TikTok-class, governments, on-prem |
 
 **Notes:**
-- Free tier requests above 100/min → HTTP 429 + `Retry-After`.
-- Paid overage billed monthly via Stripe; first $5/mo absorbed.
+- Developer tier requests above 100/min → HTTP 429 + `Retry-After`.
+- Monthly calls — hard quota. Overage billed at per-endpoint rate-card with tier discount applied (see `aevion.app/pricing/api-pricing`).
 - Enterprise quotas negotiated per-contract; contact `api@aevion.app`.
 
 ---

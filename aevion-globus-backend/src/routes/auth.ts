@@ -150,10 +150,17 @@ function requireAuth(req: any, res: any) {
     return null;
   }
   try {
-    const secret = getJwtSecret();
-    return jwt.verify(token, secret) as any;
-  } catch (e: any) {
-    res.status(401).json({ error: "invalid token", details: e?.message });
+    // Pin HS256 explicitly — without this, a forger could craft a token
+    // with `"alg": "none"` and some jsonwebtoken versions accept it
+    // when only the secret is passed. Same fix already applied to bureau,
+    // awards, modules, planet, pipeline, qshield, qcoreai etc.
+    return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as any;
+  } catch {
+    // Don't echo `e.message` — verifying-jwt error messages can hint at
+    // token structure (expired vs malformed vs bad signature) which is
+    // useful telemetry for the server log but a fingerprinting surface
+    // for clients. Server log retains it via console.
+    res.status(401).json({ error: "invalid token" });
     return null;
   }
 }

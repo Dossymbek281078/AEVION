@@ -127,6 +127,52 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
   });
 });
 
+// Anti-pattern: jwt.verify(token, secret) WITHOUT { algorithms: ["HS256"] }.
+// Some versions of jsonwebtoken accept tokens with `alg: "none"` when only
+// the secret is passed → trivial forgery. Every verify call must pin the
+// allowed algorithm list. Caught two regressions during the Tier 3 sweep
+// (bureau and auth) — this test prevents the next one.
+describe("regression: jwt.verify must pin algorithms: ['HS256']", () => {
+  const routesDir = path.join(__dirname, "..", "src", "routes");
+
+  function walkTs(dir: string): string[] {
+    const out: string[] = [];
+    for (const ent of readdirSync(dir)) {
+      const full = path.join(dir, ent);
+      const st = statSync(full);
+      if (st.isDirectory()) out.push(...walkTs(full));
+      else if (ent.endsWith(".ts")) out.push(full);
+    }
+    return out;
+  }
+
+  test("every jwt.verify in src/routes/ pins HS256", () => {
+    const offenders: string[] = [];
+    for (const f of walkTs(routesDir)) {
+      const src = readFileSync(f, "utf8");
+      const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      // Balanced-paren match is annoying in JS regex. Heuristic: locate every
+      // `jwt.verify(` occurrence and look at the next 200 chars (covers
+      // multi-line calls). If `algorithms` doesn't appear in that window,
+      // flag it. False positives are fine — the fix is to add the option,
+      // which never hurts.
+      const indices: number[] = [];
+      let idx = stripped.indexOf("jwt.verify(");
+      while (idx >= 0) {
+        indices.push(idx);
+        idx = stripped.indexOf("jwt.verify(", idx + 1);
+      }
+      for (const at of indices) {
+        const window = stripped.slice(at, at + 200);
+        if (!/algorithms/.test(window)) {
+          offenders.push(`${path.relative(routesDir, f)} :: ${window.slice(0, 80).replace(/\s+/g, " ")}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 // Anti-pattern: HMAC verification computed over `JSON.stringify(req.body)`.
 // The sender signed the EXACT raw bytes; re-serialising loses key order /
 // whitespace and either (a) silently mismatches valid signatures, or

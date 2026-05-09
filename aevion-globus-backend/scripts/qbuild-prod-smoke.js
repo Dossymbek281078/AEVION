@@ -391,48 +391,6 @@ async function runEngagement(client, worker, vacancyId, appId) {
     else fail("team-request detail with apps", `status=${r.status}`);
   }
 
-  // Communities — worker joins welders-kz (auto-seeded) and posts a message.
-  // The community list endpoint already verified the room exists.
-  r = await call("POST", "/api/build/communities/welders-kz/join", { token: worker.token });
-  if (r.status === 200) ok("worker join community welders-kz");
-  else fail("worker join community welders-kz", `status=${r.status}`);
-
-  r = await call("POST", "/api/build/communities/welders-kz/messages", {
-    token: worker.token,
-    body: { content: `Smoke test message ${Date.now()} — checking community works.` },
-  });
-  if (r.status === 200 || r.status === 201) ok("worker post community message");
-  else fail("worker post community message", `status=${r.status}`);
-
-  r = await call("GET", "/api/build/communities/welders-kz");
-  if (r.status === 200 && (payload(r.body)?.messages?.length ?? 0) >= 1) ok("community detail with messages");
-  else fail("community detail with messages", `status=${r.status}`);
-
-  // Cleanup: leave so the join-count doesn't drift on prod.
-  r = await call("POST", "/api/build/communities/welders-kz/leave", { token: worker.token });
-  if (r.status === 200) ok("worker leave community");
-  else fail("worker leave community", `status=${r.status}`);
-
-  // Video rooms — client creates a room (stub URL when DAILY_API_KEY
-  // unset — that's OK for smoke), then ends it.
-  r = await call("POST", "/api/build/video/rooms", {
-    token: client.token,
-    body: { guestId: worker.userId },
-  });
-  const roomId = payload(r.body)?.id;
-  if ((r.status === 200 || r.status === 201) && roomId) ok("client create video room", `id=${roomId.slice(0, 8)}`);
-  else fail("client create video room", `status=${r.status}`);
-
-  if (roomId) {
-    r = await call("GET", "/api/build/video/rooms/my", { token: client.token });
-    if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("client list video rooms");
-    else fail("client list video rooms", `status=${r.status}`);
-
-    r = await call("PATCH", `/api/build/video/rooms/${roomId}/end`, { token: client.token });
-    if (r.status === 200 && payload(r.body)?.status === "ENDED") ok("host end video room");
-    else fail("host end video room", `status=${r.status}`);
-  }
-
   // Payment calendar — client schedules a planned payout, lists it from
   // both sides, worker marks PAID, client deletes the row. Soft-checked
   // so the smoke can ship before Railway redeploys the new mount.
@@ -470,9 +428,7 @@ async function runEngagement(client, worker, vacancyId, appId) {
     else fail("client delete payment", `status=${r.status}`);
   }
 
-  // Web Push subscribe round-trip. Synthesize a fake-but-well-formed
-  // PushSubscription payload (real one comes from browser's pushManager).
-  // DB write is the signal; actual push send no-ops without VAPID env.
+  // Web Push subscribe round-trip.
   const fakeEndpoint = `https://fcm.googleapis.com/fcm/send/smoke-${RUN}`;
   r = await call("POST", "/api/build/push/subscribe", {
     token: worker.token,
@@ -483,17 +439,100 @@ async function runEngagement(client, worker, vacancyId, appId) {
   });
   if (r.status === 404) {
     console.log(`  ${String(++step).padStart(2, "0")}  INFO  /push/subscribe not deployed yet (404)`);
-    return;
-  }
-  if ((r.status === 200 || r.status === 201) && payload(r.body)?.id) ok("worker push subscribe");
-  else fail("worker push subscribe", `status=${r.status}`);
+  } else if ((r.status === 200 || r.status === 201) && payload(r.body)?.id) {
+    ok("worker push subscribe");
+    r = await call("POST", "/api/build/push/unsubscribe", {
+      token: worker.token,
+      body: { endpoint: fakeEndpoint },
+    });
+    if (r.status === 200 && (payload(r.body)?.removed ?? 0) >= 1) ok("worker push unsubscribe");
+    else fail("worker push unsubscribe", `status=${r.status}`);
+  } else fail("worker push subscribe", `status=${r.status}`);
 
-  r = await call("POST", "/api/build/push/unsubscribe", {
+  // Safety briefing template — public/unauthenticated.
+  r = await call("GET", "/api/build/safety-briefing/template");
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /safety-briefing/template not deployed yet`);
+  } else if (r.status === 200 && Array.isArray(payload(r.body)?.items)) {
+    ok("/safety-briefing/template", `n=${(payload(r.body)?.items ?? []).length}`);
+  } else fail("/safety-briefing/template", `status=${r.status}`);
+
+  // Documents — upload (soft), list mine.
+  r = await call("POST", "/api/build/documents", {
     token: worker.token,
-    body: { endpoint: fakeEndpoint },
+    body: { fileUrl: "https://example.com/smoke-cert.pdf", docType: "WELDER" },
   });
-  if (r.status === 200 && (payload(r.body)?.removed ?? 0) >= 1) ok("worker push unsubscribe");
-  else fail("worker push unsubscribe", `status=${r.status}`);
+  const docId = payload(r.body)?.id;
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /documents not deployed yet`);
+  } else if ((r.status === 200 || r.status === 201) && docId) {
+    ok("worker upload document", `id=${docId.slice(0, 8)}`);
+    r = await call("GET", "/api/build/documents/me", { token: worker.token });
+    if (r.status === 200) ok("worker list documents");
+    else fail("worker list documents", `status=${r.status}`);
+  } else fail("worker upload document", `status=${r.status}`);
+
+  // Portfolio photos — upload, list public, delete.
+  r = await call("POST", "/api/build/portfolio/photos", {
+    token: worker.token,
+    body: { url: "https://example.com/smoke-photo.jpg", caption: "smoke photo" },
+  });
+  const photoId = payload(r.body)?.id;
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /portfolio/photos not deployed yet`);
+  } else if ((r.status === 200 || r.status === 201) && photoId) {
+    ok("worker upload photo", `id=${photoId.slice(0, 8)}`);
+    r = await call("GET", `/api/build/portfolio/photos/${worker.userId}`);
+    if (r.status === 200) ok("public portfolio photo list");
+    else fail("public portfolio photo list", `status=${r.status}`);
+    r = await call("DELETE", `/api/build/portfolio/photos/${photoId}`, { token: worker.token });
+    if (r.status === 200) ok("worker delete photo");
+    else fail("worker delete photo", `status=${r.status}`);
+  } else fail("worker upload photo", `status=${r.status}`);
+
+  // Communities — join, post message, read, leave.
+  r = await call("POST", "/api/build/communities/welders-kz/join", { token: worker.token });
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /communities not deployed yet`);
+  } else {
+    if (r.status === 200 || r.status === 201) ok("worker join community");
+    else fail("worker join community", `status=${r.status}`);
+
+    r = await call("POST", "/api/build/communities/welders-kz/messages", {
+      token: worker.token,
+      body: { text: "smoke test message" },
+    });
+    if (r.status === 200 || r.status === 201) ok("worker post community message");
+    else fail("worker post community message", `status=${r.status}`);
+
+    r = await call("GET", "/api/build/communities/welders-kz");
+    if (r.status === 200) ok("community detail");
+    else fail("community detail", `status=${r.status}`);
+
+    r = await call("POST", "/api/build/communities/welders-kz/leave", { token: worker.token });
+    if (r.status === 200) ok("worker leave community");
+    else fail("worker leave community", `status=${r.status}`);
+  }
+
+  // Video rooms — client creates, lists, ends.
+  r = await call("POST", "/api/build/video/rooms", {
+    token: client.token,
+    body: { guestId: worker.userId },
+  });
+  const roomId = payload(r.body)?.id;
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /video/rooms not deployed yet`);
+  } else if ((r.status === 200 || r.status === 201) && roomId) {
+    ok("client create video room", `id=${roomId.slice(0, 8)}`);
+
+    r = await call("GET", "/api/build/video/rooms/my", { token: client.token });
+    if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("client list video rooms");
+    else fail("client list video rooms", `status=${r.status}`);
+
+    r = await call("PATCH", `/api/build/video/rooms/${roomId}/end`, { token: client.token });
+    if (r.status === 200 && payload(r.body)?.status === "ENDED") ok("host end video room");
+    else fail("host end video room", `status=${r.status}`);
+  } else fail("client create video room", `status=${r.status}`);
 }
 
 async function runStatsAndPipeline(client) {

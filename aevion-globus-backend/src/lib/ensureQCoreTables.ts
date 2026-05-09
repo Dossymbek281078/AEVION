@@ -554,6 +554,25 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
+  // V43 — Personal API keys (personal access tokens, SHA-256 hashed).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreApiKey" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "keyHash"     TEXT NOT NULL UNIQUE,
+      "keyPrefix"   TEXT NOT NULL,
+      "lastUsedAt"  TIMESTAMPTZ,
+      "expiresAt"   TIMESTAMPTZ,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreApiKey_user_idx" ON "QCoreApiKey" ("userId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreApiKey_hash_idx" ON "QCoreApiKey" ("keyHash");`);
+
+  // V45 — Run claps (public appreciation counter on shared runs).
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "clapCount" INTEGER NOT NULL DEFAULT 0;`);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

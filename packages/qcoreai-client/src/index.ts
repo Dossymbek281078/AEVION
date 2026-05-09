@@ -1730,6 +1730,31 @@ export class QCoreClient {
     const d = await res.json();
     return d.events;
   }
+
+  // V43: API keys
+  async createApiKey(opts: { name: string; expiresInDays?: number }): Promise<{ id: string; key: string; keyPrefix: string; name: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/api-keys"), { method: "POST", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`createApiKey failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  async listApiKeys(): Promise<Array<{ id: string; name: string; keyPrefix: string; lastUsedAt: string | null; expiresAt: string | null; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/api-keys"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listApiKeys failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  async deleteApiKey(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/api-keys/${encodeURIComponent(id)}`), { method: "DELETE", headers: this.headers() });
+    if (!res.ok) throw new Error(`deleteApiKey failed: ${await safeError(res)}`);
+  }
+
+  // V45: run claps
+  async clapRun(shareToken: string): Promise<{ clapCount: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/shared/${encodeURIComponent(shareToken)}/clap`), { method: "POST" });
+    if (!res.ok) throw new Error(`clapRun failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

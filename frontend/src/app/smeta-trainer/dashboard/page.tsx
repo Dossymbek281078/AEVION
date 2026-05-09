@@ -7,14 +7,17 @@ import { useProgress } from "../lib/useProgress";
 import { useStudent } from "../lib/useStudent";
 import {
   fetchAttempts,
+  fetchGroups,
   fetchLeaderboard,
   fetchStats,
   pingBackend,
   syncProgress,
   type AttemptRecord,
+  type GroupInfo,
   type LeaderboardEntry,
   type SmetaStats,
 } from "../lib/progressApi";
+import { findLesson } from "../lib/lessons";
 
 export default function DashboardPage() {
   const { progress } = useProgress();
@@ -23,6 +26,8 @@ export default function DashboardPage() {
   const [attempts, setAttempts] = useState<AttemptRecord[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [stats, setStats] = useState<SmetaStats | null>(null);
+  const [groups, setGroups] = useState<GroupInfo[]>([]);
+  const [groupFilter, setGroupFilter] = useState<string>("");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const displayName = student.name;
@@ -35,16 +40,26 @@ export default function DashboardPage() {
     pingBackend().then((ok) => {
       setBackendOk(ok);
       if (ok) {
-        Promise.all([fetchAttempts(20), fetchLeaderboard(undefined, 10), fetchStats()]).then(
-          ([a, l, s]) => {
-            setAttempts(a);
-            setLeaderboard(l);
-            setStats(s);
-          },
-        );
+        Promise.all([
+          fetchAttempts(20),
+          fetchLeaderboard(undefined, 10),
+          fetchStats(),
+          fetchGroups(),
+        ]).then(([a, l, s, g]) => {
+          setAttempts(a);
+          setLeaderboard(l);
+          setStats(s);
+          setGroups(g);
+        });
       }
     });
   }, []);
+
+  // При смене group-фильтра — перезагружаем лидерборд
+  useEffect(() => {
+    if (!backendOk) return;
+    fetchLeaderboard(undefined, 10, groupFilter || undefined).then(setLeaderboard).catch(() => {});
+  }, [groupFilter, backendOk]);
 
   async function handleSync() {
     setSyncing(true);
@@ -82,6 +97,9 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-4">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу
+          </Link>
+          <Link href="/smeta-trainer/admin" className="text-xs text-slate-400 hover:text-emerald-700 underline">
+            Куратор →
           </Link>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-900">Dashboard студента</h1>
@@ -301,6 +319,18 @@ export default function DashboardPage() {
                     {stats.attemptsTotal}
                   </div>
                 </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">Уроков пройдено</div>
+                  <div className="text-2xl font-bold text-sky-700">
+                    {stats.lessonsCompletedTotal ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">Капстоун сдан</div>
+                  <div className="text-2xl font-bold text-purple-700">
+                    {stats.capstonePassed ?? 0}
+                  </div>
+                </div>
               </div>
               <div className="text-[11px] font-semibold text-slate-500 uppercase mb-2">
                 По уровням
@@ -330,13 +360,64 @@ export default function DashboardPage() {
                   })}
                 </tbody>
               </table>
+
+              {/* Топ-5 трудных уроков */}
+              {stats.hardestLessons && stats.hardestLessons.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <div className="text-[11px] font-semibold text-slate-500 uppercase mb-2">
+                    Самые трудные уроки (низший ср. балл)
+                  </div>
+                  <div className="space-y-1">
+                    {stats.hardestLessons.map((h) => {
+                      const lesson = findLesson(h.lessonId);
+                      return (
+                        <Link
+                          key={h.lessonId}
+                          href={lesson ? `/smeta-trainer/level/${lesson.level}#lesson-${encodeURIComponent(h.lessonId)}` : "#"}
+                          className="flex items-center gap-2 text-xs hover:bg-slate-50 px-1.5 py-1 rounded"
+                        >
+                          <span className={`shrink-0 font-mono font-bold w-9 text-right ${
+                            h.avgScore < 50 ? "text-red-600" : h.avgScore < 75 ? "text-amber-600" : "text-emerald-600"
+                          }`}>
+                            {h.avgScore}%
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-slate-800 truncate">
+                              {lesson?.title ?? h.lessonId}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              {lesson ? `Уровень ${lesson.level} · ` : ""}{h.attempts} попыток
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {backendOk && leaderboard.length > 0 && (
             <div className="bg-white border rounded-lg p-5">
-              <div className="text-sm font-semibold text-slate-900 mb-3">
-                Лидерборд · топ-{leaderboard.length}
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm font-semibold text-slate-900">
+                  Лидерборд · топ-{leaderboard.length}
+                </div>
+                {groups.length > 0 && (
+                  <select
+                    value={groupFilter}
+                    onChange={(e) => setGroupFilter(e.target.value)}
+                    className="text-xs border border-slate-300 rounded px-2 py-1 max-w-[140px]"
+                  >
+                    <option value="">Все группы</option>
+                    {groups.map((g) => (
+                      <option key={g.name} value={g.name}>
+                        {g.name} ({g.count})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="space-y-1">
                 {leaderboard.map((e, i) => (
@@ -363,8 +444,12 @@ export default function DashboardPage() {
                       <div className="font-mono font-semibold text-slate-700">
                         {e.totalScore}
                       </div>
-                      <div className="text-[10px] text-slate-400">
-                        {e.doneCount} ур.
+                      <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1.5">
+                        <span title="Уровней зачтено">{e.doneCount}🏆</span>
+                        {e.lessonsCount != null && <span title="Уроков пройдено">{e.lessonsCount}📚</span>}
+                        {e.practiceCount != null && <span title="Упражнений практики решено">{e.practiceCount}🕵️</span>}
+                        {e.achievementsCount != null && <span title="Бейджей">{e.achievementsCount}🏅</span>}
+                        {e.capstonePassedAt && <span title="Капстоун сдан">📜</span>}
                       </div>
                     </div>
                   </div>

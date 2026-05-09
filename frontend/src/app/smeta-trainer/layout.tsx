@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AchievementToast } from "./components/AchievementToast";
+import { AutoSyncBridge } from "./lib/useAutoSync";
 
 export const metadata = {
   title: "Сметный тренажёр — AEVION",
@@ -52,6 +53,7 @@ export default function SmetaTrainerLayout({ children }: { children: ReactNode }
       `}</style>
       {children}
       <AchievementToast />
+      <AutoSyncBridge />
     </>
   );
 }

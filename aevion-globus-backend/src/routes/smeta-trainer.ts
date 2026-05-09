@@ -11,12 +11,18 @@ import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
 // на Postgres когда DATABASE_URL будет задан.
 //
 // Endpoints:
-//  GET  /api/smeta-trainer/student/:deviceId           — снимок прогресса студента
-//  POST /api/smeta-trainer/student/:deviceId/sync      — upsert прогресса (idempotent)
-//  POST /api/smeta-trainer/student/:deviceId/attempt   — записать попытку (quiz/exercise/lsr-submit)
-//  GET  /api/smeta-trainer/student/:deviceId/attempts  — последние N попыток
-//  GET  /api/smeta-trainer/leaderboard?level=N&limit=  — топ студентов по уровню (или общий)
-//  GET  /api/smeta-trainer/stats                       — агрегаты для куратора
+//  GET  /api/smeta-trainer/student/:deviceId             — снимок прогресса студента
+//  POST /api/smeta-trainer/student/:deviceId/sync        — upsert прогресса уровней (idempotent)
+//  POST /api/smeta-trainer/student/:deviceId/lessons     — upsert прогресса уроков (lessonId → quizScore/completed)
+//  POST /api/smeta-trainer/student/:deviceId/practice    — upsert прогресса практики (exerciseId → correct)
+//  POST /api/smeta-trainer/student/:deviceId/capstone    — отметка о сдаче капстоуна
+//  POST /api/smeta-trainer/student/:deviceId/achievements— синхронизация набора бейджей
+//  POST /api/smeta-trainer/student/:deviceId/attempt     — записать попытку (quiz/exercise/lsr-submit)
+//  GET  /api/smeta-trainer/student/:deviceId/attempts    — последние N попыток
+//  GET  /api/smeta-trainer/leaderboard?level=N&group=&limit= — топ студентов (общий/по уровню/по группе)
+//  GET  /api/smeta-trainer/groups                        — список уникальных групп со счётчиками
+//  GET  /api/smeta-trainer/stats                         — агрегаты для куратора (включая урок-стат)
+//  GET  /api/smeta-trainer/admin/students                — детальный список студентов (требует JWT)
 
 export const smetaTrainerRouter = Router();
 
@@ -71,6 +77,20 @@ interface LevelProgress {
   lastVisitAt?: number;
 }
 
+interface LessonProgressServer {
+  lessonId: string;
+  completed: boolean;
+  quizScore?: number;
+  ts: number;
+}
+
+interface PracticeAttemptServer {
+  exerciseId: string;
+  correct: boolean;
+  attempts: number;
+  ts: number;
+}
+
 interface StudentRecord {
   deviceId: string;
   userId: string | null;
@@ -79,6 +99,14 @@ interface StudentRecord {
   startedAt: number;
   updatedAt: number;
   levels: Record<string, LevelProgress>;
+  /** Прогресс по урокам теории (lessonId → запись). */
+  lessons?: Record<string, LessonProgressServer>;
+  /** Прогресс по упражнениям practice mode. */
+  practice?: Record<string, PracticeAttemptServer>;
+  /** Капстоун сдан — timestamp (или null если не сдан). */
+  capstonePassedAt?: number | null;
+  /** Множество полученных achievement IDs (вычисляется клиентом, мы храним для агрегатов). */
+  achievements?: string[];
 }
 
 interface AttemptRecord {
@@ -190,6 +218,118 @@ smetaTrainerRouter.post("/student/:deviceId/sync", writeLimiter, async (req, res
   res.json({ student: rec });
 });
 
+// ── POST /student/:deviceId/lessons ────────────────────────────────
+// body: { lessons: Record<lessonId, { completed: boolean; quizScore?: number; ts: number }> }
+// Идемпотентный upsert: новые записи мерджатся с существующими, max(ts) и
+// max(quizScore) — сохраняем лучшее из попыток.
+smetaTrainerRouter.post("/student/:deviceId/lessons", writeLimiter, async (req, res) => {
+  const { deviceId } = req.params;
+  if (!isValidDeviceId(deviceId)) return res.status(400).json({ error: "bad_device_id" });
+  const { lessons } = req.body ?? {};
+  if (typeof lessons !== "object" || lessons === null) {
+    return res.status(400).json({ error: "bad_lessons" });
+  }
+  const students = await loadStudents();
+  const existing = students[deviceId];
+  if (!existing) return res.status(404).json({ error: "student_not_found" });
+
+  const merged: Record<string, LessonProgressServer> = { ...(existing.lessons ?? {}) };
+  for (const [lessonId, v] of Object.entries(lessons as Record<string, unknown>)) {
+    if (typeof lessonId !== "string" || lessonId.length < 2 || lessonId.length > 64) continue;
+    const lp = v as Partial<LessonProgressServer>;
+    const prev = merged[lessonId];
+    const completed = !!lp.completed || !!prev?.completed;
+    const newScore = typeof lp.quizScore === "number" ? Math.max(0, Math.min(100, lp.quizScore)) : undefined;
+    const score = newScore != null
+      ? Math.max(prev?.quizScore ?? 0, newScore)
+      : prev?.quizScore;
+    merged[lessonId] = {
+      lessonId,
+      completed,
+      quizScore: score,
+      ts: typeof lp.ts === "number" ? Math.max(prev?.ts ?? 0, lp.ts) : Date.now(),
+    };
+  }
+  existing.lessons = merged;
+  existing.updatedAt = Date.now();
+  students[deviceId] = existing;
+  await saveStudents(students);
+  res.json({ student: existing });
+});
+
+// ── POST /student/:deviceId/practice ───────────────────────────────
+// body: { practice: Record<exerciseId, { correct: boolean; attempts: number; ts: number }> }
+smetaTrainerRouter.post("/student/:deviceId/practice", writeLimiter, async (req, res) => {
+  const { deviceId } = req.params;
+  if (!isValidDeviceId(deviceId)) return res.status(400).json({ error: "bad_device_id" });
+  const { practice } = req.body ?? {};
+  if (typeof practice !== "object" || practice === null) {
+    return res.status(400).json({ error: "bad_practice" });
+  }
+  const students = await loadStudents();
+  const existing = students[deviceId];
+  if (!existing) return res.status(404).json({ error: "student_not_found" });
+
+  const merged: Record<string, PracticeAttemptServer> = { ...(existing.practice ?? {}) };
+  for (const [exId, v] of Object.entries(practice as Record<string, unknown>)) {
+    if (typeof exId !== "string" || exId.length < 2 || exId.length > 64) continue;
+    const pa = v as Partial<PracticeAttemptServer>;
+    const prev = merged[exId];
+    merged[exId] = {
+      exerciseId: exId,
+      correct: !!pa.correct || !!prev?.correct,
+      attempts: Math.max(prev?.attempts ?? 0, typeof pa.attempts === "number" ? pa.attempts : 0),
+      ts: typeof pa.ts === "number" ? Math.max(prev?.ts ?? 0, pa.ts) : Date.now(),
+    };
+  }
+  existing.practice = merged;
+  existing.updatedAt = Date.now();
+  students[deviceId] = existing;
+  await saveStudents(students);
+  res.json({ student: existing });
+});
+
+// ── POST /student/:deviceId/capstone ───────────────────────────────
+// body: { passed: boolean }
+smetaTrainerRouter.post("/student/:deviceId/capstone", writeLimiter, async (req, res) => {
+  const { deviceId } = req.params;
+  if (!isValidDeviceId(deviceId)) return res.status(400).json({ error: "bad_device_id" });
+  const { passed } = req.body ?? {};
+  if (typeof passed !== "boolean") return res.status(400).json({ error: "bad_passed" });
+  const students = await loadStudents();
+  const existing = students[deviceId];
+  if (!existing) return res.status(404).json({ error: "student_not_found" });
+  // Не сбрасываем уже сданный капстоун
+  if (passed && !existing.capstonePassedAt) existing.capstonePassedAt = Date.now();
+  if (!passed) existing.capstonePassedAt = null;
+  existing.updatedAt = Date.now();
+  students[deviceId] = existing;
+  await saveStudents(students);
+  res.json({ student: existing });
+});
+
+// ── POST /student/:deviceId/achievements ───────────────────────────
+// body: { achievements: string[] }
+smetaTrainerRouter.post("/student/:deviceId/achievements", writeLimiter, async (req, res) => {
+  const { deviceId } = req.params;
+  if (!isValidDeviceId(deviceId)) return res.status(400).json({ error: "bad_device_id" });
+  const { achievements } = req.body ?? {};
+  if (!Array.isArray(achievements)) return res.status(400).json({ error: "bad_achievements" });
+  const clean = achievements.filter(
+    (a): a is string => typeof a === "string" && a.length >= 2 && a.length <= 48,
+  ).slice(0, 100);
+  const students = await loadStudents();
+  const existing = students[deviceId];
+  if (!existing) return res.status(404).json({ error: "student_not_found" });
+  // Объединяем со старым множеством — бейдж нельзя «отнять»
+  const merged = new Set([...(existing.achievements ?? []), ...clean]);
+  existing.achievements = [...merged];
+  existing.updatedAt = Date.now();
+  students[deviceId] = existing;
+  await saveStudents(students);
+  res.json({ student: existing });
+});
+
 // ── POST /student/:deviceId/attempt ────────────────────────────────
 // body: { level, kind, score?, payload?, feedback? }
 smetaTrainerRouter.post("/student/:deviceId/attempt", writeLimiter, async (req, res) => {
@@ -229,15 +369,23 @@ smetaTrainerRouter.get("/student/:deviceId/attempts", readLimiter, async (req, r
 });
 
 // ── GET /leaderboard ───────────────────────────────────────────────
-// query: ?level=N&limit=20  (level optional — если не задан, по сумме скоров)
+// query: ?level=N&group=X&limit=20  (level/group optional)
 smetaTrainerRouter.get("/leaderboard", readLimiter, async (req, res) => {
   const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 20));
   const level = Number(req.query.level);
+  const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
   const students = await loadStudents();
-  const rows = Object.values(students).map((s) => {
+  let entries = Object.values(students);
+  if (group) {
+    entries = entries.filter((s) => (s.group ?? "").toLowerCase() === group.toLowerCase());
+  }
+  const rows = entries.map((s) => {
     const levels = Object.values(s.levels ?? {});
     const totalScore = levels.reduce((a, l) => a + (l.score ?? 0), 0);
     const doneCount = levels.filter((l) => l.status === "done").length;
+    const lessonsCount = Object.values(s.lessons ?? {}).filter((l) => l.completed).length;
+    const practiceCount = Object.values(s.practice ?? {}).filter((p) => p.correct).length;
+    const achievementsCount = (s.achievements ?? []).length;
     let levelScore: number | null = null;
     if (isValidLevel(level)) {
       const lp = s.levels[String(level)];
@@ -250,6 +398,10 @@ smetaTrainerRouter.get("/leaderboard", readLimiter, async (req, res) => {
       doneCount,
       totalScore,
       levelScore,
+      lessonsCount,
+      practiceCount,
+      achievementsCount,
+      capstonePassedAt: s.capstonePassedAt ?? null,
       updatedAt: s.updatedAt,
     };
   });
@@ -259,6 +411,49 @@ smetaTrainerRouter.get("/leaderboard", readLimiter, async (req, res) => {
       : b.totalScore - a.totalScore || b.doneCount - a.doneCount,
   );
   res.json({ leaderboard: rows.slice(0, limit) });
+});
+
+// ── GET /groups ────────────────────────────────────────────────────
+// Список уникальных групп со счётчиком студентов — для group-фильтра в UI.
+smetaTrainerRouter.get("/groups", readLimiter, async (_req, res) => {
+  const students = await loadStudents();
+  const counts = new Map<string, number>();
+  for (const s of Object.values(students)) {
+    const g = (s.group ?? "").trim();
+    if (!g) continue;
+    counts.set(g, (counts.get(g) ?? 0) + 1);
+  }
+  const groups = [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ru"));
+  res.json({ groups });
+});
+
+// ── GET /admin/students ────────────────────────────────────────────
+// Детальный список всех студентов (для куратора). Требует JWT.
+// query: ?group=X&limit=200
+smetaTrainerRouter.get("/admin/students", readLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
+  const group = typeof req.query.group === "string" ? req.query.group.trim() : "";
+  const students = await loadStudents();
+  let entries = Object.values(students);
+  if (group) {
+    entries = entries.filter((s) => (s.group ?? "").toLowerCase() === group.toLowerCase());
+  }
+  // Полный snapshot (без обрезки), но с производными счётчиками для удобства UI
+  const rows = entries
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit)
+    .map((s) => ({
+      ...s,
+      lessonsDone: Object.values(s.lessons ?? {}).filter((l) => l.completed).length,
+      practiceDone: Object.values(s.practice ?? {}).filter((p) => p.correct).length,
+      achievementsCount: (s.achievements ?? []).length,
+      doneLevels: Object.values(s.levels ?? {}).filter((l) => l.status === "done").length,
+    }));
+  res.json({ students: rows, totalInGroup: entries.length });
 });
 
 // ── GET /stats ─────────────────────────────────────────────────────
@@ -289,10 +484,50 @@ smetaTrainerRouter.get("/stats", readLimiter, async (_req, res) => {
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
       : 0;
   }
+  // Урок-статистика: сколько уникальных уроков пройдено суммарно, средний балл по lessonId
+  const lessonScoreSums = new Map<string, { sum: number; cnt: number; doneCnt: number }>();
+  let lessonsCompletedTotal = 0;
+  for (const s of list) {
+    for (const lp of Object.values(s.lessons ?? {})) {
+      const cur = lessonScoreSums.get(lp.lessonId) ?? { sum: 0, cnt: 0, doneCnt: 0 };
+      if (lp.quizScore != null) {
+        cur.sum += lp.quizScore;
+        cur.cnt += 1;
+      }
+      if (lp.completed) {
+        cur.doneCnt += 1;
+        lessonsCompletedTotal += 1;
+      }
+      lessonScoreSums.set(lp.lessonId, cur);
+    }
+  }
+  // Топ-5 «трудных» уроков (низший средний балл, с не менее 2 ответами)
+  const hardestLessons = [...lessonScoreSums.entries()]
+    .filter(([, v]) => v.cnt >= 2)
+    .sort((a, b) => (a[1].sum / a[1].cnt) - (b[1].sum / b[1].cnt))
+    .slice(0, 5)
+    .map(([lessonId, v]) => ({
+      lessonId,
+      avgScore: Math.round(v.sum / v.cnt),
+      attempts: v.cnt,
+      doneCount: v.doneCnt,
+    }));
+
+  // Практика и капстоун
+  const practiceCorrectTotal = list.reduce(
+    (s, st) => s + Object.values(st.practice ?? {}).filter((p) => p.correct).length,
+    0,
+  );
+  const capstonePassed = list.filter((s) => s.capstonePassedAt).length;
+
   res.json({
     studentsTotal: list.length,
     attemptsTotal: attempts.length,
     perLevel,
+    lessonsCompletedTotal,
+    practiceCorrectTotal,
+    capstonePassed,
+    hardestLessons,
     lastUpdate: list.reduce((m, s) => Math.max(m, s.updatedAt), 0),
   });
 });

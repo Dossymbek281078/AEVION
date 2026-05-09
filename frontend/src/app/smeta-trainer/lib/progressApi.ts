@@ -34,6 +34,20 @@ export type ServerLevelProgress = {
   lastVisitAt?: number;
 };
 
+export type ServerLessonProgress = {
+  lessonId: string;
+  completed: boolean;
+  quizScore?: number;
+  ts: number;
+};
+
+export type ServerPracticeAttempt = {
+  exerciseId: string;
+  correct: boolean;
+  attempts: number;
+  ts: number;
+};
+
 export type ServerStudent = {
   deviceId: string;
   userId: string | null;
@@ -42,6 +56,10 @@ export type ServerStudent = {
   startedAt: number;
   updatedAt: number;
   levels: Record<string, ServerLevelProgress>;
+  lessons?: Record<string, ServerLessonProgress>;
+  practice?: Record<string, ServerPracticeAttempt>;
+  capstonePassedAt?: number | null;
+  achievements?: string[];
 };
 
 export type AttemptRecord = {
@@ -62,8 +80,18 @@ export type LeaderboardEntry = {
   doneCount: number;
   totalScore: number;
   levelScore: number | null;
+  /** Кол-во пройденных уроков теории (расширение sprint C). */
+  lessonsCount?: number;
+  /** Кол-во правильно решённых упражнений practice. */
+  practiceCount?: number;
+  /** Кол-во полученных бейджей. */
+  achievementsCount?: number;
+  /** Когда сдан капстоун (или null). */
+  capstonePassedAt?: number | null;
   updatedAt: number;
 };
+
+export type GroupInfo = { name: string; count: number };
 
 export type SmetaStats = {
   studentsTotal: number;
@@ -72,7 +100,22 @@ export type SmetaStats = {
     number,
     { open: number; "in-progress": number; done: number; avgScore: number }
   >;
+  /** Сумма пройденных уроков по всем студентам. */
+  lessonsCompletedTotal?: number;
+  /** Кол-во правильно решённых упражнений практики. */
+  practiceCorrectTotal?: number;
+  /** Кол-во студентов, сдавших капстоун. */
+  capstonePassed?: number;
+  /** Топ-5 «трудных» уроков (низший средний балл). */
+  hardestLessons?: Array<{ lessonId: string; avgScore: number; attempts: number; doneCount: number }>;
   lastUpdate: number;
+};
+
+export type AdminStudentRecord = ServerStudent & {
+  lessonsDone: number;
+  practiceDone: number;
+  achievementsCount: number;
+  doneLevels: number;
 };
 
 class BackendUnavailableError extends Error {
@@ -145,14 +188,78 @@ export async function fetchAttempts(limit = 50): Promise<AttemptRecord[]> {
   return r.attempts;
 }
 
-export async function fetchLeaderboard(level?: number, limit = 20): Promise<LeaderboardEntry[]> {
+export async function fetchLeaderboard(
+  level?: number,
+  limit = 20,
+  group?: string,
+): Promise<LeaderboardEntry[]> {
   const params = new URLSearchParams();
   if (level) params.set("level", String(level));
+  if (group) params.set("group", group);
   params.set("limit", String(limit));
   const r = await api<{ leaderboard: LeaderboardEntry[] }>(
     `/api/smeta-trainer/leaderboard?${params.toString()}`,
   );
   return r.leaderboard;
+}
+
+export async function fetchGroups(): Promise<GroupInfo[]> {
+  const r = await api<{ groups: GroupInfo[] }>(`/api/smeta-trainer/groups`);
+  return r.groups;
+}
+
+export async function syncLessons(
+  lessons: Record<string, { completed: boolean; quizScore?: number; ts: number }>,
+): Promise<ServerStudent> {
+  const id = getDeviceId();
+  const r = await api<{ student: ServerStudent }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/lessons`,
+    { method: "POST", body: JSON.stringify({ lessons }) },
+  );
+  return r.student;
+}
+
+export async function syncPractice(
+  practice: Record<string, { correct: boolean; attempts: number; ts: number }>,
+): Promise<ServerStudent> {
+  const id = getDeviceId();
+  const r = await api<{ student: ServerStudent }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/practice`,
+    { method: "POST", body: JSON.stringify({ practice }) },
+  );
+  return r.student;
+}
+
+export async function syncCapstone(passed: boolean): Promise<ServerStudent> {
+  const id = getDeviceId();
+  const r = await api<{ student: ServerStudent }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/capstone`,
+    { method: "POST", body: JSON.stringify({ passed }) },
+  );
+  return r.student;
+}
+
+export async function syncAchievements(achievements: string[]): Promise<ServerStudent> {
+  const id = getDeviceId();
+  const r = await api<{ student: ServerStudent }>(
+    `/api/smeta-trainer/student/${encodeURIComponent(id)}/achievements`,
+    { method: "POST", body: JSON.stringify({ achievements }) },
+  );
+  return r.student;
+}
+
+export async function fetchAdminStudents(
+  jwt: string,
+  group?: string,
+  limit = 200,
+): Promise<{ students: AdminStudentRecord[]; totalInGroup: number }> {
+  const params = new URLSearchParams();
+  if (group) params.set("group", group);
+  params.set("limit", String(limit));
+  return api<{ students: AdminStudentRecord[]; totalInGroup: number }>(
+    `/api/smeta-trainer/admin/students?${params.toString()}`,
+    { headers: { authorization: `Bearer ${jwt}` } },
+  );
 }
 
 export async function fetchStats(): Promise<SmetaStats> {

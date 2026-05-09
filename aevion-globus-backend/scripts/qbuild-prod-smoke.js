@@ -502,7 +502,7 @@ async function runEngagement(client, worker, vacancyId, appId) {
 
     r = await call("POST", "/api/build/communities/welders-kz/messages", {
       token: worker.token,
-      body: { text: "smoke test message" },
+      body: { content: "smoke test message" },
     });
     if (r.status === 200 || r.status === 201) ok("worker post community message");
     else fail("worker post community message", `status=${r.status}`);

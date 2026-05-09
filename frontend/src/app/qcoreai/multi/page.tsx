@@ -418,6 +418,8 @@ export default function QCoreMultiAgentPage() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const paletteRef = useRef<HTMLInputElement>(null);
   const [paletteRunResults, setPaletteRunResults] = useState<Array<{ type: string; id: string; sessionId?: string; snippet: string; title?: string | null }>>([]);
+  // V32: shortcut cheatsheet modal
+  const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
 
   // V7-T: id of the run being continued (thread reply context).
   const [continueFromRunId, setContinueFromRunId] = useState<string | null>(null);
@@ -492,8 +494,8 @@ export default function QCoreMultiAgentPage() {
       if (e.key === "1") { e.preventDefault(); setStrategy("sequential"); return; }
       if (e.key === "2") { e.preventDefault(); setStrategy("parallel"); return; }
       if (e.key === "3") { e.preventDefault(); setStrategy("debate"); return; }
-      // ? — show shortcuts tooltip
-      if (e.key === "?") { e.preventDefault(); alert("Keyboard shortcuts:\nn — New session\n/ — Search\n⌘K — Command palette\n1/2/3 — Sequential/Parallel/Debate"); return; }
+      // ? — show shortcuts modal
+      if (e.key === "?") { e.preventDefault(); setShortcutModalOpen(true); return; }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -2867,16 +2869,26 @@ export default function QCoreMultiAgentPage() {
               <span style={{ fontSize: 10, color: "#64748b" }}>{sidebarOpen ? "▲ Hide" : "▼ Show"}</span>
             </button>
             <div className="qc-sidebar-body" data-open={sidebarOpen ? "true" : "false"}>
-            <button
-              onClick={newSession}
-              style={{
-                width: "100%", padding: "10px 12px", borderRadius: 10,
-                border: "1px solid #0f172a", background: "#0f172a", color: "#fff",
-                fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 10,
-              }}
-            >
-              + New session
-            </button>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <button
+                onClick={newSession}
+                style={{
+                  flex: 1, padding: "10px 12px", borderRadius: 10,
+                  border: "1px solid #0f172a", background: "#0f172a", color: "#fff",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                + New session
+              </button>
+              <a
+                href="/qcoreai/search"
+                title="Search all sessions and runs"
+                style={{ padding: "10px 11px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              >
+                🔎
+              </a>
+            </div>
+            {/* dummy element to keep original + New session HTML shape */}
             <button
               onClick={() => { setPaletteOpen(true); setPaletteQuery(""); }}
               title="Open command palette (⌘K / Ctrl+K)"
@@ -3836,8 +3848,10 @@ export default function QCoreMultiAgentPage() {
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Actions</div>
                     {[
                       { icon: "✨", label: "New session", action: () => { newSession(); setPaletteOpen(false); } },
+                      { icon: "🔎", label: "Search runs & sessions", action: () => { window.location.href = "/qcoreai/search"; } },
                       { icon: "📓", label: "Open notebook", action: () => { window.location.href = "/qcoreai/notebook"; } },
                       { icon: "🎮", label: "Open playground", action: () => { window.location.href = "/qcoreai/playground"; } },
+                      { icon: "⌨️", label: "Keyboard shortcuts (?)", action: () => { setShortcutModalOpen(true); setPaletteOpen(false); } },
                     ].map((a) => (
                       <div
                         key={a.label}
@@ -3860,6 +3874,44 @@ export default function QCoreMultiAgentPage() {
           </div>
         );
       })()}
+
+      {/* V32 — Keyboard shortcut cheatsheet modal */}
+      {shortcutModalOpen && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setShortcutModalOpen(false)}
+        >
+          <div
+            style={{ width: "min(480px, 90vw)", borderRadius: 16, background: "#fff", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 18 }}>⌨️</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>Keyboard shortcuts</span>
+              <button onClick={() => setShortcutModalOpen(false)} style={{ marginLeft: "auto", border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "#94a3b8" }}>×</button>
+            </div>
+            <div style={{ padding: "12px 20px 20px" }}>
+              {[
+                { key: "n", desc: "New session" },
+                { key: "⌘K / Ctrl+K", desc: "Command palette" },
+                { key: "/", desc: "Open command palette (search)" },
+                { key: "1", desc: "Sequential strategy" },
+                { key: "2", desc: "Parallel strategy" },
+                { key: "3", desc: "Debate strategy" },
+                { key: "?", desc: "This shortcuts cheatsheet" },
+                { key: "Enter", desc: "Send prompt (in textarea)" },
+                { key: "Shift+Enter", desc: "New line in textarea" },
+                { key: "Esc", desc: "Close palette / modal" },
+              ].map(({ key, desc }) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid #f8fafc" }}>
+                  <kbd style={{ padding: "3px 8px", borderRadius: 6, background: "#f1f5f9", border: "1px solid #e2e8f0", fontSize: 11, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", minWidth: 90, textAlign: "center" }}>{key}</kbd>
+                  <span style={{ fontSize: 13, color: "#475569" }}>{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -5212,6 +5264,10 @@ function groupTurns(turns: AgentTurn[]): TurnGroup[] {
   return out;
 }
 
+function wordCount(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
 function FinalCard({
   content, runId, stopped, onContinue,
 }: {
@@ -5298,6 +5354,15 @@ function FinalCard({
         <span style={{ fontWeight: 800, fontSize: 13, color: stopped ? "#92400e" : "#581c87" }}>
           {stopped ? "Partial answer (stopped)" : "Final answer"}
         </span>
+        {content && (() => {
+          const wc = wordCount(content);
+          const mins = Math.max(1, Math.round(wc / 200));
+          return (
+            <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 8 }}>
+              {wc.toLocaleString()} words · ~{mins} min read
+            </span>
+          );
+        })()}
         <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
           <button
             onClick={toggleBookmark}

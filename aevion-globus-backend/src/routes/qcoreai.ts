@@ -3265,6 +3265,36 @@ qcoreaiRouter.delete("/notebook/:id", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
+   V32 — Session stats: quick summary for sidebar badges.
+   GET /sessions/:id/stats
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/sessions/:id/stats", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const runs = await listRuns(session.id, 1000);
+    const doneRuns = runs.filter((r: any) => r.status === "done");
+    const totalCostUsd = doneRuns.reduce((sum: number, r: any) => sum + (r.totalCostUsd || 0), 0);
+    const totalDurationMs = doneRuns.reduce((sum: number, r: any) => sum + (r.totalDurationMs || 0), 0);
+    const totalRuns = runs.length;
+    const doneCount = doneRuns.length;
+    const avgCostUsd = doneCount > 0 ? totalCostUsd / doneCount : 0;
+    const avgDurationMs = doneCount > 0 ? totalDurationMs / doneCount : 0;
+    const strategies = doneRuns.reduce((acc: Record<string, number>, r: any) => {
+      const s = r.strategy || "sequential";
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({ sessionId: session.id, totalRuns, doneCount, totalCostUsd, avgCostUsd, totalDurationMs, avgDurationMs, strategies });
+  } catch (err: any) {
+    res.status(500).json({ error: "session stats failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    V31 — Annotations: user notes on individual agent messages.
    GET  /runs/:id/annotations         — list my annotations for a run
    POST /runs/:id/annotations         — create annotation

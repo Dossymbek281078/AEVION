@@ -157,6 +157,14 @@ import {
   updatePrompt,
   updateTemplate,
   useTemplate,
+  createOrg,
+  getOrg,
+  listOrgs,
+  deleteOrg,
+  addOrgMember,
+  removeOrgMember,
+  listOrgMembers,
+  isOrgMember,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -4144,6 +4152,114 @@ qcoreaiRouter.get("/runs/:id/siblings", async (req, res) => {
     res.json({ runId: run.id, sessionId: run.sessionId, siblings, total: siblings.length });
   } catch (err: any) {
     res.status(500).json({ error: "siblings fetch failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V39 — Organizations (multi-user teams).
+   POST   /orgs                      — create org
+   GET    /orgs                      — list my orgs
+   GET    /orgs/:id                  — get org (member or owner)
+   DELETE /orgs/:id                  — delete org (owner only)
+   POST   /orgs/:id/members          — add member (owner only)
+   DELETE /orgs/:id/members/:userId  — remove member (owner only)
+   GET    /orgs/:id/members          — list members
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/orgs", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    if (!name) return res.status(400).json({ error: "name required" });
+    const org = await createOrg({ name, ownerId: auth.sub });
+    res.status(201).json({ org });
+  } catch (err: any) {
+    res.status(500).json({ error: "create org failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/orgs", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listOrgs(auth.sub);
+    res.json({ items, total: items.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "list orgs failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/orgs/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const org = await getOrg(String(req.params.id));
+    if (!org) return res.status(404).json({ error: "org not found" });
+    const isMember = org.ownerId === auth.sub || (await isOrgMember(org.id, auth.sub));
+    if (!isMember) return res.status(403).json({ error: "forbidden" });
+    res.json({ org });
+  } catch (err: any) {
+    res.status(500).json({ error: "get org failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/orgs/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteOrg(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "org not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete org failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/orgs/:id/members", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const org = await getOrg(String(req.params.id));
+    if (!org) return res.status(404).json({ error: "org not found" });
+    if (org.ownerId !== auth.sub) return res.status(403).json({ error: "only owner can add members" });
+    const userId = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const role = typeof req.body?.role === "string" ? req.body.role : "member";
+    await addOrgMember(org.id, userId, role);
+    res.status(201).json({ orgId: org.id, userId, role });
+  } catch (err: any) {
+    res.status(500).json({ error: "add member failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/orgs/:id/members/:userId", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const org = await getOrg(String(req.params.id));
+    if (!org) return res.status(404).json({ error: "org not found" });
+    if (org.ownerId !== auth.sub) return res.status(403).json({ error: "only owner can remove members" });
+    const ok = await removeOrgMember(org.id, String(req.params.userId));
+    if (!ok) return res.status(404).json({ error: "member not found" });
+    res.json({ removed: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "remove member failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/orgs/:id/members", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const org = await getOrg(String(req.params.id));
+    if (!org) return res.status(404).json({ error: "org not found" });
+    const isMember = org.ownerId === auth.sub || (await isOrgMember(org.id, auth.sub));
+    if (!isMember) return res.status(403).json({ error: "forbidden" });
+    const members = await listOrgMembers(org.id);
+    res.json({ members, total: members.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "list members failed", details: err?.message });
   }
 });
 

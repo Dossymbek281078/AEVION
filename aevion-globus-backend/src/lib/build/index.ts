@@ -317,9 +317,7 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_worker_due_idx" ON "BuildPaymentEvent" ("workerId", "dueDate" ASC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_app_idx" ON "BuildPaymentEvent" ("applicationId");`);
 
-  // Web Push subscriptions — endpoint is the natural unique key (one
-  // browser/profile = one endpoint). userId is upserted on re-subscribe
-  // so a shared device that signs in as a different user reroutes pushes.
+  // Web Push subscriptions — endpoint is the natural unique key.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildPushSubscription" (
       "id" TEXT PRIMARY KEY,
@@ -331,6 +329,50 @@ async function _doEnsureBuildTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPushSubscription_user_idx" ON "BuildPushSubscription" ("userId");`);
+
+  // Document verification — workers upload credential docs for admin review.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildDocument" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "docType" TEXT NOT NULL,
+      "fileUrl" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'PENDING',
+      "reviewNote" TEXT,
+      "reviewedAt" TIMESTAMPTZ,
+      "reviewedBy" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildDocument_user_idx" ON "BuildDocument" ("userId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildDocument_status_idx" ON "BuildDocument" ("status");`);
+
+  // Portfolio photos — work-site photos on worker public profile.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPortfolioPhoto" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "url" TEXT NOT NULL,
+      "caption" TEXT,
+      "projectType" TEXT,
+      "takenAt" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPortfolioPhoto_user_idx" ON "BuildPortfolioPhoto" ("userId", "createdAt" DESC);`);
+
+  // Safety briefing — pre-shift sign-off linked to a BuildShift.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildSafetyBriefing" (
+      "id" TEXT PRIMARY KEY,
+      "shiftId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "itemsJson" TEXT NOT NULL DEFAULT '[]',
+      "signedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildSafetyBriefing_shift_idx" ON "BuildSafetyBriefing" ("shiftId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildSafetyBriefing_user_shift_idx" ON "BuildSafetyBriefing" ("userId", "shiftId");`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (

@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import {
   fail,
@@ -35,6 +35,12 @@ import { interviewsRouter } from "./build/interviews";
 import { skillBadgesRouter } from "./build/skill-badges";
 import { paymentCalendarRouter } from "./build/payment-calendar";
 import { pushRouter } from "./build/push";
+import { contractsRouter } from "./build/contracts";
+import { documentsRouter } from "./build/documents";
+import { portfolioPhotosRouter } from "./build/portfolio-photos";
+import { safetyBriefingRouter } from "./build/safety-briefing";
+import { communitiesRouter } from "./build/communities";
+import { videoRoomsRouter } from "./build/video-rooms";
 
 export const buildRouter = Router();
 
@@ -90,5 +96,22 @@ buildRouter.use("/interviews", interviewsRouter);
 buildRouter.use("/", skillBadgesRouter);
 buildRouter.use("/payment-calendar", paymentCalendarRouter);
 buildRouter.use("/push", pushRouter);
-
-void communityMsgLimiter;
+// QSign-backed contract generation — mounts under /applications so
+// POST /applications/:id/contract is the full path. No new tables.
+buildRouter.use("/applications", contractsRouter);
+// Document verification — PENDING→VERIFIED|REJECTED workflow. New
+// BuildDocument table declared in lib/build/index.ts.
+buildRouter.use("/documents", documentsRouter);
+// Work-site portfolio photos — public gallery on worker profile. New
+// BuildPortfolioPhoto table in lib/build/index.ts.
+buildRouter.use("/portfolio/photos", portfolioPhotosRouter);
+// Pre-shift safety briefing sign-off. New BuildSafetyBriefing table.
+buildRouter.use("/safety-briefing", safetyBriefingRouter);
+// Community topical chat rooms. Tables were bootstrapped in #146 and
+// are already in the schema; the mount was accidentally dropped in
+// 0445a81c (skill-tests squash). Rate-limit only message POSTs.
+buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
+buildRouter.use("/communities", communitiesRouter);
+// Video rooms — Daily.co-backed. Bootstrapped in #147, mount dropped
+// in 0445a81c. DAILY_API_KEY optional — stub URL returned without it.
+buildRouter.use("/video/rooms", videoRoomsRouter);

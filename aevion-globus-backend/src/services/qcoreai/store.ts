@@ -3760,3 +3760,136 @@ export async function getRunClapCount(runId: string): Promise<number> {
   const r = await pool.query(`SELECT "clapCount" FROM "QCoreRun" WHERE "id"=$1`, [runId]);
   return r.rows[0]?.clapCount ?? 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V47 — Session AI summary (cached)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function setSessionAiSummary(
+  sessionId: string,
+  summary: string
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memSessions.get(sessionId);
+    if (s) {
+      (s as any).aiSummary = summary;
+      (s as any).aiSummaryAt = nowIso();
+    }
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCoreSession" SET "aiSummary"=$1, "aiSummaryAt"=NOW() WHERE "id"=$2`,
+    [summary, sessionId]
+  );
+}
+
+export async function getSessionAiSummary(
+  sessionId: string
+): Promise<{ summary: string; generatedAt: string } | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const s = memSessions.get(sessionId);
+    if (!s || !(s as any).aiSummary) return null;
+    return { summary: (s as any).aiSummary, generatedAt: (s as any).aiSummaryAt };
+  }
+  const r = await pool.query(
+    `SELECT "aiSummary","aiSummaryAt" FROM "QCoreSession" WHERE "id"=$1`,
+    [sessionId]
+  );
+  const row = r.rows[0];
+  if (!row || !row.aiSummary) return null;
+  return { summary: row.aiSummary, generatedAt: row.aiSummaryAt };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V49 — Per-user rate limits
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const memRateLimits = new Map<string, { count: number; windowStart: string }>();
+
+export async function checkAndIncrRateLimit(
+  userId: string,
+  bucket: string,
+  limit: number,
+  windowMs: number
+): Promise<{ allowed: boolean; remaining: number; resetAt: string }> {
+  await ensureQCoreTables(pool);
+  const key = `${userId}::${bucket}`;
+  const now = Date.now();
+  const resetAt = new Date(now + windowMs).toISOString();
+
+  if (!isDbReady()) {
+    const cur = memRateLimits.get(key);
+    const windowStart = cur ? new Date(cur.windowStart).getTime() : 0;
+    if (!cur || now - windowStart >= windowMs) {
+      memRateLimits.set(key, { count: 1, windowStart: new Date(now).toISOString() });
+      return { allowed: true, remaining: limit - 1, resetAt };
+    }
+    if (cur.count >= limit) {
+      return { allowed: false, remaining: 0, resetAt: new Date(windowStart + windowMs).toISOString() };
+    }
+    cur.count += 1;
+    return { allowed: true, remaining: limit - cur.count, resetAt: new Date(windowStart + windowMs).toISOString() };
+  }
+
+  // DB path: upsert with window reset logic
+  const windowSecs = Math.ceil(windowMs / 1000);
+  const r = await pool.query(
+    `INSERT INTO "QCoreRateLimit" ("userId","bucket","count","windowStart")
+     VALUES ($1,$2,1,NOW())
+     ON CONFLICT ("userId","bucket") DO UPDATE
+       SET "count" = CASE
+             WHEN EXTRACT(EPOCH FROM (NOW() - "QCoreRateLimit"."windowStart")) * 1000 >= $3
+             THEN 1
+             ELSE "QCoreRateLimit"."count" + 1
+           END,
+           "windowStart" = CASE
+             WHEN EXTRACT(EPOCH FROM (NOW() - "QCoreRateLimit"."windowStart")) * 1000 >= $3
+             THEN NOW()
+             ELSE "QCoreRateLimit"."windowStart"
+           END
+     RETURNING "count","windowStart"`,
+    [userId, bucket, windowMs]
+  );
+  const row = r.rows[0];
+  const count: number = row?.count ?? 1;
+  const windowStart = row?.windowStart ? new Date(row.windowStart).getTime() : now;
+  const computedResetAt = new Date(windowStart + windowMs).toISOString();
+  const allowed = count <= limit;
+  return { allowed, remaining: Math.max(0, limit - count), resetAt: computedResetAt };
+}
+
+export async function adminResetRateLimit(userId: string, bucket: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const key = `${userId}::${bucket}`;
+  if (!isDbReady()) {
+    const existed = memRateLimits.has(key);
+    memRateLimits.delete(key);
+    return existed;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreRateLimit" WHERE "userId"=$1 AND "bucket"=$2 RETURNING "userId"`,
+    [userId, bucket]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listRateLimits(userId: string): Promise<Array<{ bucket: string; count: number; windowStart: string }>> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const prefix = `${userId}::`;
+    const results: Array<{ bucket: string; count: number; windowStart: string }> = [];
+    for (const [key, val] of memRateLimits.entries()) {
+      if (key.startsWith(prefix)) {
+        results.push({ bucket: key.slice(prefix.length), count: val.count, windowStart: val.windowStart });
+      }
+    }
+    return results;
+  }
+  const r = await pool.query(
+    `SELECT "bucket","count","windowStart" FROM "QCoreRateLimit" WHERE "userId"=$1`,
+    [userId]
+  );
+  return r.rows as Array<{ bucket: string; count: number; windowStart: string }>;
+}

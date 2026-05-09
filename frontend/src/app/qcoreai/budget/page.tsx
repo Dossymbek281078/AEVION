@@ -60,6 +60,9 @@ export default function QCoreBudgetPage() {
   const [limitInput, setLimitInput] = useState("");
   const [alertInput, setAlertInput] = useState("80");
 
+  // V49 — Rate limits
+  const [rateLimits, setRateLimits] = useState<Array<{ bucket: string; count: number; limit: number; remaining: number; resetAt: string }>>([]);
+
   async function fetchSummary() {
     try {
       const [summaryRes, usageRes] = await Promise.all([
@@ -108,7 +111,15 @@ export default function QCoreBudgetPage() {
     } catch { /* silent */ }
   }
 
-  useEffect(() => { fetchSummary(); fetchCostTrend(); }, []);
+  async function fetchRateLimits() {
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/me/rate-limits"), { headers: bearerHeader() });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.rateLimits)) setRateLimits(d.rateLimits);
+    } catch { /* silent */ }
+  }
+
+  useEffect(() => { fetchSummary(); fetchCostTrend(); fetchRateLimits(); }, []);
 
   async function saveLimit() {
     const limitVal = parseFloat(limitInput);
@@ -377,6 +388,33 @@ export default function QCoreBudgetPage() {
                     Upgrade to Pro
                   </a>
                 )}
+              </div>
+            )}
+
+            {/* V49: Rate limits */}
+            {rateLimits.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Rate limits (today)</h2>
+                {rateLimits.map((rl) => {
+                  const pct = rl.limit > 0 ? (rl.count / rl.limit) * 100 : 0;
+                  const barColor = pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#22c55e";
+                  const label = rl.bucket === "multi-agent" ? "Multi-agent runs" : rl.bucket === "eval-run" ? "Eval runs" : "Widget calls";
+                  return (
+                    <div key={rl.bucket}>
+                      <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                        <span>{label}</span>
+                        <span>{rl.count} / {rl.limit}</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${Math.min(100, pct)}%`, background: barColor }}
+                        />
+                      </div>
+                      <div className="text-xs text-slate-600 mt-0.5">Resets {new Date(rl.resetAt).toLocaleString()}</div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

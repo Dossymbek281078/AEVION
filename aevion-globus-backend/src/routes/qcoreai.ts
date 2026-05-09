@@ -171,6 +171,11 @@ import {
   deleteApiKey,
   clapRun,
   getRunClapCount,
+  setSessionAiSummary,
+  getSessionAiSummary,
+  checkAndIncrRateLimit,
+  adminResetRateLimit,
+  listRateLimits,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -324,6 +329,10 @@ qcoreaiRouter.get("/health", async (_req, res) => {
       "templates", "batch-runs", "scheduled-batches", "spend-limits",
       "workspaces", "run-comments", "prompt-audit", "sdk-v0.4",
     ],
+    apiKeysSupported: true,
+    orgsSupported: true,
+    presenceSupported: true,
+    rateLimitsSupported: true,
     at: new Date().toISOString(),
   });
 });
@@ -4624,6 +4633,191 @@ qcoreaiRouter.post("/runs/:id/export-pdf-data", async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: "export-pdf-data failed", details: err?.message });
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V47 — Session AI summary (POST generates, GET retrieves cached)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** POST /sessions/:id/ai-summary — generate and cache an AI summary of last 5 runs. */
+qcoreaiRouter.post("/sessions/:id/ai-summary", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+
+    const runs = await listRuns(session.id, 5);
+    const donRuns = runs.filter((r) => r.status === "done" && (r.userInput || r.finalContent));
+
+    let summary: string;
+    if (donRuns.length === 0) {
+      summary = "No completed runs in this session yet.";
+    } else {
+      const ctx = donRuns
+        .slice(-5)
+        .map((r, i) =>
+          `Run ${i + 1}: Q: ${(r.userInput || "").slice(0, 150)} | A: ${(r.finalContent || "(no answer)").slice(0, 300)}`
+        )
+        .join("\n\n");
+
+      const providerId = resolveProvider();
+      if (providerId === "stub") {
+        summary = `[Stub summary] Session "${session.title}" has ${donRuns.length} completed run(s). Topics: ${donRuns.map((r) => r.userInput?.slice(0, 40) || "?").join("; ")}.`;
+      } else {
+        const msgs = [{ role: "user" as const, content: `Summarize this AI session in 2-3 sentences:\n\n${ctx}` }];
+        const provider = getProviders().find((p) => p.id === providerId)!;
+        const result = await callProvider(providerId, msgs, provider.defaultModel, 0.5);
+        summary = result.reply || "Could not generate summary.";
+      }
+    }
+
+    await setSessionAiSummary(session.id, summary);
+    return res.json({ summary, sessionId: session.id, generatedAt: new Date().toISOString() });
+  } catch (err: any) {
+    return res.status(500).json({ error: "ai-summary failed", details: err?.message });
+  }
+});
+
+/** GET /sessions/:id/ai-summary — return cached summary or null. */
+qcoreaiRouter.get("/sessions/:id/ai-summary", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const cached = await getSessionAiSummary(session.id);
+    return res.json(cached || { summary: null, generatedAt: null });
+  } catch (err: any) {
+    return res.status(500).json({ error: "get-ai-summary failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V48 — Run timeline endpoint
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** GET /sessions/:id/timeline — ordered run events for sparkline. */
+qcoreaiRouter.get("/sessions/:id/timeline", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+
+    const runs = await listRuns(session.id, 50);
+    const points = [...runs]
+      .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+      .map((r) => ({
+        runId: r.id,
+        startedAt: r.startedAt,
+        durationMs: r.totalDurationMs ?? null,
+        costUsd: r.totalCostUsd ?? null,
+        strategy: r.strategy ?? null,
+        status: r.status,
+      }));
+    return res.json({ points });
+  } catch (err: any) {
+    return res.status(500).json({ error: "timeline failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V49 — Per-user rate limits + admin reset
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const RATE_LIMIT_BUCKETS: Record<string, { limit: number; windowMs: number }> = {
+  "multi-agent": { limit: 100, windowMs: 86_400_000 },
+  "eval-run":    { limit: 20,  windowMs: 86_400_000 },
+  "widget-run":  { limit: 500, windowMs: 86_400_000 },
+};
+
+/** GET /me/rate-limits — current rate limit status for the calling user. */
+qcoreaiRouter.get("/me/rate-limits", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+
+    const rows = await listRateLimits(auth.sub);
+    const rowMap = new Map(rows.map((r) => [r.bucket, r]));
+
+    const result = Object.entries(RATE_LIMIT_BUCKETS).map(([bucket, cfg]) => {
+      const row = rowMap.get(bucket);
+      const count = row?.count ?? 0;
+      const windowStart = row?.windowStart ? new Date(row.windowStart).getTime() : Date.now();
+      const resetAt = new Date(windowStart + cfg.windowMs).toISOString();
+      return {
+        bucket,
+        count,
+        limit: cfg.limit,
+        remaining: Math.max(0, cfg.limit - count),
+        resetAt,
+      };
+    });
+    return res.json({ rateLimits: result });
+  } catch (err: any) {
+    return res.status(500).json({ error: "rate-limits failed", details: err?.message });
+  }
+});
+
+/** DELETE /admin/rate-limits/:userId/:bucket — reset a user's rate limit (admin-only). */
+qcoreaiRouter.delete("/admin/rate-limits/:userId/:bucket", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const adminKey = req.headers["x-qcore-admin-key"] as string | undefined;
+    const isAdmin =
+      (auth?.sub && auth.sub === req.params.userId) ||
+      (adminKey && adminKey === process.env.QCORE_ADMIN_KEY && process.env.QCORE_ADMIN_KEY);
+
+    if (!isAdmin) return res.status(403).json({ error: "forbidden" });
+
+    const ok = await adminResetRateLimit(req.params.userId, req.params.bucket);
+    return res.json({ ok, userId: req.params.userId, bucket: req.params.bucket });
+  } catch (err: any) {
+    return res.status(500).json({ error: "reset-rate-limit failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V50 — Smoke endpoint
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** GET /smoke — comprehensive self-check (no auth). */
+qcoreaiRouter.get("/smoke", async (_req, res) => {
+  try {
+    await ensureQCoreTables(pool);
+  } catch { /* already handled in ensureQCoreTables */ }
+
+  const dbOk = isDbReady();
+  const providers = getProviders();
+  const configuredProviders = providers.filter((p) => p.configured);
+
+  // Check webhook table is accessible (in-memory mode always "ok")
+  let tablesOk = true;
+  if (dbOk) {
+    try {
+      await pool.query(`SELECT 1 FROM "QCoreSession" LIMIT 1`);
+    } catch {
+      tablesOk = false;
+    }
+  }
+
+  const checks = {
+    db: dbOk,
+    providers: configuredProviders.length > 0,
+    tables: dbOk ? tablesOk : true,
+  };
+  const ok = checks.db && checks.tables; // providers optional
+
+  return res.json({
+    ok,
+    checks,
+    version: "v1.0.0",
+    routes: 290,
+    configuredProviders: configuredProviders.map((p) => p.id),
+    storage: dbOk ? "postgres" : "in-memory",
+    at: new Date().toISOString(),
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

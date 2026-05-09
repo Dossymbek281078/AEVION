@@ -2976,6 +2976,8 @@ export function saveLessonProgress(id: string, p: LessonProgress): void {
     const all = loadLessonProgress();
     all[id] = { ...p, ts: Date.now() };
     localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+    // Уведомляем AchievementToast, что прогресс изменился
+    window.dispatchEvent(new CustomEvent("aevion-smeta-progress-update"));
   } catch {}
 }
 

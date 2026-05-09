@@ -39,7 +39,10 @@ function load(): CourseProgress {
 
 function save(p: CourseProgress) {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {}
+  try {
+    localStorage.setItem(KEY, JSON.stringify(p));
+    window.dispatchEvent(new CustomEvent("aevion-smeta-progress-update"));
+  } catch {}
 }
 
 export function useProgress() {

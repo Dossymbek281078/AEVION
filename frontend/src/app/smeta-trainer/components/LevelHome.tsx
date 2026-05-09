@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LEVELS } from "../lib/levels";
 import { useProgress } from "../lib/useProgress";
 import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "../lib/lessons";
+import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
 import type { LevelStatus } from "../lib/useProgress";
 
 const statusLabel: Record<LevelStatus, string> = {
@@ -64,7 +65,10 @@ export function LevelHome() {
       }
     });
     setLessonsState({ done: doneLessons, total: totalLessons, perLevel, nextLevel, nextTitle });
+    setBadgesEarned(computeEarned(progress, lp).size);
   }, [progress]);
+
+  const [badgesEarned, setBadgesEarned] = useState(0);
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-slate-50 p-6">
@@ -200,6 +204,15 @@ export function LevelHome() {
               📊 Dashboard
               <span className="text-[10px] text-slate-400 font-normal">
                 прогресс + лидерборд
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/achievements"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 text-xs font-semibold rounded-lg"
+            >
+              🏅 Достижения
+              <span className="text-[10px] text-amber-500 font-normal">
+                {badgesEarned}/{ACHIEVEMENTS.length}
               </span>
             </Link>
             {done === total && (

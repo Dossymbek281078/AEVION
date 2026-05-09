@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AchievementToast } from "./components/AchievementToast";
 
 export const metadata = {
   title: "Сметный тренажёр — AEVION",
@@ -50,6 +51,7 @@ export default function SmetaTrainerLayout({ children }: { children: ReactNode }
         .dot-3 { animation: pulse-dots 1.4s infinite 0.4s; }
       `}</style>
       {children}
+      <AchievementToast />
     </>
   );
 }

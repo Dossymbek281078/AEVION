@@ -2414,6 +2414,78 @@ qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════
+   V34 — Prompt version diff: word-level diff between adjacent versions.
+   GET /prompts/:id/diff?fromId=<parentId>
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/prompts/:id/diff", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const targetId = String(req.params.id);
+    const fromId = typeof req.query.fromId === "string" ? req.query.fromId : null;
+    const target = await getPrompt(targetId);
+    if (!target) return res.status(404).json({ error: "prompt not found" });
+    if (!target.isPublic && (!auth?.sub || auth.sub !== target.ownerUserId)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+    let fromText = "";
+    if (fromId) {
+      const from = await getPrompt(fromId);
+      if (from && (from.isPublic || (auth?.sub && auth.sub === from.ownerUserId))) {
+        fromText = from.content;
+      }
+    } else {
+      // Auto-find parent version.
+      const chain = await getPromptVersionChain(targetId);
+      const idx = chain.findIndex((p: any) => p.id === targetId);
+      if (idx > 0) fromText = chain[idx - 1].content;
+    }
+    const diff = computeWordDiff(fromText, target.content);
+    res.json({ diff, fromLength: fromText.length, toLength: target.content.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "diff failed", details: err?.message });
+  }
+});
+
+/** Minimal word-level diff — returns an array of {text, type: 'equal'|'insert'|'delete'} */
+function computeWordDiff(from: string, to: string): Array<{ text: string; type: "equal" | "insert" | "delete" }> {
+  const fromWords = from.split(/(\s+)/);
+  const toWords = to.split(/(\s+)/);
+  // Simple LCS-based diff using DP.
+  const m = fromWords.length, n = toWords.length;
+  // For large texts, use a simplified chunk approach.
+  if (m + n > 2000) {
+    const added = to.length - from.length;
+    if (added > 0) return [{ text: from, type: "equal" }, { text: to.slice(from.length), type: "insert" }];
+    if (added < 0) return [{ text: to, type: "equal" }, { text: from.slice(to.length), type: "delete" }];
+    return [{ text: to, type: "equal" }];
+  }
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    dp[i][j] = fromWords[i - 1] === toWords[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  }
+  const result: Array<{ text: string; type: "equal" | "insert" | "delete" }> = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && fromWords[i - 1] === toWords[j - 1]) {
+      result.unshift({ text: fromWords[i - 1], type: "equal" }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.unshift({ text: toWords[j - 1], type: "insert" }); j--;
+    } else {
+      result.unshift({ text: fromWords[i - 1], type: "delete" }); i--;
+    }
+  }
+  // Merge consecutive equal segments.
+  const merged: Array<{ text: string; type: "equal" | "insert" | "delete" }> = [];
+  for (const item of result) {
+    const last = merged[merged.length - 1];
+    if (last && last.type === item.type) last.text += item.text;
+    else merged.push({ ...item });
+  }
+  return merged;
+}
+
 qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
@@ -3467,6 +3539,14 @@ qcoreaiRouter.get("/me/annotations", async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const limit = Math.min(100, Number(req.query.limit) || 50);
     const rows = await listAllAnnotations(auth.sub, limit);
+    if (req.query.format === "csv") {
+      const csv = ["id,runId,messageRole,messageIdx,note,color,createdAt",
+        ...rows.map((r) => `${r.id},${r.runId},${r.messageRole},${r.messageIdx},"${(r.note || "").replace(/"/g, '""')}",${r.color},${r.createdAt}`)
+      ].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=\"qcore-annotations.csv\"");
+      return res.send(csv);
+    }
     res.json({ annotations: rows });
   } catch (err: any) {
     res.status(500).json({ error: "list annotations failed", details: err?.message });

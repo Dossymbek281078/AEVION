@@ -78,7 +78,9 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
   const files = walkTs(routesDir);
 
   // Pattern: `<NAME>_SECRET || "dev-` (the regression we fixed).
-  const insecureRegex = /process\.env\.[A-Z_]+_SECRET\s*\|\|\s*"dev-/;
+  // Also catches `<NAME>_TOKEN || "<literal>"` — pricing.ts's dashboardSecret
+  // had a non-"dev-" prefixed literal fallback that the original regex missed.
+  const insecureRegex = /process\.env\.[A-Z_]+_SECRET\s*\|\|\s*"(dev-|[a-z]{6,})/;
 
   test("no route uses the `process.env.*_SECRET || \"dev-...\"` pattern", () => {
     const offenders: string[] = [];

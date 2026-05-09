@@ -933,11 +933,23 @@ pricingRouter.get("/newsletter/list", (req, res) => {
  * Это not super-secret — даёт доступ только к данным конкретного email.
  */
 function dashboardSecret(): string {
-  return (
+  const fromEnv =
     process.env.DASHBOARD_SECRET?.trim() ||
     process.env.ADMIN_TOKEN?.trim() ||
-    "aevion-dashboard-default-rotate-me"
-  );
+    "";
+  // Was: literal fallback "aevion-dashboard-default-rotate-me". Anyone
+  // reading the OSS source could compute valid dashboard tokens for any
+  // email. In production we now fail closed; in non-production we keep a
+  // deterministic dev default so tests + local runs work without env wiring.
+  if (process.env.NODE_ENV === "production") {
+    if (!fromEnv || fromEnv.length < 32) {
+      throw new Error(
+        "DASHBOARD_SECRET (or ADMIN_TOKEN) is missing or weak in production — refusing to mint/verify dashboard tokens.",
+      );
+    }
+    return fromEnv;
+  }
+  return fromEnv || "aevion-dashboard-dev-default-32chars-pad";
 }
 
 function dashboardToken(email: string, scope: "affiliate" | "partners"): string {

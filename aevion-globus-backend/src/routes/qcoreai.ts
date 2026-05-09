@@ -84,6 +84,8 @@ import {
   pinWorkspaceSession,
   searchQCore,
   setFollowUpFrom,
+  listPublicEvalSuites,
+  setEvalSuitePublic,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -1469,7 +1471,84 @@ qcoreaiRouter.get("/analytics/export", async (req, res) => {
   }
 });
 
-/**
+/* ═══════════════════════════════════════════════════════════════════════
+   V33 — Analytics: agent response length + provider compare.
+   GET /analytics/agent-length    — avg content length per agent role
+   GET /analytics/provider-compare — cost, speed, token stats per provider
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/analytics/agent-length", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    if (!isDbReady()) return res.json({ items: [] });
+    const r = await pool.query(
+      `SELECT m."role", COUNT(*) AS calls,
+              AVG(LENGTH(m."content")) AS avgLength,
+              MIN(LENGTH(m."content")) AS minLength,
+              MAX(LENGTH(m."content")) AS maxLength
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" ru ON ru."id"=m."runId"
+       JOIN "QCoreSession" se ON se."id"=ru."sessionId"
+       WHERE se."userId"=$1
+         AND m."role" IN ('analyst','writer','critic')
+         AND m."content" IS NOT NULL AND m."content" != ''
+       GROUP BY m."role"
+       ORDER BY AVG(LENGTH(m."content")) DESC`,
+      [auth.sub]
+    );
+    const items = r.rows.map((row: any) => ({
+      role: row.role,
+      calls: Number(row.calls),
+      avgLength: Math.round(Number(row.avglength)),
+      minLength: Math.round(Number(row.minlength)),
+      maxLength: Math.round(Number(row.maxlength)),
+      avgWords: Math.round(Number(row.avglength) / 5),
+    }));
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "agent length failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    if (!isDbReady()) return res.json({ items: [] });
+    const r = await pool.query(
+      `SELECT m."provider",
+              COUNT(*) AS calls,
+              AVG(m."durationMs") AS avgDurationMs,
+              AVG(m."costUsd") AS avgCostUsd,
+              SUM(m."costUsd") AS totalCostUsd,
+              AVG(m."tokensIn") AS avgTokensIn,
+              AVG(m."tokensOut") AS avgTokensOut,
+              AVG(LENGTH(m."content")) AS avgContentLength
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" ru ON ru."id"=m."runId"
+       JOIN "QCoreSession" se ON se."id"=ru."sessionId"
+       WHERE se."userId"=$1 AND m."provider" IS NOT NULL AND m."provider" != ''
+       GROUP BY m."provider"
+       ORDER BY SUM(m."costUsd") DESC NULLS LAST`,
+      [auth.sub]
+    );
+    const items = r.rows.map((row: any) => ({
+      provider: row.provider,
+      calls: Number(row.calls),
+      avgDurationMs: Math.round(Number(row.avgdurationms) || 0),
+      avgCostUsd: Number(row.avgcostusd) || 0,
+      totalCostUsd: Number(row.totalcostusd) || 0,
+      avgTokensIn: Math.round(Number(row.avgtokensin) || 0),
+      avgTokensOut: Math.round(Number(row.avgtokensout) || 0),
+      avgContentLength: Math.round(Number(row.avgcontentlength) || 0),
+    }));
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "provider compare failed", details: err?.message });
+  }
+});
+
 /**
  * GET /api/qcoreai/sessions/:id/export?format=json|md
  * Bulk export of all runs in a session — useful for offline archival.
@@ -2128,6 +2207,30 @@ qcoreaiRouter.get("/eval/suites", async (req, res) => {
     res.json({ items });
   } catch (err: any) {
     res.status(500).json({ error: "list eval suites failed", details: err?.message });
+  }
+});
+
+/* V33 — public eval suite gallery */
+qcoreaiRouter.get("/eval/suites/public", async (req, res) => {
+  try {
+    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const items = await listPublicEvalSuites(limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public eval suites failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/eval/suites/:id/visibility", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const isPublic = Boolean(req.body?.isPublic);
+    const ok = await setEvalSuitePublic(String(req.params.id), auth.sub, isPublic);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ isPublic });
+  } catch (err: any) {
+    res.status(500).json({ error: "set eval suite visibility failed", details: err?.message });
   }
 });
 

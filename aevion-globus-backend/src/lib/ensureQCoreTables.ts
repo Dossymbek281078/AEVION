@@ -500,6 +500,10 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx" ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx" ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);`);
 
+  // V33 — EvalSuite public sharing.
+  await pool.query(`ALTER TABLE "QCoreEvalSuite" ADD COLUMN IF NOT EXISTS "isPublic" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreEvalSuite_public_idx" ON "QCoreEvalSuite" ("isPublic", "updatedAt" DESC) WHERE "isPublic"=TRUE;`);
+
   // Annotations — user notes attached to individual agent messages within a run.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreAnnotation" (

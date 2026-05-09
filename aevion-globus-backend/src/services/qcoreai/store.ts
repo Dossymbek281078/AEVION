@@ -1442,6 +1442,21 @@ export async function listEvalSuites(userId: string, limit = 50): Promise<EvalSu
   return r.rows as EvalSuiteRow[];
 }
 
+export async function listPublicEvalSuites(limit = 20): Promise<EvalSuiteRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(100, limit));
+  if (!isDbReady()) return Array.from(memEvalSuites.values()).filter((s) => (s as any).isPublic).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, lim);
+  const r = await pool.query(`SELECT * FROM "QCoreEvalSuite" WHERE "isPublic"=TRUE ORDER BY "updatedAt" DESC LIMIT $1`, [lim]);
+  return r.rows as EvalSuiteRow[];
+}
+
+export async function setEvalSuitePublic(id: string, userId: string, isPublic: boolean): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) { const s = memEvalSuites.get(id); if (!s || s.ownerUserId !== userId) return false; (s as any).isPublic = isPublic; return true; }
+  const r = await pool.query(`UPDATE "QCoreEvalSuite" SET "isPublic"=$1 WHERE "id"=$2 AND "ownerUserId"=$3 RETURNING "id"`, [isPublic, id, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
 export async function getEvalSuite(id: string): Promise<EvalSuiteRow | null> {
   await ensureQCoreTables(pool);
   if (!isDbReady()) return memEvalSuites.get(id) ?? null;

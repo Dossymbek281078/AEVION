@@ -3348,3 +3348,145 @@ export async function isBookmarked(runId: string, userId: string): Promise<boole
   const r = await pool.query(`SELECT 1 FROM "QCoreRunBookmark" WHERE "runId"=$1 AND "userId"=$2`, [runId, userId]);
   return (r.rowCount ?? 0) > 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Annotations — user notes on individual agent messages within a run.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type AnnotationRow = {
+  id: string; runId: string; userId: string;
+  messageRole: string; messageIdx: number;
+  note: string; color: string; createdAt: string; updatedAt: string;
+};
+const memAnnotations = new Map<string, AnnotationRow>(); // key = id
+
+export async function createAnnotation(
+  runId: string, userId: string,
+  messageRole: string, messageIdx: number,
+  note: string, color: string = "yellow"
+): Promise<AnnotationRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: AnnotationRow = { id, runId, userId, messageRole, messageIdx: messageIdx || 0, note: note.slice(0, 2000), color, createdAt: nowIso(), updatedAt: nowIso() };
+  if (!isDbReady()) { memAnnotations.set(id, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCoreAnnotation" ("id","runId","userId","messageRole","messageIdx","note","color")
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [id, runId, userId, messageRole, messageIdx || 0, row.note, color]
+  );
+  return r.rows[0] as AnnotationRow;
+}
+
+export async function updateAnnotation(id: string, userId: string, note: string, color?: string): Promise<AnnotationRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const a = memAnnotations.get(id);
+    if (!a || a.userId !== userId) return null;
+    a.note = note.slice(0, 2000); if (color) a.color = color; a.updatedAt = nowIso();
+    return a;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreAnnotation" SET "note"=$1,"color"=COALESCE($2,"color"),"updatedAt"=NOW()
+     WHERE "id"=$3 AND "userId"=$4 RETURNING *`,
+    [note.slice(0, 2000), color ?? null, id, userId]
+  );
+  return r.rows[0] as AnnotationRow ?? null;
+}
+
+export async function deleteAnnotation(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) { const a = memAnnotations.get(id); if (!a || a.userId !== userId) return false; memAnnotations.delete(id); return true; }
+  const r = await pool.query(`DELETE FROM "QCoreAnnotation" WHERE "id"=$1 AND "userId"=$2 RETURNING "id"`, [id, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listAnnotations(runId: string, userId: string): Promise<AnnotationRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memAnnotations.values()).filter((a) => a.runId === runId && a.userId === userId).sort((a, b) => a.messageIdx - b.messageIdx);
+  const r = await pool.query(`SELECT * FROM "QCoreAnnotation" WHERE "runId"=$1 AND "userId"=$2 ORDER BY "messageIdx","createdAt"`, [runId, userId]);
+  return r.rows as AnnotationRow[];
+}
+
+export async function listAllAnnotations(userId: string, limit = 50): Promise<AnnotationRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memAnnotations.values()).filter((a) => a.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  const r = await pool.query(`SELECT * FROM "QCoreAnnotation" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`, [userId, limit]);
+  return r.rows as AnnotationRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Workspace session pin order.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function pinWorkspaceSession(workspaceId: string, sessionId: string, pinOrder: number | null): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return false;
+  const r = await pool.query(
+    `UPDATE "QCoreWorkspaceSession" SET "pinOrder"=$1 WHERE "workspaceId"=$2 AND "sessionId"=$3 RETURNING "sessionId"`,
+    [pinOrder, workspaceId, sessionId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Full-text search across sessions and runs.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type SearchResult = {
+  type: "session" | "run";
+  id: string; sessionId?: string; title?: string | null;
+  snippet: string; createdAt: string;
+};
+
+export async function searchQCore(userId: string, query: string, limit = 20): Promise<SearchResult[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady() || !query.trim()) return [];
+  const q = query.trim();
+  const [sessions, runs] = await Promise.all([
+    pool.query(
+      `SELECT "id","title","createdAt" FROM "QCoreSession"
+       WHERE "userId"=$1 AND "title" ILIKE $2 ORDER BY "updatedAt" DESC LIMIT $3`,
+      [userId, `%${q}%`, limit]
+    ),
+    pool.query(
+      `SELECT r."id", r."sessionId", r."userInput", r."finalContent", r."startedAt"
+       FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON s."id"=r."sessionId"
+       WHERE s."userId"=$1 AND (r."userInput" ILIKE $2 OR r."finalContent" ILIKE $2)
+       ORDER BY r."startedAt" DESC LIMIT $3`,
+      [userId, `%${q}%`, limit]
+    ),
+  ]);
+  const results: SearchResult[] = [
+    ...sessions.rows.map((s: any) => ({
+      type: "session" as const,
+      id: s.id,
+      title: s.title,
+      snippet: s.title || "",
+      createdAt: s.createdAt,
+    })),
+    ...runs.rows.map((r: any) => {
+      const raw = r.userInput || r.finalContent || "";
+      const idx = raw.toLowerCase().indexOf(q.toLowerCase());
+      const start = Math.max(0, idx - 40);
+      const snippet = (idx >= 0 ? "…" + raw.slice(start, start + 120) + "…" : raw.slice(0, 120));
+      return {
+        type: "run" as const,
+        id: r.id, sessionId: r.sessionId,
+        snippet,
+        createdAt: r.startedAt,
+      };
+    }),
+  ];
+  return results.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Run follow-up — record the link between runs.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function setFollowUpFrom(runId: string, fromRunId: string): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return;
+  await pool.query(`UPDATE "QCoreRun" SET "followUpFromId"=$1 WHERE "id"=$2`, [fromRunId, runId]);
+}

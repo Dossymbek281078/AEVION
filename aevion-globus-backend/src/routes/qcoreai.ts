@@ -76,6 +76,14 @@ import {
   mergeSessions,
   pinSession,
   rateRun,
+  createAnnotation,
+  updateAnnotation,
+  deleteAnnotation,
+  listAnnotations,
+  listAllAnnotations,
+  pinWorkspaceSession,
+  searchQCore,
+  setFollowUpFrom,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -3253,6 +3261,216 @@ qcoreaiRouter.delete("/notebook/:id", async (req, res) => {
     res.json({ deleted: true });
   } catch (err: any) {
     res.status(500).json({ error: "delete snippet failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Annotations: user notes on individual agent messages.
+   GET  /runs/:id/annotations         — list my annotations for a run
+   POST /runs/:id/annotations         — create annotation
+   PATCH /annotations/:id             — update note/color
+   DELETE /annotations/:id            — delete
+   GET  /me/annotations               — all my annotations across runs
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/runs/:id/annotations", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const rows = await listAnnotations(String(req.params.id), auth.sub);
+    res.json({ annotations: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "list annotations failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/runs/:id/annotations", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { messageRole, messageIdx, note, color } = req.body || {};
+    if (!note || typeof note !== "string") return res.status(400).json({ error: "note required" });
+    const ann = await createAnnotation(
+      String(req.params.id), auth.sub,
+      typeof messageRole === "string" ? messageRole : "final",
+      typeof messageIdx === "number" ? messageIdx : 0,
+      note, typeof color === "string" ? color : "yellow"
+    );
+    res.status(201).json(ann);
+  } catch (err: any) {
+    res.status(500).json({ error: "create annotation failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/annotations/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { note, color } = req.body || {};
+    if (!note || typeof note !== "string") return res.status(400).json({ error: "note required" });
+    const ann = await updateAnnotation(String(req.params.id), auth.sub, note, typeof color === "string" ? color : undefined);
+    if (!ann) return res.status(404).json({ error: "not found or forbidden" });
+    res.json(ann);
+  } catch (err: any) {
+    res.status(500).json({ error: "update annotation failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/annotations/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteAnnotation(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete annotation failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/annotations", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.min(100, Number(req.query.limit) || 50);
+    const rows = await listAllAnnotations(auth.sub, limit);
+    res.json({ annotations: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "list annotations failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Workspace session pin order.
+   PATCH /workspaces/:id/sessions/:sessionId/pin
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.patch("/workspaces/:id/sessions/:sessionId/pin", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ws = await getWorkspace(String(req.params.id));
+    if (!ws) return res.status(404).json({ error: "workspace not found" });
+    if (ws.ownerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    const pinOrder = req.body?.pinOrder != null ? Number(req.body.pinOrder) : null;
+    const ok = await pinWorkspaceSession(String(req.params.id), String(req.params.sessionId), isNaN(pinOrder as number) ? null : pinOrder);
+    if (!ok) return res.status(404).json({ error: "session not in workspace" });
+    res.json({ pinOrder });
+  } catch (err: any) {
+    res.status(500).json({ error: "pin session failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Full-text search.
+   GET /search?q=...&limit=20
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/search", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!q) return res.json({ results: [] });
+    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const results = await searchQCore(auth.sub, q, limit);
+    res.json({ results, query: q });
+  } catch (err: any) {
+    res.status(500).json({ error: "search failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Smart prompt suggestions based on session history.
+   POST /sessions/:id/suggest
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/sessions/:id/suggest", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const runs = await listRuns(session.id, 5);
+    if (!runs.length) return res.json({ suggestions: [] });
+
+    const context = runs
+      .slice(0, 3)
+      .map((r: any) => `Q: ${(r.userInput || "").slice(0, 200)}\nA: ${(r.finalContent || "").slice(0, 400)}`)
+      .join("\n\n---\n\n");
+
+    const providers = getProviders();
+    const provider = providers.find((p) => p.configured);
+    if (!provider) {
+      return res.json({
+        suggestions: [
+          "Can you elaborate on that point?",
+          "What are the main trade-offs here?",
+          "Give me a concrete example.",
+          "How would you approach this differently?",
+          "What should I watch out for?",
+        ],
+      });
+    }
+
+    const messages = [
+      {
+        role: "user" as const,
+        content: `Based on this conversation history, suggest 5 concise follow-up questions the user might want to ask next. Return ONLY a JSON array of strings, no explanation.\n\nConversation:\n${context}`,
+      },
+    ];
+    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7);
+    let suggestions: string[] = [];
+    try {
+      const raw = result.reply.trim();
+      const jsonStr = raw.startsWith("[") ? raw : raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1);
+      suggestions = JSON.parse(jsonStr);
+      if (!Array.isArray(suggestions)) suggestions = [];
+    } catch {
+      suggestions = result.reply.split("\n").filter((l: string) => l.trim().length > 5).slice(0, 5);
+    }
+    res.json({ suggestions: suggestions.slice(0, 5).map((s: string) => String(s).trim()).filter(Boolean) });
+  } catch (err: any) {
+    res.status(500).json({ error: "suggest failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Run follow-up: continue from a run's final answer.
+   POST /runs/:id/follow-up
+   Body: { prompt, strategy?, overrides? }
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/follow-up", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const sourceRun = await getRun(String(req.params.id));
+    if (!sourceRun) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(sourceRun.sessionId, auth.sub);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const { prompt, strategy, overrides } = req.body || {};
+    if (!prompt || typeof prompt !== "string") return res.status(400).json({ error: "prompt required" });
+
+    // Prepend the previous run's final answer as context.
+    const prevAnswer = (sourceRun.finalContent || "").slice(0, 1500);
+    const fullInput = prevAnswer
+      ? `[Context from previous answer]\n${prevAnswer}\n\n[Follow-up question]\n${prompt}`
+      : prompt;
+
+    const newRun = await createRun({
+      sessionId: session.id,
+      userInput: fullInput,
+      strategy: typeof strategy === "string" ? strategy : (sourceRun.strategy ?? "sequential"),
+      agentConfig: overrides || sourceRun.agentConfig || {},
+      parentRunId: sourceRun.id,
+      threadId: sourceRun.threadId || sourceRun.id,
+    });
+    await setFollowUpFrom(newRun.id, sourceRun.id);
+    await touchSession(session.id);
+    res.status(201).json({ run: newRun, sourceRunId: sourceRun.id });
+  } catch (err: any) {
+    res.status(500).json({ error: "follow-up failed", details: err?.message });
   }
 });
 

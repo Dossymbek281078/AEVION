@@ -417,6 +417,7 @@ export default function QCoreMultiAgentPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const paletteRef = useRef<HTMLInputElement>(null);
+  const [paletteRunResults, setPaletteRunResults] = useState<Array<{ type: string; id: string; sessionId?: string; snippet: string; title?: string | null }>>([]);
 
   // V7-T: id of the run being continued (thread reply context).
   const [continueFromRunId, setContinueFromRunId] = useState<string | null>(null);
@@ -447,6 +448,17 @@ export default function QCoreMultiAgentPage() {
   const [refineOpen, setRefineOpen] = useState<string | null>(null);
   const [refineText, setRefineText] = useState<string>("");
   const [refineBusy, setRefineBusy] = useState<boolean>(false);
+
+  // V31 — smart suggestions.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+
+  // V31 — annotations per run.
+  type AnnotationRow = { id: string; runId: string; messageRole: string; messageIdx: number; note: string; color: string; createdAt: string };
+  const [annotationsMap, setAnnotationsMap] = useState<Record<string, AnnotationRow[]>>({});
+  const [annotatingRunId, setAnnotatingRunId] = useState<string | null>(null);
+  const [annotateText, setAnnotateText] = useState("");
+  const [annotateSaving, setAnnotateSaving] = useState(false);
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -491,6 +503,21 @@ export default function QCoreMultiAgentPage() {
   useEffect(() => {
     if (paletteOpen) setTimeout(() => paletteRef.current?.focus(), 50);
   }, [paletteOpen]);
+
+  // V31 — debounced backend search when ⌘K query is 3+ chars.
+  useEffect(() => {
+    if (!paletteOpen || paletteQuery.length < 3) { setPaletteRunResults([]); return; }
+    const t = setTimeout(async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+      if (!token) return;
+      try {
+        const r = await fetch(apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(paletteQuery)}&limit=5`), { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok && Array.isArray(d.results)) setPaletteRunResults(d.results.filter((x: any) => x.type === "run"));
+      } catch { /* non-fatal */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [paletteOpen, paletteQuery]);
 
   /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
@@ -1425,6 +1452,8 @@ export default function QCoreMultiAgentPage() {
               setGlobalError(`⚠ Run cost $${payload.totalCostUsd.toFixed(4)} (${pct}% of $${maxCostUsd} cap)`);
               setTimeout(() => setGlobalError(null), 6000);
             }
+            // V31 — load suggestions after run completes.
+            if (activeSessionId) setTimeout(() => loadSuggestions(activeSessionId), 800);
             break;
           case "sse_end":
             break;
@@ -1490,6 +1519,66 @@ export default function QCoreMultiAgentPage() {
       try { abortRef.current.abort(); } catch { /* noop */ }
       abortRef.current = null;
     }
+  }, []);
+
+  // V31 — fetch smart suggestions for the active session.
+  const loadSuggestions = useCallback(async (sessionId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token || suggestBusy) return;
+    setSuggestBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/sessions/${sessionId}/suggest`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.suggestions)) setSuggestions(d.suggestions);
+    } catch { /* non-fatal */ }
+    finally { setSuggestBusy(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // V31 — load annotations for a run.
+  const loadAnnotations = useCallback(async (runId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/annotations`), { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.annotations)) {
+        setAnnotationsMap((prev) => ({ ...prev, [runId]: d.annotations }));
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
+  // V31 — save annotation.
+  const saveAnnotation = useCallback(async (runId: string, note: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token || !note.trim()) return;
+    setAnnotateSaving(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/annotations`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ note: note.trim(), messageRole: "final", messageIdx: 0, color: "yellow" }),
+      });
+      if (r.ok) {
+        await loadAnnotations(runId);
+        setAnnotatingRunId(null);
+        setAnnotateText("");
+      }
+    } catch { /* non-fatal */ }
+    finally { setAnnotateSaving(false); }
+  }, [loadAnnotations]);
+
+  // V31 — delete annotation.
+  const deleteAnnotation = useCallback(async (annotationId: string, runId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token) return;
+    try {
+      await fetch(apiUrl(`/api/qcoreai/annotations/${annotationId}`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      setAnnotationsMap((prev) => ({ ...prev, [runId]: (prev[runId] || []).filter((a) => a.id !== annotationId) }));
+    } catch { /* non-fatal */ }
   }, []);
 
   /** Run the same prompt through all three strategies back-to-back. */
@@ -3176,6 +3265,15 @@ export default function QCoreMultiAgentPage() {
                       setTemplateNameInput("");
                       setTemplatePanelOpen(false);
                     }}
+                    annotations={annotationsMap[run.id] || []}
+                    annotatingOpen={annotatingRunId === run.id}
+                    annotateText={annotatingRunId === run.id ? annotateText : ""}
+                    annotateSaving={annotatingRunId === run.id ? annotateSaving : false}
+                    onOpenAnnotate={() => { setAnnotatingRunId(run.id); setAnnotateText(""); loadAnnotations(run.id); }}
+                    onChangeAnnotateText={setAnnotateText}
+                    onSaveAnnotation={() => saveAnnotation(run.id, annotateText)}
+                    onCancelAnnotate={() => { setAnnotatingRunId(null); setAnnotateText(""); }}
+                    onDeleteAnnotation={(id) => deleteAnnotation(id, run.id)}
                   />
                 ))
               )}
@@ -3449,6 +3547,34 @@ export default function QCoreMultiAgentPage() {
               </div>
             )}
 
+            {/* V31 — Smart suggestion chips */}
+            {suggestions.length > 0 && !busy && (
+              <div style={{ marginBottom: 8, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Suggest:</span>
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setInput(s); setSuggestions([]); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                    style={{
+                      padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(13,148,136,0.3)",
+                      background: "rgba(13,148,136,0.06)", color: "#0d9488",
+                      fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    {s.length > 60 ? s.slice(0, 60) + "…" : s}
+                  </button>
+                ))}
+                <button onClick={() => setSuggestions([])} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#94a3b8", padding: "2px 4px" }}>✕</button>
+              </div>
+            )}
+            {!busy && activeSessionId && runs.some((r) => r.status === "done") && suggestions.length === 0 && !suggestBusy && (
+              <button
+                onClick={() => loadSuggestions(activeSessionId)}
+                style={{ marginBottom: 8, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", background: "transparent", color: "#94a3b8", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                ✨ Suggest follow-ups
+              </button>
+            )}
             {/* Input */}
             <div style={{ display: "flex", gap: 8 }}>
               <textarea
@@ -3595,6 +3721,8 @@ export default function QCoreMultiAgentPage() {
         const matchedSessions = q
           ? sessions.filter((s) => s.title.toLowerCase().includes(q)).slice(0, 5)
           : sessions.slice(0, 5);
+        // V31 — also run backend full-text search when palette is open and query is long enough.
+        // We don't await here — search is triggered via separate effect + state.
         const NAV_COMMANDS = [
           { icon: "📊", label: "Analytics", href: "/qcoreai/analytics" },
           { icon: "🧪", label: "Eval harness", href: "/qcoreai/eval" },
@@ -3660,6 +3788,27 @@ export default function QCoreMultiAgentPage() {
                         <span style={{ fontSize: 10, color: "#94a3b8" }}>
                           {new Date(s.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                         </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* V31 — run search results */}
+                {paletteRunResults.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Runs</div>
+                    {paletteRunResults.map((r) => (
+                      <div
+                        key={r.id}
+                        onClick={() => {
+                          setPaletteOpen(false);
+                          if (r.sessionId) { setActiveSessionId(r.sessionId); loadSession(r.sessionId); }
+                        }}
+                        style={{ padding: "8px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontSize: 13, flexShrink: 0 }}>▶</span>
+                        <span style={{ fontSize: 12, color: "#475569", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.snippet}</span>
                       </div>
                     ))}
                   </div>
@@ -4221,6 +4370,15 @@ function RunCard({
   onContinue,
   onSaveTemplate,
   personas,
+  annotations = [],
+  annotatingOpen = false,
+  annotateText = "",
+  annotateSaving = false,
+  onOpenAnnotate,
+  onChangeAnnotateText,
+  onSaveAnnotation,
+  onCancelAnnotate,
+  onDeleteAnnotation,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
@@ -4240,6 +4398,15 @@ function RunCard({
   onContinue?: (runId: string) => void;
   onSaveTemplate?: (runId: string) => void;
   personas?: Record<string, { name: string; emoji?: string }>;
+  annotations?: Array<{ id: string; note: string; color: string; createdAt: string }>;
+  annotatingOpen?: boolean;
+  annotateText?: string;
+  annotateSaving?: boolean;
+  onOpenAnnotate?: () => void;
+  onChangeAnnotateText?: (text: string) => void;
+  onSaveAnnotation?: () => void;
+  onCancelAnnotate?: () => void;
+  onDeleteAnnotation?: (id: string) => void;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
@@ -4479,6 +4646,52 @@ function RunCard({
                   Cancel (Esc)
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* V31 — Annotation panel */}
+          {run.status !== "running" && (
+            <div style={{ marginTop: 6 }}>
+              {annotations.length > 0 && (
+                <div style={{ marginBottom: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {annotations.map((ann) => (
+                    <div key={ann.id} style={{ padding: "6px 10px", borderRadius: 8, background: "rgba(253,224,71,0.2)", border: "1px solid rgba(234,179,8,0.3)", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <span style={{ fontSize: 12 }}>📝</span>
+                      <span style={{ flex: 1, fontSize: 12, color: "#713f12", lineHeight: 1.4 }}>{ann.note}</span>
+                      {onDeleteAnnotation && (
+                        <button onClick={() => onDeleteAnnotation(ann.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: 11, padding: 0, flexShrink: 0 }}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!annotatingOpen && onOpenAnnotate && (
+                <button
+                  onClick={onOpenAnnotate}
+                  title="Add a personal note to this run"
+                  style={{ padding: "3px 9px", borderRadius: 8, border: "1px dashed rgba(234,179,8,0.5)", background: "rgba(253,224,71,0.06)", color: "#92400e", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                >
+                  ✎ Add note
+                </button>
+              )}
+              {annotatingOpen && (
+                <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <textarea
+                    value={annotateText}
+                    onChange={(e) => onChangeAnnotateText && onChangeAnnotateText(e.target.value)}
+                    placeholder="Your note about this run…"
+                    rows={2}
+                    autoFocus
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(234,179,8,0.4)", fontSize: 12, fontFamily: "inherit", resize: "vertical", outline: "none", background: "rgba(253,224,71,0.06)" }}
+                  />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={onSaveAnnotation} disabled={annotateSaving || !annotateText.trim()} style={{ padding: "4px 12px", borderRadius: 8, background: "#ca8a04", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      {annotateSaving ? "Saving…" : "Save note"}
+                    </button>
+                    <button onClick={onCancelAnnotate} style={{ padding: "4px 10px", borderRadius: 8, background: "#fff", color: "#475569", border: "1px solid #cbd5e1", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>

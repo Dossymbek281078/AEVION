@@ -1458,6 +1458,79 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`getAnalyticsGoal failed: ${await safeError(res)}`);
     return (await res.json()).goal;
   }
+
+  /* ─── V31: annotations, search, suggestions, follow-up, workspace pin ─ */
+
+  /** List annotations for a specific run. */
+  async listAnnotations(runId: string): Promise<Array<{ id: string; runId: string; messageRole: string; messageIdx: number; note: string; color: string; createdAt: string; updatedAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/annotations`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listAnnotations failed: ${await safeError(res)}`);
+    return (await res.json()).annotations || [];
+  }
+
+  /** Create an annotation on a specific run message. */
+  async createAnnotation(runId: string, opts: { note: string; messageRole?: string; messageIdx?: number; color?: string }): Promise<{ id: string; runId: string; note: string; color: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/annotations`), {
+      method: "POST", headers: this.headers(),
+      body: JSON.stringify({ messageRole: "final", messageIdx: 0, color: "yellow", ...opts }),
+    });
+    if (!res.ok) throw new Error(`createAnnotation failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Update an annotation's note or color. */
+  async updateAnnotation(annotationId: string, opts: { note: string; color?: string }): Promise<{ id: string; note: string; color: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/annotations/${encodeURIComponent(annotationId)}`), { method: "PATCH", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`updateAnnotation failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Delete an annotation. */
+  async deleteAnnotation(annotationId: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/annotations/${encodeURIComponent(annotationId)}`), { method: "DELETE", headers: this.headers() });
+    if (!res.ok) throw new Error(`deleteAnnotation failed: ${await safeError(res)}`);
+  }
+
+  /** List all annotations across all runs for the current user. */
+  async listAllAnnotations(limit = 50): Promise<Array<{ id: string; runId: string; note: string; color: string; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/annotations?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listAllAnnotations failed: ${await safeError(res)}`);
+    return (await res.json()).annotations || [];
+  }
+
+  /** Full-text search across sessions and runs. */
+  async globalSearch(query: string, limit = 20): Promise<Array<{ type: "session" | "run"; id: string; sessionId?: string; snippet: string; title?: string | null; createdAt: string }>> {
+    const p = new URLSearchParams({ q: query, limit: String(limit) });
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/search?${p}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`globalSearch failed: ${await safeError(res)}`);
+    return (await res.json()).results || [];
+  }
+
+  /** Get AI-generated follow-up prompt suggestions for a session. */
+  async getSuggestions(sessionId: string): Promise<string[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/suggest`), { method: "POST", headers: this.headers() });
+    if (!res.ok) throw new Error(`getSuggestions failed: ${await safeError(res)}`);
+    return (await res.json()).suggestions || [];
+  }
+
+  /** Create a follow-up run from an existing run's final answer. */
+  async followUp(runId: string, prompt: string, opts?: { strategy?: string; overrides?: Record<string, unknown> }): Promise<{ run: { id: string; sessionId: string; userInput: string; status: string }; sourceRunId: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/follow-up`), {
+      method: "POST", headers: this.headers(),
+      body: JSON.stringify({ prompt, ...(opts || {}) }),
+    });
+    if (!res.ok) throw new Error(`followUp failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Pin/unpin a session within a workspace (owner-only). Pass null to unpin. */
+  async pinWorkspaceSession(workspaceId: string, sessionId: string, pinOrder: number | null): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/workspaces/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/pin`), {
+      method: "PATCH", headers: this.headers(),
+      body: JSON.stringify({ pinOrder }),
+    });
+    if (!res.ok) throw new Error(`pinWorkspaceSession failed: ${await safeError(res)}`);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

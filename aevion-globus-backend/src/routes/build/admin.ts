@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
 
@@ -547,7 +547,7 @@ adminRouter.get("/weekly-preview/:userId", async (req, res) => {
     } else {
       lines.push("", "На этой неделе откликов не было — попробуйте 🚀 Boost для активной вакансии.");
     }
-    lines.push("", "Открыть dashboard: https://aevion.tech/build/dashboard");
+    lines.push("", "Открыть dashboard: https://aevion.app/build/dashboard");
     lines.push("Отписаться: /build/settings/notifications");
 
     return ok(res, {

@@ -23,7 +23,6 @@ async function createDailyRoom(roomName: string): Promise<{ url: string }> {
       properties: {
         max_participants: 10,
         enable_screenshare: true,
-        enable_recording: "cloud",
         exp: Math.floor(Date.now() / 1000) + 3600 * 24, // 24h
       },
     }),

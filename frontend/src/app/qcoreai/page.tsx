@@ -680,6 +680,8 @@ export default function QCoreAIPage() {
             { href: "/qcoreai/optimize",   icon: "✨", t: "Prompt Optimizer",            d: "AI-powered prompt improvement suggestions" },
             { href: "/qcoreai/insights",   icon: "🔍", t: "Run Insights",                d: "Agent costs, strategy ratings, peak hours" },
             { href: "/qcoreai/bookmarks",  icon: "🔖", t: "Bookmarks",                   d: "Starred runs for quick re-access" },
+            { href: "/qcoreai/api-keys",   icon: "🔑", t: "API Keys",                    d: "Personal access tokens for programmatic access" },
+            { href: "/qcoreai/orgs",       icon: "🏢", t: "Organizations",                d: "Multi-user teams with shared workspaces" },
           ].map(({ href, icon, t, d }) => (
             <a
               key={href}
@@ -700,6 +702,157 @@ export default function QCoreAIPage() {
               </div>
             </a>
           ))}
+        </div>
+
+        {/* V44 — How it works */}
+        <div style={{ marginTop: 32, marginBottom: 24 }}>
+          <div style={{ fontWeight: 900, fontSize: 18, color: "#0f172a", marginBottom: 4, letterSpacing: "-0.02em" }}>
+            How it works
+          </div>
+          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Three specialised agents collaborate on every run.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            {[
+              { icon: "🔬", step: "1", role: "Analyst", desc: "Breaks down the prompt, gathers context, and plans the response structure." },
+              { icon: "✍️", step: "2", role: "Writer", desc: "Drafts the answer based on the analyst output, tuned for depth and clarity." },
+              { icon: "⚖️", step: "3", role: "Critic", desc: "Reviews, scores, and refines the draft before the final answer is delivered." },
+            ].map((s) => (
+              <div
+                key={s.step}
+                style={{
+                  padding: "16px 16px", borderRadius: 12,
+                  background: "#fff", border: "1px solid rgba(15,23,42,0.08)",
+                }}
+              >
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
+                  <span
+                    style={{
+                      width: 28, height: 28, borderRadius: 8,
+                      background: "linear-gradient(135deg, #0d9488, #06b6d4)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: 900, fontSize: 12, color: "#fff",
+                    }}
+                  >
+                    {s.step}
+                  </span>
+                  <span style={{ fontSize: 16 }}>{s.icon}</span>
+                  <span style={{ fontWeight: 800, fontSize: 13, color: "#0f172a" }}>{s.role}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.55 }}>{s.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* V44 — Strategies */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontWeight: 900, fontSize: 18, color: "#0f172a", marginBottom: 4, letterSpacing: "-0.02em" }}>
+            Strategies
+          </div>
+          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Pick the agent coordination pattern that fits your use case.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            {[
+              { name: "Sequential", color: "#3b82f6", bg: "rgba(59,130,246,0.06)", desc: "Agents hand off in order. Best for: structured reports, technical docs, code reviews." },
+              { name: "Parallel drafts", color: "#10b981", bg: "rgba(16,185,129,0.06)", desc: "Two writers produce competing drafts; critic picks the best. Best for: creative writing, ideation." },
+              { name: "Debate", color: "#7c3aed", bg: "rgba(124,58,237,0.06)", desc: "Pro/Con writers argue; moderator synthesises. Best for: decisions, analysis, balanced views." },
+            ].map((s) => (
+              <div
+                key={s.name}
+                style={{
+                  padding: "16px 16px", borderRadius: 12,
+                  background: s.bg, border: `1px solid ${s.color}33`,
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: 13, color: s.color, marginBottom: 6 }}>{s.name}</div>
+                <div style={{ fontSize: 12, color: "#334155", lineHeight: 1.55 }}>{s.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* V44 — Stats bar */}
+        <div
+          style={{
+            marginBottom: 24, padding: "14px 20px",
+            borderRadius: 12, background: "linear-gradient(135deg, #0f172a, #1e1b4b)",
+            color: "#fff", display: "flex", gap: 0, flexWrap: "wrap",
+          }}
+        >
+          {[
+            { val: "270+", label: "API routes" },
+            { val: "28", label: "Pages" },
+            { val: "580", label: "Vitest tests" },
+            { val: "SDK v1.0", label: "npm package" },
+          ].map((s, i, arr) => (
+            <div
+              key={s.val}
+              style={{
+                flex: "1 1 120px", textAlign: "center",
+                borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.12)" : "none",
+                padding: "4px 16px",
+              }}
+            >
+              <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.03em" }}>{s.val}</div>
+              <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* V44 — SDK snippet */}
+        <div
+          style={{
+            marginBottom: 28, borderRadius: 14, overflow: "hidden",
+            border: "1px solid rgba(15,23,42,0.1)",
+          }}
+        >
+          <div
+            style={{
+              padding: "10px 16px",
+              background: "#1e1b4b",
+              fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)",
+              display: "flex", alignItems: "center", gap: 8,
+            }}
+          >
+            <span style={{ color: "#22d3ee" }}>SDK</span>
+            <span>@dosymbek/qcoreai-client · TypeScript / Node / Edge</span>
+          </div>
+          <pre
+            style={{
+              margin: 0, padding: "16px", background: "#0f172a",
+              color: "#e2e8f0", fontSize: 12, fontFamily: "monospace",
+              overflowX: "auto", lineHeight: 1.65,
+            }}
+          >{`npm install @dosymbek/qcoreai-client
+
+import { QCoreClient } from "@dosymbek/qcoreai-client";
+const client = new QCoreClient("https://api.aevion.app", { token: process.env.QCORE_TOKEN });
+const run = await client.runMultiAgent({ input: "Summarise Q1 2025", strategy: "sequential" });
+console.log(run.finalContent);`}</pre>
+        </div>
+
+        {/* V44 — CTA footer */}
+        <div
+          style={{
+            marginBottom: 40, padding: "28px 24px", borderRadius: 16,
+            background: "linear-gradient(135deg, #0d9488, #06b6d4)",
+            textAlign: "center", color: "#fff",
+          }}
+        >
+          <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            Ready to build?
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 18 }}>
+            Start with the multi-agent pipeline — Analyst, Writer, Critic in one call.
+          </div>
+          <a
+            href="/qcoreai/multi"
+            style={{
+              display: "inline-block", padding: "12px 28px", borderRadius: 12,
+              background: "#fff", color: "#0d9488", fontWeight: 900, fontSize: 14,
+              textDecoration: "none", letterSpacing: "-0.01em",
+            }}
+          >
+            Start building →
+          </a>
         </div>
       </ProductPageShell>
     </main>

@@ -47,7 +47,7 @@ type SharedRun = {
 
 type SharedPayload = {
   session: { id: string; title: string; mode: string } | null;
-  run: SharedRun;
+  run: SharedRun & { clapCount?: number };
   messages: SharedMessage[];
 };
 
@@ -124,6 +124,8 @@ export default function SharedRunClient() {
     tokensIn: number | null; tokensOut: number | null; costUsd: number | null; durationMs: number | null;
   }> | null>(null);
   const [showCost, setShowCost] = useState(false);
+  const [clapCount, setClapCount] = useState<number>(0);
+  const [clapBusy, setClapBusy] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -136,6 +138,7 @@ export default function SharedRunClient() {
         const data = await runRes.json();
         if (!runRes.ok) throw new Error(data?.error || `HTTP ${runRes.status}`);
         setPayload(data as SharedPayload);
+        setClapCount(data?.run?.clapCount ?? 0);
         const cmData = await cmRes.json().catch(() => ({}));
         if (Array.isArray(cmData?.items)) setComments(cmData.items);
       } catch (e: any) {
@@ -143,6 +146,22 @@ export default function SharedRunClient() {
       }
     })();
   }, [token]);
+
+  const handleClap = async () => {
+    if (clapBusy) return;
+    setClapBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/shared/${token}/clap`), { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data?.clapCount === "number") {
+        setClapCount(data.clapCount);
+      }
+    } catch {
+      // silent — clap is non-critical
+    } finally {
+      setClapBusy(false);
+    }
+  };
 
   const submitComment = async () => {
     const text = commentText.trim();
@@ -400,6 +419,21 @@ export default function SharedRunClient() {
           <span>Exported from <b style={{ color: "#0f172a" }}>AEVION QCoreAI</b></span>
           <span>·</span>
           <span>Run started {new Date(run.startedAt).toLocaleString()}</span>
+          <button
+            onClick={handleClap}
+            disabled={clapBusy}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: "4px 10px", borderRadius: 8,
+              border: "1px solid rgba(124,58,237,0.25)",
+              background: "rgba(124,58,237,0.06)",
+              color: "#6d28d9", fontWeight: 700, fontSize: 11,
+              cursor: clapBusy ? "default" : "pointer",
+            }}
+            title="Clap for this run"
+          >
+            👏 {clapCount > 0 ? clapCount : "Clap"}
+          </button>
           <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button
               onClick={async () => {

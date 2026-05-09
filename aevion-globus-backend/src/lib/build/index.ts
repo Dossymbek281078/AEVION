@@ -317,6 +317,21 @@ async function _doEnsureBuildTables(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_worker_due_idx" ON "BuildPaymentEvent" ("workerId", "dueDate" ASC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPaymentEvent_app_idx" ON "BuildPaymentEvent" ("applicationId");`);
 
+  // Web Push subscriptions — endpoint is the natural unique key (one
+  // browser/profile = one endpoint). userId is upserted on re-subscribe
+  // so a shared device that signs in as a different user reroutes pushes.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BuildPushSubscription" (
+      "id" TEXT PRIMARY KEY,
+      "userId" TEXT NOT NULL,
+      "endpoint" TEXT NOT NULL UNIQUE,
+      "p256dh" TEXT NOT NULL,
+      "auth" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "BuildPushSubscription_user_idx" ON "BuildPushSubscription" ("userId");`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "BuildExperience" (
       "id" TEXT PRIMARY KEY,

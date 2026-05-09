@@ -133,6 +133,14 @@ async function runPublic() {
     ok("/communities list", `n=${communities.length} ${fmtMs(r.durMs)}`);
   } else fail("/communities list", `status=${r.status}`);
 
+  // Web Push public-key — unauthenticated. Mount presence is the signal.
+  r = await call("GET", "/api/build/push/public-key");
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /push/public-key not deployed yet (404)`);
+  } else if (r.status === 200) {
+    ok("/push/public-key", `len=${(payload(r.body)?.publicKey ?? "").length}`);
+  } else fail("/push/public-key", `status=${r.status}`);
+
   r = await call("GET", "/api/build/stats");
   if (r.status === 200 && payload(r.body)?.vacancies != null) {
     const p = payload(r.body);
@@ -461,6 +469,31 @@ async function runEngagement(client, worker, vacancyId, appId) {
     if (r.status === 200) ok("client delete payment");
     else fail("client delete payment", `status=${r.status}`);
   }
+
+  // Web Push subscribe round-trip. Synthesize a fake-but-well-formed
+  // PushSubscription payload (real one comes from browser's pushManager).
+  // DB write is the signal; actual push send no-ops without VAPID env.
+  const fakeEndpoint = `https://fcm.googleapis.com/fcm/send/smoke-${RUN}`;
+  r = await call("POST", "/api/build/push/subscribe", {
+    token: worker.token,
+    body: {
+      endpoint: fakeEndpoint,
+      keys: { p256dh: "BG".padEnd(88, "x"), auth: "smoke-auth-1234" },
+    },
+  });
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /push/subscribe not deployed yet (404)`);
+    return;
+  }
+  if ((r.status === 200 || r.status === 201) && payload(r.body)?.id) ok("worker push subscribe");
+  else fail("worker push subscribe", `status=${r.status}`);
+
+  r = await call("POST", "/api/build/push/unsubscribe", {
+    token: worker.token,
+    body: { endpoint: fakeEndpoint },
+  });
+  if (r.status === 200 && (payload(r.body)?.removed ?? 0) >= 1) ok("worker push unsubscribe");
+  else fail("worker push unsubscribe", `status=${r.status}`);
 }
 
 async function runStatsAndPipeline(client) {

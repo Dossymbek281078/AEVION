@@ -33,6 +33,8 @@ import { shiftsRouter } from "./build/shifts";
 import { teamHiringRouter } from "./build/team-hiring";
 import { interviewsRouter } from "./build/interviews";
 import { skillBadgesRouter } from "./build/skill-badges";
+import { paymentCalendarRouter } from "./build/payment-calendar";
+import { pushRouter } from "./build/push";
 
 export const buildRouter = Router();
 
@@ -86,5 +88,7 @@ buildRouter.use("/shifts", shiftsRouter);
 buildRouter.use("/team-requests", teamHiringRouter);
 buildRouter.use("/interviews", interviewsRouter);
 buildRouter.use("/", skillBadgesRouter);
+buildRouter.use("/payment-calendar", paymentCalendarRouter);
+buildRouter.use("/push", pushRouter);
 
 void communityMsgLimiter;

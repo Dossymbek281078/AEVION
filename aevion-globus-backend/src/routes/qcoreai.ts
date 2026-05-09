@@ -158,7 +158,41 @@ export const qcoreaiRouter = Router();
    POST /api/qcoreai/chat
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/chat", async (req, res) => {
+// Bound /chat to defend our LLM provider bills. Without this anyone could
+// hit /api/qcoreai/chat in a loop and run up Anthropic/OpenAI charges.
+// Per-IP cap is conservative; signed-in users get their own limiter
+// downstream (sharedLimiter), so a real product flow isn't constrained.
+const chatLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyPrefix: "qcoreai:chat",
+  message: "rate_limit_exceeded: max 30 chat requests per minute per IP",
+});
+
+// Clamp temperature into the range every provider documents. Negative values
+// or huge numbers either error out the upstream call or burn extra tokens.
+function clampTemperature(raw: unknown, fallback = 0.6): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return fallback;
+  if (raw < 0) return 0;
+  if (raw > 2) return 2;
+  return raw;
+}
+
+// Strip provider-specific internals from upstream errors before they reach
+// the client. Callers don't need (and shouldn't see) phrases like
+// "Anthropic auth failed: invalid API key prefix sk-ant-..."; they get a
+// stable category instead. Server logs keep the full message for ops.
+function publicErrorCategory(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("api key") || m.includes("api_key") || m.includes("apikey")) return "provider_auth_failed";
+  if (m.includes("rate limit") || m.includes("rate_limit") || m.includes("429")) return "provider_rate_limited";
+  if (m.includes("timeout") || m.includes("timed out") || m.includes("etimedout")) return "provider_timeout";
+  if (m.includes("model") && (m.includes("not found") || m.includes("does not exist"))) return "model_not_found";
+  if (m.includes("billing") || m.includes("quota")) return "provider_quota_exceeded";
+  return "chat_failed";
+}
+
+qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
   try {
     const messages = sanitizeMessages(req.body?.messages);
     if (!messages) {
@@ -183,7 +217,7 @@ qcoreaiRouter.post("/chat", async (req, res) => {
 
     const provider = getProviders().find((p) => p.id === providerId)!;
     const modelName = (typeof req.body?.model === "string" && req.body.model) || provider.defaultModel;
-    const temperature = typeof req.body?.temperature === "number" ? req.body.temperature : 0.6;
+    const temperature = clampTemperature(req.body?.temperature, 0.6);
 
     const result = await callProvider(providerId, messages, modelName, temperature);
     res.json({
@@ -195,10 +229,16 @@ qcoreaiRouter.post("/chat", async (req, res) => {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "chat failed";
+    // Keep the full message in our own logs / Sentry — strip it from the
+    // wire response so we never echo a leaked provider key, internal URL,
+    // or stack frame back to anonymous callers.
     console.error("[QCoreAI] error:", msg);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: publicErrorCategory(msg) });
   }
 });
+
+// Exported for unit tests.
+export { clampTemperature, publicErrorCategory };
 
 /* ═══════════════════════════════════════════════════════════════════════
    Providers + pricing + health

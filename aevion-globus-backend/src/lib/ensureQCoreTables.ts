@@ -500,6 +500,37 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx" ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx" ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);`);
 
+  // V33 — EvalSuite public sharing.
+  await pool.query(`ALTER TABLE "QCoreEvalSuite" ADD COLUMN IF NOT EXISTS "isPublic" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreEvalSuite_public_idx" ON "QCoreEvalSuite" ("isPublic", "updatedAt" DESC) WHERE "isPublic"=TRUE;`);
+
+  // Annotations — user notes attached to individual agent messages within a run.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAnnotation" (
+      "id"          TEXT PRIMARY KEY,
+      "runId"       TEXT NOT NULL,
+      "userId"      TEXT NOT NULL,
+      "messageRole" TEXT NOT NULL,
+      "messageIdx"  INTEGER NOT NULL DEFAULT 0,
+      "note"        TEXT NOT NULL,
+      "color"       TEXT NOT NULL DEFAULT 'yellow',
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreAnnotation_run_idx" ON "QCoreAnnotation" ("runId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreAnnotation_user_idx" ON "QCoreAnnotation" ("userId", "createdAt" DESC);`);
+
+  // Workspace session pinning — ordered pin within a workspace.
+  await pool.query(`ALTER TABLE "QCoreWorkspaceSession" ADD COLUMN IF NOT EXISTS "pinOrder" INTEGER;`);
+
+  // Run follow-up link — track which run was forked from which.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "followUpFromId" TEXT;`);
+
+  // Full-text search index on run inputs.
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_userInput_search_idx" ON "QCoreRun" USING gin(to_tsvector('english', COALESCE("userInput",'')));`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_title_search_idx" ON "QCoreSession" USING gin(to_tsvector('english', COALESCE("title",'')));`);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

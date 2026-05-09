@@ -48,6 +48,10 @@ export default function QCorePromptsPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [chain, setChain] = useState<Prompt[]>([]);
+  // V34 — version diff
+  type DiffSegment = { text: string; type: "equal" | "insert" | "delete" };
+  const [diffData, setDiffData] = useState<DiffSegment[] | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -707,14 +711,32 @@ export default function QCorePromptsPage() {
 
                   {chain.length > 1 && (
                     <div>
-                      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
-                        Version chain ({chain.length})
+                      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span>Version chain ({chain.length})</span>
+                        {selected.version > 1 && (
+                          <button
+                            onClick={async () => {
+                              if (diffData) { setDiffData(null); return; }
+                              setDiffLoading(true);
+                              try {
+                                const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+                                const r = await fetch(`/api/qcoreai/prompts/${selected.id}/diff`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                const d = await r.json().catch(() => ({}));
+                                if (Array.isArray(d.diff)) setDiffData(d.diff);
+                              } catch { /* ignore */ }
+                              finally { setDiffLoading(false); }
+                            }}
+                            style={{ padding: "2px 8px", borderRadius: 6, background: diffData ? "rgba(239,68,68,0.08)" : "rgba(79,70,229,0.08)", color: diffData ? "#dc2626" : "#4f46e5", border: "1px solid currentColor", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                          >
+                            {diffLoading ? "Loading…" : diffData ? "Hide diff" : "Δ Diff"}
+                          </button>
+                        )}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {chain.map((v) => (
                           <button
                             key={v.id}
-                            onClick={() => setSelectedId(v.id)}
+                            onClick={() => { setSelectedId(v.id); setDiffData(null); }}
                             style={{
                               padding: "4px 10px",
                               borderRadius: 6,
@@ -730,6 +752,22 @@ export default function QCorePromptsPage() {
                           </button>
                         ))}
                       </div>
+                      {diffData && (
+                        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#fafafa", border: "1px solid #e2e8f0", fontSize: 12, lineHeight: 1.6, fontFamily: "monospace", maxHeight: 200, overflowY: "auto" }}>
+                          {diffData.map((seg, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                background: seg.type === "insert" ? "rgba(16,185,129,0.15)" : seg.type === "delete" ? "rgba(239,68,68,0.15)" : "transparent",
+                                color: seg.type === "insert" ? "#065f46" : seg.type === "delete" ? "#991b1b" : "#0f172a",
+                                textDecoration: seg.type === "delete" ? "line-through" : "none",
+                              }}
+                            >
+                              {seg.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

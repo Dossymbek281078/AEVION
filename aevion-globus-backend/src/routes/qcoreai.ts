@@ -76,6 +76,16 @@ import {
   mergeSessions,
   pinSession,
   rateRun,
+  createAnnotation,
+  updateAnnotation,
+  deleteAnnotation,
+  listAnnotations,
+  listAllAnnotations,
+  pinWorkspaceSession,
+  searchQCore,
+  setFollowUpFrom,
+  listPublicEvalSuites,
+  setEvalSuitePublic,
   createTemplate,
   createWorkspace,
   deleteWorkspace,
@@ -1501,7 +1511,84 @@ qcoreaiRouter.get("/analytics/export", async (req, res) => {
   }
 });
 
-/**
+/* ═══════════════════════════════════════════════════════════════════════
+   V33 — Analytics: agent response length + provider compare.
+   GET /analytics/agent-length    — avg content length per agent role
+   GET /analytics/provider-compare — cost, speed, token stats per provider
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/analytics/agent-length", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    if (!isDbReady()) return res.json({ items: [] });
+    const r = await pool.query(
+      `SELECT m."role", COUNT(*) AS calls,
+              AVG(LENGTH(m."content")) AS avgLength,
+              MIN(LENGTH(m."content")) AS minLength,
+              MAX(LENGTH(m."content")) AS maxLength
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" ru ON ru."id"=m."runId"
+       JOIN "QCoreSession" se ON se."id"=ru."sessionId"
+       WHERE se."userId"=$1
+         AND m."role" IN ('analyst','writer','critic')
+         AND m."content" IS NOT NULL AND m."content" != ''
+       GROUP BY m."role"
+       ORDER BY AVG(LENGTH(m."content")) DESC`,
+      [auth.sub]
+    );
+    const items = r.rows.map((row: any) => ({
+      role: row.role,
+      calls: Number(row.calls),
+      avgLength: Math.round(Number(row.avglength)),
+      minLength: Math.round(Number(row.minlength)),
+      maxLength: Math.round(Number(row.maxlength)),
+      avgWords: Math.round(Number(row.avglength) / 5),
+    }));
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "agent length failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    if (!isDbReady()) return res.json({ items: [] });
+    const r = await pool.query(
+      `SELECT m."provider",
+              COUNT(*) AS calls,
+              AVG(m."durationMs") AS avgDurationMs,
+              AVG(m."costUsd") AS avgCostUsd,
+              SUM(m."costUsd") AS totalCostUsd,
+              AVG(m."tokensIn") AS avgTokensIn,
+              AVG(m."tokensOut") AS avgTokensOut,
+              AVG(LENGTH(m."content")) AS avgContentLength
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" ru ON ru."id"=m."runId"
+       JOIN "QCoreSession" se ON se."id"=ru."sessionId"
+       WHERE se."userId"=$1 AND m."provider" IS NOT NULL AND m."provider" != ''
+       GROUP BY m."provider"
+       ORDER BY SUM(m."costUsd") DESC NULLS LAST`,
+      [auth.sub]
+    );
+    const items = r.rows.map((row: any) => ({
+      provider: row.provider,
+      calls: Number(row.calls),
+      avgDurationMs: Math.round(Number(row.avgdurationms) || 0),
+      avgCostUsd: Number(row.avgcostusd) || 0,
+      totalCostUsd: Number(row.totalcostusd) || 0,
+      avgTokensIn: Math.round(Number(row.avgtokensin) || 0),
+      avgTokensOut: Math.round(Number(row.avgtokensout) || 0),
+      avgContentLength: Math.round(Number(row.avgcontentlength) || 0),
+    }));
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "provider compare failed", details: err?.message });
+  }
+});
+
 /**
  * GET /api/qcoreai/sessions/:id/export?format=json|md
  * Bulk export of all runs in a session — useful for offline archival.
@@ -2163,6 +2250,30 @@ qcoreaiRouter.get("/eval/suites", async (req, res) => {
   }
 });
 
+/* V33 — public eval suite gallery */
+qcoreaiRouter.get("/eval/suites/public", async (req, res) => {
+  try {
+    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const items = await listPublicEvalSuites(limit);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list public eval suites failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/eval/suites/:id/visibility", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const isPublic = Boolean(req.body?.isPublic);
+    const ok = await setEvalSuitePublic(String(req.params.id), auth.sub, isPublic);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ isPublic });
+  } catch (err: any) {
+    res.status(500).json({ error: "set eval suite visibility failed", details: err?.message });
+  }
+});
+
 qcoreaiRouter.get("/eval/suites/:id", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
@@ -2342,6 +2453,78 @@ qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
     res.status(500).json({ error: "version chain failed", details: err?.message });
   }
 });
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V34 — Prompt version diff: word-level diff between adjacent versions.
+   GET /prompts/:id/diff?fromId=<parentId>
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/prompts/:id/diff", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    const targetId = String(req.params.id);
+    const fromId = typeof req.query.fromId === "string" ? req.query.fromId : null;
+    const target = await getPrompt(targetId);
+    if (!target) return res.status(404).json({ error: "prompt not found" });
+    if (!target.isPublic && (!auth?.sub || auth.sub !== target.ownerUserId)) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+    let fromText = "";
+    if (fromId) {
+      const from = await getPrompt(fromId);
+      if (from && (from.isPublic || (auth?.sub && auth.sub === from.ownerUserId))) {
+        fromText = from.content;
+      }
+    } else {
+      // Auto-find parent version.
+      const chain = await getPromptVersionChain(targetId);
+      const idx = chain.findIndex((p: any) => p.id === targetId);
+      if (idx > 0) fromText = chain[idx - 1].content;
+    }
+    const diff = computeWordDiff(fromText, target.content);
+    res.json({ diff, fromLength: fromText.length, toLength: target.content.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "diff failed", details: err?.message });
+  }
+});
+
+/** Minimal word-level diff — returns an array of {text, type: 'equal'|'insert'|'delete'} */
+function computeWordDiff(from: string, to: string): Array<{ text: string; type: "equal" | "insert" | "delete" }> {
+  const fromWords = from.split(/(\s+)/);
+  const toWords = to.split(/(\s+)/);
+  // Simple LCS-based diff using DP.
+  const m = fromWords.length, n = toWords.length;
+  // For large texts, use a simplified chunk approach.
+  if (m + n > 2000) {
+    const added = to.length - from.length;
+    if (added > 0) return [{ text: from, type: "equal" }, { text: to.slice(from.length), type: "insert" }];
+    if (added < 0) return [{ text: to, type: "equal" }, { text: from.slice(to.length), type: "delete" }];
+    return [{ text: to, type: "equal" }];
+  }
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    dp[i][j] = fromWords[i - 1] === toWords[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  }
+  const result: Array<{ text: string; type: "equal" | "insert" | "delete" }> = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && fromWords[i - 1] === toWords[j - 1]) {
+      result.unshift({ text: fromWords[i - 1], type: "equal" }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.unshift({ text: toWords[j - 1], type: "insert" }); j--;
+    } else {
+      result.unshift({ text: fromWords[i - 1], type: "delete" }); i--;
+    }
+  }
+  // Merge consecutive equal segments.
+  const merged: Array<{ text: string; type: "equal" | "insert" | "delete" }> = [];
+  for (const item of result) {
+    const last = merged[merged.length - 1];
+    if (last && last.type === item.type) last.text += item.text;
+    else merged.push({ ...item });
+  }
+  return merged;
+}
 
 qcoreaiRouter.patch("/prompts/:id", async (req, res) => {
   try {
@@ -3293,6 +3476,254 @@ qcoreaiRouter.delete("/notebook/:id", async (req, res) => {
     res.json({ deleted: true });
   } catch (err: any) {
     res.status(500).json({ error: "delete snippet failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V32 — Session stats: quick summary for sidebar badges.
+   GET /sessions/:id/stats
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/sessions/:id/stats", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const runs = await listRuns(session.id, 1000);
+    const doneRuns = runs.filter((r: any) => r.status === "done");
+    const totalCostUsd = doneRuns.reduce((sum: number, r: any) => sum + (r.totalCostUsd || 0), 0);
+    const totalDurationMs = doneRuns.reduce((sum: number, r: any) => sum + (r.totalDurationMs || 0), 0);
+    const totalRuns = runs.length;
+    const doneCount = doneRuns.length;
+    const avgCostUsd = doneCount > 0 ? totalCostUsd / doneCount : 0;
+    const avgDurationMs = doneCount > 0 ? totalDurationMs / doneCount : 0;
+    const strategies = doneRuns.reduce((acc: Record<string, number>, r: any) => {
+      const s = r.strategy || "sequential";
+      acc[s] = (acc[s] || 0) + 1;
+      return acc;
+    }, {});
+    res.json({ sessionId: session.id, totalRuns, doneCount, totalCostUsd, avgCostUsd, totalDurationMs, avgDurationMs, strategies });
+  } catch (err: any) {
+    res.status(500).json({ error: "session stats failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Annotations: user notes on individual agent messages.
+   GET  /runs/:id/annotations         — list my annotations for a run
+   POST /runs/:id/annotations         — create annotation
+   PATCH /annotations/:id             — update note/color
+   DELETE /annotations/:id            — delete
+   GET  /me/annotations               — all my annotations across runs
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/runs/:id/annotations", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const rows = await listAnnotations(String(req.params.id), auth.sub);
+    res.json({ annotations: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "list annotations failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/runs/:id/annotations", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { messageRole, messageIdx, note, color } = req.body || {};
+    if (!note || typeof note !== "string") return res.status(400).json({ error: "note required" });
+    const ann = await createAnnotation(
+      String(req.params.id), auth.sub,
+      typeof messageRole === "string" ? messageRole : "final",
+      typeof messageIdx === "number" ? messageIdx : 0,
+      note, typeof color === "string" ? color : "yellow"
+    );
+    res.status(201).json(ann);
+  } catch (err: any) {
+    res.status(500).json({ error: "create annotation failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.patch("/annotations/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { note, color } = req.body || {};
+    if (!note || typeof note !== "string") return res.status(400).json({ error: "note required" });
+    const ann = await updateAnnotation(String(req.params.id), auth.sub, note, typeof color === "string" ? color : undefined);
+    if (!ann) return res.status(404).json({ error: "not found or forbidden" });
+    res.json(ann);
+  } catch (err: any) {
+    res.status(500).json({ error: "update annotation failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/annotations/:id", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteAnnotation(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete annotation failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/annotations", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.min(100, Number(req.query.limit) || 50);
+    const rows = await listAllAnnotations(auth.sub, limit);
+    if (req.query.format === "csv") {
+      const csv = ["id,runId,messageRole,messageIdx,note,color,createdAt",
+        ...rows.map((r) => `${r.id},${r.runId},${r.messageRole},${r.messageIdx},"${(r.note || "").replace(/"/g, '""')}",${r.color},${r.createdAt}`)
+      ].join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=\"qcore-annotations.csv\"");
+      return res.send(csv);
+    }
+    res.json({ annotations: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: "list annotations failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Workspace session pin order.
+   PATCH /workspaces/:id/sessions/:sessionId/pin
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.patch("/workspaces/:id/sessions/:sessionId/pin", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ws = await getWorkspace(String(req.params.id));
+    if (!ws) return res.status(404).json({ error: "workspace not found" });
+    if (ws.ownerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    const pinOrder = req.body?.pinOrder != null ? Number(req.body.pinOrder) : null;
+    const ok = await pinWorkspaceSession(String(req.params.id), String(req.params.sessionId), isNaN(pinOrder as number) ? null : pinOrder);
+    if (!ok) return res.status(404).json({ error: "session not in workspace" });
+    res.json({ pinOrder });
+  } catch (err: any) {
+    res.status(500).json({ error: "pin session failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Full-text search.
+   GET /search?q=...&limit=20
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/search", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (!q) return res.json({ results: [] });
+    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const results = await searchQCore(auth.sub, q, limit);
+    res.json({ results, query: q });
+  } catch (err: any) {
+    res.status(500).json({ error: "search failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Smart prompt suggestions based on session history.
+   POST /sessions/:id/suggest
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/sessions/:id/suggest", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(String(req.params.id), auth.sub);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    const runs = await listRuns(session.id, 5);
+    if (!runs.length) return res.json({ suggestions: [] });
+
+    const context = runs
+      .slice(0, 3)
+      .map((r: any) => `Q: ${(r.userInput || "").slice(0, 200)}\nA: ${(r.finalContent || "").slice(0, 400)}`)
+      .join("\n\n---\n\n");
+
+    const providers = getProviders();
+    const provider = providers.find((p) => p.configured);
+    if (!provider) {
+      return res.json({
+        suggestions: [
+          "Can you elaborate on that point?",
+          "What are the main trade-offs here?",
+          "Give me a concrete example.",
+          "How would you approach this differently?",
+          "What should I watch out for?",
+        ],
+      });
+    }
+
+    const messages = [
+      {
+        role: "user" as const,
+        content: `Based on this conversation history, suggest 5 concise follow-up questions the user might want to ask next. Return ONLY a JSON array of strings, no explanation.\n\nConversation:\n${context}`,
+      },
+    ];
+    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7);
+    let suggestions: string[] = [];
+    try {
+      const raw = result.reply.trim();
+      const jsonStr = raw.startsWith("[") ? raw : raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1);
+      suggestions = JSON.parse(jsonStr);
+      if (!Array.isArray(suggestions)) suggestions = [];
+    } catch {
+      suggestions = result.reply.split("\n").filter((l: string) => l.trim().length > 5).slice(0, 5);
+    }
+    res.json({ suggestions: suggestions.slice(0, 5).map((s: string) => String(s).trim()).filter(Boolean) });
+  } catch (err: any) {
+    res.status(500).json({ error: "suggest failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V31 — Run follow-up: continue from a run's final answer.
+   POST /runs/:id/follow-up
+   Body: { prompt, strategy?, overrides? }
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/follow-up", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const sourceRun = await getRun(String(req.params.id));
+    if (!sourceRun) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(sourceRun.sessionId, auth.sub);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const { prompt, strategy, overrides } = req.body || {};
+    if (!prompt || typeof prompt !== "string") return res.status(400).json({ error: "prompt required" });
+
+    // Prepend the previous run's final answer as context.
+    const prevAnswer = (sourceRun.finalContent || "").slice(0, 1500);
+    const fullInput = prevAnswer
+      ? `[Context from previous answer]\n${prevAnswer}\n\n[Follow-up question]\n${prompt}`
+      : prompt;
+
+    const newRun = await createRun({
+      sessionId: session.id,
+      userInput: fullInput,
+      strategy: typeof strategy === "string" ? strategy : (sourceRun.strategy ?? "sequential"),
+      agentConfig: overrides || sourceRun.agentConfig || {},
+      parentRunId: sourceRun.id,
+      threadId: sourceRun.threadId || sourceRun.id,
+    });
+    await setFollowUpFrom(newRun.id, sourceRun.id);
+    await touchSession(session.id);
+    res.status(201).json({ run: newRun, sourceRunId: sourceRun.id });
+  } catch (err: any) {
+    res.status(500).json({ error: "follow-up failed", details: err?.message });
   }
 });
 

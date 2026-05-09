@@ -24,8 +24,15 @@ interface SpendLimit {
   alertAt: number;
 }
 
+interface UsageData {
+  thisMonth: { runs: number; costUsd: number; sessions: number };
+  limits: { runs: number | null; costUsd: number | null };
+  planName: string;
+}
+
 export default function QCoreBudgetPage() {
   const [summary, setSummary] = useState<SpendSummary | null>(null);
+  const [usageData, setUsageData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -37,15 +44,20 @@ export default function QCoreBudgetPage() {
 
   async function fetchSummary() {
     try {
-      const r = await fetch(apiUrl("/api/qcoreai/me/spend-summary"), {
-        headers: bearerHeader(),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      const [summaryRes, usageRes] = await Promise.all([
+        fetch(apiUrl("/api/qcoreai/me/spend-summary"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/me/usage"), { headers: bearerHeader() }),
+      ]);
+      const d = await summaryRes.json();
+      if (!summaryRes.ok) throw new Error(d.error ?? `HTTP ${summaryRes.status}`);
       setSummary(d);
       if (d.limitUsd) {
         setLimitInput(String(d.limitUsd));
         setAlertInput(String(Math.round((d.alertAt ?? 0.8) * 100)));
+      }
+      if (usageRes.ok) {
+        const ud = await usageRes.json().catch(() => null);
+        if (ud) setUsageData(ud);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
@@ -253,6 +265,78 @@ export default function QCoreBudgetPage() {
                 )}
               </div>
             </div>
+
+            {/* V36: Plan badge + Usage bars */}
+            {usageData && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex-1">
+                    Plan &amp; Usage
+                  </h2>
+                  <span
+                    className="text-xs font-bold px-2.5 py-1 rounded-full"
+                    style={
+                      usageData.planName === "pro"
+                        ? { background: "rgba(139,92,246,0.15)", color: "#8b5cf6", border: "1px solid rgba(139,92,246,0.3)" }
+                        : usageData.planName === "enterprise"
+                        ? { background: "rgba(16,185,129,0.15)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }
+                        : { background: "rgba(100,116,139,0.15)", color: "#94a3b8", border: "1px solid rgba(100,116,139,0.3)" }
+                    }
+                  >
+                    {usageData.planName === "pro" ? "Pro" : usageData.planName === "enterprise" ? "Enterprise" : "Free plan"}
+                  </span>
+                </div>
+
+                {/* Runs bar */}
+                {usageData.limits.runs != null && (
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                      <span>Runs this month</span>
+                      <span>{usageData.thisMonth.runs} / {usageData.limits.runs}</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(100, (usageData.thisMonth.runs / usageData.limits.runs) * 100)}%`,
+                          background: usageData.thisMonth.runs >= usageData.limits.runs ? "#ef4444" : "#14b8a6",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Cost bar */}
+                {usageData.limits.costUsd != null && (
+                  <div>
+                    <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                      <span>Cost this month</span>
+                      <span>${usageData.thisMonth.costUsd.toFixed(4)} / ${usageData.limits.costUsd.toFixed(2)}</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(100, (usageData.thisMonth.costUsd / usageData.limits.costUsd) * 100)}%`,
+                          background: usageData.thisMonth.costUsd >= usageData.limits.costUsd ? "#ef4444" : "#8b5cf6",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Upgrade CTA */}
+                {usageData.planName === "free" && (
+                  <a
+                    href="mailto:hello@aevion.app?subject=QCoreAI Pro Plan"
+                    className="block text-center py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ background: "linear-gradient(135deg,#8b5cf6,#6366f1)", color: "#fff", textDecoration: "none" }}
+                  >
+                    Upgrade to Pro
+                  </a>
+                )}
+              </div>
+            )}
 
             {/* Info */}
             <div className="text-xs text-slate-600 space-y-1.5">

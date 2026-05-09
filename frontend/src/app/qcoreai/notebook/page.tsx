@@ -55,6 +55,37 @@ export default function NotebookPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // V35: Notebook Q&A panel
+  const [qaOpen, setQaOpen] = useState(false);
+  const [qaQuestion, setQaQuestion] = useState("");
+  const [qaAnswer, setQaAnswer] = useState<string | null>(null);
+  const [qaSnippetsUsed, setQaSnippetsUsed] = useState(0);
+  const [qaBusy, setQaBusy] = useState(false);
+
+  const askAI = async () => {
+    if (!qaQuestion.trim() || qaBusy) return;
+    setQaBusy(true);
+    setQaAnswer(null);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/notebook/qa"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ question: qaQuestion.trim(), limit: 10 }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setQaAnswer(d.answer ?? "No answer returned.");
+        setQaSnippetsUsed(d.snippetsUsed ?? 0);
+      } else {
+        setQaAnswer("Error: " + (d.error ?? "unknown"));
+      }
+    } catch (e: any) {
+      setQaAnswer("Error: " + (e?.message || "unknown"));
+    } finally {
+      setQaBusy(false);
+    }
+  };
+
   const loadCollections = useCallback(async () => {
     try {
       const r = await fetch(apiUrl("/api/qcoreai/notebook/collections"), { headers: bearerHeader() });
@@ -169,6 +200,17 @@ export default function NotebookPage() {
             <p style={{ fontSize: 13, color: "#64748b", margin: 0, flex: 1 }}>
               Saved snippets from run outputs — highlight, annotate, and search your knowledge base.
             </p>
+            {/* V35: Ask AI button */}
+            <button
+              onClick={() => { setQaOpen((v) => !v); setQaAnswer(null); }}
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                border: "1px solid rgba(99,102,241,0.4)", background: qaOpen ? "rgba(99,102,241,0.1)" : "#fff",
+                color: "#4338ca", whiteSpace: "nowrap",
+              }}
+            >
+              Ask AI
+            </button>
             <button
               onClick={async () => {
                 const lines = ["# QCoreAI Notebook Export", `*${new Date().toISOString().slice(0, 10)}*`, ""];
@@ -205,6 +247,45 @@ export default function NotebookPage() {
             )}
           </div>
         </div>
+
+        {/* V35: Notebook Q&A panel */}
+        {qaOpen && (
+          <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: "1px solid rgba(99,102,241,0.2)", background: "rgba(99,102,241,0.04)" }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: "#3730a3", marginBottom: 8 }}>Ask AI about your notebook</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: qaAnswer ? 12 : 0 }}>
+              <textarea
+                value={qaQuestion}
+                onChange={(e) => setQaQuestion(e.target.value)}
+                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); askAI(); } }}
+                placeholder="What patterns do you see in my saved snippets?"
+                rows={2}
+                style={{
+                  flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #c7d2fe",
+                  fontSize: 12, outline: "none", resize: "vertical", fontFamily: "inherit",
+                }}
+              />
+              <button
+                onClick={askAI}
+                disabled={qaBusy || !qaQuestion.trim()}
+                style={{
+                  padding: "8px 16px", borderRadius: 8, border: "none",
+                  background: qaBusy ? "#a5b4fc" : "#4338ca", color: "#fff",
+                  fontSize: 12, fontWeight: 700, cursor: qaBusy ? "default" : "pointer", alignSelf: "flex-start",
+                }}
+              >
+                {qaBusy ? "…" : "Ask"}
+              </button>
+            </div>
+            {qaAnswer && (
+              <div>
+                <div style={{ fontSize: 11, color: "#6d28d9", marginBottom: 4, fontWeight: 600 }}>
+                  Answer · {qaSnippetsUsed} snippet{qaSnippetsUsed !== 1 ? "s" : ""} used
+                </div>
+                <div style={{ fontSize: 13, color: "#1e1b4b", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{qaAnswer}</div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Collections */}
         <div style={{ marginBottom: 14, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>

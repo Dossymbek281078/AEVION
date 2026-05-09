@@ -1,5 +1,6 @@
 /**
  * @aevion/qcoreai-client — TypeScript client for AEVION QCoreAI multi-agent.
+ * @version v1.0.0-rc.1
  *
  * Single-file SDK that wraps the public HTTP API:
  *   - POST /api/qcoreai/multi-agent             (SSE streaming pipeline)
@@ -1530,6 +1531,121 @@ export class QCoreClient {
       body: JSON.stringify({ pinOrder }),
     });
     if (!res.ok) throw new Error(`pinWorkspaceSession failed: ${await safeError(res)}`);
+  }
+
+  /* ─── V35 — Presence + Notebook QA + Widget v2 ───────────────────────── */
+
+  /**
+   * Heartbeat ping for session presence. Call every ~20 s to indicate the
+   * current user is viewing the session. Returns the current online count.
+   */
+  async pingPresence(sessionId: string): Promise<{ sessionId: string; onlineCount: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/presence/ping`), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+    });
+    if (!res.ok) throw new Error(`pingPresence failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List users currently online in a session (those who pinged in the last 30 s). */
+  async getPresence(sessionId: string): Promise<{ sessionId: string; onlineCount: number; users: Array<{ userId: string; lastSeenMs: number }> }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/presence`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getPresence failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Ask a question about the user's saved notebook snippets.
+   * The server loads the latest N snippets, builds a context prompt, and
+   * calls the configured AI provider. Falls back gracefully when empty.
+   */
+  async notebookQA(question: string, limit = 10): Promise<{ answer: string; snippetsUsed: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/qa"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ question, limit }),
+    });
+    if (!res.ok) throw new Error(`notebookQA failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V36 — Usage dashboard + Plan limits ────────────────────────────── */
+
+  /**
+   * Get the calling user's usage for the current calendar month plus their
+   * plan limits. Always returns a valid structure — uses in-memory fallback
+   * when the DB is unavailable.
+   */
+  async getUsage(): Promise<{
+    thisMonth: { runs: number; costUsd: number; sessions: number };
+    limits: { runs: number | null; costUsd: number | null };
+    planName: string;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/usage"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getUsage failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Fetch the calling user's current plan and its limits. */
+  async getPlan(): Promise<{
+    plan: "free" | "pro" | "enterprise";
+    limits: { runs: number; costUsd: number; description: string };
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/plan"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getPlan failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V37 — Bulk session ops + run siblings ──────────────────────────── */
+
+  /**
+   * Delete multiple sessions at once (owner-only per session).
+   * Returns a count of successfully deleted sessions and a list of per-id errors.
+   */
+  async bulkDeleteSessions(sessionIds: string[]): Promise<{ deleted: number; errors: string[] }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/sessions/bulk-delete"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ sessionIds }),
+    });
+    if (!res.ok) throw new Error(`bulkDeleteSessions failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Archive or unarchive multiple sessions at once (owner-only per session).
+   * Pass archive=true to archive, false to unarchive.
+   */
+  async bulkArchiveSessions(sessionIds: string[], archive = true): Promise<{ updated: number; archive: boolean; errors: string[] }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/sessions/bulk-archive"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ sessionIds, archive }),
+    });
+    if (!res.ok) throw new Error(`bulkArchiveSessions failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Get other runs in the same session as a given run (siblings).
+   * Useful for comparison UI — see what other strategies were tried.
+   */
+  async getRunSiblings(runId: string, limit = 20): Promise<{ runId: string; sessionId: string; siblings: unknown[]; total: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/siblings?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunSiblings failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Execute a synchronous run via the widget embed endpoint.
+   * No auth — uses an API key (env-based or shared preset id as key).
+   * Returns the final content without streaming.
+   */
+  async widgetRun(apiKey: string, input: string, strategy?: "sequential" | "parallel" | "debate"): Promise<{ runId: string; sessionId: string; finalContent: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/widget/run"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey, input, strategy }),
+    });
+    if (!res.ok) throw new Error(`widgetRun failed: ${await safeError(res)}`);
+    return res.json();
   }
 }
 

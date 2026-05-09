@@ -421,6 +421,13 @@ export default function QCoreMultiAgentPage() {
   // V32: shortcut cheatsheet modal
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
 
+  // V35: presence indicator — online count for the active session
+  const [presenceCount, setPresenceCount] = useState(0);
+
+  // V37: multi-select mode for bulk session ops
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
   // V7-T: id of the run being continued (thread reply context).
   const [continueFromRunId, setContinueFromRunId] = useState<string | null>(null);
   // V7-Tmpl: run templates — save/load named input+strategy bundles.
@@ -520,6 +527,26 @@ export default function QCoreMultiAgentPage() {
     }, 300);
     return () => clearTimeout(t);
   }, [paletteOpen, paletteQuery]);
+
+  /* ── V35: Presence ping — heartbeat every 20s when a session is active ── */
+  useEffect(() => {
+    if (!activeSessionId) { setPresenceCount(0); return; }
+    const ping = async () => {
+      try {
+        const r = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/presence/ping`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...bearerHeader() },
+        });
+        if (r.ok) {
+          const d = await r.json().catch(() => ({}));
+          setPresenceCount(d.onlineCount ?? 0);
+        }
+      } catch { /* non-fatal */ }
+    };
+    ping();
+    const interval = setInterval(ping, 20_000);
+    return () => clearInterval(interval);
+  }, [activeSessionId]);
 
   /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
@@ -2887,7 +2914,69 @@ export default function QCoreMultiAgentPage() {
               >
                 🔎
               </a>
+              {/* V37: Select toggle */}
+              <button
+                onClick={() => { setSelectMode((v) => !v); setSelectedSessionIds(new Set()); }}
+                title="Multi-select sessions"
+                style={{
+                  padding: "10px 10px", borderRadius: 10,
+                  border: "1px solid rgba(15,23,42,0.15)", background: selectMode ? "#f0fdf4" : "#fff",
+                  color: selectMode ? "#16a34a" : "#475569", fontSize: 11, fontWeight: 700,
+                  cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                ☑
+              </button>
             </div>
+            {/* V37: Bulk action bar */}
+            {selectMode && selectedSessionIds.size > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                <button
+                  onClick={async () => {
+                    const ids = Array.from(selectedSessionIds);
+                    try {
+                      await fetch(apiUrl("/api/qcoreai/sessions/bulk-delete"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...bearerHeader() },
+                        body: JSON.stringify({ sessionIds: ids }),
+                      });
+                      setSessions((prev) => prev.filter((s) => !ids.includes(s.id)));
+                      setSelectedSessionIds(new Set());
+                      setSelectMode(false);
+                    } catch { /* noop */ }
+                  }}
+                  style={{
+                    flex: 1, padding: "6px 8px", borderRadius: 8,
+                    border: "1px solid #fca5a5", background: "#fef2f2",
+                    color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  Delete ({selectedSessionIds.size})
+                </button>
+                <button
+                  onClick={async () => {
+                    const ids = Array.from(selectedSessionIds);
+                    try {
+                      await fetch(apiUrl("/api/qcoreai/sessions/bulk-archive"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...bearerHeader() },
+                        body: JSON.stringify({ sessionIds: ids, archive: true }),
+                      });
+                      setSessions((prev) => prev.filter((s) => !ids.includes(s.id)));
+                      setSelectedSessionIds(new Set());
+                      setSelectMode(false);
+                    } catch { /* noop */ }
+                  }}
+                  style={{
+                    flex: 1, padding: "6px 8px", borderRadius: 8,
+                    border: "1px solid #fcd34d", background: "#fffbeb",
+                    color: "#92400e", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  Archive ({selectedSessionIds.size})
+                </button>
+              </div>
+            )}
             {/* dummy element to keep original + New session HTML shape */}
             <button
               onClick={() => { setPaletteOpen(true); setPaletteQuery(""); }}
@@ -3085,8 +3174,23 @@ export default function QCoreMultiAgentPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {sessions.map((s) => (
                   <div key={s.id} style={{ display: "flex", alignItems: "stretch", gap: 2 }}>
+                    {/* V37: multi-select checkbox */}
+                    {selectMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedSessionIds.has(s.id)}
+                        onChange={() => {
+                          setSelectedSessionIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                            return next;
+                          });
+                        }}
+                        style={{ alignSelf: "center", marginRight: 2, cursor: "pointer" }}
+                      />
+                    )}
                     <button
-                      onClick={() => loadSession(s.id)}
+                      onClick={() => selectMode ? setSelectedSessionIds((prev) => { const n = new Set(prev); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n; }) : loadSession(s.id)}
                       style={{
                         flex: 1, textAlign: "left",
                         padding: "8px 10px", borderRadius: 8,
@@ -3226,6 +3330,13 @@ export default function QCoreMultiAgentPage() {
 
           {/* Main conversation */}
           <section>
+            {/* V35: Presence badge */}
+            {activeSessionId && presenceCount > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>{presenceCount} online</span>
+              </div>
+            )}
             <div
               ref={timelineRef}
               onScroll={onTimelineScroll}

@@ -1647,6 +1647,89 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`widgetRun failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  /* ─── V39: Organizations ─────────────────────────────────────────────── */
+
+  /** Create a new organization owned by the authenticated user. */
+  async createOrg(name: string): Promise<{ id: string; name: string; ownerId: string; plan: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/orgs"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`createOrg failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.org;
+  }
+
+  /** List organizations owned by the authenticated user. */
+  async listOrgs(): Promise<Array<{ id: string; name: string; plan: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/orgs"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listOrgs failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items;
+  }
+
+  /** Add a member to an organization (owner only). */
+  async addOrgMember(orgId: string, userId: string, role = "member"): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/orgs/${encodeURIComponent(orgId)}/members`), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ userId, role }),
+    });
+    if (!res.ok) throw new Error(`addOrgMember failed: ${await safeError(res)}`);
+  }
+
+  /** Remove a member from an organization (owner only). */
+  async removeOrgMember(orgId: string, userId: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`), {
+      method: "DELETE", headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`removeOrgMember failed: ${await safeError(res)}`);
+  }
+
+  /** List members of an organization (member or owner can call). */
+  async listOrgMembers(orgId: string): Promise<Array<{ userId: string; role: string; joinedAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/orgs/${encodeURIComponent(orgId)}/members`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listOrgMembers failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.members;
+  }
+
+  /* ─── V40: Cost optimization ─────────────────────────────────────────── */
+
+  /** Analyze run history and return cost-saving suggestions. */
+  async getOptimizationTips(): Promise<Array<{ type: string; title: string; description: string; estimatedSavingPct: number }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/optimize-costs"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+    });
+    if (!res.ok) throw new Error(`getOptimizationTips failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.suggestions;
+  }
+
+  /** Get daily cost data with 7-day rolling average for the last N days. */
+  async getCostTrend(days = 30): Promise<Array<{ date: string; costUsd: number; rollingAvg7d: number }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/cost-trend?days=${days}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getCostTrend failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.points;
+  }
+
+  /* ─── V41: Webhook stats ──────────────────────────────────────────────── */
+
+  /** Get webhook delivery statistics for the last 30 days. */
+  async getWebhookStats(): Promise<{ total: number; successRate: number; avgLatencyMs: number; errorCount: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/webhook/stats"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getWebhookStats failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List all supported webhook event types. */
+  async listWebhookEventTypes(): Promise<Array<{ name: string; description: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/webhook/events"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listWebhookEventTypes failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.events;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

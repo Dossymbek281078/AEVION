@@ -269,6 +269,38 @@ export default function DocsPage() {
             </div>
           </div>
         ))}
+
+        {/* V41 — Webhook event types reference */}
+        <div id="webhook-events" style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 900, color: "#0f172a", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <span>🔔</span>
+            Webhook event types
+          </h2>
+          <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+            Configure your webhook URL at <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: 4, fontSize: 11 }}>PUT /me/webhook</code>.
+            All events include the event name in the <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: 4, fontSize: 11 }}>X-QCore-Event</code> header.
+          </p>
+          <div style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden" }}>
+            {[
+              { name: "run.started", description: "Fired when a multi-agent run begins.", fields: "runId, sessionId, strategy, userInput, startedAt" },
+              { name: "agent.turn", description: "Fired after each agent finishes.", fields: "runId, sessionId, role, stage, model, tokensIn, tokensOut, durationMs, costUsd, contentPreview" },
+              { name: "run.completed", description: "Fired when a run finishes (done / stopped / error).", fields: "runId, sessionId, status, finalContent, totalCostUsd, totalDurationMs, finishedAt" },
+              { name: "session.created", description: "Fired when a new session is created.", fields: "sessionId, userId, title, createdAt" },
+              { name: "session.archived", description: "Fired when a session is archived or unarchived.", fields: "sessionId, archived, archivedAt" },
+              { name: "annotation.created", description: "Fired when an annotation is added to a run message.", fields: "annotationId, runId, userId, note, color, createdAt" },
+            ].map((evt, i, arr) => (
+              <div key={evt.name} style={{ padding: "12px 16px", borderBottom: i < arr.length - 1 ? "1px solid rgba(15,23,42,0.06)" : "none", background: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <code style={{ fontSize: 12, fontWeight: 900, color: "#7c3aed", fontFamily: "monospace" }}>{evt.name}</code>
+                </div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  {evt.description}
+                  <span style={{ marginLeft: 6, color: "#94a3b8" }}>Fields: <code style={{ fontSize: 11, color: "#64748b" }}>{evt.fields}</code></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </ProductPageShell>
     </main>
   );

@@ -30,6 +30,19 @@ interface UsageData {
   planName: string;
 }
 
+interface OptimizationSuggestion {
+  type: string;
+  title: string;
+  description: string;
+  estimatedSavingPct: number;
+}
+
+interface CostTrendPoint {
+  date: string;
+  costUsd: number;
+  rollingAvg7d: number;
+}
+
 export default function QCoreBudgetPage() {
   const [summary, setSummary] = useState<SpendSummary | null>(null);
   const [usageData, setUsageData] = useState<UsageData | null>(null);
@@ -38,6 +51,11 @@ export default function QCoreBudgetPage() {
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [optimizationTips, setOptimizationTips] = useState<OptimizationSuggestion[] | null>(null);
+  const [tipsLoading, setTipsLoading] = useState(false);
+  const [costTrend, setCostTrend] = useState<CostTrendPoint[]>([]);
+  const [trendLoaded, setTrendLoaded] = useState(false);
 
   const [limitInput, setLimitInput] = useState("");
   const [alertInput, setAlertInput] = useState("80");
@@ -66,7 +84,31 @@ export default function QCoreBudgetPage() {
     }
   }
 
-  useEffect(() => { fetchSummary(); }, []);
+  async function fetchOptimizationTips() {
+    setTipsLoading(true);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/me/optimize-costs"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.suggestions)) setOptimizationTips(d.suggestions);
+    } catch { /* silent */ } finally {
+      setTipsLoading(false);
+    }
+  }
+
+  async function fetchCostTrend() {
+    if (trendLoaded) return;
+    setTrendLoaded(true);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/me/cost-trend?days=14"), { headers: bearerHeader() });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.points)) setCostTrend(d.points);
+    } catch { /* silent */ }
+  }
+
+  useEffect(() => { fetchSummary(); fetchCostTrend(); }, []);
 
   async function saveLimit() {
     const limitVal = parseFloat(limitInput);
@@ -337,6 +379,68 @@ export default function QCoreBudgetPage() {
                 )}
               </div>
             )}
+
+            {/* V40: Cost trend mini-chart */}
+            {costTrend.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Cost trend (14 days)</h2>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 48 }}>
+                  {costTrend.map((p, i) => {
+                    const maxCost = Math.max(...costTrend.map((x) => x.costUsd), 0.0001);
+                    const h = Math.max(2, Math.round((p.costUsd / maxCost) * 44));
+                    return (
+                      <div key={i} title={`${p.date}: $${p.costUsd.toFixed(5)}`} style={{ flex: 1, height: h, borderRadius: 3, background: "#14b8a6", opacity: 0.85, cursor: "default" }} />
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-xs text-slate-600 mt-1">
+                  <span>{costTrend[0]?.date?.slice(5)}</span>
+                  <span>{costTrend[costTrend.length - 1]?.date?.slice(5)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* V40: Optimization tips */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cost optimization tips</h2>
+                {!optimizationTips && (
+                  <button
+                    onClick={fetchOptimizationTips}
+                    disabled={tipsLoading}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {tipsLoading ? "Analyzing…" : "Get tips"}
+                  </button>
+                )}
+              </div>
+              {!optimizationTips ? (
+                <p className="text-xs text-slate-600">Click "Get tips" to analyze your run history for savings opportunities.</p>
+              ) : (
+                <div className="space-y-3">
+                  {optimizationTips.map((tip, i) => (
+                    <div key={i} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                      <div className="flex items-start gap-3">
+                        <div className="text-lg">
+                          {tip.type === "model_downgrade" ? "🔽" : tip.type === "enable_debate" ? "⚖️" : "🔒"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-white">{tip.title}</span>
+                            {tip.estimatedSavingPct > 0 && (
+                              <span className="text-xs font-bold text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">
+                                save ~{tip.estimatedSavingPct}%
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed">{tip.description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Info */}
             <div className="text-xs text-slate-600 space-y-1.5">

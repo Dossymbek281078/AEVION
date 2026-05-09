@@ -105,7 +105,32 @@ export type RunCompletedEvent = {
   finishedAt: string;
 };
 
-export type QCoreEvent = RunStartedEvent | AgentTurnEvent | RunCompletedEvent;
+export type SessionCreatedEvent = {
+  event: "session.created";
+  sessionId: string;
+  userId: string | null;
+  title: string;
+  createdAt: string;
+};
+
+export type SessionArchivedEvent = {
+  event: "session.archived";
+  sessionId: string;
+  archived: boolean;
+  archivedAt: string;
+};
+
+export type AnnotationCreatedEvent = {
+  event: "annotation.created";
+  annotationId: string;
+  runId: string;
+  userId: string;
+  note: string;
+  color: string;
+  createdAt: string;
+};
+
+export type QCoreEvent = RunStartedEvent | AgentTurnEvent | RunCompletedEvent | SessionCreatedEvent | SessionArchivedEvent | AnnotationCreatedEvent;
 
 /** True iff the env-level (single-tenant) webhook is configured. The UI
  * uses this to show a "🔗 Webhook wired" chip; per-user webhooks render

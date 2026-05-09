@@ -531,6 +531,29 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_userInput_search_idx" ON "QCoreRun" USING gin(to_tsvector('english', COALESCE("userInput",'')));`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_title_search_idx" ON "QCoreSession" USING gin(to_tsvector('english', COALESCE("title",'')));`);
 
+  // V39 — Organizations (multi-user teams).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreOrg" (
+      "id"          TEXT PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+      "ownerId"     TEXT NOT NULL,
+      "plan"        TEXT NOT NULL DEFAULT 'team',
+      "memberLimit" INTEGER NOT NULL DEFAULT 5,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreOrg_owner_idx" ON "QCoreOrg" ("ownerId");`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreOrgMember" (
+      "orgId"    TEXT NOT NULL,
+      "userId"   TEXT NOT NULL,
+      "role"     TEXT NOT NULL DEFAULT 'member',
+      "joinedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("orgId", "userId")
+    );
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

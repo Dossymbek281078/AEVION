@@ -3505,3 +3505,109 @@ export async function setFollowUpFrom(runId: string, fromRunId: string): Promise
   if (!isDbReady()) return;
   await pool.query(`UPDATE "QCoreRun" SET "followUpFromId"=$1 WHERE "id"=$2`, [fromRunId, runId]);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V39 — Organizations (multi-user teams).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type OrgRow = {
+  id: string;
+  name: string;
+  ownerId: string;
+  plan: string;
+  memberLimit: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OrgMemberRow = {
+  orgId: string;
+  userId: string;
+  role: string;
+  joinedAt: string;
+};
+
+// In-memory fallback maps
+const memOrgs = new Map<string, OrgRow>();
+const memOrgMembers = new Map<string, OrgMemberRow>(); // key = `${orgId}:${userId}`
+
+export async function createOrg(opts: { name: string; ownerId: string }): Promise<OrgRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const now = nowIso();
+  const row: OrgRow = { id, name: opts.name.slice(0, 200), ownerId: opts.ownerId, plan: "team", memberLimit: 5, createdAt: now, updatedAt: now };
+  if (!isDbReady()) { memOrgs.set(id, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCoreOrg" ("id","name","ownerId") VALUES ($1,$2,$3) RETURNING *`,
+    [id, row.name, opts.ownerId]
+  );
+  return r.rows[0] as OrgRow;
+}
+
+export async function getOrg(id: string): Promise<OrgRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memOrgs.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCoreOrg" WHERE "id"=$1`, [id]);
+  return (r.rows[0] as OrgRow) ?? null;
+}
+
+export async function listOrgs(userId: string): Promise<OrgRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memOrgs.values()).filter((o) => o.ownerId === userId);
+  const r = await pool.query(`SELECT * FROM "QCoreOrg" WHERE "ownerId"=$1 ORDER BY "createdAt" DESC`, [userId]);
+  return r.rows as OrgRow[];
+}
+
+export async function deleteOrg(id: string, ownerId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const o = memOrgs.get(id);
+    if (!o || o.ownerId !== ownerId) return false;
+    memOrgs.delete(id);
+    // Remove members
+    for (const [k, m] of memOrgMembers) { if (m.orgId === id) memOrgMembers.delete(k); }
+    return true;
+  }
+  const r = await pool.query(`DELETE FROM "QCoreOrg" WHERE "id"=$1 AND "ownerId"=$2 RETURNING "id"`, [id, ownerId]);
+  if ((r.rowCount ?? 0) > 0) {
+    await pool.query(`DELETE FROM "QCoreOrgMember" WHERE "orgId"=$1`, [id]);
+    return true;
+  }
+  return false;
+}
+
+export async function addOrgMember(orgId: string, userId: string, role = "member"): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const key = `${orgId}:${userId}`;
+  const row: OrgMemberRow = { orgId, userId, role, joinedAt: nowIso() };
+  if (!isDbReady()) { memOrgMembers.set(key, row); return true; }
+  await pool.query(
+    `INSERT INTO "QCoreOrgMember" ("orgId","userId","role") VALUES ($1,$2,$3)
+     ON CONFLICT ("orgId","userId") DO UPDATE SET "role"=$3`,
+    [orgId, userId, role]
+  );
+  return true;
+}
+
+export async function removeOrgMember(orgId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const key = `${orgId}:${userId}`;
+  if (!isDbReady()) { const had = memOrgMembers.has(key); memOrgMembers.delete(key); return had; }
+  const r = await pool.query(`DELETE FROM "QCoreOrgMember" WHERE "orgId"=$1 AND "userId"=$2 RETURNING "userId"`, [orgId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return Array.from(memOrgMembers.values()).filter((m) => m.orgId === orgId);
+  const r = await pool.query(`SELECT * FROM "QCoreOrgMember" WHERE "orgId"=$1 ORDER BY "joinedAt"`, [orgId]);
+  return r.rows as OrgMemberRow[];
+}
+
+export async function isOrgMember(orgId: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  const key = `${orgId}:${userId}`;
+  if (!isDbReady()) return memOrgMembers.has(key);
+  const r = await pool.query(`SELECT 1 FROM "QCoreOrgMember" WHERE "orgId"=$1 AND "userId"=$2`, [orgId, userId]);
+  return (r.rowCount ?? 0) > 0;
+}

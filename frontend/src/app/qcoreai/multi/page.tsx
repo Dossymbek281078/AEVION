@@ -3860,6 +3860,7 @@ export default function QCoreMultiAgentPage() {
           { icon: "⚖️", label: "Compare runs", href: "/qcoreai/compare" },
           { icon: "🗂️", label: "Workspaces", href: "/qcoreai/workspaces" },
           { icon: "🔖", label: "Bookmarks", href: "/qcoreai/bookmarks" },
+          { icon: "🏢", label: "Organizations", href: "/qcoreai/orgs" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div

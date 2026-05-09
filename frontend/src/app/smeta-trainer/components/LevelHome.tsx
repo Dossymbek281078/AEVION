@@ -6,6 +6,7 @@ import { LEVELS } from "../lib/levels";
 import { useProgress } from "../lib/useProgress";
 import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "../lib/lessons";
 import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
+import { findLesson } from "../lib/lessons";
 import type { LevelStatus } from "../lib/useProgress";
 
 const statusLabel: Record<LevelStatus, string> = {
@@ -75,6 +76,21 @@ export function LevelHome() {
 
   const [badgesEarned, setBadgesEarned] = useState(0);
 
+  // Weak spots: уроки с quizScore < 100, отсортированные по слабости
+  const [weakSpots, setWeakSpots] = useState<Array<{ id: string; title: string; level: number; score: number }>>([]);
+  useEffect(() => {
+    const lp = loadLessonProgress();
+    const items: Array<{ id: string; title: string; level: number; score: number }> = [];
+    Object.entries(lp).forEach(([id, p]) => {
+      if (p.quizScore != null && p.quizScore < 100) {
+        const lesson = findLesson(id);
+        if (lesson) items.push({ id, title: lesson.title, level: lesson.level, score: p.quizScore });
+      }
+    });
+    items.sort((a, b) => a.score - b.score);
+    setWeakSpots(items.slice(0, 4));
+  }, [progress]);
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] bg-slate-50 p-6">
       {/* Заголовок курса */}
@@ -134,6 +150,37 @@ export function LevelHome() {
                   <span className="hidden sm:inline text-xs">Случайный</span>
                 </button>
               )}
+            </div>
+          )}
+
+          {/* Weak spots — повторить уроки с низким quiz-баллом */}
+          {weakSpots.length > 0 && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">🔁</span>
+                <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">
+                  Слабые места — стоит повторить
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {weakSpots.map((w) => (
+                  <Link
+                    key={w.id}
+                    href={`/smeta-trainer/level/${w.level}#lesson-${encodeURIComponent(w.id)}`}
+                    className="flex items-center gap-2 bg-white border border-amber-200 rounded px-2 py-1.5 hover:border-amber-400 text-xs"
+                  >
+                    <span className={`shrink-0 font-mono text-[10px] font-bold w-9 text-right ${
+                      w.score < 50 ? "text-red-600" : "text-amber-600"
+                    }`}>
+                      {w.score}%
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-slate-800 truncate">{w.title}</div>
+                      <div className="text-[10px] text-slate-400">Уровень {w.level}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
 
@@ -233,6 +280,24 @@ export function LevelHome() {
               📝 Мои заметки
               <span className="text-[10px] text-sky-500 font-normal">
                 конспект + экспорт .md
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/practice"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 text-xs font-semibold rounded-lg"
+            >
+              🕵️ Практика
+              <span className="text-[10px] text-purple-500 font-normal">
+                7 упражнений «найди ошибку»
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/capstone"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-purple-300 text-purple-700 hover:bg-purple-50 text-xs font-semibold rounded-lg"
+            >
+              📜 Капстоун
+              <span className="text-[10px] text-purple-500 font-normal">
+                сводный экзамен (10)
               </span>
             </Link>
             <Link

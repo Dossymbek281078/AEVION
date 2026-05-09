@@ -9,6 +9,7 @@ import type { CourseProgress } from "./useProgress";
 import type { LessonProgress } from "./lessons";
 import { LEVELS } from "./levels";
 import { getLessonsForLevel } from "./lessons";
+import { PRACTICE_EXERCISES, loadPracticeProgress } from "./practiceExercises";
 
 export interface Achievement {
   id: string;
@@ -30,6 +31,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "perfectionist",      icon: "💯", title: "Перфекционист",       description: "5 уроков сданы со 100% по тестам" },
   { id: "first-zachet",       icon: "🥇", title: "Первый зачёт",        description: "Получен первый зачёт уровня" },
   { id: "course-complete",    icon: "🏆", title: "Курс пройден",        description: "Все 5 уровней зачтены — сертификат доступен" },
+  { id: "detective",          icon: "🕵️", title: "Детектив",            description: "Все 7 упражнений «найди ошибку» в практике решены" },
+  { id: "capstone-pass",      icon: "📜", title: "Капстоун-зачёт",      description: "Сдан финальный экзамен между Уровнями 4 и 5" },
 ];
 
 const STORAGE_KEY = "aevion-smeta-achievements-v1";
@@ -69,6 +72,20 @@ export function computeEarned(
   const doneLevels = LEVELS.filter((lv) => progress.levels[lv.num]?.status === "done").length;
   if (doneLevels >= 1) earned.add("first-zachet");
   if (doneLevels === LEVELS.length) earned.add("course-complete");
+
+  // ── Практика ──
+  const practice = loadPracticeProgress();
+  const solvedAll = PRACTICE_EXERCISES.every((ex) => practice[ex.id]?.correct);
+  if (PRACTICE_EXERCISES.length > 0 && solvedAll) earned.add("detective");
+
+  // ── Капстоун (хранится отдельным флагом) ──
+  if (typeof window !== "undefined") {
+    try {
+      if (localStorage.getItem("aevion-smeta-capstone-pass-v1") === "true") {
+        earned.add("capstone-pass");
+      }
+    } catch {}
+  }
 
   return earned;
 }

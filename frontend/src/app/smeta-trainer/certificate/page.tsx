@@ -113,7 +113,10 @@ export default function CertificatePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 print:bg-white print:p-0">
+    <div className="min-h-screen bg-slate-100 p-4 print:bg-white print:p-0 relative">
+      {/* Confetti — только при первом открытии (CSS-only) */}
+      <Confetti />
+
       {/* Toolbar (скрыт при печати) */}
       <div className="max-w-4xl mx-auto mb-4 flex items-center justify-between print:hidden">
         <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
@@ -237,6 +240,67 @@ export default function CertificatePage() {
         @media print {
           @page { size: A4 landscape; margin: 12mm; }
           body { background: white; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Confetti (CSS-only, без библиотек) ──────────────────────────────
+function Confetti() {
+  const [show, setShow] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShow(false), 5000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!show) return null;
+
+  // 60 цветных «конфетти» с разными задержками и углами
+  const pieces = Array.from({ length: 60 }, (_, i) => i);
+  const colors = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden z-20 print:hidden">
+      {pieces.map((i) => {
+        const left = (i * 16) % 100;
+        const delay = (i % 8) * 0.15;
+        const dur = 2.5 + (i % 5) * 0.4;
+        const color = colors[i % colors.length];
+        const rot = (i * 47) % 360;
+        return (
+          <span
+            key={i}
+            className="absolute top-[-20px] confetti-piece"
+            style={{
+              left: `${left}%`,
+              backgroundColor: color,
+              animationDelay: `${delay}s`,
+              animationDuration: `${dur}s`,
+              transform: `rotate(${rot}deg)`,
+            }}
+          />
+        );
+      })}
+      <style jsx>{`
+        .confetti-piece {
+          width: 8px;
+          height: 14px;
+          opacity: 0.9;
+          border-radius: 1px;
+          animation-name: fall;
+          animation-iteration-count: 1;
+          animation-timing-function: cubic-bezier(0.4, 0.6, 0.6, 1);
+          animation-fill-mode: forwards;
+        }
+        @keyframes fall {
+          0% {
+            transform: translateY(0) rotate(0);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(105vh) rotate(720deg);
+            opacity: 0;
+          }
         }
       `}</style>
     </div>

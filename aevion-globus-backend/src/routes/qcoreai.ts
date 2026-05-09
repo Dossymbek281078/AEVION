@@ -435,6 +435,50 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
   }
 });
 
+/** GET /api/qcoreai/me/webhook/stats — delivery statistics for the last 30 days. */
+qcoreaiRouter.get("/me/webhook/stats", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    if (!isDbReady()) {
+      return res.json({ total: 0, successRate: 1, avgLatencyMs: 0, errorCount: 0, period: "30d" });
+    }
+    const r = await pool.query(
+      `SELECT
+         COUNT(*) AS total,
+         COUNT(*) FILTER (WHERE "error" IS NULL AND "statusCode" BETWEEN 200 AND 299) AS successes,
+         COUNT(*) FILTER (WHERE "error" IS NOT NULL OR "statusCode" < 200 OR "statusCode" >= 300) AS errors,
+         AVG("durationMs") AS avg_latency
+       FROM "QCoreWebhookLog"
+       WHERE "userId"=$1 AND "createdAt" >= NOW() - INTERVAL '30 days'`,
+      [auth.sub]
+    );
+    const row = r.rows[0] || {};
+    const total = parseInt(row.total ?? "0", 10);
+    const successes = parseInt(row.successes ?? "0", 10);
+    const errorCount = parseInt(row.errors ?? "0", 10);
+    const avgLatencyMs = Math.round(parseFloat(row.avg_latency ?? "0") || 0);
+    const successRate = total > 0 ? Math.round((successes / total) * 1000) / 1000 : 1;
+    res.json({ total, successRate, avgLatencyMs, errorCount, period: "30d" });
+  } catch (err: any) {
+    res.status(500).json({ error: "webhook stats failed", details: err?.message });
+  }
+});
+
+/** GET /api/qcoreai/me/webhook/events — list all supported event types. */
+const WEBHOOK_EVENT_TYPES = [
+  { name: "run.started", description: "Fired when a multi-agent run begins. Includes runId, sessionId, strategy, userInput." },
+  { name: "agent.turn", description: "Fired after each agent finishes. Includes role, stage, model, tokens, cost, content preview." },
+  { name: "run.completed", description: "Fired when a run finishes (done, stopped, or error). Includes final content, cost, duration." },
+  { name: "session.created", description: "Fired when a new session is created. Includes sessionId, userId, title." },
+  { name: "session.archived", description: "Fired when a session is archived or unarchived. Includes sessionId, archived flag." },
+  { name: "annotation.created", description: "Fired when an annotation is added to a run message. Includes annotationId, runId, note." },
+];
+
+qcoreaiRouter.get("/me/webhook/events", (_req, res) => {
+  res.json({ events: WEBHOOK_EVENT_TYPES });
+});
+
 /** POST /api/qcoreai/me/webhook/retry — re-fire a previously failed webhook event. */
 qcoreaiRouter.post("/me/webhook/retry", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -884,6 +928,8 @@ qcoreaiRouter.patch("/sessions/:id/archive", async (req, res) => {
   try {
     const ok = await archiveSession(String(req.params.id), auth?.sub ?? null, archive);
     if (!ok) return res.status(404).json({ error: "session not found" });
+    // V41: fire session.archived event
+    void notifyEvent({ event: "session.archived", sessionId: String(req.params.id), archived: archive, archivedAt: new Date().toISOString() }, null, auth?.sub);
     res.json({ ok: true, archived: archive });
   } catch (err: any) {
     res.status(500).json({ error: "archive failed", details: err?.message });
@@ -1904,14 +1950,19 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
   let sessionId: string;
   let runId: string;
   try {
+    const prevSessionId = parentRun?.sessionId ?? (typeof req.body?.sessionId === "string" ? req.body.sessionId : null);
     const session = await ensureSession({
       // When continuing a thread, re-use the parent's session so the reply
       // appears in the same sidebar entry.
-      sessionId: parentRun?.sessionId ?? (typeof req.body?.sessionId === "string" ? req.body.sessionId : null),
+      sessionId: prevSessionId,
       userId,
       seedTitle: userInput,
     });
     sessionId = session.id;
+    // V41: fire session.created when a brand-new session was created
+    if (!prevSessionId || prevSessionId !== sessionId) {
+      void notifyEvent({ event: "session.created", sessionId, userId: userId ?? null, title: session.title, createdAt: session.createdAt }, null, userId);
+    }
     const run = await createRun({
       sessionId,
       userInput,
@@ -3549,6 +3600,8 @@ qcoreaiRouter.post("/runs/:id/annotations", async (req, res) => {
       typeof messageIdx === "number" ? messageIdx : 0,
       note, typeof color === "string" ? color : "yellow"
     );
+    // V41: fire annotation.created event
+    void notifyEvent({ event: "annotation.created", annotationId: ann.id, runId: String(req.params.id), userId: auth.sub, note: ann.note, color: ann.color, createdAt: ann.createdAt }, null, auth.sub);
     res.status(201).json(ann);
   } catch (err: any) {
     res.status(500).json({ error: "create annotation failed", details: err?.message });

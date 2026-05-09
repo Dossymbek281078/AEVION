@@ -424,6 +424,43 @@ async function runEngagement(client, worker, vacancyId, appId) {
     if (r.status === 200 && payload(r.body)?.status === "ENDED") ok("host end video room");
     else fail("host end video room", `status=${r.status}`);
   }
+
+  // Payment calendar — client schedules a planned payout, lists it from
+  // both sides, worker marks PAID, client deletes the row. Soft-checked
+  // so the smoke can ship before Railway redeploys the new mount.
+  const dueDate = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
+  r = await call("POST", "/api/build/payment-calendar", {
+    token: client.token,
+    body: { applicationId: appId, amount: 50_000, currency: "RUB", dueDate, note: "smoke milestone #1" },
+  });
+  if (r.status === 404 && /not_found/.test(JSON.stringify(r.body))) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /payment-calendar not deployed yet (404)`);
+    return;
+  }
+  const payEventId = payload(r.body)?.id;
+  if ((r.status === 200 || r.status === 201) && payEventId) ok("client schedule payment", `id=${payEventId.slice(0, 8)}`);
+  else fail("client schedule payment", `status=${r.status}`);
+
+  if (payEventId) {
+    r = await call("GET", "/api/build/payment-calendar/my", { token: client.token });
+    if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("client list payments");
+    else fail("client list payments", `status=${r.status}`);
+
+    r = await call("GET", "/api/build/payment-calendar/my", { token: worker.token });
+    if (r.status === 200 && (payload(r.body)?.items?.length ?? 0) >= 1) ok("worker list payments");
+    else fail("worker list payments", `status=${r.status}`);
+
+    r = await call("PATCH", `/api/build/payment-calendar/${payEventId}`, {
+      token: worker.token,
+      body: { status: "PAID" },
+    });
+    if (r.status === 200 && payload(r.body)?.status === "PAID") ok("worker mark PAID");
+    else fail("worker mark PAID", `status=${r.status}`);
+
+    r = await call("DELETE", `/api/build/payment-calendar/${payEventId}`, { token: client.token });
+    if (r.status === 200) ok("client delete payment");
+    else fail("client delete payment", `status=${r.status}`);
+  }
 }
 
 async function runStatsAndPipeline(client) {

@@ -42,7 +42,7 @@ import { computeInsights, type Insights } from "./insights";
 import { getValidGames as ldMasterGames, buildFenLine as masterFenLine, scoreGuess as masterScoreGuess, recordCompletion as masterRecord, type MasterGame } from "./masters";
 import { fetchOpening, whitePct as oeWhitePct, drawPct as oeDrawPct, blackPct as oeBlackPct, shortNum as oeShortNum, type OpeningEntry } from "./openingExplorer";
 import { fetchTablebase, isTablebaseEligible, categoryLabel as tbLabel, categoryColor as tbColor, type TablebaseEntry } from "./tablebase";
-import RepertoireModal, { loadRepertoire, saveRepertoire, type Repertoire } from "./Repertoire";
+import RepertoireModal, { loadRepertoire, saveRepertoire, matchHist, type Repertoire, type RepertoireEntry } from "./Repertoire";
 import DailyMission, { bumpDaily } from "./DailyMission";
 import WhatIfButton from "./WhatIfButton";
 import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from "./BoardArt";
@@ -600,6 +600,10 @@ export default function CyberChessPage(){
   };
   const clearAnnotations=useCallback(()=>{sArrows([]);sSqHL([])},[]);
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
+  // Premium tier helpers — Pro and Ultimate are mutually-additive: Ultimate implies Pro,
+  // so most gates check `isPro` (= pro OR ultimate). `isUltimate` is for tier-only perks.
+  const isPro=!!chessy.owned.pro||!!chessy.owned.ultimate;
+  const isUltimate=!!chessy.owned.ultimate;
   const[showShop,sShowShop]=useState(false);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
   const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
@@ -641,6 +645,14 @@ export default function CyberChessPage(){
   // Chess Variants (Fischer 960, Asymmetric, Twin Kings, Diceblade, Reinforcement)
   const[variant,sVariant]=useState<VariantId>("standard");
   const[showVariants,sShowVariants]=useState(false);
+  // Variant tutorial overlay — shown ONCE per variant on first launch (vs the prior subtle toast).
+  // Tracks dismissed variants in localStorage so repeated plays don't re-show the modal.
+  const[variantTutorialFor,sVariantTutorialFor]=useState<VariantId|null>(null);
+  const[seenVariantTutorials,sSeenVariantTutorials]=useState<Set<string>>(()=>{
+    if(typeof window==="undefined")return new Set();
+    try{const r=localStorage.getItem("aevion_variant_tutorial_seen_v1");return new Set(r?JSON.parse(r):[])}catch{return new Set()}
+  });
+  useEffect(()=>{try{localStorage.setItem("aevion_variant_tutorial_seen_v1",JSON.stringify(Array.from(seenVariantTutorials)))}catch{}},[seenVariantTutorials]);
   const[variantStartFen,sVariantStartFen]=useState<string>("");
   const[variantArmies,sVariantArmies]=useState<{white:ArmySlot[];black:ArmySlot[]}|null>(null);
   // Diceblade die state — current allowed piece type for the side-to-move
@@ -2540,19 +2552,24 @@ export default function CyberChessPage(){
     if(variant==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=variant==="standard"?"":` · ${VARIANTS.find(v=>v.id===variant)?.name||""}`;
     showToast(`Playing ${cl==="w"?"White":"Black"}${variantLabel}`,"info");
-    // Tutorial tip for non-standard variants — only show first 3 plays per variant
-    const tip=VARIANT_TUTORIAL[variant];
-    if(tip){
-      const stats=variantStats[variant]||{w:0,l:0,d:0};
-      const totalPlays=stats.w+stats.l+stats.d;
-      if(totalPlays<3)setTimeout(()=>showToast(tip,"info"),1500);
+    // Tutorial overlay for non-standard variants — once per variant. After dismissed, the
+    // smaller toast tip kicks in for the next 3 plays as a refresher.
+    if(variant!=="standard"&&!seenVariantTutorials.has(variant)){
+      sVariantTutorialFor(variant);
+    }else{
+      const tip=VARIANT_TUTORIAL[variant];
+      if(tip){
+        const stats=variantStats[variant]||{w:0,l:0,d:0};
+        const totalPlays=stats.w+stats.l+stats.d;
+        if(totalPlays<3)setTimeout(()=>showToast(tip,"info"),1500);
+      }
     }
   };
   const resumeGame=(s:ResumeSnap)=>{
     try{
       sTab("play");
       sTcI(s.tcI);sUseCustom(s.useCustom);sCustomMin(s.customMin);sCustomInc(s.customInc);
-      sPCol(s.pCol);sAiI(chessy.owned.master_ai?s.aiI:Math.min(s.aiI,4));sFlip(s.pCol==="b");
+      sPCol(s.pCol);sAiI((chessy.owned.master_ai||isPro)?s.aiI:Math.min(s.aiI,4));sFlip(s.pCol==="b");
       const g=new Chess(s.fen);setGame(g);sBk(k=>k+1);
       sHist(s.hist);sFenHist(s.fenHist);sCapW(s.capW);sCapB(s.capB);
       sLm(null);sSel(null);sVm(new Set());sPromo(null);sThink(false);sPms([]);sPmSel(null);
@@ -2575,7 +2592,7 @@ export default function CyberChessPage(){
     // Switch to tournament's variant
     if(tournament?.variant){sVariant(tournament.variant)}
     // Map persona aiLevel directly (clamp to unlocked range)
-    const lvl=chessy.owned.master_ai?Math.min(5,opp.aiLevel):Math.min(4,opp.aiLevel);
+    const lvl=(chessy.owned.master_ai||isPro)?Math.min(5,opp.aiLevel):Math.min(4,opp.aiLevel);
     sAiI(lvl);
     // 5+0 default for tournaments — short-format excitement
     sUseCustom(false);sTcI(9);
@@ -2586,7 +2603,7 @@ export default function CyberChessPage(){
     setTimeout(()=>newG(color),50);
     const variantLabel=tournament?.variant&&tournament.variant!=="standard"?` · ${VARIANTS.find(v=>v.id===tournament.variant)?.name||""}`:"";
     showToast(`⚔ ${opp.name} (${opp.elo}) — ${opp.style}${variantLabel}. ${opp.motto}`,"info");
-  },[chessy.owned.master_ai,tournament,newG,showToast]);
+  },[(chessy.owned.master_ai||isPro),tournament,newG,showToast]);
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
   const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
   const loadEndgame=(eg:Endgame)=>{
@@ -2939,7 +2956,18 @@ export default function CyberChessPage(){
             fontSize:19,color:"#fff",boxShadow:SHADOW.sm
           }}>♞</div>
           <div style={{lineHeight:1.15}}>
-            <div style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2}}>CyberChess</div>
+            <div style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2,display:"inline-flex",alignItems:"center",gap:6}}>
+              <span>CyberChess</span>
+              {isPro&&<span title={isUltimate?"Ultimate активен":"Pro активен"} style={{
+                display:"inline-flex",alignItems:"center",gap:3,
+                fontSize:9,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,
+                padding:"2px 7px",borderRadius:RADIUS.full,
+                background:isUltimate?"linear-gradient(135deg,#d97706,#fcd34d)":"linear-gradient(135deg,#7c3aed,#a78bfa)",
+                color:"#fff",boxShadow:isUltimate?"0 1px 4px rgba(217,119,6,0.4)":"0 1px 4px rgba(124,58,237,0.4)"
+              }}>
+                {isUltimate?"✨ Ultimate":"✨ Pro"}
+              </span>}
+            </div>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
               SF18 · {PUZZLES.length} puzzles{useSF&&sfOk?" · ⚡":""}
             </div>
@@ -3295,13 +3323,13 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>AI</span>
-                  <input type="range" min={0} max={chessy.owned.master_ai?5:4}
-                    value={Math.min(aiI,chessy.owned.master_ai?5:4)}
-                    onChange={e=>{const v=+e.target.value;if(v===5&&!chessy.owned.master_ai){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?5:4}
+                    value={Math.min(aiI,(chessy.owned.master_ai||isPro)?5:4)}
+                    onChange={e=>{const v=+e.target.value;if(v===5&&!(chessy.owned.master_ai||isPro)){showToast("Master AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
-                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI===5&&!chessy.owned.master_ai?" 🔒":""}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.name} · {lv.elo}{aiI===5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
-                {!chessy.owned.master_ai&&<button onClick={()=>sShowShop(true)}
+                {!(chessy.owned.master_ai||isPro)&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
                   style={{marginTop:6,padding:"3px 8px",borderRadius:RADIUS.sm,
                     border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
@@ -3344,7 +3372,7 @@ export default function CyberChessPage(){
                 </button>
                 <Btn size="lg" variant="secondary" onClick={()=>{
                   const targetIdx=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;
-                  const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+                  const capped=(chessy.owned.master_ai||isPro)?targetIdx:Math.min(targetIdx,4);
                   sAiI(capped);sHotseat(false);sRivalMode(false);
                   setTimeout(()=>newG(),50);
                 }}>
@@ -5713,6 +5741,71 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* ─── Personal Opening Repertoire summary ─── lichess-style mini-tracker.
+                Shows white/black entry counts, top-3 most-used lines with W/L,
+                CTA to add current line and to open the full modal. */}
+            {(()=>{
+              const wEntries=repertoire.entries.filter(e=>e.color==="w");
+              const bEntries=repertoire.entries.filter(e=>e.color==="b");
+              const top3=[...repertoire.entries].sort((a,b)=>b.uses-a.uses).slice(0,3);
+              const canAddCurrent=hist.length>=4;
+              const matched=matchHist(repertoire,hist,pCol);
+              const onBook=matched.length>0&&matched[0].matchedPlies===hist.length;
+              return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fffbeb,#fef9c3)",border:"1px solid #fde68a",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:14}}>📚</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#92400e",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Мой дебютный репертуар</span>
+                  {hist.length>0&&matched.length>0&&<span title={`Совпадение с «${matched[0].entry.name}» на ${matched[0].matchedPlies}/${matched[0].entry.moves.length} ходов`} style={{
+                    fontSize:10,fontWeight:900,padding:"2px 8px",borderRadius:RADIUS.full,
+                    background:onBook?"#10b981":"#94a3b8",color:"#fff",letterSpacing:0.3
+                  }}>{onBook?"✓ on book":`${matched[0].matchedPlies}/${matched[0].entry.moves.length}`}</span>}
+                </div>
+                <div style={{display:"flex",gap:6,fontSize:11,color:"#78350f"}}>
+                  <span>⚪ {wEntries.length} линий за белых</span>
+                  <span>·</span>
+                  <span>⚫ {bEntries.length} линий за чёрных</span>
+                  {repertoire.entries.length>0&&<>
+                    <span>·</span>
+                    <span>сыграно: {repertoire.entries.reduce((a,e)=>a+e.uses,0)}</span>
+                  </>}
+                </div>
+                {top3.length>0&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {top3.map(e=>{
+                    const total=e.wins+e.losses+e.draws;
+                    const wr=total>0?Math.round(e.wins/total*100):0;
+                    return <div key={e.id} style={{
+                      display:"flex",alignItems:"center",gap:6,padding:"4px 8px",
+                      borderRadius:6,background:"rgba(255,255,255,0.55)",
+                      fontSize:11
+                    }}>
+                      <span style={{fontSize:12}}>{e.color==="w"?"⚪":"⚫"}</span>
+                      <span style={{fontWeight:700,color:"#451a03",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.name}</span>
+                      <span style={{color:"#92400e",fontWeight:700}}>{e.moves.length} ходов</span>
+                      {e.uses>0&&<span style={{color:wr>=50?CC.brand:CC.danger,fontWeight:800,minWidth:34,textAlign:"right"}}>{wr}% WR</span>}
+                    </div>;
+                  })}
+                </div>}
+                {repertoire.entries.length===0&&<div style={{fontSize:11,color:"#78350f",fontStyle:"italic",lineHeight:1.5}}>
+                  Сохрани свои дебютные линии — Coach будет подсказывать «on book / off book» во время игры. Lichess-style.
+                </div>}
+                <div style={{display:"flex",gap:6}}>
+                  {canAddCurrent&&<Btn size="sm" variant="secondary" onClick={()=>{
+                    const name=prompt("Название линии (например, «Italian — Main»):",currentOpening?.name||`Моя линия #${repertoire.entries.length+1}`);
+                    if(!name)return;
+                    const eco=currentOpening?.eco;
+                    const ecoName=currentOpening?.name;
+                    const entry:RepertoireEntry={
+                      id:Date.now().toString(36),name,color:pCol,
+                      moves:[...hist],eco,ecoName,
+                      createdAt:Date.now(),uses:0,wins:0,losses:0,draws:0
+                    };
+                    sRepertoire(r=>({...r,entries:[entry,...r.entries]}));
+                    showToast(`📚 «${name}» сохранено в репертуар`,"success");
+                  }}>+ Сохранить текущую линию</Btn>}
+                  <Btn size="sm" variant="primary" onClick={()=>sRepertoireOpen(true)}>📖 Открыть репертуар (R)</Btn>
+                </div>
+              </div>;
+            })()}
             {/* Mode selector — 5 ways to start a Coach session */}
             {(()=>{
               const modeBtn=(icon:string,title:string,sub:string,onClick:()=>void,active?:boolean)=>(
@@ -6234,7 +6327,7 @@ export default function CyberChessPage(){
         {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
         {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
         {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
-        {id:"hint_ghost",name:"Ghost-подсказка",desc:"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)",cost:15,kind:"action",disabled:!on||!!over,onBuy:()=>{
+        {id:"hint_ghost",name:isPro?"Ghost-подсказка ✨":"Ghost-подсказка",desc:isPro?"Pro: бесплатные подсказки. На 3 секунды увидишь лучший ход на доске.":"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)",cost:isPro?0:15,kind:"action",disabled:!on||!!over,onBuy:()=>{
           if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
           sShowShop(false);
           showToast("🧠 Считаю подсказку...","info");
@@ -6244,7 +6337,7 @@ export default function CyberChessPage(){
             setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),3000);
           });
         }},
-        {id:"deep_review",name:"Глубокий разбор партии",desc:"Coach пройдёт по всем ходам и выдаст план на будущее",cost:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
+        {id:"deep_review",name:isPro?"Глубокий разбор ✨":"Глубокий разбор партии",desc:isPro?"Pro: бесплатно. Coach пройдёт по всем ходам и выдаст план на будущее.":"Coach пройдёт по всем ходам и выдаст план на будущее",cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
       ];
       const purchaseUnlock=(id:string,cost:number,name:string)=>{
         if(chessy.owned[id]){showToast("Уже куплено","info");return}
@@ -6277,43 +6370,66 @@ export default function CyberChessPage(){
                 cta:"Купить через AEV"}
             ].map(t=>{
               const isPro=t.id==="pro";const isUlt=t.id==="ultimate";
+              const owned=t.id!=="free"&&!!chessy.owned[t.id];
+              const eitherOwned=!!chessy.owned.pro||!!chessy.owned.ultimate;
               return <div key={t.id} style={{
-                background:isPro?"linear-gradient(135deg,rgba(124,58,237,0.18),rgba(167,139,250,0.10))":isUlt?"linear-gradient(135deg,rgba(217,119,6,0.18),rgba(252,211,77,0.10))":"rgba(255,255,255,0.04)",
-                border:`1px solid ${isPro?"rgba(167,139,250,0.45)":isUlt?"rgba(252,211,77,0.45)":"rgba(148,163,184,0.25)"}`,
+                background:owned?"linear-gradient(135deg,rgba(16,185,129,0.22),rgba(52,211,153,0.10))":isPro?"linear-gradient(135deg,rgba(124,58,237,0.18),rgba(167,139,250,0.10))":isUlt?"linear-gradient(135deg,rgba(217,119,6,0.18),rgba(252,211,77,0.10))":"rgba(255,255,255,0.04)",
+                border:`1px solid ${owned?"rgba(52,211,153,0.55)":isPro?"rgba(167,139,250,0.45)":isUlt?"rgba(252,211,77,0.45)":"rgba(148,163,184,0.25)"}`,
                 borderRadius:RADIUS.md,padding:`${SPACE[3]}px ${SPACE[4]}px`,
                 position:"relative",
-                ...(t.accent?{transform:"scale(1.02)",boxShadow:"0 4px 16px rgba(167,139,250,0.25)"}:{})
+                ...(t.accent&&!owned?{transform:"scale(1.02)",boxShadow:"0 4px 16px rgba(167,139,250,0.25)"}:{})
               }}>
-                {t.accent&&<div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",
+                {owned&&<div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",
+                  background:"linear-gradient(135deg,#10b981,#34d399)",color:"#fff",fontSize:10,fontWeight:900,
+                  padding:"2px 10px",borderRadius:RADIUS.full,letterSpacing:1,textTransform:"uppercase" as const,
+                  boxShadow:"0 2px 8px rgba(16,185,129,0.4)"}}>✓ активен</div>}
+                {!owned&&t.accent&&<div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",
                   background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",fontSize:10,fontWeight:900,
                   padding:"2px 10px",borderRadius:RADIUS.full,letterSpacing:1,textTransform:"uppercase" as const,
                   boxShadow:"0 2px 8px rgba(124,58,237,0.4)"}}>популярный</div>}
                 <div style={{fontSize:14,fontWeight:900,color:"#fff",marginBottom:2}}>{t.name}</div>
                 <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:SPACE[2]}}>
-                  <span style={{fontSize:24,fontWeight:900,color:isPro?"#c4b5fd":isUlt?"#fcd34d":"#cbd5e1"}}>{t.price}</span>
+                  <span style={{fontSize:24,fontWeight:900,color:owned?"#34d399":isPro?"#c4b5fd":isUlt?"#fcd34d":"#cbd5e1"}}>{t.price}</span>
                   <span style={{fontSize:11,color:"#94a3b8",fontWeight:700}}>{t.sub}</span>
                 </div>
                 <ul style={{margin:0,padding:0,listStyle:"none",fontSize:11,lineHeight:1.6,color:"#cbd5e1",marginBottom:SPACE[2]}}>
                   {t.features.map((f,i)=><li key={i} style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:2}}>
-                    <span style={{color:isPro?"#a78bfa":isUlt?"#fcd34d":"#64748b",flexShrink:0,fontWeight:900}}>✓</span>
+                    <span style={{color:owned?"#34d399":isPro?"#a78bfa":isUlt?"#fcd34d":"#64748b",flexShrink:0,fontWeight:900}}>✓</span>
                     <span>{f}</span>
                   </li>)}
                 </ul>
-                <button disabled={t.disabled}
+                {/* Free tile is always disabled. Pro/Ultimate: if owned → "Активирован" disabled; if other tier owned → "Сменить" allowed; else → primary buy CTA. */}
+                <button disabled={t.disabled||owned}
                   onClick={()=>{
                     if(t.id==="free")return;
+                    if(owned)return;
                     sShowShop(false);
                     showToast(`💳 ${t.name} — оплата через AEVION Bank · открываю…`,"info");
                     setTimeout(()=>{try{window.open(`/bank?intent=cyberchess-${t.id}&amount=${t.price}`,"_blank")}catch{}},400);
                   }}
                   style={{
                     width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,
-                    border:"none",cursor:t.disabled?"default":"pointer",
-                    background:t.disabled?"rgba(148,163,184,0.18)":isPro?"linear-gradient(135deg,#7c3aed,#a78bfa)":isUlt?"linear-gradient(135deg,#d97706,#fcd34d)":"rgba(148,163,184,0.18)",
-                    color:t.disabled?"#94a3b8":"#fff",
+                    border:"none",cursor:(t.disabled||owned)?"default":"pointer",
+                    background:owned?"rgba(16,185,129,0.18)":t.disabled?"rgba(148,163,184,0.18)":isPro?"linear-gradient(135deg,#7c3aed,#a78bfa)":isUlt?"linear-gradient(135deg,#d97706,#fcd34d)":"rgba(148,163,184,0.18)",
+                    color:owned?"#34d399":t.disabled?"#94a3b8":"#fff",
                     fontSize:12,fontWeight:900,letterSpacing:0.3,
-                    boxShadow:t.disabled?"none":"0 2px 8px rgba(0,0,0,0.2)"
-                  }}>{t.cta}</button>
+                    boxShadow:(t.disabled||owned)?"none":"0 2px 8px rgba(0,0,0,0.2)"
+                  }}>{owned?"✓ Активирован":eitherOwned&&t.id!=="free"?"Сменить тариф":t.cta}</button>
+                {/* Dev-only test activator (until real billing wires up). Skipped on Free. */}
+                {!owned&&t.id!=="free"&&<button onClick={()=>{
+                  if(!confirm(`🧪 Тест-активация ${t.name} (без реальной оплаты)?\n\nВсе premium-фичи разблокируются. Можно отключить через localStorage clear.`))return;
+                  sChessy(c=>({...c,owned:{...c.owned,[t.id]:true}}));
+                  showToast(`✨ ${t.name} активирован (тест-режим)`,"success");
+                }} style={{width:"100%",marginTop:6,padding:"4px 8px",borderRadius:RADIUS.sm,border:"1px dashed rgba(148,163,184,0.4)",background:"transparent",color:"#94a3b8",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:0.3}}>
+                  🧪 Тест-активация (без оплаты)
+                </button>}
+                {owned&&<button onClick={()=>{
+                  if(!confirm(`Отключить ${t.name}?`))return;
+                  sChessy(c=>{const o={...c.owned};delete o[t.id];return {...c,owned:o}});
+                  showToast(`${t.name} отключён`,"info");
+                }} style={{width:"100%",marginTop:6,padding:"4px 8px",borderRadius:RADIUS.sm,border:"1px dashed rgba(52,211,153,0.4)",background:"transparent",color:"#34d399",fontSize:10,fontWeight:700,cursor:"pointer",letterSpacing:0.3}}>
+                  Отключить тариф
+                </button>}
               </div>;
             })}
           </div>
@@ -6631,7 +6747,7 @@ export default function CyberChessPage(){
           <Btn variant="accent" size="md" full onClick={()=>{
             // Start a Rival match: rating-matched AI
             const targetIdx=rivalProfile.rating<900?1:rivalProfile.rating<1300?2:rivalProfile.rating<1700?3:rivalProfile.rating<2100?4:5;
-            const capped=chessy.owned.master_ai?targetIdx:Math.min(targetIdx,4);
+            const capped=(chessy.owned.master_ai||isPro)?targetIdx:Math.min(targetIdx,4);
             sAiI(capped);sHotseat(false);sRivalMode(true);
             sShowRivalGreet(false);
             setTimeout(()=>newG(),60);
@@ -7101,6 +7217,54 @@ export default function CyberChessPage(){
     </Modal>
 
     {/* ═══ Chess Variants (Fischer 960 · Asymmetric · Twin Kings · Diceblade · Reinforcement) ═══ */}
+    {/* ─── Variant tutorial overlay ─── shown once per variant on its first play. After dismiss,
+        the lighter "tip toast" path takes over for subsequent first 3 plays as a refresher. */}
+    {variantTutorialFor&&(()=>{
+      const v=VARIANTS.find(x=>x.id===variantTutorialFor);
+      if(!v)return null;
+      const tip=VARIANT_TUTORIAL[variantTutorialFor];
+      const dismiss=()=>{
+        sSeenVariantTutorials(prev=>{const n=new Set(prev);n.add(variantTutorialFor);return n});
+        sVariantTutorialFor(null);
+      };
+      return <div role="dialog" aria-modal="true" onClick={dismiss}
+        style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.62)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:240,padding:16}}>
+        <div onClick={e=>e.stopPropagation()} style={{
+          background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
+          borderRadius:16,maxWidth:520,width:"100%",padding:"24px 28px",
+          boxShadow:"0 24px 64px -8px rgba(15,23,42,0.55)",border:"1px solid #312e81"
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+            <div style={{fontSize:42,lineHeight:1}}>{v.emoji}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#a78bfa"}}>Новый режим</div>
+              <div style={{fontSize:22,fontWeight:900,color:"#fff",lineHeight:1.15}}>{v.name}</div>
+            </div>
+          </div>
+          <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.6,marginBottom:14}}>{v.longDesc}</div>
+          {tip&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.18)",border:"1px solid rgba(167,139,250,0.4)",fontSize:13,color:"#e9d5ff",lineHeight:1.55,marginBottom:14}}>
+            <span style={{fontWeight:900,color:"#a78bfa"}}>💡 Совет:</span> {tip.replace(/^[^\s]+\s/,"")}
+          </div>}
+          {v.notes&&v.notes.length>0&&<ul style={{margin:0,padding:0,listStyle:"none",fontSize:12,color:"#94a3b8",lineHeight:1.7,marginBottom:16}}>
+            {v.notes.map((n,i)=><li key={i} style={{display:"flex",gap:6}}><span style={{color:"#a78bfa",flexShrink:0}}>·</span><span>{n}</span></li>)}
+          </ul>}
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={dismiss} style={{
+              flex:1,padding:"10px 16px",borderRadius:10,border:"none",
+              background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
+              fontSize:14,fontWeight:900,cursor:"pointer",letterSpacing:0.5,
+              boxShadow:"0 4px 14px rgba(124,58,237,0.4)"
+            }}>▶ Понял, играть</button>
+            <button onClick={()=>{dismiss();sShowVariants(true)}} style={{
+              padding:"10px 16px",borderRadius:10,border:"1px solid rgba(148,163,184,0.4)",
+              background:"transparent",color:"#cbd5e1",
+              fontSize:13,fontWeight:700,cursor:"pointer"
+            }}>Все режимы</button>
+          </div>
+        </div>
+      </div>;
+    })()}
+
     <Modal open={showVariants} onClose={()=>sShowVariants(false)} size="lg"
       title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>🎲 Chess Variants <Badge tone="gold" size="sm">{VARIANTS.length} режимов</Badge></span>}>
       <div>
@@ -7382,7 +7546,7 @@ export default function CyberChessPage(){
             const isActive=ghostMode&&activeGhost?.id===g.id;
             return <button key={g.id} onClick={()=>{
               sActiveGhost(g);sGhostMode(true);sShowGhost(false);sTab("play");sHotseat(false);sRivalMode(false);sCloneMode(false);
-              const lvl=chessy.owned.master_ai?g.aiLevel:Math.min(4,g.aiLevel);
+              const lvl=(chessy.owned.master_ai||isPro)?g.aiLevel:Math.min(4,g.aiLevel);
               sAiI(lvl);
               setTimeout(()=>newG(),50);
               showToast(`👻 Призрак ${g.name} принимает вызов...`,"info");
@@ -7496,7 +7660,7 @@ export default function CyberChessPage(){
                 <Btn variant="primary" size="sm" onClick={()=>{
                   sActiveCloneId(i);sCloneMode(true);sShowCloner(false);sTab("play");sHotseat(false);sRivalMode(false);
                   // Set AI level to clone's rating-matched level
-                  const lvl=chessy.owned.master_ai?cl.aiLevel:Math.min(4,cl.aiLevel);
+                  const lvl=(chessy.owned.master_ai||isPro)?cl.aiLevel:Math.min(4,cl.aiLevel);
                   sAiI(lvl);
                   setTimeout(()=>newG(),50);
                   showToast(`▶ Играешь vs клон ${cl.username} (${cl.rating} · ${cl.style})`,"success");
@@ -8489,7 +8653,7 @@ export default function CyberChessPage(){
       const cmds:PaletteCommand[]=[
         // ── PLAY ──
         {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Quick start с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
-        {id:"play-matchme", icon:"⚡", group:"Play", label:"Match Me",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=chessy.owned.master_ai?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-matchme", icon:"⚡", group:"Play", label:"Match Me",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-hotseat", icon:"👥", group:"Play", label:"Vs Человек (Hotseat)", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-variants",icon:"🎲", group:"Play", label:"Выбрать вариант шахмат",hint:"Fischer 960 / Atomic / Crazyhouse / +9",   run:()=>sShowVariants(true)},
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},

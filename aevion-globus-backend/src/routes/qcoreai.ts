@@ -3818,6 +3818,336 @@ qcoreaiRouter.get("/agents", (_req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
+   V35 — Session presence (SSE-less, ping-based).
+   POST /sessions/:id/presence/ping   — heartbeat (upserts userId, returns online count)
+   GET  /sessions/:id/presence        — list online users (last 30 s)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// In-memory presence map: sessionId → Map<userId, lastSeenMs>
+const presenceMap = new Map<string, Map<string, number>>();
+
+const PRESENCE_TTL_MS = 30_000;
+
+function cleanPresence(sessionId: string): void {
+  const m = presenceMap.get(sessionId);
+  if (!m) return;
+  const cutoff = Date.now() - PRESENCE_TTL_MS;
+  for (const [uid, ts] of m) {
+    if (ts < cutoff) m.delete(uid);
+  }
+  if (m.size === 0) presenceMap.delete(sessionId);
+}
+
+qcoreaiRouter.post("/sessions/:id/presence/ping", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const sessionId = String(req.params.id);
+    cleanPresence(sessionId);
+    let m = presenceMap.get(sessionId);
+    if (!m) { m = new Map(); presenceMap.set(sessionId, m); }
+    m.set(auth.sub, Date.now());
+    res.json({ sessionId, onlineCount: m.size });
+  } catch (err: any) {
+    res.status(500).json({ error: "presence ping failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/sessions/:id/presence", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const sessionId = String(req.params.id);
+    cleanPresence(sessionId);
+    const m = presenceMap.get(sessionId);
+    const users = m ? Array.from(m.entries()).map(([uid, ts]) => ({ userId: uid, lastSeenMs: ts })) : [];
+    res.json({ sessionId, onlineCount: users.length, users });
+  } catch (err: any) {
+    res.status(500).json({ error: "presence get failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V35 — Notebook AI Q&A.
+   POST /notebook/qa   — ask a question about saved notebook snippets
+   Body: { question: string, limit?: number }
+   Returns: { answer: string, snippetsUsed: number }
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/notebook/qa", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { question, limit } = req.body || {};
+    if (!question || typeof question !== "string" || !question.trim()) {
+      return res.status(400).json({ error: "question required" });
+    }
+    const fetchLimit = Math.min(20, Math.max(1, Number(limit) || 10));
+    const snippets: any[] = await listSnippets(auth.sub, { limit: fetchLimit }) ?? [];
+
+    if (!snippets.length) {
+      return res.json({ answer: "No saved notebook snippets found. Save some AI outputs to the notebook first, then ask questions about them.", snippetsUsed: 0 });
+    }
+
+    const providers = getProviders();
+    const provider = providers.find((p: any) => p.configured);
+    if (!provider) {
+      return res.json({ answer: "No AI provider configured. Please add a provider API key.", snippetsUsed: 0 });
+    }
+
+    const context = snippets
+      .slice(0, fetchLimit)
+      .map((s: any, i: number) => `[Snippet ${i + 1}] (role: ${s.role})\n${(s.content || "").slice(0, 800)}`)
+      .join("\n\n---\n\n");
+
+    const messages = [
+      {
+        role: "user" as const,
+        content: `You are a helpful assistant. The user has saved the following notebook snippets from AI sessions:\n\n${context}\n\n---\n\nNow answer this question about the snippets:\n${question.trim()}`,
+      },
+    ];
+    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.5);
+    res.json({ answer: result.reply, snippetsUsed: snippets.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "notebook QA failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V35 — Widget v2: embed endpoint with API key auth.
+   POST /widget/run
+   Body: { apiKey: string, input: string, strategy?: string }
+   Returns: { runId, sessionId, finalContent }
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/widget/run", async (req, res) => {
+  // CORS headers for cross-origin embeds
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  try {
+    const { apiKey, input, strategy } = req.body || {};
+
+    if (!apiKey || typeof apiKey !== "string") {
+      return res.status(401).json({ error: "apiKey required" });
+    }
+    if (!input || typeof input !== "string" || !input.trim()) {
+      return res.status(400).json({ error: "input required" });
+    }
+
+    // Validate API key: check env-based widget key first, then shared presets
+    const envWidgetKey = process.env.QCORE_WIDGET_API_KEY;
+    let widgetUserId: string | null = null;
+
+    if (envWidgetKey && apiKey === envWidgetKey) {
+      widgetUserId = "widget-env";
+    } else {
+      // Check shared presets for matching API key (use preset id as API key)
+      const allPresets = await listPublicSharedPresets(undefined, 100);
+      const matchedPreset = (allPresets ?? []).find((p: any) => p.id === apiKey);
+      if (matchedPreset) {
+        widgetUserId = matchedPreset.ownerUserId ?? "widget-preset";
+      }
+    }
+
+    if (!widgetUserId) {
+      return res.status(401).json({ error: "invalid api key" });
+    }
+
+    const resolvedStrategy = (strategy === "parallel" || strategy === "debate") ? strategy : "sequential";
+    const session = await ensureSession({ userId: widgetUserId, seedTitle: "Widget run" });
+    const run = await createRun({ sessionId: session.id, userInput: input.trim(), strategy: resolvedStrategy });
+
+    // Synchronous (non-streaming) execution for widget
+    const providers = getProviders();
+    const provider = providers.find((p: any) => p.configured);
+    let finalContent = "";
+
+    if (provider) {
+      try {
+        const messages = [{ role: "user" as const, content: input.trim() }];
+        const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7);
+        finalContent = result.reply;
+        await finishRun(run.id, "done", { finalContent });
+      } catch (provErr: any) {
+        finalContent = "Error calling provider: " + (provErr?.message || "unknown");
+        await finishRun(run.id, "error", { finalContent });
+      }
+    } else {
+      finalContent = "No AI provider configured for widget.";
+      await finishRun(run.id, "done", { finalContent });
+    }
+
+    res.json({ runId: run.id, sessionId: session.id, finalContent });
+  } catch (err: any) {
+    res.status(500).json({ error: "widget run failed", details: err?.message });
+  }
+});
+
+// CORS preflight for widget
+qcoreaiRouter.options("/widget/run", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V36 — Usage dashboard + Plan limits.
+   GET /me/usage   — thisMonth stats + limits + planName
+   GET /me/plan    — plan info + limits
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const FREE_PLAN_LIMITS = { runs: 100, costUsd: 5 };
+
+qcoreaiRouter.get("/me/usage", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+
+    // Get current month analytics
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    let runs = 0;
+    let costUsd = 0;
+    let sessions = 0;
+
+    if (isDbReady()) {
+      try {
+        const r = await pool.query(
+          `SELECT COUNT(r.id) AS run_count,
+                  COALESCE(SUM(r."totalCostUsd"), 0) AS cost,
+                  COUNT(DISTINCT r."sessionId") AS session_count
+           FROM "QCoreRun" r
+           JOIN "QCoreSession" s ON s.id = r."sessionId"
+           WHERE s."userId"=$1 AND r."startedAt" >= $2`,
+          [auth.sub, monthStart]
+        );
+        runs = parseInt(r.rows[0]?.run_count ?? "0", 10);
+        costUsd = parseFloat(r.rows[0]?.cost ?? "0") || 0;
+        sessions = parseInt(r.rows[0]?.session_count ?? "0", 10);
+      } catch { /* fallback to in-memory */ }
+    }
+
+    if (!isDbReady() || runs === 0) {
+      // In-memory fallback
+      const memSpend = await getMonthlySpend(auth.sub);
+      costUsd = memSpend;
+      // Count sessions and runs from analytics
+      const analytics = await getAnalytics(auth.sub);
+      runs = analytics?.runs ?? 0;
+      sessions = analytics?.sessions ?? 0;
+    }
+
+    res.json({
+      thisMonth: { runs, costUsd, sessions },
+      limits: { runs: FREE_PLAN_LIMITS.runs, costUsd: FREE_PLAN_LIMITS.costUsd },
+      planName: "free",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "usage fetch failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/plan", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    res.json({
+      plan: "free",
+      limits: {
+        runs: FREE_PLAN_LIMITS.runs,
+        costUsd: FREE_PLAN_LIMITS.costUsd,
+        description: "Free plan: up to 100 runs/month, $5/month cost",
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "plan fetch failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V37 — Session bulk ops + run siblings.
+   POST /sessions/bulk-delete    — delete multiple sessions at once
+   POST /sessions/bulk-archive   — archive/unarchive multiple sessions
+   GET  /runs/:id/siblings       — other runs in the same session
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/sessions/bulk-delete", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { sessionIds } = req.body || {};
+    if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+      return res.status(400).json({ error: "sessionIds array required" });
+    }
+    const ids = sessionIds.map(String).slice(0, 50); // cap at 50
+    let deleted = 0;
+    const errors: string[] = [];
+    for (const sid of ids) {
+      try {
+        const session = await getSession(sid, auth.sub);
+        if (!session) { errors.push(`${sid}: not found or forbidden`); continue; }
+        await deleteSession(sid, auth.sub);
+        deleted++;
+      } catch (e: any) {
+        errors.push(`${sid}: ${e?.message}`);
+      }
+    }
+    res.json({ deleted, errors });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk delete failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/sessions/bulk-archive", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { sessionIds, archive } = req.body || {};
+    if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+      return res.status(400).json({ error: "sessionIds array required" });
+    }
+    const shouldArchive = archive !== false; // default true
+    const ids = sessionIds.map(String).slice(0, 50);
+    let updated = 0;
+    const errors: string[] = [];
+    for (const sid of ids) {
+      try {
+        const session = await getSession(sid, auth.sub);
+        if (!session) { errors.push(`${sid}: not found or forbidden`); continue; }
+        await archiveSession(sid, auth.sub, shouldArchive);
+        updated++;
+      } catch (e: any) {
+        errors.push(`${sid}: ${e?.message}`);
+      }
+    }
+    res.json({ updated, archive: shouldArchive, errors });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk archive failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/runs/:id/siblings", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(run.sessionId, auth.sub);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const limit = Math.min(50, Number(req.query.limit) || 20);
+    const allRuns = await listRuns(run.sessionId, limit + 1);
+    const siblings = allRuns.filter((r: any) => r.id !== run.id).slice(0, limit);
+    res.json({ runId: run.id, sessionId: run.sessionId, siblings, total: siblings.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "siblings fetch failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    Helpers (local to route)
    ═══════════════════════════════════════════════════════════════════════ */
 

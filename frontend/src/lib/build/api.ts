@@ -1703,6 +1703,47 @@ export const buildApi = {
   aiScoreApplication: (input: { applicationId: string; vacancyContext?: string }) =>
     call<{ score: number; summary: string; redFlags: string[] }>("POST", "/api/build/ai/score-application", input),
 
+  // ── Interviews ──────────────────────────────────────────────────────────
+  proposeInterview: (input: {
+    applicationId: string;
+    title?: string;
+    proposedSlots: string[];
+    format?: "video" | "phone" | "in_person";
+    location?: string;
+    notes?: string;
+  }) =>
+    call<{ interview: { id: string; status: string; createdAt: string } }>(
+      "POST", "/api/build/interviews", input,
+    ),
+  myScheduledInterviews: (status?: string) =>
+    call<{
+      interviews: Array<{
+        id: string; applicationId: string; vacancyId: string;
+        recruiterId: string; candidateId: string; title: string;
+        proposedSlots: string[]; confirmedSlot: string | null;
+        format: string; location: string | null; notes: string | null;
+        status: string; canceledBy: string | null; cancelReason: string | null;
+        createdAt: string; updatedAt: string;
+      }>;
+      total: number;
+    }>("GET", `/api/build/interviews/my${status ? `?status=${status}` : ""}`),
+  interviewsByApplication: (applicationId: string) =>
+    call<{ interviews: { id: string; proposedSlots: string[]; confirmedSlot: string | null; format: string; location: string | null; status: string; createdAt: string }[] }>(
+      "GET", `/api/build/interviews/by-application/${encodeURIComponent(applicationId)}`,
+    ),
+  confirmInterview: (id: string, slot: string) =>
+    call<{ interview: { id: string; confirmedSlot: string; status: string } }>(
+      "PATCH", `/api/build/interviews/${encodeURIComponent(id)}/confirm`, { slot },
+    ),
+  cancelInterview: (id: string, reason?: string) =>
+    call<{ interview: { id: string; status: string } }>(
+      "PATCH", `/api/build/interviews/${encodeURIComponent(id)}/cancel`, { reason: reason ?? "" },
+    ),
+  completeInterview: (id: string) =>
+    call<{ interview: { id: string; status: string } }>(
+      "PATCH", `/api/build/interviews/${encodeURIComponent(id)}/complete`, {},
+    ),
+
   // Payment calendar
   myPaymentCalendar: () =>
     call<{ items: BuildPaymentEvent[]; summary: { due: number; paid: number; overdue: number } }>("GET", "/api/build/payment-calendar"),

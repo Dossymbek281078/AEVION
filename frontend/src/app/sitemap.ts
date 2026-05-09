@@ -39,6 +39,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/leaderboard", changeFrequency: "daily", priority: 0.6 },
   { path: "/build/help", changeFrequency: "weekly", priority: 0.5 },
   { path: "/build/salary", changeFrequency: "hourly", priority: 0.75 },
+  { path: "/build/interviews", changeFrequency: "daily", priority: 0.6 },
   { path: "/build/ai-match", changeFrequency: "weekly", priority: 0.65 },
   // HealthAI standalone pages
   { path: "/healthai", changeFrequency: "weekly", priority: 0.8 },

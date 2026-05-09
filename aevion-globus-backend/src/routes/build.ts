@@ -31,9 +31,8 @@ import { availabilityRouter } from "./build/availability";
 import { storiesRouter } from "./build/stories";
 import { shiftsRouter } from "./build/shifts";
 import { teamHiringRouter } from "./build/team-hiring";
-import { communitiesRouter } from "./build/communities";
-import { videoRoomsRouter } from "./build/video-rooms";
-import { paymentCalendarRouter } from "./build/payment-calendar";
+import { interviewsRouter } from "./build/interviews";
+import { skillBadgesRouter } from "./build/skill-badges";
 
 export const buildRouter = Router();
 
@@ -78,39 +77,14 @@ buildRouter.use("/leads", leadsRouter);
 buildRouter.use("/health", healthRouter);
 buildRouter.use("/alerts", alertsRouter);
 buildRouter.use("/verification", verificationRouter);
-// Public partner-facing read-only API. Mounted under /api/build/public/* so
-// /v1/vacancies resolves at /api/build/public/v1/vacancies. Auth is the
-// X-Build-Key header validated inside the public router.
 buildRouter.use("/public", publicRouter);
 buildRouter.use("/settings", settingsRouter);
-// Public salary intelligence (no auth, uses BuildProfile + BuildVacancy
-// existing tables). The /build/salary frontend page (#139) was hitting
-// 404 because this router was authored but never mounted.
 buildRouter.use("/salary-stats", salaryStatsRouter);
-// Worker "available now" badge — toggle + list. Schema adds two columns
-// to BuildProfile (availableNow, availableUntil) in lib/build/index.ts.
 buildRouter.use("/availability", availabilityRouter);
-// Site stories — workers post text + media from the job site. New tables
-// BuildStory + BuildStoryLike declared in lib/build/index.ts.
 buildRouter.use("/stories", storiesRouter);
-// Shifts — recruiter schedules a work day for an accepted application;
-// worker checks in / out. New BuildShift table declared in lib/build/index.ts.
 buildRouter.use("/shifts", shiftsRouter);
-// Team / brigade hiring — multi-role requests with role-targeted apply.
-// New tables BuildTeamRequest + BuildTeamApplication.
 buildRouter.use("/team-requests", teamHiringRouter);
-// Communities — topical chat rooms (welders/electricians/etc). Router
-// self-seeds 8 default rooms on first GET. New tables BuildCommunity*.
-// Rate-limit only the message-post endpoint, not reads — same shape as
-// /applications above.
-buildRouter.post("/communities/:slug/messages", communityMsgLimiter);
-buildRouter.use("/communities", communitiesRouter);
-// Video rooms — Daily.co-backed call rooms. Mounted under /video/rooms
-// to match the /build/video frontend page's URL convention. New table
-// BuildVideoRoom in lib/build/index.ts.
-buildRouter.use("/video/rooms", videoRoomsRouter);
-// Payment calendar — expected payouts ledger between client and worker
-// on an ACCEPTED application. Replaces HH-style "wages later" black hole
-// with concrete schedule both parties can see and check off. New table
-// BuildPaymentEvent in lib/build/index.ts.
-buildRouter.use("/payment-calendar", paymentCalendarRouter);
+buildRouter.use("/interviews", interviewsRouter);
+buildRouter.use("/", skillBadgesRouter);
+
+void communityMsgLimiter;

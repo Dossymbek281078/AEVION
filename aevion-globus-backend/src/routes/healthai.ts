@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { rateLimit } from "../lib/rateLimit";
+import { publicErrorCategory } from "./qcoreai";
 
 // HealthAI tables aren't in prisma/schema.prisma yet — the route stays
 // in-memory until they are. The Prisma branches below are kept as
@@ -953,7 +955,23 @@ async function callLlmGemini(
   return { advice: reply, model };
 }
 
-healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
+// Rate limit /check-llm to defend our LLM bills. Medical-AI calls are
+// expensive (long system prompt + structured response), and the endpoint
+// could be invoked in a tight loop by a buggy client or a hostile script
+// that gets hold of any user account. 10/min/IP is generous for real use
+// (a doctor consultation flow is 1-3 calls per session) but blocks abuse.
+const llmLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "healthai:check-llm",
+  message: "rate_limit_exceeded: max 10 LLM checks per minute per IP",
+});
+
+const HEALTHAI_MAX_SYMPTOM_LEN = 200;
+const HEALTHAI_MAX_SYMPTOMS = 20;
+const HEALTHAI_MAX_NOTES = 2000;
+
+healthaiRouter.post("/check-llm", llmLimiter, async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
@@ -961,9 +979,19 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   const profile = await store.getProfile(body.profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
-  const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
+  // Cap symptoms array + each entry length. Without these caps an attacker
+  // with a valid profileId can pad the prompt to push token cost.
+  const symptomsRaw = Array.isArray(body.symptoms) ? body.symptoms : [];
+  const symptoms: string[] = symptomsRaw
+    .slice(0, HEALTHAI_MAX_SYMPTOMS)
+    .map((s: unknown) => String(s).trim().slice(0, HEALTHAI_MAX_SYMPTOM_LEN))
+    .filter(Boolean);
   if (symptoms.length === 0) {
     return res.status(400).json({ error: "symptoms-empty" });
+  }
+  // Cap notes too — they get appended to the prompt verbatim.
+  if (typeof body.notes === "string" && body.notes.length > HEALTHAI_MAX_NOTES) {
+    body.notes = body.notes.slice(0, HEALTHAI_MAX_NOTES);
   }
   const lang =
     body.lang === "en" || body.lang === "ru" ? body.lang : "ru";
@@ -1038,9 +1066,14 @@ healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
         disclaimer: DISCLAIMER,
       });
     } catch (e: any) {
+      // Server log keeps the full upstream error for debugging.
+      // Wire response gets a stable category to avoid leaking provider
+      // internals (API key prefixes, model URLs, etc).
+      const rawMsg = String(e?.message || e);
+      console.error(`[HealthAI] /check-llm provider=${name} error:`, rawMsg);
       tried.push({
         provider: name,
-        error: String(e?.message || e),
+        error: rawMsg === "not-configured" ? "not-configured" : publicErrorCategory(rawMsg),
       });
       // continue chain
     }

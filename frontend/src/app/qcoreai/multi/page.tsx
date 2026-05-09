@@ -3861,6 +3861,7 @@ export default function QCoreMultiAgentPage() {
           { icon: "🗂️", label: "Workspaces", href: "/qcoreai/workspaces" },
           { icon: "🔖", label: "Bookmarks", href: "/qcoreai/bookmarks" },
           { icon: "🏢", label: "Organizations", href: "/qcoreai/orgs" },
+          { icon: "🔑", label: "API Keys", href: "/qcoreai/api-keys" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div

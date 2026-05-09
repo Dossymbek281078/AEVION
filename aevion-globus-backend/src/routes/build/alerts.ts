@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 
@@ -128,9 +128,9 @@ export async function dispatchJobAlerts(vacancy: {
       ``,
       `${vacancy.title}${vacancy.salary > 0 ? ` · $${vacancy.salary.toLocaleString()}` : ""}${vacancy.city ? ` · ${vacancy.city}` : ""}`,
       ``,
-      `Apply: https://aevion.tech/build/vacancy/${vacancy.id}`,
+      `Apply: https://aevion.app/build/vacancy/${vacancy.id}`,
       ``,
-      `Unsubscribe: https://aevion.tech/build/profile#alerts`,
+      `Unsubscribe: https://aevion.app/build/profile#alerts`,
       ``,
       `— AEVION QBuild`,
     ].join("\n");
@@ -141,7 +141,7 @@ export async function dispatchJobAlerts(vacancy: {
       fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: "QBuild <noreply@aevion.tech>", to: batch, subject, text }),
+        body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: batch, subject, text }),
       }).catch(() => {});
     }
     console.info(`[build] job alerts sent to ${matches.length} subscribers for vacancy ${vacancy.id}`);

@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from "express";
+﻿import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { buildPool as pool, ok, fail, safeParseJson } from "../../lib/build";
@@ -122,7 +122,7 @@ publicRouter.get("/v1/vacancies", publicRateLimiter, requirePartnerKey, async (r
       skills: safeParseJson(row.skillsJson, [] as string[]),
       city: row.city ?? row.projectCity ?? null,
       project: row.projectTitle ?? null,
-      url: `https://aevion.tech/build/vacancy/${encodeURIComponent(String(row.id))}`,
+      url: `https://aevion.app/build/vacancy/${encodeURIComponent(String(row.id))}`,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
     }));
@@ -159,7 +159,7 @@ publicRouter.get("/v1/vacancies/:id", publicRateLimiter, requirePartnerKey, asyn
       skills: safeParseJson(row.skillsJson, [] as string[]),
       city: row.city ?? row.projectCity ?? null,
       project: row.projectTitle ?? null,
-      url: `https://aevion.tech/build/vacancy/${encodeURIComponent(String(row.id))}`,
+      url: `https://aevion.app/build/vacancy/${encodeURIComponent(String(row.id))}`,
       createdAt: row.createdAt,
       expiresAt: row.expiresAt,
     };
@@ -217,7 +217,7 @@ publicRouter.get("/rss/vacancies.xml", async (req, res) => {
       projectTitle: string;
       projectCity: string | null;
     }[]).map((v) => {
-      const link = `https://aevion.tech/build/vacancy/${encodeURIComponent(v.id)}`;
+      const link = `https://aevion.app/build/vacancy/${encodeURIComponent(v.id)}`;
       const cityStr = v.city || v.projectCity || "";
       const salaryStr = v.salary > 0 ? `${v.salary.toLocaleString()} ${v.salaryCurrency || "USD"}` : "—";
       const descSummary = `${cityStr ? `📍 ${cityStr} · ` : ""}💰 ${salaryStr}\n\n${(v.description || "").slice(0, 600)}`;
@@ -239,7 +239,7 @@ publicRouter.get("/rss/vacancies.xml", async (req, res) => {
 <rss version="2.0">
   <channel>
     <title>${xmlEscape(channelTitle)}</title>
-    <link>https://aevion.tech/build/vacancies</link>
+    <link>https://aevion.app/build/vacancies</link>
     <description>${xmlEscape("Latest open vacancies on AEVION QBuild construction recruiting platform.")}</description>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     <ttl>5</ttl>
@@ -259,7 +259,7 @@ ${items}
 //
 // The partner adds:
 //   <div data-aevion-build data-key="qb_pk_..." data-limit="6"></div>
-//   <script src="https://aevion.tech/api/build/public/widget.js" defer></script>
+//   <script src="https://aevion.app/api/build/public/widget.js" defer></script>
 //
 // The script auto-finds every `[data-aevion-build]` div, calls our public
 // vacancies feed using the data-key, and renders a styled list of open
@@ -276,7 +276,7 @@ publicRouter.get("/widget.js", (_req, res) => {
   res.send(`(function(){
   var API = (function(){
     try { var s = document.currentScript; if (s && s.src) { return new URL(s.src).origin; } } catch (e) {}
-    return "https://aevion.tech";
+    return "https://aevion.app";
   })();
   function esc(s){ return String(s == null ? "" : s).replace(/[&<>\"']/g, function(c){ return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]; }); }
   function fmtSalary(v){ if(!v||v.salary<=0) return ""; var n=v.salary.toLocaleString("en-US"); return "$"+n+" "+(v.salaryCurrency||"USD"); }

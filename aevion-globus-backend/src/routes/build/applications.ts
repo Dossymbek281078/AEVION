@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -921,12 +921,12 @@ async function notifyCandidate(candidateId: string, status: "ACCEPTED" | "REJECT
       ? "Your application was accepted — AEVION QBuild"
       : "Update on your application — AEVION QBuild";
     const text = status === "ACCEPTED"
-      ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.tech/build/applications\n\n— AEVION QBuild`
-      : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.tech/build/vacancies\n\n— AEVION QBuild`;
+      ? `Hi ${name},\n\nGreat news! Your application was accepted. The employer will reach out via AEVION QBuild messages.\n\nhttps://aevion.app/build/applications\n\n— AEVION QBuild`
+      : `Hi ${name},\n\nThis employer has decided not to move forward. Keep browsing open vacancies.\n\nhttps://aevion.app/build/vacancies\n\n— AEVION QBuild`;
     await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: "QBuild <noreply@aevion.tech>", to: email, subject, text }),
+      body: JSON.stringify({ from: "QBuild <noreply@aevion.app>", to: email, subject, text }),
     });
     console.info(`[build] email sent to ${email} (${status})`);
   } catch (e) {

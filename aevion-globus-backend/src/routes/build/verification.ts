@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 
@@ -95,10 +95,10 @@ verificationRouter.post("/admin/:userId/approve", async (req, res) => {
         method: "POST",
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "QBuild <noreply@aevion.tech>",
+          from: "QBuild <noreply@aevion.app>",
           to: u.rows[0].email,
           subject: "Your profile is now verified — AEVION QBuild",
-          text: `Hi ${u.rows[0].name},\n\nGreat news! Your profile has been verified. The ✓ Verified badge is now visible on your public profile.\n\nhttps://aevion.tech/build/u/${userId}\n\n— AEVION QBuild`,
+          text: `Hi ${u.rows[0].name},\n\nGreat news! Your profile has been verified. The ✓ Verified badge is now visible on your public profile.\n\nhttps://aevion.app/build/u/${userId}\n\n— AEVION QBuild`,
         }),
       }).catch(() => {});
     }

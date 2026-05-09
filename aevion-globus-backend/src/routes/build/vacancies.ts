@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { dispatchJobAlerts } from "./alerts";
 import {
@@ -204,10 +204,10 @@ vacanciesRouter.post("/:id/invite", async (req, res) => {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "QBuild <noreply@aevion.tech>",
+          from: "QBuild <noreply@aevion.app>",
           to: emailVal.value,
           subject: `You've been invited to apply — ${owner.rows[0].title}`,
-          text: `Hi,\n\n${recruiterName} thinks you'd be a great fit for:\n\n"${owner.rows[0].title}"\n\nApply here: https://aevion.tech/build/vacancy/${id}\n\n— AEVION QBuild`,
+          text: `Hi,\n\n${recruiterName} thinks you'd be a great fit for:\n\n"${owner.rows[0].title}"\n\nApply here: https://aevion.app/build/vacancy/${id}\n\n— AEVION QBuild`,
         }),
       }).catch(() => {});
     }

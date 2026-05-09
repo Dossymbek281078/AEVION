@@ -41,6 +41,7 @@ export function LevelHome() {
     perLevel: Record<number, { done: number; total: number; pct: number }>;
     nextLevel: number | null; // уровень с первым непрочитанным уроком
     nextTitle: string | null;  // заголовок этого урока — для CTA
+    unread: Array<{ level: number; id: string }>;
   } | null>(null);
   useEffect(() => {
     const lp = loadLessonProgress();
@@ -49,6 +50,7 @@ export function LevelHome() {
     let nextLevel: number | null = null;
     let nextTitle: string | null = null;
     const perLevel: Record<number, { done: number; total: number; pct: number }> = {};
+    const unread: Array<{ level: number; id: string }> = [];
     LEVELS.forEach((lv) => {
       const lessons = getLessonsForLevel(lv.num);
       const t = lessons.length;
@@ -56,6 +58,9 @@ export function LevelHome() {
       totalLessons += t;
       doneLessons += d;
       perLevel[lv.num] = { done: d, total: t, pct: t > 0 ? levelLessonsCompletion(lv.num) : 0 };
+      lessons.forEach((l) => {
+        if (!lp[l.id]?.completed) unread.push({ level: lv.num, id: l.id });
+      });
       if (nextLevel === null) {
         const firstUnread = lessons.find((l) => !lp[l.id]?.completed);
         if (firstUnread) {
@@ -64,7 +69,7 @@ export function LevelHome() {
         }
       }
     });
-    setLessonsState({ done: doneLessons, total: totalLessons, perLevel, nextLevel, nextTitle });
+    setLessonsState({ done: doneLessons, total: totalLessons, perLevel, nextLevel, nextTitle, unread });
     setBadgesEarned(computeEarned(progress, lp).size);
   }, [progress]);
 
@@ -98,23 +103,38 @@ export function LevelHome() {
             </div>
           </div>
 
-          {/* Continue learning CTA */}
+          {/* Continue learning CTA + Random */}
           {lessonsState?.nextLevel != null && lessonsState.done < lessonsState.total && (
-            <Link
-              href={`/smeta-trainer/level/${lessonsState.nextLevel}`}
-              className="mt-4 flex items-center gap-3 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white rounded-lg p-3 shadow-sm"
-            >
-              <div className="text-2xl">▶️</div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wide text-sky-100">
-                  Продолжить с урока
+            <div className="mt-4 flex gap-2">
+              <Link
+                href={`/smeta-trainer/level/${lessonsState.nextLevel}#lesson-${encodeURIComponent(lessonsState.unread[0]?.id ?? "")}`}
+                className="flex-1 flex items-center gap-3 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white rounded-lg p-3 shadow-sm"
+              >
+                <div className="text-2xl">▶️</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-sky-100">
+                    Продолжить с урока
+                  </div>
+                  <div className="text-sm font-bold truncate">
+                    Уровень {lessonsState.nextLevel} · {lessonsState.nextTitle}
+                  </div>
                 </div>
-                <div className="text-sm font-bold truncate">
-                  Уровень {lessonsState.nextLevel} · {lessonsState.nextTitle}
-                </div>
-              </div>
-              <div className="text-xl">→</div>
-            </Link>
+                <div className="text-xl">→</div>
+              </Link>
+              {lessonsState.unread.length > 1 && (
+                <button
+                  onClick={() => {
+                    const pick = lessonsState.unread[Math.floor(Math.random() * lessonsState.unread.length)];
+                    window.location.href = `/smeta-trainer/level/${pick.level}#lesson-${encodeURIComponent(pick.id)}`;
+                  }}
+                  className="px-4 bg-white border-2 border-sky-300 text-sky-700 hover:bg-sky-50 rounded-lg flex items-center gap-1 font-bold text-sm shadow-sm"
+                  title="Случайный непрочитанный урок — для повторения вразброс"
+                >
+                  <span className="text-xl">🎲</span>
+                  <span className="hidden sm:inline text-xs">Случайный</span>
+                </button>
+              )}
+            </div>
           )}
 
           {/* Progress bars */}
@@ -195,6 +215,24 @@ export function LevelHome() {
               📋 Шпаргалка
               <span className="text-[10px] text-emerald-500 font-normal">
                 все формулы на A4
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/lessons-search"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-sky-300 text-sky-700 hover:bg-sky-50 text-xs font-semibold rounded-lg"
+            >
+              🔍 Поиск по урокам
+              <span className="text-[10px] text-sky-500 font-normal">
+                найти теорию по слову
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/notes"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-sky-300 text-sky-700 hover:bg-sky-50 text-xs font-semibold rounded-lg"
+            >
+              📝 Мои заметки
+              <span className="text-[10px] text-sky-500 font-normal">
+                конспект + экспорт .md
               </span>
             </Link>
             <Link

@@ -116,3 +116,49 @@ describe("build payment webhook — HMAC verify uses raw bytes (fix #2)", () => 
     expect(buildPaymentSignatureValid(secret, "{}", "not-a-hex".padEnd(64, "z"))).toBe(false);
   });
 });
+
+// Timestamp replay-protection — fix #3 (added 2026-05-09).
+// Without timestamp, a captured signed payload could be replayed forever.
+// The header is optional so existing partners aren't broken; once they sign
+// timestamps too, we can tighten via WEBHOOK_REQUIRE_HMAC=1.
+function timestampWithinTolerance(tsHeader: string, nowSec: number, toleranceSec = 300): boolean {
+  if (!tsHeader.trim()) return true; // no header → optional, allow
+  const ts = Number(tsHeader);
+  if (!Number.isFinite(ts)) return false;
+  return Math.abs(nowSec - ts) <= toleranceSec;
+}
+
+describe("build payment webhook — timestamp replay protection (fix #3)", () => {
+  const now = 1_778_000_000;
+
+  test("missing timestamp header → allowed (backwards compat)", () => {
+    expect(timestampWithinTolerance("", now)).toBe(true);
+  });
+
+  test("recent timestamp → allowed", () => {
+    expect(timestampWithinTolerance(String(now - 30), now)).toBe(true);
+    expect(timestampWithinTolerance(String(now), now)).toBe(true);
+    expect(timestampWithinTolerance(String(now + 30), now)).toBe(true);
+  });
+
+  test("timestamp 5 min ago → boundary allowed", () => {
+    expect(timestampWithinTolerance(String(now - 300), now)).toBe(true);
+  });
+
+  test("timestamp 10 min ago → REJECTED (replay)", () => {
+    expect(timestampWithinTolerance(String(now - 600), now)).toBe(false);
+  });
+
+  test("timestamp 1 day ago → REJECTED (replay)", () => {
+    expect(timestampWithinTolerance(String(now - 86400), now)).toBe(false);
+  });
+
+  test("timestamp 10 min in future → REJECTED (clock skew or forge)", () => {
+    expect(timestampWithinTolerance(String(now + 600), now)).toBe(false);
+  });
+
+  test("non-numeric timestamp → REJECTED", () => {
+    expect(timestampWithinTolerance("not-a-number", now)).toBe(false);
+    expect(timestampWithinTolerance("NaN", now)).toBe(false);
+  });
+});

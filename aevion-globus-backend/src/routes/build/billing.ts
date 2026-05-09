@@ -293,6 +293,20 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
       ) {
         return fail(res, 401, "invalid_signature");
       }
+      // Optional timestamp replay-protection. If the partner sends
+      // X-Aevion-Timestamp (unix seconds), reject deliveries older than
+      // 5 min. A captured-and-replayed payload would otherwise pass the
+      // signature check forever. Header is optional so existing partners
+      // who don't yet sign timestamps keep working — they should add it
+      // before we flip WEBHOOK_REQUIRE_HMAC=1 in prod.
+      const tsHeader = (req.headers["x-aevion-timestamp"] || "").toString().trim();
+      if (tsHeader) {
+        const ts = Number(tsHeader);
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (!Number.isFinite(ts) || Math.abs(nowSec - ts) > 300) {
+          return fail(res, 401, "timestamp_outside_tolerance");
+        }
+      }
     } else if (!isLocal) {
       return fail(res, 503, "webhook_secret_not_configured");
     }

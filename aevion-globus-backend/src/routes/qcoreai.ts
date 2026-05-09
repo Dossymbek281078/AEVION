@@ -4264,6 +4264,153 @@ qcoreaiRouter.get("/orgs/:id/members", async (req, res) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════
+   V40 — AI cost optimization suggestions + cost trend.
+   POST /me/optimize-costs    — analyze run history, return saving tips
+   GET  /me/cost-trend        — daily cost with 7-day rolling average
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const STATIC_OPTIMIZATION_SUGGESTIONS = [
+  {
+    type: "model_downgrade",
+    title: "Use a lighter model for analysis tasks",
+    description: "Your analyst stage consistently uses the most expensive model. For summarization and fact-checking, a smaller model (e.g. Claude Haiku or GPT-3.5-turbo) is 10-20x cheaper with comparable accuracy.",
+    estimatedSavingPct: 40,
+  },
+  {
+    type: "enable_debate",
+    title: "Try parallel/debate strategy for creative tasks",
+    description: "You rarely use parallel or debate strategies. For brainstorming or open-ended tasks, debate mode produces more diverse output at only ~1.5x the cost of a single run.",
+    estimatedSavingPct: 0,
+  },
+  {
+    type: "cost_cap",
+    title: "Set a per-run cost cap",
+    description: "Some of your runs exceed $0.10. Setting a maxCostUsd cap prevents runaway costs from long debates or high-token inputs.",
+    estimatedSavingPct: 15,
+  },
+];
+
+qcoreaiRouter.post("/me/optimize-costs", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+
+    if (!isDbReady()) {
+      return res.json({ suggestions: STATIC_OPTIMIZATION_SUGGESTIONS, source: "static" });
+    }
+
+    // Analyze real run history for dynamic suggestions
+    const suggestions: typeof STATIC_OPTIMIZATION_SUGGESTIONS = [];
+    try {
+      // Check if user uses expensive models for analyst stage
+      const analystModelResult = await pool.query(
+        `SELECT m."model", COUNT(*) as cnt, AVG(m."costUsd") as avg_cost
+         FROM "QCoreMessage" m
+         JOIN "QCoreRun" r ON r."id" = m."runId"
+         JOIN "QCoreSession" s ON s."id" = r."sessionId"
+         WHERE s."userId" = $1 AND m."stage" = 'analyst' AND m."model" IS NOT NULL
+         GROUP BY m."model" ORDER BY cnt DESC LIMIT 1`,
+        [auth.sub]
+      );
+      if ((analystModelResult.rowCount ?? 0) > 0) {
+        const model = analystModelResult.rows[0]?.model || "";
+        if (model.includes("opus") || model.includes("gpt-4") || model.includes("claude-3-5")) {
+          suggestions.push(STATIC_OPTIMIZATION_SUGGESTIONS[0]);
+        }
+      }
+
+      // Check usage of parallel/debate
+      const strategyResult = await pool.query(
+        `SELECT COUNT(*) FILTER (WHERE r."strategy" IN ('parallel','debate')) AS parallel_count,
+                COUNT(*) AS total_count
+         FROM "QCoreRun" r
+         JOIN "QCoreSession" s ON s."id" = r."sessionId"
+         WHERE s."userId" = $1`,
+        [auth.sub]
+      );
+      const total = parseInt(strategyResult.rows[0]?.total_count ?? "0", 10);
+      const parallel = parseInt(strategyResult.rows[0]?.parallel_count ?? "0", 10);
+      if (total > 5 && parallel / Math.max(total, 1) < 0.1) {
+        suggestions.push(STATIC_OPTIMIZATION_SUGGESTIONS[1]);
+      }
+
+      // Check for high-cost runs
+      const highCostResult = await pool.query(
+        `SELECT COUNT(*) as cnt FROM "QCoreRun" r
+         JOIN "QCoreSession" s ON s."id" = r."sessionId"
+         WHERE s."userId" = $1 AND r."totalCostUsd" > 0.10`,
+        [auth.sub]
+      );
+      const highCostCount = parseInt(highCostResult.rows[0]?.cnt ?? "0", 10);
+      if (highCostCount > 2) {
+        suggestions.push(STATIC_OPTIMIZATION_SUGGESTIONS[2]);
+      }
+    } catch { /* if queries fail, fall back to static */ }
+
+    res.json({
+      suggestions: suggestions.length > 0 ? suggestions : STATIC_OPTIMIZATION_SUGGESTIONS,
+      source: "analyzed",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "optimize-costs failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/cost-trend", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
+
+    if (!isDbReady()) {
+      // In-memory fallback: return empty points
+      return res.json({ points: [], days });
+    }
+
+    try {
+      const result = await pool.query(
+        `SELECT DATE(r."startedAt") AS day,
+                COALESCE(SUM(r."totalCostUsd"), 0) AS cost_usd
+         FROM "QCoreRun" r
+         JOIN "QCoreSession" s ON s."id" = r."sessionId"
+         WHERE s."userId" = $1 AND r."startedAt" >= NOW() - INTERVAL '1 day' * $2
+         GROUP BY day ORDER BY day ASC`,
+        [auth.sub, days]
+      );
+
+      // Build a complete day-by-day series with 7-day rolling average
+      const byDay = new Map<string, number>();
+      for (const row of result.rows) {
+        byDay.set(String(row.day).slice(0, 10), parseFloat(row.cost_usd) || 0);
+      }
+
+      const points: Array<{ date: string; costUsd: number; rollingAvg7d: number }> = [];
+      const now = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().slice(0, 10);
+        const costUsd = byDay.get(dateStr) ?? 0;
+        points.push({ date: dateStr, costUsd, rollingAvg7d: 0 });
+      }
+
+      // Compute 7-day rolling average
+      for (let i = 0; i < points.length; i++) {
+        const window = points.slice(Math.max(0, i - 6), i + 1);
+        const avg = window.reduce((s, p) => s + p.costUsd, 0) / window.length;
+        points[i].rollingAvg7d = Math.round(avg * 100000) / 100000;
+      }
+
+      res.json({ points, days });
+    } catch (dbErr: any) {
+      res.json({ points: [], days, error: dbErr?.message });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: "cost-trend failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
    Helpers (local to route)
    ═══════════════════════════════════════════════════════════════════════ */
 

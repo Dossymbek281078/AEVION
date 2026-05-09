@@ -1,8 +1,22 @@
-# AEV public /mint — R1 boundary finding (2026-05-09)
+# AEV public /mint — R1 boundary finding (2026-05-09 → CLOSED 2026-05-10)
 
-> Discovered during qtrade/aev Tier 3 audit. **Known issue, not yet fixed**
-> because the fix requires a coordinated smoke + frontend change. Captured
-> here so future sessions don't waste time re-discovering it.
+> ✅ **CLOSED** in commit [`9c85c69e`](https://github.com/Dossymbek281078/AEVION/commit/9c85c69e):
+> auth gate added on `/mint` and `/sync` in production, smoke pivoted to
+> register-first then run AEV layer authenticated. Frontend update unneeded —
+> the public mining UI was never wired to the prod path.
+>
+> Verification on prod (uptime 75s after redeploy):
+> - Anonymous `/mint` with valid amount → `HTTP 401 {error:"auth_required_in_prod", reason:"AEC mint requires Bearer auth on production (AEC↔fiat boundary R1)."}`
+> - Authenticated `/mint` → `HTTP 200` with wallet.userId tied to the JWT subject.
+> - `bank-prod-smoke.js` → still 24/24 PASS after pivot.
+>
+> Original finding writeup below for context.
+
+---
+
+## Original finding (2026-05-09)
+
+> Discovered during qtrade/aev Tier 3 audit.
 
 ---
 

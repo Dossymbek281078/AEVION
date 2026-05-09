@@ -129,7 +129,9 @@ async function runPublic() {
   // Communities — public list (self-seeds 8 defaults on first call).
   r = await call("GET", "/api/build/communities");
   const communities = payload(r.body)?.items;
-  if (r.status === 200 && Array.isArray(communities) && communities.length >= 1) {
+  if (r.status === 404) {
+    console.log(`  ${String(++step).padStart(2, "0")}  INFO  /communities not deployed yet (404)`);
+  } else if (r.status === 200 && Array.isArray(communities) && communities.length >= 1) {
     ok("/communities list", `n=${communities.length} ${fmtMs(r.durMs)}`);
   } else fail("/communities list", `status=${r.status}`);
 

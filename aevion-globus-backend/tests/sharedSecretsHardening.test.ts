@@ -103,4 +103,71 @@ describe("regression: no insecure secret defaults in src/routes/", () => {
     }
     expect(offenders).toEqual([]);
   });
+
+  // Hardcoded credential prefixes — Stripe (sk_test_, sk_live_, whsec_),
+  // OpenAI (sk-), Anthropic (sk-ant-). If any of these appear as a literal
+  // string in source, it's almost always a real credential leak.
+  // Excludes the format-pattern docs in apiQuotas.ts (literally describes
+  // the key shape: `aev_(test|live)_<24bytes_base64url>`).
+  test("no route file contains a literal API-key-shaped string", () => {
+    // Match prefix + at least 16 alphanumeric/underscore chars after.
+    // Allow short example strings in tests and docs (e.g., `sk_test_dummy`)
+    // by requiring ≥16 trailing chars — real keys are 32+ chars long.
+    const credRegex = /\b(sk_test_|sk_live_|sk-ant-|whsec_)[A-Za-z0-9_-]{16,}/;
+    const offenders: { file: string; match: string }[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      const m = stripped.match(credRegex);
+      if (m) offenders.push({ file: path.relative(routesDir, f), match: m[0].slice(0, 30) + "..." });
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+// Anti-pattern: HMAC verification computed over `JSON.stringify(req.body)`.
+// The sender signed the EXACT raw bytes; re-serialising loses key order /
+// whitespace and either (a) silently mismatches valid signatures, or
+// (b) accepts a forgery if both sides happen to canonicalise identically.
+// The fix is `req.rawBody.toString("utf8")` (stashed by express.json verify
+// hook in src/index.ts).
+//
+// We use a heuristic: a file that calls createHmac AND uses JSON.stringify
+// near it (within 5 lines) AND does NOT also reference rawBody. Skips files
+// that demonstrably go through the rawBody-first pattern.
+describe("regression: HMAC verify must use req.rawBody not re-serialised body", () => {
+  const routesDir = path.join(__dirname, "..", "src", "routes");
+
+  function walkTs(dir: string): string[] {
+    const out: string[] = [];
+    for (const ent of readdirSync(dir)) {
+      const full = path.join(dir, ent);
+      const st = statSync(full);
+      if (st.isDirectory()) out.push(...walkTs(full));
+      else if (ent.endsWith(".ts")) out.push(full);
+    }
+    return out;
+  }
+
+  test("HMAC users in routes either reference rawBody or skip JSON.stringify(req.body)", () => {
+    const files = walkTs(routesDir);
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      // Module of interest: it uses HMAC at all (sender or verifier).
+      if (!/createHmac\s*\(/.test(stripped)) continue;
+      // Skip if the file uses raw bytes — either as Buffer or .rawBody.
+      if (/rawBody|rawBuf/.test(stripped)) continue;
+      // Skip files that are HMAC senders only (no req.body — they sign their
+      // own outbound payload, which IS canonical because they generate it).
+      if (!/req\.body/.test(stripped)) continue;
+      // Remaining files: HMAC + req.body, no rawBody anywhere → suspect.
+      // Confirm the bad pattern is actually present.
+      if (/JSON\.stringify\s*\(\s*req\.body/.test(stripped)) {
+        offenders.push(path.relative(routesDir, f));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });

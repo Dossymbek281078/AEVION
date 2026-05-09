@@ -166,7 +166,12 @@ export default function CertificatePage() {
             <div className="text-[10px] tracking-[0.3em] text-emerald-700 font-bold uppercase">
               {COURSE_ORG}
             </div>
-            <div className="mt-1 text-[10px] font-mono text-slate-400">№ {certNumber}</div>
+            <div className="mt-1 text-[10px] font-mono text-slate-400">
+              № {certNumber}
+              <span className="ml-2 text-emerald-600 print:text-slate-400">
+                · проверка: /smeta-trainer/verify/{certNumber}
+              </span>
+            </div>
           </div>
 
           {/* Title block */}

@@ -83,10 +83,26 @@ export function Level2View() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      {/* Mobile open trigger когда aside скрыт */}
+      {!showTask && (
+        <button
+          onClick={() => setShowTask(true)}
+          className="md:hidden absolute top-2 left-2 z-30 bg-amber-100 border border-amber-300 rounded-md px-2 py-1 text-xs font-semibold shadow text-amber-800"
+        >
+          ☰ Задание
+        </button>
+      )}
+      {/* Mobile backdrop */}
+      {showTask && (
+        <div
+          onClick={() => setShowTask(false)}
+          className="md:hidden fixed inset-0 bg-black/40 z-40"
+        />
+      )}
       {/* Task card боковая */}
       {showTask && (
-        <aside className="w-72 shrink-0 bg-amber-50 border-r border-amber-200 flex flex-col overflow-auto">
+        <aside className="fixed left-0 top-0 bottom-0 w-72 z-50 md:relative md:w-72 md:z-auto md:shrink-0 bg-amber-50 border-r border-amber-200 flex flex-col overflow-auto">
           <div className="px-3 py-3 border-b border-amber-200 flex justify-between items-center">
             <span className="text-xs font-bold text-amber-800 uppercase">Задание — уровень 2</span>
             <button onClick={() => setShowTask(false)} className="text-amber-400 hover:text-amber-700 text-xs">скрыть</button>

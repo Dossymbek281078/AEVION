@@ -65,10 +65,36 @@ export function Level5View() {
   const impactColor = { critical: "text-red-700 bg-red-50 border-red-300", major: "text-amber-700 bg-amber-50 border-amber-300", minor: "text-blue-700 bg-blue-50 border-blue-200" };
   const impactLabel = { critical: "Критическая", major: "Существенная", minor: "Незначительная" };
 
+  const [leftOpen, setLeftOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(false);
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      {/* Mobile triggers */}
+      <button
+        onClick={() => setLeftOpen(true)}
+        className="md:hidden absolute top-2 left-2 z-30 bg-slate-800 text-white border border-slate-600 rounded-md px-2 py-1 text-xs font-semibold shadow"
+      >
+        ☰ Эксперт
+      </button>
+      <button
+        onClick={() => setRightOpen(true)}
+        className="md:hidden absolute top-2 right-2 z-30 bg-amber-100 text-amber-800 border border-amber-300 rounded-md px-2 py-1 text-xs font-semibold shadow"
+      >
+        AI ☰
+      </button>
+      {(leftOpen || rightOpen) && (
+        <div
+          onClick={() => { setLeftOpen(false); setRightOpen(false); }}
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+        />
+      )}
       {/* Левая панель — роль эксперта */}
-      <aside className="w-64 shrink-0 bg-slate-900 text-white flex flex-col overflow-auto">
+      <aside className={`
+        bg-slate-900 text-white flex-col overflow-auto
+        ${leftOpen ? "fixed left-0 top-0 bottom-0 w-72 z-50 flex" : "hidden"}
+        md:relative md:flex md:w-64 md:shrink-0 md:z-auto
+      `}>
         <div className="px-4 py-3 border-b border-slate-700">
           <div className="text-[10px] font-bold text-slate-400 uppercase">Уровень 5</div>
           <div className="text-sm font-bold mt-0.5">Эксперт</div>
@@ -256,7 +282,11 @@ export function Level5View() {
       </div>
 
       {/* AI подсказки справа */}
-      <aside className="w-64 shrink-0 bg-slate-50 border-l border-slate-200 p-3 overflow-auto">
+      <aside className={`
+        bg-slate-50 border-l border-slate-200 p-3 overflow-auto
+        ${rightOpen ? "fixed right-0 top-0 bottom-0 w-72 z-50 block" : "hidden"}
+        md:relative md:block md:w-64 md:shrink-0 md:z-auto
+      `}>
         <div className="text-xs font-bold text-slate-600 mb-3">AI — подсказки эксперту</div>
         {aiNotices.length === 0 ? (
           <div className="text-xs text-slate-400 italic">AI не обнаружил явных нарушений. Ищите скрытые ошибки самостоятельно.</div>

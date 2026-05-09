@@ -144,10 +144,28 @@ export function Level4View() {
   const activeLsr = LSRS.find((l) => l.id === activeView);
   const activeCalc = activeLsr ? calcs[activeLsr.id] : null;
 
+  const [navOpen, setNavOpen] = useState(false);
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      <button
+        onClick={() => setNavOpen(true)}
+        className="md:hidden absolute top-2 left-2 z-30 bg-slate-700 border border-slate-600 text-white rounded-md px-2 py-1 text-xs font-semibold shadow"
+      >
+        ☰ Документы
+      </button>
+      {navOpen && (
+        <div
+          onClick={() => setNavOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+        />
+      )}
       {/* Навигация по документам */}
-      <aside className="w-64 shrink-0 bg-slate-800 text-white flex flex-col overflow-auto">
+      <aside className={`
+        bg-slate-800 text-white flex-col overflow-auto
+        ${navOpen ? "fixed left-0 top-0 bottom-0 w-72 z-50 flex" : "hidden"}
+        md:relative md:flex md:w-64 md:shrink-0 md:z-auto
+      `}>
         <div className="px-4 py-3 border-b border-slate-700">
           <div className="text-[10px] font-bold text-slate-400 uppercase">Уровень 4</div>
           <div className="text-sm font-bold mt-0.5">Проектировщик</div>
@@ -157,20 +175,20 @@ export function Level4View() {
         <div className="px-3 py-2 border-b border-slate-700">
           <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Состав комплекта</div>
           <button
-            onClick={() => setActiveView("ssr")}
+            onClick={() => { setActiveView("ssr"); setNavOpen(false); }}
             className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "ssr" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
           >
             📊 Сводный сметный расчёт (ССР)
           </button>
           <button
-            onClick={() => setActiveView("form3")}
+            onClick={() => { setActiveView("form3"); setNavOpen(false); }}
             className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "form3" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
           >
             📋 Объектная смета (Форма 3)
           </button>
           {lessonsCount > 0 && (
             <button
-              onClick={() => setActiveView("theory")}
+              onClick={() => { setActiveView("theory"); setNavOpen(false); }}
               className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "theory" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
             >
               📚 Теория уровня
@@ -180,7 +198,7 @@ export function Level4View() {
           {LSRS.map((l) => (
             <button
               key={l.id}
-              onClick={() => setActiveView(l.id)}
+              onClick={() => { setActiveView(l.id); setNavOpen(false); }}
               className={`w-full text-left text-xs px-2 py-1.5 rounded mb-0.5 ${activeView === l.id ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
             >
               📄 {l.meta?.lsrNumber} — {l.meta?.objectTitle}

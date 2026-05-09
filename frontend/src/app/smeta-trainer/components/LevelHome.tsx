@@ -301,6 +301,15 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/import-check"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 text-xs font-semibold rounded-lg"
+            >
+              📤 Импорт ЛСР
+              <span className="text-[10px] text-rose-500 font-normal">
+                CSV → AI-проверка
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/dashboard"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg"
             >

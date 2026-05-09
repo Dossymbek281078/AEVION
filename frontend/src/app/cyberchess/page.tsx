@@ -1364,10 +1364,14 @@ export default function CyberChessPage(){
                   sRushScore(s=>s+1);
                   sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
                   showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
+                  // Rush auto-advance on correct — Lichess Puzzle Streak feel
+                  setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},650);
                 }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
                   sPzTimeLeft(v=>v+bonus);
                   showToast(`✓ +${bonus}с`,"success");
+                  // Auto-advance in timed modes (chess.com 3min/5min behaviour)
+                  setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},900);
                 }else{
                   showToast(`✓ Решено! ${pzCurrent.name}`,"success");
                 }
@@ -1392,10 +1396,12 @@ export default function CyberChessPage(){
             sRushScore(s=>s+1);
             sRushStreak(st=>{const n=st+1;sRushBestStreak(b=>Math.max(b,n));return n});
             showToast(`✓ +${bonus}с · ${pzCurrent.r}`,"success");
-          }else if(pzMode==="timed3"||pzMode==="timed5"){
+            setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},650);
+          }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
             sPzTimeLeft(v=>v+bonus);
             showToast(`✓ +${bonus}с`,"success");
+            setTimeout(()=>{if(fPz.length){const nx=(pzI+1)%fPz.length;ldPz(nx)}},900);
           }else{
             showToast(`✓ Решено! ${pzCurrent.name}`,"success");
           }
@@ -3075,6 +3081,40 @@ export default function CyberChessPage(){
         />
       </div>}
 
+      {/* ─── AEVION ecosystem strip ─── compact pill-bar with cross-product links so users can
+          discover what else AEVION offers without leaving CyberChess. Hidden in streamer mode. */}
+      {!streamerMode&&<div style={{
+        display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:10,
+        background:"linear-gradient(135deg,rgba(15,23,42,0.04),rgba(124,58,237,0.06))",
+        border:`1px solid ${CC.border}`,borderRadius:RADIUS.lg,
+        flexWrap:"wrap",fontSize:11
+      }}>
+        <span style={{fontWeight:900,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,fontSize:10,marginRight:4}}>🌐 AEVION</span>
+        {[
+          {href:"/qcoreai",label:"🧠 QCoreAI",hint:"AI-агенты и чат"},
+          {href:"/qtrade",label:"📈 QTrade",hint:"Биржа AEV"},
+          {href:"/aev",label:"🪙 AEV",hint:"Токеномика"},
+          {href:"/qpaynet",label:"💸 QPayNet",hint:"Платежи P2P"},
+          {href:"/qright",label:"©  QRight",hint:"Авторские права"},
+          {href:"/qsign",label:"✍ QSign v2",hint:"PQ-подпись"},
+          {href:"/quantum-shield",label:"🛡 QShield",hint:"Threshold-секреты"},
+          {href:"/qbuild",label:"💼 QBuild",hint:"HR-платформа"},
+          {href:"/healthai",label:"🩺 HealthAI",hint:"Здоровье"},
+          {href:"/smeta-trainer",label:"📐 Smeta",hint:"Тренажёр сметчика"},
+        ].map(p=><a key={p.href} href={p.href} title={p.hint}
+          style={{
+            display:"inline-flex",alignItems:"center",padding:"4px 10px",
+            borderRadius:RADIUS.full,background:CC.surface1,
+            border:`1px solid ${CC.border}`,color:CC.text,
+            fontSize:11,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",
+            transition:`all ${MOTION.fast} ${MOTION.ease}`
+          }}
+          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.borderStrong;(e.currentTarget as HTMLElement).style.background="#fff"}}
+          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
+          {p.label}
+        </a>)}
+      </div>}
+
       {/* Resume offer banner */}
       {resumeOffer&&(()=>{
         const s=resumeOffer;const ago=Math.round((Date.now()-s.ts)/60000);
@@ -3848,7 +3888,7 @@ export default function CyberChessPage(){
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(920px,calc(100vw - 32px),calc(100vh - 200px))"}}>
+          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
@@ -3856,7 +3896,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px),calc(100vh - 200px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -4093,24 +4133,13 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px),calc(100vh - 200px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
-          {/* Controls — bigger touch targets per UX feedback (size sm → md, gap 6→8) */}
+          {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
+              right-sidebar Tools card to reduce visual clutter under the board. */}
           <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
-            <Btn size="md" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
-              title="Показать контроль доски: какие клетки атакованы белыми/чёрными"
-              style={showThreatMap?{background:"linear-gradient(135deg,#fef2f2,#ecfdf5)",color:"#0f172a",borderColor:"#a7f3d0",fontWeight:900}:undefined}>
-              {showThreatMap?"🌡 Heatmap ON":"🌡 Heatmap"}
-            </Btn>
-            <Btn size="md" variant="secondary" onClick={async()=>{
-              try{
-                const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
-                showToast(`🔊 ${text}`,"info");
-              }catch{showToast("Голос недоступен","error")}
-            }} title="Chessy объяснит позицию голосом"
-              style={{background:"linear-gradient(135deg,#f0fdfa,#ccfbf1)",color:"#115e59",borderColor:"#5eead4"}}>🔊 Whisper</Btn>
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -4295,7 +4324,6 @@ export default function CyberChessPage(){
               if(needChessy)spendChessy(3,"takeback");
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
             }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
-            {savedGames.length>0&&(tab==="play"||tab==="coach")&&<Btn size="md" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
           </div>}
           {over&&fenHist.length>2&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
             <Btn size="sm" variant="accent" onClick={()=>{
@@ -4306,43 +4334,73 @@ export default function CyberChessPage(){
             <Btn size="sm" variant="primary" loading={analyzing} onClick={runAnalysis}>
               {analyzing?"Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze"}
             </Btn>
-            {savedGames.length>0&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
-            <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
-              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
-              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
-              const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
-              const pgn=buildPGN(hist,{white,black,result});
-              const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
-              const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
-              try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
-            } } style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Share PGN</Btn>
-            <Btn size="sm" variant="secondary" onClick={()=>{
-              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
-              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
-              const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
-              sReelMeta({white,black,result});sShowReel(true);
-            }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Auto-Reel</Btn>
-            <Btn size="sm" variant="secondary" onClick={()=>{
-              const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
-              const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
-              const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
-              const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
-              const blob=new Blob([svg],{type:"image/svg+xml"});
-              downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
-              showToast("SVG скачан — открой в браузере чтобы поделиться","success");
-            }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
           </div>}
         </div>
 
-        {/* Right panel — hidden in Focus workspace (board only). */}
-        {wsShowRight&&<div style={{flex:"1 1 440px",minWidth:380,maxWidth:720,display:"flex",flexDirection:"column",gap:10}}>
+        {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
+            and media pane get more breathing room. */}
+        {wsShowRight&&<div style={{flex:"0 1 360px",minWidth:300,maxWidth:420,display:"flex",flexDirection:"column",gap:10}}>
+          {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
+              Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
+              History appears when user has saved games. */}
+          <div style={{
+            padding:"10px 12px",borderRadius:RADIUS.lg,
+            background:CC.surface1,border:`1px solid ${CC.border}`,
+            display:"flex",flexDirection:"column",gap:8
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const}}>
+              <span style={{fontSize:14}}>🛠</span>Инструменты
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <Btn size="sm" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
+                title="Подсветка контроля доски"
+                style={showThreatMap?{background:"linear-gradient(135deg,#fef2f2,#ecfdf5)",color:"#0f172a",borderColor:"#a7f3d0",fontWeight:900}:undefined}>
+                {showThreatMap?"🌡 Heatmap ON":"🌡 Heatmap"}
+              </Btn>
+              <Btn size="sm" variant="secondary" onClick={async()=>{
+                try{
+                  const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
+                  showToast(`🔊 ${text}`,"info");
+                }catch{showToast("Голос недоступен","error")}
+              }} title="Chessy объяснит позицию голосом"
+                style={{background:"linear-gradient(135deg,#f0fdfa,#ccfbf1)",color:"#115e59",borderColor:"#5eead4"}}>🔊 Whisper</Btn>
+              {savedGames.length>0&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+              {over&&fenHist.length>2&&<>
+                <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
+                  const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+                  const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+                  const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
+                  const pgn=buildPGN(hist,{white,black,result});
+                  const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
+                  const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
+                  try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
+                }} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Share PGN</Btn>
+                <Btn size="sm" variant="secondary" onClick={()=>{
+                  const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+                  const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+                  const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
+                  sReelMeta({white,black,result});sShowReel(true);
+                }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Auto-Reel</Btn>
+                <Btn size="sm" variant="secondary" onClick={()=>{
+                  const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
+                  const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+                  const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
+                  const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
+                  const blob=new Blob([svg],{type:"image/svg+xml"});
+                  downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
+                  showToast("SVG скачан — открой в браузере чтобы поделиться","success");
+                }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
+              </>}
+            </div>
+          </div>
           {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
               (it reads as "noise" when user is focused on the board). Shown in puzzles tab
               and when no game is in progress (between matches). */}
           {((tab==="puzzles"&&!on)||(tab==="play"&&!on&&!p2pMode))&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
           {/* Coach Predictions: shows opponent's likely next moves while AI thinks.
+              Now also visible in Coach tab so the AI explains predictions during learning sessions.
               Hidden in P2P (no analytics during human-vs-human matches per design). */}
-          {tab==="play"&&on&&!over&&!hotseat&&!p2pMode&&sfOk&&<CoachPredictions
+          {(tab==="play"||tab==="coach")&&on&&!over&&!hotseat&&!p2pMode&&sfOk&&<CoachPredictions
             fen={game.fen()}
             opponentColor={pCol==="w"?"b":"w"}
             isOpponentTurn={game.turn()!==pCol}

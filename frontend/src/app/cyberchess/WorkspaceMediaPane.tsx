@@ -362,13 +362,12 @@ export default function WorkspaceMediaPane() {
 
   return (
     <div style={{
-      width: "min(440px, 36vw)", minWidth: 320, maxWidth: 540,
+      width: "min(640px, 44vw)", minWidth: 360, maxWidth: 760, alignSelf: "stretch",
       display: "flex", flexDirection: "column",
       borderRadius: 10, overflow: "hidden",
       background: "#0f172a", color: "#e2e8f0",
       border: "1px solid #1e293b",
       boxShadow: "0 4px 14px rgba(0,0,0,0.14)",
-      alignSelf: "stretch",
       flexShrink: 0,
     }}>
       {/* Layout toggle — top bar */}

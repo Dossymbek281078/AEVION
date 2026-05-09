@@ -87,30 +87,33 @@ function fmtMs(ms) {
   return `${ms}ms`;
 }
 
-async function runAev() {
+async function runAev(token) {
   console.log(`\n[AEV layer] device=${DEVICE}`);
 
   let r = await call("GET", "/api/aev/stats");
   if (r.status === 200 && r.body?.ok) ok("AEV baseline /stats", `wallets=${r.body.wallets} ledger=${r.body.ledgerEntries} ${fmtMs(r.durMs)}`);
   else return fail("AEV baseline /stats", `status=${r.status} ${fmtMs(r.durMs)}`);
 
-  r = await call("POST", `/api/aev/wallet/${DEVICE}/mint`, { body: { amount: 0.5, sourceKind: "play", sourceModule: "smoke", reason: "smoke-mint-1" } });
+  // Mints + syncs + spends are now authenticated. The /mint and /sync routes
+  // gate on Bearer in production (see docs/bank/AEV_PUBLIC_MINT_FINDING_2026-05-09.md
+  // for context — coordinated fix for R1 boundary violation).
+  r = await call("POST", `/api/aev/wallet/${DEVICE}/mint`, { token, body: { amount: 0.5, sourceKind: "play", sourceModule: "smoke", reason: "smoke-mint-1" } });
   if (r.status === 200 && r.body?.wallet?.balance === 0.5) ok("AEV mint 0.5", `balance=${r.body.wallet.balance} ${fmtMs(r.durMs)}`);
   else return fail("AEV mint 0.5", `status=${r.status} body=${JSON.stringify(r.body)?.slice(0, 200)}`);
 
-  r = await call("POST", `/api/aev/wallet/${DEVICE}/mint`, { body: { amount: 1.25, sourceKind: "play", sourceModule: "smoke" } });
+  r = await call("POST", `/api/aev/wallet/${DEVICE}/mint`, { token, body: { amount: 1.25, sourceKind: "play", sourceModule: "smoke" } });
   if (r.status === 200 && r.body?.wallet?.balance === 1.75) ok("AEV mint 1.25", `balance=${r.body.wallet.balance} ${fmtMs(r.durMs)}`);
   else return fail("AEV mint 1.25", `expected balance=1.75 got ${r.body?.wallet?.balance}`);
 
-  r = await call("POST", `/api/aev/wallet/${DEVICE}/sync`, { body: { balance: 1.75, lifetimeMined: 5, modes: { play: false, compute: true, stewardship: true } } });
+  r = await call("POST", `/api/aev/wallet/${DEVICE}/sync`, { token, body: { balance: 1.75, lifetimeMined: 5, modes: { play: false, compute: true, stewardship: true } } });
   if (r.status === 200 && r.body?.wallet?.lifetimeMined >= 5 && r.body?.wallet?.modes?.compute === true) ok("AEV sync (max+modes)", `lifetimeMined=${r.body.wallet.lifetimeMined} ${fmtMs(r.durMs)}`);
   else return fail("AEV sync", `status=${r.status}`);
 
-  r = await call("POST", `/api/aev/wallet/${DEVICE}/spend`, { body: { amount: 0.75, reason: "smoke-spend-1" } });
+  r = await call("POST", `/api/aev/wallet/${DEVICE}/spend`, { token, body: { amount: 0.75, reason: "smoke-spend-1" } });
   if (r.status === 200 && Math.abs((r.body?.wallet?.balance ?? -1) - 1) < 1e-6) ok("AEV spend 0.75", `balance=${r.body.wallet.balance} ${fmtMs(r.durMs)}`);
   else return fail("AEV spend 0.75", `expected balance≈1 got ${r.body?.wallet?.balance}`);
 
-  r = await call("POST", `/api/aev/wallet/${DEVICE}/spend`, { body: { amount: 999 } });
+  r = await call("POST", `/api/aev/wallet/${DEVICE}/spend`, { token, body: { amount: 999 } });
   if (r.status === 409 && r.body?.error === "insufficient_funds") ok("AEV spend 999 → 409 insufficient_funds", fmtMs(r.durMs));
   else return fail("AEV spend 999", `expected 409 got ${r.status}`);
 
@@ -243,8 +246,12 @@ async function main() {
   console.log(`Bank prod smoke against ${BASE}`);
   console.log(`Run id: deviceId=${DEVICE} email=${SMOKE_EMAIL}`);
 
-  await runAev();
+  // Auth FIRST — AEV /mint and /sync now require Bearer in production
+  // (per AEC↔fiat boundary R1 — platform-only mint authority).
+  // runAuthAndQtrade does register + qtrade tests and returns the token;
+  // we hand it to runAev so the AEV layer authenticates too.
   const token = await runAuthAndQtrade();
+  await runAev(token);
   await runBureauTrustGraph(token);
   await cleanup(token);
 

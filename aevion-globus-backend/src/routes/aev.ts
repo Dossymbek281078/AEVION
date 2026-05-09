@@ -48,7 +48,7 @@ function readUserIdFromBearer(req: Request): string | null {
   if (!header?.startsWith("Bearer ")) return null;
   const token = header.slice(7);
   try {
-    const decoded = jwt.verify(token, getJwtSecret());
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] });
     if (typeof decoded === "object" && decoded !== null && "sub" in decoded) {
       const sub = (decoded as { sub: unknown }).sub;
       return typeof sub === "string" ? sub : null;
@@ -57,6 +57,30 @@ function readUserIdFromBearer(req: Request): string | null {
   } catch {
     return null;
   }
+}
+
+// AEC↔fiat boundary R1 (docs/bank/AEC_FIAT_BOUNDARY.md): AEC is platform-
+// minted only. Public anonymous mint is the legacy QTrade-style demo path.
+// In production we require Bearer; non-production stays open so
+// scripts/bank-prod-smoke.js can run in dev / CI without a registered user.
+//
+// Set AEV_PUBLIC_MINT_ENABLED=1 to bypass even on prod (escape hatch for
+// urgent rollback or partner-test flows). Server-side mint authority via
+// internalMintForDevice() is unaffected — it's an in-process call, not a
+// route handler.
+function requireAuthForMintIfProd(req: Request, res: Response): string | null | "blocked" {
+  const userId = readUserIdFromBearer(req);
+  if (userId) return userId;
+  const isProd = process.env.NODE_ENV === "production";
+  const escapeHatch = process.env.AEV_PUBLIC_MINT_ENABLED === "1";
+  if (isProd && !escapeHatch) {
+    res.status(401).json({
+      error: "auth_required_in_prod",
+      reason: "AEC mint requires Bearer auth on production (AEC↔fiat boundary R1).",
+    });
+    return "blocked";
+  }
+  return null; // anonymous, but allowed (non-prod or escape hatch)
 }
 
 // Flat filename — jsonFileStore mkdirs only top-level AEVION_DATA_DIR;
@@ -162,6 +186,11 @@ aevRouter.post("/wallet/:deviceId/sync", syncLimiter, async (req: Request, res: 
   if (!deviceId) return res.status(400).json({ error: "invalid_device_id" });
   const body = req.body ?? {};
 
+  // Production gate (R1 boundary). Same logic as /mint — sync can inflate
+  // lifetimeMined via Math.max(existing, body), so it's a mint surface too.
+  const gate = requireAuthForMintIfProd(req, res);
+  if (gate === "blocked") return;
+
   const wallets = await loadWallets();
   const existing = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);
   const bearerUserId = readUserIdFromBearer(req);
@@ -199,6 +228,13 @@ aevRouter.post("/wallet/:deviceId/mint", writeLimiter, async (req: Request, res:
   if (!deviceId) return res.status(400).json({ error: "invalid_device_id" });
   const amount = clampAmount(req.body?.amount);
   if (amount === null) return res.status(400).json({ error: "invalid_amount" });
+
+  // Production gate (R1 boundary — see docs/bank/AEV_PUBLIC_MINT_FINDING_2026-05-09.md).
+  // Anonymous mint is allowed in dev/test for the smoke flow; prod requires
+  // a real bearer so client-supplied amounts are tied to a user identity
+  // and per-user limits/audits can be applied later.
+  const gate = requireAuthForMintIfProd(req, res);
+  if (gate === "blocked") return;
 
   const [wallets, ledger] = await Promise.all([loadWallets(), loadLedger()]);
   const w = wallets[deviceId] ?? DEFAULT_WALLET(deviceId, null);

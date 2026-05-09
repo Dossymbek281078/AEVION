@@ -84,9 +84,9 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 18 }}>📚</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — Тренер</div>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — AI Coach</div>
               <div style={{ fontSize: 10, opacity: 0.85 }}>
-                Тактика · Эндшпиль · Дебюты · Стратегия
+                Тактика · Эндшпиль · Дебюты · Миттельшпиль · Стратегия · Время · Память · Roadmap
                 {totalAll > 0 && <span style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 999, background: "rgba(255,255,255,0.18)", fontWeight: 800 }}>
                   {totalRead === totalAll ? "🏆 ВСЁ ПРОЧИТАНО" : `${totalRead}/${totalAll} прочитано`}
                 </span>}

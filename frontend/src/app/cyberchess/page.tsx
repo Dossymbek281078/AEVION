@@ -489,6 +489,14 @@ export default function CyberChessPage(){
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
   const[coachAIEnabled,sCoachAIEnabled]=useState(false);  // default off — user opts in via 🔮 button
+  // Coach Quick-Actions remark — shown inline in the in-game panel after a quick-action.
+  // null = nothing to show; { kind, title, body } = panel content.
+  const[coachRemark,sCoachRemark]=useState<{kind:"plan"|"tactic"|"position"|"weakness";title:string;body:string;hint?:string}|null>(null);
+  // Time-per-move tracker — milliseconds spent per ply for time-management analytics.
+  // Reset on newG; appended on each move via execTime(). Index aligns with hist.
+  const moveTimesRef=useRef<number[]>([]);
+  const lastMoveStartRef=useRef<number>(Date.now());
+  const[moveTimes,sMoveTimes]=useState<number[]>([]);
   const[showKnowledge,sShowKnowledge]=useState(false);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
@@ -1474,6 +1482,11 @@ export default function CyberChessPage(){
       window.setTimeout(()=>sCapAnim(null),220);
     }
     if(mv.color===pCol)pT.addInc();else aT.addInc();
+    // Record time spent on this ply for time-management analytics
+    const now=Date.now();
+    moveTimesRef.current=[...moveTimesRef.current,now-lastMoveStartRef.current];
+    sMoveTimes([...moveTimesRef.current]);
+    lastMoveStartRef.current=now;
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
     if(game.isGameOver()){
       let r="";
@@ -2543,6 +2556,8 @@ export default function CyberChessPage(){
     sVariantStartFen(startFen);sVariantArmies(armies);
     const ng=startFen?new Chess(startFen):new Chess();
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
+    // Reset time-per-move tracker for new game
+    moveTimesRef.current=[];sMoveTimes([]);lastMoveStartRef.current=Date.now();
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
     reinfLastMoveRef.current=0;
@@ -4484,6 +4499,119 @@ export default function CyberChessPage(){
             onToggle={()=>sCoachAIEnabled(v=>!v)}
             runEngine={runEnginePromise}
           />}
+          {/* ─── Coach Quick Actions ─── in-game heuristic-driven coach buttons. Each runs a
+              deterministic position evaluation + Stockfish suggestion and shows a coach-style
+              explanation card. Available in Coach tab + Play tab when game is on. */}
+          {(tab==="play"||tab==="coach")&&on&&!over&&!setup&&sfOk&&<div style={{
+            padding:"10px 12px",borderRadius:RADIUS.lg,
+            background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
+            display:"flex",flexDirection:"column",gap:8
+          }}>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const}}>
+              <span style={{fontSize:14}}>🎓</span>AI Coach · быстрые подсказки
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <Btn size="sm" variant="primary" onClick={()=>{
+                // Объясни позицию — оценка + материал + кому лучше + почему
+                const fen=game.fen();
+                const turn=game.turn();
+                const pieces=fen.split(" ")[0];
+                const w={p:0,n:0,b:0,r:0,q:0,k:0};const b={...w};
+                for(const c of pieces){
+                  if(c==="P")w.p++;else if(c==="N")w.n++;else if(c==="B")w.b++;else if(c==="R")w.r++;else if(c==="Q")w.q++;else if(c==="K")w.k++;
+                  else if(c==="p")b.p++;else if(c==="n")b.n++;else if(c==="b")b.b++;else if(c==="r")b.r++;else if(c==="q")b.q++;else if(c==="k")b.k++;
+                }
+                const wMat=w.p+w.n*3+w.b*3+w.r*5+w.q*9;
+                const bMat=b.p+b.n*3+b.b*3+b.r*5+b.q*9;
+                const matDiff=wMat-bMat;
+                const phase=hist.length<14?"дебюте":hist.length<40?"миттельшпиле":"эндшпиле";
+                const evalCpAbs=Math.abs(evalCp);
+                const evalSide=evalCp>50?"белые":evalCp<-50?"чёрные":"равная";
+                const evalStrength=evalCpAbs<50?"равенство":evalCpAbs<150?"небольшой перевес":evalCpAbs<300?"явный перевес":evalCpAbs<700?"решающий перевес":"подавляющий";
+                const myEval=pCol==="w"?evalCp:-evalCp;
+                const verdict=myEval>=300?"Ты ВЫИГРЫВАЕШЬ — упрощай и реализуй":myEval>=80?"У тебя инициатива — продолжай давить":myEval>=-80?"Позиция РОВНАЯ — ищи план":myEval>=-300?"Соперник давит — ищи контр-игру":"Тяжело — ищи практический шанс";
+                const body=`Сейчас ${phase}, ход ${hist.length+1}.\n\n📊 Оценка: ${evalSide==="равная"?"равно":`перевес у ${evalSide}`} (${evalStrength}).\n💎 Материал: ${matDiff===0?"равный":matDiff>0?`+${matDiff} у белых`:`+${-matDiff} у чёрных`}.\n👑 Ход: ${turn==="w"?"белые":"чёрные"}.\n\n🎯 ${verdict}.`;
+                sCoachRemark({kind:"position",title:"Объяснение позиции",body});
+              }}>🔍 Объясни</Btn>
+              <Btn size="sm" variant="secondary" onClick={()=>{
+                // Найди план — top-3 моих лучших ходов + комментарий
+                if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+                sCoachRemark({kind:"plan",title:"⏳ Coach думает над планом…",body:"Считаю топ-3 хода…"});
+                sfR.current.multiPV(game.fen(),12,3,(lines)=>{
+                  if(!lines||lines.length===0){sCoachRemark({kind:"plan",title:"Не нашёл плана",body:"Попробуй ещё раз через секунду"});return}
+                  const ms=lines.slice(0,3).map((l,i)=>{
+                    const uci=l.moves&&l.moves[0]?l.moves[0]:"";
+                    try{
+                      if(!uci)return `${i+1}. ?`;
+                      const test=new Chess(game.fen());
+                      const f=uci.slice(0,2),t=uci.slice(2,4),pr=uci.length>4?uci[4]:undefined;
+                      const mv=test.move({from:f,to:t,promotion:(pr||"q") as any});
+                      const cp=l.cp*(pCol==="w"?1:-1);
+                      const evalStr=l.mate!==0?`#${Math.abs(l.mate)}`:`${cp>=0?"+":""}${(cp/100).toFixed(2)}`;
+                      return `${i+1}. ${mv?.san||uci}  ${evalStr}`;
+                    }catch{return `${i+1}. ${uci}`}
+                  }).join("\n");
+                  const top=lines[0];
+                  const isMine=game.turn()===pCol;
+                  sCoachRemark({kind:"plan",title:`📋 Топ-3 ${isMine?"ТВОИХ":"ходов соперника"} (depth ${top.depth})`,body:ms,hint:isMine?"Сделай ход 1 для лучшего результата":"Готовься к этим ответам соперника"});
+                });
+              }}>📋 Найди план</Btn>
+              <Btn size="sm" variant="secondary" onClick={()=>{
+                // Подскажи тактику — быстрый поиск тактических мотивов через engine
+                if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+                sCoachRemark({kind:"tactic",title:"⏳ Ищу тактику…",body:"Стockfish считает…"});
+                sfR.current.go(game.fen(),14,(f,t,p)=>{
+                  if(!f||!t){sCoachRemark({kind:"tactic",title:"Тактика не найдена",body:"Позиция тихая — играй стратегически"});return}
+                  try{
+                    const test=new Chess(game.fen());
+                    const mv=test.move({from:f,to:t,promotion:(p||"q") as any});
+                    const isCapture=!!mv?.captured;
+                    const isCheck=test.isCheck();
+                    const isMate=test.isCheckmate();
+                    const motif=isMate?"⚔ МАТ!":isCapture&&isCheck?"⚡ Вилка с шахом":isCheck?"♔ Шах":isCapture?"💎 Размен/выигрыш материала":"✨ Тихий улучшающий ход";
+                    const body=`Лучший ход: ${mv?.san||`${f}-${t}`}\n\n${motif}\n\nПопробуй найти продолжение.`;
+                    sArrows([{from:f as Square,to:t as Square,c:"#10b981"}]);
+                    setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t))),5000);
+                    sCoachRemark({kind:"tactic",title:"🎯 Тактический совет",body,hint:"Стрелка на доске показывает ход на 5 секунд"});
+                  }catch{sCoachRemark({kind:"tactic",title:"Тактика",body:`Ход: ${f}-${t}`})}
+                });
+              }}>🎯 Тактика</Btn>
+              <Btn size="sm" variant="secondary" onClick={()=>{
+                // Где слабости — анализ позиции на слабости (короля, пешек, фигур)
+                const fen=game.fen();
+                const myK=pCol==="w"?"K":"k";
+                const oppK=pCol==="w"?"k":"K";
+                const findKing=(c:string)=>{
+                  const ranks=fen.split(" ")[0].split("/");
+                  for(let r=0;r<8;r++){let f=0;for(const ch of ranks[r]){if(/\d/.test(ch))f+=parseInt(ch);else{if(ch===c)return `${"abcdefgh"[f]}${8-r}`;f++}}}
+                  return null;
+                };
+                const myKsq=findKing(myK);
+                const oppKsq=findKing(oppK);
+                let myAtk=0,oppAtk=0;
+                try{
+                  const tmp=new Chess(fen);
+                  if(myKsq)myAtk=tmp.attackers(myKsq as Square,pCol==="w"?"b":"w").length;
+                  if(oppKsq)oppAtk=tmp.attackers(oppKsq as Square,pCol).length;
+                }catch{}
+                const safety=myAtk===0?"Король в безопасности":myAtk===1?"Король под атакой 1 фигуры":`Король под атакой ${myAtk} фигур!`;
+                const attack=oppAtk===0?"Король соперника безопасен":oppAtk>=2?`Король соперника под атакой ${oppAtk} фигур!`:"Король соперника под лёгким давлением";
+                const evalAbs=Math.abs(evalCp);
+                const positional=evalAbs>200&&hist.length>20?"Позиция требует нового плана — текущая стратегия не работает":evalAbs<50?"Равная позиция — ищи мелкие улучшения фигур":"Позиция в порядке — продолжай план";
+                sCoachRemark({kind:"weakness",title:"🛡 Слабости в позиции",body:`Твой король: ${safety} (${myKsq})\nКороль соперника: ${attack} (${oppKsq})\n\n${positional}`,hint:myAtk>=2?"Защити короля немедленно!":oppAtk>=2?"Усиль атаку!":undefined});
+              }}>🛡 Слабости</Btn>
+              {coachRemark&&<Btn size="sm" variant="ghost" onClick={()=>sCoachRemark(null)}>✕ Скрыть</Btn>}
+            </div>
+            {coachRemark&&<div style={{
+              padding:"10px 12px",borderRadius:RADIUS.md,
+              background:"#fff",border:"1px solid #a7f3d0",
+              fontSize:12,lineHeight:1.55,color:CC.text,whiteSpace:"pre-wrap"
+            }}>
+              <div style={{fontWeight:900,color:CC.brand,marginBottom:4,fontSize:12}}>{coachRemark.title}</div>
+              <div>{coachRemark.body}</div>
+              {coachRemark.hint&&<div style={{marginTop:6,padding:"4px 8px",borderRadius:6,background:"#fffbeb",border:"1px solid #fde68a",fontSize:11,color:"#92400e",fontWeight:700}}>💡 {coachRemark.hint}</div>}
+            </div>}
+          </div>}
           {/* Opening Drill HUD */}
           {openingDrill&&<Card padding={SPACE[3]} tone="surface1"
             style={{background:"linear-gradient(135deg,#faf5ff,#f3e8ff)",borderColor:"#c4b5fd"}}>
@@ -4739,6 +4867,64 @@ export default function CyberChessPage(){
             </div>;
           })()}
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+
+          {/* ── Time-per-move analytics ── per-ply time chart with red flags for time-management coach.
+              Visible after game ends with ≥4 moves recorded. Coach-style insights below the chart. */}
+          {over&&(tab==="play"||tab==="coach")&&moveTimes.length>=4&&(()=>{
+            // Filter to user's plies only (every other ply starting from pCol==="w" ? 0 : 1).
+            const userIsWhite=pCol==="w";
+            const myPlyTimes=moveTimes.map((t,i)=>({t,i,isUser:userIsWhite?i%2===0:i%2===1})).filter(x=>x.isUser).map(x=>({t:x.t,ply:x.i}));
+            if(myPlyTimes.length===0)return null;
+            const avgMs=myPlyTimes.reduce((a,p)=>a+p.t,0)/myPlyTimes.length;
+            const maxMs=Math.max(...myPlyTimes.map(p=>p.t));
+            const W=560,H=64;
+            const xs=(i:number)=>myPlyTimes.length<=1?W/2:(i/(myPlyTimes.length-1))*W;
+            const ys=(t:number)=>H-(t/Math.max(maxMs,1))*(H-4)-2;
+            // Red flags: rushed (<2s on user move in middlegame ply 10-30) AND blunder/mistake at same ply.
+            const flags:string[]=[];
+            if(analysis.length>0){
+              for(let k=0;k<myPlyTimes.length;k++){
+                const{t,ply}=myPlyTimes[k];
+                const a=analysis[ply];
+                if(!a)continue;
+                if(t<2000&&(a.quality==="blunder"||a.quality==="mistake")){
+                  flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(1)}с — спешка → ${a.quality==="blunder"?"блундер":"ошибка"}`);
+                }
+                if(t>30000&&Math.abs(a.cp)>500){
+                  flags.push(`Ход ${Math.floor(ply/2)+1}: ${(t/1000).toFixed(0)}с в ${a.cp>0?"выигранной":"проигранной"} → потеря времени`);
+                }
+              }
+            }
+            const fmt=(ms:number)=>ms<1000?`${ms}мс`:ms<10000?`${(ms/1000).toFixed(1)}с`:`${Math.round(ms/1000)}с`;
+            return <div style={{marginTop:8,padding:"10px 14px",borderRadius:RADIUS.lg,background:"linear-gradient(135deg,#fefce8,#fef9c3)",border:"1px solid #facc15"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:900,color:"#854d0e",letterSpacing:0.5,textTransform:"uppercase" as const}}>⏱ Управление временем · {myPlyTimes.length} твоих ходов</div>
+                <div style={{fontSize:10,color:"#a16207",fontWeight:700}}>средний {fmt(avgMs)} · максимум {fmt(maxMs)}</div>
+              </div>
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+                style={{width:"100%",height:60,background:"linear-gradient(180deg,#fff 0%,#fef9c3 100%)",borderRadius:6}}>
+                <line x1="0" y1={ys(avgMs)} x2={W} y2={ys(avgMs)} stroke="#a16207" strokeWidth="0.4" strokeDasharray="3,2"/>
+                {myPlyTimes.map((p,i)=>{
+                  const flagged=analysis[p.ply]&&(p.t<2000&&(analysis[p.ply].quality==="blunder"||analysis[p.ply].quality==="mistake"))||p.t>30000;
+                  return <rect key={i} x={xs(i)-2} y={ys(p.t)} width={4} height={H-ys(p.t)-2}
+                    fill={flagged?"#dc2626":p.t<3000?"#f59e0b":p.t<10000?"#84cc16":"#0891b2"}
+                    rx={1}>
+                    <title>Ход {Math.floor(p.ply/2)+1}: {fmt(p.t)}{analysis[p.ply]?` · ${analysis[p.ply].quality}`:""}</title>
+                  </rect>;
+                })}
+              </svg>
+              {flags.length>0?<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.25)",fontSize:11,color:"#991b1b",lineHeight:1.6}}>
+                <div style={{fontWeight:900,marginBottom:2}}>🚩 Замечания тренера ({flags.length}):</div>
+                {flags.slice(0,3).map((f,i)=><div key={i}>· {f}</div>)}
+                {flags.length>3&&<div style={{fontStyle:"italic",marginTop:2}}>+ ещё {flags.length-3}</div>}
+              </div>:<div style={{marginTop:8,padding:"6px 10px",borderRadius:6,background:"rgba(132,204,22,0.10)",border:"1px solid rgba(132,204,22,0.3)",fontSize:11,color:"#3f6212",fontWeight:700}}>
+                ✓ Время распределено хорошо — никаких спешащих блундеров или потерь времени в выигранных позициях
+              </div>}
+              <div style={{marginTop:6,fontSize:10,color:"#854d0e",lineHeight:1.5}}>
+                Зелёный — нормально (10-30с) · Жёлтый — быстро (3-10с) · Оранжевый — спешка (&lt;3с) · Красный — флаг тренера
+              </div>
+            </div>;
+          })()}
 
           {/* ── Blunder Rewind — переиграть свои ошибки как пазлы ── */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>0&&(()=>{
@@ -8684,8 +8870,8 @@ export default function CyberChessPage(){
         }},
 
         // ── COACH / TRAINING ──
-        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + знания 45 тем",              run:()=>sTab("coach")},
-        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"45 тем · эндшпили / стратегия / тактика",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
+        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
+        {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
         {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
         {id:"editor",       icon:"♟",group:"Coach",   label:"Position Editor",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},

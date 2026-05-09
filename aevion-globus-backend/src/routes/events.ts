@@ -1,8 +1,31 @@
 import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
+import { timingSafeEqual } from "crypto";
 
 export const eventsRouter = Router();
+
+/**
+ * Admin token gate — fail-CLOSED in production when ADMIN_TOKEN env is unset
+ * (was: silently public — analytics readable by anyone). Timing-safe equality
+ * stops length-extension probing.
+ *
+ * Returns true if access should be denied.
+ */
+function adminGateBlocks(req: import("express").Request): boolean {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    // No token configured: deny in prod (fail-closed), allow in dev/test.
+    return process.env.NODE_ENV === "production";
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim() ?? "";
+  if (got.length !== required.length) return true;
+  try {
+    return !timingSafeEqual(Buffer.from(got), Buffer.from(required));
+  } catch {
+    return true;
+  }
+}
 
 /**
  * GTM analytics events — простой ingest без внешних трекеров.
@@ -143,13 +166,7 @@ eventsRouter.post("/", (req, res) => {
  * Защищён ADMIN_TOKEN (header X-Admin-Token).
  */
 eventsRouter.get("/summary", (req, res) => {
-  const required = process.env.ADMIN_TOKEN?.trim();
-  if (required) {
-    const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
-    if (got !== required) {
-      return res.status(401).json({ error: "unauthorized" });
-    }
-  }
+  if (adminGateBlocks(req)) return res.status(401).json({ error: "unauthorized" });
 
   if (!existsSync(EVENTS_FILE)) {
     return res.json({
@@ -217,13 +234,7 @@ eventsRouter.get("/summary", (req, res) => {
  * Последние N событий целиком. Защищён ADMIN_TOKEN.
  */
 eventsRouter.get("/recent", (req, res) => {
-  const required = process.env.ADMIN_TOKEN?.trim();
-  if (required) {
-    const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
-    if (got !== required) {
-      return res.status(401).json({ error: "unauthorized" });
-    }
-  }
+  if (adminGateBlocks(req)) return res.status(401).json({ error: "unauthorized" });
 
   if (!existsSync(EVENTS_FILE)) {
     return res.json({ items: [], total: 0 });
@@ -264,13 +275,7 @@ eventsRouter.get("/recent", (req, res) => {
  *   - keys (csv, default "hero,tierCards") — какие variant-ключи группировать
  */
 eventsRouter.get("/by-variant", (req, res) => {
-  const required = process.env.ADMIN_TOKEN?.trim();
-  if (required) {
-    const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
-    if (got !== required) {
-      return res.status(401).json({ error: "unauthorized" });
-    }
-  }
+  if (adminGateBlocks(req)) return res.status(401).json({ error: "unauthorized" });
 
   const sinceHours = Math.min(Math.max(parseInt(String(req.query.hours ?? "168"), 10), 1), 720);
   const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;

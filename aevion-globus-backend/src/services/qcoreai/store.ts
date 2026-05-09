@@ -86,6 +86,19 @@ const memSessions = new Map<string, SessionRow>();
 const memRuns = new Map<string, RunRow>();
 const memMessagesByRun = new Map<string, MessageRow[]>();
 
+// V43 — in-memory API key store
+type ApiKeyRow = {
+  id: string;
+  userId: string;
+  name: string;
+  keyHash: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+};
+const memApiKeys = new Map<string, ApiKeyRow>();
+
 function nowIso(): string { return new Date().toISOString(); }
 
 function deriveTitle(text: string): string {
@@ -3610,4 +3623,140 @@ export async function isOrgMember(orgId: string, userId: string): Promise<boolea
   if (!isDbReady()) return memOrgMembers.has(key);
   const r = await pool.query(`SELECT 1 FROM "QCoreOrgMember" WHERE "orgId"=$1 AND "userId"=$2`, [orgId, userId]);
   return (r.rowCount ?? 0) > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V43 — Personal API keys
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type ApiKeyPublic = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+export async function createApiKey(
+  userId: string,
+  name: string,
+  expiresInDays?: number
+): Promise<{ id: string; key: string; keyPrefix: string; name: string; createdAt: string }> {
+  await ensureQCoreTables(pool);
+  const rawBytes = crypto.randomBytes(32).toString("hex");
+  const rawKey = `qck_${rawBytes}`;
+  const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+  const keyPrefix = rawKey.slice(0, 12);
+  const id = crypto.randomUUID();
+  const createdAt = nowIso();
+  const expiresAt = expiresInDays
+    ? new Date(Date.now() + expiresInDays * 86_400_000).toISOString()
+    : null;
+
+  if (!isDbReady()) {
+    memApiKeys.set(id, { id, userId, name, keyHash, keyPrefix, lastUsedAt: null, expiresAt, createdAt });
+  } else {
+    await pool.query(
+      `INSERT INTO "QCoreApiKey" ("id","userId","name","keyHash","keyPrefix","expiresAt","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, userId, name, keyHash, keyPrefix, expiresAt, createdAt]
+    );
+  }
+  return { id, key: rawKey, keyPrefix, name, createdAt };
+}
+
+export async function validateApiKey(rawKey: string): Promise<{ userId: string; keyId: string } | null> {
+  await ensureQCoreTables(pool);
+  if (!rawKey?.startsWith("qck_")) return null;
+  const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+  const now = nowIso();
+
+  if (!isDbReady()) {
+    for (const row of memApiKeys.values()) {
+      if (row.keyHash === keyHash) {
+        if (row.expiresAt && row.expiresAt < now) return null;
+        row.lastUsedAt = now;
+        return { userId: row.userId, keyId: row.id };
+      }
+    }
+    return null;
+  }
+
+  const r = await pool.query(
+    `SELECT "id","userId","expiresAt" FROM "QCoreApiKey" WHERE "keyHash"=$1`,
+    [keyHash]
+  );
+  if (!r.rows.length) return null;
+  const row = r.rows[0];
+  if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
+  await pool.query(
+    `UPDATE "QCoreApiKey" SET "lastUsedAt"=$1 WHERE "id"=$2`,
+    [now, row.id]
+  );
+  return { userId: row.userId, keyId: row.id };
+}
+
+export async function listApiKeys(userId: string): Promise<ApiKeyPublic[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memApiKeys.values())
+      .filter((k) => k.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(({ id, name, keyPrefix, lastUsedAt, expiresAt, createdAt }) => ({
+        id, name, keyPrefix, lastUsedAt, expiresAt, createdAt,
+      }));
+  }
+  const r = await pool.query(
+    `SELECT "id","name","keyPrefix","lastUsedAt","expiresAt","createdAt"
+     FROM "QCoreApiKey" WHERE "userId"=$1 ORDER BY "createdAt" DESC`,
+    [userId]
+  );
+  return r.rows as ApiKeyPublic[];
+}
+
+export async function deleteApiKey(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const row = memApiKeys.get(id);
+    if (!row || row.userId !== userId) return false;
+    memApiKeys.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreApiKey" WHERE "id"=$1 AND "userId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V45 — Run claps
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function clapRun(runId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const run = memRuns.get(runId);
+    if (!run) return 0;
+    const current = (run as any).clapCount ?? 0;
+    (run as any).clapCount = current + 1;
+    return (run as any).clapCount;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreRun" SET "clapCount" = COALESCE("clapCount",0) + 1
+     WHERE "id"=$1 RETURNING "clapCount"`,
+    [runId]
+  );
+  return r.rows[0]?.clapCount ?? 0;
+}
+
+export async function getRunClapCount(runId: string): Promise<number> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const run = memRuns.get(runId);
+    return (run as any)?.clapCount ?? 0;
+  }
+  const r = await pool.query(`SELECT "clapCount" FROM "QCoreRun" WHERE "id"=$1`, [runId]);
+  return r.rows[0]?.clapCount ?? 0;
 }

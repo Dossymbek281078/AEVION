@@ -165,6 +165,12 @@ import {
   removeOrgMember,
   listOrgMembers,
   isOrgMember,
+  createApiKey,
+  validateApiKey,
+  listApiKeys,
+  deleteApiKey,
+  clapRun,
+  getRunClapCount,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -1039,6 +1045,7 @@ qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
           overrides: scrubOverrides(run.agentConfig.overrides),
         }
       : null;
+    const clapCount = await getRunClapCount(run.id);
     const safeRun = {
       id: run.id,
       strategy: run.strategy,
@@ -1050,6 +1057,7 @@ qcoreaiRouter.get("/shared/:token", sharedLimiter, async (req, res) => {
       startedAt: run.startedAt,
       finishedAt: run.finishedAt,
       agentConfig: safeConfig,
+      clapCount,
     };
     res.json({ session, run: safeRun, messages });
   } catch (err: any) {
@@ -4460,6 +4468,161 @@ qcoreaiRouter.get("/me/cost-trend", async (req, res) => {
     }
   } catch (err: any) {
     res.status(500).json({ error: "cost-trend failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V43 — Personal API keys (PATs)
+   POST /me/api-keys   — create key, returns raw key ONCE
+   GET  /me/api-keys   — list keys (no raw values)
+   DELETE /me/api-keys/:id — delete key
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Helper: extract userId from Bearer token OR X-QCore-Key header. */
+async function resolveAuth(req: any): Promise<{ sub: string } | null> {
+  const bearer = verifyBearerOptional(req);
+  if (bearer?.sub) return bearer;
+  const rawKey = req.headers["x-qcore-key"];
+  if (typeof rawKey === "string" && rawKey.length > 0) {
+    const result = await validateApiKey(rawKey);
+    if (result) return { sub: result.userId };
+  }
+  return null;
+}
+
+const apiKeyLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "qcore-apikeys",
+  message: "Too many API key requests",
+});
+
+qcoreaiRouter.post("/me/api-keys", apiKeyLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const { name, expiresInDays } = req.body || {};
+    if (!name?.trim()) return res.status(400).json({ error: "name required" });
+    const expires = typeof expiresInDays === "number" && expiresInDays > 0 ? Math.floor(expiresInDays) : undefined;
+    const result = await createApiKey(auth.sub, String(name).trim().slice(0, 80), expires);
+    res.status(201).json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: "create api-key failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/api-keys", apiKeyLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const items = await listApiKeys(auth.sub);
+    res.json({ items });
+  } catch (err: any) {
+    res.status(500).json({ error: "list api-keys failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.delete("/me/api-keys/:id", apiKeyLimiter, async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteApiKey(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "api key not found or not yours" });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "delete api-key failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V45 — Run embed snippet + export-pdf-data + claps
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const clapLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  keyPrefix: "qcore-clap",
+  message: "Too many claps from this IP",
+});
+
+/** POST /shared/:token/clap — increment clap count (no auth, rate-limited by IP). */
+qcoreaiRouter.post("/shared/:token/clap", clapLimiter, async (req, res) => {
+  try {
+    const run = await getRunByShareToken(String(req.params.token || ""));
+    if (!run) return res.status(404).json({ error: "not found" });
+    const clapCount = await clapRun(run.id);
+    res.json({ clapCount });
+  } catch (err: any) {
+    res.status(500).json({ error: "clap failed", details: err?.message });
+  }
+});
+
+/** GET /runs/:id/embed — returns a minimal HTML snippet for embedding the run. */
+qcoreaiRouter.get("/runs/:id/embed", async (req, res) => {
+  try {
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    if (!run.shareToken) return res.status(403).json({ error: "run is not public — share it first" });
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QCoreAI Run</title>
+<style>
+  body{margin:0;padding:16px;font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a}
+  .card{background:#fff;border-radius:12px;padding:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(15,23,42,.06)}
+  .label{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:6px}
+  .content{font-size:13px;line-height:1.6;white-space:pre-wrap}
+  .footer{margin-top:12px;font-size:11px;color:#94a3b8}
+  a{color:#0e7490;text-decoration:none;font-weight:700}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="label">QCoreAI · ${(run.strategy || "sequential").toUpperCase()}</div>
+  <div class="content">${(run.finalContent || run.userInput || "").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 2000)}</div>
+  <div class="footer">
+    <a href="${process.env.NEXT_PUBLIC_SITE_URL || "https://aevion.app"}/qcoreai/shared/${run.shareToken}" target="_blank" rel="noreferrer">View full run →</a>
+    &nbsp;·&nbsp; Powered by <b>AEVION QCoreAI</b>
+  </div>
+</div>
+</body>
+</html>`;
+    res.json({ html });
+  } catch (err: any) {
+    res.status(500).json({ error: "embed failed", details: err?.message });
+  }
+});
+
+/** POST /runs/:id/export-pdf-data — returns structured data for client-side PDF generation. */
+qcoreaiRouter.post("/runs/:id/export-pdf-data", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const run = await getRun(String(req.params.id));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    const session = await getSession(run.sessionId, auth.sub);
+    if (!session) return res.status(403).json({ error: "forbidden" });
+    const messages = await listMessages(run.id);
+    res.json({
+      session: session ? { id: session.id, title: session.title, mode: session.mode } : null,
+      run: {
+        id: run.id,
+        strategy: run.strategy,
+        status: run.status,
+        userInput: run.userInput,
+        finalContent: run.finalContent,
+        totalDurationMs: run.totalDurationMs,
+        totalCostUsd: run.totalCostUsd,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+      },
+      messages,
+      exportedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "export-pdf-data failed", details: err?.message });
   }
 });
 

@@ -277,7 +277,7 @@ function fmt(s:number){return s<=0?"0:00":`${Math.floor(s/60)}:${String(s%60).pa
 function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 
 /* ═══ Theme ═══ */
-const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.25)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
+const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.50)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
 
 type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string;premium?:string};
 const BOARD_THEMES: BoardTheme[] = [
@@ -3848,7 +3848,7 @@ export default function CyberChessPage(){
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(920px,calc(100vw - 48px))"}}>
+          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(920px,calc(100vw - 32px),calc(100vh - 200px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
@@ -3856,7 +3856,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(920px,calc(100vw - 32px),calc(100vh - 200px))",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -4093,7 +4093,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(920px,calc(100vw - 32px),calc(100vh - 200px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls — bigger touch targets per UX feedback (size sm → md, gap 6→8) */}
           <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>

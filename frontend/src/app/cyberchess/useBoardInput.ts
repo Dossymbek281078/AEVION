@@ -291,7 +291,9 @@ export function useBoardInput(opts: BoardInputOptions) {
   // visible highlight.
   const flashLastMove = useCallback((from: Square, to: Square) => {
     if (typeof document === "undefined") return;
-    const lastBg = "rgba(217,119,6,0.25)";
+    // Must match T.last in page.tsx — same value avoids visible flicker when
+    // React renders cells (also sets bg=T.last for lm cells via inline style).
+    const lastBg = "rgba(217,119,6,0.50)";
     const fromCell = document.querySelector(`[data-sq="${from}"]`) as HTMLElement | null;
     const toCell = document.querySelector(`[data-sq="${to}"]`) as HTMLElement | null;
     if (fromCell) fromCell.style.background = lastBg;

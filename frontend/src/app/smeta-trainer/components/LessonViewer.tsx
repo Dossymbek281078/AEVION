@@ -22,7 +22,13 @@ interface Props {
  */
 export function LessonViewer({ level }: Props) {
   const lessons = useMemo(() => getLessonsForLevel(level), [level]);
-  const [activeIdx, setActiveIdx] = useState(0);
+  // На монтировании прыгаем на первый непрочитанный урок (или 0 — если все пройдены / прогресса нет)
+  const [activeIdx, setActiveIdx] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const lp = loadLessonProgress();
+    const idx = lessons.findIndex((l) => !lp[l.id]?.completed);
+    return idx === -1 ? 0 : idx;
+  });
   const [progressTick, setProgressTick] = useState(0); // bump для re-read из localStorage
   const [answers, setAnswers] = useState<Record<string, string | number>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});

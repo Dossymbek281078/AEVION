@@ -34,11 +34,19 @@ export function LevelHome() {
   const total = LEVELS.length;
 
   // Прогресс уроков считаем на клиенте (после mount), чтобы не было гидратационного рассинхрона
-  const [lessonsState, setLessonsState] = useState<{ done: number; total: number; perLevel: Record<number, { done: number; total: number; pct: number }> } | null>(null);
+  const [lessonsState, setLessonsState] = useState<{
+    done: number;
+    total: number;
+    perLevel: Record<number, { done: number; total: number; pct: number }>;
+    nextLevel: number | null; // уровень с первым непрочитанным уроком
+    nextTitle: string | null;  // заголовок этого урока — для CTA
+  } | null>(null);
   useEffect(() => {
     const lp = loadLessonProgress();
     let totalLessons = 0;
     let doneLessons = 0;
+    let nextLevel: number | null = null;
+    let nextTitle: string | null = null;
     const perLevel: Record<number, { done: number; total: number; pct: number }> = {};
     LEVELS.forEach((lv) => {
       const lessons = getLessonsForLevel(lv.num);
@@ -47,8 +55,15 @@ export function LevelHome() {
       totalLessons += t;
       doneLessons += d;
       perLevel[lv.num] = { done: d, total: t, pct: t > 0 ? levelLessonsCompletion(lv.num) : 0 };
+      if (nextLevel === null) {
+        const firstUnread = lessons.find((l) => !lp[l.id]?.completed);
+        if (firstUnread) {
+          nextLevel = lv.num;
+          nextTitle = firstUnread.title;
+        }
+      }
     });
-    setLessonsState({ done: doneLessons, total: totalLessons, perLevel });
+    setLessonsState({ done: doneLessons, total: totalLessons, perLevel, nextLevel, nextTitle });
   }, [progress]);
 
   return (
@@ -78,6 +93,25 @@ export function LevelHome() {
               )}
             </div>
           </div>
+
+          {/* Continue learning CTA */}
+          {lessonsState?.nextLevel != null && lessonsState.done < lessonsState.total && (
+            <Link
+              href={`/smeta-trainer/level/${lessonsState.nextLevel}`}
+              className="mt-4 flex items-center gap-3 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white rounded-lg p-3 shadow-sm"
+            >
+              <div className="text-2xl">▶️</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wide text-sky-100">
+                  Продолжить с урока
+                </div>
+                <div className="text-sm font-bold truncate">
+                  Уровень {lessonsState.nextLevel} · {lessonsState.nextTitle}
+                </div>
+              </div>
+              <div className="text-xl">→</div>
+            </Link>
+          )}
 
           {/* Progress bars */}
           <div className="mt-4 space-y-1.5">

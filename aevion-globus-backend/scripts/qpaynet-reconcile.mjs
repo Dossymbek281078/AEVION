@@ -14,7 +14,8 @@
  * either there's a bug or someone wrote SQL by hand. Either way: page on it.
  *
  * Wire as a cron in production:
- *   */15 * * * * node /app/scripts/qpaynet-reconcile.mjs || curl -X POST $ALERT_URL
+ *   "every 15 minutes" -> node /app/scripts/qpaynet-reconcile.mjs ; on non-zero
+ *   exit, POST $ALERT_URL.
  *
  * Exit code:
  *   0  reconciled

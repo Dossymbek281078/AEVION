@@ -137,13 +137,14 @@ export default function WorkspaceMediaPane() {
 
   return (
     <div style={{
-      width: 320, minWidth: 320, maxWidth: 320,
+      width: "min(380px, 30vw)", minWidth: 280, maxWidth: 420,
       display: "flex", flexDirection: "column",
       borderRadius: 10, overflow: "hidden",
       background: "#0f172a", color: "#e2e8f0",
       border: "1px solid #1e293b",
       boxShadow: "0 4px 14px rgba(0,0,0,0.14)",
-      height: "min(620px, calc(100vh - 200px))",
+      alignSelf: "stretch", // stretch to match board height in flex parent
+      flexShrink: 0,
     }}>
       {/* Tab strip — compact */}
       <div style={{ display: "flex", gap: 0, background: "#020617", borderBottom: "1px solid #1e293b" }}>
@@ -251,10 +252,10 @@ export default function WorkspaceMediaPane() {
             <iframe
               key={iframeKey}
               src={iframeSrc}
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write"
               allowFullScreen
               referrerPolicy="origin-when-cross-origin"
-              sandbox="allow-same-origin allow-scripts allow-popups allow-presentation allow-forms"
+              loading="eager"
               style={{ width: "100%", height: "100%", border: "none", background: "#000", display: "block" }}
             />
             {/* Overlay hint — visible only briefly via title; user can hover footer link */}

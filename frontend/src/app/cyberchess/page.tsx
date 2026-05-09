@@ -3843,8 +3843,8 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Board + Panel + (optional) Media Pane */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>

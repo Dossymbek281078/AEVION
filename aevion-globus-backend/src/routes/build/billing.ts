@@ -279,7 +279,13 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
 
     if (secret) {
       const sigHeader = (req.headers["x-aevion-signature"] || "").toString();
-      const canonical = JSON.stringify(req.body ?? {});
+      // HMAC must be computed over the EXACT raw bytes the sender signed.
+      // express.json() stashes them on req.rawBody (see src/index.ts).
+      // Re-serialising via JSON.stringify(req.body) loses original key order
+      // and whitespace → false-rejections (or worse, silent acceptance if
+      // both sides happen to canonicalize identically by accident).
+      const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+      const canonical = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
       const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
       if (
         sigHeader.length !== expected.length ||

@@ -172,7 +172,14 @@ async function notifyNewApplication(
 ): Promise<void> {
   const webhookUrl = process.env.BUILD_APPLICATION_WEBHOOK_URL;
   if (!webhookUrl) return;
-  const secret = process.env.BUILD_PAYMENT_WEBHOOK_SECRET ?? "";
+  // Was: `process.env.BUILD_PAYMENT_WEBHOOK_SECRET ?? ""` — empty-string
+  // fallback signs the payload with an HMAC any verifier could trivially
+  // forge. If we aren't configured to sign, we shouldn't fire the webhook
+  // at all (subscriber would reject anyway, or worse, accept a forgeable
+  // payload). Skip silently — recipient was opt-in via env and will
+  // re-poll if they actually rely on it.
+  const secret = (process.env.BUILD_PAYMENT_WEBHOOK_SECRET ?? "").trim();
+  if (!secret) return;
   const payload = JSON.stringify({ event: "application.new", ...data, ts: Date.now() });
   const sig = `sha256=${crypto.createHmac("sha256", secret).update(payload).digest("hex")}`;
   await fetch(webhookUrl, {

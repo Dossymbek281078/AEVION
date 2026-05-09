@@ -897,28 +897,66 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
 });
 
 // 🔹 Создать объект
+// Length caps for free-tier registrations. Without these a single anonymous
+// POST could insert a 100MB description (limited only by express body
+// parser's 10MB cap). Caps are generous — a real work entry needs only a
+// few hundred chars at most.
+const QRIGHT_MAX_TITLE = 300;
+const QRIGHT_MAX_DESCRIPTION = 10_000;
+const QRIGHT_MAX_OWNER_NAME = 200;
+const QRIGHT_MAX_OWNER_EMAIL = 254; // RFC 3696
+const QRIGHT_MAX_LOCATION = 100;
+
+// Kind enum — matches what the frontend dropdowns ship and what
+// /admin/objects status filters expect. Restricting at API boundary stops
+// callers from polluting the DB with arbitrary kind strings.
+const QRIGHT_KINDS = new Set(["code", "text", "image", "music", "movie", "design", "other"]);
+
+function clampStr(v: unknown, max: number): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t) return null;
+  return t.length > max ? t.slice(0, max) : t;
+}
+
 qrightRouter.post("/objects", async (req, res) => {
   try {
-    const { title, description, kind, ownerName, ownerEmail, country, city } =
-      req.body;
+    const titleIn = clampStr(req.body?.title, QRIGHT_MAX_TITLE);
+    const descIn = clampStr(req.body?.description, QRIGHT_MAX_DESCRIPTION);
+    const kindIn = typeof req.body?.kind === "string" ? req.body.kind.trim().toLowerCase() : "";
 
-    if (!title || !description || !kind) {
+    if (!titleIn || !descIn || !kindIn) {
       return res.status(400).json({
         error: "title, description and kind required",
       });
     }
+    if (!QRIGHT_KINDS.has(kindIn)) {
+      return res.status(400).json({
+        error: "invalid_kind",
+        allowed: [...QRIGHT_KINDS],
+      });
+    }
 
-    const raw = JSON.stringify({ title, description, kind, country, city });
-    const contentHash = crypto
-      .createHash("sha256")
-      .update(raw)
-      .digest("hex");
+    const ownerNameIn = clampStr(req.body?.ownerName, QRIGHT_MAX_OWNER_NAME);
+    const ownerEmailIn = clampStr(req.body?.ownerEmail, QRIGHT_MAX_OWNER_EMAIL);
+    const countryIn = clampStr(req.body?.country, QRIGHT_MAX_LOCATION);
+    const cityIn = clampStr(req.body?.city, QRIGHT_MAX_LOCATION);
+
+    const raw = JSON.stringify({
+      title: titleIn,
+      description: descIn,
+      kind: kindIn,
+      country: countryIn,
+      city: cityIn,
+    });
+    const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
 
     await ensureQRightTable();
 
     const auth = verifyBearerOptional(req);
-    let resolvedOwnerName = ownerName ?? null;
-    let resolvedOwnerEmail = ownerEmail ?? null;
+    let resolvedOwnerName = ownerNameIn;
+    let resolvedOwnerEmail = ownerEmailIn;
     let resolvedOwnerUserId: string | null = null;
     if (auth) {
       await ensureUsersTable(pool);
@@ -929,8 +967,11 @@ qrightRouter.post("/objects", async (req, res) => {
       const row = u.rows?.[0];
       if (row) {
         resolvedOwnerUserId = row.id;
-        if (!resolvedOwnerName) resolvedOwnerName = row.name;
-        if (!resolvedOwnerEmail) resolvedOwnerEmail = row.email;
+        // Authenticated → trust the JWT identity over self-supplied fields.
+        // Stops authenticated users from claiming someone else's display
+        // name/email (the DB trust gradient: ownerUserId is the truth).
+        resolvedOwnerName = row.name;
+        resolvedOwnerEmail = row.email;
       }
     }
 
@@ -943,29 +984,32 @@ qrightRouter.post("/objects", async (req, res) => {
       `,
       [
         crypto.randomUUID(),
-        title,
-        description,
-        kind,
+        titleIn,
+        descIn,
+        kindIn,
         contentHash,
         resolvedOwnerName,
         resolvedOwnerEmail,
         resolvedOwnerUserId,
-        country || null,
-        city || null,
+        countryIn,
+        cityIn,
       ]
     );
 
     res.status(201).json(result.rows[0]);
-  } catch (err: any) {
-    captureQrightError(err, { route: "DB error" });
-    res.status(500).json({
-      error: "DB error",
-      code: err.code,
-      name: err.name,
-      details: err.message,
-    });
+  } catch (err: unknown) {
+    // Don't echo Postgres internals (err.code, table names) to the wire —
+    // adversary could fingerprint schema or trigger DoS through specific
+    // malformed inputs that surface internal errors. Server log retains it.
+    captureQrightError(err, { route: "POST /objects" });
+    const msg = err instanceof Error ? err.message : "create_failed";
+    console.error("[QRight] POST /objects error:", msg);
+    res.status(500).json({ error: "create_failed" });
   }
 });
+
+// Exported for unit tests.
+export { clampStr as _qrightClampStr, QRIGHT_KINDS as _qrightKinds };
 
 // 🔹 Admin: list all objects with optional status/query filters
 qrightRouter.get("/admin/objects", async (req, res) => {

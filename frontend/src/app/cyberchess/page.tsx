@@ -3564,6 +3564,49 @@ export default function CyberChessPage(){
                   <span style={{fontSize:18}}>🎮</span>
                   <span style={{fontSize:13,fontWeight:900,letterSpacing:0.4,color:CC.text,textTransform:"uppercase" as const}}>Игра — конфигурация партии</span>
                 </div>
+                {/* ── Quick Variant Strip ── 7 quick-launch tiles for the most popular variants.
+                    Standard always first; Daily always last (with reward badge). Click sets variant
+                    and shows a confirmation toast — user still presses ▶ Сыграть to launch. */}
+                {(()=>{
+                  const QUICK:VariantId[]=["standard","fischer960","atomic","kingofthehill","threecheck","crazyhouse"];
+                  const dailyV=dailyVariantInfo?.variant;
+                  const tiles:VariantId[]=[...QUICK];
+                  if(dailyV&&!QUICK.includes(dailyV))tiles.push(dailyV);
+                  return <div style={{marginBottom:SPACE[3]}}>
+                    <div style={{fontSize:10,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textDim,marginBottom:SPACE[1]}}>⚡ Быстрый выбор варианта</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(96px,1fr))",gap:6}}>
+                      {tiles.map(vid=>{
+                        const v=VARIANTS.find(x=>x.id===vid);if(!v)return null;
+                        const active=variant===vid;
+                        const isDaily=dailyVariantInfo?.variant===vid&&!dailyVariantInfo.played;
+                        const stats=variantStats[vid]||{w:0,l:0,d:0};
+                        const total=stats.w+stats.l+stats.d;
+                        return <button key={vid} onClick={()=>{
+                          sVariant(vid);
+                          showToast(vid==="standard"?"Стандартный режим":`🎲 ${v.name} — нажми ▶ Сыграть`,"info");
+                        }} className="cc-focus-ring" title={v.shortDesc}
+                          style={{
+                            padding:"10px 6px",borderRadius:RADIUS.md,
+                            border:active?`2px solid ${CC.gold}`:`1px solid ${CC.border}`,
+                            background:active?"linear-gradient(135deg,#fef3c7,#fde68a)":isDaily?"linear-gradient(135deg,#f5f3ff,#ede9fe)":CC.surface1,
+                            cursor:"pointer",position:"relative",
+                            display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                            transition:`all ${MOTION.fast} ${MOTION.ease}`
+                          }}>
+                          {isDaily&&<span style={{position:"absolute",top:-7,right:-3,fontSize:8,fontWeight:900,padding:"1px 5px",borderRadius:RADIUS.full,background:"linear-gradient(90deg,#7c3aed,#a78bfa)",color:"#fff",letterSpacing:0.5}}>+50</span>}
+                          <span style={{fontSize:18,lineHeight:1}}>{v.emoji}</span>
+                          <span style={{fontSize:11,fontWeight:800,color:active?"#92400e":CC.text,lineHeight:1.15,textAlign:"center"}}>{v.name}</span>
+                          {total>0&&<span style={{fontSize:9,color:CC.textMute,fontWeight:700}}>{stats.w}/{total}</span>}
+                        </button>;
+                      })}
+                      <button onClick={()=>sShowVariants(true)} title="Все 12 режимов"
+                        style={{padding:"10px 6px",borderRadius:RADIUS.md,border:`1px dashed ${CC.border}`,background:CC.surface1,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:CC.textDim}}>
+                        <span style={{fontSize:18,lineHeight:1}}>···</span>
+                        <span style={{fontSize:11,fontWeight:800,lineHeight:1.15}}>Ещё {VARIANTS.length-tiles.length}</span>
+                      </button>
+                    </div>
+                  </div>;
+                })()}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
                   <button onClick={()=>sShowVariants(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${variant!=="standard"?"#3b82f6":CC.border}`,background:variant!=="standard"?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>{variant!=="standard"?VARIANTS.find(v=>v.id===variant)?.emoji||"🎲":"🎲"}</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>12 Вариантов</span></div>
@@ -5428,6 +5471,71 @@ export default function CyberChessPage(){
               </>}
             </div>
           </div>}
+
+          {/* ── Eval Graph + Key Moments ── lichess-style timeline. Visible only when analysis has run.
+              Each ply is plotted on a sparkline; clicking a point jumps to that move (sets browseIdx).
+              Below the graph is a chip-row of "key moments" (blunders/mistakes/brilliancies) for fast nav. */}
+          {tab==="analysis"&&analysis.length>0&&hist.length>0&&(()=>{
+            const W=560,H=72;
+            const pts=analysis.map((a,i)=>{
+              const cp=a.mate!==0?(a.mate>0?2000:-2000):Math.max(-1000,Math.min(1000,a.cp));
+              return{x:i,cp,quality:a.quality};
+            });
+            const xs=(i:number)=>pts.length<=1?W/2:(i/(pts.length-1))*W;
+            const ys=(cp:number)=>H/2-(Math.max(-1000,Math.min(1000,cp))/1000)*(H/2-2);
+            const path=pts.map((p,i)=>`${i===0?"M":"L"}${xs(i).toFixed(1)},${ys(p.cp).toFixed(1)}`).join(" ");
+            const fillPath=`${path} L${xs(pts.length-1).toFixed(1)},${H/2} L${xs(0).toFixed(1)},${H/2} Z`;
+            const QUALITY_COL:Record<string,string>={great:"#10b981",good:"#94a3b8",inacc:"#f59e0b",mistake:"#ea580c",blunder:"#dc2626"};
+            // Key moments — only blunders+mistakes+great moves. Show as jump chips.
+            const keyMoments=pts.filter(p=>p.quality==="blunder"||p.quality==="mistake"||p.quality==="great");
+            // browseIdx maps to ply index. Convert: ply N is between fenHist[N] and fenHist[N+1]; analysis[i] corresponds to ply i.
+            const goToPly=(i:number)=>{
+              const fenIdx=i+1; // after the move was played
+              if(!fenHist[fenIdx])return;
+              try{const g=new Chess(fenHist[fenIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(fenIdx>=hist.length?-1:fenIdx);sLm(null);sSel(null);sVm(new Set())}catch{}
+            };
+            const curPly=browseIdx<0?hist.length-1:browseIdx-1;
+            return <div style={{borderRadius:RADIUS.lg,background:T.surface,border:`1px solid ${T.border}`,padding:`${SPACE[3]}px ${SPACE[4]}px`,display:"flex",flexDirection:"column",gap:SPACE[2]}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:11,fontWeight:900,letterSpacing:0.5,textTransform:"uppercase" as const,color:T.purple}}>📈 Эval graph · {pts.length} ходов</div>
+                <div style={{fontSize:10,color:T.dim,fontWeight:700}}>клик по точке → переход к ходу</div>
+              </div>
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+                style={{width:"100%",height:78,background:"linear-gradient(180deg,#fafafa 0%,#f3f4f6 50%,#fafafa 100%)",borderRadius:6,cursor:"crosshair"}}>
+                <line x1="0" y1={H/2} x2={W} y2={H/2} stroke="#cbd5e1" strokeWidth="0.5" strokeDasharray="3,2"/>
+                <path d={fillPath} fill="rgba(124,58,237,0.10)"/>
+                <path d={path} fill="none" stroke="#7c3aed" strokeWidth="1.4" strokeLinejoin="round"/>
+                {pts.map((p,i)=>{
+                  const isCur=i===curPly;
+                  const r=p.quality==="blunder"||p.quality==="great"?2.6:isCur?2.8:1.6;
+                  return <circle key={i} cx={xs(i)} cy={ys(p.cp)} r={r}
+                    fill={QUALITY_COL[p.quality]||"#7c3aed"}
+                    stroke={isCur?"#0f172a":"#fff"} strokeWidth={isCur?1.4:0.6}
+                    style={{cursor:"pointer"}}
+                    onClick={()=>goToPly(i)}>
+                    <title>Ход {Math.floor(i/2)+1}{i%2===0?".":"..."} {hist[i]||""} · cp {(p.cp/100).toFixed(1)}{p.quality!=="good"?` · ${p.quality}`:""}</title>
+                  </circle>;
+                })}
+              </svg>
+              {keyMoments.length>0&&<div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center",fontSize:11}}>
+                <span style={{fontSize:10,color:T.dim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,marginRight:4}}>🎯 ключевые моменты:</span>
+                {keyMoments.map(m=>{
+                  const isUserMove=hist.length>0&&((pCol==="w")===(m.x%2===0));
+                  const ic=m.quality==="blunder"?"??":m.quality==="mistake"?"?":"!";
+                  const col=QUALITY_COL[m.quality];
+                  return <button key={m.x} onClick={()=>goToPly(m.x)}
+                    title={`${hist[m.x]||""} · ход ${Math.floor(m.x/2)+1}${m.x%2===0?".":"..."} · ${m.quality}`}
+                    style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:999,
+                      border:`1px solid ${col}66`,background:`${col}14`,color:col,
+                      fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
+                      ...(isUserMove?{}:{opacity:0.7})}}>
+                    <span style={{fontWeight:900}}>{ic}</span>
+                    <span>{Math.floor(m.x/2)+1}{m.x%2===0?".":"..."}</span>
+                  </button>;
+                })}
+              </div>}
+            </div>;
+          })()}
 
           {/* ── MultiPV Analysis Panel ── */}
           {tab==="analysis"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>

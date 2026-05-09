@@ -62,7 +62,20 @@
       "PowerShell(ffprobe *)",
       "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"interviews\"} | Out-String; Write-Host \"DONE\")",
       "PowerShell(New-Item *)",
-      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"skill-badges|interviews|build.ts\"} | Out-String; Write-Host \"DONE\")"
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"skill-badges|interviews|build.ts\"} | Out-String; Write-Host \"DONE\")",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"skill-badges|interviews|build.ts|communityMsg\"} | Out-String; Write-Host \"DONE\")",
+      "PowerShell(Select-String *)",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend ; $out = npx tsc --noEmit 2>&1; $out | Where-Object {$_ -match \"build.ts|interview|skill-badge|Merge conflict\"} | Out-String; Write-Host \"EXIT:$LASTEXITCODE\")",
+      "PowerShell(git add *)",
+      "PowerShell(gh run *)",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion\"})",
+      "Bash(gh run *)",
+      "Bash(powershell -NoProfile -Command \"\\(Get-Content frontend/src/app/cyberchess/page.tsx -Raw\\) -replace 'min\\\\\\(920px,calc\\\\\\(100vw - 32px\\\\\\),calc\\\\\\(100vh - 200px\\\\\\)\\\\\\)','min\\(1040px,calc\\(100vw - 32px\\),calc\\(100vh - 160px\\)\\)' | Set-Content -NoNewline frontend/src/app/cyberchess/page.tsx -Encoding UTF8\")",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; \\(Get-Content \"C:\\\\Users\\\\user\\\\aevion-core\\\\aevion-globus-backend\\\\src\\\\routes\\\\build\\\\vacancies.ts\"\\).Count)",
+      "Bash(BACKEND_URL=\"https://aevion.app/api-backend\" node /c/Users/user/aevion-core/aevion-globus-backend/scripts/auth-smoke.mjs)",
+      "Bash(BACKEND_URL=\"https://aevion.app/api-backend\" node /c/Users/user/aevion-core/aevion-globus-backend/scripts/cyberchess-smoke.js)",
+      "Bash(BASE=\"https://aevion.app/api-backend\" node /c/Users/user/aevion-core/aevion-globus-backend/scripts/planet-smoke.js)",
+      "Bash(wait)"
     ]
   }
 }

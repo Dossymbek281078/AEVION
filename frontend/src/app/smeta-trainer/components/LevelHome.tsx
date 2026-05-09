@@ -150,6 +150,17 @@ export function LevelHome() {
                 прогресс + лидерборд
               </span>
             </Link>
+            {done === total && (
+              <Link
+                href="/smeta-trainer/certificate"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-semibold rounded-lg shadow"
+              >
+                🎓 Сертификат
+                <span className="text-[10px] text-emerald-100 font-normal">
+                  курс пройден
+                </span>
+              </Link>
+            )}
           </div>
         </div>
 

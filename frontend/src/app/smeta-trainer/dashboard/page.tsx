@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LEVELS } from "../lib/levels";
 import { useProgress } from "../lib/useProgress";
+import { useStudent } from "../lib/useStudent";
 import {
   fetchAttempts,
   fetchLeaderboard,
@@ -17,14 +18,17 @@ import {
 
 export default function DashboardPage() {
   const { progress } = useProgress();
+  const { student, setStudent } = useStudent();
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
   const [attempts, setAttempts] = useState<AttemptRecord[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [stats, setStats] = useState<SmetaStats | null>(null);
-  const [displayName, setDisplayName] = useState("");
-  const [group, setGroup] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const displayName = student.name;
+  const group = student.group;
+  const setDisplayName = (v: string) => setStudent({ ...student, name: v });
+  const setGroup = (v: string) => setStudent({ ...student, group: v });
 
   // Bootstrap: проверка бэкенда + первичная загрузка
   useEffect(() => {
@@ -94,6 +98,26 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {done === total && (
+        <div className="max-w-7xl mx-auto px-6 pt-4">
+          <Link
+            href="/smeta-trainer/certificate"
+            className="block bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-lg p-4 hover:from-emerald-700 hover:to-emerald-800 shadow"
+          >
+            <div className="flex items-center gap-4">
+              <div className="text-3xl">🎓</div>
+              <div className="flex-1">
+                <div className="text-base font-bold">Курс пройден — сертификат доступен</div>
+                <div className="text-xs text-emerald-100 mt-0.5">
+                  Все 5 уровней зачтены. Откройте сертификат, введите ФИО и сохраните в PDF.
+                </div>
+              </div>
+              <div className="text-2xl">→</div>
+            </div>
+          </Link>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-12 gap-4">
         {/* ── Левая колонка: личный прогресс ─────────── */}

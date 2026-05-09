@@ -573,6 +573,21 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // V45 — Run claps (public appreciation counter on shared runs).
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "clapCount" INTEGER NOT NULL DEFAULT 0;`);
 
+  // V47 — Session AI summary (cached, generated on demand).
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "aiSummary" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "aiSummaryAt" TIMESTAMPTZ;`);
+
+  // V49 — Per-user rate limits.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRateLimit" (
+      "userId"      TEXT NOT NULL,
+      "bucket"      TEXT NOT NULL,
+      "count"       INTEGER NOT NULL DEFAULT 0,
+      "windowStart" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "bucket")
+    );
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

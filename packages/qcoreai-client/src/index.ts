@@ -1755,6 +1755,53 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`clapRun failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  // V47: AI summaries
+  async generateSessionSummary(sessionId: string): Promise<{ summary: string; sessionId: string; generatedAt: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/ai-summary`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`generateSessionSummary failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  async getSessionSummary(sessionId: string): Promise<{ summary: string; generatedAt: string } | null> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/ai-summary`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getSessionSummary failed: ${await safeError(res)}`);
+    const d = await res.json();
+    if (!d.summary) return null;
+    return { summary: d.summary, generatedAt: d.generatedAt };
+  }
+
+  // V48: timeline
+  async getSessionTimeline(sessionId: string): Promise<Array<{ runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/timeline`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getSessionTimeline failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.points || [];
+  }
+
+  // V49: rate limits
+  async getRateLimits(): Promise<Array<{ bucket: string; count: number; limit: number; remaining: number; resetAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/rate-limits"), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getRateLimits failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.rateLimits || [];
+  }
+
+  // V50: smoke
+  async smoke(): Promise<{ ok: boolean; checks: Record<string, boolean>; version: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/smoke"));
+    if (!res.ok) throw new Error(`smoke failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

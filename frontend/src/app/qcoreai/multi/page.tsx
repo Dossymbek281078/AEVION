@@ -469,6 +469,15 @@ export default function QCoreMultiAgentPage() {
   const [annotateText, setAnnotateText] = useState("");
   const [annotateSaving, setAnnotateSaving] = useState(false);
 
+  // V47 — AI summary popover.
+  const [aiSummaryText, setAiSummaryText] = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [showAiSummary, setShowAiSummary] = useState(false);
+
+  // V48 — Run timeline points.
+  type TimelinePoint = { runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string };
+  const [timelinePoints, setTimelinePoints] = useState<TimelinePoint[]>([]);
+
   const timelineRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -1009,6 +1018,17 @@ export default function QCoreMultiAgentPage() {
       }));
       setRuns(hydrated);
       setActiveSessionId(sessionId);
+      // V47 — clear cached summary when switching sessions.
+      setAiSummaryText(null);
+      setShowAiSummary(false);
+      // V48 — load timeline.
+      try {
+        const tlRes = await fetch(apiUrl(`/api/qcoreai/sessions/${sessionId}/timeline`), { headers: bearerHeader() });
+        if (tlRes.ok) {
+          const tlData = await tlRes.json().catch(() => ({}));
+          if (Array.isArray(tlData?.points)) setTimelinePoints(tlData.points);
+        }
+      } catch { /* non-fatal */ }
     } catch (e: any) {
       setGlobalError(e?.message || "Failed to load session");
     }
@@ -3219,7 +3239,7 @@ export default function QCoreMultiAgentPage() {
                       const donRuns = runs.filter((r) => r.status !== "running");
                       const totalCost = donRuns.reduce((a, r) => a + (r.totalCostUsd ?? 0), 0);
                       return (
-                        <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <span style={{ display: "flex", gap: 4, alignItems: "center", position: "relative" }}>
                           {donRuns.length > 0 && (
                             <span style={{ fontSize: 9, color: "#94a3b8", whiteSpace: "nowrap" }}>
                               {donRuns.length}r · {totalCost > 0 ? `$${totalCost.toFixed(4)}` : "$0"}
@@ -3229,22 +3249,74 @@ export default function QCoreMultiAgentPage() {
                             title="AI summary of this session"
                             onClick={async (e) => {
                               e.stopPropagation();
-                              const recentRuns = donRuns.slice(-5);
-                              const ctx = recentRuns.map((r) => `Q: ${r.userInput?.slice(0, 100)}\nA: ${r.finalContent?.slice(0, 200) || "(no answer)"}`).join("\n\n");
-                              if (!ctx) return;
-                              const res = await fetch(apiUrl("/api/qcoreai/chat"), {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json", ...bearerHeader() },
-                                body: JSON.stringify({ messages: [{ role: "user", content: `Summarise this AI session in 2-3 sentences:\n\n${ctx}` }] }),
-                              }).catch(() => null);
-                              const d = await res?.json().catch(() => ({}));
-                              if (d?.reply) alert(`Session summary:\n\n${d.reply}`);
+                              if (showAiSummary) { setShowAiSummary(false); return; }
+                              setShowAiSummary(true);
+                              if (!aiSummaryText) {
+                                setAiSummaryLoading(true);
+                                try {
+                                  const res = await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}/ai-summary`), {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", ...bearerHeader() },
+                                  }).catch(() => null);
+                                  const d = await res?.json().catch(() => ({}));
+                                  setAiSummaryText(d?.summary || "Could not generate summary.");
+                                } catch {
+                                  setAiSummaryText("Error generating summary.");
+                                } finally {
+                                  setAiSummaryLoading(false);
+                                }
+                              }
                             }}
-                            style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#94a3b8", padding: 0 }}
+                            style={{ border: "none", background: showAiSummary ? "rgba(14,116,144,0.15)" : "transparent", cursor: "pointer", fontSize: 10, color: showAiSummary ? "#0e7490" : "#94a3b8", padding: "1px 3px", borderRadius: 4 }}
                           >
                             ∑
                           </button>
+                          {/* V47 — AI summary popover */}
+                          {showAiSummary && activeSessionId === s.id && (
+                            <div
+                              style={{
+                                position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+                                background: "#0f172a", border: "1px solid rgba(14,116,144,0.3)",
+                                borderRadius: 8, padding: "10px 12px", width: 240, boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div style={{ fontSize: 9, fontWeight: 700, color: "#0e7490", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                AI Summary
+                              </div>
+                              {aiSummaryLoading ? (
+                                <div style={{ fontSize: 11, color: "#94a3b8" }}>Generating...</div>
+                              ) : (
+                                <div style={{ fontSize: 11, color: "#e2e8f0", lineHeight: 1.55 }}>{aiSummaryText}</div>
+                              )}
+                              <button
+                                onClick={() => setShowAiSummary(false)}
+                                style={{ marginTop: 8, fontSize: 9, color: "#64748b", border: "none", background: "transparent", cursor: "pointer", padding: 0 }}
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          )}
                         </span>
+                      );
+                    })()}
+                    {/* V48 — Mini sparkline timeline below stats */}
+                    {activeSessionId === s.id && timelinePoints.length > 0 && (() => {
+                      const dots = timelinePoints.slice(-20);
+                      return (
+                        <div style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "nowrap", marginTop: 2, marginBottom: 2 }}>
+                          {dots.map((pt) => {
+                            const color = pt.status === "done" ? "#22c55e" : pt.status === "error" ? "#ef4444" : "#f59e0b";
+                            const tip = [pt.strategy, pt.costUsd != null ? `$${pt.costUsd.toFixed(4)}` : null].filter(Boolean).join(" · ");
+                            return (
+                              <div
+                                key={pt.runId}
+                                title={tip}
+                                style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0, cursor: "default" }}
+                              />
+                            );
+                          })}
+                        </div>
                       );
                     })()}
                     <button

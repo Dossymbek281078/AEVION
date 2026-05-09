@@ -194,7 +194,7 @@ export function LessonViewer({ level }: Props) {
 
           {/* Теория */}
           <article className="prose prose-sm max-w-none text-slate-800 leading-relaxed">
-            <Markdown text={lesson.content} />
+            <Markdown text={lesson.content} autoGloss />
           </article>
 
           {/* Тесты */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { GLOSSARY } from "../lib/glossary";
 
 /**
  * Минимальный markdown-рендер без внешних библиотек.
@@ -10,15 +11,89 @@ import { Fragment } from "react";
  *
  * Не цель — полный CommonMark. Цель — корректный рендер ответов LLM
  * по сметному делу (заголовки, списки правил, код, цитаты НПА).
+ *
+ * autoGloss: автоматически вставляет ссылки на глоссарий для первого вхождения
+ *            каждого термина из GLOSSARY (только в plain-text, не в коде/ссылках).
  */
 
 interface Props {
   text: string;
+  /** Автолинковать термины глоссария (по умолчанию false; для уроков — true). */
+  autoGloss?: boolean;
 }
 
-export function Markdown({ text }: Props) {
+// Заранее построенная карта: нормализованная форма (lowercase) → канонический term для якоря
+const GLOSS_LOOKUP: Map<string, string> = (() => {
+  const map = new Map<string, string>();
+  GLOSSARY.forEach((g) => {
+    map.set(g.term.toLowerCase(), g.term);
+    g.aliases?.forEach((a) => map.set(a.toLowerCase(), g.term));
+  });
+  return map;
+})();
+
+// Собираем все формы (term + aliases) и сортируем по убыванию длины,
+// чтобы длинные («Лимитированные затраты») матчились раньше коротких («затраты»).
+const GLOSS_FORMS: string[] = (() => {
+  const forms = new Set<string>();
+  GLOSSARY.forEach((g) => {
+    forms.add(g.term);
+    g.aliases?.forEach((a) => forms.add(a));
+  });
+  return [...forms].sort((a, b) => b.length - a.length);
+})();
+
+const GLOSS_RE = (() => {
+  if (GLOSS_FORMS.length === 0) return null;
+  const escaped = GLOSS_FORMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  // Cyrillic-aware: ни до, ни после — не буква/цифра. Используем lookarounds.
+  return new RegExp(
+    `(?<![А-Яа-яA-Za-zЁё0-9])(${escaped.join("|")})(?![А-Яа-яA-Za-zЁё0-9])`,
+    "g",
+  );
+})();
+
+/**
+ * Препроцесс: вставляет markdown-ссылки [term](/smeta-trainer/glossary#term-X)
+ * для первого вхождения каждой формы термина. Уважает code-fences (```), inline `code`
+ * и существующие markdown-ссылки [text](url) — внутрь них не трогает.
+ */
+function injectGlossaryLinks(input: string): string {
+  if (!GLOSS_RE) return input;
+  // 1. Разделяем текст на «защищённые» сегменты (code-block, inline-code, link)
+  // и «обычные» (где можем вставлять ссылки). Регекс ловит любой защищённый сегмент.
+  const PROTECT_RE = /(```[\s\S]*?```|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+  const out: string[] = [];
+  const linked = new Set<string>(); // канонические термы, для которых уже добавили ссылку
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  PROTECT_RE.lastIndex = 0;
+  while ((m = PROTECT_RE.exec(input)) !== null) {
+    out.push(processPlain(input.slice(lastIdx, m.index), linked));
+    out.push(m[0]); // защищённое — без изменений
+    lastIdx = m.index + m[0].length;
+  }
+  out.push(processPlain(input.slice(lastIdx), linked));
+  return out.join("");
+}
+
+function processPlain(text: string, linked: Set<string>): string {
+  if (!GLOSS_RE) return text;
+  GLOSS_RE.lastIndex = 0;
+  return text.replace(GLOSS_RE, (match) => {
+    const canonical = GLOSS_LOOKUP.get(match.toLowerCase());
+    if (!canonical) return match;
+    if (linked.has(canonical)) return match;
+    linked.add(canonical);
+    // Cyrillic in href OK для современных браузеров; encodeURI защитит пробелы.
+    return `[${match}](/smeta-trainer/glossary#term-${encodeURIComponent(canonical)})`;
+  });
+}
+
+export function Markdown({ text, autoGloss = false }: Props) {
+  const processed = autoGloss ? injectGlossaryLinks(text) : text;
   // Сначала блочный уровень: разбиваем по строкам, группируем
-  const lines = text.split(/\r?\n/);
+  const lines = processed.split(/\r?\n/);
   const blocks: React.ReactNode[] = [];
   let i = 0;
   let key = 0;
@@ -159,13 +234,20 @@ function renderInline(text: string): React.ReactNode {
     m = rest.match(/^([\s\S]*?)\[([^\]]+)\]\(([^)\s]+)\)/);
     if (m) {
       if (m[1]) parts.push(...inlineRich(m[1], "k1_" + key++));
+      const href = m[3];
+      const isGloss = href.startsWith("/smeta-trainer/glossary#");
       parts.push(
         <a
           key={"a_" + key++}
-          href={m[3]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-emerald-600 hover:text-emerald-800 underline"
+          href={href}
+          target={isGloss ? undefined : "_blank"}
+          rel={isGloss ? undefined : "noopener noreferrer"}
+          className={
+            isGloss
+              ? "text-emerald-800 decoration-dotted decoration-emerald-400 underline underline-offset-2 hover:decoration-emerald-800"
+              : "text-emerald-600 hover:text-emerald-800 underline"
+          }
+          title={isGloss ? "Открыть в глоссарии" : undefined}
         >
           {m[2]}
         </a>

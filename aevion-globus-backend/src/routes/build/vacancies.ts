@@ -1245,3 +1245,42 @@ vacanciesRouter.post("/:id/duplicate", async (req, res) => {
     return fail(res, 500, "vacancy_duplicate_failed", { details: (err as Error).message });
   }
 });
+
+// PATCH /api/build/vacancies/:id/urgent — toggle urgent flag (owner only)
+vacanciesRouter.patch("/:id/urgent", async (req, res) => {
+  try {
+    const auth = requireBuildAuth(req, res);
+    if (!auth) return;
+
+    const row = await pool.query(
+      `SELECT v."id", p."clientId" FROM "BuildVacancy" v
+       JOIN "BuildProject" p ON p."id" = v."projectId"
+       WHERE v."id" = $1 LIMIT 1`,
+      [req.params.id],
+    );
+    if (!row.rows[0]) return fail(res, 404, "vacancy_not_found");
+    if (row.rows[0].clientId !== auth.sub && auth.role !== "ADMIN") {
+      return fail(res, 403, "only_project_owner_can_set_urgent");
+    }
+
+    const urgent = req.body?.urgent === true || req.body?.urgent === "true";
+    const urgentNote = typeof req.body?.urgentNote === "string" ? req.body.urgentNote.trim().slice(0, 200) || null : null;
+    let urgentUntil: string | null = null;
+    if (urgent && req.body?.urgentUntil) {
+      const d = new Date(String(req.body.urgentUntil));
+      if (!isNaN(d.getTime())) urgentUntil = d.toISOString();
+    }
+    if (urgent && !urgentUntil) {
+      urgentUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days default
+    }
+
+    const r = await pool.query(
+      `UPDATE "BuildVacancy" SET "urgent"=$1, "urgentUntil"=$2, "urgentNote"=$3
+       WHERE "id"=$4 RETURNING "id","urgent","urgentUntil","urgentNote"`,
+      [urgent, urgent ? urgentUntil : null, urgent ? urgentNote : null, req.params.id],
+    );
+    return ok(res, { vacancy: r.rows[0] });
+  } catch (err: unknown) {
+    return fail(res, 500, "set_urgent_failed", { details: (err as Error).message });
+  }
+});

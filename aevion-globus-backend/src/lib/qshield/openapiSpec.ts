@@ -19,7 +19,7 @@ export const QSHIELD_OPENAPI = {
   },
   servers: [
     {
-      url: "https://aevion-production-a70c.up.railway.app/api/quantum-shield",
+      url: "https://api.aevion.app/api/quantum-shield",
       description: "Production",
     },
     { url: "http://127.0.0.1:4001/api/quantum-shield", description: "Local dev" },

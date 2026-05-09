@@ -19,7 +19,7 @@ export const QSIGN_V2_OPENAPI = {
     license: { name: "Proprietary" },
   },
   servers: [
-    { url: "https://aevion-production-a70c.up.railway.app/api/qsign/v2", description: "Production" },
+    { url: "https://api.aevion.app/api/qsign/v2", description: "Production" },
     { url: "http://127.0.0.1:4001/api/qsign/v2", description: "Local dev" },
   ],
   tags: [

@@ -1695,6 +1695,11 @@ export const buildApi = {
   quickApply: (input: { vacancyId: string; referredByUserId?: string | null }) =>
     call<{ applicationId: string; status: string }>("POST", "/api/build/quick-apply", input),
 
+  setVacancyUrgent: (id: string, input: { urgent: boolean; urgentNote?: string; urgentUntil?: string }) =>
+    call<{ vacancy: { id: string; urgent: boolean; urgentUntil: string | null; urgentNote: string | null } }>(
+      "PATCH", `/api/build/vacancies/${encodeURIComponent(id)}/urgent`, input,
+    ),
+
   // AI tools
   aiGenerateVacancy: (input: { brief: string; city?: string | null }) =>
     call<{ draft: AiVacancyDraft }>("POST", "/api/build/ai/generate-vacancy", input),

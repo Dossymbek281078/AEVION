@@ -12,7 +12,7 @@
  * import { QPayNetClient } from "@aevion/qpaynet-client";
  *
  * const client = new QPayNetClient({
- *   baseUrl: "https://aevion-production-a70c.up.railway.app",
+ *   baseUrl: "https://api.aevion.app",
  *   token: process.env.AEVION_JWT,
  * });
  *
@@ -169,7 +169,7 @@ export interface CheckoutSession {
    ═══════════════════════════════════════════════════════════════════════ */
 
 export interface QPayNetClientOptions {
-  /** Backend root, e.g. `https://aevion-production-a70c.up.railway.app`. No trailing slash. */
+  /** Backend root, e.g. `https://api.aevion.app`. No trailing slash. */
   baseUrl: string;
   /** End-user JWT (Bearer). For wallet management, transfers, payment requests, etc. */
   token?: string;

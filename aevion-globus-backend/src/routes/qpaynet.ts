@@ -3631,7 +3631,7 @@ qpaynetRouter.get("/openapi.json", (_req, res) => {
   // public spec — no auth, no sensitive data — so wildcard origin is fine.
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://aevion-production-a70c.up.railway.app").replace(/\/$/, "");
+  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
   const spec = {
     openapi: "3.1.0",
     info: {

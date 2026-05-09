@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { COACH_KNOWLEDGE, type KnowledgeCategory, type KnowledgeEntry, type Difficulty } from "./coachKnowledge";
 
 type Props = {
@@ -14,10 +14,24 @@ const DIFF_LABEL: Record<Difficulty, { ru: string; col: string }> = {
   hard: { ru: "Сложно", col: "#ef4444" },
 };
 
+// ── Read-tracking — persist which entries the user has opened so the modal can show
+// per-category progress bars and a global completion badge. Same pattern as a Lichess
+// study read-state. Stored as a Set of "<catId>/<entryId>" keys in localStorage.
+const READ_KEY = "aevion_coach_knowledge_read_v1";
+function loadRead(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try { const raw = localStorage.getItem(READ_KEY); if (!raw) return new Set(); const arr = JSON.parse(raw); return new Set(Array.isArray(arr) ? arr : []) } catch { return new Set() }
+}
+function saveRead(s: Set<string>) {
+  try { localStorage.setItem(READ_KEY, JSON.stringify(Array.from(s))) } catch {}
+}
+
 export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Props) {
   const [catId, sCatId] = useState<string>(COACH_KNOWLEDGE[0].id);
   const [entryId, sEntryId] = useState<string>("");
   const [showSolution, sShowSolution] = useState(false);
+  const [read, sRead] = useState<Set<string>>(() => loadRead());
+  useEffect(() => { saveRead(read) }, [read]);
 
   const cat = useMemo<KnowledgeCategory>(
     () => COACH_KNOWLEDGE.find(c => c.id === catId) || COACH_KNOWLEDGE[0],
@@ -27,6 +41,28 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
     () => cat.entries.find(e => e.id === entryId) || null,
     [cat, entryId]
   );
+
+  // Mark current entry as read when it's selected
+  useEffect(() => {
+    if (!entry) return;
+    const k = `${catId}/${entry.id}`;
+    if (read.has(k)) return;
+    sRead(prev => { const next = new Set(prev); next.add(k); return next });
+  }, [entry, catId]);
+
+  // Per-category progress (read entries / total entries)
+  const catProgress = useMemo(() => {
+    const m: Record<string, { read: number; total: number }> = {};
+    for (const c of COACH_KNOWLEDGE) {
+      const total = c.entries.length;
+      let r = 0;
+      for (const e of c.entries) if (read.has(`${c.id}/${e.id}`)) r++;
+      m[c.id] = { read: r, total };
+    }
+    return m;
+  }, [read]);
+  const totalRead = Object.values(catProgress).reduce((a, p) => a + p.read, 0);
+  const totalAll = Object.values(catProgress).reduce((a, p) => a + p.total, 0);
 
   if (!visible) return null;
 
@@ -49,7 +85,12 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
             <span style={{ fontSize: 18 }}>📚</span>
             <div>
               <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — Тренер</div>
-              <div style={{ fontSize: 10, opacity: 0.85 }}>Тактика · Эндшпиль · Дебюты · Стратегия</div>
+              <div style={{ fontSize: 10, opacity: 0.85 }}>
+                Тактика · Эндшпиль · Дебюты · Стратегия
+                {totalAll > 0 && <span style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 999, background: "rgba(255,255,255,0.18)", fontWeight: 800 }}>
+                  {totalRead === totalAll ? "🏆 ВСЁ ПРОЧИТАНО" : `${totalRead}/${totalAll} прочитано`}
+                </span>}
+              </div>
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -63,17 +104,30 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
           display: "flex", gap: 0, borderBottom: "1px solid #e5e7eb",
           background: "#f9fafb", overflowX: "auto",
         }}>
-          {COACH_KNOWLEDGE.map(c => (
-            <button key={c.id} onClick={() => { sCatId(c.id); sEntryId(""); sShowSolution(false); }}
-              style={{
-                padding: "10px 16px", border: "none",
-                background: catId === c.id ? "#fff" : "transparent",
-                borderBottom: catId === c.id ? "2px solid #059669" : "2px solid transparent",
-                fontSize: 12, fontWeight: 700,
-                color: catId === c.id ? "#065f46" : "#4b5563",
-                cursor: "pointer", whiteSpace: "nowrap",
-              }}>{c.title}</button>
-          ))}
+          {COACH_KNOWLEDGE.map(c => {
+            const p = catProgress[c.id];
+            const done = p && p.total > 0 && p.read === p.total;
+            return (
+              <button key={c.id} onClick={() => { sCatId(c.id); sEntryId(""); sShowSolution(false); }}
+                style={{
+                  padding: "10px 16px", border: "none",
+                  background: catId === c.id ? "#fff" : "transparent",
+                  borderBottom: catId === c.id ? "2px solid #059669" : "2px solid transparent",
+                  fontSize: 12, fontWeight: 700,
+                  color: catId === c.id ? "#065f46" : "#4b5563",
+                  cursor: "pointer", whiteSpace: "nowrap",
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                }}>
+                <span>{c.title}</span>
+                {p && p.total > 0 && <span style={{
+                  fontSize: 9, padding: "1px 6px", borderRadius: 999,
+                  background: done ? "#10b98122" : "#f3f4f6",
+                  color: done ? "#065f46" : "#6b7280",
+                  fontWeight: 800,
+                }}>{done ? "✓" : `${p.read}/${p.total}`}</span>}
+              </button>
+            );
+          })}
         </div>
 
         {/* Body */}
@@ -88,6 +142,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
             {cat.entries.map(e => {
               const sel = entryId === e.id;
               const d = DIFF_LABEL[e.difficulty];
+              const isRead = read.has(`${cat.id}/${e.id}`);
               return (
                 <button key={e.id} onClick={() => { sEntryId(e.id); sShowSolution(false); }}
                   style={{
@@ -96,14 +151,16 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
                     borderLeft: sel ? "3px solid #059669" : "3px solid transparent",
                     textAlign: "left", cursor: "pointer",
                     borderBottom: "1px solid #f3f4f6",
+                    opacity: isRead && !sel ? 0.78 : 1,
                   }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
                     <span style={{
                       width: 6, height: 6, borderRadius: "50%", background: d.col, flexShrink: 0,
                     }} />
-                    <span style={{ fontSize: 12, fontWeight: 800, color: sel ? "#065f46" : "#111827", lineHeight: 1.2 }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: sel ? "#065f46" : "#111827", lineHeight: 1.2, flex: 1 }}>
                       {e.title}
                     </span>
+                    {isRead && <span title="Прочитано" style={{ fontSize: 11, color: "#10b981", fontWeight: 900 }}>✓</span>}
                   </div>
                   <div style={{ fontSize: 10, color: "#6b7280", lineHeight: 1.35, marginLeft: 12 }}>
                     {e.description}

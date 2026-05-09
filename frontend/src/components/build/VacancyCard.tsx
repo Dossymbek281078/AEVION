@@ -25,6 +25,11 @@ export function VacancyCard({
   const isClosed = vacancy.status === "CLOSED";
   const isOwner = me?.id === vacancy.clientId;
   const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
+  const isUrgent = !!(vacancy as {urgent?: boolean}).urgent &&
+    (() => {
+      const u = (vacancy as {urgentUntil?: string|null}).urgentUntil;
+      return !u || new Date(u) > new Date();
+    })();
   const hasQuestions = (vacancy.questions?.length ?? 0) > 0;
   const daysLeft = vacancy.expiresAt
     ? Math.ceil((new Date(vacancy.expiresAt).getTime() - Date.now()) / 86400000)
@@ -66,6 +71,14 @@ export function VacancyCard({
         {isFeatured && (
           <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
             ★ Featured
+          </div>
+        )}
+        {isUrgent && !isClosed && (
+          <div
+            className="inline-flex items-center gap-1 rounded-full border border-red-400/60 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-200 animate-pulse"
+            title={(vacancy as {urgentNote?: string|null}).urgentNote ?? "Срочный найм"}
+          >
+            🚨 Срочно
           </div>
         )}
         {hot && !isClosed && (

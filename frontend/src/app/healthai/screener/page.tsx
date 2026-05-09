@@ -6,7 +6,7 @@ import Link from "next/link";
 const BACKEND =
   typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:4001"
-    : "https://aevion-production-a70c.up.railway.app";
+    : "https://api.aevion.app";
 
 const LS_PROFILE = "aevion:healthai:profileId";
 

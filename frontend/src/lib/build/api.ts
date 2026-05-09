@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthToken } from "./auth";
@@ -1715,7 +1715,7 @@ export const buildApi = {
     call<{ interview: { id: string; status: string; createdAt: string } }>(
       "POST", "/api/build/interviews", input,
     ),
-  myInterviews: (status?: string) =>
+  myScheduledInterviews: (status?: string) =>
     call<{
       interviews: Array<{
         id: string; applicationId: string; vacancyId: string;

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -408,7 +408,7 @@ function PlanBadge() {
   return (
     <Link
       href="/build/pricing"
-      className={`hidden items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${tone}`}
+      className={`hidden items-center rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wider sm:inline-flex ${tone}`}
       title="Your current plan — click to compare or upgrade"
     >
       {planKey === "PPHIRE" ? "Pay-per-Hire" : planKey}
@@ -444,7 +444,7 @@ function TierBadge() {
     <Link
       href="/build/loyalty"
       title={`AEV Loyalty · ${tier.label} tier`}
-      className={`hidden items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider sm:inline-flex ${theme.className}`}
+      className={`hidden items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold uppercase tracking-wider sm:inline-flex ${theme.className}`}
     >
       <span aria-hidden>{theme.emoji}</span>
       <span>{tier.label}</span>

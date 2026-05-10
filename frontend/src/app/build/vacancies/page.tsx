@@ -20,6 +20,7 @@ function VacanciesFeedInner() {
   const [items, setItems] = useState<FeedVacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // Initial state hydrates from URL so deep links / back-button restore filters.
   const [status, setStatus] = useState<VacancyStatus | "ALL">(
     (searchParams.get("status") as VacancyStatus | "ALL") || "OPEN",
@@ -162,13 +163,27 @@ function VacanciesFeedInner() {
         <Stat label="Cities" value={stats.cities} />
       </div>
 
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search title or description…"
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
-        />
+      <div className="mb-5 flex flex-col gap-3">
+        {/* Search + filter toggle row (always visible) */}
+        <div className="flex gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search title or description…"
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 sm:hidden"
+            aria-label="Toggle filters"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            Filters
+          </button>
+        </div>
+        {/* Secondary filters — always visible sm+, collapsible on mobile */}
+        <div className={`flex flex-col gap-3 sm:flex sm:flex-row sm:items-center ${filtersOpen ? "flex" : "hidden sm:flex"}`}>
         <input
           value={city}
           onChange={(e) => setCity(e.target.value)}
@@ -231,6 +246,7 @@ function VacanciesFeedInner() {
             </button>
           ))}
         </div>
+        </div>{/* end collapsible filters */}
       </div>
 
       {popularSkills.length > 0 && (

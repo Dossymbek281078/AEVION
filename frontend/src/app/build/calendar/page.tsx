@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -73,7 +73,7 @@ function Body() {
           <h1 className="text-2xl font-bold text-white">Interview calendar</h1>
           <p className="mt-1 text-sm text-slate-400">
             Кандидаты с лейблом{" "}
-            <span className="rounded bg-emerald-400/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-200">
+            <span className="rounded bg-emerald-400/15 px-1.5 py-1 text-[11px] font-semibold text-emerald-200">
               💬 Interview
             </span>{" "}
             в ваших вакансиях, сгруппированные по дню. Нажмите для перехода в review-режим.

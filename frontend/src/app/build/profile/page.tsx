@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -166,7 +166,7 @@ function ProfileBody() {
                     {a.vacancyTitle || a.vacancyId}
                   </Link>
                   <span
-                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${APP_STATUS_TONE[a.status]}`}
+                    className={`shrink-0 rounded-full border px-2 py-1 text-xs ${APP_STATUS_TONE[a.status]}`}
                   >
                     {a.status}
                   </span>
@@ -374,8 +374,8 @@ function ExperienceEditor({
           border-radius: 0.5rem;
           border: 1px solid rgba(255,255,255,0.1);
           background: rgba(255,255,255,0.05);
-          padding: 0.5rem 0.625rem;
-          font-size: 0.8125rem;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.875rem;
           color: white;
         }
         .input-resume:focus { outline: none; border-color: rgba(16,185,129,0.5); }
@@ -641,8 +641,8 @@ function EducationEditor({
           border-radius: 0.5rem;
           border: 1px solid rgba(255,255,255,0.1);
           background: rgba(255,255,255,0.05);
-          padding: 0.5rem 0.625rem;
-          font-size: 0.8125rem;
+          padding: 0.625rem 0.75rem;
+          font-size: 0.875rem;
           color: white;
         }
         .input-edu:focus { outline: none; border-color: rgba(16,185,129,0.5); }

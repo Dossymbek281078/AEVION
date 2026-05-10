@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -294,7 +294,7 @@ function SingleReviewForm({
             </span>
           )}
         </div>
-        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-400">
+        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs uppercase tracking-wider text-slate-400">
           {row.direction === "CLIENT_TO_WORKER" ? "as client" : "as worker"}
         </span>
       </div>

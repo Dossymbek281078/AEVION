@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -160,7 +160,7 @@ function Body() {
                     </div>
                   </div>
                   <span
-                    className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[doc.status] ?? "border-white/10 text-slate-400"}`}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_STYLE[doc.status] ?? "border-white/10 text-slate-400"}`}
                   >
                     {doc.status}
                   </span>

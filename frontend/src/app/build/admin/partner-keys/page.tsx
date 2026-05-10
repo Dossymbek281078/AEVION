@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -306,11 +306,11 @@ function Body() {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {k.revokedAt ? (
-                      <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] text-rose-200">
+                      <span className="rounded-full bg-rose-500/15 px-2 py-1 text-xs text-rose-200">
                         revoked
                       </span>
                     ) : (
-                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200">
                         active
                       </span>
                     )}

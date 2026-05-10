@@ -4045,6 +4045,8 @@ export default function QCoreMultiAgentPage() {
           { icon: "📋", label: "Audit log", href: "/qcoreai/audit-log" },
           { icon: "📊", label: "Model benchmarks", href: "/qcoreai/benchmarks" },
           { icon: "🧠", label: "AI Memory", href: "/qcoreai/memory" },
+          { icon: "🧪", label: "A/B Tests", href: "/qcoreai/ab-tests" },
+          { icon: "⚙️", label: "Settings", href: "/qcoreai/settings" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div

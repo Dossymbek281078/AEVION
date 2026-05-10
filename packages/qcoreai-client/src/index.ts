@@ -2052,6 +2052,78 @@ export class QCoreClient {
     const d = await res.json();
     return d.providers ?? [];
   }
+
+  // V63: A/B tests
+
+  /** Create a new A/B test comparing two prompt variants. */
+  async createAbTest(opts: { name: string; promptA: string; promptB: string; strategy?: string }): Promise<{ id: string; name: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/ab-tests"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createAbTest failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.test;
+  }
+
+  /** List all A/B tests for the authenticated user. */
+  async listAbTests(): Promise<Array<{ id: string; name: string; runsA: number; runsB: number; avgCostA: number; avgCostB: number }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/ab-tests"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listAbTests failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Run both variants of an A/B test back-to-back and return side-by-side results. */
+  async runAbTest(testId: string): Promise<{
+    testId: string;
+    variantA: { runId: string; finalContent: string; costUsd: number };
+    variantB: { runId: string; finalContent: string; costUsd: number };
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/ab-tests/${encodeURIComponent(testId)}/run`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`runAbTest failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V64: User settings
+
+  /** Retrieve all user settings as a key-value record. */
+  async getUserSettings(): Promise<Record<string, any>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/settings"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getUserSettings failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.settings || {};
+  }
+
+  /** Set a user setting by key. */
+  async setUserSetting(key: string, value: any): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/settings/${encodeURIComponent(key)}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ value }),
+    });
+    if (!res.ok) throw new Error(`setUserSetting failed: ${await safeError(res)}`);
+  }
+
+  // V65: Advanced analytics
+
+  /** Weekly cohort analysis — sessions created per week and run counts in W0/W1/W2. */
+  async getCohortAnalysis(): Promise<{ cohorts: Array<{ week: string; sessionsCreated: number; runsWeek0: number; runsWeek1: number }> }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/analytics/cohorts"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getCohortAnalysis failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Run output quality distribution — brief / standard / detailed buckets. */
+  async getRunQuality(): Promise<{ brief: number; standard: number; detailed: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/analytics/run-quality"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunQuality failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

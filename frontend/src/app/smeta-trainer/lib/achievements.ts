@@ -27,7 +27,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "level3-theory",      icon: "📊", title: "ПТО",                 description: "Все уроки уровня 3 пройдены" },
   { id: "level4-theory",      icon: "📐", title: "Проектировщик",       description: "Все уроки уровня 4 пройдены" },
   { id: "level5-theory",      icon: "🔬", title: "Эксперт",             description: "Все уроки уровня 5 пройдены" },
-  { id: "all-theory",         icon: "🎓", title: "Магистр теории",      description: "Все 32 урока пройдены" },
+  { id: "all-theory",         icon: "🎓", title: "Магистр теории",      description: "Все уроки курса пройдены (47 штук)" },
   { id: "perfectionist",      icon: "💯", title: "Перфекционист",       description: "5 уроков сданы со 100% по тестам" },
   { id: "first-zachet",       icon: "🥇", title: "Первый зачёт",        description: "Получен первый зачёт уровня" },
   { id: "course-complete",    icon: "🏆", title: "Курс пройден",        description: "Все 5 уровней зачтены — сертификат доступен" },

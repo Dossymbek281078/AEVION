@@ -102,7 +102,7 @@ export default function LessonsSearchPage() {
         )}
         {query && matches.length === 0 && (
           <div className="bg-white border border-slate-200 rounded-lg p-8 text-center text-slate-400 text-sm">
-            По запросу «{query}» ничего не найдено в 32 уроках. Попробуйте более общий термин.
+            По запросу «{query}» ничего не найдено в {LESSONS.length} уроках. Попробуйте более общий термин.
           </div>
         )}
 

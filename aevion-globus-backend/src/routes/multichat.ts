@@ -297,7 +297,7 @@ multichatRouter.post("/conversations", async (req, res) => {
     const c = await createConv(userId, title);
     res.status(201).json(c);
   } catch (err: any) {
-    res.status(500).json({ error: "create failed", details: err?.message });
+    res.status(500).json({ error: "create failed", });
   }
 });
 
@@ -308,7 +308,7 @@ multichatRouter.get("/conversations", async (req, res) => {
     const items = await listConvs(userId);
     res.json({ items, total: items.length });
   } catch (err: any) {
-    res.status(500).json({ error: "list failed", details: err?.message });
+    res.status(500).json({ error: "list failed", });
   }
 });
 
@@ -322,7 +322,7 @@ multichatRouter.get("/conversations/:id", async (req, res) => {
     const turns = await listChatTurns({ userId, conversationId: id, limit: 200 });
     res.json({ conversation: conv, turns });
   } catch (err: any) {
-    res.status(500).json({ error: "fetch failed", details: err?.message });
+    res.status(500).json({ error: "fetch failed", });
   }
 });
 
@@ -454,7 +454,7 @@ multichatRouter.delete("/conversations/:id", async (req, res) => {
     if (!ok) return res.status(404).json({ error: "conversation_not_found" });
     res.json({ ok: true, deletedId: id });
   } catch (err: any) {
-    res.status(500).json({ error: "delete_failed", details: err?.message });
+    res.status(500).json({ error: "delete_failed", });
   }
 });
 
@@ -469,7 +469,7 @@ multichatRouter.patch("/conversations/:id", async (req, res) => {
     if (!c) return res.status(404).json({ error: "conversation_not_found" });
     res.json(c);
   } catch (err: any) {
-    res.status(500).json({ error: "rename_failed", details: err?.message });
+    res.status(500).json({ error: "rename_failed", });
   }
 });
 
@@ -486,7 +486,7 @@ multichatRouter.get("/conversations/:id/export.json", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.json"`);
     res.json({ conversation: conv, turns, exportedAt: new Date().toISOString() });
   } catch (err: any) {
-    res.status(500).json({ error: "export_failed", details: err?.message });
+    res.status(500).json({ error: "export_failed", });
   }
 });
 
@@ -514,7 +514,7 @@ multichatRouter.get("/conversations/:id/export.csv", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="multichat-${id}.csv"`);
     res.send(lines.join("\n") + "\n");
   } catch (err: any) {
-    res.status(500).json({ error: "export_failed", details: err?.message });
+    res.status(500).json({ error: "export_failed", });
   }
 });
 
@@ -547,7 +547,7 @@ multichatRouter.get("/conversations/:id/usage", async (req, res) => {
       costUsd: Number(totalUsd.toFixed(6)),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "usage_failed", details: err?.message });
+    res.status(500).json({ error: "usage_failed", });
   }
 });
 
@@ -566,7 +566,7 @@ multichatRouter.post("/conversations/:id/share", async (req, res) => {
     }
     res.json({ shareToken: token, shareUrl: `/multichat-engine/shared/${token}` });
   } catch (err: any) {
-    res.status(500).json({ error: "share_failed", details: err?.message });
+    res.status(500).json({ error: "share_failed", });
   }
 });
 
@@ -579,7 +579,7 @@ multichatRouter.delete("/conversations/:id/share", async (req, res) => {
     if (!c) return res.status(404).json({ error: "conversation_not_found" });
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(500).json({ error: "revoke_failed", details: err?.message });
+    res.status(500).json({ error: "revoke_failed", });
   }
 });
 
@@ -594,7 +594,7 @@ multichatRouter.get("/search", async (req, res) => {
     const items = await searchConvs(userId, q, limit, offset);
     res.json({ items, total: items.length, q });
   } catch (err: any) {
-    res.status(500).json({ error: "search_failed", details: err?.message });
+    res.status(500).json({ error: "search_failed", });
   }
 });
 
@@ -621,6 +621,6 @@ multichatPublicRouter.get("/shared/:token", async (req, res) => {
       turns: safeTurns,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "fetch_failed", details: err?.message });
+    res.status(500).json({ error: "fetch_failed", });
   }
 });

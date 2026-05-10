@@ -2,6 +2,7 @@
 
 import type { Lsr, LsrCalc, Ks2Period } from "./types";
 import { formatKzt } from "./calc";
+import { buildXlsx, downloadBlob, type Cell, type Sheet } from "./xlsx";
 
 // ── CSV ──────────────────────────────────────────────────────────────────────
 
@@ -81,6 +82,102 @@ export function exportToCsv(lsr: Lsr, calc: LsrCalc): void {
 
   const csvContent = "﻿" + rows.map((r) => r.map(escCsv).join(",")).join("\r\n");
   downloadText(csvContent, `ЛСР_${lsr.meta?.lsrNumber ?? lsr.id}.csv`, "text/csv;charset=utf-8");
+}
+
+// ── XLSX (настоящий Excel-файл, pure-TS, без зависимостей) ──────────────────
+
+export function exportToXlsx(lsr: Lsr, calc: LsrCalc): void {
+  const rows: Cell[][] = [];
+
+  // Шапка
+  rows.push([{ v: "ЛОКАЛЬНАЯ СМЕТНАЯ РАСЧЁТ", style: "header" }]);
+  rows.push([{ v: lsr.meta?.lsrNumber ?? "" }, { v: lsr.title }]);
+  rows.push([{ v: "Объект:" }, { v: lsr.meta?.objectTitle ?? "" }]);
+  rows.push([{ v: "Стройка:" }, { v: lsr.meta?.strojkaTitle ?? "" }]);
+  rows.push([{ v: "Основание:" }, { v: lsr.meta?.osnovanje ?? "" }]);
+  rows.push([{ v: "Дата цен:" }, { v: lsr.meta?.priceDate ?? "" }]);
+  rows.push([{ v: "Метод:" }, { v: lsr.method }, { v: lsr.indexRegion }, { v: lsr.indexQuarter }]);
+  rows.push([]);
+
+  // Заголовки таблицы
+  rows.push([
+    { v: "№ п/п", style: "header" },
+    { v: "Обоснование", style: "header" },
+    { v: "Наименование работ и затрат", style: "header" },
+    { v: "Ед. изм.", style: "header" },
+    { v: "Количество", style: "header" },
+    { v: "Стоимость ед., ₸", style: "header" },
+    { v: "Общая стоимость, ₸", style: "header" },
+    { v: "в т.ч. ФОТ", style: "header" },
+    { v: "в т.ч. ЭМ", style: "header" },
+    { v: "в т.ч. Материалы", style: "header" },
+    { v: "Коэффициенты", style: "header" },
+  ]);
+
+  let posNum = 0;
+  for (const sc of calc.sections) {
+    rows.push([
+      {}, {}, { v: sc.section.title, style: "subtotal" },
+    ]);
+    for (const p of sc.positions) {
+      posNum++;
+      const coefStr = p.position.coefficients.length > 0
+        ? p.position.coefficients.map((c) => `К=${c.value}`).join(" × ")
+        : "";
+      rows.push([
+        { v: posNum, fmt: "int" },
+        { v: p.rate.code },
+        { v: p.rate.title },
+        { v: p.rate.unit },
+        { v: p.position.volume, fmt: "num" },
+        { v: Math.round(p.unitPrice), fmt: "money" },
+        { v: Math.round(p.current.direct), fmt: "money" },
+        { v: Math.round(p.current.fot), fmt: "money" },
+        { v: Math.round(p.current.em), fmt: "money" },
+        { v: Math.round(p.current.materials), fmt: "money" },
+        { v: coefStr },
+      ]);
+    }
+    if (sc.positions.length > 0) {
+      rows.push([
+        {}, {}, { v: "Итого ПЗ по разделу:", style: "total" },
+        {}, {}, {},
+        { v: Math.round(sc.direct), fmt: "money", style: "total" },
+      ]);
+    }
+    rows.push([]);
+  }
+
+  // Итоги
+  const totalDirect = calc.sections.reduce((s, sc) => s + sc.direct, 0);
+  const totalOverhead = calc.sections.reduce((s, sc) => s + sc.overhead + sc.profit, 0);
+  rows.push([
+    {}, {}, { v: "ВСЕГО прямых затрат:", style: "total" },
+    {}, {}, {}, { v: Math.round(totalDirect), fmt: "money", style: "total" },
+  ]);
+  rows.push([
+    {}, {}, { v: "НР + СП:", style: "total" },
+    {}, {}, {}, { v: Math.round(totalOverhead), fmt: "money", style: "total" },
+  ]);
+  rows.push([
+    {}, {}, { v: "НДС 12%:", style: "total" },
+    {}, {}, {}, { v: Math.round(calc.vat), fmt: "money", style: "total" },
+  ]);
+  rows.push([
+    {}, {}, { v: "ИТОГО с НДС:", style: "total" },
+    {}, {}, {}, { v: Math.round(calc.totalWithVat), fmt: "money", style: "total" },
+  ]);
+  rows.push([]);
+  rows.push([{ v: "Составил:" }, { v: lsr.meta?.author ?? "" }]);
+
+  const sheet: Sheet = {
+    name: "ЛСР",
+    rows,
+    colWidths: [6, 18, 50, 8, 10, 14, 14, 14, 14, 14, 18],
+  };
+
+  const blob = buildXlsx([sheet]);
+  downloadBlob(blob, `ЛСР_${lsr.meta?.lsrNumber ?? lsr.id}.xlsx`);
 }
 
 // ── КС-3 Справка о стоимости ─────────────────────────────────────────────────

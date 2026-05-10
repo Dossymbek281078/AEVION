@@ -51,6 +51,31 @@ let bureauTablesReady = false;
 
 async function ensureBureauTables(): Promise<void> {
   if (bureauTablesReady) return;
+  // IPCertificate is the canonical table created by pipeline.ts. Ensure it
+  // exists here as well so bureau can boot independently (e.g. in CI where
+  // the pipeline route may not have been hit yet).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "IPCertificate" (
+      "id" TEXT PRIMARY KEY,
+      "objectId" TEXT NOT NULL,
+      "shieldId" TEXT,
+      "title" TEXT NOT NULL,
+      "kind" TEXT NOT NULL DEFAULT 'other',
+      "description" TEXT NOT NULL DEFAULT '',
+      "authorName" TEXT,
+      "authorEmail" TEXT,
+      "country" TEXT,
+      "city" TEXT,
+      "contentHash" TEXT NOT NULL DEFAULT '',
+      "signatureHmac" TEXT NOT NULL DEFAULT '',
+      "algorithm" TEXT NOT NULL DEFAULT 'HMAC-SHA256',
+      "legalBasis" JSONB NOT NULL DEFAULT '[]',
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "protectedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "verifiedCount" INT NOT NULL DEFAULT 0,
+      "lastVerifiedAt" TIMESTAMPTZ
+    );
+  `);
   await pool.query(
     `ALTER TABLE "IPCertificate"
        ADD COLUMN IF NOT EXISTS "authorVerificationLevel" TEXT NOT NULL DEFAULT 'anonymous';`,

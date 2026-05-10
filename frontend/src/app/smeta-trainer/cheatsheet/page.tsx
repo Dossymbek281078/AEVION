@@ -9,7 +9,7 @@ import Link from "next/link";
  */
 export default function CheatsheetPage() {
   return (
-    <div className="min-h-screen bg-slate-100 p-4 print:bg-white print:p-0">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 p-4 print:bg-white print:p-0">
       {/* Toolbar (скрыт при печати) */}
       <div className="max-w-3xl mx-auto mb-3 flex items-center justify-between print:hidden">
         <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">

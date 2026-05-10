@@ -57,8 +57,8 @@ export default function LessonsSearchPage() {
   const matches = useMemo(() => findMatches(query), [query]);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b sticky top-0 z-10">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center gap-4">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу
@@ -111,7 +111,7 @@ export default function LessonsSearchPage() {
             <Link
               key={lesson.id}
               href={`/smeta-trainer/level/${lesson.level}#lesson-${encodeURIComponent(lesson.id)}`}
-              className="block bg-white border border-slate-200 hover:border-emerald-400 rounded-lg p-4 transition-colors"
+              className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 rounded-lg p-4 transition-colors"
             >
               <div className="flex items-baseline gap-3 flex-wrap">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">

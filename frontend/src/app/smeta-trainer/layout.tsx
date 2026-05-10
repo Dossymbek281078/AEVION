@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AchievementToast } from "./components/AchievementToast";
 import { AutoSyncBridge } from "./lib/useAutoSync";
+import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 
 export const metadata = {
   title: "Сметный тренажёр — AEVION",
@@ -51,9 +52,17 @@ export default function SmetaTrainerLayout({ children }: { children: ReactNode }
         .dot-2 { animation: pulse-dots 1.4s infinite 0.2s; }
         .dot-3 { animation: pulse-dots 1.4s infinite 0.4s; }
       `}</style>
-      {children}
+      {/* Skip to content для скринридеров и keyboard-only пользователей */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-emerald-600 focus:text-white focus:px-3 focus:py-1.5 focus:rounded focus:text-sm focus:font-semibold focus:shadow-lg"
+      >
+        Перейти к содержимому
+      </a>
+      <div id="main-content">{children}</div>
       <AchievementToast />
       <AutoSyncBridge />
+      <KeyboardShortcuts />
     </>
   );
 }

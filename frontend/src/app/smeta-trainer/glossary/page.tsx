@@ -33,15 +33,15 @@ export default function GlossaryPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b sticky top-0 z-10">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-3 flex items-center gap-4">
-          <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
+          <Link href="/smeta-trainer" className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
             ← К курсу
           </Link>
           <div className="flex-1">
-            <h1 className="text-lg font-bold text-slate-900">Глоссарий сметных терминов РК</h1>
-            <p className="text-[11px] text-slate-500">
+            <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Глоссарий сметных терминов РК</h1>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {GLOSSARY.length} терминов · нормативная база НДЦС РК 8.01-08-2022, СН РК 8.02
             </p>
           </div>
@@ -50,7 +50,7 @@ export default function GlossaryPage() {
 
       <div className="max-w-5xl mx-auto px-6 py-4 space-y-4">
         {/* Поиск */}
-        <div className="bg-white border border-slate-200 rounded-lg p-3">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
           <div className="relative">
             <input
               type="text"
@@ -115,7 +115,7 @@ export default function GlossaryPage() {
               <div
                 key={e.term}
                 id={`term-${e.term}`}
-                className="bg-white border border-slate-200 rounded-lg p-4 hover:border-emerald-300 transition-colors"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 hover:border-emerald-300 dark:hover:border-emerald-500 transition-colors"
               >
                 <div className="flex items-baseline gap-3 flex-wrap">
                   <h2 className="text-lg font-bold text-slate-900">{e.term}</h2>

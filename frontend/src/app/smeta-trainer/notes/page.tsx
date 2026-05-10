@@ -74,8 +74,8 @@ export default function NotesPage() {
   if (!hydrated) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b sticky top-0 z-10">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center gap-4">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу

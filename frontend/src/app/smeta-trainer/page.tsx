@@ -21,6 +21,14 @@ export default function SmetaTrainerPage() {
           <div className="text-[10px] text-slate-400 hidden sm:block">
             НДЦС РК 8.01-08-2022 · 222 расценки ЭСН · 5 уровней · Школа №47, Алматы
           </div>
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}
+            className="hidden sm:block text-[10px] text-slate-400 hover:text-emerald-400 px-1.5 py-0.5 border border-slate-700 rounded font-mono"
+            title="Клавиатурные шорткаты"
+            aria-label="Показать клавиатурные шорткаты"
+          >
+            ?
+          </button>
           <ThemeToggle />
         </div>
       </header>

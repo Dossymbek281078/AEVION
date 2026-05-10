@@ -165,7 +165,7 @@ export default function CapstonePage() {
   if (!hydrated) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <header className="bg-slate-900 text-white">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center gap-4">
           <Link href="/smeta-trainer" className="text-xs text-slate-400 hover:text-white">
@@ -233,7 +233,7 @@ export default function CapstonePage() {
           return (
             <div
               key={i}
-              className={`bg-white border-2 rounded-lg p-4 ${
+              className={`bg-white dark:bg-slate-900 border-2 rounded-lg p-4 ${
                 isCorrect ? "border-emerald-300" : isWrong || noAnswer ? "border-red-300" : "border-slate-200"
               }`}
             >

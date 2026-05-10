@@ -343,14 +343,8 @@ pricingRouter.get("/leads/count", (_req, res) => {
  * ?limit=N — последние N (макс 500), по умолчанию 100
  */
 pricingRouter.get("/leads", (req, res) => {
-  const required = process.env.ADMIN_TOKEN?.trim();
-  if (!required) {
-    return res.status(401).json({ error: "admin_token_not_configured" });
-  }
-  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
-  if (got !== required) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+  const gate = pricingAdminGateBlocks(req);
+  if (gate.blocked) return res.status(401).json({ error: gate.reason });
 
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
 
@@ -850,14 +844,8 @@ pricingRouter.post("/edu/apply", (req, res) => {
  * Используется /pricing/admin для мониторинга всех program-applications в одном месте.
  */
 pricingRouter.get("/applications", (req, res) => {
-  const required = process.env.ADMIN_TOKEN?.trim();
-  if (!required) {
-    return res.status(401).json({ error: "admin_token_not_configured" });
-  }
-  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
-  if (got !== required) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+  const gate = pricingAdminGateBlocks(req);
+  if (gate.blocked) return res.status(401).json({ error: gate.reason });
 
   const kind = req.query.kind === "affiliate" || req.query.kind === "partner" || req.query.kind === "edu"
     ? (req.query.kind as "affiliate" | "partner" | "edu")
@@ -895,14 +883,8 @@ pricingRouter.get("/applications", (req, res) => {
  * Token-gated: список последних подписчиков newsletter (без PII в публичном /count).
  */
 pricingRouter.get("/newsletter/list", (req, res) => {
-  const required = process.env.ADMIN_TOKEN?.trim();
-  if (!required) {
-    return res.status(401).json({ error: "admin_token_not_configured" });
-  }
-  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
-  if (got !== required) {
-    return res.status(401).json({ error: "unauthorized" });
-  }
+  const gate = pricingAdminGateBlocks(req);
+  if (gate.blocked) return res.status(401).json({ error: gate.reason });
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "100"), 10), 1), 500);
 
   try {
@@ -932,6 +914,28 @@ pricingRouter.get("/newsletter/list", (req, res) => {
  * DASHBOARD_SECRET по умолчанию = ADMIN_TOKEN (если не задан отдельно).
  * Это not super-secret — даёт доступ только к данным конкретного email.
  */
+/**
+ * Token-gate helper for /leads, /applications, /newsletter/list. Replaces
+ * three identical inline blocks that used `got !== required` (non-timing-
+ * safe). Centralised here so future endpoints can't accidentally drift.
+ *
+ * Returns true if access should be denied.
+ */
+function pricingAdminGateBlocks(req: import("express").Request): { blocked: true; reason: string } | { blocked: false } {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) return { blocked: true, reason: "admin_token_not_configured" };
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim() ?? "";
+  if (got.length !== required.length) return { blocked: true, reason: "unauthorized" };
+  try {
+    if (!timingSafeEqual(Buffer.from(got), Buffer.from(required))) {
+      return { blocked: true, reason: "unauthorized" };
+    }
+  } catch {
+    return { blocked: true, reason: "unauthorized" };
+  }
+  return { blocked: false };
+}
+
 function dashboardSecret(): string {
   const fromEnv =
     process.env.DASHBOARD_SECRET?.trim() ||

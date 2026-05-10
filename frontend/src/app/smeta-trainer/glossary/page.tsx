@@ -39,6 +39,9 @@ export default function GlossaryPage() {
           <Link href="/smeta-trainer" className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
             ← К курсу
           </Link>
+          <Link href="/smeta-trainer/glossary/print" className="text-xs text-emerald-600 hover:text-emerald-800 underline ml-auto sm:order-last">
+            🖨 Печатная версия (A4)
+          </Link>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Глоссарий сметных терминов РК</h1>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">

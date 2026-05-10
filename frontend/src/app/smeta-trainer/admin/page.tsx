@@ -236,6 +236,14 @@ export default function AdminPage() {
             {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</div>}
             {loading && <div className="text-sm text-slate-500 text-center py-4">Загрузка…</div>}
 
+            {/* Charts: distribution per level + lessons */}
+            {!loading && students.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-lg p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <LevelChart students={students} />
+                <LessonsChart students={students} />
+              </div>
+            )}
+
             {/* Table */}
             {!loading && students.length === 0 && (
               <div className="bg-white border border-slate-200 rounded-lg p-8 text-center text-slate-400 text-sm">
@@ -515,6 +523,144 @@ if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── SVG Charts ──────────────────────────────────────────────────────
+
+function LevelChart({ students }: { students: AdminStudentRecord[] }) {
+  const counts: Record<number, { open: number; inProgress: number; done: number }> = {};
+  for (const lv of LEVELS) counts[lv.num] = { open: 0, inProgress: 0, done: 0 };
+  for (const s of students) {
+    for (const lv of LEVELS) {
+      const lp = s.levels[String(lv.num)];
+      if (lp?.status === "done") counts[lv.num].done++;
+      else if (lp?.status === "in-progress") counts[lv.num].inProgress++;
+      else counts[lv.num].open++;
+    }
+  }
+  const total = students.length;
+  const W = 360;
+  const H = 200;
+  const PAD = 40;
+  const barW = (W - PAD * 2) / LEVELS.length - 8;
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-700 mb-2">
+        Прогресс по уровням ({total} студентов)
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+        {/* Y-axis labels */}
+        {[0, 0.25, 0.5, 0.75, 1].map((p) => {
+          const y = H - PAD - p * (H - PAD - 20);
+          return (
+            <g key={p}>
+              <line x1={PAD} y1={y} x2={W - 10} y2={y} stroke="#e2e8f0" strokeDasharray="2 2" />
+              <text x={PAD - 4} y={y + 3} fontSize="9" textAnchor="end" fill="#94a3b8">
+                {Math.round(p * total)}
+              </text>
+            </g>
+          );
+        })}
+        {/* Bars */}
+        {LEVELS.map((lv, i) => {
+          const c = counts[lv.num];
+          const x = PAD + i * ((W - PAD * 2) / LEVELS.length) + 4;
+          const baseY = H - PAD;
+          const fullH = H - PAD - 20;
+          const doneH = total ? (c.done / total) * fullH : 0;
+          const ipH = total ? (c.inProgress / total) * fullH : 0;
+          const openH = total ? (c.open / total) * fullH : 0;
+          return (
+            <g key={lv.num}>
+              <rect x={x} y={baseY - doneH} width={barW} height={doneH} fill="#10b981" />
+              <rect x={x} y={baseY - doneH - ipH} width={barW} height={ipH} fill="#f59e0b" />
+              <rect x={x} y={baseY - doneH - ipH - openH} width={barW} height={openH} fill="#cbd5e1" />
+              <text x={x + barW / 2} y={H - PAD + 14} fontSize="10" textAnchor="middle" fill="#475569">
+                Ур.{lv.num}
+              </text>
+              <text x={x + barW / 2} y={baseY - doneH - 3} fontSize="9" textAnchor="middle" fill="#065f46" fontWeight="bold">
+                {c.done > 0 ? c.done : ""}
+              </text>
+            </g>
+          );
+        })}
+        {/* Legend */}
+        <g transform={`translate(${PAD}, 6)`}>
+          <rect width="10" height="10" fill="#10b981" />
+          <text x="14" y="9" fontSize="9" fill="#475569">зачтено</text>
+          <rect x="80" width="10" height="10" fill="#f59e0b" />
+          <text x="94" y="9" fontSize="9" fill="#475569">в процессе</text>
+          <rect x="180" width="10" height="10" fill="#cbd5e1" />
+          <text x="194" y="9" fontSize="9" fill="#475569">не начат</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function LessonsChart({ students }: { students: AdminStudentRecord[] }) {
+  // Распределение студентов по «бакетам» пройденных уроков (0, 1-9, 10-19, ..., 40+)
+  const buckets = [
+    { label: "0", min: 0, max: 0 },
+    { label: "1–9", min: 1, max: 9 },
+    { label: "10–19", min: 10, max: 19 },
+    { label: "20–29", min: 20, max: 29 },
+    { label: "30–39", min: 30, max: 39 },
+    { label: "40+", min: 40, max: Infinity },
+  ];
+  const counts = buckets.map((b) =>
+    students.filter((s) => s.lessonsDone >= b.min && s.lessonsDone <= b.max).length,
+  );
+  const max = Math.max(1, ...counts);
+  const W = 360;
+  const H = 200;
+  const PAD = 40;
+  const barW = (W - PAD * 2) / buckets.length - 8;
+
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-700 mb-2">
+        Распределение по урокам теории
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto">
+        {/* Y-axis */}
+        {[0, 0.5, 1].map((p) => {
+          const y = H - PAD - p * (H - PAD - 20);
+          return (
+            <g key={p}>
+              <line x1={PAD} y1={y} x2={W - 10} y2={y} stroke="#e2e8f0" strokeDasharray="2 2" />
+              <text x={PAD - 4} y={y + 3} fontSize="9" textAnchor="end" fill="#94a3b8">
+                {Math.round(p * max)}
+              </text>
+            </g>
+          );
+        })}
+        {/* Bars */}
+        {buckets.map((b, i) => {
+          const x = PAD + i * ((W - PAD * 2) / buckets.length) + 4;
+          const baseY = H - PAD;
+          const h = (counts[i] / max) * (H - PAD - 20);
+          return (
+            <g key={b.label}>
+              <rect x={x} y={baseY - h} width={barW} height={h} fill="#3b82f6" />
+              <text x={x + barW / 2} y={H - PAD + 14} fontSize="9" textAnchor="middle" fill="#475569">
+                {b.label}
+              </text>
+              {counts[i] > 0 && (
+                <text x={x + barW / 2} y={baseY - h - 3} fontSize="9" textAnchor="middle" fill="#1e40af" fontWeight="bold">
+                  {counts[i]}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        <text x={W / 2} y={H - 4} fontSize="9" textAnchor="middle" fill="#94a3b8">
+          Уроков пройдено (бакеты по 10)
+        </text>
+      </svg>
     </div>
   );
 }

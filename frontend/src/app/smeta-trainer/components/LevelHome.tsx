@@ -169,9 +169,12 @@ export function LevelHome() {
                 <div className="text-xs font-bold text-purple-800 uppercase tracking-wide">
                   Сегодня к повторению — {dueToday.length} {dueToday.length === 1 ? "урок" : dueToday.length < 5 ? "урока" : "уроков"}
                 </div>
-                <span className="ml-auto text-[10px] text-purple-600 italic">
-                  spaced repetition · SM-2-lite
-                </span>
+                <Link
+                  href="/smeta-trainer/review"
+                  className="ml-auto text-[10px] bg-purple-600 text-white px-2 py-0.5 rounded font-semibold hover:bg-purple-700"
+                >
+                  ▶ Тренировать
+                </Link>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {dueToday.slice(0, 6).map((d) => (

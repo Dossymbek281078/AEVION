@@ -161,8 +161,8 @@ from this list is a regression and a finding worth reporting.
   in-memory `lib/rateLimit.ts` divides effective limits across them.
   Documented in `docs/RATELIMIT_KNOWN_LIMITATIONS.md`. Will move to
   Redis-backed when Redis enters the stack.
-- **Sentry DSN not yet set** on Railway. Alerts are wired and tested
-  but won't reach Slack until `SENTRY_DSN` is configured.
+- **Sentry active** (`sentry: true` in `/api/health/deep`). All P1 alert
+  rules from `docs/SENTRY_ALERTS.md` are now live.
 
 ---
 

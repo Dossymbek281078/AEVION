@@ -263,3 +263,21 @@ model SmetaAttempt {
   @@index([studentId, ts])
   @@index([level, ts])
 }
+
+model ChessPuzzle {
+  id       String  @id                     // lichess puzzle ID or "gen_xxx"
+  fen      String                           // position FEN (player to move)
+  sol      String                           // UCI moves JSON array string
+  name     String                           // human-readable name
+  rating   Int     @default(1200)
+  theme    String  @default("Тактика")
+  phase    String  @default("Middlegame")
+  side     String  @default("w")            // w|b
+  goal     String  @default("Best move")    // Mate|Best move
+  mateIn   Int?                             // null if not a mate puzzle
+  createdAt DateTime @default(now())
+
+  @@index([rating])
+  @@index([theme])
+  @@index([goal, mateIn])
+}

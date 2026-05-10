@@ -596,6 +596,8 @@ export default function CyberChessPage(){
   const[rushBestStreak,sRushBestStreak]=useState(0);
   const[rushBest,sRushBest]=useState(()=>{try{return parseInt(localStorage.getItem("aevion_puzzle_rush_best_v1")||"0")||0}catch{return 0}});
   const[rushResult,sRushResult]=useState<null|{score:number;streak:number;best:number;chessy:number;isNewBest:boolean}>(null);
+  // Timed mode (3min/5min/custom) session result — separate from Rush
+  const[timedResult,sTimedResult]=useState<null|{solved:number;failed:number;mode:string;totalSec:number}>(null);
   // Rush duration в секундах — юзер сам выбирает 1.5 / 3 / 5 / 10 / custom
   const[rushDuration,sRushDuration]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_rush_duration_v1")||"180");return v>=30&&v<=1800?v:180}catch{return 180}});
   useEffect(()=>{try{localStorage.setItem("aevion_rush_duration_v1",String(rushDuration))}catch{}},[rushDuration]);
@@ -1112,7 +1114,32 @@ export default function CyberChessPage(){
       sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
       setTimeout(()=>showToast(`☀ +${bonus} Chessy · ${newStreak}-й день подряд`,"success"),800);
     }
-    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
+    // Load bundled puzzles first (instant), then try to expand from cloud API.
+    // Cloud API (/api-backend/puzzles) is Railway-hosted with the full Lichess CC0 DB.
+    // Falls back gracefully if offline or DB not seeded.
+    fetch("/puzzles.json")
+      .then(r=>r.json())
+      .then((bundled:Puzzle[])=>{
+        sPuzzles(bundled);
+        // Try cloud extension — if backend has more puzzles, fetch a random batch
+        // and merge (dedup by FEN). This runs in background; failure is silent.
+        const backendUrl=typeof window!=="undefined"&&window.location.hostname==="localhost"
+          ?"http://localhost:4001":"/api-backend";
+        fetch(`${backendUrl}/api/puzzles?nb=200&random=1`,{signal:AbortSignal.timeout(8000)})
+          .then(r=>r.ok?r.json():null)
+          .then(data=>{
+            if(!data||!Array.isArray(data.puzzles)||data.puzzles.length===0)return;
+            // Merge with bundled — deduplicate by FEN
+            const fenSet=new Set(bundled.map((p:Puzzle)=>p.fen));
+            const newOnes=data.puzzles.filter((p:Puzzle)=>p.fen&&!fenSet.has(p.fen));
+            if(newOnes.length>0){
+              sPuzzles(prev=>[...prev,...newOnes]);
+              console.log(`[Puzzles] +${newOnes.length} from cloud (total cloud DB: ${data.total})`);
+            }
+          })
+          .catch(()=>{/* cloud offline — bundled puzzles are sufficient */});
+      })
+      .catch(()=>sPuzzles([]));
     fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
       // Build FEN-indexed opening database for transposition detection
       const map=new Map<string,OpeningIndexed>();
@@ -1491,8 +1518,18 @@ export default function CyberChessPage(){
             sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
             sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
           },700);
+        }else if(pzMode==="timed3"||pzMode==="timed5"||pzMode==="custom"){
+          // In timed modes: auto-advance after 1.5s so user sees the wrong indicator then moves on
+          setTimeout(()=>{
+            if(!fPz.length)return;
+            const nextIdx=(pzI+1)%fPz.length;
+            const pz=fPz[nextIdx];if(!pz)return;
+            const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
+            sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);
+            sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+          },1500);
         }else{
-          showToast(`✗ Not the best. Try again or see solution`,"error");
+          showToast(`✗ Неверно. Попробуй ещё или посмотри ответ`,"error");
         }
         return false;
       }
@@ -2741,12 +2778,25 @@ export default function CyberChessPage(){
   // Sync timer to current mode (fires on mode switch, even mid-puzzle)
   useEffect(()=>{
     if(tab!=="puzzles")return;
-    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false);showToast("⏱ Режим 3 минуты — таймер пошёл","info")}
-    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false);showToast("⏱ Режим 5 минут — таймер пошёл","info")}
-    else if(pzMode==="custom"){sPzTimeLeft(pzCustomSec);sRushActive(false);showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
+    if(pzMode==="timed3"){sPzTimeLeft(180);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);showToast("⏱ 3 минуты — решай как можно больше пазлов, +3с за каждый правильный","info")}
+    else if(pzMode==="timed5"){sPzTimeLeft(300);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);showToast("⏱ 5 минут — решай как можно больше пазлов, +3с за каждый правильный","info")}
+    else if(pzMode==="custom"){sPzTimeLeft(pzCustomSec);sRushActive(false);sPzSolvedCount(0);sPzFailedCount(0);sTimedResult(null);showToast(`⏱ Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")} — таймер пошёл`,"info")}
     else if(pzMode==="rush"){sPzTimeLeft(rushDuration);sRushActive(true);sRushScore(0);sRushStreak(0);sRushBestStreak(0);sRushResult(null)}
     else {sPzTimeLeft(0);sRushActive(false)}
   },[pzMode,tab,rushDuration,pzCustomSec]);
+
+  // Timed mode (3min/5min/custom) end-of-session — fires when timer hits 0
+  useEffect(()=>{
+    if(pzTimeLeft>0||pzMode==="learn"||pzMode==="rush")return;
+    if(tab!=="puzzles")return;
+    if(pzSolvedCount===0&&pzFailedCount===0)return; // session hasn't started
+    const totalSec=pzMode==="timed3"?180:pzMode==="timed5"?300:pzCustomSec;
+    const modeName=pzMode==="timed3"?"3 мин":pzMode==="timed5"?"5 мин":`${Math.floor(totalSec/60)}:${String(totalSec%60).padStart(2,"0")}`;
+    sTimedResult({solved:pzSolvedCount,failed:pzFailedCount,mode:modeName,totalSec});
+    const bonus=pzSolvedCount*2;
+    if(bonus>0)addChessy(bonus,`Puzzle Timed · ${pzSolvedCount} решено`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[pzTimeLeft]);
 
   // Rush end-of-session detection — fire only once per session
   useEffect(()=>{
@@ -8424,6 +8474,50 @@ ${question.trim()}`;
     {chessyFloat&&<ChessyFloat key={chessyFloat.key} amount={chessyFloat.amount} onDone={()=>sChessyFloat(null)}/>}
     {showConfetti&&<Confetti onDone={()=>sShowConfetti(false)}/>}
 
+    {/* ─── Timed Puzzle Session result modal (3min / 5min / custom) ─── */}
+    <Modal open={!!timedResult} onClose={()=>sTimedResult(null)} size="sm"
+      title={timedResult?`⏱ ${timedResult.mode} завершено`:"Сессия завершена"}>
+      {timedResult&&<div style={{textAlign:"center"}}>
+        <div style={{fontSize:56,lineHeight:1,marginBottom:SPACE[3]}}>
+          {timedResult.solved===0?"😔":timedResult.solved>=10?"🏆":timedResult.solved>=5?"🎯":"⏱"}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:SPACE[2],marginBottom:SPACE[4]}}>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
+            <div style={{fontSize:10,color:CC.brand,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Решено</div>
+            <div style={{fontSize:32,fontWeight:900,color:CC.brand,lineHeight:1.1,marginTop:2}}>{timedResult.solved}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"#fef2f2",border:"1px solid #fca5a5"}}>
+            <div style={{fontSize:10,color:CC.danger,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>Ошибок</div>
+            <div style={{fontSize:32,fontWeight:900,color:CC.danger,lineHeight:1.1,marginTop:2}}>{timedResult.failed}</div>
+          </div>
+          <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.surface3,border:`1px solid ${CC.border}`}}>
+            <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const}}>WR%</div>
+            <div style={{fontSize:32,fontWeight:900,color:CC.text,lineHeight:1.1,marginTop:2}}>
+              {timedResult.solved+timedResult.failed>0?Math.round(timedResult.solved/(timedResult.solved+timedResult.failed)*100):0}%
+            </div>
+          </div>
+        </div>
+        {timedResult.solved>0&&<div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",marginBottom:SPACE[3]}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#92400e"}}>Начислено Chessy</div>
+          <div style={{fontSize:22,fontWeight:900,color:"#78350f",display:"inline-flex",alignItems:"center",gap:4,marginTop:2}}>
+            <Icon.Coin width={20} height={20}/>+{timedResult.solved*2}
+          </div>
+        </div>}
+        <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[3]}}>
+          {timedResult.solved>=10?"Отличный результат! Продолжай в том же духе.":timedResult.solved>=5?"Хорошо! Больше практики — и вырастешь.":timedResult.solved===0?"Попробуй снова — главное начать!":"Неплохое начало. Тренируй тактику каждый день!"}
+        </div>
+        <div style={{display:"flex",gap:SPACE[2]}}>
+          <Btn variant="secondary" size="md" full onClick={()=>sTimedResult(null)}>Закрыть</Btn>
+          <Btn variant="primary" size="md" full onClick={()=>{
+            sTimedResult(null);
+            const sec=timedResult.mode==="3 мин"?180:timedResult.mode==="5 мин"?300:pzCustomSec;
+            sPzSolvedCount(0);sPzFailedCount(0);sPzTimeLeft(sec);
+            if(fPz.length)ldPz(Math.floor(Math.random()*fPz.length));
+          }}>▶ Ещё раз</Btn>
+        </div>
+      </div>}
+    </Modal>
+
     {/* Puzzle Rush — final result */}
     <Modal open={!!rushResult} onClose={()=>sRushResult(null)} size="sm" title={rushResult?.isNewBest?"🏆 Новый рекорд!":"⚡ Rush завершён"}>
       {rushResult&&<div style={{textAlign:"center"}}>
@@ -9268,7 +9362,7 @@ ${question.trim()}`;
         // ── PUZZLES ──
         {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${PUZZLES.length.toLocaleString()} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-        {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"180 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Lichess Daily Puzzle",hint:"Задача дня с lichess.org (live)",          run:async()=>{
           if(lichessLoading)return;sLichessLoading(true);showToast("⏳ Загружаю Lichess Daily…","info");

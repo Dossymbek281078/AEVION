@@ -6,6 +6,7 @@ import { LEVELS } from "../lib/levels";
 import { useProgress } from "../lib/useProgress";
 import { useStudent } from "../lib/useStudent";
 import { getLessonsForLevel, loadLessonProgress } from "../lib/lessons";
+import { encodeQR, renderQRSvg } from "../lib/qr";
 
 const COURSE_TITLE = "Сметное дело в Республике Казахстан";
 const COURSE_HOURS = 88;
@@ -65,6 +66,17 @@ export default function CertificatePage() {
     () => genCertificateNumber(`${student.name}|${student.group}|${issueDate ?? ""}`),
     [student, issueDate],
   );
+
+  // QR-код с verify URL
+  const qrSvg = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://aevion.kz";
+    const url = `${origin}/smeta-trainer/verify/${certNumber}`;
+    try {
+      return renderQRSvg(encodeQR(url), 110);
+    } catch {
+      return null;
+    }
+  }, [certNumber]);
 
   if (!hydrated) {
     return <div className="min-h-screen flex items-center justify-center text-slate-400">Загрузка…</div>;
@@ -218,7 +230,7 @@ export default function CertificatePage() {
           </div>
 
           {/* Footer */}
-          <div className="grid grid-cols-3 items-end gap-4 mt-6 pt-4 border-t border-slate-200">
+          <div className="grid grid-cols-4 items-end gap-4 mt-6 pt-4 border-t border-slate-200">
             <div>
               <div className="text-[10px] text-slate-500 uppercase">Дата выдачи</div>
               <div className="text-sm font-semibold text-slate-700">{formatRuDate(issueDate)}</div>
@@ -232,6 +244,22 @@ export default function CertificatePage() {
               <div className="text-sm font-semibold text-slate-700">AEVION</div>
               <div className="text-[10px] text-slate-400">aevion.kz · сметный тренажёр</div>
             </div>
+            {/* QR-код для верификации */}
+            {qrSvg && (
+              <div className="flex flex-col items-center">
+                <div
+                  dangerouslySetInnerHTML={{ __html: qrSvg }}
+                  className="border border-slate-200 rounded"
+                  style={{ width: 110, height: 110 }}
+                  aria-label="QR для проверки сертификата"
+                />
+                <div className="text-[8px] text-slate-400 mt-1 text-center leading-tight">
+                  Проверить:
+                  <br />
+                  /verify/{certNumber}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

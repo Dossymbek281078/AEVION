@@ -1980,6 +1980,78 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`getBenchmarks failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  // V59: AI Memory
+
+  /** Add a memory entry that persists across sessions. Pinned memories are injected into the analyst. */
+  async addMemory(
+    content: string,
+    opts?: { category?: string; pinned?: boolean }
+  ): Promise<{ id: string; content: string; category: string; pinned: boolean }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/memories"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, ...opts }),
+    });
+    if (!res.ok) throw new Error(`addMemory failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.memory;
+  }
+
+  /** List memories for the authenticated user. */
+  async listMemories(
+    opts?: { category?: string; pinned?: boolean; limit?: number }
+  ): Promise<Array<{ id: string; content: string; category: string; pinned: boolean; createdAt: string }>> {
+    const p = new URLSearchParams();
+    if (opts?.category) p.set("category", opts.category);
+    if (opts?.pinned !== undefined) p.set("pinned", String(opts.pinned));
+    if (opts?.limit) p.set("limit", String(opts.limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/memories${p.size ? "?" + p : ""}`));
+    if (!res.ok) throw new Error(`listMemories failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.memories ?? [];
+  }
+
+  /** Delete a memory by id. */
+  async deleteMemory(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/memories/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(`deleteMemory failed: ${await safeError(res)}`);
+  }
+
+  /** Extract memories from a completed run's output. Non-blocking — server fires-and-forgets. */
+  async extractMemoriesFromRun(runId: string): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/memories/extract"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId }),
+    });
+    if (!res.ok) throw new Error(`extractMemoriesFromRun failed: ${await safeError(res)}`);
+  }
+
+  // V60: Template suggestions
+
+  /** Get AI-powered template suggestions based on your run history. */
+  async suggestTemplates(): Promise<Array<{ name: string; description: string; input: string; strategy: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/templates/suggest"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`suggestTemplates failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.suggestions ?? [];
+  }
+
+  // V61: Provider health
+
+  /** Check live status of all configured providers. Results cached server-side for 60s. */
+  async checkProviderHealth(): Promise<Array<{ id: string; name: string; status: string; latencyMs: number; checkedAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/providers/health"));
+    if (!res.ok) throw new Error(`checkProviderHealth failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.providers ?? [];
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

@@ -76,6 +76,21 @@ function safeUrl(input: string): string | null {
   try { new URL(withProto); return withProto; } catch { return null; }
 }
 
+// Twitch is strict about `parent` — it must EXACTLY match the page hostname.
+// We pass every realistic deployment host plus the current one so preview/prod
+// deployments and localhost all work without further config.
+const TWITCH_PARENTS = ["localhost", "127.0.0.1", "aevion.app", "www.aevion.app", "aevion.vercel.app"];
+function buildTwitchParents(currentHost: string): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const h of [currentHost, ...TWITCH_PARENTS]) {
+    if (!h || seen.has(h)) continue;
+    seen.add(h);
+    out.push(`parent=${encodeURIComponent(h)}`);
+  }
+  return out.join("&");
+}
+
 function paneIframe(p: PaneState, parent: string): { src: string; key: string; ext: string } {
   if (p.tab === "youtube") {
     const id = ytId(p.yt);
@@ -86,7 +101,7 @@ function paneIframe(p: PaneState, parent: string): { src: string; key: string; e
   if (p.tab === "twitch") {
     const ch = twChannel(p.tw);
     return ch
-      ? { src: `https://player.twitch.tv/?channel=${ch}&parent=${parent}&parent=localhost&muted=true&autoplay=true`, key: `tw-${ch}`, ext: `https://twitch.tv/${ch}` }
+      ? { src: `https://player.twitch.tv/?channel=${ch}&${buildTwitchParents(parent)}&muted=true&autoplay=true`, key: `tw-${ch}`, ext: `https://twitch.tv/${ch}` }
       : { src: "", key: "tw-empty", ext: "" };
   }
   if (p.tab === "url") {
@@ -256,15 +271,34 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
             ))}
           </div>
         ) : src ? (
-          <iframe
-            key={key}
-            src={src}
-            allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write"
-            allowFullScreen
-            referrerPolicy="origin-when-cross-origin"
-            loading="eager"
-            style={{ width: "100%", height: "100%", border: "none", background: "#000", display: "block" }}
-          />
+          <div style={{ position: "relative", width: "100%", height: "100%" }}>
+            <iframe
+              key={key}
+              src={src}
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write; accelerometer; gyroscope"
+              allowFullScreen
+              referrerPolicy="origin-when-cross-origin"
+              loading="eager"
+              style={{ width: "100%", height: "100%", border: "none", background: "#000", display: "block" }}
+            />
+            {/* Always-visible "open in new tab" pill overlay — many sites send X-Frame-Options DENY
+                so the iframe shows blank. The pill gives the user an immediate escape hatch. */}
+            {ext && (
+              <a href={ext} target="_blank" rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Если страница не отображается — сайт запретил iframe"
+                style={{
+                  position: "absolute", top: 6, right: 6, zIndex: 2,
+                  padding: "3px 8px", borderRadius: 999,
+                  background: "rgba(15,23,42,0.78)", color: "#fbbf24",
+                  fontSize: 9.5, fontWeight: 800, letterSpacing: 0.3,
+                  textDecoration: "none", border: "1px solid rgba(251,191,36,0.4)",
+                  backdropFilter: "blur(4px)",
+                }}>
+                ↗ Новая вкладка
+              </a>
+            )}
+          </div>
         ) : (
           <div style={{
             display: "flex", flexDirection: "column",

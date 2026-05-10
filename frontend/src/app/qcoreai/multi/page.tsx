@@ -2887,6 +2887,30 @@ export default function QCoreMultiAgentPage() {
                 </span>
               </div>
 
+              {/* V69 — Smart routing toggle */}
+              <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontWeight: 800, fontSize: 12, color: "#0f172a", flex: 1 }}>🔀 Smart routing</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: "#64748b" }}>
+                    <input
+                      type="checkbox"
+                      checked={typeof window !== "undefined" ? localStorage.getItem("qcore_smart_routing") === "on" : false}
+                      onChange={(e) => {
+                        if (typeof window !== "undefined") {
+                          localStorage.setItem("qcore_smart_routing", e.target.checked ? "on" : "off");
+                          // force re-render
+                          window.dispatchEvent(new Event("storage"));
+                        }
+                      }}
+                    />
+                    Auto-select model by input type
+                  </label>
+                  <a href="/qcoreai/routing" style={{ fontSize: 11, color: "#6d28d9", fontWeight: 700, textDecoration: "none" }}>
+                    Edit rules →
+                  </a>
+                </div>
+              </div>
+
               {strategy === "sequential" && (
                 <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700 }}>Revision rounds:</span>
@@ -4047,6 +4071,8 @@ export default function QCoreMultiAgentPage() {
           { icon: "🧠", label: "AI Memory", href: "/qcoreai/memory" },
           { icon: "🧪", label: "A/B Tests", href: "/qcoreai/ab-tests" },
           { icon: "⚙️", label: "Settings", href: "/qcoreai/settings" },
+          { icon: "📦", label: "Export hub", href: "/qcoreai/export" },
+          { icon: "🔀", label: "Smart routing", href: "/qcoreai/routing" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div
@@ -5577,6 +5603,11 @@ function FinalCard({
   const [userRating, setUserRating] = useState<1 | -1 | null>(null);
   const [ratingCounts, setRatingCounts] = useState<{ thumbsUp: number; thumbsDown: number } | null>(null);
   const [bookmarked, setBookmarked] = useState(false);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [branchInput, setBranchInput] = useState("");
+  const [branchStrategy, setBranchStrategy] = useState("debate");
+  const [branchBusy, setBranchBusy] = useState(false);
+  const [branchMsg, setBranchMsg] = useState<string | null>(null);
 
   const toggleBookmark = async () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
@@ -5723,6 +5754,20 @@ function FinalCard({
               ↩ Continue
             </button>
           )}
+          {/* V67 — Branch button */}
+          <button
+            onClick={() => { setBranchOpen((v) => !v); setBranchMsg(null); }}
+            title="Branch — try an alternative approach or strategy"
+            style={{
+              padding: "4px 10px", borderRadius: 8,
+              border: "1px solid rgba(99,102,241,0.3)",
+              background: branchOpen ? "rgba(99,102,241,0.08)" : "#fff",
+              color: "#4338ca",
+              fontSize: 11, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            ⑂ Branch
+          </button>
           {/* Rating buttons */}
           <button
             onClick={() => rate(1)}
@@ -5765,6 +5810,67 @@ function FinalCard({
           </button>
         </div>
       </div>
+      {/* V67 — Branch inline form */}
+      {branchOpen && (
+        <div style={{ marginTop: 10, padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(99,102,241,0.25)", background: "rgba(99,102,241,0.04)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#4338ca", marginBottom: 8 }}>
+            ⑂ Branch — try an alternative approach
+          </div>
+          <textarea
+            value={branchInput}
+            onChange={(e) => setBranchInput(e.target.value)}
+            placeholder="Describe an alternative approach or ask the same question differently…"
+            rows={3}
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #c7d2fe", fontSize: 12, outline: "none", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit" }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <select
+              value={branchStrategy}
+              onChange={(e) => setBranchStrategy(e.target.value)}
+              style={{ padding: "5px 8px", borderRadius: 7, border: "1px solid #c7d2fe", fontSize: 11, color: "#0f172a", background: "#fff", outline: "none" }}
+            >
+              <option value="debate">Debate</option>
+              <option value="sequential">Sequential</option>
+              <option value="parallel">Parallel</option>
+            </select>
+            <button
+              disabled={branchBusy || !branchInput.trim()}
+              onClick={async () => {
+                if (!branchInput.trim()) return;
+                setBranchBusy(true);
+                setBranchMsg(null);
+                const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+                try {
+                  const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/branch`), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    body: JSON.stringify({ reason: "User requested alternative", alternativeInput: branchInput, strategy: branchStrategy }),
+                  });
+                  const d = await res.json().catch(() => ({}));
+                  if (res.ok && d.branch) {
+                    setBranchMsg("Branch created. A new run was queued in this session.");
+                    setBranchInput("");
+                    setBranchOpen(false);
+                  } else {
+                    setBranchMsg(`Error: ${d.error || res.status}`);
+                  }
+                } catch (e: any) {
+                  setBranchMsg(`Error: ${e?.message || "unknown"}`);
+                } finally {
+                  setBranchBusy(false);
+                }
+              }}
+              style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: "#4338ca", color: "#fff", fontSize: 11, fontWeight: 700, cursor: branchBusy ? "wait" : "pointer", opacity: branchBusy ? 0.7 : 1 }}
+            >
+              {branchBusy ? "Creating…" : "Create branch"}
+            </button>
+            <button onClick={() => { setBranchOpen(false); setBranchMsg(null); }} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: 11, cursor: "pointer" }}>
+              Cancel
+            </button>
+            {branchMsg && <span style={{ fontSize: 11, color: branchMsg.startsWith("Error") ? "#dc2626" : "#065f46", fontWeight: 600 }}>{branchMsg}</span>}
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 14, lineHeight: 1.6, color: "#0f172a" }}>
         <Markdown source={content} />
       </div>

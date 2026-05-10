@@ -2124,6 +2124,104 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`getRunQuality failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  // ─── V67: Run branching ──────────────────────────────────────────────────
+
+  /**
+   * Create a conditional branch from an existing run.
+   * Triggers a new run in the same session with `alternativeInput` and the
+   * given `strategy`. Returns both the branch record and the new run stub.
+   *
+   * @example
+   * ```ts
+   * const { branch, run } = await client.createRunBranch(runId, {
+   *   reason: "Try debate strategy instead",
+   *   alternativeInput: "What are the trade-offs of SQL vs NoSQL?",
+   *   strategy: "debate",
+   * });
+   * console.log("New run:", run.id, "in session:", run.sessionId);
+   * ```
+   */
+  async createRunBranch(
+    runId: string,
+    opts: { reason: string; alternativeInput: string; strategy?: string }
+  ): Promise<{ branch: { id: string }; run: { id: string; sessionId: string } }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${runId}/branch`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ reason: opts.reason, alternativeInput: opts.alternativeInput, strategy: opts.strategy }),
+    });
+    if (!res.ok) throw new Error(`createRunBranch failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * List all branches created from a run.
+   */
+  async listRunBranches(runId: string): Promise<Array<{ id: string; branchReason: string; status: string; resultRunId: string | null }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${runId}/branches`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listRunBranches failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.branches ?? [];
+  }
+
+  // ─── V68: Export ─────────────────────────────────────────────────────────
+
+  /**
+   * Export a full session as a JSON bundle (session + runs + annotations + bookmarks).
+   * Auth required; owner only.
+   *
+   * @example
+   * ```ts
+   * const bundle = await client.exportSessionBundle(sessionId, { includeMessages: true });
+   * fs.writeFileSync(`session-${sessionId}.json`, JSON.stringify(bundle, null, 2));
+   * ```
+   */
+  async exportSessionBundle(sessionId: string, opts?: { includeMessages?: boolean }): Promise<any> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/export/session-bundle"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ sessionId, includeMessages: opts?.includeMessages ?? false }),
+    });
+    if (!res.ok) throw new Error(`exportSessionBundle failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // ─── V69: Smart routing rules ────────────────────────────────────────────
+
+  /**
+   * Save auto-routing preferences. Rules are applied automatically in the
+   * multi-agent handler when no explicit provider/model override is set.
+   * Conditions: `short_input` | `long_input` | `code_task` | `creative_task`.
+   *
+   * @example
+   * ```ts
+   * await client.saveRoutingRules([
+   *   { condition: "code_task", preferProvider: "anthropic", preferModel: "claude-sonnet-4-5" },
+   *   { condition: "long_input", preferProvider: "openai", preferModel: "gpt-4o" },
+   * ]);
+   * ```
+   */
+  async saveRoutingRules(
+    rules: Array<{ condition: string; preferProvider: string; preferModel: string }>
+  ): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/routing-rules"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ rules }),
+    });
+    if (!res.ok) throw new Error(`saveRoutingRules failed: ${await safeError(res)}`);
+  }
+
+  /**
+   * Retrieve the current smart routing rules for the authenticated user.
+   */
+  async getRoutingRules(): Promise<Array<{ condition: string; preferProvider: string; preferModel: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/routing-rules"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRoutingRules failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.rules ?? [];
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

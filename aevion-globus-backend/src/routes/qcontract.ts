@@ -636,3 +636,209 @@ qcontractRouter.get("/health", async (_req, res) => {
     res.status(503).json({ status: "error", service: "qcontract", error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// GET /api/qcontract/openapi.json — public OpenAPI 3.1 spec for partners.
+qcontractRouter.options("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.status(204).end();
+});
+qcontractRouter.get("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
+  res.json({
+    openapi: "3.1.0",
+    info: {
+      title: "AEVION QContract",
+      version: "1.1.0",
+      description:
+        "Self-destruct smart documents API. Burn-after-N-reads, time expiry, password gate, email watermark, audit log, QRight legal cert.",
+      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+      license: { name: "Proprietary" },
+    },
+    servers: [{ url: `${base}/api/qcontract`, description: "Production" }],
+    tags: [
+      { name: "Templates" },
+      { name: "Documents" },
+      { name: "View" },
+      { name: "Public" },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+      },
+      schemas: {
+        Document: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            title: { type: "string" },
+            contentType: { type: "string", enum: ["text", "url", "html"] },
+            maxViews: { type: "integer", nullable: true },
+            viewCount: { type: "integer" },
+            expiresAt: { type: "string", format: "date-time", nullable: true },
+            revokedAt: { type: "string", format: "date-time", nullable: true },
+            hasPassword: { type: "boolean" },
+            expired: { type: "boolean" },
+            shareUrl: { type: "string", format: "uri" },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        Error: {
+          type: "object",
+          required: ["error"],
+          properties: { error: { type: "string" } },
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
+    paths: {
+      "/templates": {
+        get: {
+          tags: ["Templates"],
+          summary: "List built-in document templates",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/templates/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: {
+          tags: ["Templates"],
+          summary: "Single template (with content)",
+          security: [],
+          responses: { "200": { description: "OK" }, "404": { description: "Not found" } },
+        },
+      },
+      "/documents": {
+        post: {
+          tags: ["Documents"],
+          summary: "Create a self-destruct document",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["title", "content"],
+                  properties: {
+                    title: { type: "string" },
+                    content: { type: "string" },
+                    contentType: { type: "string", enum: ["text", "url", "html"], default: "text" },
+                    password: { type: "string", description: "Plaintext, hashed server-side" },
+                    maxViews: { type: "integer", minimum: 1 },
+                    expiresAt: { type: "string", format: "date-time" },
+                    requireSignature: { type: "boolean", default: false },
+                    qrightId: { type: "string", description: "Optional QRight cert id to bind" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Created",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", format: "uuid" },
+                      accessToken: { type: "string" },
+                      shareUrl: { type: "string", format: "uri" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": { description: "title_required / content_required" },
+            "401": { description: "auth_required" },
+          },
+        },
+        get: {
+          tags: ["Documents"],
+          summary: "List my documents",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/documents/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        patch: {
+          tags: ["Documents"],
+          summary: "Update document (extend expiry, change password, etc.)",
+          responses: { "200": { description: "OK" }, "404": { description: "Not found" } },
+        },
+        delete: {
+          tags: ["Documents"],
+          summary: "Revoke document (terminal)",
+          responses: { "200": { description: "OK" }, "404": { description: "Not found" } },
+        },
+      },
+      "/documents/{id}/log": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: {
+          tags: ["Documents"],
+          summary: "View access log (audit trail)",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/documents/{id}/log.csv": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        get: {
+          tags: ["Documents"],
+          summary: "Audit log as CSV (compliance)",
+          responses: { "200": { description: "text/csv" } },
+        },
+      },
+      "/view/{token}": {
+        parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+        get: {
+          tags: ["View"],
+          summary: "Document metadata (no content) — pre-flight",
+          security: [],
+          responses: { "200": { description: "OK" }, "404": { description: "Revoked / expired" } },
+        },
+        post: {
+          tags: ["View"],
+          summary: "View content (consumes one read; password if set)",
+          security: [],
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    password: { type: "string" },
+                    viewerEmail: { type: "string", description: "Watermark + audit" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "OK — content + watermark" },
+            "401": { description: "password_required / password_mismatch" },
+            "410": { description: "expired / revoked / max_views_exceeded" },
+          },
+        },
+      },
+      "/stats": {
+        get: {
+          tags: ["Public"],
+          summary: "Aggregate stats (anon)",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/health": {
+        get: {
+          tags: ["Public"],
+          summary: "Service health",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  });
+});

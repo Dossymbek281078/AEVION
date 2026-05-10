@@ -7,6 +7,7 @@ import { useProgress } from "../lib/useProgress";
 import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "../lib/lessons";
 import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
 import { findLesson } from "../lib/lessons";
+import { backfillFromLessonProgress, computeDueToday, type DueLesson } from "../lib/spacedRepetition";
 import type { LevelStatus } from "../lib/useProgress";
 
 const statusLabel: Record<LevelStatus, string> = {
@@ -75,6 +76,13 @@ export function LevelHome() {
   }, [progress]);
 
   const [badgesEarned, setBadgesEarned] = useState(0);
+
+  // Spaced repetition — что повторять сегодня
+  const [dueToday, setDueToday] = useState<DueLesson[]>([]);
+  useEffect(() => {
+    backfillFromLessonProgress(); // безопасный one-time fill для старых пользователей
+    setDueToday(computeDueToday());
+  }, [progress]);
 
   // Weak spots: уроки с quizScore < 100, отсортированные по слабости
   const [weakSpots, setWeakSpots] = useState<Array<{ id: string; title: string; level: number; score: number }>>([]);
@@ -149,6 +157,48 @@ export function LevelHome() {
                   <span className="text-xl">🎲</span>
                   <span className="hidden sm:inline text-xs">Случайный</span>
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Spaced repetition — что повторять сегодня */}
+          {dueToday.length > 0 && (
+            <div className="mt-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">🧠</span>
+                <div className="text-xs font-bold text-purple-800 uppercase tracking-wide">
+                  Сегодня к повторению — {dueToday.length} {dueToday.length === 1 ? "урок" : dueToday.length < 5 ? "урока" : "уроков"}
+                </div>
+                <span className="ml-auto text-[10px] text-purple-600 italic">
+                  spaced repetition · SM-2-lite
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {dueToday.slice(0, 6).map((d) => (
+                  <Link
+                    key={d.lessonId}
+                    href={`/smeta-trainer/level/${d.level}#lesson-${encodeURIComponent(d.lessonId)}`}
+                    className="flex items-center gap-2 bg-white border border-purple-200 rounded px-2 py-1.5 hover:border-purple-400 text-xs"
+                  >
+                    <span className="shrink-0 w-9 text-right text-[10px] font-mono font-bold text-purple-700">
+                      {"⭐".repeat(Math.min(d.reps + 1, 5))}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-slate-800 truncate">{d.title}</div>
+                      <div className="text-[10px] text-slate-400">
+                        Уровень {d.level} · интервал {d.intervalDays}д
+                        {d.overdueDays > 0 && (
+                          <span className="text-red-600 ml-1">· просрочен {d.overdueDays}д</span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              {dueToday.length > 6 && (
+                <div className="text-[10px] text-purple-600 mt-2 italic">
+                  И ещё {dueToday.length - 6} — пройди эти 6, остальные подтянутся завтра.
+                </div>
               )}
             </div>
           )}

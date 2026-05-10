@@ -11,6 +11,7 @@ import {
 } from "../lib/lessons";
 import { useLessonBookmarks } from "../lib/useLessonBookmarks";
 import { useLessonNotes } from "../lib/useLessonNotes";
+import { recordReview } from "../lib/spacedRepetition";
 import { Markdown } from "./Markdown";
 
 interface Props {
@@ -107,6 +108,8 @@ export function LessonViewer({ level }: Props) {
       quizScore: score,
       ts: Date.now(),
     });
+    // Spaced repetition: фиксируем ревью (advance / reset / enqueue)
+    recordReview(lesson.id, score);
     setProgressTick((n) => n + 1);
   }
 

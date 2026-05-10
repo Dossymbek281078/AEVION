@@ -1903,6 +1903,83 @@ export class QCoreClient {
     const d = await res.json();
     return d.stats;
   }
+
+  // V55: session invites
+
+  /** Create a read-only invite link for a session. */
+  async createSessionInvite(
+    sessionId: string,
+    opts?: { role?: string; expiresInDays?: number }
+  ): Promise<{ id: string; token: string; role: string; expiresAt: string | null }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${sessionId}/invites`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts ?? {}),
+    });
+    if (!res.ok) throw new Error(`createSessionInvite failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List all active invite links for a session (owner only). */
+  async listSessionInvites(
+    sessionId: string
+  ): Promise<Array<{ id: string; token: string; role: string; usedCount: number; expiresAt: string | null }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${sessionId}/invites`));
+    if (!res.ok) throw new Error(`listSessionInvites failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.invites ?? [];
+  }
+
+  /** Delete a session invite (owner only). */
+  async deleteSessionInvite(sessionId: string, inviteId: string): Promise<void> {
+    const res = await this.fetchImpl(
+      this.url(`/api/qcoreai/sessions/${sessionId}/invites/${inviteId}`),
+      { method: "DELETE" }
+    );
+    if (!res.ok) throw new Error(`deleteSessionInvite failed: ${await safeError(res)}`);
+  }
+
+  /** Resolve an invite token — checks validity and returns session info. */
+  async resolveInvite(
+    token: string
+  ): Promise<{ sessionId: string; role: string; valid: boolean }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/invites/${token}`));
+    if (!res.ok) throw new Error(`resolveInvite failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V56: audit log
+
+  /** Get the current user's action history. */
+  async getAuditLog(
+    limit?: number
+  ): Promise<Array<{ id: string; action: string; resourceType: string | null; resourceId: string | null; createdAt: string }>> {
+    const qs = limit ? `?limit=${limit}` : "";
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/audit-log${qs}`));
+    if (!res.ok) throw new Error(`getAuditLog failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.entries ?? [];
+  }
+
+  // V57: benchmarks
+
+  /** Get model benchmark comparison data (speed, quality, cost scores). */
+  async getBenchmarks(): Promise<{
+    models: Array<{
+      provider: string;
+      model: string;
+      speedScore: number;
+      qualityScore: number;
+      costScore: number;
+      contextWindow: number;
+    }>;
+    lastUpdated: string;
+    note: string;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/benchmarks"));
+    if (!res.ok) throw new Error(`getBenchmarks failed: ${await safeError(res)}`);
+    return res.json();
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

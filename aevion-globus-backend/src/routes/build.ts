@@ -33,6 +33,7 @@ import { shiftsRouter } from "./build/shifts";
 import { teamHiringRouter } from "./build/team-hiring";
 import { interviewsRouter } from "./build/interviews";
 import { skillBadgesRouter } from "./build/skill-badges";
+import { referencesRouter } from "./build/references";
 import { paymentCalendarRouter } from "./build/payment-calendar";
 import { pushRouter } from "./build/push";
 import { contractsRouter } from "./build/contracts";
@@ -94,6 +95,7 @@ buildRouter.use("/shifts", shiftsRouter);
 buildRouter.use("/team-requests", teamHiringRouter);
 buildRouter.use("/interviews", interviewsRouter);
 buildRouter.use("/", skillBadgesRouter);
+buildRouter.use("/", referencesRouter);
 buildRouter.use("/payment-calendar", paymentCalendarRouter);
 buildRouter.use("/push", pushRouter);
 // QSign-backed contract generation — mounts under /applications so

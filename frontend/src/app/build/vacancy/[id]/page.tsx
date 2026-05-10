@@ -296,6 +296,9 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                   vacancyId={vacancy.id}
                   projectId={vacancy.projectId}
                 />
+                {vacancy.status === "OPEN" && (
+                  <UrgentToggleButton vacancy={vacancy} onDone={refresh} />
+                )}
                 <SaveAsTemplateButton vacancy={vacancy} />
                 {(vacancy.status === "CLOSED" || vacancy.status === "ARCHIVED") && (
                   <RepublishVacancyButton
@@ -3370,6 +3373,35 @@ function VacancyStatusToggle({
       }`}
     >
       {busy ? "…" : isOpen ? "Close vacancy" : "Reopen vacancy"}
+    </button>
+  );
+}
+
+function UrgentToggleButton({ vacancy, onDone }: { vacancy: BuildVacancy & { urgent?: boolean; urgentUntil?: string | null }; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const isUrgent = !!vacancy.urgent && (!vacancy.urgentUntil || new Date(vacancy.urgentUntil) > new Date());
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      await buildApi.setVacancyUrgent(vacancy.id, { urgent: !isUrgent });
+      onDone();
+    } catch {/* ignore */}
+    finally { setBusy(false); }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      title={isUrgent ? "Снять срочность" : "Пометить как срочную (🚨 badge на 7 дней)"}
+      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+        isUrgent
+          ? "border border-red-500/50 bg-red-500/20 text-red-200 hover:bg-red-500/10"
+          : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+      }`}
+    >
+      {busy ? "…" : isUrgent ? "🚨 Срочно ON" : "🚨 Срочно"}
     </button>
   );
 }

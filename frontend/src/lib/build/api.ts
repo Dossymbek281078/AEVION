@@ -1765,7 +1765,7 @@ export const buildApi = {
       "POST", "/api/build/documents", input
     ),
   myDocuments: () =>
-    call<{ items: Array<{ id: string; docType: string; status: string; fileUrl: string; verifiedAt: string | null; rejectReason: string | null; createdAt: string }>; total: number }>(
+    call<{ items: Array<{ id: string; docType: string; status: string; fileUrl: string; verifiedAt: string | null; rejectReason: string | null; reviewNote: string | null; createdAt: string }>; total: number }>(
       "GET", "/api/build/documents/me"
     ),
   adminPendingDocuments: () =>
@@ -1776,6 +1776,38 @@ export const buildApi = {
     call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/verify`, {}),
   rejectDocument: (id: string, reason?: string) =>
     call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/reject`, { reason }),
+
+  // References — employer-written references for workers
+  myReferences: () =>
+    call<{ references: Array<{ id: string; projectId: string; workerId: string; authorId: string; rating: number; text: string; recommend: boolean; createdAt: string; projectTitle?: string; workerName?: string; workerTitle?: string; workerPhoto?: string | null; authorName?: string }>; total: number }>(
+      "GET", "/api/build/references/my"
+    ),
+  workerReferences: (userId: string) =>
+    call<{ references: Array<{ id: string; projectId: string; rating: number; text: string; recommend: boolean; createdAt: string; projectTitle?: string; authorName?: string }>; total: number }>(
+      "GET", `/api/build/worker-references/${userId}`
+    ),
+  createReference: (projectId: string, input: { workerId: string; rating: number; text: string; recommend: boolean }) =>
+    call<{ id: string }>("POST", `/api/build/projects/${projectId}/references`, input),
+  deleteReference: (id: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/build/references/${id}`),
+
+  // Portfolio photos — work-site gallery on worker public profile
+  uploadPortfolioPhoto: (input: { url: string; caption?: string; projectType?: string; takenAt?: string }) =>
+    call<{ id: string; url: string; caption: string | null; createdAt: string }>(
+      "POST", "/api/build/portfolio/photos", input
+    ),
+  portfolioPhotos: (userId: string) =>
+    call<{ items: Array<{ id: string; url: string; caption: string | null; projectType: string | null; takenAt: string | null; createdAt: string }>; total: number }>(
+      "GET", `/api/build/portfolio/photos/${userId}`
+    ),
+  deletePortfolioPhoto: (id: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/build/portfolio/photos/${id}`),
+  updatePortfolioPhoto: (id: string, input: { caption?: string; projectType?: string }) =>
+    call<{ id: string; caption: string | null }>("PATCH", `/api/build/portfolio/photos/${id}`, input),
+
+  // Safety briefing template (public)
+  safetyBriefingTemplate: () =>
+    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template"),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─

@@ -8,6 +8,7 @@ import { getLessonsForLevel, levelLessonsCompletion, loadLessonProgress } from "
 import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
 import { findLesson } from "../lib/lessons";
 import { backfillFromLessonProgress, computeDueToday, type DueLesson } from "../lib/spacedRepetition";
+import { currentStreak, longestStreak } from "../lib/streak";
 import type { LevelStatus } from "../lib/useProgress";
 
 const statusLabel: Record<LevelStatus, string> = {
@@ -77,6 +78,11 @@ export function LevelHome() {
 
   const [badgesEarned, setBadgesEarned] = useState(0);
 
+  const [streak, setStreak] = useState({ current: 0, longest: 0 });
+  useEffect(() => {
+    setStreak({ current: currentStreak(), longest: longestStreak() });
+  }, [progress]);
+
   // Spaced repetition — что повторять сегодня
   const [dueToday, setDueToday] = useState<DueLesson[]>([]);
   useEffect(() => {
@@ -122,6 +128,16 @@ export function LevelHome() {
                 <div>
                   <div className="text-2xl font-bold text-sky-600">{lessonsState.done}/{lessonsState.total}</div>
                   <div className="text-xs text-slate-400">уроков пройдено</div>
+                </div>
+              )}
+              {streak.current > 0 && (
+                <div title={`Лучший streak: ${streak.longest}д`}>
+                  <div className="text-2xl font-bold text-orange-500 flex items-center gap-1">
+                    🔥 {streak.current}
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    {streak.current === 1 ? "день подряд" : streak.current < 5 ? "дня подряд" : "дней подряд"}
+                  </div>
                 </div>
               )}
             </div>

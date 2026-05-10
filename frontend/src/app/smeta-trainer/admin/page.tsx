@@ -46,6 +46,9 @@ export default function AdminPage() {
     loadWebhooks(storedJwt);
   }, [storedJwt]);
 
+  // Per-student detail drawer
+  const [drawerStudent, setDrawerStudent] = useState<AdminStudentRecord | null>(null);
+
   // Webhooks state
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
   const [showWebhookForm, setShowWebhookForm] = useState(false);
@@ -273,7 +276,11 @@ export default function AdminPage() {
                       const lastSeen = new Date(s.updatedAt);
                       const ago = Math.floor((Date.now() - s.updatedAt) / (1000 * 60 * 60 * 24));
                       return (
-                        <tr key={s.deviceId} className="border-t hover:bg-slate-50">
+                        <tr
+                          key={s.deviceId}
+                          className="border-t hover:bg-emerald-50 cursor-pointer"
+                          onClick={() => setDrawerStudent(s)}
+                        >
                           <td className="px-3 py-2">
                             <div className="font-semibold text-slate-900">
                               {s.displayName || <span className="text-slate-400 italic">аноним</span>}
@@ -555,6 +562,171 @@ if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
             </div>
           </>
         )}
+      </div>
+
+      {/* Per-student detail drawer */}
+      {drawerStudent && (
+        <StudentDrawer student={drawerStudent} onClose={() => setDrawerStudent(null)} />
+      )}
+    </div>
+  );
+}
+
+function StudentDrawer({
+  student,
+  onClose,
+}: {
+  student: AdminStudentRecord;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 flex items-stretch justify-end"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full max-w-xl overflow-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="sticky top-0 bg-slate-900 text-white px-5 py-3 flex items-center justify-between">
+          <div>
+            <div className="text-base font-bold">
+              {student.displayName ?? <span className="text-slate-400 italic">аноним</span>}
+            </div>
+            <div className="text-[10px] text-slate-400 font-mono">
+              {student.group ?? "без группы"} · {student.deviceId}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-lg"
+            aria-label="Закрыть"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="p-5 space-y-4">
+          {/* Сводка */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-slate-50 border border-slate-200 rounded p-2">
+              <div className="text-[10px] text-slate-500 uppercase">Зачёты</div>
+              <div className="text-lg font-bold text-emerald-700">{student.doneLevels}/5</div>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded p-2">
+              <div className="text-[10px] text-slate-500 uppercase">Уроки</div>
+              <div className="text-lg font-bold text-sky-700">{student.lessonsDone}</div>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded p-2">
+              <div className="text-[10px] text-slate-500 uppercase">Практика</div>
+              <div className="text-lg font-bold text-purple-700">{student.practiceDone}/7</div>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded p-2">
+              <div className="text-[10px] text-slate-500 uppercase">Бейджи</div>
+              <div className="text-lg font-bold text-amber-600">{student.achievementsCount}</div>
+            </div>
+          </div>
+
+          {student.capstonePassedAt && (
+            <div className="bg-purple-50 border border-purple-200 rounded p-2 text-xs">
+              <span className="font-bold text-purple-800">📜 Капстоун сдан:</span>{" "}
+              {new Date(student.capstonePassedAt).toLocaleString("ru-RU")}
+            </div>
+          )}
+
+          {/* Уровни — детально */}
+          <div>
+            <h3 className="text-xs font-bold text-slate-700 uppercase mb-2">Уровни</h3>
+            <div className="space-y-1">
+              {LEVELS.map((lv) => {
+                const lp = student.levels[String(lv.num)];
+                const status = lp?.status ?? "open";
+                return (
+                  <div
+                    key={lv.num}
+                    className={`flex items-center gap-2 text-xs p-2 rounded border ${
+                      status === "done"
+                        ? "border-emerald-200 bg-emerald-50"
+                        : status === "in-progress"
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <span className="text-base">{lv.icon}</span>
+                    <span className="flex-1 font-medium">Ур. {lv.num} — {lv.title}</span>
+                    {lp?.score != null && (
+                      <span className="font-mono font-bold text-emerald-700">{lp.score}/100</span>
+                    )}
+                    {status === "done" && lp?.completedAt && (
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(lp.completedAt).toLocaleDateString("ru-RU")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Уроки — heat-list (иконки по level) */}
+          {student.lessons && Object.keys(student.lessons).length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-slate-700 uppercase mb-2">
+                Уроки ({Object.values(student.lessons).filter((l) => l.completed).length} пройдено)
+              </h3>
+              <div className="grid grid-cols-12 gap-0.5 text-[10px]">
+                {Object.values(student.lessons)
+                  .sort((a, b) => a.lessonId.localeCompare(b.lessonId))
+                  .map((l) => {
+                    const score = l.quizScore ?? 0;
+                    const bg = !l.completed
+                      ? "bg-slate-200 text-slate-500"
+                      : score === 100
+                        ? "bg-emerald-500 text-white"
+                        : score >= 70
+                          ? "bg-emerald-300 text-slate-800"
+                          : "bg-amber-300 text-slate-800";
+                    return (
+                      <div
+                        key={l.lessonId}
+                        className={`${bg} text-center py-0.5 rounded font-mono cursor-help`}
+                        title={`${l.lessonId}: ${score}% · ${new Date(l.ts).toLocaleString("ru-RU")}`}
+                      >
+                        {l.lessonId.replace(/^l\d-/, "")}
+                      </div>
+                    );
+                  })}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1 italic">
+                Hover для деталей. Зелёный = 100%, светло-зелёный = 70%+, жёлтый = меньше 70%.
+              </div>
+            </div>
+          )}
+
+          {/* Бейджи */}
+          {student.achievements && student.achievements.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-slate-700 uppercase mb-2">Открытые бейджи</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {student.achievements.map((a) => (
+                  <span
+                    key={a}
+                    className="text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1 rounded-full font-mono"
+                  >
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Метаданные */}
+          <div className="border-t border-slate-200 pt-3 text-[10px] text-slate-500 space-y-0.5">
+            <div>Старт: {new Date(student.startedAt).toLocaleString("ru-RU")}</div>
+            <div>Активность: {new Date(student.updatedAt).toLocaleString("ru-RU")}</div>
+            {student.userId && <div>userId: <code className="text-[10px]">{student.userId}</code></div>}
+          </div>
+        </div>
       </div>
     </div>
   );

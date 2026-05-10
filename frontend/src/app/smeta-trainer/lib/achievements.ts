@@ -10,6 +10,7 @@ import type { LessonProgress } from "./lessons";
 import { LEVELS } from "./levels";
 import { getLessonsForLevel } from "./lessons";
 import { PRACTICE_EXERCISES, loadPracticeProgress } from "./practiceExercises";
+import { currentStreak } from "./streak";
 
 export interface Achievement {
   id: string;
@@ -33,6 +34,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "course-complete",    icon: "🏆", title: "Курс пройден",        description: "Все 5 уровней зачтены — сертификат доступен" },
   { id: "detective",          icon: "🕵️", title: "Детектив",            description: "Все 7 упражнений «найди ошибку» в практике решены" },
   { id: "capstone-pass",      icon: "📜", title: "Капстоун-зачёт",      description: "Сдан финальный экзамен между Уровнями 4 и 5" },
+  { id: "streak-7",           icon: "🔥", title: "Неделя подряд",       description: "7 дней активности подряд" },
+  { id: "streak-30",          icon: "🌟", title: "Месяц подряд",        description: "30 дней активности подряд — настоящая дисциплина" },
 ];
 
 const STORAGE_KEY = "aevion-smeta-achievements-v1";
@@ -85,6 +88,13 @@ export function computeEarned(
         earned.add("capstone-pass");
       }
     } catch {}
+  }
+
+  // ── Streak ──
+  if (typeof window !== "undefined") {
+    const streak = currentStreak();
+    if (streak >= 7) earned.add("streak-7");
+    if (streak >= 30) earned.add("streak-30");
   }
 
   return earned;

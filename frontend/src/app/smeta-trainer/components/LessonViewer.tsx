@@ -12,6 +12,7 @@ import {
 import { useLessonBookmarks } from "../lib/useLessonBookmarks";
 import { useLessonNotes } from "../lib/useLessonNotes";
 import { recordReview } from "../lib/spacedRepetition";
+import { markActivity } from "../lib/streak";
 import { Markdown } from "./Markdown";
 
 interface Props {
@@ -110,6 +111,7 @@ export function LessonViewer({ level }: Props) {
     });
     // Spaced repetition: фиксируем ревью (advance / reset / enqueue)
     recordReview(lesson.id, score);
+    markActivity();
     setProgressTick((n) => n + 1);
   }
 

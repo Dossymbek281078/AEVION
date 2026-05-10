@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Lsr, LsrCalc } from "../lib/types";
-import { exportToCsv, exportToJson, importFromJson } from "../lib/exportLsr";
+import { exportToCsv, exportToJson, exportToXlsx, importFromJson } from "../lib/exportLsr";
 
 interface Props {
   lsr: Lsr;
@@ -30,13 +30,24 @@ export function ExportButton({ lsr, calc, onImport }: Props) {
             <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase">Скачать</div>
 
             <button
-              onClick={() => { exportToCsv(lsr, calc); setOpen(false); }}
+              onClick={() => { exportToXlsx(lsr, calc); setOpen(false); }}
               className="w-full text-left px-3 py-2 text-xs hover:bg-emerald-50 flex items-center gap-2"
             >
               <span className="text-lg">📊</span>
               <div>
-                <div className="font-medium text-slate-800">Excel (CSV)</div>
-                <div className="text-[10px] text-slate-400">Открывается в Excel</div>
+                <div className="font-medium text-slate-800">Excel (XLSX)</div>
+                <div className="text-[10px] text-slate-400">С форматированием и стилями</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { exportToCsv(lsr, calc); setOpen(false); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-emerald-50 flex items-center gap-2"
+            >
+              <span className="text-lg">📑</span>
+              <div>
+                <div className="font-medium text-slate-800">CSV (универсальный)</div>
+                <div className="text-[10px] text-slate-400">Любая таблица, текст</div>
               </div>
             </button>
 

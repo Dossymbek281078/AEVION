@@ -8,6 +8,9 @@ interface Props {
   activeSectionId: string;
   onSelect: (id: string) => void;
   onAddRate: () => void;
+  /** Mobile drawer state — управляется родителем (LsrEditor). На desktop игнорируется. */
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 function completionIcon(positions: number): string {
@@ -22,12 +25,33 @@ function completionColor(positions: number): string {
   return "text-emerald-500";
 }
 
-export function SectionNav({ sections, activeSectionId, onSelect, onAddRate }: Props) {
+export function SectionNav({
+  sections,
+  activeSectionId,
+  onSelect,
+  onAddRate,
+  mobileOpen = false,
+  onMobileClose,
+}: Props) {
   const total = sections.reduce((s, sc) => s + sc.direct, 0);
   const filled = sections.filter((sc) => sc.positions.length > 0).length;
 
   return (
-    <aside className="w-52 shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden">
+    <aside className={`
+      bg-slate-50 border-r border-slate-200 flex-col overflow-hidden
+      ${mobileOpen ? "fixed left-0 top-0 bottom-0 w-64 z-50 flex" : "hidden"}
+      md:relative md:flex md:w-52 md:shrink-0 md:z-auto
+    `}>
+      {/* Mobile close button */}
+      {mobileOpen && onMobileClose && (
+        <button
+          onClick={onMobileClose}
+          className="md:hidden absolute top-2 right-2 text-slate-400 hover:text-slate-700 text-sm z-10"
+          aria-label="Закрыть"
+        >
+          ✕
+        </button>
+      )}
       {/* Прогресс */}
       <div className="px-3 pt-3 pb-2 border-b border-slate-100">
         <div className="text-[10px] text-slate-400 mb-1">
@@ -49,7 +73,7 @@ export function SectionNav({ sections, activeSectionId, onSelect, onAddRate }: P
           return (
             <button
               key={sc.section.id}
-              onClick={() => onSelect(sc.section.id)}
+              onClick={() => { onSelect(sc.section.id); onMobileClose?.(); }}
               className={`w-full text-left px-3 py-2 transition-colors flex items-start gap-2 ${
                 isActive
                   ? "bg-emerald-50 border-r-2 border-emerald-500"

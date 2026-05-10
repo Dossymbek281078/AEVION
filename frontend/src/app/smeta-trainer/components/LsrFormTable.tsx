@@ -11,12 +11,16 @@ interface Props {
   onChangeVolume: (sectionId: string, posId: string, vol: number) => void;
   onRemove: (sectionId: string, posId: string) => void;
   onUpdateCoefs?: (sectionId: string, posId: string, coefs: AppliedCoefficient[]) => void;
+  /** Открыть редактор ресурсов для позиции. */
+  onEditResources?: (sectionId: string, posId: string) => void;
+  /** Спросить AI про эту позицию (открыть чат с предзаполненным вопросом). */
+  onAskAi?: (rateCode: string, posId: string) => void;
 }
 
 const TH = "px-2 py-1 text-[10px] font-semibold text-slate-600 border border-slate-300 bg-slate-100 text-center whitespace-nowrap";
 const TD = "px-2 py-1 text-xs border border-slate-200";
 
-export function LsrFormTable({ calc, notices, onChangeVolume, onRemove, onUpdateCoefs }: Props) {
+export function LsrFormTable({ calc, notices, onChangeVolume, onRemove, onUpdateCoefs, onEditResources, onAskAi }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   function toggleExpand(id: string) {
@@ -150,11 +154,37 @@ export function LsrFormTable({ calc, notices, onChangeVolume, onRemove, onUpdate
                           )}
                         </td>
                         <td className={`${TD} text-center`}>
-                          <button
-                            onClick={() => onRemove(sc.section.id, p.position.id)}
-                            className="text-slate-300 hover:text-red-500 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Удалить позицию"
-                          >✕</button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {onAskAi && (
+                              <button
+                                onClick={() => onAskAi(p.rate.code, p.position.id)}
+                                className="text-slate-300 hover:text-blue-600 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Спросить AI про эту позицию"
+                              >💬</button>
+                            )}
+                            {onEditResources && (
+                              <button
+                                onClick={() => onEditResources(sc.section.id, p.position.id)}
+                                className={`text-[11px] transition-opacity ${
+                                  p.position.resourceOverrides
+                                    ? "text-amber-600 hover:text-amber-800 opacity-100"
+                                    : "text-slate-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100"
+                                }`}
+                                title={
+                                  p.position.resourceOverrides
+                                    ? "Ресурсы переопределены — открыть редактор"
+                                    : "Редактировать состав ресурсов расценки"
+                                }
+                              >
+                                {p.position.resourceOverrides ? "✎" : "⚙"}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => onRemove(sc.section.id, p.position.id)}
+                              className="text-slate-300 hover:text-red-500 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Удалить позицию"
+                            >✕</button>
+                          </div>
                         </td>
                       </tr>
 

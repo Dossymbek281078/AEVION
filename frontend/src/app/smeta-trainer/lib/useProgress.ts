@@ -6,7 +6,7 @@ export type LevelStatus = "locked" | "open" | "in-progress" | "done";
 
 export interface LevelProgress {
   status: LevelStatus;
-  score?: number;       // 0–100
+  score?: number;       // для уровней с тестами (0–100)
   completedAt?: string; // ISO date
   attempts?: number;
 }
@@ -14,9 +14,6 @@ export interface LevelProgress {
 export interface CourseProgress {
   levels: Record<number, LevelProgress>;
   lastVisited?: number;
-  studentName?: string;
-  studentGroup?: string;
-  startedAt?: string;
 }
 
 const KEY = "aevion-smeta-progress-v1";
@@ -42,20 +39,18 @@ function load(): CourseProgress {
 
 function save(p: CourseProgress) {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(KEY, JSON.stringify(p)); } catch {}
+  try {
+    localStorage.setItem(KEY, JSON.stringify(p));
+    window.dispatchEvent(new CustomEvent("aevion-smeta-progress-update"));
+  } catch {}
 }
 
 export function useProgress() {
-  // Начинаем с DEFAULT — localStorage читается в useEffect (fix hydration mismatch)
+  // Всегда начинаем с DEFAULT — localStorage читается в useEffect (fix hydration mismatch)
   const [progress, setProgress] = useState<CourseProgress>(DEFAULT);
 
   useEffect(() => {
-    const loaded = load();
-    if (!loaded.startedAt) {
-      loaded.startedAt = new Date().toISOString();
-      save(loaded);
-    }
-    setProgress(loaded);
+    setProgress(load());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -87,15 +82,7 @@ export function useProgress() {
     });
   }, []);
 
-  const setStudentInfo = useCallback((name: string, group?: string) => {
-    setProgress((prev) => {
-      const next = { ...prev, studentName: name.trim() || prev.studentName, studentGroup: group?.trim() || prev.studentGroup };
-      save(next);
-      return next;
-    });
-  }, []);
-
   const reset = useCallback(() => { save(DEFAULT); setProgress(DEFAULT); }, []);
 
-  return { progress, setLevel, markVisit, setStudentInfo, reset };
+  return { progress, setLevel, markVisit, reset };
 }

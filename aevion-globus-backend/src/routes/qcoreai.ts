@@ -6,6 +6,7 @@ import {
   getProviders,
   resolveProvider,
   sanitizeMessages,
+  streamProvider,
 } from "../services/qcoreai/providers";
 import { AgentOverride } from "../services/qcoreai/agents";
 import {
@@ -287,6 +288,90 @@ qcoreaiRouter.post("/chat", chatLimiter, async (req, res) => {
 
 // Exported for unit tests.
 export { clampTemperature, publicErrorCategory };
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Streaming chat (SSE) — ChatGPT-стиль печатания по кускам
+   POST /api/qcoreai/chat-stream
+   Body: { messages, provider?, model?, temperature? }
+   Response: text/event-stream — события data: { kind: "text", text }
+                                              data: { kind: "done", model, provider, usage? }
+                                              data: { kind: "error", message }
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/chat-stream", async (req, res) => {
+  const messages = sanitizeMessages(req.body?.messages);
+  if (!messages) {
+    return res.status(400).json({ error: "messages required" });
+  }
+  const requestedProvider = typeof req.body?.provider === "string" ? req.body.provider : undefined;
+  const providerId = resolveProvider(requestedProvider);
+
+  if (providerId === "stub") {
+    // Не SSE, обычный JSON — клиент сам поймёт fallback
+    return res.json({
+      mode: "stub",
+      provider: "none",
+      model: "none",
+      reply:
+        "[QCoreAI — no AI provider configured]\n\nTo enable streaming, set one of:\n" +
+        "ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, GROK_API_KEY",
+    });
+  }
+
+  const provider = getProviders().find((p) => p.id === providerId)!;
+  const modelName = (typeof req.body?.model === "string" && req.body.model) || provider.defaultModel;
+  const temperature = typeof req.body?.temperature === "number" ? req.body.temperature : 0.6;
+
+  // SSE headers
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (payload: unknown) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  // Heartbeat — каждые 15s, чтобы держать соединение и обнаружить разрыв
+  const heartbeat = setInterval(() => res.write(`:hb\n\n`), 15000);
+  let aborted = false;
+  req.on("close", () => { aborted = true; clearInterval(heartbeat); });
+
+  try {
+    let totalText = "";
+    for await (const ev of streamProvider(providerId, messages, modelName, temperature)) {
+      if (aborted) break;
+      if (ev.kind === "text") {
+        totalText += ev.text;
+        send({ kind: "text", text: ev.text });
+      } else if (ev.kind === "done") {
+        send({
+          kind: "done",
+          model: modelName,
+          provider: provider.name,
+          providerId,
+          tokensIn: ev.tokensIn,
+          tokensOut: ev.tokensOut,
+        });
+      }
+    }
+    if (!aborted && totalText === "") {
+      send({ kind: "error", message: "empty stream" });
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "stream failed";
+    console.error("[QCoreAI stream]", msg);
+    if (!aborted) send({ kind: "error", message: msg });
+  } finally {
+    clearInterval(heartbeat);
+    if (!aborted) {
+      res.write("data: [DONE]\n\n");
+      res.end();
+    }
+  }
+});
 
 /* ═══════════════════════════════════════════════════════════════════════
    Providers + pricing + health

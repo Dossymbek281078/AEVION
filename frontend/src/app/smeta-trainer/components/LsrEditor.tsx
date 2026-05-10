@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { initLaborMachinePrices } from "../lib/laborMachinePrices";
 import type { Lsr, LsrMeta, Rate, SmetaPosition, AppliedCoefficient } from "../lib/types";
 import { calcLsr } from "../lib/calc";
+import { formatKzt } from "../lib/calc";
+import { materialMapMeta } from "../lib/materialPrices";
 import { runAiAdvisor } from "../lib/ai";
 import { findObject } from "../lib/corpus";
 import { useLocalSmeta } from "../lib/useLocalSmeta";
@@ -13,13 +16,18 @@ import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
 import { VorView } from "./VorView";
 import { Ks2View } from "./Ks2View";
-import { AiChat } from "./AiChat";
+import { Ks3View } from "./Ks3View";
+import { ResourceEditor } from "./ResourceEditor";
+import { findRate } from "../lib/corpus";
+import type { Resource } from "../lib/types";
+import { useKs2Periods } from "../lib/useKs2Periods";
+import { AiChat, type AiChatHandle } from "./AiChat";
 import { StickyTotals } from "./StickyTotals";
 import { GeomHint } from "./GeomHint";
 import { DefectActView } from "./DefectActView";
 import { ExportButton } from "./ExportButton";
 
-type Tab = "lsr" | "defect" | "vor" | "ssr" | "ks2" | "print";
+type Tab = "lsr" | "defect" | "vor" | "ssr" | "ks2" | "ks3" | "print";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "defect", label: "📋 Дефектная вед." },
@@ -27,6 +35,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "vor",   label: "ВОР" },
   { key: "ssr",   label: "НР + СП" },
   { key: "ks2",   label: "КС-2" },
+  { key: "ks3",   label: "КС-3" },
   { key: "print", label: "🖨 Печать" },
 ];
 
@@ -39,9 +48,26 @@ export function LsrEditor({ initialLsr }: Props) {
   const [activeTab, setActiveTab]           = useState<Tab>("lsr");
   const [activeSectionId, setActiveSectionId] = useState<string>(initialLsr.sections[0]?.id ?? "");
   const [drawerOpen, setDrawerOpen]         = useState(false);
+  const [useSscPrices, setUseSscPrices]     = useState(false);
+  const [editResources, setEditResources]   = useState<{ sectionId: string; posId: string } | null>(null);
+  const [pricesLoaded, setPricesLoaded]     = useState(0); // bump после init для пересчёта calc
+  const [navOpen, setNavOpen]               = useState(false); // mobile drawer для разделов
+  const [chatOpen, setChatOpen]             = useState(false); // mobile drawer для AI
+  const aiChatRef = useRef<AiChatHandle>(null);
 
+  useEffect(() => {
+    initLaborMachinePrices().then(() => setPricesLoaded((n) => n + 1));
+  }, []);
+
+  const { periods: ks2Periods } = useKs2Periods(lsr.id);
   const learningObject = useMemo(() => findObject(lsr.objectId), [lsr.objectId]);
-  const calc           = useMemo(() => calcLsr(lsr), [lsr]);
+  const calc           = useMemo(() => calcLsr(lsr, { useSscPrices }), [lsr, useSscPrices, pricesLoaded]);
+  // Параллельный расчёт «как было бы по учебным ценам» — только если включён ССЦ-режим,
+  // чтобы показать дельту. Скрываем оверхед когда тоггл выключен.
+  const eduCalc        = useMemo(
+    () => (useSscPrices ? calcLsr(lsr, { useSscPrices: false }) : null),
+    [lsr, useSscPrices]
+  );
   const notices        = useMemo(
     () => (learningObject ? runAiAdvisor(lsr, learningObject) : []),
     [lsr, learningObject]
@@ -134,21 +160,42 @@ export function LsrEditor({ initialLsr }: Props) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      {/* ── Mobile triggers ─────────────────────────────────── */}
+      <button
+        onClick={() => setNavOpen(true)}
+        className="md:hidden absolute top-1.5 left-1.5 z-30 bg-emerald-600 text-white border border-emerald-700 rounded px-2 py-1 text-[10px] font-bold shadow"
+      >
+        ☰ Разделы
+      </button>
+      <button
+        onClick={() => setChatOpen(true)}
+        className="md:hidden absolute top-1.5 right-1.5 z-30 bg-slate-900 text-emerald-300 border border-slate-700 rounded px-2 py-1 text-[10px] font-bold shadow"
+      >
+        AI ☰
+      </button>
+      {(navOpen || chatOpen) && (
+        <div
+          onClick={() => { setNavOpen(false); setChatOpen(false); }}
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+        />
+      )}
 
       {/* ── Левая панель: разделы ─────────────────────────────── */}
       <SectionNav
         sections={calc.sections}
         activeSectionId={activeSectionId}
         onSelect={(id) => { setActiveSectionId(id); setActiveTab("lsr"); }}
-        onAddRate={() => setDrawerOpen(true)}
+        onAddRate={() => { setDrawerOpen(true); setNavOpen(false); }}
+        mobileOpen={navOpen}
+        onMobileClose={() => setNavOpen(false)}
       />
 
       {/* ── Центральная зона ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Табы + мета */}
-        <div className="shrink-0 bg-white border-b border-slate-200 flex items-center gap-0 px-3">
+        <div className="shrink-0 bg-white border-b border-slate-200 flex items-center gap-0 px-3 print:hidden overflow-x-auto pl-14 md:pl-3 pr-14 md:pr-3">
           {TABS.map(({ key, label }) => (
             <button
               key={key}
@@ -163,6 +210,31 @@ export function LsrEditor({ initialLsr }: Props) {
             </button>
           ))}
           <div className="ml-auto flex items-center gap-2 text-[10px] text-slate-400 pr-1">
+            {/* Toggle: учебные / реальные цены ССЦ-2025 */}
+            <button
+              onClick={() => setUseSscPrices((v) => !v)}
+              className={`px-2 py-1 rounded text-[10px] font-semibold transition-colors ${
+                useSscPrices
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+              }`}
+              title={`Подменяет учебные цены материалов на сметные ССЦ РК 8.04-08-2025. Сейчас покрытие ${materialMapMeta.matched}/${materialMapMeta.total} материалов.`}
+            >
+              {useSscPrices ? "✓ Цены ССЦ-2025" : "Учебные цены"}
+            </button>
+            {useSscPrices && eduCalc && (
+              <span
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                  calc.totalWithVat > eduCalc.totalWithVat
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-emerald-100 text-emerald-800"
+                }`}
+                title={`По учебным: ${formatKzt(eduCalc.totalWithVat)}\nПо ССЦ-2025: ${formatKzt(calc.totalWithVat)}`}
+              >
+                Δ {calc.totalWithVat >= eduCalc.totalWithVat ? "+" : ""}
+                {formatKzt(calc.totalWithVat - eduCalc.totalWithVat)}
+              </span>
+            )}
             <GeomHint object={learningObject} />
             <ExportButton lsr={lsr} calc={calc} onImport={(imported) => setLsr(imported)} />
             <span className={hasSaved ? "text-emerald-500" : "text-slate-300"} title={lsr.indexRegion + " · " + lsr.indexQuarter}>
@@ -187,6 +259,8 @@ export function LsrEditor({ initialLsr }: Props) {
                 onChangeVolume={changeVolume}
                 onRemove={removePosition}
                 onUpdateCoefs={updateCoefs}
+                onEditResources={(sectionId, posId) => setEditResources({ sectionId, posId })}
+                onAskAi={(rateCode, posId) => aiChatRef.current?.askAboutPosition(rateCode, posId)}
               />
             </div>
           )}
@@ -198,6 +272,7 @@ export function LsrEditor({ initialLsr }: Props) {
           )}
           {activeTab === "ssr" && <SsrView calc={calc} />}
           {activeTab === "ks2" && <Ks2View calc={calc} />}
+          {activeTab === "ks3" && <Ks3View calc={calc} ks2Periods={ks2Periods} />}
           {activeTab === "print" && (
             <div className="p-4 space-y-4">
               <div className="flex gap-2 items-center print:hidden">
@@ -220,7 +295,14 @@ export function LsrEditor({ initialLsr }: Props) {
       </div>
 
       {/* ── Правая панель: AI-консультант ───────────────────── */}
-      <AiChat notices={notices} lsr={lsr} calc={calc} />
+      <AiChat
+        ref={aiChatRef}
+        notices={notices}
+        lsr={lsr}
+        calc={calc}
+        mobileOpen={chatOpen}
+        onMobileClose={() => setChatOpen(false)}
+      />
 
       {/* ── Drawer поиска расценок ──────────────────────────── */}
       <RateDrawer
@@ -229,6 +311,32 @@ export function LsrEditor({ initialLsr }: Props) {
         onClose={() => setDrawerOpen(false)}
         onPick={(rate) => { addPosition(rate); }}
       />
+
+      {/* ── Редактор ресурсов позиции ────────────────────────── */}
+      {editResources && (() => {
+        const sec = lsr.sections.find((s) => s.id === editResources.sectionId);
+        const pos = sec?.positions.find((p) => p.id === editResources.posId);
+        const rate = pos ? findRate(pos.rateCode) : null;
+        if (!sec || !pos || !rate) {
+          // Не удалось найти позицию — закрываем тихо
+          setTimeout(() => setEditResources(null), 0);
+          return null;
+        }
+        return (
+          <ResourceEditor
+            position={pos}
+            rate={rate}
+            onSave={(resources: Resource[]) => {
+              updatePosition(sec.id, pos.id, { resourceOverrides: resources });
+            }}
+            onReset={() => {
+              updatePosition(sec.id, pos.id, { resourceOverrides: undefined });
+              setEditResources(null);
+            }}
+            onClose={() => setEditResources(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

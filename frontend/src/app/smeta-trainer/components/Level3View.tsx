@@ -4,8 +4,11 @@ import { useMemo, useState } from "react";
 import { LEVEL1_LSR } from "../lib/levels";
 import { calcLsr } from "../lib/calc";
 import { useProgress } from "../lib/useProgress";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
+import { useKs2Periods } from "../lib/useKs2Periods";
 import { Ks2View } from "./Ks2View";
-import { ZachetBanner } from "./ZachetBanner";
+import { Ks3View } from "./Ks3View";
+import { LessonViewer } from "./LessonViewer";
 
 const DOPRABOTY_LSR = {
   ...LEVEL1_LSR,
@@ -33,27 +36,47 @@ const JOURNAL = [
   { month: "Ноябрь 2026",   note: "Финальная окраска. t°=-5°C. Применить зимнее удорожание." },
 ];
 
-type KsTab = "main" | "dop";
+type KsTab = "main" | "dop" | "ks3-main" | "ks3-dop" | "theory";
 
 export function Level3View() {
   const { setLevel } = useProgress();
   const [ksTab, setKsTab] = useState<KsTab>("main");
-  const [toastVisible, setToastVisible] = useState(false);
   const mainCalc = useMemo(() => calcLsr(LEVEL1_LSR), []);
   const dopCalc = useMemo(() => calcLsr(DOPRABOTY_LSR), []);
+  const { periods: mainPeriods } = useKs2Periods(LEVEL1_LSR.id);
+  const { periods: dopPeriods } = useKs2Periods(DOPRABOTY_LSR.id);
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(3).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(3) : 0;
+  void lessonsTick;
 
   function handleZachet() {
     setLevel(3, { status: "done", completedAt: new Date().toISOString() });
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 5000);
+    alert("Уровень 3 зачтён! КС-2 за 6 месяцев + допработы.");
   }
 
-  return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      <ZachetBanner visible={toastVisible} level={3} passed />
+  const [navOpen, setNavOpen] = useState(false);
 
+  return (
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      <button
+        onClick={() => setNavOpen(true)}
+        className="md:hidden absolute top-2 left-2 z-30 bg-slate-800 border border-slate-700 text-white rounded-md px-2 py-1 text-xs font-semibold shadow"
+      >
+        ☰ Журнал ПТО
+      </button>
+      {navOpen && (
+        <div
+          onClick={() => setNavOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+        />
+      )}
       {/* Левая панель — роль ПТО */}
-      <aside className="w-64 shrink-0 bg-slate-900 text-white flex flex-col overflow-auto">
+      <aside className={`
+        bg-slate-900 text-white flex-col overflow-auto
+        ${navOpen ? "fixed left-0 top-0 bottom-0 w-72 z-50 flex" : "hidden"}
+        md:relative md:flex md:w-64 md:shrink-0 md:z-auto
+      `}>
         <div className="px-4 py-3 border-b border-slate-700">
           <div className="text-[10px] font-bold text-slate-400 uppercase">Уровень 3</div>
           <div className="text-sm font-bold mt-0.5">Инженер ПТО</div>
@@ -101,19 +124,42 @@ export function Level3View() {
       {/* Правая область */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="shrink-0 border-b border-slate-200 bg-white flex px-4">
-          {([["main", "КС-2 Основной договор"], ["dop", "КС-2 Допработы (август)"]] as const).map(([key, label]) => (
+          {(
+            [
+              ["main", "КС-2 Основной"],
+              ["dop", "КС-2 Допработы"],
+              ["ks3-main", `КС-3 Основной${mainPeriods.length > 0 ? ` (${mainPeriods.length})` : ""}`],
+              ["ks3-dop", `КС-3 Допработы${dopPeriods.length > 0 ? ` (${dopPeriods.length})` : ""}`],
+              ...(lessonsCount > 0
+                ? ([["theory", `📚 Теория (${Math.round(lessonsCompletion * 100)}%)`]] as const)
+                : []),
+            ] as ReadonlyArray<readonly [KsTab, string]>
+          ).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setKsTab(key)}
-              className={`px-4 py-2.5 text-xs font-medium border-b-2 ${ksTab === key ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+              className={`px-4 py-2.5 text-xs font-medium border-b-2 whitespace-nowrap ${ksTab === key ? "border-emerald-500 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="flex-1 overflow-auto">
-          <Ks2View calc={ksTab === "main" ? mainCalc : dopCalc} />
-        </div>
+        {ksTab === "theory" ? (
+          <div className="flex-1 overflow-hidden" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={3} />
+          </div>
+        ) : ksTab === "main" || ksTab === "dop" ? (
+          <div className="flex-1 overflow-auto">
+            <Ks2View calc={ksTab === "main" ? mainCalc : dopCalc} />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <Ks3View
+              calc={ksTab === "ks3-main" ? mainCalc : dopCalc}
+              ks2Periods={ksTab === "ks3-main" ? mainPeriods : dopPeriods}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

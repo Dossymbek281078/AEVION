@@ -5,14 +5,21 @@ import { QUIZ_QUESTIONS } from "../lib/quiz";
 import { LEVEL1_LSR } from "../lib/levels";
 import { useProgress } from "../lib/useProgress";
 import { calcLsr, formatKzt } from "../lib/calc";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { LsrFormTable } from "./LsrFormTable";
 import { LsrFormHeader } from "./LsrFormHeader";
+import { LessonViewer } from "./LessonViewer";
 
 const PASS_THRESHOLD = 12;
 
 export function Level1View() {
   const { setLevel } = useProgress();
-  const [tab, setTab] = useState<"smeta" | "quiz">("smeta");
+  const [tab, setTab] = useState<"theory" | "smeta" | "quiz">("theory");
+  const lessonsCount = getLessonsForLevel(1).length;
+  // Re-read для прогресс-баров уроков (после клика «Прочитано» в LessonViewer)
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(1) : 0;
+  void lessonsTick;
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [checked, setChecked] = useState(false);
 
@@ -41,10 +48,30 @@ export function Level1View() {
     });
   }
 
+  const [navOpen, setNavOpen] = useState(false);
+
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      {/* Mobile nav trigger */}
+      <button
+        onClick={() => setNavOpen(true)}
+        className="md:hidden absolute top-2 left-2 z-30 bg-white border border-slate-300 rounded-md px-2 py-1 text-xs font-semibold shadow"
+      >
+        ☰ Меню
+      </button>
+      {/* Mobile backdrop */}
+      {navOpen && (
+        <div
+          onClick={() => setNavOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/40 z-40"
+        />
+      )}
       {/* Левая панель — навигация */}
-      <aside className="w-56 shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col p-3 gap-2">
+      <aside className={`
+        bg-slate-50 border-r border-slate-200 flex-col p-3 gap-2
+        ${navOpen ? "fixed left-0 top-0 bottom-0 w-64 z-50 flex" : "hidden"}
+        md:relative md:flex md:w-56 md:shrink-0 md:z-auto
+      `}>
         <div className="text-[10px] font-bold text-slate-400 uppercase">Уровень 1 — С нуля</div>
         <div className="text-xs font-semibold text-slate-700 leading-tight">
           Читаю готовую смету
@@ -56,14 +83,25 @@ export function Level1View() {
           Позиций: {QUIZ_QUESTIONS.length} вопросов · Зачёт ≥ {PASS_THRESHOLD}
         </div>
         <hr className="border-slate-200 my-1" />
+        {lessonsCount > 0 && (
+          <button
+            onClick={() => { setTab("theory"); setNavOpen(false); }}
+            className={`text-left text-xs px-2 py-1.5 rounded ${tab === "theory" ? "bg-emerald-100 text-emerald-800 font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
+          >
+            📚 Теория курса
+            <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+              {lessonsCount} уроков · {Math.round(lessonsCompletion * 100)}%
+            </div>
+          </button>
+        )}
         <button
-          onClick={() => setTab("smeta")}
+          onClick={() => { setTab("smeta"); setNavOpen(false); }}
           className={`text-left text-xs px-2 py-1.5 rounded ${tab === "smeta" ? "bg-emerald-100 text-emerald-800 font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
         >
           📄 Читать смету
         </button>
         <button
-          onClick={() => setTab("quiz")}
+          onClick={() => { setTab("quiz"); setNavOpen(false); }}
           className={`text-left text-xs px-2 py-1.5 rounded ${tab === "quiz" ? "bg-emerald-100 text-emerald-800 font-semibold" : "text-slate-600 hover:bg-slate-100"}`}
         >
           ✏️ Ответить на вопросы
@@ -79,9 +117,15 @@ export function Level1View() {
       </aside>
 
       {/* Основная область */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-hidden flex flex-col">
+        {tab === "theory" && (
+          <div className="flex-1 overflow-hidden" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={1} />
+          </div>
+        )}
+
         {tab === "smeta" && (
-          <div className="p-4 space-y-4">
+          <div className="flex-1 overflow-auto p-4 space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded px-4 py-3 text-sm">
               <strong>Задание уровня 1.</strong> Изучите эту смету, затем перейдите на вкладку «Ответить на вопросы». Зачёт: ≥{PASS_THRESHOLD} из {QUIZ_QUESTIONS.length} правильных ответов.
             </div>
@@ -100,7 +144,7 @@ export function Level1View() {
         )}
 
         {tab === "quiz" && (
-          <div className="p-4 max-w-3xl mx-auto space-y-4">
+          <div className="flex-1 overflow-auto p-4 max-w-3xl mx-auto space-y-4">
             {checked && (
               <div className={`rounded-xl p-4 text-center ${passed ? "bg-emerald-50 border border-emerald-300" : "bg-amber-50 border border-amber-300"}`}>
                 <div className="text-2xl font-bold">{correctCount}/{QUIZ_QUESTIONS.length}</div>

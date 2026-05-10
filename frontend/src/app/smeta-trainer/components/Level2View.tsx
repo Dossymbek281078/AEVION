@@ -3,8 +3,9 @@
 import { useState, useMemo } from "react";
 import { useProgress } from "../lib/useProgress";
 import { applyDemoFill } from "../lib/demoFill";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { LsrEditor } from "./LsrEditor";
-import { ZachetBanner } from "./ZachetBanner";
+import { LessonViewer } from "./LessonViewer";
 import type { Lsr } from "../lib/types";
 
 const INITIAL_LSR: Lsr = {
@@ -49,10 +50,14 @@ const STEPS = [
 export function Level2View() {
   const { setLevel } = useProgress();
   const [showTask, setShowTask] = useState(true);
+  const [mode, setMode] = useState<"editor" | "theory">("editor");
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [lsr, setLsr] = useState(INITIAL_LSR);
   const [demoApplied, setDemoApplied] = useState(false);
-  const [toastVisible, setToastVisible] = useState(false);
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(2).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(2) : 0;
+  void lessonsTick;
 
   function handleDemo() {
     if (confirm("Заполнить смету примером? Текущие данные будут заменены демо-данными.")) {
@@ -74,21 +79,53 @@ export function Level2View() {
 
   function handleZachet() {
     setLevel(2, { status: "done", completedAt: new Date().toISOString() });
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 5000);
+    alert("Уровень 2 зачтён! Переходите на уровень 3 (ПТО).");
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      <ZachetBanner visible={toastVisible} level={2} passed />
-
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      {/* Mobile open trigger когда aside скрыт */}
+      {!showTask && (
+        <button
+          onClick={() => setShowTask(true)}
+          className="md:hidden absolute top-2 left-2 z-30 bg-amber-100 border border-amber-300 rounded-md px-2 py-1 text-xs font-semibold shadow text-amber-800"
+        >
+          ☰ Задание
+        </button>
+      )}
+      {/* Mobile backdrop */}
+      {showTask && (
+        <div
+          onClick={() => setShowTask(false)}
+          className="md:hidden fixed inset-0 bg-black/40 z-40"
+        />
+      )}
       {/* Task card боковая */}
       {showTask && (
-        <aside className="w-72 shrink-0 bg-amber-50 border-r border-amber-200 flex flex-col overflow-auto">
+        <aside className="fixed left-0 top-0 bottom-0 w-72 z-50 md:relative md:w-72 md:z-auto md:shrink-0 bg-amber-50 border-r border-amber-200 flex flex-col overflow-auto">
           <div className="px-3 py-3 border-b border-amber-200 flex justify-between items-center">
             <span className="text-xs font-bold text-amber-800 uppercase">Задание — уровень 2</span>
             <button onClick={() => setShowTask(false)} className="text-amber-400 hover:text-amber-700 text-xs">скрыть</button>
           </div>
+          {lessonsCount > 0 && (
+            <div className="px-3 pt-3">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setMode("editor")}
+                  className={`flex-1 text-[11px] px-2 py-1.5 rounded font-medium ${mode === "editor" ? "bg-amber-200 text-amber-900" : "bg-white text-amber-700 hover:bg-amber-100"}`}
+                >
+                  ✏️ Редактор
+                </button>
+                <button
+                  onClick={() => setMode("theory")}
+                  className={`flex-1 text-[11px] px-2 py-1.5 rounded font-medium ${mode === "theory" ? "bg-amber-200 text-amber-900" : "bg-white text-amber-700 hover:bg-amber-100"}`}
+                >
+                  📚 Теория
+                  <span className="ml-1 text-[9px] opacity-70">{Math.round(lessonsCompletion * 100)}%</span>
+                </button>
+              </div>
+            </div>
+          )}
           <div className="p-3 space-y-1">
             <p className="text-xs text-amber-700 mb-3">
               Составьте ЛСР «Отделочные работы крыла Б школы №47». Отмечайте шаги по мере выполнения.
@@ -145,10 +182,16 @@ export function Level2View() {
             <button onClick={() => setShowTask(true)} className="text-amber-600 underline">показать задание</button>
           </div>
         )}
-        {/* key сбрасывает LsrEditor когда применяется demo — иначе useLocalSmeta не перечитает initialLsr */}
-        <div className="flex-1 overflow-hidden">
-          <LsrEditor key={demoApplied ? "demo" : "fresh"} initialLsr={lsr} />
-        </div>
+        {mode === "theory" ? (
+          <div className="flex-1 overflow-hidden" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={2} />
+          </div>
+        ) : (
+          /* key сбрасывает LsrEditor когда применяется demo — иначе useLocalSmeta не перечитает initialLsr */
+          <div className="flex-1 overflow-hidden">
+            <LsrEditor key={demoApplied ? "demo" : "fresh"} initialLsr={lsr} />
+          </div>
+        )}
       </div>
     </div>
   );

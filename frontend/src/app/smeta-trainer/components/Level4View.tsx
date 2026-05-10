@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { calcLsr, formatKzt } from "../lib/calc";
 import { useProgress } from "../lib/useProgress";
+import { getLessonsForLevel, levelLessonsCompletion } from "../lib/lessons";
 import { LsrFormHeader } from "./LsrFormHeader";
 import { LsrFormTable } from "./LsrFormTable";
 import { SsrView } from "./SsrView";
-import { ZachetBanner } from "./ZachetBanner";
+import { LessonViewer } from "./LessonViewer";
 import type { Lsr } from "../lib/types";
 
 // 4 ЛСР для полного комплекта
@@ -113,10 +114,20 @@ const SSR_CHAPTERS = [
   { num: 12, title: "Проектно-изыскательские и авторский надзор", lsrId: null },
 ];
 
+// Объект для группировки в Объектной смете (Форма 3)
+const OBJECT_META = {
+  code: "2-02",
+  title: "Учебный корпус — крыло Б, СОШ №47",
+  area: 1280, // м² общая площадь объекта (для показателя ед. стоимости)
+};
+
 export function Level4View() {
   const { setLevel } = useProgress();
-  const [activeView, setActiveView] = useState<"ssr" | string>("ssr");
-  const [toastVisible, setToastVisible] = useState(false);
+  const [activeView, setActiveView] = useState<"ssr" | "theory" | "form3" | string>("ssr");
+  const [lessonsTick, setLessonsTick] = useState(0);
+  const lessonsCount = getLessonsForLevel(4).length;
+  const lessonsCompletion = lessonsCount > 0 ? levelLessonsCompletion(4) : 0;
+  void lessonsTick;
 
   const calcs = useMemo(
     () => Object.fromEntries(LSRS.map((l) => [l.id, calcLsr(l)])),
@@ -127,19 +138,34 @@ export function Level4View() {
 
   function handleZachet() {
     setLevel(4, { status: "done", completedAt: new Date().toISOString() });
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 5000);
+    alert("Уровень 4 зачтён! Полный комплект ПСД.");
   }
 
   const activeLsr = LSRS.find((l) => l.id === activeView);
   const activeCalc = activeLsr ? calcs[activeLsr.id] : null;
 
-  return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      <ZachetBanner visible={toastVisible} level={4} passed />
+  const [navOpen, setNavOpen] = useState(false);
 
+  return (
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      <button
+        onClick={() => setNavOpen(true)}
+        className="md:hidden absolute top-2 left-2 z-30 bg-slate-700 border border-slate-600 text-white rounded-md px-2 py-1 text-xs font-semibold shadow"
+      >
+        ☰ Документы
+      </button>
+      {navOpen && (
+        <div
+          onClick={() => setNavOpen(false)}
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+        />
+      )}
       {/* Навигация по документам */}
-      <aside className="w-64 shrink-0 bg-slate-800 text-white flex flex-col overflow-auto">
+      <aside className={`
+        bg-slate-800 text-white flex-col overflow-auto
+        ${navOpen ? "fixed left-0 top-0 bottom-0 w-72 z-50 flex" : "hidden"}
+        md:relative md:flex md:w-64 md:shrink-0 md:z-auto
+      `}>
         <div className="px-4 py-3 border-b border-slate-700">
           <div className="text-[10px] font-bold text-slate-400 uppercase">Уровень 4</div>
           <div className="text-sm font-bold mt-0.5">Проектировщик</div>
@@ -149,15 +175,30 @@ export function Level4View() {
         <div className="px-3 py-2 border-b border-slate-700">
           <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Состав комплекта</div>
           <button
-            onClick={() => setActiveView("ssr")}
+            onClick={() => { setActiveView("ssr"); setNavOpen(false); }}
             className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "ssr" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
           >
             📊 Сводный сметный расчёт (ССР)
           </button>
+          <button
+            onClick={() => { setActiveView("form3"); setNavOpen(false); }}
+            className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "form3" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
+          >
+            📋 Объектная смета (Форма 3)
+          </button>
+          {lessonsCount > 0 && (
+            <button
+              onClick={() => { setActiveView("theory"); setNavOpen(false); }}
+              className={`w-full text-left text-xs px-2 py-1.5 rounded mb-1 ${activeView === "theory" ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
+            >
+              📚 Теория уровня
+              <span className="ml-1 text-[9px] opacity-70">({Math.round(lessonsCompletion * 100)}%)</span>
+            </button>
+          )}
           {LSRS.map((l) => (
             <button
               key={l.id}
-              onClick={() => setActiveView(l.id)}
+              onClick={() => { setActiveView(l.id); setNavOpen(false); }}
               className={`w-full text-left text-xs px-2 py-1.5 rounded mb-0.5 ${activeView === l.id ? "bg-emerald-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
             >
               📄 {l.meta?.lsrNumber} — {l.meta?.objectTitle}
@@ -178,7 +219,12 @@ export function Level4View() {
       </aside>
 
       {/* Основная область */}
-      <div className="flex-1 overflow-auto">
+      <div className={`flex-1 ${activeView === "theory" ? "overflow-hidden" : "overflow-auto"}`}>
+        {activeView === "theory" && (
+          <div className="h-full" onClick={() => setLessonsTick((n) => n + 1)}>
+            <LessonViewer level={4} />
+          </div>
+        )}
         {activeView === "ssr" && (
           <div className="p-4 max-w-4xl mx-auto space-y-4">
             <div className="border border-slate-300 bg-white">
@@ -243,6 +289,140 @@ export function Level4View() {
 
             <div className="text-xs text-slate-400 italic">
               * Главы 3, 4, 10, 11 не применимы для данного объекта (капремонт без внешних сетей и благоустройства). Главы 8, 9, 12 рассчитаны по нормативному проценту от суммы СМР.
+            </div>
+          </div>
+        )}
+
+        {activeView === "form3" && (
+          <div className="p-4 max-w-5xl mx-auto space-y-4">
+            <div className="border border-slate-300 bg-white">
+              <div className="flex justify-between border-b border-slate-200 px-3 py-1 bg-slate-50 text-xs">
+                <span className="text-slate-400">НДЦС РК 8.01-08-2022. Приложение Г.</span>
+                <span className="font-semibold text-slate-600">Форма 3 — Объектная смета</span>
+              </div>
+              <div className="px-4 py-3">
+                <div className="font-bold text-slate-800 text-sm uppercase">Объектная смета на строительство</div>
+                <div className="text-xs text-slate-600 mt-0.5">
+                  Объект <span className="font-mono text-slate-800">{OBJECT_META.code}</span> — {OBJECT_META.title}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Сметная стоимость объекта (по ЛСР, входящим в его состав)
+                </div>
+              </div>
+            </div>
+
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-300 px-2 py-1.5 text-[10px] font-semibold text-slate-600 text-center w-10">№ п/п</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-[10px] font-semibold text-slate-600 w-24">Шифр<br />сметы</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-left text-[10px] font-semibold text-slate-600">Наименование работ и затрат</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-right text-[10px] font-semibold text-slate-600 w-28">СМР, тыс.тнг</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-right text-[10px] font-semibold text-slate-600 w-28">Оборуд., тыс.тнг</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-right text-[10px] font-semibold text-slate-600 w-28">Прочие, тыс.тнг</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-right text-[10px] font-semibold text-slate-600 w-28">Всего, тыс.тнг</th>
+                  <th className="border border-slate-300 px-2 py-1.5 text-right text-[10px] font-semibold text-slate-600 w-24">тенге/м²</th>
+                </tr>
+              </thead>
+              <tbody>
+                {LSRS.map((l, idx) => {
+                  const c = calcs[l.id];
+                  const smrTys = c.totalBeforeVat / 1000;
+                  const equipTys = 0; // в учебном кейсе — без оборудования
+                  const otherTys = 0;
+                  const totalTys = smrTys + equipTys + otherTys;
+                  return (
+                    <tr key={l.id} className="hover:bg-slate-50">
+                      <td className="border border-slate-200 px-2 py-1.5 text-center text-slate-500 font-mono">{idx + 1}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 font-mono text-[10px] text-slate-700 text-center">
+                        {l.meta?.lsrNumber}
+                      </td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-slate-800">
+                        {l.title.replace(/^ЛСР [\d-]+ — /, "")}
+                      </td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-right font-mono text-slate-700">{smrTys.toFixed(3)}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-right font-mono text-slate-400">—</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-right font-mono text-slate-400">—</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-right font-mono font-semibold text-slate-900">{totalTys.toFixed(3)}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-right font-mono text-[11px] text-slate-600">
+                        {Math.round((c.totalBeforeVat / OBJECT_META.area))}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {(() => {
+                  const totalSmrTys = totalSmr / 1000;
+                  const totalAllTys = totalSmrTys;
+                  return (
+                    <>
+                      <tr className="bg-slate-50 font-semibold">
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2 text-slate-700">Итого по объекту (без НДС)</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono">{totalSmrTys.toFixed(3)}</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-slate-400">—</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-slate-400">—</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono">{totalAllTys.toFixed(3)}</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-[11px]">
+                          {Math.round(totalSmr / OBJECT_META.area)}
+                        </td>
+                      </tr>
+                      <tr className="bg-amber-50 text-slate-700">
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2 italic">в т.ч. НДС 12%</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-slate-500">{(totalSmrTys * 0.12).toFixed(3)}</td>
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-slate-500">{(totalAllTys * 0.12).toFixed(3)}</td>
+                        <td className="border border-slate-300 px-2 py-2" />
+                      </tr>
+                      <tr className="bg-emerald-50 font-bold">
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2 text-slate-900">ВСЕГО ПО ОБЪЕКТУ (с НДС)</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-emerald-800">{(totalSmrTys * 1.12).toFixed(3)}</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right text-slate-400">—</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right text-slate-400">—</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-emerald-800">{(totalAllTys * 1.12).toFixed(3)}</td>
+                        <td className="border border-slate-300 px-2 py-2 text-right font-mono text-emerald-700 text-[11px]">
+                          {Math.round(totalSmr * 1.12 / OBJECT_META.area)}
+                        </td>
+                      </tr>
+                    </>
+                  );
+                })()}
+              </tbody>
+            </table>
+
+            <div className="grid grid-cols-3 gap-3 mt-2">
+              <div className="bg-white border border-slate-200 rounded p-3">
+                <div className="text-[10px] text-slate-500 uppercase">Площадь объекта</div>
+                <div className="text-sm font-bold text-slate-900 mt-0.5">{OBJECT_META.area} м²</div>
+                <div className="text-[10px] text-slate-400">учебный показатель</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded p-3">
+                <div className="text-[10px] text-slate-500 uppercase">Удельная стоимость СМР</div>
+                <div className="text-sm font-bold text-emerald-700 mt-0.5">
+                  {formatKzt(totalSmr / OBJECT_META.area)}/м²
+                </div>
+                <div className="text-[10px] text-slate-400">без НДС</div>
+              </div>
+              <div className="bg-white border border-slate-200 rounded p-3">
+                <div className="text-[10px] text-slate-500 uppercase">Удельная стоимость всего</div>
+                <div className="text-sm font-bold text-emerald-700 mt-0.5">
+                  {formatKzt((totalSmr * 1.12) / OBJECT_META.area)}/м²
+                </div>
+                <div className="text-[10px] text-slate-400">с НДС</div>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 italic bg-slate-50 border border-slate-200 rounded p-3">
+              <strong>Что показывает Форма 3.</strong> Объектная смета агрегирует все ЛСР, относящиеся
+              к одному «объекту» (часть стройки — корпус, секция, этап). В Форме 3 видна стоимость
+              объекта целиком в разрезе СМР / Оборудования / Прочих затрат, и ключевой показатель
+              для согласования — удельная стоимость на единицу мощности (м², место, погонный метр).
+              В реальном проекте — это страница 2 ПСД, после ССР.
             </div>
           </div>
         )}

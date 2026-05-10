@@ -588,6 +588,29 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
+  // V51 — Prompt chains (multi-step prompt sequences).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePromptChain" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "steps"       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "runCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePromptChain_user_idx" ON "QCorePromptChain" ("userId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePromptChain_public_idx" ON "QCorePromptChain" ("isPublic", "runCount" DESC) WHERE "isPublic"=TRUE;`);
+
+  // V52 — Agent personas v2 (defaultProvider, defaultModel, bio, systemPromptHint).
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "defaultProvider" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "defaultModel" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "systemPromptHint" TEXT;`);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

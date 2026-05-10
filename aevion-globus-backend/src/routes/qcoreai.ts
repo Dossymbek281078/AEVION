@@ -176,6 +176,16 @@ import {
   checkAndIncrRateLimit,
   adminResetRateLimit,
   listRateLimits,
+  // V51 — Prompt chains
+  createPromptChain,
+  listPromptChains,
+  getPromptChain,
+  updatePromptChain,
+  deletePromptChain,
+  listPublicPromptChains,
+  incrPromptChainRunCount,
+  // V54 — User stats
+  getUserStats,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -735,17 +745,21 @@ qcoreaiRouter.put("/me/personas/:roleId", async (req, res) => {
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   const roleId = String(req.params.roleId);
   if (!VALID_ROLES.includes(roleId)) return res.status(400).json({ error: "invalid roleId" });
-  const { name, emoji, color } = req.body || {};
+  // V52 — extended fields: defaultProvider, defaultModel, bio, systemPromptHint
+  const { name, emoji, color, defaultProvider, defaultModel, bio, systemPromptHint } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: "name required" });
   try {
     await ensureQCoreTables(pool);
-    if (!isDbReady()) return res.json({ persona: { userId: auth.sub, roleId, name, emoji: emoji || null, color: color || null } });
+    if (!isDbReady()) return res.json({ persona: { userId: auth.sub, roleId, name, emoji: emoji || null, color: color || null, defaultProvider: defaultProvider || null, defaultModel: defaultModel || null, bio: bio || null, systemPromptHint: systemPromptHint || null } });
     const r = await pool.query(
-      `INSERT INTO "QCoreAgentPersona" ("userId","roleId","name","emoji","color")
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT ("userId","roleId") DO UPDATE SET "name"=$3,"emoji"=$4,"color"=$5,"updatedAt"=NOW()
+      `INSERT INTO "QCoreAgentPersona" ("userId","roleId","name","emoji","color","defaultProvider","defaultModel","bio","systemPromptHint")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT ("userId","roleId") DO UPDATE
+         SET "name"=$3,"emoji"=$4,"color"=$5,"defaultProvider"=$6,"defaultModel"=$7,"bio"=$8,"systemPromptHint"=$9,"updatedAt"=NOW()
        RETURNING *`,
-      [auth.sub, roleId, String(name).slice(0, 40), emoji?.slice(0, 4) || null, color?.slice(0, 20) || null]
+      [auth.sub, roleId, String(name).slice(0, 40), emoji?.slice(0, 4) || null, color?.slice(0, 20) || null,
+       defaultProvider?.slice(0, 40) || null, defaultModel?.slice(0, 80) || null,
+       bio?.slice(0, 500) || null, systemPromptHint?.slice(0, 2000) || null]
     );
     res.json({ persona: r.rows[0] });
   } catch (err: any) { res.status(500).json({ error: "set persona failed" }); }
@@ -4776,6 +4790,280 @@ qcoreaiRouter.delete("/admin/rate-limits/:userId/:bucket", async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ error: "reset-rate-limit failed", details: err?.message });
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V51 — Prompt chains (multi-step prompt sequences)
+   POST   /prompt-chains          — create chain
+   GET    /prompt-chains          — list mine
+   GET    /prompt-chains/public   — public chains
+   GET    /prompt-chains/:id      — get chain (owner or public)
+   PATCH  /prompt-chains/:id      — update (owner)
+   DELETE /prompt-chains/:id      — delete (owner)
+   POST   /prompt-chains/:id/run  — execute chain
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/prompt-chains", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { name, description, steps, isPublic } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  try {
+    const chain = await createPromptChain({
+      userId: auth.sub,
+      name: String(name).trim(),
+      description: description ? String(description) : null,
+      steps: Array.isArray(steps) ? steps : [],
+      isPublic: Boolean(isPublic),
+    });
+    res.status(201).json({ chain });
+  } catch (err: any) { res.status(500).json({ error: "create chain failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/prompt-chains/public", async (req, res) => {
+  try {
+    const limit = Math.min(50, parseInt(String(req.query.limit || "20"), 10) || 20);
+    const items = await listPublicPromptChains(limit);
+    res.json({ items });
+  } catch (err: any) { res.status(500).json({ error: "list public chains failed" }); }
+});
+
+qcoreaiRouter.get("/prompt-chains", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const items = await listPromptChains(auth.sub);
+    res.json({ items });
+  } catch (err: any) { res.status(500).json({ error: "list chains failed" }); }
+});
+
+qcoreaiRouter.get("/prompt-chains/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  try {
+    const chain = await getPromptChain(String(req.params.id));
+    if (!chain) return res.status(404).json({ error: "not found" });
+    if (!chain.isPublic && chain.userId !== auth?.sub) return res.status(403).json({ error: "forbidden" });
+    res.json({ chain });
+  } catch (err: any) { res.status(500).json({ error: "get chain failed" }); }
+});
+
+qcoreaiRouter.patch("/prompt-chains/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { name, description, steps, isPublic } = req.body || {};
+  try {
+    const chain = await updatePromptChain(String(req.params.id), auth.sub, {
+      ...(name !== undefined && { name: String(name).trim() }),
+      ...(description !== undefined && { description: description ? String(description) : null }),
+      ...(steps !== undefined && { steps: Array.isArray(steps) ? steps : [] }),
+      ...(isPublic !== undefined && { isPublic: Boolean(isPublic) }),
+    });
+    if (!chain) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ chain });
+  } catch (err: any) { res.status(500).json({ error: "update chain failed" }); }
+});
+
+qcoreaiRouter.delete("/prompt-chains/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deletePromptChain(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) { res.status(500).json({ error: "delete chain failed" }); }
+});
+
+qcoreaiRouter.post("/prompt-chains/:id/run", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const chain = await getPromptChain(String(req.params.id));
+    if (!chain) return res.status(404).json({ error: "chain not found" });
+    if (!chain.isPublic && chain.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    if (!chain.steps || chain.steps.length === 0) return res.status(400).json({ error: "chain has no steps" });
+
+    // All steps run in the same session
+    const session = await ensureSession({ userId: auth.sub, seedTitle: `Chain: ${chain.name}` });
+
+    const results: Array<{ stepIndex: number; runId: string; sessionId: string; finalContent: string }> = [];
+    let prevOutput = "";
+
+    for (let i = 0; i < chain.steps.length; i++) {
+      const step = chain.steps[i];
+      // Resolve input: replace {prev_output} placeholder
+      let userInput = step.inputTemplate || "";
+      if (step.useOutputOf !== undefined && step.useOutputOf >= 0 && step.useOutputOf < results.length) {
+        userInput = userInput.replace(/\{prev_output\}/g, results[step.useOutputOf].finalContent);
+      } else {
+        userInput = userInput.replace(/\{prev_output\}/g, prevOutput);
+      }
+      userInput = userInput.trim() || "(no input)";
+
+      const strategy: PipelineStrategy =
+        step.strategy === "parallel" ? "parallel" :
+        step.strategy === "debate" ? "debate" : "sequential";
+
+      const run = await createRun({ sessionId: session.id, userInput, strategy: strategy as string });
+
+      // Run through orchestrator collecting final content
+      let finalContent = "";
+      try {
+        for await (const evt of runMultiAgent({
+          userInput,
+          strategy,
+          overrides: {},
+          maxRevisions: 0,
+        })) {
+          if (evt.type === "final") {
+            finalContent = evt.content || "";
+          }
+        }
+      } catch { /* best-effort */ }
+
+      await finishRun(run.id, "done", {
+        finalContent,
+        totalDurationMs: 0,
+        totalCostUsd: 0,
+      });
+
+      prevOutput = finalContent;
+      results.push({ stepIndex: i, runId: run.id, sessionId: session.id, finalContent });
+    }
+
+    await incrPromptChainRunCount(chain.id);
+    res.json({ chainId: chain.id, results });
+  } catch (err: any) { res.status(500).json({ error: "run chain failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V52 — Agent personas v2 (defaultProvider, defaultModel, bio, systemPromptHint)
+   Extends existing PUT /me/personas/:roleId endpoint
+   ═══════════════════════════════════════════════════════════════════════ */
+// (personas v2 fields handled inline in existing personas endpoint below — see PATCH below)
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V53 — Notebook: auto-tag, collection summary, markdown export
+   POST /notebook/auto-tag
+   GET  /notebook/collections/:id/summary
+   POST /notebook/collections/:id/export
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { content } = req.body || {};
+  if (!content?.trim()) return res.status(400).json({ error: "content required" });
+  try {
+    // Try AI tagging, fall back to keyword extraction
+    let tags: string[] = [];
+    try {
+      const providerId = resolveProvider(undefined);
+      const provider = getProviders().find((p) => p.id === providerId);
+      const model = provider?.defaultModel ?? "claude-3-haiku-20240307";
+      const result = await callProvider(providerId, [
+        {
+          role: "user",
+          content: `Extract 3-5 concise topic tags from this text. Return ONLY a JSON array of lowercase tag strings, no explanation.\n\nText:\n${String(content).slice(0, 2000)}`,
+        },
+      ], model, 0.3);
+      const raw = (result.reply || "").trim();
+      const match = raw.match(/\[[\s\S]*\]/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (Array.isArray(parsed)) {
+          tags = parsed.filter((t: unknown) => typeof t === "string").slice(0, 5).map((t: string) => t.toLowerCase().trim().slice(0, 32));
+        }
+      }
+    } catch {
+      // Fallback: simple keyword extraction
+      const words = String(content).toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 4);
+      const freq = new Map<string, number>();
+      for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
+      tags = Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);
+    }
+    res.json({ tags });
+  } catch (err: any) { res.status(500).json({ error: "auto-tag failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/notebook/collections/:id/summary", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    // Load snippets in this collection (up to 10)
+    const allSnippets = await listSnippets(auth.sub, { limit: 200 });
+    const collSnippets = allSnippets.filter((s: any) => (s as any).collectionId === req.params.id).slice(0, 10);
+
+    if (collSnippets.length === 0) {
+      return res.json({ summary: "No snippets in this collection.", snippetCount: 0, tags: [] });
+    }
+
+    const combinedContent = collSnippets.map((s: any, i: number) => `Snippet ${i + 1}:\n${s.content}`).join("\n\n---\n\n");
+    const allTags = Array.from(new Set(collSnippets.flatMap((s: any) => s.tags || [])));
+
+    let summary = `Collection contains ${collSnippets.length} snippet(s) covering: ${allTags.slice(0, 5).join(", ") || "various topics"}.`;
+    try {
+      const providerId = resolveProvider(undefined);
+      const providerObj = getProviders().find((p) => p.id === providerId);
+      const model = providerObj?.defaultModel ?? "claude-3-haiku-20240307";
+      const result = await callProvider(providerId, [
+        {
+          role: "user",
+          content: `Summarize these notebook snippets in 2-3 sentences. Be concise.\n\n${combinedContent.slice(0, 4000)}`,
+        },
+      ], model, 0.5);
+      summary = (result.reply || summary).trim().slice(0, 1000);
+    } catch { /* use fallback summary */ }
+
+    res.json({ summary, snippetCount: collSnippets.length, tags: allTags.slice(0, 20) });
+  } catch (err: any) { res.status(500).json({ error: "collection summary failed", details: err?.message }); }
+});
+
+qcoreaiRouter.post("/notebook/collections/:id/export", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const [allSnippets, collections] = await Promise.all([
+      listSnippets(auth.sub, { limit: 200 }),
+      listCollections(auth.sub),
+    ]);
+    const collection = collections.find((c) => c.id === req.params.id);
+    const collSnippets = allSnippets.filter((s: any) => (s as any).collectionId === req.params.id);
+
+    const lines: string[] = [
+      `# ${collection?.name ?? "Collection"} — QCoreAI Notebook Export`,
+      ``,
+      `*Exported: ${new Date().toISOString().slice(0, 10)} | ${collSnippets.length} snippet(s)*`,
+      ``,
+    ];
+    if (collection?.description) {
+      lines.push(`> ${collection.description}`, ``);
+    }
+    for (const s of collSnippets) {
+      lines.push(`## [${(s.role || "final").toUpperCase()}] ${new Date(s.createdAt).toLocaleDateString()}`, ``);
+      if (s.annotation) lines.push(`> ${s.annotation}`, ``);
+      if (s.tags && s.tags.length > 0) lines.push(`Tags: ${s.tags.map((t: string) => `#${t}`).join(", ")}`, ``);
+      lines.push(s.content, ``, `---`, ``);
+    }
+
+    const md = lines.join("\n");
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="collection-${req.params.id}.md"`);
+    res.send(md);
+  } catch (err: any) { res.status(500).json({ error: "export failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V54 — Comprehensive user stats
+   GET /me/stats
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/stats", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const stats = await getUserStats(auth.sub);
+    res.json({ stats });
+  } catch (err: any) { res.status(500).json({ error: "stats failed", details: err?.message }); }
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

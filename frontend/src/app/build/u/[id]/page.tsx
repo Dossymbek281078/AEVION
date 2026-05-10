@@ -6,6 +6,7 @@ import { StarsDisplay } from "@/components/build/StarRating";
 import { ReviewsByUserSection } from "@/components/build/ReviewsSection";
 import { ShareProfileButton } from "@/components/build/ShareProfileButton";
 import { ProfileShareQR } from "@/components/build/ProfileShareQR";
+import { ProfileExtras } from "@/components/build/ProfileExtras";
 
 export const dynamic = "force-dynamic";
 
@@ -235,6 +236,8 @@ export default async function PublicProfilePage({ params }: Props) {
             </div>
           </Section>
         )}
+
+        <ProfileExtras userId={data.userId} />
 
         {data.introVideoUrl && (
           <Section title="Intro video">

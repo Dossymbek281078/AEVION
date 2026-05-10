@@ -3893,3 +3893,236 @@ export async function listRateLimits(userId: string): Promise<Array<{ bucket: st
   );
   return r.rows as Array<{ bucket: string; count: number; windowStart: string }>;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V51 — Prompt chains (multi-step prompt sequences).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type PromptChainStep = {
+  promptId?: string;
+  inputTemplate: string;
+  strategy?: string;
+  useOutputOf?: number;
+};
+
+export type PromptChainRow = {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  steps: PromptChainStep[];
+  isPublic: boolean;
+  runCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memPromptChains = new Map<string, PromptChainRow>();
+
+export async function createPromptChain(opts: {
+  userId: string;
+  name: string;
+  description?: string | null;
+  steps?: PromptChainStep[];
+  isPublic?: boolean;
+}): Promise<PromptChainRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const row: PromptChainRow = {
+    id,
+    userId: opts.userId,
+    name: opts.name.slice(0, 120),
+    description: opts.description?.slice(0, 500) ?? null,
+    steps: (opts.steps ?? []).slice(0, 20),
+    isPublic: opts.isPublic ?? false,
+    runCount: 0,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  if (!isDbReady()) { memPromptChains.set(id, row); return row; }
+  const r = await pool.query(
+    `INSERT INTO "QCorePromptChain" ("id","userId","name","description","steps","isPublic")
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [id, row.userId, row.name, row.description, JSON.stringify(row.steps), row.isPublic]
+  );
+  const dbRow = r.rows[0];
+  return { ...dbRow, steps: typeof dbRow.steps === "string" ? JSON.parse(dbRow.steps) : (dbRow.steps ?? []) } as PromptChainRow;
+}
+
+export async function listPromptChains(userId: string): Promise<PromptChainRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memPromptChains.values())
+      .filter((c) => c.userId === userId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePromptChain" WHERE "userId"=$1 ORDER BY "updatedAt" DESC`,
+    [userId]
+  );
+  return r.rows.map((row: any) => ({ ...row, steps: typeof row.steps === "string" ? JSON.parse(row.steps) : (row.steps ?? []) })) as PromptChainRow[];
+}
+
+export async function getPromptChain(id: string): Promise<PromptChainRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) return memPromptChains.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "QCorePromptChain" WHERE "id"=$1`, [id]);
+  if (!r.rows[0]) return null;
+  const row = r.rows[0];
+  return { ...row, steps: typeof row.steps === "string" ? JSON.parse(row.steps) : (row.steps ?? []) } as PromptChainRow;
+}
+
+export async function updatePromptChain(
+  id: string,
+  userId: string,
+  patch: Partial<Pick<PromptChainRow, "name" | "description" | "steps" | "isPublic">>
+): Promise<PromptChainRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const row = memPromptChains.get(id);
+    if (!row || row.userId !== userId) return null;
+    const updated = { ...row, ...patch, updatedAt: nowIso() };
+    memPromptChains.set(id, updated);
+    return updated;
+  }
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let idx = 1;
+  if (patch.name !== undefined) { sets.push(`"name"=$${idx++}`); vals.push(String(patch.name).slice(0, 120)); }
+  if (patch.description !== undefined) { sets.push(`"description"=$${idx++}`); vals.push(patch.description?.slice(0, 500) ?? null); }
+  if (patch.steps !== undefined) { sets.push(`"steps"=$${idx++}`); vals.push(JSON.stringify(patch.steps)); }
+  if (patch.isPublic !== undefined) { sets.push(`"isPublic"=$${idx++}`); vals.push(Boolean(patch.isPublic)); }
+  if (sets.length === 0) return getPromptChain(id);
+  sets.push(`"updatedAt"=NOW()`);
+  vals.push(id, userId);
+  const r = await pool.query(
+    `UPDATE "QCorePromptChain" SET ${sets.join(",")} WHERE "id"=$${idx++} AND "userId"=$${idx++} RETURNING *`,
+    vals
+  );
+  if (!r.rows[0]) return null;
+  const row = r.rows[0];
+  return { ...row, steps: typeof row.steps === "string" ? JSON.parse(row.steps) : (row.steps ?? []) } as PromptChainRow;
+}
+
+export async function deletePromptChain(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const row = memPromptChains.get(id);
+    if (!row || row.userId !== userId) return false;
+    memPromptChains.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCorePromptChain" WHERE "id"=$1 AND "userId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function listPublicPromptChains(limit = 20): Promise<PromptChainRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memPromptChains.values())
+      .filter((c) => c.isPublic)
+      .sort((a, b) => b.runCount - a.runCount)
+      .slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCorePromptChain" WHERE "isPublic"=TRUE ORDER BY "runCount" DESC LIMIT $1`,
+    [limit]
+  );
+  return r.rows.map((row: any) => ({ ...row, steps: typeof row.steps === "string" ? JSON.parse(row.steps) : (row.steps ?? []) })) as PromptChainRow[];
+}
+
+export async function incrPromptChainRunCount(id: string): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const row = memPromptChains.get(id);
+    if (row) { row.runCount += 1; row.updatedAt = nowIso(); }
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCorePromptChain" SET "runCount"="runCount"+1,"updatedAt"=NOW() WHERE "id"=$1`,
+    [id]
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V54 — Comprehensive user stats (/me/stats)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function getUserStats(userId: string): Promise<{
+  totalSessions: number;
+  totalRuns: number;
+  totalCostUsd: number;
+  totalTokensIn: number;
+  totalTokensOut: number;
+  avgCostPerRun: number;
+  mostUsedStrategy: string;
+  mostUsedProvider: string;
+  joinedAt: string | null;
+}> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return {
+      totalSessions: 0,
+      totalRuns: 0,
+      totalCostUsd: 0,
+      totalTokensIn: 0,
+      totalTokensOut: 0,
+      avgCostPerRun: 0,
+      mostUsedStrategy: "",
+      mostUsedProvider: "",
+      joinedAt: null,
+    };
+  }
+  const [sessR, runR, stratR, provR] = await Promise.all([
+    pool.query(`SELECT COUNT(*) AS cnt, MIN("createdAt") AS first FROM "QCoreSession" WHERE "userId"=$1`, [userId]),
+    pool.query(
+      `SELECT COUNT(*) AS cnt, COALESCE(SUM("totalCostUsd"),0) AS cost FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON r."sessionId"=s."id" WHERE s."userId"=$1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT r."strategy", COUNT(*) AS cnt FROM "QCoreRun" r
+       JOIN "QCoreSession" s ON r."sessionId"=s."id"
+       WHERE s."userId"=$1 AND r."strategy" IS NOT NULL
+       GROUP BY r."strategy" ORDER BY cnt DESC LIMIT 1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT m."provider", COUNT(*) AS cnt FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON m."runId"=r."id"
+       JOIN "QCoreSession" s ON r."sessionId"=s."id"
+       WHERE s."userId"=$1 AND m."provider" IS NOT NULL
+       GROUP BY m."provider" ORDER BY cnt DESC LIMIT 1`,
+      [userId]
+    ),
+  ]);
+
+  const totalSessions = parseInt(sessR.rows[0]?.cnt ?? "0", 10);
+  const joinedAt = sessR.rows[0]?.first ?? null;
+  const totalRuns = parseInt(runR.rows[0]?.cnt ?? "0", 10);
+  const totalCostUsd = parseFloat(runR.rows[0]?.cost ?? "0");
+  const avgCostPerRun = totalRuns > 0 ? totalCostUsd / totalRuns : 0;
+  const mostUsedStrategy = stratR.rows[0]?.strategy ?? "";
+  const mostUsedProvider = provR.rows[0]?.provider ?? "";
+
+  // Token totals (best-effort — QCoreMessage may not exist)
+  let totalTokensIn = 0;
+  let totalTokensOut = 0;
+  try {
+    const tokR = await pool.query(
+      `SELECT COALESCE(SUM("tokensIn"),0) AS ti, COALESCE(SUM("tokensOut"),0) AS to_
+       FROM "QCoreMessage" m
+       JOIN "QCoreRun" r ON m."runId"=r."id"
+       JOIN "QCoreSession" s ON r."sessionId"=s."id"
+       WHERE s."userId"=$1`,
+      [userId]
+    );
+    totalTokensIn = parseFloat(tokR.rows[0]?.ti ?? "0");
+    totalTokensOut = parseFloat(tokR.rows[0]?.to_ ?? "0");
+  } catch { /* table might differ */ }
+
+  return { totalSessions, totalRuns, totalCostUsd, totalTokensIn, totalTokensOut, avgCostPerRun, mostUsedStrategy, mostUsedProvider, joinedAt };
+}

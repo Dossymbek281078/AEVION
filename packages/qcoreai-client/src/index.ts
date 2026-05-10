@@ -1802,6 +1802,107 @@ export class QCoreClient {
     if (!res.ok) throw new Error(`smoke failed: ${await safeError(res)}`);
     return res.json();
   }
+
+  // V51: prompt chains
+
+  /** Create a new prompt chain (multi-step sequence). */
+  async createPromptChain(opts: {
+    name: string;
+    description?: string;
+    steps: Array<{ inputTemplate: string; strategy?: string; useOutputOf?: number }>;
+    isPublic?: boolean;
+  }): Promise<{ id: string; name: string; description: string | null; steps: Array<{ inputTemplate: string; strategy?: string; useOutputOf?: number }>; runCount: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/prompt-chains"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createPromptChain failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.chain;
+  }
+
+  /** List the current user's prompt chains. */
+  async listPromptChains(): Promise<Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    steps: Array<{ inputTemplate: string; strategy?: string; useOutputOf?: number }>;
+    runCount: number;
+    isPublic: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/prompt-chains"));
+    if (!res.ok) throw new Error(`listPromptChains failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Execute a prompt chain and get step-by-step results. */
+  async runPromptChain(chainId: string): Promise<{
+    chainId: string;
+    results: Array<{ stepIndex: number; runId: string; sessionId: string; finalContent: string }>;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompt-chains/${chainId}/run`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (!res.ok) throw new Error(`runPromptChain failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Delete a prompt chain (owner only). */
+  async deletePromptChain(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompt-chains/${id}`), { method: "DELETE" });
+    if (!res.ok) throw new Error(`deletePromptChain failed: ${await safeError(res)}`);
+  }
+
+  // V53: notebook AI features
+
+  /** Get AI-suggested tags for a snippet's content. */
+  async autoTagSnippet(content: string): Promise<string[]> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/auto-tag"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error(`autoTagSnippet failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.tags || [];
+  }
+
+  /** Get an AI summary of all snippets in a notebook collection. */
+  async getCollectionSummary(collectionId: string): Promise<{
+    summary: string;
+    snippetCount: number;
+    tags: string[];
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/collections/${collectionId}/summary`));
+    if (!res.ok) throw new Error(`getCollectionSummary failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V54: user stats
+
+  /** Get comprehensive stats for the current user. */
+  async getMyStats(): Promise<{
+    totalSessions: number;
+    totalRuns: number;
+    totalCostUsd: number;
+    totalTokensIn: number;
+    totalTokensOut: number;
+    avgCostPerRun: number;
+    mostUsedStrategy: string;
+    mostUsedProvider: string;
+    joinedAt: string | null;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/stats"));
+    if (!res.ok) throw new Error(`getMyStats failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.stats;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

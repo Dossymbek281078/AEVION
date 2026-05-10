@@ -407,11 +407,13 @@ export default function QCoreMultiAgentPage() {
     });
   };
 
-  // V19: agent personas
-  const [personas, setPersonas] = useState<Record<string, { name: string; emoji?: string; color?: string }>>({});
+  // V19: agent personas (V52: extended with bio + systemPromptHint)
+  const [personas, setPersonas] = useState<Record<string, { name: string; emoji?: string; color?: string; defaultProvider?: string; defaultModel?: string; bio?: string; systemPromptHint?: string }>>({});
   const [personaEditRole, setPersonaEditRole] = useState<string | null>(null);
   const [personaName, setPersonaName] = useState("");
   const [personaEmoji, setPersonaEmoji] = useState("");
+  const [personaBio, setPersonaBio] = useState("");
+  const [personaSystemHint, setPersonaSystemHint] = useState("");
 
   // V18: command palette state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -2777,6 +2779,8 @@ export default function QCoreMultiAgentPage() {
                             setPersonaEditRole(role);
                             setPersonaName(persona?.name || "");
                             setPersonaEmoji(persona?.emoji || "");
+                            setPersonaBio(persona?.bio || "");
+                            setPersonaSystemHint(persona?.systemPromptHint || "");
                           }}
                           style={{
                             padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
@@ -2788,15 +2792,18 @@ export default function QCoreMultiAgentPage() {
                           {persona?.emoji ? `${persona.emoji} ` : ""}{persona?.name || role}
                         </button>
                         {editing && (
-                          <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 100, marginTop: 4, padding: 10, borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", minWidth: 200 }}>
+                          <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 100, marginTop: 4, padding: 10, borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", minWidth: 240 }}>
                             <input value={personaName} onChange={(e) => setPersonaName(e.target.value)} placeholder="Name…" style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
                             <input value={personaEmoji} onChange={(e) => setPersonaEmoji(e.target.value)} placeholder="Emoji (opt.)…" maxLength={4} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            {/* V52: bio + system prompt hint */}
+                            <input value={personaBio} onChange={(e) => setPersonaBio(e.target.value)} placeholder="Bio (e.g. senior software architect)…" style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            <textarea value={personaSystemHint} onChange={(e) => setPersonaSystemHint(e.target.value)} placeholder="System prompt hint (e.g. Always use bullet points)…" rows={2} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", resize: "vertical", marginBottom: 6, boxSizing: "border-box" }} />
                             <div style={{ display: "flex", gap: 5 }}>
                               <button onClick={async () => {
                                 if (!personaName.trim()) return;
-                                const res = await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ name: personaName.trim(), emoji: personaEmoji.trim() || null }) });
+                                const res = await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ name: personaName.trim(), emoji: personaEmoji.trim() || null, bio: personaBio.trim() || null, systemPromptHint: personaSystemHint.trim() || null }) });
                                 const d = await res.json().catch(() => ({}));
-                                if (d.persona) { setPersonas((p) => ({ ...p, [role]: { name: d.persona.name, emoji: d.persona.emoji } })); }
+                                if (d.persona) { setPersonas((p) => ({ ...p, [role]: { name: d.persona.name, emoji: d.persona.emoji, bio: d.persona.bio, systemPromptHint: d.persona.systemPromptHint } })); }
                                 setPersonaEditRole(null);
                               }} style={{ flex: 1, padding: "4px", borderRadius: 5, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
                               {personas[role] && <button onClick={async () => {
@@ -3934,6 +3941,7 @@ export default function QCoreMultiAgentPage() {
           { icon: "🔖", label: "Bookmarks", href: "/qcoreai/bookmarks" },
           { icon: "🏢", label: "Organizations", href: "/qcoreai/orgs" },
           { icon: "🔑", label: "API Keys", href: "/qcoreai/api-keys" },
+          { icon: "🔗", label: "Prompt chains", href: "/qcoreai/chains" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div

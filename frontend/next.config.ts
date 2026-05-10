@@ -30,45 +30,19 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Main CyberChess route hosts the WorkspaceMediaPane with cross-origin
-        // iframes for YouTube / Twitch / arbitrary URLs. The default `require-corp`
-        // (set in the catch-all above for SharedArrayBuffer) BLOCKS those frames
-        // because YT/Twitch don't send CORP headers. `credentialless` keeps
-        // SharedArrayBuffer working for same-origin Stockfish worker AND lets
-        // third-party iframes load (without credentials). Chrome 110+/Firefox 122+.
-        // Old browsers fall back to require-corp behaviour — embed won't work
-        // there, but Stockfish stays alive.
-        // NOTE: declared AFTER the catch-all but BEFORE /cyberchess/studio so the
-        // studio's unsafe-none can still override us for that nested path.
+        // CyberChess: COEP unsafe-none so YouTube / Twitch / any third-party iframe
+        // loads without CORP restrictions on ALL browsers (incl. Safari).
+        // Stockfish runs in single-threaded mode (SharedArrayBuffer unavailable),
+        // which still provides solid analysis. For full-speed Stockfish open the
+        // standalone /cyberchess tab while streaming via /cyberchess/studio.
         source: "/cyberchess",
-        headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
-        ],
-      },
-      {
-        source: "/cyberchess/:path*",
-        headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
-        ],
-      },
-      {
-        // Studio hosts cross-origin iframes (Twitch / YouTube / Lichess).
-        // unsafe-none = no isolation = full third-party iframe support
-        // including cookies/storage that Twitch needs. Stockfish in the
-        // chess-internal iframe loses SharedArrayBuffer here — user can
-        // open the standalone /cyberchess tab via the pane "↗" button.
-        // NOTE: declared AFTER the /cyberchess catch-all so studio's
-        // unsafe-none overrides credentialless for this nested path.
-        source: "/cyberchess/studio",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
           { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
         ],
       },
       {
-        source: "/cyberchess/studio/:path*",
+        source: "/cyberchess/:path*",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
           { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },

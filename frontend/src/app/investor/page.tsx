@@ -5,10 +5,8 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
-export const metadata = {
-  title: "AEVION — Investor Overview",
-  description: "Trust infrastructure for the AI content era. Post-quantum IP protection + B2B hiring + embedded payments. Seed $5M.",
-};
+// metadata must live in a server component — moved to layout or generateMetadata.
+// Kept as a plain object for <head> tags injected by the client shell.
 
 type Stats = {
   planetSubmissions: number;

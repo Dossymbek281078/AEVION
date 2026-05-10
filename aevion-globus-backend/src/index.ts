@@ -26,7 +26,7 @@ import { checkoutRouter } from "./routes/checkout";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
-import { multichatRouter } from "./routes/multichat";
+import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
@@ -163,6 +163,9 @@ app.get("/api/globus/projects/:id", (req, res) => {
 app.use("/api/modules", modulesRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
+// Public share-link route mounted BEFORE the auth-gated multichat router so
+// /api/multichat/shared/:token bypasses requireAuth.
+app.use("/api/multichat", multichatPublicRouter);
 app.use("/api/multichat", multichatRouter);
 
 /** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,

@@ -9,6 +9,7 @@ import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
+import CoachLessonsModal from "./CoachLessonsModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
@@ -497,7 +498,20 @@ export default function CyberChessPage(){
   const moveTimesRef=useRef<number[]>([]);
   const lastMoveStartRef=useRef<number>(Date.now());
   const[moveTimes,sMoveTimes]=useState<number[]>([]);
+  // Coach Chat — conversational AI tutor with current position as context.
+  // Messages: { role, content }. Sent to /api/coach/chat with a coach system prompt.
+  type CoachMsg={role:"user"|"assistant";content:string;ts:number};
+  const[coachChat,sCoachChat]=useState<CoachMsg[]>([]);
+  const[coachChatInput,sCoachChatInput]=useState("");
+  const[coachChatLoading,sCoachChatLoading]=useState(false);
+  const coachChatScrollRef=useRef<HTMLDivElement|null>(null);
+  // Auto-scroll chat to bottom on new message
+  useEffect(()=>{
+    const el=coachChatScrollRef.current;
+    if(el)el.scrollTop=el.scrollHeight;
+  },[coachChat,coachChatLoading]);
   const[showKnowledge,sShowKnowledge]=useState(false);
+  const[showLessons,sShowLessons]=useState(false);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
@@ -5992,6 +6006,196 @@ export default function CyberChessPage(){
                 </div>
               </div>;
             })()}
+            {/* ─── Coach Chat — conversational AI tutor ─── sends FEN + history + question to
+                /api/coach/chat (Anthropic Claude). Suggested questions auto-populate the input.
+                Messages persist within session (not localStorage — too sensitive to overflow). */}
+            {(()=>{
+              const BACKEND=typeof window!=="undefined"&&window.location.hostname==="localhost"?"http://localhost:4001":"https://api.aevion.app";
+              const SUGGESTED=[
+                {q:"Что в этой позиции? Объясни сильные и слабые стороны.",icon:"🔍"},
+                {q:"Какой план мне сейчас играть?",icon:"📋"},
+                {q:"Где моя последняя ошибка и как её надо было сыграть?",icon:"❓"},
+                {q:"Какой дебют я играю и какие типичные планы в нём?",icon:"📖"},
+                {q:"Объясни последний ход соперника — почему он его сделал?",icon:"🤔"},
+                {q:"Какие тактические возможности есть в позиции?",icon:"🎯"},
+                {q:"Как улучшить мою активность фигур?",icon:"♞"},
+                {q:"Чему меня учит эта партия?",icon:"🎓"},
+              ];
+              const sendChat=async(question:string)=>{
+                if(coachChatLoading)return;
+                if(!question.trim())return;
+                const fen=game.fen();
+                const turn=game.turn()==="w"?"белые":"чёрные";
+                const lastMove=hist.length>0?hist[hist.length-1]:"(партия не начата)";
+                const recent=hist.slice(-10).join(" ");
+                const evalCpStr=evalMate!==0?`#${evalMate>0?evalMate:-evalMate}`:`${evalCp>=0?"+":""}${(evalCp/100).toFixed(2)}`;
+                const phase=hist.length<14?"дебют":hist.length<40?"миттельшпиль":"эндшпиль";
+                const userMsg:CoachMsg={role:"user",content:question.trim(),ts:Date.now()};
+                const newMsgs=[...coachChat,userMsg];
+                sCoachChat(newMsgs);
+                sCoachChatInput("");
+                sCoachChatLoading(true);
+                // Build context block prepended to the user's question for the API.
+                const contextBlock=`КОНТЕКСТ ПОЗИЦИИ:
+FEN: ${fen}
+Ход ${Math.floor(hist.length/2)+1}, ${turn} ходят. Фаза: ${phase}.
+Последние ходы: ${recent||"начало партии"}
+Последний ход: ${lastMove}
+Engine eval: ${evalCpStr} (с точки зрения белых)
+Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}
+
+ВОПРОС УЧЕНИКА:
+${question.trim()}`;
+                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. Не выдумывай ходов.`;
+                try{
+                  const ctrl=new AbortController();
+                  const tId=setTimeout(()=>ctrl.abort(),30000);
+                  const apiMsgs=[...coachChat,{role:"user" as const,content:contextBlock}].map(m=>({role:m.role,content:typeof m==="object"&&"content" in m?m.content:""}));
+                  const res=await fetch(`${BACKEND}/api/coach/chat`,{
+                    method:"POST",headers:{"Content-Type":"application/json"},
+                    body:JSON.stringify({system:SYSTEM,messages:apiMsgs,maxTokens:600}),
+                    signal:ctrl.signal
+                  });
+                  clearTimeout(tId);
+                  if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw new Error(e.error||`Server ${res.status}`)}
+                  const data=await res.json();
+                  const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
+                  sCoachChat([...newMsgs,{role:"assistant",content:reply,ts:Date.now()}]);
+                }catch(e:any){
+                  const errMsg=e?.name==="AbortError"?"⏱ Coach думал слишком долго — попробуй ещё раз":/fetch|network|Failed/i.test(e?.message||"")?"⚠ Не могу связаться с Coach AI. Бэкенд недоступен — попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.":`Ошибка: ${e?.message||"unknown"}`;
+                  sCoachChat([...newMsgs,{role:"assistant",content:errMsg,ts:Date.now()}]);
+                }finally{
+                  sCoachChatLoading(false);
+                }
+              };
+              return <div style={{borderRadius:10,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",border:"1px solid #93c5fd",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:14}}>💬</span>
+                  <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси Coach — chat с AI</span>
+                  {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
+                </div>
+                {coachChat.length===0&&<div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                  {SUGGESTED.map(s=><button key={s.q} onClick={()=>sendChat(s.q)} disabled={coachChatLoading}
+                    style={{padding:"5px 9px",borderRadius:RADIUS.full,border:`1px solid ${T.border}`,background:"#fff",color:"#1e3a8a",fontSize:11,fontWeight:700,cursor:"pointer",lineHeight:1.3,opacity:coachChatLoading?0.5:1}}>
+                    {s.icon} {s.q.length>40?s.q.slice(0,38)+"…":s.q}
+                  </button>)}
+                </div>}
+                {coachChat.length>0&&<div ref={coachChatScrollRef} style={{maxHeight:280,overflowY:"auto",display:"flex",flexDirection:"column",gap:6,padding:"4px 0"}}>
+                  {coachChat.map((m,i)=><div key={i} style={{
+                    padding:"7px 10px",borderRadius:RADIUS.md,
+                    background:m.role==="user"?"linear-gradient(135deg,#1e40af,#3b82f6)":"#fff",
+                    color:m.role==="user"?"#fff":"#0f172a",
+                    fontSize:12,lineHeight:1.55,whiteSpace:"pre-wrap",
+                    border:m.role==="user"?"none":"1px solid #c7d2fe",
+                    alignSelf:m.role==="user"?"flex-end":"flex-start",
+                    maxWidth:"92%",
+                    boxShadow:m.role==="user"?"0 1px 3px rgba(30,64,175,0.2)":"none"
+                  }}>
+                    <div style={{fontSize:9,fontWeight:900,opacity:0.7,marginBottom:2,letterSpacing:0.4,textTransform:"uppercase" as const}}>{m.role==="user"?"ты":"☕ coach"}</div>
+                    {m.content}
+                  </div>)}
+                  {coachChatLoading&&<div style={{padding:"7px 10px",borderRadius:RADIUS.md,background:"#fff",border:"1px solid #c7d2fe",color:T.dim,fontSize:12,fontStyle:"italic",alignSelf:"flex-start",maxWidth:"92%"}}>
+                    Coach печатает<span style={{animation:"cc-fade-in 0.6s ease-out infinite alternate"}}>…</span>
+                  </div>}
+                </div>}
+                <div style={{display:"flex",gap:6}}>
+                  <input
+                    value={coachChatInput}
+                    onChange={e=>sCoachChatInput(e.target.value)}
+                    onKeyDown={e=>{if(e.key==="Enter"&&coachChatInput.trim()&&!coachChatLoading){sendChat(coachChatInput)}}}
+                    placeholder={coachChatLoading?"Coach думает…":"Спроси что-нибудь о позиции…"}
+                    disabled={coachChatLoading}
+                    style={{flex:1,padding:"7px 10px",borderRadius:RADIUS.md,border:`1px solid ${T.border}`,fontSize:12,background:"#fff",color:T.text,outline:"none"}}
+                  />
+                  <button onClick={()=>sendChat(coachChatInput)} disabled={coachChatLoading||!coachChatInput.trim()}
+                    style={{padding:"7px 14px",borderRadius:RADIUS.md,border:"none",background:coachChatLoading||!coachChatInput.trim()?"#cbd5e1":"linear-gradient(135deg,#1e40af,#3b82f6)",color:"#fff",fontSize:12,fontWeight:800,cursor:coachChatLoading||!coachChatInput.trim()?"default":"pointer"}}>
+                    {coachChatLoading?"…":"Спросить"}
+                  </button>
+                </div>
+                <div style={{fontSize:10,color:"#64748b",lineHeight:1.4}}>
+                  💡 Coach видит текущий FEN, последние 10 ходов, eval Stockfish и твой рейтинг. Спрашивай про позицию, план, ошибки, дебют — будет конкретный ответ. Pro: Anthropic Claude Sonnet, ~3 секунды на ответ.
+                </div>
+              </div>;
+            })()}
+            {/* ─── Personal weakness analyzer ─── data-driven insights from saved games.
+                Uses existing computeGameDNA. Hidden until 5+ games played. */}
+            {savedGames.length>=5&&(()=>{
+              const dna=gameDna;
+              const flags:{label:string;detail:string;tone:"warn"|"info"|"good"}[]=[];
+              if(dna.whiteWinPct-dna.blackWinPct>20&&dna.blackGames>=3){
+                flags.push({label:"⚫ Слабая защита",detail:`${dna.whiteWinPct}% за белых vs ${dna.blackWinPct}% за чёрных. Учи дебюты за чёрных (Caro-Kann, KID).`,tone:"warn"});
+              }
+              if(dna.blackWinPct-dna.whiteWinPct>20&&dna.whiteGames>=3){
+                flags.push({label:"⚪ Слабая инициатива",detail:`${dna.blackWinPct}% за чёрных vs ${dna.whiteWinPct}% за белых. Учи активные дебюты за белых (Italian, KIA).`,tone:"warn"});
+              }
+              if(dna.avgLengthLoss>0&&dna.avgLengthLoss<25){
+                flags.push({label:"⚡ Ранние зевки",detail:`Средняя длина проигрыша: ${dna.avgLengthLoss} ходов. Урок 2 «Не зевай — blunder check» — твой приоритет.`,tone:"warn"});
+              }
+              if(dna.tacticalPhaseLoss==="opening"){
+                flags.push({label:"📖 Дебютные ошибки",detail:`Большинство поражений — в дебюте. Работай над репертуаром (Урок 14) и принципами (Урок 1).`,tone:"warn"});
+              }
+              if(dna.tacticalPhaseLoss==="endgame"){
+                flags.push({label:"🏁 Слабый эндшпиль",detail:`Чаще теряешь в эндшпиле. Урок 5 (пешечные эндшпили) + Урок 3 (базовые маты).`,tone:"warn"});
+              }
+              if(dna.recentTrend==="up"&&dna.recentWinPctDelta>=10){
+                flags.push({label:"📈 Растёшь",detail:`Последние 10 партий +${dna.recentWinPctDelta}% к WR. Продолжай в том же темпе!`,tone:"good"});
+              }
+              if(dna.recentTrend==="down"&&dna.recentWinPctDelta<=-10){
+                flags.push({label:"📉 Спад формы",detail:`Последние 10 партий ${dna.recentWinPctDelta}% к WR. Возможно — усталость. Сделай перерыв или возьми Урок по психологии (Roadmap).`,tone:"warn"});
+              }
+              if(dna.bestOpening){
+                flags.push({label:`✓ Сильный дебют: ${dna.bestOpening.opening}`,detail:`${dna.bestOpening.winPct}% побед в ${dna.bestOpening.total} партиях. Изучи его глубже — это твой репертуар.`,tone:"good"});
+              }
+              if(dna.worstOpening&&dna.worstOpening.total>=3){
+                flags.push({label:`✗ Слабый дебют: ${dna.worstOpening.opening}`,detail:`${dna.worstOpening.winPct}% побед в ${dna.worstOpening.total} партиях. Либо изучи его, либо смени на другой.`,tone:"warn"});
+              }
+              if(dna.currentStreak.type==="L"&&dna.currentStreak.count>=3){
+                flags.push({label:`💔 Серия проигрышей ×${dna.currentStreak.count}`,detail:`Возьми паузу 30 минут или поиграй пазлы для восстановления уверенности.`,tone:"warn"});
+              }
+              return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",border:"1px solid #fca5a5",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:14}}>🩺</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Персональная диагностика · {dna.total} партий</span>
+                  <span style={{fontSize:10,color:"#6b7280",fontWeight:700}}>WR {dna.winPct}%</span>
+                </div>
+                {/* Quick stats grid */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4,fontSize:10}}>
+                  <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
+                    <div style={{fontWeight:900,color:CC.brand,fontSize:14}}>{dna.wins}</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>побед</div>
+                  </div>
+                  <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
+                    <div style={{fontWeight:900,color:CC.danger,fontSize:14}}>{dna.losses}</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>пораж.</div>
+                  </div>
+                  <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
+                    <div style={{fontWeight:900,color:CC.text,fontSize:14}}>{dna.avgLengthWin}</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>avg ходов</div>
+                  </div>
+                  <div style={{textAlign:"center",padding:"5px 4px",background:"#fff",borderRadius:5}}>
+                    <div style={{fontWeight:900,color:dna.ratingGrowth>=0?CC.brand:CC.danger,fontSize:14}}>{dna.ratingGrowth>=0?"+":""}{dna.ratingGrowth}</div>
+                    <div style={{color:CC.textDim,letterSpacing:0.3}}>ELO Δ</div>
+                  </div>
+                </div>
+                {/* Insights / flags */}
+                {flags.length>0?<div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {flags.slice(0,5).map((f,i)=><div key={i} style={{
+                    padding:"6px 10px",borderRadius:6,
+                    background:f.tone==="good"?"rgba(16,185,129,0.10)":f.tone==="warn"?"rgba(220,38,38,0.06)":"rgba(59,130,246,0.06)",
+                    border:`1px solid ${f.tone==="good"?"rgba(16,185,129,0.3)":f.tone==="warn"?"rgba(220,38,38,0.25)":"rgba(59,130,246,0.25)"}`,
+                    fontSize:11,lineHeight:1.5
+                  }}>
+                    <div style={{fontWeight:900,color:f.tone==="good"?"#065f46":f.tone==="warn"?"#991b1b":"#1e3a8a",marginBottom:1}}>{f.label}</div>
+                    <div style={{color:"#475569",fontSize:11}}>{f.detail}</div>
+                  </div>)}
+                </div>:<div style={{fontSize:11,color:"#6b7280",fontStyle:"italic",lineHeight:1.5}}>
+                  Слабостей не найдено — продолжай играть стабильно.
+                </div>}
+                {dna.insights.length>0&&<div style={{fontSize:10,color:"#6b7280",lineHeight:1.5,paddingTop:4,borderTop:"1px dashed rgba(220,38,38,0.2)"}}>
+                  💡 Дополнительно: {dna.insights.slice(0,2).join(" · ")}
+                </div>}
+              </div>;
+            })()}
             {/* Mode selector — 5 ways to start a Coach session */}
             {(()=>{
               const modeBtn=(icon:string,title:string,sub:string,onClick:()=>void,active?:boolean)=>(
@@ -6100,6 +6304,7 @@ export default function CyberChessPage(){
                 <button onClick={()=>{sEditorMode(true)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>✏️ Расставить вручную</button>
 
                 <button onClick={()=>sShowKnowledge(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #a7f3d0`,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#065f46",textAlign:"left"}}>📚 База знаний</button>
+                <button onClick={()=>sShowLessons(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #93c5fd`,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#1e3a8a",textAlign:"left"}}>📖 Курс (14 уроков)</button>
               </div>
             </div>
             {/* Combined AI Toggle + Level selector */}
@@ -6258,6 +6463,20 @@ export default function CyberChessPage(){
                 const g=new Chess(fen);
                 setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
                 sShowKnowledge(false);
+                if(hint)showToast(hint,"info");
+                else showToast("Позиция загружена","success");
+              }catch{showToast("Неверная позиция","error")}
+            }}
+          />
+
+          <CoachLessonsModal
+            open={showLessons}
+            onClose={()=>sShowLessons(false)}
+            onLoadPosition={(fen:string,hint?:string)=>{
+              try{
+                const g=new Chess(fen);
+                setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
+                sShowLessons(false);sTab("coach");
                 if(hint)showToast(hint,"info");
                 else showToast("Позиция загружена","success");
               }catch{showToast("Неверная позиция","error")}
@@ -8872,6 +9091,7 @@ export default function CyberChessPage(){
         // ── COACH / TRAINING ──
         {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
         {id:"coach-knowledge",icon:"📚",group:"Coach", label:"Coach Knowledge",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
+        {id:"coach-lessons",  icon:"📖",group:"Coach", label:"Coach Lessons (Курс)", hint:"14 уроков beginner→advanced с теорией+позициями+упражнениями", run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},
         {id:"opening",      icon:"📖",group:"Coach",   label:"Opening Trainer",   hint:"Дрилл дебютов до автоматизма",              run:()=>sShowOpeningTrainer(true)},
         {id:"editor",       icon:"♟",group:"Coach",   label:"Position Editor",   hint:"FEN · ручная расстановка",                  run:()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}},

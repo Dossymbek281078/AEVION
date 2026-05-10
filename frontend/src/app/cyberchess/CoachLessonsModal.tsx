@@ -17,10 +17,12 @@ import {
   type LessonsState,
 } from "./coachLessons";
 
+type LessonMeta = { lessonId: string; stepIdx: number; lessonTitle: string; lessonEmoji: string };
+
 type Props = {
   open: boolean;
   onClose: () => void;
-  onLoadPosition: (fen: string, hint?: string) => void;
+  onLoadPosition: (fen: string, hint?: string, meta?: LessonMeta) => void;
 };
 
 const RATING_LABEL: Record<Lesson["rating"], { ru: string; col: string; bg: string }> = {
@@ -128,7 +130,7 @@ export default function CoachLessonsModal({ open, onClose, onLoadPosition }: Pro
               <div style={{ marginTop: 16, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
                 <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: "#64748b", marginBottom: 6 }}>FEN-позиция</div>
                 <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "#475569", marginBottom: 8, wordBreak: "break-all", lineHeight: 1.5 }}>{step.fen}</div>
-                <button onClick={() => { onLoadPosition(step.fen!, step.bestMove ? `Найди лучший ход${step.bestMove ? ` (ответ: ${step.bestMove})` : ""}` : step.title); }}
+                <button onClick={() => { onLoadPosition(step.fen!, step.bestMove ? `Найди лучший ход${step.bestMove ? ` (ответ: ${step.bestMove})` : ""}` : step.title, { lessonId: lesson.id, stepIdx, lessonTitle: lesson.title, lessonEmoji: lesson.emoji }); }}
                   style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#1e40af,#3b82f6)", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", letterSpacing: 0.3 }}>
                   ▶ Загрузить позицию на доску
                 </button>

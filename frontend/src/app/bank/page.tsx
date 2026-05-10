@@ -121,6 +121,23 @@ function BankContent() {
     return decodePaymentRequest(sp);
   }, [searchParams]);
 
+  // CyberChess Premium purchase intent — /bank?intent=cyberchess-pro|ultimate&amount=N
+  const chessIntent = useMemo<{tier:"pro"|"ultimate";amount:string;label:string;features:string[]}|null>(() => {
+    if (!searchParams) return null;
+    const intent = searchParams.get("intent");
+    if (intent === "cyberchess-pro") return {
+      tier: "pro", amount: searchParams.get("amount") || "500",
+      label: "CyberChess Pro",
+      features: ["Master AI до 2800 ELO","Безлимитные подсказки","Глубокий разбор каждой партии","Multi-PV анализ до 5 линий","Auto-Reels без водяного знака","Дебютная теория мастер-уровня"],
+    };
+    if (intent === "cyberchess-ultimate") return {
+      tier: "ultimate", amount: searchParams.get("amount") || "5000",
+      label: "CyberChess Ultimate",
+      features: ["Всё из Pro","Кастомные AI-личности","Персональный AI-коуч с памятью","Турниры с призами в AEV","API-доступ к движку","Приоритетная поддержка"],
+    };
+    return null;
+  }, [searchParams]);
+
   const handleSend = useCallback(
     async (to: string, amount: number, memo?: string) => {
       const ok = await send(to, amount, memo);
@@ -166,6 +183,65 @@ function BankContent() {
       <BackendStatus />
       <PreflightBanner />
       <InvestorModeAutorun />
+      {/* ─── CyberChess Premium Purchase Banner ─── shown when arriving from /bank?intent=cyberchess-pro */}
+      {chessIntent && (
+        <div style={{
+          margin:"0 0 24px",borderRadius:16,
+          background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",
+          color:"#fff",padding:"20px 24px",
+          border:"1px solid #312e81",
+          boxShadow:"0 8px 24px rgba(15,23,42,0.22)",
+        }}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 260px"}}>
+              <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#a78bfa",marginBottom:6}}>
+                🎟 Активация тарифа
+              </div>
+              <div style={{fontSize:20,fontWeight:900,color:"#fff",marginBottom:4}}>{chessIntent.label}</div>
+              <div style={{fontSize:13,color:"#cbd5e1",marginBottom:12}}>
+                Оплата {chessIntent.amount} AEV с вашего кошелька AEVION Bank → тариф активируется в CyberChess автоматически.
+              </div>
+              <ul style={{margin:0,padding:0,listStyle:"none",display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>
+                {chessIntent.features.map((f,i) => (
+                  <li key={i} style={{display:"flex",gap:8,fontSize:12,color:"#cbd5e1",alignItems:"flex-start"}}>
+                    <span style={{color:"#a78bfa",flexShrink:0,fontWeight:900}}>✓</span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:200}}>
+              <button
+                onClick={() => {
+                  if (!hasWallet) { showToast("Нужен кошелёк AEVION Bank — создай ниже","error"); return; }
+                  // Redirect back with paid marker so CyberChess sets chessy.owned
+                  const returnUrl = `/cyberchess?paid=${chessIntent.tier}&amount=${chessIntent.amount}`;
+                  showToast(`Платёж ${chessIntent.amount} AEV — инициирован...`,"info");
+                  // Simulate payment then redirect (in production: real QPayNet transfer)
+                  setTimeout(() => { window.location.href = returnUrl; }, 1200);
+                }}
+                style={{
+                  padding:"12px 20px",borderRadius:10,border:"none",cursor:"pointer",
+                  background:chessIntent.tier==="pro"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"linear-gradient(135deg,#d97706,#fcd34d)",
+                  color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.3,
+                  boxShadow:"0 4px 14px rgba(124,58,237,0.4)",
+                }}>
+                💳 Оплатить {chessIntent.amount} AEV
+              </button>
+              <a href="/cyberchess" style={{
+                display:"block",padding:"10px 20px",borderRadius:10,
+                border:"1px solid rgba(148,163,184,0.3)",color:"#cbd5e1",
+                fontSize:13,fontWeight:700,textDecoration:"none",textAlign:"center",
+              }}>
+                ← Вернуться в CyberChess
+              </a>
+              <div style={{fontSize:10,color:"#64748b",lineHeight:1.5}}>
+                AEV — нативный токен AEVION. Можно купить за фиат через QPayNet или заработать в игре.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <CommandPalette
         accountId={account?.id ?? null}
         hasWallet={hasWallet}

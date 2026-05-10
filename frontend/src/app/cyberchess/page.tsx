@@ -493,6 +493,13 @@ export default function CyberChessPage(){
   // Coach Quick-Actions remark — shown inline in the in-game panel after a quick-action.
   // null = nothing to show; { kind, title, body } = panel content.
   const[coachRemark,sCoachRemark]=useState<{kind:"plan"|"tactic"|"position"|"weakness";title:string;body:string;hint?:string}|null>(null);
+  // Move annotations — user-added symbols per ply index (0-based). Persists per-game via
+  // a ref so it survives re-renders but resets on newG. Symbols: !! ! !? ?! ? ??
+  const[moveAnnotations,sMoveAnnotations]=useState<Record<number,string>>({});
+  // Annotation picker popup state
+  const[annotPicker,sAnnotPicker]=useState<{ply:number;x:number;y:number}|null>(null);
+  const ANNOT_SYMS=[{s:"!!",c:"#10b981",t:"Блестящий"},{"s":"!",c:"#22c55e",t:"Хороший"},{"s":"!?",c:"#f59e0b",t:"Интересный"},{"s":"?!",c:"#f97316",t:"Сомнительный"},{"s":"?",c:"#ef4444",t:"Ошибка"},{"s":"??",c:"#dc2626",t:"Зевок"}];
+
   // Time-per-move tracker — milliseconds spent per ply for time-management analytics.
   // Reset on newG; appended on each move via execTime(). Index aligns with hist.
   const moveTimesRef=useRef<number[]>([]);
@@ -512,6 +519,9 @@ export default function CyberChessPage(){
   },[coachChat,coachChatLoading]);
   const[showKnowledge,sShowKnowledge]=useState(false);
   const[showLessons,sShowLessons]=useState(false);
+  // Active lesson tracking — when user loads a position from a lesson step, show a sticky
+  // "return to lesson" banner at the top of the board. Stores {lessonId, step, lessonTitle}.
+  const[activeLesson,sActiveLesson]=useState<{id:string;step:number;title:string;emoji:string}|null>(null);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
@@ -1028,6 +1038,17 @@ export default function CyberChessPage(){
       }
       // Quick-share FEN: ?fen=... loads the position into Analysis tab.
       // Companion to the S hotkey which generates these URLs.
+      // Return from /bank purchase: ?paid=pro|ultimate → activate tier
+      const paid=params.get("paid");
+      if(paid==="pro"||paid==="ultimate"){
+        sChessy(c=>({...c,owned:{...c.owned,[paid]:true}}));
+        setTimeout(()=>{
+          showToast(`✨ ${paid==="ultimate"?"Ultimate":"Pro"} активирован! Добро пожаловать в ${paid==="ultimate"?"Ultimate":"Pro"}`,"success");
+          sShowShop(true); // show shop so user sees their new tier
+        },600);
+        // Clean URL param so refresh doesn't re-activate
+        try{const u=new URL(window.location.href);u.searchParams.delete("paid");u.searchParams.delete("amount");window.history.replaceState({},"",u.pathname+u.search);}catch{}
+      }
       const fenParam=params.get("fen");
       if(fenParam){
         try{
@@ -1907,13 +1928,16 @@ export default function CyberChessPage(){
     if(hist.length<10||hist.length===reinfLastMoveRef.current)return;
     if(hist.length%10!==0)return;
     reinfLastMoveRef.current=hist.length;
-    // Pick captured piece from BOTH pools (capW = pieces taken from white = belong to black)
-    // capW stores symbols of captured-by-black white pieces; capB stores black pieces taken by white
-    // Convert glyphs to chess.js codes is tricky — easier: pick from chess.js's own captured tracking
-    // For simplicity, just spawn a random pawn for the side-to-move
+    // Pick captured piece from actual capW/capB tracking:
+    // capW = white pieces captured BY black (so available to reinforce white's side)
+    // capB = black pieces captured BY white (so available to reinforce black's side)
+    // Kings never spawn back. If no captured pieces for that side, use a random pawn.
     try{
       const sideToMove=game.turn();
-      const captured:string[]=sideToMove==="w"?["P","N","B","R"]:["p","n","b","r"];
+      const pool=sideToMove==="w"
+        ?capW.filter(p=>p.toUpperCase()!=="K")
+        :capB.filter(p=>p.toLowerCase()!=="k");
+      const captured=pool.length>0?pool:(sideToMove==="w"?["P"]:["p"]);
       const drop=pickReinforcement(captured,sideToMove,game.fen());
       if(drop){
         // Use chess.js .put to place piece
@@ -2570,8 +2594,9 @@ export default function CyberChessPage(){
     sVariantStartFen(startFen);sVariantArmies(armies);
     const ng=startFen?new Chess(startFen):new Chess();
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
-    // Reset time-per-move tracker for new game
+    // Reset time-per-move tracker and annotations for new game
     moveTimesRef.current=[];sMoveTimes([]);lastMoveStartRef.current=Date.now();
+    sMoveAnnotations({});sAnnotPicker(null);
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
     reinfLastMoveRef.current=0;
@@ -3992,6 +4017,24 @@ export default function CyberChessPage(){
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
+          {/* ─── Active Lesson banner — shown when user loaded a position from a Coach Lesson ─── */}
+          {activeLesson&&<div style={{
+            marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
+            background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
+            border:"1px solid #93c5fd",
+            width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",
+            display:"flex",alignItems:"center",gap:SPACE[2],
+          }}>
+            <span style={{fontSize:16}}>{activeLesson.emoji}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:900,color:"#1e3a8a",letterSpacing:0.3,textTransform:"uppercase" as const}}>Урок · {activeLesson.title}</div>
+              <div style={{fontSize:10,color:"#3b82f6",fontWeight:700}}>Шаг {activeLesson.step+1} · реши позицию на доске → вернись к уроку</div>
+            </div>
+            <button onClick={()=>{sShowLessons(true)}} style={{padding:"5px 10px",borderRadius:RADIUS.sm,border:`1px solid #93c5fd`,background:"#fff",color:"#1e3a8a",fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
+              📖 К уроку
+            </button>
+            <button onClick={()=>sActiveLesson(null)} style={{padding:"4px 8px",borderRadius:RADIUS.sm,border:"none",background:"transparent",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>✕</button>
+          </div>}
           {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
@@ -4713,18 +4756,35 @@ export default function CyberChessPage(){
             <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
               <span style={{fontSize:20,filter:"drop-shadow(0 1px 2px rgba(154,52,18,0.25))"}}>{VARIANTS.find(v=>v.id===variant)?.emoji}</span>
               <span style={{fontWeight:900,color:"#9a3412",letterSpacing:0.3}}>{VARIANTS.find(v=>v.id===variant)?.name}</span>
-              {variant==="diceblade"&&<>
-                <div style={{flex:1}}/>
-                <span style={{
-                  fontSize:28,lineHeight:1,
-                  display:"inline-block",
-                  padding:"2px 8px",borderRadius:6,
-                  background:"#fff",
-                  boxShadow:"0 2px 6px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(0,0,0,0.08)",
-                  animation:"diceRoll 0.4s ease-out"
-                }}>{["⚀","⚁","⚂","⚃","⚄","⚅"][diceFace-1]}</span>
-                <span style={{fontWeight:800,color:CC.text}}>Только: <b style={{color:CC.danger,padding:"2px 8px",borderRadius:RADIUS.sm,background:"rgba(220,38,38,0.08)"}}>{diceLabel}</b></span>
-              </>}
+              {variant==="diceblade"&&(()=>{
+                // Detect if player has NO legal moves with the rolled piece type (must pass)
+                const myTurnDice=game.turn()===pCol;
+                const noDiceOptions=myTurnDice&&dicePieceType!==""&&
+                  filterMovesByDice(game.moves({verbose:true}),dicePieceType).filter(m=>m.piece!=="k").length===0;
+                return <>
+                  <div style={{flex:1}}/>
+                  <span style={{
+                    fontSize:28,lineHeight:1,display:"inline-block",
+                    padding:"2px 8px",borderRadius:6,background:"#fff",
+                    boxShadow:"0 2px 6px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(0,0,0,0.08)",
+                    animation:"diceRoll 0.4s ease-out"
+                  }}>{["⚀","⚁","⚂","⚃","⚄","⚅"][diceFace-1]}</span>
+                  <span style={{fontWeight:800,color:noDiceOptions?CC.danger:CC.text}}>
+                    Только: <b style={{color:CC.danger,padding:"2px 8px",borderRadius:RADIUS.sm,background:"rgba(220,38,38,0.08)"}}>{diceLabel}</b>
+                  </span>
+                  {noDiceOptions&&<button title="Нет ходов выбранной фигурой — пропустить ход"
+                    onClick={()=>{
+                      try{
+                        const parts=game.fen().split(" ");parts[1]=parts[1]==="w"?"b":"w";
+                        const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
+                        showToast(`🎲 Пропускаю ход (нет ${diceLabel})`,"info");
+                      }catch{}
+                    }}
+                    style={{padding:"4px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.danger}`,background:"rgba(220,38,38,0.10)",color:CC.danger,fontSize:11,fontWeight:800,cursor:"pointer",animation:"cc-pulse-glow 1.2s infinite"}}>
+                    ⏭ Пас
+                  </button>}
+                </>;
+              })()}
               {variant==="twinkings"&&(()=>{
                 try{
                   const placement=game.fen().split(" ")[0];
@@ -5348,16 +5408,21 @@ export default function CyberChessPage(){
                     if(previewLeaveTimer.current){window.clearTimeout(previewLeaveTimer.current);previewLeaveTimer.current=null;}
                     try{const g=new Chess(fenHist[idx+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(idx);sLm(null);sSel(null);sVm(new Set());}catch{}
                   };
+                  const wAnnot=moveAnnotations[wIdx];const bAnnot=moveAnnotations[bIdx];
+                  const annotColor=(s?:string)=>ANNOT_SYMS.find(a=>a.s===s)?.c||T.text;
+                  const openAnnot=(ply:number,e:React.MouseEvent)=>{if(tab!=="analysis")return;e.preventDefault();e.stopPropagation();sAnnotPicker({ply,x:Math.min(e.clientX,window.innerWidth-140),y:Math.min(e.clientY,window.innerHeight-120)});};
                   return <React.Fragment key={i}>
                     <span data-pair-idx={i} data-active={isActivePair?"1":undefined} style={{color:T.dim,fontWeight:700,textAlign:"center",padding:"5px 0",background:isActivePair?"rgba(5,150,105,0.10)":"#fafafa",borderRight:`1px solid ${T.border}`,fontSize:12}}>{i+1}</span>
-                    <span onMouseEnter={()=>{if(white)previewMove(wIdx)}} onClick={()=>{if(white)commitMove(wIdx)}}
+                    <span onMouseEnter={()=>{if(white)previewMove(wIdx)}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
+                      title={tab==="analysis"?"Правый клик — добавить аннотацию":undefined}
                       style={{color:T.text,fontWeight:600,padding:"5px 10px",background:wIsPreview?"rgba(245,158,11,0.20)":wIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:wIsPreview?`3px solid #f59e0b`:wIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>{white||""}{wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3}}>{qIcon(wQ)}</span>}</span>
+                      <span>{white||""}{wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,marginLeft:2,fontSize:12}}>{wAnnot}</span>}{!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3}}>{qIcon(wQ)}</span>}</span>
                       {wEval&&<span style={{fontSize:10,color:wEval.cp>0?T.accent:wEval.cp<0?T.danger:T.dim,fontWeight:700}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
                     </span>
-                    <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}}
+                    <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
+                      title={tab==="analysis"&&black?"Правый клик — добавить аннотацию":undefined}
                       style={{color:T.text,fontWeight:600,padding:"5px 10px",background:bIsPreview?"rgba(245,158,11,0.20)":bIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:bIsPreview?`3px solid #f59e0b`:bIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>{black||""}{bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3}}>{qIcon(bQ)}</span>}</span>
+                      <span>{black||""}{bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,marginLeft:2,fontSize:12}}>{bAnnot}</span>}{!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3}}>{qIcon(bQ)}</span>}</span>
                       {bEval&&<span style={{fontSize:10,color:bEval.cp>0?T.accent:bEval.cp<0?T.danger:T.dim,fontWeight:700}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
                     </span>
                   </React.Fragment>;
@@ -6472,11 +6537,12 @@ ${question.trim()}`;
           <CoachLessonsModal
             open={showLessons}
             onClose={()=>sShowLessons(false)}
-            onLoadPosition={(fen:string,hint?:string)=>{
+            onLoadPosition={(fen:string,hint?:string,meta?:any)=>{
               try{
                 const g=new Chess(fen);
                 setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
                 sShowLessons(false);sTab("coach");
+                if(meta)sActiveLesson({id:meta.lessonId,step:meta.stepIdx,title:meta.lessonTitle,emoji:meta.lessonEmoji});
                 if(hint)showToast(hint,"info");
                 else showToast("Позиция загружена","success");
               }catch{showToast("Неверная позиция","error")}
@@ -9053,6 +9119,40 @@ ${question.trim()}`;
         is still driven by the ghostFrom React state below. */}
     <BoardDebugHud boardRef={boardRef} ghostRef={ghostRef} ghostFrom={ghostFrom} dragHover={dragHover}/>
     <WorkspaceDock chessyBalance={chessy.balance} onOpenDailyModal={()=>sTab("puzzles")} onOpenChessyShop={()=>sShowShop(true)}/>
+
+    {/* ─── Move annotation picker (right-click on move in Analysis) ─── */}
+    {annotPicker&&<>
+      <div style={{position:"fixed",inset:0,zIndex:290}} onClick={()=>sAnnotPicker(null)} onContextMenu={e=>{e.preventDefault();sAnnotPicker(null)}}/>
+      <div style={{
+        position:"fixed",left:annotPicker.x,top:annotPicker.y,zIndex:291,
+        background:"#fff",borderRadius:RADIUS.lg,border:`1px solid ${CC.border}`,
+        boxShadow:SHADOW.lg,padding:SPACE[2],
+        display:"flex",flexDirection:"column",gap:SPACE[1],minWidth:130,
+      }}>
+        <div style={{fontSize:9,fontWeight:900,letterSpacing:1,color:CC.textDim,textTransform:"uppercase" as const,padding:"0 4px"}}>Аннотация</div>
+        {ANNOT_SYMS.map(a=><button key={a.s} onClick={()=>{
+          sMoveAnnotations(prev=>({...prev,[annotPicker.ply]:prev[annotPicker.ply]===a.s?"":a.s}));
+          sAnnotPicker(null);
+          showToast(`${a.s} — ${a.t}`,"info");
+        }} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:RADIUS.sm,border:"none",background:"transparent",cursor:"pointer",fontSize:12,width:"100%",textAlign:"left"}}
+          onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=CC.surface2}
+          onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background="transparent"}>
+          <span style={{fontWeight:900,color:a.c,minWidth:22,fontSize:13}}>{a.s}</span>
+          <span style={{color:CC.textDim}}>{a.t}</span>
+        </button>)}
+        <div style={{borderTop:`1px solid ${CC.border}`,paddingTop:SPACE[1],marginTop:SPACE[1]}}>
+          <button onClick={()=>{
+            sMoveAnnotations(prev=>{const n={...prev};delete n[annotPicker.ply];return n});
+            sAnnotPicker(null);
+          }} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:RADIUS.sm,border:"none",background:"transparent",cursor:"pointer",fontSize:11,width:"100%",color:CC.textDim,textAlign:"left"}}
+            onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=CC.surface2}
+            onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background="transparent"}>
+            ✕ Снять аннотацию
+          </button>
+        </div>
+      </div>
+    </>}
+
     {/* Command palette (Ctrl/Cmd+K) — fuzzy-search any action, exec on Enter. */}
     <CommandPalette open={palOpen} onClose={()=>sPalOpen(false)} commands={(()=>{
       const cmds:PaletteCommand[]=[

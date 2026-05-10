@@ -216,6 +216,11 @@ import {
   getUserSetting,
   getAllUserSettings,
   deleteUserSetting,
+  // V67 — Conditional run branching
+  createBranch,
+  getBranch,
+  listBranches,
+  completeBranch,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -2075,6 +2080,44 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
             ? `${memContext}\n\n${cur.systemPrompt}`
             : memContext,
         };
+      }
+    } catch { /* non-critical */ }
+  }
+
+  // V69 — Smart model routing: auto-select provider/model by input characteristics
+  // if the user has routing rules configured and no explicit override for that role.
+  if (userId) {
+    try {
+      const routingRules: Array<{ condition: string; preferProvider: string; preferModel: string }> =
+        (await getUserSetting(userId, "routing_rules")) ?? [];
+      if (Array.isArray(routingRules) && routingRules.length > 0) {
+        // Detect input characteristics
+        const inputLen = userInput.length;
+        const hasCode = userInput.includes("```");
+        const activeConditions = new Set<string>();
+        if (inputLen <= 500) activeConditions.add("short_input");
+        if (inputLen > 500) activeConditions.add("long_input");
+        if (hasCode) activeConditions.add("code_task");
+        // creative_task: check for creative keywords
+        if (/\b(write|poem|story|creative|fiction|imagine|compose)\b/i.test(userInput)) {
+          activeConditions.add("creative_task");
+        }
+        for (const rule of routingRules) {
+          if (!activeConditions.has(rule.condition)) continue;
+          // Apply to all roles that don't already have an explicit override
+          const roles = ["analyst", "writer", "writerB", "critic"] as const;
+          for (const role of roles) {
+            const existing = overrides[role];
+            if (!existing?.provider && !existing?.model) {
+              overrides[role] = {
+                ...(existing || {}),
+                provider: rule.preferProvider,
+                model: rule.preferModel,
+              };
+            }
+          }
+          break; // first matching rule wins
+        }
       }
     } catch { /* non-critical */ }
   }
@@ -5906,4 +5949,217 @@ qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
       })),
     });
   } catch (err: any) { res.status(500).json({ error: "run-quality failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V67 — Conditional run branching
+   POST /runs/:id/branch   — create branch + new run with alternate input
+   GET  /runs/:id/branches — list branches for a run
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+  const parentRunId = req.params.id;
+  const { reason, alternativeInput, strategy } = req.body || {};
+
+  if (!reason || typeof reason !== "string" || !alternativeInput || typeof alternativeInput !== "string") {
+    return res.status(400).json({ error: "reason and alternativeInput are required" });
+  }
+
+  try {
+    // Resolve the parent run to get its session
+    const parentRun = await getRun(parentRunId);
+    if (!parentRun) return res.status(404).json({ error: "run not found" });
+
+    const resolvedStrategy = typeof strategy === "string" && ["sequential","parallel","debate"].includes(strategy)
+      ? strategy
+      : "debate";
+
+    // Create branch record
+    const branch = await createBranch(parentRunId, reason.slice(0, 500), alternativeInput.slice(0, 16000), resolvedStrategy);
+
+    // Create a new run in the same session with the alternative input
+    const newRun = await createRun({
+      sessionId: parentRun.sessionId,
+      userInput: alternativeInput.slice(0, 16000),
+      strategy: resolvedStrategy,
+      parentRunId,
+    });
+
+    // Link branch → new run
+    await completeBranch(branch.id, newRun.id);
+
+    if (userId) void logAudit(userId, "branch.created", { resourceId: branch.id, resourceType: "branch" });
+
+    return res.status(201).json({ branch: { ...branch, status: "completed", resultRunId: newRun.id }, run: { id: newRun.id, sessionId: newRun.sessionId } });
+  } catch (err: any) {
+    return res.status(500).json({ error: "branch failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
+  const parentRunId = req.params.id;
+  try {
+    const branches = await listBranches(parentRunId);
+    return res.json({ branches });
+  } catch (err: any) {
+    return res.status(500).json({ error: "list branches failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V68 — Export Hub
+   POST /export/session-bundle  — session + runs + annotations + bookmarks
+   POST /export/full-account    — all sessions + prompts + templates + memories
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Simple in-memory rate limit for full-account export: 1 per hour per user
+const exportRateLimitMap = new Map<string, number>();
+
+qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+  if (!userId) return res.status(401).json({ error: "auth required" });
+
+  const { sessionId, includeMessages } = req.body || {};
+  if (!sessionId || typeof sessionId !== "string") {
+    return res.status(400).json({ error: "sessionId required" });
+  }
+
+  try {
+    const session = await getSession(sessionId, userId);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    if (session.userId !== userId) return res.status(403).json({ error: "forbidden" });
+
+    const runs = await listRuns(sessionId);
+    let runsWithMessages: any[] = runs;
+    if (includeMessages) {
+      runsWithMessages = await Promise.all(
+        runs.map(async (r) => {
+          const msgs = await listMessages(r.id);
+          return { ...r, messages: msgs };
+        })
+      );
+    }
+
+    const allAnnotations: any[] = [];
+    for (const r of runs) {
+      try {
+        const anns = await listAnnotations(r.id, userId);
+        allAnnotations.push(...anns);
+      } catch { /* ignore */ }
+    }
+
+    const allBookmarks: any[] = [];
+    for (const r of runs) {
+      try {
+        const bm = await isBookmarked(r.id, userId);
+        if (bm) allBookmarks.push({ runId: r.id });
+      } catch { /* ignore */ }
+    }
+
+    const bundle = {
+      exportedAt: new Date().toISOString(),
+      session,
+      runs: runsWithMessages,
+      annotations: allAnnotations,
+      bookmarks: allBookmarks,
+    };
+
+    res.setHeader("Content-Disposition", `attachment; filename="session-${sessionId}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    return res.json(bundle);
+  } catch (err: any) {
+    return res.status(500).json({ error: "export failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.post("/export/full-account", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+  if (!userId) return res.status(401).json({ error: "auth required" });
+
+  // Rate limit: 1 export per hour
+  const lastExport = exportRateLimitMap.get(userId);
+  const now = Date.now();
+  if (lastExport && now - lastExport < 3600_000) {
+    const waitMs = 3600_000 - (now - lastExport);
+    return res.status(429).json({ error: "rate_limited", retryAfterMs: waitMs });
+  }
+  exportRateLimitMap.set(userId, now);
+
+  try {
+    const sessions = await listSessions(userId, 500);
+    const prompts = await listPrompts(userId, 500);
+    const templates = await listTemplates(userId, 500);
+    const memories = await listMemories(userId, { limit: 500 });
+    const apiKeys = await listApiKeys(userId);
+    // Redact secrets from API keys
+    const redactedApiKeys = apiKeys.map((k: any) => ({
+      id: k.id,
+      label: k.label,
+      createdAt: k.createdAt,
+      lastUsedAt: k.lastUsedAt,
+    }));
+
+    const bundle = {
+      exportedAt: new Date().toISOString(),
+      sessions,
+      prompts,
+      templates,
+      memories,
+      apiKeys: redactedApiKeys,
+    };
+
+    res.setHeader("Content-Disposition", `attachment; filename="qcoreai-account-${userId}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    return res.json(bundle);
+  } catch (err: any) {
+    return res.status(500).json({ error: "full export failed", details: err?.message });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V69 — Smart Model Routing
+   POST /me/routing-rules — save auto-routing preferences
+   GET  /me/routing-rules — get current rules
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/me/routing-rules", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+  if (!userId) return res.status(401).json({ error: "auth required" });
+
+  const { rules } = req.body || {};
+  if (!Array.isArray(rules)) return res.status(400).json({ error: "rules array required" });
+
+  const VALID_CONDITIONS = ["short_input", "long_input", "code_task", "creative_task"];
+  const sanitized = rules
+    .filter((r: any) => r && VALID_CONDITIONS.includes(r.condition) && typeof r.preferProvider === "string" && typeof r.preferModel === "string")
+    .map((r: any) => ({
+      condition: r.condition as string,
+      preferProvider: r.preferProvider.slice(0, 64),
+      preferModel: r.preferModel.slice(0, 128),
+    }));
+
+  try {
+    await setUserSetting(userId, "routing_rules", sanitized);
+    return res.json({ ok: true, rules: sanitized });
+  } catch (err: any) {
+    return res.status(500).json({ error: "save routing rules failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/me/routing-rules", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+  if (!userId) return res.status(401).json({ error: "auth required" });
+
+  try {
+    const rules = await getUserSetting(userId, "routing_rules");
+    return res.json({ rules: rules ?? [] });
+  } catch (err: any) {
+    return res.status(500).json({ error: "get routing rules failed", details: err?.message });
+  }
 });

@@ -4676,3 +4676,128 @@ export async function deleteUserSetting(userId: string, key: string): Promise<bo
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V67 — Conditional run branching
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type BranchRow = {
+  id: string;
+  parentRunId: string;
+  branchReason: string;
+  alternativeInput: string;
+  strategy: string;
+  status: string;
+  resultRunId: string | null;
+  createdAt: string;
+};
+
+const memBranches = new Map<string, BranchRow>();
+
+export async function createBranch(
+  parentRunId: string,
+  branchReason: string,
+  alternativeInput: string,
+  strategy: string = "debate"
+): Promise<BranchRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+
+  if (!isDbReady()) {
+    const row: BranchRow = {
+      id,
+      parentRunId,
+      branchReason,
+      alternativeInput,
+      strategy,
+      status: "pending",
+      resultRunId: null,
+      createdAt: now,
+    };
+    memBranches.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreRunBranch"
+       ("id","parentRunId","branchReason","alternativeInput","strategy","status","resultRunId","createdAt")
+     VALUES ($1,$2,$3,$4,$5,'pending',NULL,NOW())
+     RETURNING *`,
+    [id, parentRunId, branchReason, alternativeInput, strategy]
+  );
+  const row = r.rows[0];
+  return {
+    id: row.id,
+    parentRunId: row.parentRunId,
+    branchReason: row.branchReason,
+    alternativeInput: row.alternativeInput,
+    strategy: row.strategy,
+    status: row.status,
+    resultRunId: row.resultRunId ?? null,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+  };
+}
+
+export async function getBranch(id: string): Promise<BranchRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return memBranches.get(id) ?? null;
+  }
+  const r = await pool.query(`SELECT * FROM "QCoreRunBranch" WHERE "id"=$1`, [id]);
+  if (!r.rows[0]) return null;
+  const row = r.rows[0];
+  return {
+    id: row.id,
+    parentRunId: row.parentRunId,
+    branchReason: row.branchReason,
+    alternativeInput: row.alternativeInput,
+    strategy: row.strategy,
+    status: row.status,
+    resultRunId: row.resultRunId ?? null,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+  };
+}
+
+export async function listBranches(parentRunId: string): Promise<BranchRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const out: BranchRow[] = [];
+    for (const b of memBranches.values()) {
+      if (b.parentRunId === parentRunId) out.push(b);
+    }
+    return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreRunBranch" WHERE "parentRunId"=$1 ORDER BY "createdAt" ASC`,
+    [parentRunId]
+  );
+  return r.rows.map((row: any) => ({
+    id: row.id,
+    parentRunId: row.parentRunId,
+    branchReason: row.branchReason,
+    alternativeInput: row.alternativeInput,
+    strategy: row.strategy,
+    status: row.status,
+    resultRunId: row.resultRunId ?? null,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+  }));
+}
+
+export async function completeBranch(id: string, resultRunId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const b = memBranches.get(id);
+    if (!b) return false;
+    memBranches.set(id, { ...b, status: "completed", resultRunId });
+    return true;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreRunBranch"
+     SET "status"='completed', "resultRunId"=$2
+     WHERE "id"=$1
+     RETURNING "id"`,
+    [id, resultRunId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}

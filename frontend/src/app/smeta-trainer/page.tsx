@@ -1,11 +1,8 @@
+"use client";
+
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
-
-export const metadata = {
-  title: "Сметный тренажёр РК — AEVION",
-  description: "Учебная платформа по сметному делу Казахстана. 5 уровней: с нуля до эксперта. Школа №47, Алматы.",
-};
 
 export default function SmetaTrainerPage() {
   return (

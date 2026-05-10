@@ -104,6 +104,10 @@ export default function QCoreAnalyticsPage() {
   const [tagCosts, setTagCosts] = useState<Array<{ tag: string; runs: number; totalCostUsd: number; avgCostUsd: number }>>([]);
   const [providerLatency, setProviderLatency] = useState<Array<{ provider: string; avgDurationMs: number; minDurationMs: number; maxDurationMs: number; calls: number }>>([]);
   const [goal, setGoal] = useState<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null>(null);
+  // V65 — advanced analytics
+  const [cohorts, setCohorts] = useState<Array<{ week: string; sessionsCreated: number; runsWeek0: number; runsWeek1: number; runsWeek2: number }>>([]);
+  const [topHours, setTopHours] = useState<Array<{ hour: number; runs: number; avgCostUsd: number; efficiency: number }>>([]);
+  const [runQuality, setRunQuality] = useState<{ brief: number; standard: number; detailed: number; avgLengthByStrategy: Array<{ strategy: string; avgLength: number }> } | null>(null);
   const [goalEdit, setGoalEdit] = useState(false);
   const [goalRuns, setGoalRuns] = useState("");
   const [goalCost, setGoalCost] = useState("");
@@ -143,6 +147,21 @@ export default function QCoreAnalyticsPage() {
         const gRes = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { headers: bearerHeader() });
         const gData = await gRes.json().catch(() => ({}));
         if (gData?.goal) setGoal(gData.goal);
+      } catch { /* non-critical */ }
+
+      // V65 — advanced analytics
+      try {
+        const [cRes, hRes, qRes] = await Promise.all([
+          fetch(apiUrl("/api/qcoreai/analytics/cohorts"), { headers: bearerHeader() }),
+          fetch(apiUrl("/api/qcoreai/analytics/top-hours"), { headers: bearerHeader() }),
+          fetch(apiUrl("/api/qcoreai/analytics/run-quality"), { headers: bearerHeader() }),
+        ]);
+        const cData = await cRes.json().catch(() => ({}));
+        if (Array.isArray(cData?.cohorts)) setCohorts(cData.cohorts);
+        const hData = await hRes.json().catch(() => ({}));
+        if (Array.isArray(hData?.hours)) setTopHours(hData.hours);
+        const qData = await qRes.json().catch(() => ({}));
+        if (qData?.brief !== undefined) setRunQuality(qData);
       } catch { /* non-critical */ }
     } catch (e: any) {
       setError(e?.message || "Failed to load analytics");
@@ -693,6 +712,118 @@ export default function QCoreAnalyticsPage() {
                     </Link>
                   ))}
                 </div>
+              </Section>
+            )}
+
+            {/* V65 — Cohort retention mini-grid */}
+            {cohorts.length > 0 && (
+              <Section title="Cohort retention (12 weeks)">
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...thStyle, textAlign: "left" }}>Week</th>
+                        <th style={thStyle}>Sessions</th>
+                        <th style={thStyle}>Runs W0</th>
+                        <th style={thStyle}>Runs W1</th>
+                        <th style={thStyle}>Runs W2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohorts.map((c) => {
+                        const maxRuns = Math.max(1, c.runsWeek0, c.runsWeek1, c.runsWeek2);
+                        const cellBg = (v: number) => {
+                          const pct = v / maxRuns;
+                          if (pct > 0.7) return "#0d9488";
+                          if (pct > 0.4) return "#34d399";
+                          if (pct > 0.1) return "#a7f3d0";
+                          return "#f1f5f9";
+                        };
+                        const cellColor = (v: number) => (v / maxRuns > 0.4 ? "#fff" : "#374151");
+                        return (
+                          <tr key={c.week}>
+                            <td style={{ ...tdStyle, fontWeight: 700 }}>{c.week}</td>
+                            <td style={{ ...tdStyle, textAlign: "center" }}>{c.sessionsCreated}</td>
+                            {[c.runsWeek0, c.runsWeek1, c.runsWeek2].map((v, i) => (
+                              <td key={i} style={{ ...tdStyle, textAlign: "center", background: cellBg(v), color: cellColor(v), fontWeight: 700, borderRadius: 4 }}>{v}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Section>
+            )}
+
+            {/* V65 — Top productive hours */}
+            {topHours.length > 0 && (
+              <Section title="Top productive hours (30d)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {topHours.map((h) => {
+                    const maxRuns = Math.max(1, ...topHours.map((x) => x.runs));
+                    const label = `${h.hour}:00–${h.hour + 1}:00`;
+                    return (
+                      <div key={h.hour} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <span style={{ minWidth: 80, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{label}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ height: 8, borderRadius: 4, background: "#f1f5f9", overflow: "hidden" }}>
+                            <div style={{ height: "100%", borderRadius: 4, background: "#4338ca", width: `${(h.runs / maxRuns) * 100}%` }} />
+                          </div>
+                        </div>
+                        <span style={{ width: 40, textAlign: "right", fontSize: 11, color: "#64748b" }}>{h.runs}r</span>
+                        <span style={{ width: 80, textAlign: "right", fontSize: 11, fontWeight: 700, color: "#0f172a" }}>{h.avgCostUsd > 0 ? `$${h.avgCostUsd.toFixed(4)}` : "—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
+
+            {/* V65 — Run quality distribution donut */}
+            {runQuality && (runQuality.brief + runQuality.standard + runQuality.detailed) > 0 && (
+              <Section title="Output quality distribution">
+                {(() => {
+                  const total = runQuality.brief + runQuality.standard + runQuality.detailed;
+                  const pctB = total > 0 ? (runQuality.brief / total) * 100 : 0;
+                  const pctS = total > 0 ? (runQuality.standard / total) * 100 : 0;
+                  const pctD = total > 0 ? (runQuality.detailed / total) * 100 : 0;
+                  const segments = [
+                    { label: "Brief (<500)", pct: pctB, count: runQuality.brief, color: "#f59e0b" },
+                    { label: "Standard (500-2k)", pct: pctS, count: runQuality.standard, color: "#0d9488" },
+                    { label: "Detailed (>2k)", pct: pctD, count: runQuality.detailed, color: "#4338ca" },
+                  ];
+                  return (
+                    <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+                      {/* CSS-based bar */}
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ height: 20, borderRadius: 10, overflow: "hidden", display: "flex" }}>
+                          {segments.map((s) => s.pct > 0 && (
+                            <div key={s.label} style={{ width: `${s.pct}%`, background: s.color, transition: "width 0.3s" }} title={`${s.label}: ${s.count}`} />
+                          ))}
+                        </div>
+                      </div>
+                      {/* Legend */}
+                      <div style={{ display: "flex", gap: 16 }}>
+                        {segments.map((s) => (
+                          <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color }} />
+                            <span style={{ fontSize: 12, color: "#374151" }}>{s.label}: <strong>{s.count}</strong> ({pctB > 0 || pctS > 0 || pctD > 0 ? `${s.pct.toFixed(0)}%` : "0%"})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                {runQuality.avgLengthByStrategy.length > 0 && (
+                  <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {runQuality.avgLengthByStrategy.map((s) => (
+                      <span key={s.strategy} style={{ fontSize: 12, background: "#f1f5f9", borderRadius: 6, padding: "3px 10px", color: "#374151" }}>
+                        {s.strategy}: avg {s.avgLength.toLocaleString()} chars
+                      </span>
+                    ))}
+                  </div>
+                )}
               </Section>
             )}
           </>

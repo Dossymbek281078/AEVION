@@ -401,7 +401,6 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -450,7 +449,6 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -548,7 +546,6 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -588,7 +585,6 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -648,7 +644,6 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -760,7 +755,6 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -891,7 +885,6 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1059,7 +1052,6 @@ qrightRouter.get("/admin/objects", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1146,7 +1138,6 @@ qrightRouter.get("/admin/objects.csv", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1265,7 +1256,6 @@ qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1343,7 +1333,6 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1414,7 +1403,6 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1478,7 +1466,6 @@ qrightRouter.get("/admin/audit", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1544,7 +1531,6 @@ qrightRouter.get("/admin/sources", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1643,7 +1629,6 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1691,7 +1676,7 @@ qrightRouter.get("/webhooks", async (req, res) => {
     });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1747,7 +1732,7 @@ qrightRouter.post("/webhooks", async (req, res) => {
     });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1771,7 +1756,7 @@ qrightRouter.delete("/webhooks/:id", async (req, res) => {
     res.json({ id, deleted: true });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1807,7 +1792,7 @@ qrightRouter.patch("/webhooks/:id", async (req, res) => {
     res.json({ id: result.rows[0].id, url: result.rows[0].url, updated: true });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1875,7 +1860,7 @@ qrightRouter.get("/webhooks/:id/deliveries", async (req, res) => {
     });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1935,7 +1920,7 @@ qrightRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
     });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -2007,7 +1992,7 @@ qrightRouter.get("/og.svg", embedRateLimit, async (req, res) => {
     res.send(svg);
   } catch (err: any) {
     captureQrightError(err, { route: "index og" });
-    res.status(500).json({ error: "index og failed", details: err.message });
+    res.status(500).json({ error: "index og failed" });
   }
 });
 
@@ -2098,7 +2083,7 @@ ${items}
     res.send(xml);
   } catch (err: any) {
     captureQrightError(err, { route: "object rss" });
-    res.status(500).json({ error: "object rss failed", details: err.message });
+    res.status(500).json({ error: "object rss failed" });
   }
 });
 
@@ -2161,6 +2146,6 @@ ${urls.join("\n")}
     res.send(xml);
   } catch (err: any) {
     captureQrightError(err, { route: "sitemap" });
-    res.status(500).json({ error: "sitemap failed", details: err.message });
+    res.status(500).json({ error: "sitemap failed" });
   }
 });

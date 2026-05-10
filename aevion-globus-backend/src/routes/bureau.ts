@@ -1609,7 +1609,7 @@ bureauRouter.get("/cert/:certId/embed", bureauEmbedRateLimit, async (req, res) =
       verifyUrl: `/bureau/upgrade/${row.id}`,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "embed failed", details: err.message });
+    res.status(500).json({ error: "embed failed" });
   }
 });
 
@@ -1685,7 +1685,7 @@ bureauRouter.get("/cert/:certId/badge.svg", bureauEmbedRateLimit, async (req, re
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION BUREAU", label, color));
   } catch (err: any) {
-    res.status(500).json({ error: "badge failed", details: err.message });
+    res.status(500).json({ error: "badge failed" });
   }
 });
 
@@ -1715,7 +1715,7 @@ bureauRouter.get("/transparency", bureauEmbedRateLimit, async (_req, res) => {
       topCountries: countries.rows.map((r: any) => ({ country: r.c, count: r.n })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "transparency failed", details: err.message });
+    res.status(500).json({ error: "transparency failed" });
   }
 });
 
@@ -1961,7 +1961,7 @@ bureauRouter.get("/cert/:certId/og.svg", bureauEmbedRateLimit, async (req, res) 
 
     res.send(svg);
   } catch (err: any) {
-    res.status(500).json({ error: "cert og failed", details: err.message });
+    res.status(500).json({ error: "cert og failed" });
   }
 });
 
@@ -2027,7 +2027,7 @@ bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (req, res) => {
 
     res.send(svg);
   } catch (err: any) {
-    res.status(500).json({ error: "index og failed", details: err.message });
+    res.status(500).json({ error: "index og failed" });
   }
 });
 
@@ -2115,7 +2115,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
-    res.status(500).json({ error: "cert rss failed", details: err.message });
+    res.status(500).json({ error: "cert rss failed" });
   }
 });
 
@@ -2185,7 +2185,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err: any) {
-    res.status(500).json({ error: "sitemap failed", details: err.message });
+    res.status(500).json({ error: "sitemap failed" });
   }
 });
 
@@ -2329,7 +2329,7 @@ bureauRouter.patch("/admin/bulk", async (req, res) => {
     const okCount = results.filter((r) => r.ok).length;
     res.json({ ok: true, applied: okCount, total: results.length, results });
   } catch (err: any) {
-    res.status(500).json({ error: "bulk failed", details: err.message });
+    res.status(500).json({ error: "bulk failed" });
   }
 });
 

@@ -186,7 +186,7 @@ modulesRouter.get("/status", async (_req, res) => {
       items: enriched,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "status failed", details: err.message });
+    res.status(500).json({ error: "status failed" });
   }
 });
 
@@ -309,7 +309,7 @@ modulesRouter.get("/registry", modulesEmbedRateLimit, async (req, res) => {
       items: decorated,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "registry failed", details: err.message });
+    res.status(500).json({ error: "registry failed" });
   }
 });
 
@@ -383,7 +383,7 @@ modulesRouter.get("/registry.csv", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send([header, ...lines].join("\r\n"));
   } catch (err: any) {
-    res.status(500).json({ error: "csv failed", details: err.message });
+    res.status(500).json({ error: "csv failed" });
   }
 });
 
@@ -424,7 +424,7 @@ modulesRouter.get("/stats", modulesEmbedRateLimit, async (_req, res) => {
       trending7d,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "stats failed", details: err.message });
+    res.status(500).json({ error: "stats failed" });
   }
 });
 
@@ -464,7 +464,7 @@ modulesRouter.get("/trending", modulesEmbedRateLimit, async (req, res) => {
       items,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "trending failed", details: err.message });
+    res.status(500).json({ error: "trending failed" });
   }
 });
 
@@ -506,7 +506,7 @@ modulesRouter.get("/:id/embed", modulesEmbedRateLimit, async (req, res) => {
       isOverridden: !!p.override,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "embed failed", details: err.message });
+    res.status(500).json({ error: "embed failed" });
   }
 });
 
@@ -548,7 +548,7 @@ modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
       updatedAt: p.updatedAt,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "detail failed", details: err.message });
+    res.status(500).json({ error: "detail failed" });
   }
 });
 
@@ -622,7 +622,7 @@ modulesRouter.get("/:id/badge.svg", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION MODULE", right, tierColor[p.effectiveTier] || "#94a3b8"));
   } catch (err: any) {
-    res.status(500).json({ error: "badge failed", details: err.message });
+    res.status(500).json({ error: "badge failed" });
   }
 });
 
@@ -656,7 +656,7 @@ modulesRouter.get("/dependency-graph", modulesEmbedRateLimit, async (_req, res) 
       edges,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "graph failed", details: err.message });
+    res.status(500).json({ error: "graph failed" });
   }
 });
 
@@ -703,7 +703,7 @@ modulesRouter.get("/changelog", modulesEmbedRateLimit, async (req, res) => {
       })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "changelog failed", details: err.message });
+    res.status(500).json({ error: "changelog failed" });
   }
 });
 
@@ -839,7 +839,7 @@ modulesRouter.patch("/admin/:id", async (req, res) => {
       cleared: !after.hadOverride,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "admin patch failed", details: err.message });
+    res.status(500).json({ error: "admin patch failed" });
   }
 });
 
@@ -886,7 +886,7 @@ modulesRouter.get("/admin/audit", async (req, res) => {
       })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "audit failed", details: err.message });
+    res.status(500).json({ error: "audit failed" });
   }
 });
 
@@ -956,7 +956,7 @@ modulesRouter.post("/admin/webhooks", async (req, res) => {
       createdAt: new Date().toISOString(),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "webhook create failed", details: err.message });
+    res.status(500).json({ error: "webhook create failed" });
   }
 });
 
@@ -992,7 +992,7 @@ modulesRouter.get("/admin/webhooks", async (req, res) => {
       })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "webhook list failed", details: err.message });
+    res.status(500).json({ error: "webhook list failed" });
   }
 });
 
@@ -1012,7 +1012,7 @@ modulesRouter.delete("/admin/webhooks/:id", async (req, res) => {
     await pool.query(`DELETE FROM "ModuleWebhookDelivery" WHERE "webhookId" = $1`, [id]);
     res.json({ id, deleted: true });
   } catch (err: any) {
-    res.status(500).json({ error: "webhook delete failed", details: err.message });
+    res.status(500).json({ error: "webhook delete failed" });
   }
 });
 
@@ -1051,7 +1051,7 @@ modulesRouter.get("/admin/webhooks/:id/deliveries", async (req, res) => {
       })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "deliveries failed", details: err.message });
+    res.status(500).json({ error: "deliveries failed" });
   }
 });
 
@@ -1144,7 +1144,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
-    res.status(500).json({ error: "rss failed", details: err.message });
+    res.status(500).json({ error: "rss failed" });
   }
 });
 
@@ -1177,7 +1177,7 @@ modulesRouter.get("/tags", modulesEmbedRateLimit, async (_req, res) => {
       items,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "tags failed", details: err.message });
+    res.status(500).json({ error: "tags failed" });
   }
 });
 
@@ -1290,7 +1290,7 @@ modulesRouter.get("/:id/og.svg", modulesEmbedRateLimit, async (req, res) => {
 
     res.send(svg);
   } catch (err: any) {
-    res.status(500).json({ error: "og failed", details: err.message });
+    res.status(500).json({ error: "og failed" });
   }
 });
 
@@ -1386,7 +1386,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
-    res.status(500).json({ error: "module rss failed", details: err.message });
+    res.status(500).json({ error: "module rss failed" });
   }
 });
 
@@ -1463,7 +1463,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err: any) {
-    res.status(500).json({ error: "sitemap failed", details: err.message });
+    res.status(500).json({ error: "sitemap failed" });
   }
 });
 
@@ -1536,7 +1536,7 @@ modulesRouter.get("/og.svg", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(svg);
   } catch (err: any) {
-    res.status(500).json({ error: "index og failed", details: err.message });
+    res.status(500).json({ error: "index og failed" });
   }
 });
 
@@ -1634,7 +1634,7 @@ ${items}
 
     res.send(xml);
   } catch (err: any) {
-    res.status(500).json({ error: "tag rss failed", details: err.message });
+    res.status(500).json({ error: "tag rss failed" });
   }
 });
 
@@ -1783,6 +1783,6 @@ modulesRouter.patch("/admin/bulk", async (req, res) => {
 
     res.json({ updated: results.length, items: results });
   } catch (err: any) {
-    res.status(500).json({ error: "bulk patch failed", details: err.message });
+    res.status(500).json({ error: "bulk patch failed" });
   }
 });

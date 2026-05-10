@@ -41,6 +41,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/build/salary", changeFrequency: "hourly", priority: 0.75 },
   { path: "/build/interviews", changeFrequency: "daily", priority: 0.6 },
   { path: "/build/ai-match", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/keys", changeFrequency: "monthly", priority: 0.6 },
   // HealthAI standalone pages
   { path: "/healthai", changeFrequency: "weekly", priority: 0.8 },
   { path: "/healthai/screener", changeFrequency: "monthly", priority: 0.6 },
@@ -61,6 +62,8 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qcontract/documents", changeFrequency: "daily", priority: 0.5 },
   // Smeta Trainer
   { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
+  // QTradeOffline
+  { path: "/qtradeoffline", changeFrequency: "weekly", priority: 0.6 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];

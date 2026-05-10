@@ -102,7 +102,7 @@ cyberchessRouter.get("/upcoming", async (_req, res) => {
     const items = await loadTournaments();
     res.json({ items });
   } catch (err: any) {
-    res.status(500).json({ error: "tournaments load failed", details: err?.message });
+    res.status(500).json({ error: "tournaments load failed" });
   }
 });
 

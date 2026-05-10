@@ -574,7 +574,7 @@ quantumShieldRouter.get("/transparency", async (_req, res) => {
       byPolicy: Object.fromEntries(byPolicy.rows.map((r: { p: string; n: number }) => [r.p, r.n])),
     });
   } catch (err: unknown) {
-    res.status(500).json({ error: "transparency failed", details: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "transparency failed" });
   }
 });
 
@@ -732,7 +732,7 @@ quantumShieldRouter.get("/og.svg", async (req, res) => {
 
     res.send(svg);
   } catch (err) {
-    res.status(500).json({ error: "index og failed", details: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "index og failed" });
   }
 });
 
@@ -808,7 +808,7 @@ quantumShieldRouter.get("/:id/og.svg", async (req, res) => {
 
     res.send(svg);
   } catch (err) {
-    res.status(500).json({ error: "shield og failed", details: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "shield og failed" });
   }
 });
 
@@ -891,7 +891,7 @@ ${items}
 
     res.send(xml);
   } catch (err) {
-    res.status(500).json({ error: "shield rss failed", details: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "shield rss failed" });
   }
 });
 
@@ -946,7 +946,7 @@ ${urls.join("\n")}
 
     res.send(xml);
   } catch (err) {
-    res.status(500).json({ error: "sitemap failed", details: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "sitemap failed" });
   }
 });
 

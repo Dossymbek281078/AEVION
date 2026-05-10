@@ -1,4 +1,4 @@
-﻿import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
@@ -2278,7 +2278,7 @@ pipelineRouter.get("/transparency", async (_req, res) => {
     });
   } catch (err: any) {
     capturePipelineError(err, { route: "transparency" });
-    res.status(500).json({ error: "transparency failed", details: err.message });
+    res.status(500).json({ error: "transparency failed" });
   }
 });
 
@@ -2484,7 +2484,7 @@ pipelineRouter.get("/certificate/:certId/og.svg", async (req, res) => {
     res.send(svg);
   } catch (err: any) {
     capturePipelineError(err, { route: "cert og" });
-    res.status(500).json({ error: "cert og failed", details: err.message });
+    res.status(500).json({ error: "cert og failed" });
   }
 });
 
@@ -2543,7 +2543,7 @@ pipelineRouter.get("/og.svg", async (req, res) => {
     res.send(svg);
   } catch (err: any) {
     capturePipelineError(err, { route: "index og" });
-    res.status(500).json({ error: "index og failed", details: err.message });
+    res.status(500).json({ error: "index og failed" });
   }
 });
 
@@ -2629,7 +2629,7 @@ ${items}
     res.send(xml);
   } catch (err: any) {
     capturePipelineError(err, { route: "cert rss" });
-    res.status(500).json({ error: "cert rss failed", details: err.message });
+    res.status(500).json({ error: "cert rss failed" });
   }
 });
 
@@ -2681,6 +2681,6 @@ ${urls.join("\n")}
     res.send(xml);
   } catch (err: any) {
     capturePipelineError(err, { route: "sitemap" });
-    res.status(500).json({ error: "sitemap failed", details: err.message });
+    res.status(500).json({ error: "sitemap failed" });
   }
 });

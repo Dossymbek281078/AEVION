@@ -257,7 +257,7 @@ awardsRouter.get("/seasons", awardsEmbedRateLimit, async (req, res) => {
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "seasons" });
-    res.status(500).json({ error: "seasons failed", details: err.message });
+    res.status(500).json({ error: "seasons failed" });
   }
 });
 
@@ -292,7 +292,7 @@ awardsRouter.get("/seasons/current/:type", awardsEmbedRateLimit, async (req, res
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "current" });
-    res.status(500).json({ error: "current failed", details: err.message });
+    res.status(500).json({ error: "current failed" });
   }
 });
 
@@ -364,7 +364,7 @@ awardsRouter.get("/:type/leaderboard", awardsEmbedRateLimit, async (req, res) =>
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "leaderboard" });
-    res.status(500).json({ error: "leaderboard failed", details: err.message });
+    res.status(500).json({ error: "leaderboard failed" });
   }
 });
 
@@ -410,7 +410,7 @@ awardsRouter.get("/seasons/:seasonId/results", awardsEmbedRateLimit, async (req,
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "results" });
-    res.status(500).json({ error: "results failed", details: err.message });
+    res.status(500).json({ error: "results failed" });
   }
 });
 
@@ -476,7 +476,7 @@ awardsRouter.get("/entries/:entryId/embed", awardsEmbedRateLimit, async (req, re
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "embed" });
-    res.status(500).json({ error: "embed failed", details: err.message });
+    res.status(500).json({ error: "embed failed" });
   }
 });
 
@@ -577,7 +577,7 @@ awardsRouter.get("/entries/:entryId/badge.svg", awardsEmbedRateLimit, async (req
     res.send(svgShell("AEVION AWARDS", label, color));
   } catch (err: any) {
     captureAwardsError(err, { route: "badge" });
-    res.status(500).json({ error: "badge failed", details: err.message });
+    res.status(500).json({ error: "badge failed" });
   }
 });
 
@@ -623,7 +623,7 @@ awardsRouter.get("/transparency", awardsEmbedRateLimit, async (_req, res) => {
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "transparency" });
-    res.status(500).json({ error: "transparency failed", details: err.message });
+    res.status(500).json({ error: "transparency failed" });
   }
 });
 
@@ -698,7 +698,7 @@ awardsRouter.post("/entries", async (req, res) => {
     res.status(201).json({ id, seasonId, artifactVersionId, status: "pending" });
   } catch (err: any) {
     captureAwardsError(err, { route: "submit" });
-    res.status(500).json({ error: "submit failed", details: err.message });
+    res.status(500).json({ error: "submit failed" });
   }
 });
 
@@ -737,7 +737,7 @@ awardsRouter.get("/me/entries", async (req, res) => {
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "me/entries" });
-    res.status(500).json({ error: "me/entries failed", details: err.message });
+    res.status(500).json({ error: "me/entries failed" });
   }
 });
 
@@ -797,7 +797,7 @@ awardsRouter.post("/admin/seasons", async (req, res) => {
     res.status(201).json({ id, code, type, title, status: st });
   } catch (err: any) {
     captureAwardsError(err, { route: "create" });
-    res.status(500).json({ error: "create failed", details: err.message });
+    res.status(500).json({ error: "create failed" });
   }
 });
 
@@ -837,7 +837,7 @@ awardsRouter.patch("/admin/seasons/:id", async (req, res) => {
     res.json(r.rows[0]);
   } catch (err: any) {
     captureAwardsError(err, { route: "update" });
-    res.status(500).json({ error: "update failed", details: err.message });
+    res.status(500).json({ error: "update failed" });
   }
 });
 
@@ -863,7 +863,7 @@ awardsRouter.post("/admin/entries/:id/qualify", async (req, res) => {
     res.json(r.rows[0]);
   } catch (err: any) {
     captureAwardsError(err, { route: "qualify" });
-    res.status(500).json({ error: "qualify failed", details: err.message });
+    res.status(500).json({ error: "qualify failed" });
   }
 });
 
@@ -890,7 +890,7 @@ awardsRouter.post("/admin/entries/:id/disqualify", async (req, res) => {
     res.json(r.rows[0]);
   } catch (err: any) {
     captureAwardsError(err, { route: "disqualify" });
-    res.status(500).json({ error: "disqualify failed", details: err.message });
+    res.status(500).json({ error: "disqualify failed" });
   }
 });
 
@@ -1027,7 +1027,7 @@ awardsRouter.patch("/admin/entries/bulk", async (req, res) => {
     res.json({ ok: true, applied: okCount, total: results.length, results });
   } catch (err: any) {
     captureAwardsError(err, { route: "bulk" });
-    res.status(500).json({ error: "bulk failed", details: err.message });
+    res.status(500).json({ error: "bulk failed" });
   }
 });
 
@@ -1096,7 +1096,7 @@ awardsRouter.post("/admin/seasons/:id/finalize", async (req, res) => {
     res.json({ seasonId, status: "finalized", medals });
   } catch (err: any) {
     captureAwardsError(err, { route: "finalize" });
-    res.status(500).json({ error: "finalize failed", details: err.message });
+    res.status(500).json({ error: "finalize failed" });
   }
 });
 
@@ -1139,7 +1139,7 @@ awardsRouter.get("/admin/audit", async (req, res) => {
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "audit" });
-    res.status(500).json({ error: "audit failed", details: err.message });
+    res.status(500).json({ error: "audit failed" });
   }
 });
 
@@ -1192,7 +1192,7 @@ awardsRouter.get("/admin/entries", async (req, res) => {
     });
   } catch (err: any) {
     captureAwardsError(err, { route: "entries" });
-    res.status(500).json({ error: "entries failed", details: err.message });
+    res.status(500).json({ error: "entries failed" });
   }
 });
 
@@ -1318,7 +1318,7 @@ awardsRouter.get("/entries/:entryId/og.svg", awardsEmbedRateLimit, async (req, r
     res.send(svg);
   } catch (err: any) {
     captureAwardsError(err, { route: "entry og" });
-    res.status(500).json({ error: "entry og failed", details: err.message });
+    res.status(500).json({ error: "entry og failed" });
   }
 });
 
@@ -1386,7 +1386,7 @@ awardsRouter.get("/og.svg", awardsEmbedRateLimit, async (req, res) => {
     res.send(svg);
   } catch (err: any) {
     captureAwardsError(err, { route: "index og" });
-    res.status(500).json({ error: "index og failed", details: err.message });
+    res.status(500).json({ error: "index og failed" });
   }
 });
 
@@ -1485,7 +1485,7 @@ ${items}
     res.send(xml);
   } catch (err: any) {
     captureAwardsError(err, { route: "season rss" });
-    res.status(500).json({ error: "season rss failed", details: err.message });
+    res.status(500).json({ error: "season rss failed" });
   }
 });
 
@@ -1558,6 +1558,6 @@ ${urls.join("\n")}
     res.send(xml);
   } catch (err: any) {
     captureAwardsError(err, { route: "sitemap" });
-    res.status(500).json({ error: "sitemap failed", details: err.message });
+    res.status(500).json({ error: "sitemap failed" });
   }
 });

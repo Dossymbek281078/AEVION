@@ -55,6 +55,41 @@ export default function NotebookPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // V53: Auto-tag suggestions per snippet
+  const [autoTagBusy, setAutoTagBusy] = useState<string | null>(null); // snippet id
+  const [suggestedTags, setSuggestedTags] = useState<Record<string, string[]>>({}); // snippetId -> tags
+
+  async function fetchAutoTags(snippet: Snippet) {
+    if (autoTagBusy) return;
+    setAutoTagBusy(snippet.id);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/notebook/auto-tag"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ content: snippet.content }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (Array.isArray(d?.tags)) {
+        setSuggestedTags((p) => ({ ...p, [snippet.id]: d.tags }));
+      }
+    } catch { /* ignore */ }
+    setAutoTagBusy(null);
+  }
+
+  async function addSuggestedTag(snippet: Snippet, tag: string) {
+    const newTags = [...new Set([...snippet.tags, tag])];
+    const res = await fetch(apiUrl(`/api/qcoreai/notebook/${snippet.id}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...bearerHeader() },
+      body: JSON.stringify({ tags: newTags }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (d.snippet) {
+      setSnippets((p) => p.map((s) => s.id === snippet.id ? d.snippet : s));
+      setSuggestedTags((p) => ({ ...p, [snippet.id]: (p[snippet.id] || []).filter((t) => t !== tag) }));
+    }
+  }
+
   // V35: Notebook Q&A panel
   const [qaOpen, setQaOpen] = useState(false);
   const [qaQuestion, setQaQuestion] = useState("");
@@ -297,14 +332,34 @@ export default function NotebookPage() {
             All
           </button>
           {collections.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveCollection(activeCollection === c.id ? null : c.id)}
-              style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1px solid ${activeCollection === c.id ? (c.color || "#4338ca") : "#e2e8f0"}`, background: activeCollection === c.id ? (c.color ? `${c.color}20` : "rgba(67,56,202,0.1)") : "#fff", color: activeCollection === c.id ? (c.color || "#4338ca") : "#64748b" }}
-            >
-              {c.name}
-              <button onClick={async (e) => { e.stopPropagation(); await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ marginLeft: 5, border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5" }}>×</button>
-            </button>
+            <span key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+              <button
+                onClick={() => setActiveCollection(activeCollection === c.id ? null : c.id)}
+                style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer", border: `1px solid ${activeCollection === c.id ? (c.color || "#4338ca") : "#e2e8f0"}`, background: activeCollection === c.id ? (c.color ? `${c.color}20` : "rgba(67,56,202,0.1)") : "#fff", color: activeCollection === c.id ? (c.color || "#4338ca") : "#64748b" }}
+              >
+                {c.name}
+              </button>
+              {/* V53: Export collection as markdown */}
+              <button
+                title={`Export "${c.name}" as markdown`}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const r = await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}/export`), { method: "POST", headers: bearerHeader() });
+                    if (r.ok) {
+                      const text = await r.text();
+                      const blob = new Blob([text], { type: "text/markdown" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a"); a.href = url; a.download = `${c.name.toLowerCase().replace(/\s+/g, "-")}.md`; a.click(); URL.revokeObjectURL(url);
+                    }
+                  } catch { /* ignore */ }
+                }}
+                style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#64748b", padding: "1px 3px" }}
+              >
+                📋
+              </button>
+              <button onClick={async (e) => { e.stopPropagation(); await fetch(apiUrl(`/api/qcoreai/notebook/collections/${c.id}`), { method: "DELETE", headers: bearerHeader() }); setCollections((p) => p.filter((x) => x.id !== c.id)); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 11, color: "#fca5a5", padding: "1px 3px" }}>×</button>
+            </span>
           ))}
           <div style={{ display: "flex", gap: 4 }}>
             <input value={newCollName} onChange={(e) => setNewCollName(e.target.value)} onKeyDown={async (e) => {
@@ -455,25 +510,41 @@ export default function NotebookPage() {
                       </div>
                     ) : null}
 
-                    {/* Tags */}
-                    {s.tags.length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
-                        {s.tags.map((t) => (
-                          <button
-                            key={t}
-                            onClick={() => setActiveTag(t)}
-                            style={{
-                              padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, cursor: "pointer",
-                              border: `1px solid ${tagColor(t)}44`,
-                              background: `${tagColor(t)}10`,
-                              color: tagColor(t),
-                            }}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* Tags + V53 Auto-tag */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, alignItems: "center" }}>
+                      {s.tags.map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setActiveTag(t)}
+                          style={{
+                            padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, cursor: "pointer",
+                            border: `1px solid ${tagColor(t)}44`,
+                            background: `${tagColor(t)}10`,
+                            color: tagColor(t),
+                          }}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => fetchAutoTags(s)}
+                        disabled={autoTagBusy === s.id}
+                        title="AI auto-tag"
+                        style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, cursor: autoTagBusy === s.id ? "default" : "pointer", border: "1px dashed #a78bfa", background: "rgba(167,139,250,0.08)", color: "#7c3aed" }}
+                      >
+                        {autoTagBusy === s.id ? "…" : "✨ Auto-tag"}
+                      </button>
+                      {(suggestedTags[s.id] || []).map((tag) => (
+                        <button
+                          key={tag}
+                          onClick={() => addSuggestedTag(s, tag)}
+                          title={`Add tag "${tag}"`}
+                          style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, cursor: "pointer", border: "1px solid #a78bfa", background: "rgba(167,139,250,0.15)", color: "#6d28d9" }}
+                        >
+                          + {tag}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

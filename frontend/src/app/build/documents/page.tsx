@@ -10,7 +10,8 @@ type Doc = {
   docType: string;
   status: string;
   fileUrl: string;
-  reviewNote: string | null;
+  rejectReason: string | null;
+  verifiedAt: string | null;
   createdAt: string;
 };
 
@@ -51,7 +52,7 @@ function Body() {
   async function load() {
     try {
       const r = await buildApi.myDocuments();
-      setDocs((r.items ?? []) as Doc[]);
+      setDocs(r.items ?? []);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -164,8 +165,8 @@ function Body() {
                     {doc.status}
                   </span>
                 </div>
-                {doc.reviewNote && (
-                  <p className="mt-2 text-xs text-rose-300">Note: {doc.reviewNote}</p>
+                {doc.rejectReason && (
+                  <p className="mt-2 text-xs text-rose-300">Reason: {doc.rejectReason}</p>
                 )}
                 <p className="mt-1 text-[10px] text-slate-600">
                   Submitted {new Date(doc.createdAt).toLocaleDateString()}

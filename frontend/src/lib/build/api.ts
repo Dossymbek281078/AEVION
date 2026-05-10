@@ -1765,7 +1765,7 @@ export const buildApi = {
       "POST", "/api/build/documents", input
     ),
   myDocuments: () =>
-    call<{ items: Array<{ id: string; docType: string; status: string; fileUrl: string; verifiedAt: string | null; rejectReason: string | null; createdAt: string }>; total: number }>(
+    call<{ items: Array<{ id: string; docType: string; status: string; fileUrl: string; verifiedAt: string | null; rejectReason: string | null; reviewNote: string | null; createdAt: string }>; total: number }>(
       "GET", "/api/build/documents/me"
     ),
   adminPendingDocuments: () =>

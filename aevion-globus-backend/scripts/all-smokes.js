@@ -50,6 +50,8 @@ const SMOKES = [
   { name: "cyberchess", script: "cyberchess-smoke.js", readOnly: false },
   { name: "smeta-trainer", script: "smeta-trainer-smoke.js", readOnly: false },
   { name: "multichat", script: "multichat-smoke.js", readOnly: false },
+  // Platform API keys — self-serve key issuance (Phase B). Creates/verifies/revokes.
+  { name: "apikeys", script: "apikeys-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

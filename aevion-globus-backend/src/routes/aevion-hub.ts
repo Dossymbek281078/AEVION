@@ -169,7 +169,7 @@ aevionHubRouter.get("/openapi.json", (req, res) => {
  * no DB). Useful for "what's deployed?" dashboard tiles.
  */
 /** GET /api/aevion/sitemap.xml — platform-wide XML sitemap index. */
-aevionHubRouter.get("/sitemap.xml", (_req, res) => {
+aevionHubRouter.get("/sitemap.xml", (req, res) => {
   const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
   const modules = [
     "/qright", "/qsign", "/bureau", "/qcoreai", "/cyberchess",
@@ -179,9 +179,13 @@ aevionHubRouter.get("/sitemap.xml", (_req, res) => {
   const urls = modules
     .map((p) => `  <url><loc>${base}${p}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`)
     .join("\n");
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
+  const etag = `W/"sitemap-hub-${modules.length}-${Buffer.byteLength(body)}"`;
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=3600");
-  res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
+  res.setHeader("ETag", etag);
+  if (req.headers["if-none-match"] === etag) return res.status(304).end();
+  res.send(body);
 });
 
 aevionHubRouter.get("/version", (_req, res) => {

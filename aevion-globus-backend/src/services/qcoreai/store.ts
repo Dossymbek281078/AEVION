@@ -15,6 +15,7 @@ import crypto from "crypto";
 import { getPool } from "../../lib/dbPool";
 import { ensureQCoreTables, isDbReady } from "../../lib/ensureQCoreTables";
 import type { ChatMessage } from "./providers";
+import { callProvider, resolveProvider, getProviders } from "./providers";
 
 const pool = getPool();
 
@@ -98,6 +99,19 @@ type ApiKeyRow = {
   createdAt: string;
 };
 const memApiKeys = new Map<string, ApiKeyRow>();
+
+// V59 — in-memory memory store
+export type MemoryRow = {
+  id: string;
+  userId: string;
+  content: string;
+  category: string;
+  source: string | null;
+  pinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+const memMemories = new Map<string, MemoryRow>();
 
 function nowIso(): string { return new Date().toISOString(); }
 
@@ -4278,4 +4292,156 @@ export async function getUserStats(userId: string): Promise<{
   } catch { /* table might differ */ }
 
   return { totalSessions, totalRuns, totalCostUsd, totalTokensIn, totalTokensOut, avgCostPerRun, mostUsedStrategy, mostUsedProvider, joinedAt };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V59 — AI Memory helpers
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function addMemory(
+  userId: string,
+  content: string,
+  opts?: { category?: string; source?: string; pinned?: boolean }
+): Promise<MemoryRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const category = opts?.category || "general";
+  const source = opts?.source ?? null;
+  const pinned = opts?.pinned ?? false;
+
+  if (!isDbReady()) {
+    const row: MemoryRow = { id, userId, content, category, source, pinned, createdAt: nowIso(), updatedAt: nowIso() };
+    memMemories.set(id, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreMemory" ("id","userId","content","category","source","pinned")
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [id, userId, content, category, source, pinned]
+  );
+  return r.rows[0] as MemoryRow;
+}
+
+export async function listMemories(
+  userId: string,
+  opts?: { category?: string; pinned?: boolean; limit?: number }
+): Promise<MemoryRow[]> {
+  await ensureQCoreTables(pool);
+  const lim = Math.max(1, Math.min(200, opts?.limit ?? 50));
+
+  if (!isDbReady()) {
+    let rows = Array.from(memMemories.values()).filter((m) => m.userId === userId);
+    if (opts?.category) rows = rows.filter((m) => m.category === opts.category);
+    if (opts?.pinned !== undefined) rows = rows.filter((m) => m.pinned === opts.pinned);
+    rows.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt.localeCompare(a.createdAt));
+    return rows.slice(0, lim);
+  }
+  const conditions: string[] = [`"userId"=$1`];
+  const params: any[] = [userId];
+  if (opts?.category) { params.push(opts.category); conditions.push(`"category"=$${params.length}`); }
+  if (opts?.pinned !== undefined) { params.push(opts.pinned); conditions.push(`"pinned"=$${params.length}`); }
+  params.push(lim);
+  const r = await pool.query(
+    `SELECT * FROM "QCoreMemory" WHERE ${conditions.join(" AND ")} ORDER BY "pinned" DESC, "createdAt" DESC LIMIT $${params.length}`,
+    params
+  );
+  return r.rows as MemoryRow[];
+}
+
+export async function deleteMemory(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const m = memMemories.get(id);
+    if (!m || m.userId !== userId) return false;
+    memMemories.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreMemory" WHERE "id"=$1 AND "userId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function updateMemory(
+  id: string,
+  userId: string,
+  patch: { content?: string; category?: string; pinned?: boolean }
+): Promise<MemoryRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const m = memMemories.get(id);
+    if (!m || m.userId !== userId) return null;
+    if (patch.content !== undefined) m.content = patch.content;
+    if (patch.category !== undefined) m.category = patch.category;
+    if (patch.pinned !== undefined) m.pinned = patch.pinned;
+    m.updatedAt = nowIso();
+    return m;
+  }
+  const sets: string[] = [`"updatedAt"=NOW()`];
+  const params: any[] = [id, userId];
+  if (patch.content !== undefined) { params.push(patch.content); sets.push(`"content"=$${params.length}`); }
+  if (patch.category !== undefined) { params.push(patch.category); sets.push(`"category"=$${params.length}`); }
+  if (patch.pinned !== undefined) { params.push(patch.pinned); sets.push(`"pinned"=$${params.length}`); }
+  const r = await pool.query(
+    `UPDATE "QCoreMemory" SET ${sets.join(",")} WHERE "id"=$1 AND "userId"=$2 RETURNING *`,
+    params
+  );
+  return (r.rows[0] as MemoryRow) || null;
+}
+
+export async function extractMemoriesFromRun(
+  userId: string,
+  finalContent: string,
+  userInput: string
+): Promise<void> {
+  // Best-effort — swallows all errors so the caller (run completion) never blocks.
+  try {
+    const providerId = resolveProvider();
+    if (providerId === "stub") return; // no provider configured
+
+    const prompt = `Extract 2-3 key facts or preferences from this conversation that should be remembered. Return JSON array of strings. Conversation: Q: ${userInput.slice(0, 500)}\nA: ${finalContent.slice(0, 1000)}`;
+    const prov = getProviders().find((p) => p.id === providerId);
+    const result = await callProvider(
+      providerId,
+      [{ role: "user", content: prompt }],
+      prov?.defaultModel ?? "",
+      0.3
+    );
+    let facts: string[] = [];
+    try {
+      const cleaned = result.reply.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      facts = JSON.parse(cleaned);
+      if (!Array.isArray(facts)) facts = [];
+    } catch { return; }
+
+    for (const fact of facts.slice(0, 3)) {
+      if (typeof fact === "string" && fact.trim()) {
+        await addMemory(userId, fact.trim(), { category: "fact", pinned: false });
+      }
+    }
+  } catch { /* silent */ }
+}
+
+export async function listPinnedMemories(userId: string, limit = 5): Promise<MemoryRow[]> {
+  return listMemories(userId, { pinned: true, limit });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V60 — Template pin helper
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export async function pinTemplate(id: string, userId: string, pinned: boolean): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memTemplates.get(id);
+    if (!t || t.ownerUserId !== userId) return false;
+    (t as any).pinned = pinned;
+    return true;
+  }
+  const r = await pool.query(
+    `UPDATE "QCoreTemplate" SET "pinned"=$3, "updatedAt"=NOW() WHERE "id"=$1 AND "ownerUserId"=$2 RETURNING "id"`,
+    [id, userId, pinned]
+  );
+  return (r.rowCount ?? 0) > 0;
 }

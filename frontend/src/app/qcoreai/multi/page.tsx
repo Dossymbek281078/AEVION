@@ -440,6 +440,9 @@ export default function QCoreMultiAgentPage() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateNameInput, setTemplateNameInput] = useState("");
   const [saveTemplateFor, setSaveTemplateFor] = useState<string | null>(null);
+  // V60: AI template suggestions
+  const [templateSuggestions, setTemplateSuggestions] = useState<Array<{ name: string; description: string; input: string; strategy: string }>>([]);
+  const [templateSuggestBusy, setTemplateSuggestBusy] = useState(false);
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -2823,6 +2826,34 @@ export default function QCoreMultiAgentPage() {
                 </div>
               </div>
 
+              {/* V59: AI Memory section */}
+              {(() => {
+                const lastDoneRun = runs.find((r) => r.status === "done");
+                return (
+                  <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(124,58,237,0.2)", background: "rgba(124,58,237,0.03)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>🧠</span>
+                      <span style={{ fontWeight: 800, fontSize: 12, color: "#0f172a", flex: 1 }}>AI Memory</span>
+                      <a href="/qcoreai/memory" style={{ fontSize: 11, color: "#6d28d9", fontWeight: 700, textDecoration: "none" }}>Manage →</a>
+                    </div>
+                    <p style={{ fontSize: 11, color: "#64748b", margin: "4px 0 8px" }}>Pinned memories are injected into the Analyst on every run.</p>
+                    {lastDoneRun && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") || "") : "";
+                            await fetch(`/api/qcoreai/me/memories/extract`, { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ runId: lastDoneRun.id }) });
+                          } catch { /* ignore */ }
+                        }}
+                        style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.07)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                      >
+                        ✨ Extract from last run
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Budget cap selector — applies to every strategy. */}
               <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 700 }}>Per-run cap:</span>
@@ -3726,6 +3757,39 @@ export default function QCoreMultiAgentPage() {
                     ×
                   </button>
                 </div>
+                {/* V60: AI suggest button */}
+                <button
+                  onClick={async () => {
+                    if (templateSuggestBusy) return;
+                    setTemplateSuggestBusy(true);
+                    try {
+                      const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") || "") : "";
+                      const r = await fetch("/api/qcoreai/templates/suggest", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
+                      const d = await r.json().catch(() => ({}));
+                      if (Array.isArray(d?.suggestions)) setTemplateSuggestions(d.suggestions);
+                    } catch { /* ignore */ } finally { setTemplateSuggestBusy(false); }
+                  }}
+                  style={{ marginBottom: 10, padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.06)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                >
+                  {templateSuggestBusy ? "Generating…" : "✨ Suggest templates"}
+                </button>
+                {templateSuggestions.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>AI Suggestions</div>
+                    {templateSuggestions.map((s, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, padding: "6px 10px", borderRadius: 8, background: "rgba(124,58,237,0.04)", border: "1px solid rgba(124,58,237,0.15)", cursor: "pointer" }}
+                        onClick={() => { setInput(s.input); setStrategy(s.strategy as any); setTemplatePanelOpen(false); setTemplateSuggestions([]); }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{s.name}</div>
+                          {s.description && <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{s.description}</div>}
+                        </div>
+                        <span style={{ fontSize: 10, color: "#6d28d9", borderRadius: 6, padding: "2px 6px", background: "rgba(124,58,237,0.07)" }}>{s.strategy}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#6d28d9" }}>Use →</span>
+                      </div>
+                    ))}
+                    <div style={{ height: 1, background: "#e2e8f0", margin: "8px 0" }} />
+                  </>
+                )}
                 {templates.length > 0 && (
                   <>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
@@ -3980,6 +4044,7 @@ export default function QCoreMultiAgentPage() {
           { icon: "🔗", label: "Prompt chains", href: "/qcoreai/chains" },
           { icon: "📋", label: "Audit log", href: "/qcoreai/audit-log" },
           { icon: "📊", label: "Model benchmarks", href: "/qcoreai/benchmarks" },
+          { icon: "🧠", label: "AI Memory", href: "/qcoreai/memory" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div

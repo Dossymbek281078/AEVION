@@ -36,6 +36,14 @@ type HealthData = {
   at: string;
 };
 
+type ProviderLiveStatus = {
+  id: string;
+  name: string;
+  status: "ok" | "degraded" | "down" | "unknown";
+  latencyMs: number;
+  checkedAt: string;
+};
+
 const PROVIDER_COLORS: Record<string, string> = {
   anthropic: "#d97706",
   openai: "#10b981",
@@ -77,6 +85,9 @@ export default function ProvidersPage() {
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // V61: live provider health
+  const [liveStatuses, setLiveStatuses] = useState<ProviderLiveStatus[]>([]);
+  const [healthChecking, setHealthChecking] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -99,6 +110,18 @@ export default function ProvidersPage() {
       }
     })();
   }, []);
+
+  const checkProviderHealth = async () => {
+    if (healthChecking) return;
+    setHealthChecking(true);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/providers/health"));
+      const d = await r.json().catch(() => ({}));
+      if (Array.isArray(d?.providers)) setLiveStatuses(d.providers);
+    } catch { /* ignore */ } finally {
+      setHealthChecking(false);
+    }
+  };
 
   const configured = providers.filter((p) => p.configured);
   const unconfigured = providers.filter((p) => !p.configured);
@@ -138,6 +161,38 @@ export default function ProvidersPage() {
           </div>
         )}
 
+        {/* V61: Check health button */}
+        {!loading && configured.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <button
+              onClick={checkProviderHealth}
+              disabled={healthChecking}
+              style={{
+                padding: "8px 18px", borderRadius: 10, border: "1px solid #e2e8f0",
+                background: "#fff", color: "#0f172a", fontSize: 13, fontWeight: 700,
+                cursor: healthChecking ? "default" : "pointer", opacity: healthChecking ? 0.6 : 1,
+              }}
+            >
+              {healthChecking ? "Checking…" : "⚡ Check health"}
+            </button>
+            {liveStatuses.length > 0 && (
+              <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                {liveStatuses.map((s) => {
+                  const dot = s.status === "ok" ? "#10b981" : s.status === "degraded" ? "#f59e0b" : "#ef4444";
+                  return (
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: 10, border: `1px solid ${dot}33`, background: `${dot}0a` }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, display: "inline-block", flexShrink: 0 }} />
+                      <span style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{s.name}</span>
+                      <span style={{ fontSize: 11, color: "#64748b" }}>{s.latencyMs}ms</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: dot }}>{s.status}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Configured providers */}
         {!loading && (
           <>
@@ -170,6 +225,17 @@ export default function ProvidersPage() {
                           DEFAULT
                         </span>
                       )}
+                      {(() => {
+                        const live = liveStatuses.find((s) => s.id === p.id);
+                        if (!live) return null;
+                        const dot = live.status === "ok" ? "#10b981" : live.status === "degraded" ? "#f59e0b" : "#ef4444";
+                        return (
+                          <span style={{ position: "absolute", top: 10, left: 10, display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, display: "inline-block" }} />
+                            <span style={{ color: dot, fontWeight: 700 }}>{live.latencyMs}ms</span>
+                          </span>
+                        );
+                      })()}
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                         <span style={{ fontSize: 22, color }}>{icon}</span>
                         <div>

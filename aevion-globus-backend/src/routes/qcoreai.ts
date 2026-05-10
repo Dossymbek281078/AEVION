@@ -205,6 +205,17 @@ import {
   listPinnedMemories,
   // V60 — Template pin
   pinTemplate,
+  // V63 — A/B testing
+  createAbTest,
+  listAbTests,
+  getAbTest,
+  deleteAbTest,
+  recordAbTestResult,
+  // V64 — User settings
+  setUserSetting,
+  getUserSetting,
+  getAllUserSettings,
+  deleteUserSetting,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -5646,3 +5657,253 @@ function renderRunMarkdown(opts: { session: any; run: any; messages: any[] }): s
   }
   return lines.join("\n");
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V63 — A/B Testing for prompts
+   POST   /ab-tests
+   GET    /ab-tests
+   GET    /ab-tests/:id
+   DELETE /ab-tests/:id
+   POST   /ab-tests/:id/run
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/ab-tests", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { name, promptA, promptB, strategy, overrides } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "name required" });
+  if (!promptA?.trim()) return res.status(400).json({ error: "promptA required" });
+  if (!promptB?.trim()) return res.status(400).json({ error: "promptB required" });
+  try {
+    const test = await createAbTest({ userId: auth.sub, name: String(name).trim(), promptA, promptB, strategy, overrides });
+    res.json({ test });
+  } catch (err: any) { res.status(500).json({ error: "create ab-test failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/ab-tests", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const items = await listAbTests(auth.sub);
+    res.json({ items });
+  } catch (err: any) { res.status(500).json({ error: "list ab-tests failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/ab-tests/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const test = await getAbTest(req.params.id, auth.sub);
+    if (!test) return res.status(404).json({ error: "not found" });
+    res.json({ test });
+  } catch (err: any) { res.status(500).json({ error: "get ab-test failed", details: err?.message }); }
+});
+
+qcoreaiRouter.delete("/ab-tests/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deleteAbTest(req.params.id, auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found" });
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: "delete ab-test failed", details: err?.message }); }
+});
+
+qcoreaiRouter.post("/ab-tests/:id/run", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const abTest = await getAbTest(req.params.id, auth.sub);
+    if (!abTest) return res.status(404).json({ error: "not found" });
+
+    const strategy = (abTest.strategy || "sequential") as PipelineStrategy;
+    const testOverrides = abTest.overrides || {};
+    const testId = abTest.id;
+    const userId = auth.sub;
+
+    async function runVariant(prompt: string): Promise<{ runId: string; finalContent: string; costUsd: number }> {
+      const session = await ensureSession({ userId });
+      const run = await createRun({ sessionId: session.id, userInput: prompt, strategy });
+      let finalContent = "";
+      let totalCostUsd = 0;
+      try {
+        for await (const evt of runMultiAgent({ userInput: prompt, strategy, overrides: testOverrides, maxRevisions: 0 })) {
+          if ((evt as any).type === "final") finalContent = (evt as any).content || "";
+          if ((evt as any).type === "run_complete") { totalCostUsd = (evt as any).totalCostUsd ?? 0; finalContent = finalContent || (evt as any).finalContent || ""; }
+        }
+      } catch { /* best-effort */ }
+      await finishRun(run.id, "done", { finalContent, totalDurationMs: 0, totalCostUsd });
+      return { runId: run.id, finalContent, costUsd: totalCostUsd };
+    }
+
+    const [variantA, variantB] = await Promise.all([runVariant(abTest.promptA), runVariant(abTest.promptB)]);
+    await recordAbTestResult(testId, "a", variantA.costUsd, 0);
+    await recordAbTestResult(testId, "b", variantB.costUsd, 0);
+
+    res.json({ testId, variantA, variantB });
+  } catch (err: any) { res.status(500).json({ error: "run ab-test failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V64 — User settings
+   GET    /me/settings
+   PUT    /me/settings/:key
+   DELETE /me/settings/:key
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/settings", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const settings = await getAllUserSettings(auth.sub);
+    res.json({ settings });
+  } catch (err: any) { res.status(500).json({ error: "get settings failed", details: err?.message }); }
+});
+
+qcoreaiRouter.put("/me/settings/:key", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { key } = req.params;
+  const { value } = req.body || {};
+  if (value === undefined) return res.status(400).json({ error: "value required" });
+  try {
+    await setUserSetting(auth.sub, key, value);
+    res.json({ ok: true, key, value });
+  } catch (err: any) { res.status(500).json({ error: "set setting failed", details: err?.message }); }
+});
+
+qcoreaiRouter.delete("/me/settings/:key", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deleteUserSetting(auth.sub, req.params.key);
+    res.json({ ok });
+  } catch (err: any) { res.status(500).json({ error: "delete setting failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V65 — Advanced analytics
+   GET /analytics/cohorts
+   GET /analytics/top-hours
+   GET /analytics/run-quality
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/analytics/cohorts", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  try {
+    if (!isDbReady()) {
+      return res.json({ cohorts: [] });
+    }
+    const userId = auth?.sub ?? null;
+    const userFilter = userId ? `AND s."userId"=$1` : `AND s."userId" IS NULL`;
+    const params: any[] = userId ? [userId] : [];
+    const r = await pool.query(
+      `SELECT
+         date_trunc('week', s."createdAt") AS week,
+         COUNT(DISTINCT s."id")::int AS "sessionsCreated",
+         COUNT(CASE WHEN r."startedAt" < date_trunc('week', s."createdAt") + interval '7 days' THEN r."id" END)::int AS "runsWeek0",
+         COUNT(CASE WHEN r."startedAt" >= date_trunc('week', s."createdAt") + interval '7 days'
+                    AND r."startedAt" < date_trunc('week', s."createdAt") + interval '14 days' THEN r."id" END)::int AS "runsWeek1",
+         COUNT(CASE WHEN r."startedAt" >= date_trunc('week', s."createdAt") + interval '14 days'
+                    AND r."startedAt" < date_trunc('week', s."createdAt") + interval '21 days' THEN r."id" END)::int AS "runsWeek2"
+       FROM "QCoreSession" s
+       LEFT JOIN "QCoreRun" r ON r."sessionId"=s."id"
+       WHERE s."createdAt" >= NOW() - interval '12 weeks' ${userFilter}
+       GROUP BY date_trunc('week', s."createdAt")
+       ORDER BY week DESC
+       LIMIT 12`,
+      params
+    );
+    const cohorts = r.rows.map((row: any) => ({
+      week: new Date(row.week).toISOString().slice(0, 10),
+      sessionsCreated: row.sessionsCreated,
+      runsWeek0: row.runsWeek0,
+      runsWeek1: row.runsWeek1,
+      runsWeek2: row.runsWeek2,
+    }));
+    res.json({ cohorts });
+  } catch (err: any) { res.status(500).json({ error: "cohorts failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/analytics/top-hours", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  try {
+    if (!isDbReady()) {
+      return res.json({ hours: [] });
+    }
+    const userId = auth?.sub ?? null;
+    const userFilter = userId
+      ? `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId"=$1`
+      : `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId" IS NULL`;
+    const params: any[] = userId ? [userId] : [];
+    const r = await pool.query(
+      `SELECT
+         EXTRACT(hour FROM r."startedAt")::int AS hour,
+         COUNT(r."id")::int AS runs,
+         COALESCE(AVG(r."totalCostUsd"),0) AS "avgCostUsd"
+       FROM "QCoreRun" r
+       ${userFilter}
+       WHERE r."startedAt" >= NOW() - interval '30 days'
+       GROUP BY hour
+       ORDER BY runs DESC
+       LIMIT 5`,
+      params
+    );
+    const hours = r.rows.map((row: any) => ({
+      hour: row.hour,
+      runs: row.runs,
+      avgCostUsd: Number(row.avgCostUsd),
+      efficiency: row.runs > 0 && row.avgCostUsd > 0 ? row.runs / row.avgCostUsd : 0,
+    }));
+    res.json({ hours });
+  } catch (err: any) { res.status(500).json({ error: "top-hours failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  try {
+    if (!isDbReady()) {
+      return res.json({ brief: 0, standard: 0, detailed: 0, avgLengthByStrategy: [] });
+    }
+    const userId = auth?.sub ?? null;
+    const userFilter = userId
+      ? `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId"=$1`
+      : `JOIN "QCoreSession" s ON s."id"=r."sessionId" AND s."userId" IS NULL`;
+    const params: any[] = userId ? [userId] : [];
+
+    const [qualR, stratR] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(CASE WHEN LENGTH(r."finalContent") < 500 THEN 1 END)::int AS brief,
+           COUNT(CASE WHEN LENGTH(r."finalContent") >= 500 AND LENGTH(r."finalContent") < 2000 THEN 1 END)::int AS standard,
+           COUNT(CASE WHEN LENGTH(r."finalContent") >= 2000 THEN 1 END)::int AS detailed
+         FROM "QCoreRun" r
+         ${userFilter}
+         WHERE r."finalContent" IS NOT NULL`,
+        params
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(r."strategy",'sequential') AS strategy,
+           COALESCE(AVG(LENGTH(r."finalContent")),0)::int AS "avgLength"
+         FROM "QCoreRun" r
+         ${userFilter}
+         WHERE r."finalContent" IS NOT NULL
+         GROUP BY r."strategy"
+         ORDER BY "avgLength" DESC`,
+        params
+      ),
+    ]);
+
+    const q = qualR.rows[0] || { brief: 0, standard: 0, detailed: 0 };
+    res.json({
+      brief: q.brief,
+      standard: q.standard,
+      detailed: q.detailed,
+      avgLengthByStrategy: stratR.rows.map((row: any) => ({
+        strategy: row.strategy,
+        avgLength: row.avgLength,
+      })),
+    });
+  } catch (err: any) { res.status(500).json({ error: "run-quality failed", details: err?.message }); }
+});

@@ -663,6 +663,43 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // V60 — Template pin column.
   await pool.query(`ALTER TABLE "QCoreTemplate" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
 
+  // V63 — A/B testing for prompts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAbTest" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "promptA"     TEXT NOT NULL,
+      "promptB"     TEXT NOT NULL,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "status"      TEXT NOT NULL DEFAULT 'active',
+      "runsA"       INTEGER NOT NULL DEFAULT 0,
+      "runsB"       INTEGER NOT NULL DEFAULT 0,
+      "avgCostA"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "avgCostB"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "avgRatingA"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "avgRatingB"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreAbTest_user_idx"
+      ON "QCoreAbTest" ("userId", "createdAt" DESC);
+  `);
+
+  // V64 — User settings (key-value store).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreUserSettings" (
+      "userId"    TEXT NOT NULL,
+      "key"       TEXT NOT NULL,
+      "value"     JSONB NOT NULL,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "key")
+    );
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

@@ -4445,3 +4445,234 @@ export async function pinTemplate(id: string, userId: string, pinned: boolean): 
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V63 — A/B Testing for prompts
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type AbTestRow = {
+  id: string;
+  userId: string;
+  name: string;
+  promptA: string;
+  promptB: string;
+  strategy: string;
+  overrides: Record<string, any>;
+  status: string;
+  runsA: number;
+  runsB: number;
+  avgCostA: number;
+  avgCostB: number;
+  avgRatingA: number;
+  avgRatingB: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const memAbTests = new Map<string, AbTestRow>();
+
+export async function createAbTest(opts: {
+  userId: string;
+  name: string;
+  promptA: string;
+  promptB: string;
+  strategy?: string;
+  overrides?: Record<string, any>;
+}): Promise<AbTestRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const strategy = opts.strategy || "sequential";
+  const overrides = opts.overrides ?? {};
+
+  if (!isDbReady()) {
+    const row: AbTestRow = {
+      id,
+      userId: opts.userId,
+      name: opts.name,
+      promptA: opts.promptA,
+      promptB: opts.promptB,
+      strategy,
+      overrides,
+      status: "active",
+      runsA: 0,
+      runsB: 0,
+      avgCostA: 0,
+      avgCostB: 0,
+      avgRatingA: 0,
+      avgRatingB: 0,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    memAbTests.set(id, row);
+    return row;
+  }
+
+  const r = await pool.query(
+    `INSERT INTO "QCoreAbTest" ("id","userId","name","promptA","promptB","strategy","overrides")
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [id, opts.userId, opts.name, opts.promptA, opts.promptB, strategy, JSON.stringify(overrides)]
+  );
+  const row = r.rows[0];
+  return { ...row, overrides: row.overrides ?? {} } as AbTestRow;
+}
+
+export async function listAbTests(userId: string): Promise<AbTestRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memAbTests.values())
+      .filter((t) => t.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreAbTest" WHERE "userId"=$1 ORDER BY "createdAt" DESC`,
+    [userId]
+  );
+  return r.rows.map((row: any) => ({ ...row, overrides: row.overrides ?? {} })) as AbTestRow[];
+}
+
+export async function getAbTest(id: string, userId: string): Promise<AbTestRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memAbTests.get(id);
+    if (!t || t.userId !== userId) return null;
+    return t;
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreAbTest" WHERE "id"=$1 AND "userId"=$2`,
+    [id, userId]
+  );
+  if (!r.rows[0]) return null;
+  return { ...r.rows[0], overrides: r.rows[0].overrides ?? {} } as AbTestRow;
+}
+
+export async function deleteAbTest(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memAbTests.get(id);
+    if (!t || t.userId !== userId) return false;
+    memAbTests.delete(id);
+    return true;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreAbTest" WHERE "id"=$1 AND "userId"=$2 RETURNING "id"`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function recordAbTestResult(
+  id: string,
+  variant: "a" | "b",
+  costUsd: number,
+  rating: number
+): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const t = memAbTests.get(id);
+    if (!t) return;
+    if (variant === "a") {
+      const prevN = t.runsA;
+      t.runsA += 1;
+      t.avgCostA = (t.avgCostA * prevN + costUsd) / t.runsA;
+      t.avgRatingA = (t.avgRatingA * prevN + rating) / t.runsA;
+    } else {
+      const prevN = t.runsB;
+      t.runsB += 1;
+      t.avgCostB = (t.avgCostB * prevN + costUsd) / t.runsB;
+      t.avgRatingB = (t.avgRatingB * prevN + rating) / t.runsB;
+    }
+    t.updatedAt = nowIso();
+    return;
+  }
+
+  if (variant === "a") {
+    await pool.query(
+      `UPDATE "QCoreAbTest"
+       SET "runsA"="runsA"+1,
+           "avgCostA"=("avgCostA"*"runsA"+$2)/("runsA"+1),
+           "avgRatingA"=("avgRatingA"*"runsA"+$3)/("runsA"+1),
+           "updatedAt"=NOW()
+       WHERE "id"=$1`,
+      [id, costUsd, rating]
+    );
+  } else {
+    await pool.query(
+      `UPDATE "QCoreAbTest"
+       SET "runsB"="runsB"+1,
+           "avgCostB"=("avgCostB"*"runsB"+$2)/("runsB"+1),
+           "avgRatingB"=("avgRatingB"*"runsB"+$3)/("runsB"+1),
+           "updatedAt"=NOW()
+       WHERE "id"=$1`,
+      [id, costUsd, rating]
+    );
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V64 — User settings (key-value store)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const memUserSettings = new Map<string, any>();
+
+function settingsKey(userId: string, key: string): string {
+  return `${userId}:${key}`;
+}
+
+export async function setUserSetting(userId: string, key: string, value: any): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    memUserSettings.set(settingsKey(userId, key), value);
+    return;
+  }
+  await pool.query(
+    `INSERT INTO "QCoreUserSettings" ("userId","key","value","updatedAt")
+     VALUES ($1,$2,$3,NOW())
+     ON CONFLICT ("userId","key") DO UPDATE SET "value"=$3,"updatedAt"=NOW()`,
+    [userId, key, JSON.stringify(value)]
+  );
+}
+
+export async function getUserSetting(userId: string, key: string): Promise<any | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const v = memUserSettings.get(settingsKey(userId, key));
+    return v !== undefined ? v : null;
+  }
+  const r = await pool.query(
+    `SELECT "value" FROM "QCoreUserSettings" WHERE "userId"=$1 AND "key"=$2`,
+    [userId, key]
+  );
+  if (!r.rows[0]) return null;
+  return r.rows[0].value;
+}
+
+export async function getAllUserSettings(userId: string): Promise<Record<string, any>> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const prefix = `${userId}:`;
+    const result: Record<string, any> = {};
+    for (const [k, v] of memUserSettings.entries()) {
+      if (k.startsWith(prefix)) result[k.slice(prefix.length)] = v;
+    }
+    return result;
+  }
+  const r = await pool.query(
+    `SELECT "key","value" FROM "QCoreUserSettings" WHERE "userId"=$1`,
+    [userId]
+  );
+  const result: Record<string, any> = {};
+  for (const row of r.rows) result[row.key] = row.value;
+  return result;
+}
+
+export async function deleteUserSetting(userId: string, key: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return memUserSettings.delete(settingsKey(userId, key));
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreUserSettings" WHERE "userId"=$1 AND "key"=$2 RETURNING "key"`,
+    [userId, key]
+  );
+  return (r.rowCount ?? 0) > 0;
+}

@@ -22,6 +22,8 @@ interface Props {
   notices: AiNotice[];
   lsr: Lsr;
   calc: LsrCalc;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 /** Внешний API: открыть чат с предзаполненным вопросом про конкретную позицию. */
@@ -60,7 +62,7 @@ const WELCOME_MESSAGE: AiMessage = {
   ts: 0, // 0 — приветственное, не сохраняется в history
 };
 
-export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices, lsr, calc }, ref) {
+export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices, lsr, calc, mobileOpen = false, onMobileClose }, ref) {
   // History persisted per LSR id
   const [messages, setMessages] = useState<AiMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
@@ -216,7 +218,20 @@ export const AiChat = forwardRef<AiChatHandle, Props>(function AiChat({ notices,
   const warnCount  = notices.filter((n) => n.severity === "warning").length;
 
   return (
-    <aside className="w-72 shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+    <aside className={`
+      bg-white border-l border-slate-200 flex-col overflow-hidden
+      ${mobileOpen ? "fixed right-0 top-0 bottom-0 w-80 z-50 flex" : "hidden"}
+      md:relative md:flex md:w-72 md:shrink-0 md:z-auto
+    `}>
+      {mobileOpen && onMobileClose && (
+        <button
+          onClick={onMobileClose}
+          className="md:hidden absolute top-2 left-2 text-slate-400 hover:text-white text-sm z-10"
+          aria-label="Закрыть AI-чат"
+        >
+          ✕
+        </button>
+      )}
       {/* Шапка */}
       <div className="shrink-0 px-3 py-2 border-b border-slate-200 bg-slate-900 space-y-1.5">
         <div className="flex items-center gap-2">

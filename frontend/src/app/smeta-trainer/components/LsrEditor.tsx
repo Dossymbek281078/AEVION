@@ -51,6 +51,8 @@ export function LsrEditor({ initialLsr }: Props) {
   const [useSscPrices, setUseSscPrices]     = useState(false);
   const [editResources, setEditResources]   = useState<{ sectionId: string; posId: string } | null>(null);
   const [pricesLoaded, setPricesLoaded]     = useState(0); // bump после init для пересчёта calc
+  const [navOpen, setNavOpen]               = useState(false); // mobile drawer для разделов
+  const [chatOpen, setChatOpen]             = useState(false); // mobile drawer для AI
   const aiChatRef = useRef<AiChatHandle>(null);
 
   useEffect(() => {
@@ -158,21 +160,42 @@ export function LsrEditor({ initialLsr }: Props) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden relative">
+      {/* ── Mobile triggers ─────────────────────────────────── */}
+      <button
+        onClick={() => setNavOpen(true)}
+        className="md:hidden absolute top-1.5 left-1.5 z-30 bg-emerald-600 text-white border border-emerald-700 rounded px-2 py-1 text-[10px] font-bold shadow"
+      >
+        ☰ Разделы
+      </button>
+      <button
+        onClick={() => setChatOpen(true)}
+        className="md:hidden absolute top-1.5 right-1.5 z-30 bg-slate-900 text-emerald-300 border border-slate-700 rounded px-2 py-1 text-[10px] font-bold shadow"
+      >
+        AI ☰
+      </button>
+      {(navOpen || chatOpen) && (
+        <div
+          onClick={() => { setNavOpen(false); setChatOpen(false); }}
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+        />
+      )}
 
       {/* ── Левая панель: разделы ─────────────────────────────── */}
       <SectionNav
         sections={calc.sections}
         activeSectionId={activeSectionId}
         onSelect={(id) => { setActiveSectionId(id); setActiveTab("lsr"); }}
-        onAddRate={() => setDrawerOpen(true)}
+        onAddRate={() => { setDrawerOpen(true); setNavOpen(false); }}
+        mobileOpen={navOpen}
+        onMobileClose={() => setNavOpen(false)}
       />
 
       {/* ── Центральная зона ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Табы + мета */}
-        <div className="shrink-0 bg-white border-b border-slate-200 flex items-center gap-0 px-3 print:hidden">
+        <div className="shrink-0 bg-white border-b border-slate-200 flex items-center gap-0 px-3 print:hidden overflow-x-auto pl-14 md:pl-3 pr-14 md:pr-3">
           {TABS.map(({ key, label }) => (
             <button
               key={key}
@@ -272,7 +295,14 @@ export function LsrEditor({ initialLsr }: Props) {
       </div>
 
       {/* ── Правая панель: AI-консультант ───────────────────── */}
-      <AiChat ref={aiChatRef} notices={notices} lsr={lsr} calc={calc} />
+      <AiChat
+        ref={aiChatRef}
+        notices={notices}
+        lsr={lsr}
+        calc={calc}
+        mobileOpen={chatOpen}
+        onMobileClose={() => setChatOpen(false)}
+      />
 
       {/* ── Drawer поиска расценок ──────────────────────────── */}
       <RateDrawer

@@ -700,6 +700,24 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
 
+  // V67 — Conditional run branching.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunBranch" (
+      "id"               TEXT PRIMARY KEY,
+      "parentRunId"      TEXT NOT NULL,
+      "branchReason"     TEXT NOT NULL,
+      "alternativeInput" TEXT NOT NULL,
+      "strategy"         TEXT NOT NULL DEFAULT 'debate',
+      "status"           TEXT NOT NULL DEFAULT 'pending',
+      "resultRunId"      TEXT,
+      "createdAt"        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreRunBranch_parent_idx"
+      ON "QCoreRunBranch" ("parentRunId");
+  `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

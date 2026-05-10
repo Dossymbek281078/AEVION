@@ -3267,7 +3267,44 @@ export default function CyberChessPage(){
         const achTotal=Object.keys(ACH_LABELS).length;
         const achGot=Object.keys(chessy.ach).length;
         const achPct=Math.round(achGot/achTotal*100);
+        // Compute current streak from savedGames
+        let streak=0;let streakType:"W"|"L"|"D"|null=null;
+        for(let i=savedGames.length-1;i>=0;i--){
+          const g=savedGames[i];
+          const r=g.result.includes("You win")||g.result.includes("win!")?"W":g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")?"D":"L";
+          if(streak===0){streakType=r;streak=1}
+          else if(r===streakType)streak++;
+          else break;
+        }
         return<div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+
+          {/* ─── Session stats pill strip ─── */}
+          {totalGames>0&&<div style={{
+            display:"flex",gap:6,alignItems:"center",
+            padding:"8px 12px",borderRadius:RADIUS.lg,
+            background:CC.surface1,border:`1px solid ${CC.border}`,
+            flexWrap:"wrap"
+          }}>
+            <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const}}>Сессия</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 9px",borderRadius:RADIUS.full,background:"rgba(5,150,105,0.10)",border:"1px solid rgba(5,150,105,0.25)"}}>
+              <span style={{fontSize:12,fontWeight:900,color:CC.brand}}>{sts.w}</span>
+              <span style={{fontSize:9,fontWeight:800,color:CC.textDim}}>W</span>
+            </span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 9px",borderRadius:RADIUS.full,background:"rgba(220,38,38,0.08)",border:"1px solid rgba(220,38,38,0.2)"}}>
+              <span style={{fontSize:12,fontWeight:900,color:CC.danger}}>{sts.l}</span>
+              <span style={{fontSize:9,fontWeight:800,color:CC.textDim}}>L</span>
+            </span>
+            {sts.d>0&&<span style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 9px",borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
+              <span style={{fontSize:12,fontWeight:900,color:CC.textDim}}>{sts.d}</span>
+              <span style={{fontSize:9,fontWeight:800,color:CC.textMute}}>D</span>
+            </span>}
+            <span style={{fontSize:11,fontWeight:800,color:winPct>=60?CC.brand:winPct>=40?CC.textDim:CC.danger}}>{winPct}% WR</span>
+            {streak>=2&&streakType&&<span style={{marginLeft:4,fontSize:11,fontWeight:900,color:streakType==="W"?CC.brand:streakType==="L"?CC.danger:CC.textDim,padding:"2px 8px",borderRadius:RADIUS.full,background:streakType==="W"?"rgba(5,150,105,0.08)":streakType==="L"?"rgba(220,38,38,0.08)":CC.surface2}}>
+              {streakType==="W"?"🔥":"💔"} {streak}× {streakType==="W"?"серия побед":"серия поражений"}
+            </span>}
+            <span style={{flex:1}}/>
+            <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ELO <b style={{color:CC.gold}}>{rat}</b></span>
+          </div>}
 
           {/* ─── HERO: format + color + AI + premoves — компактно вместе ─── */}
           <Card padding={SPACE[3]} elevation="md">
@@ -4453,6 +4490,7 @@ export default function CyberChessPage(){
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
             }}>⌨️ Ход текстом</Btn>}
             {over&&<Btn size="md" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
+            {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого AI-уровня" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
@@ -4719,7 +4757,18 @@ export default function CyberChessPage(){
                   <Badge tone={useSF?"accent":"info"} size="xs">{lv.elo}</Badge>
                   {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>думаю</Badge>}
                 </div>
-                {capW.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capW.join("")}</div>}
+                {(()=>{
+                  // Material balance: capW = white pieces black has taken; show them under AI portrait.
+                  // Also compute material advantage for the side that captured more.
+                  const VAL:Record<string,number>={p:1,n:3,b:3,r:5,q:9,P:1,N:3,B:3,R:5,Q:9};
+                  const wVal=capW.reduce((a,p)=>a+(VAL[p]||0),0);
+                  const bVal=capB.reduce((a,p)=>a+(VAL[p]||0),0);
+                  const diff=wVal-bVal; // >0 = black (AI) captured more = AI has material advantage
+                  return capW.length>0?<div style={{display:"flex",alignItems:"center",gap:4,marginTop:3}}>
+                    <span style={{fontSize:15,letterSpacing:0.5,lineHeight:1,color:"#94a3b8"}} translate="no">{capW.join("")}</span>
+                    {diff>0&&<span style={{fontSize:10,fontWeight:900,color:CC.danger,padding:"1px 5px",borderRadius:999,background:"rgba(220,38,38,0.08)"}}>+{diff}</span>}
+                  </div>:null;
+                })()}
               </div>
             </div>;
           })()}
@@ -5070,7 +5119,16 @@ export default function CyberChessPage(){
                 <Badge tone="gold" size="xs">{rat}</Badge>
                 <Badge tone="neutral" size="xs">{rk.i} {rk.t}</Badge>
               </div>
-              {capB.length>0&&<div style={{fontSize:16,letterSpacing:1,lineHeight:1,marginTop:4,color:CC.textDim}} translate="no">{capB.join("")}</div>}
+              {(()=>{
+                const VAL:Record<string,number>={p:1,n:3,b:3,r:5,q:9,P:1,N:3,B:3,R:5,Q:9};
+                const wVal=capW.reduce((a,p)=>a+(VAL[p]||0),0);
+                const bVal=capB.reduce((a,p)=>a+(VAL[p]||0),0);
+                const diff=bVal-wVal; // >0 = player captured more = player has material advantage
+                return capB.length>0?<div style={{display:"flex",alignItems:"center",gap:4,marginTop:3}}>
+                  <span style={{fontSize:15,letterSpacing:0.5,lineHeight:1,color:"#94a3b8"}} translate="no">{capB.join("")}</span>
+                  {diff>0&&<span style={{fontSize:10,fontWeight:900,color:CC.brand,padding:"1px 5px",borderRadius:999,background:"rgba(5,150,105,0.10)"}}>+{diff}</span>}
+                </div>:null;
+              })()}
             </div>
           </div>}
 
@@ -5340,9 +5398,15 @@ export default function CyberChessPage(){
                 style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ всё</button>
             </div>}
             <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:6}}>
-                <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2}}/>
+              <span style={{fontSize:11,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+                <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>
                 Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
+                {currentOpening&&hist.length>0&&hist.length<=30&&<span style={{
+                  marginLeft:4,fontSize:10,fontWeight:700,color:"#059669",
+                  letterSpacing:0.3,textTransform:"none" as const,
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:130,
+                  padding:"1px 6px",borderRadius:RADIUS.full,background:"rgba(5,150,105,0.10)",
+                }} title={currentOpening.name}>{currentOpening.eco} · {currentOpening.name}</span>}
                 {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
               </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
@@ -5478,15 +5542,27 @@ export default function CyberChessPage(){
                   </div>
                 </div>
                 {/* Rush HUD — score + streak */}
-                {pzMode==="rush"&&rushActive&&<div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2],padding:`${SPACE[2]}px ${SPACE[3]}px`,borderRadius:RADIUS.md,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <span style={{fontSize:11,fontWeight:800,color:"#92400e",letterSpacing:0.5,textTransform:"uppercase" as const}}>RUSH</span>
-                    <Badge tone="gold" size="xs">{rushScore} решено</Badge>
-                  </div>
-                  <div style={{flex:1}}/>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    {rushStreak>0&&<Badge tone="danger" size="xs">🔥 {rushStreak}</Badge>}
-                    {rushBest>0&&<Badge tone="neutral" size="xs">best {rushBest}</Badge>}
+                {pzMode==="rush"&&rushActive&&<div style={{
+                  marginBottom:SPACE[2],borderRadius:RADIUS.md,overflow:"hidden",
+                  border:"1px solid #fcd34d",
+                  background:"linear-gradient(135deg,#0f172a,#1c1400)",
+                }}>
+                  <div style={{display:"flex",alignItems:"center",gap:SPACE[2],padding:`${SPACE[2]}px ${SPACE[3]}px`}}>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:52}}>
+                      <div style={{fontSize:28,fontWeight:900,color:"#fcd34d",lineHeight:1,fontFamily:"ui-monospace,monospace"}}>{rushScore}</div>
+                      <div style={{fontSize:9,fontWeight:800,color:"#92400e",letterSpacing:1,textTransform:"uppercase" as const}}>решено</div>
+                    </div>
+                    <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}>
+                      {rushStreak>=3?<div style={{fontSize:22,fontWeight:900,color:rushStreak>=5?"#ef4444":"#f97316",display:"flex",alignItems:"center",gap:2}}>
+                        {Array.from({length:Math.min(rushStreak,5)}).map((_,i)=><span key={i} style={{filter:`hue-rotate(${i*10}deg)`,animation:`cc-pulse-glow ${0.8+i*0.1}s ease-in-out infinite`,fontSize:16+i*2}}>🔥</span>)}
+                        <span style={{fontSize:18,fontWeight:900,marginLeft:2}}>{rushStreak}</span>
+                      </div>:rushStreak>0?<div style={{fontSize:16,fontWeight:900,color:"#fb923c"}}>🔥 {rushStreak}</div>:<div style={{fontSize:12,color:"#475569",fontWeight:700}}>Без стрика</div>}
+                      <div style={{fontSize:9,color:"#78716c",fontWeight:700}}>COMBO</div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+                      {rushBest>0&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>рекорд <span style={{color:"#fcd34d",fontWeight:900}}>{rushBest}</span></div>}
+                      {rushBestStreak>0&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>серия <span style={{color:"#fb923c",fontWeight:900}}>{rushBestStreak}</span></div>}
+                    </div>
                   </div>
                 </div>}
                 {/* Tags */}
@@ -5494,9 +5570,35 @@ export default function CyberChessPage(){
                   {[pzCurrent.phase,pzCurrent.theme].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
                 </div>
                 {/* Result banner */}
-                {pzAttempt==="correct"&&<div style={{fontSize:14,fontWeight:900,color:T.accent,padding:"8px 12px",background:"rgba(5,150,105,0.1)",borderRadius:7,marginBottom:10}}>✓ Отлично! Верный ход</div>}
-                {pzAttempt==="wrong"&&<div style={{fontSize:14,fontWeight:900,color:T.danger,padding:"8px 12px",background:"rgba(220,38,38,0.1)",borderRadius:7,marginBottom:10}}>✗ Неверно. Попробуй ещё</div>}
-                {pzAttempt==="shown"&&<div style={{fontSize:14,fontWeight:800,color:"#92400e",padding:"8px 12px",background:"#fffbeb",borderRadius:7,marginBottom:10,border:"1px solid #fde68a"}}>💡 Ответ: <span style={{fontFamily:"monospace",background:"#fef3c7",padding:"2px 8px",borderRadius:4}}>{pzCurrent.sol[0]}</span></div>}
+                {pzAttempt==="correct"&&<div style={{
+                  fontSize:15,fontWeight:900,color:"#065f46",
+                  padding:"10px 14px",marginBottom:10,borderRadius:8,
+                  background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",
+                  border:"1px solid #6ee7b7",
+                  display:"flex",alignItems:"center",gap:8,
+                  animation:"cc-turn-flash 0.6s ease-out"
+                }}>
+                  <span style={{fontSize:20}}>✅</span>
+                  <span>{pzMode==="rush"&&rushStreak>=3?`Серия ${rushStreak}! 🔥`:pzMode==="rush"?"Верно! 🎯":"Отлично! Верный ход"}</span>
+                  {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>+3с ⏱</span>}
+                </div>}
+                {pzAttempt==="wrong"&&<div style={{
+                  fontSize:14,fontWeight:900,color:"#991b1b",
+                  padding:"10px 14px",marginBottom:10,borderRadius:8,
+                  background:"linear-gradient(135deg,#fef2f2,#fee2e2)",
+                  border:"1px solid #fca5a5",
+                  display:"flex",alignItems:"center",gap:8
+                }}>
+                  <span style={{fontSize:18}}>❌</span>
+                  <span>{pzMode==="rush"?"Неверно! Стрик сброшен":"Неверно. Попробуй ещё"}</span>
+                  {pzMode==="rush"&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:T.danger}}>−5с ⏱</span>}
+                </div>}
+                {pzAttempt==="shown"&&<div style={{
+                  fontSize:13,fontWeight:800,color:"#78350f",
+                  padding:"10px 14px",marginBottom:10,borderRadius:8,
+                  background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                  border:"1px solid #fde68a"
+                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
                 {/* Actions */}
                 <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                   <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>

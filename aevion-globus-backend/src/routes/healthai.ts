@@ -2062,3 +2062,162 @@ healthaiRouter.get("/leaderboard", async (_req, res) => {
   board.sort((a, b) => b.streak - a.streak || b.logs - a.logs);
   res.json({ leaderboard: board.slice(0, 20) });
 });
+
+// GET /api/healthai/openapi.json — public OpenAPI 3.1 spec.
+healthaiRouter.options("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.status(204).end();
+});
+healthaiRouter.get("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
+  res.json({
+    openapi: "3.1.0",
+    info: {
+      title: "AEVION HealthAI",
+      version: "3.0.0",
+      description:
+        "Personal AI Doctor API. Rule-based symptom triage, daily wellness log, BMI/trends, PHQ-9/GAD-7 screeners, weekly plan, cycle tracker, family profiles. NOT medical advice.",
+      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+      license: { name: "Proprietary" },
+      "x-disclaimer":
+        "HealthAI provides informational triage only and does not constitute medical advice, diagnosis, or treatment. Always consult a licensed clinician.",
+    },
+    servers: [{ url: `${base}/api/healthai`, description: "Production" }],
+    tags: [
+      { name: "Profiles" },
+      { name: "Triage" },
+      { name: "Logs" },
+      { name: "Trends" },
+      { name: "Screeners", description: "Validated mental-health screeners (PHQ-9, GAD-7)" },
+      { name: "Plan" },
+      { name: "Cycle" },
+      { name: "Population", description: "Anon population stats" },
+      { name: "Public" },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+      },
+      schemas: {
+        Error: { type: "object", properties: { error: { type: "string" } } },
+      },
+    },
+    security: [{ bearerAuth: [] }],
+    paths: {
+      "/health": {
+        get: {
+          tags: ["Public"],
+          summary: "Service health",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/profile": {
+        post: { tags: ["Profiles"], summary: "Create or update profile", responses: { "200": { description: "OK" } } },
+      },
+      "/profiles/me": {
+        get: { tags: ["Profiles"], summary: "List my profiles (incl. family)", responses: { "200": { description: "OK" } } },
+      },
+      "/profile/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Profiles"], summary: "Get profile", responses: { "200": { description: "OK" } } },
+        delete: { tags: ["Profiles"], summary: "Delete profile + all data (GDPR)", responses: { "200": { description: "OK" } } },
+      },
+      "/check": {
+        post: {
+          tags: ["Triage"],
+          summary: "Rule-based symptom triage (deterministic, no LLM)",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["symptoms"],
+                  properties: {
+                    symptoms: { type: "array", items: { type: "string" } },
+                    profileId: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: { "200": { description: "OK — recommendations + flags" } },
+        },
+      },
+      "/check-llm": {
+        post: {
+          tags: ["Triage"],
+          summary: "AI-augmented triage (rate-limited, LLM-backed)",
+          responses: { "200": { description: "OK" }, "429": { description: "rate_limited" } },
+        },
+      },
+      "/log": {
+        post: {
+          tags: ["Logs"],
+          summary: "Daily wellness log entry (sleep, mood, energy, weight, etc.)",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/history/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Logs"], summary: "Log history for profile", responses: { "200": { description: "OK" } } },
+      },
+      "/trends/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Trends"], summary: "Aggregated trends + BMI", responses: { "200": { description: "OK" } } },
+      },
+      "/risks/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Trends"], summary: "Risk indicators (sleep deficit, weight trend, etc.)", responses: { "200": { description: "OK" } } },
+      },
+      "/screener/phq9": {
+        post: { tags: ["Screeners"], summary: "PHQ-9 depression screening", responses: { "200": { description: "OK — score + severity band" } } },
+      },
+      "/screener/gad7": {
+        post: { tags: ["Screeners"], summary: "GAD-7 anxiety screening", responses: { "200": { description: "OK — score + severity band" } } },
+      },
+      "/plan/{profileId}": {
+        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Plan"], summary: "Personalized weekly wellness plan", responses: { "200": { description: "OK" } } },
+      },
+      "/plan/history/{profileId}": {
+        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Plan"], summary: "Past weekly plans", responses: { "200": { description: "OK" } } },
+      },
+      "/cycle": {
+        post: { tags: ["Cycle"], summary: "Log menstrual cycle data", responses: { "200": { description: "OK" } } },
+      },
+      "/cycle/{profileId}": {
+        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Cycle"], summary: "Cycle history + predictions", responses: { "200": { description: "OK" } } },
+      },
+      "/population/{profileId}": {
+        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
+        get: {
+          tags: ["Population"],
+          summary: "Anonymous population context for the user's profile (age/sex/region cohort)",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/import": {
+        post: { tags: ["Logs"], summary: "Bulk-import logs (CSV/JSON)", responses: { "200": { description: "OK" } } },
+      },
+      "/export/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: { tags: ["Logs"], summary: "Export profile + logs (GDPR data dump)", responses: { "200": { description: "OK" } } },
+      },
+      "/leaderboard": {
+        get: {
+          tags: ["Public"],
+          summary: "Anonymous streak leaderboard (top 20)",
+          security: [],
+          responses: { "200": { description: "OK" } },
+        },
+      },
+    },
+  });
+});

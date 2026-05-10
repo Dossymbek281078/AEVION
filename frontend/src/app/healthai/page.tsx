@@ -1433,6 +1433,34 @@ export default function HealthAIPage() {
           'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
       }}
     >
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "MedicalWebPage",
+            name: "AEVION HealthAI",
+            description:
+              "Personal AI Doctor: rule-based symptom triage, daily wellness log, BMI, trends, PHQ-9/GAD-7 screeners, weekly plan, cycle tracker. Not medical advice.",
+            url: "https://aevion.app/healthai",
+            audience: { "@type": "PeopleAudience", suggestedMinAge: 18 },
+            specialty: ["Primary Care", "Mental Health"],
+            lastReviewed: new Date().toISOString().slice(0, 10),
+            mainContentOfPage: {
+              "@type": "WebPageElement",
+              cssSelector: ".ha-wrap",
+            },
+            isAccessibleForFree: true,
+            disclaimer:
+              "HealthAI provides informational triage only and does not constitute medical advice, diagnosis, or treatment. Always consult a licensed healthcare provider.",
+            publisher: {
+              "@type": "Organization",
+              name: "AEVION",
+              url: "https://aevion.app",
+            },
+          }),
+        }}
+      />
       <style>{`
         @media (max-width: 720px) {
           .ha-wrap { padding: 12px 10px 60px !important; }

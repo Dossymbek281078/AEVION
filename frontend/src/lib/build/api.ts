@@ -1777,6 +1777,20 @@ export const buildApi = {
   rejectDocument: (id: string, reason?: string) =>
     call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/reject`, { reason }),
 
+  // References — employer-written references for workers
+  myReferences: () =>
+    call<{ items: Array<{ id: string; projectId: string; workerId: string; authorId: string; rating: number; text: string; recommend: boolean; createdAt: string; projectTitle?: string; workerName?: string; workerTitle?: string; workerPhoto?: string | null; authorName?: string }>; total: number }>(
+      "GET", "/api/build/references/my"
+    ),
+  workerReferences: (userId: string) =>
+    call<{ items: Array<{ id: string; projectId: string; rating: number; text: string; recommend: boolean; createdAt: string; projectTitle?: string; authorName?: string }>; total: number }>(
+      "GET", `/api/build/worker-references/${userId}`
+    ),
+  createReference: (projectId: string, input: { workerId: string; rating: number; text: string; recommend: boolean }) =>
+    call<{ id: string }>("POST", `/api/build/projects/${projectId}/references`, input),
+  deleteReference: (id: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/build/references/${id}`),
+
   // Portfolio photos — work-site gallery on worker public profile
   uploadPortfolioPhoto: (input: { url: string; caption?: string; projectType?: string; takenAt?: string }) =>
     call<{ id: string; url: string; caption: string | null; createdAt: string }>(

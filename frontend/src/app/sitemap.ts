@@ -57,6 +57,8 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qpaynet/requests", changeFrequency: "weekly", priority: 0.55 },
   // QContract
   { path: "/qcontract", changeFrequency: "weekly", priority: 0.75 },
+  { path: "/qcontract/create", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/qcontract/documents", changeFrequency: "daily", priority: 0.5 },
   // Smeta Trainer
   { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
   // Launch status

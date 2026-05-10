@@ -80,6 +80,32 @@ export default function QContractHome() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QContract",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web, iOS, Android",
+            description:
+              "Self-destruct smart documents: burn-after-N-reads, time expiry, password gate, email-watermark, audit log, QRight cert.",
+            url: "https://aevion.app/qcontract",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Burn after N reads",
+              "Time-based expiry",
+              "Password gate",
+              "Email watermark",
+              "Audit log (CSV export)",
+              "QRight legal cert",
+              "Public share link with revoke",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
       {/* Header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

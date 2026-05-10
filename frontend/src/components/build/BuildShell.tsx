@@ -22,6 +22,8 @@ const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build/dashboard", label: "Dashboard", authOnly: true },
   { href: "/build/create-project", label: "New project", authOnly: true },
   { href: "/build/profile", label: "Profile", authOnly: true },
+  { href: "/build/documents", label: "📄 Docs", authOnly: true },
+  { href: "/build/portfolio", label: "🖼 Portfolio", authOnly: true },
   { href: "/build/messages", label: "Messages", authOnly: true },
   { href: "/build/pipeline", label: "Pipeline", authOnly: true },
   { href: "/build/calendar", label: "Calendar", authOnly: true },

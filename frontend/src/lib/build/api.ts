@@ -1776,6 +1776,24 @@ export const buildApi = {
     call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/verify`, {}),
   rejectDocument: (id: string, reason?: string) =>
     call<{ id: string; status: string }>("PATCH", `/api/build/documents/${id}/reject`, { reason }),
+
+  // Portfolio photos — work-site gallery on worker public profile
+  uploadPortfolioPhoto: (input: { url: string; caption?: string; projectType?: string; takenAt?: string }) =>
+    call<{ id: string; url: string; caption: string | null; createdAt: string }>(
+      "POST", "/api/build/portfolio/photos", input
+    ),
+  portfolioPhotos: (userId: string) =>
+    call<{ items: Array<{ id: string; url: string; caption: string | null; projectType: string | null; takenAt: string | null; createdAt: string }>; total: number }>(
+      "GET", `/api/build/portfolio/photos/${userId}`
+    ),
+  deletePortfolioPhoto: (id: string) =>
+    call<{ ok: boolean }>("DELETE", `/api/build/portfolio/photos/${id}`),
+  updatePortfolioPhoto: (id: string, input: { caption?: string; projectType?: string }) =>
+    call<{ id: string; caption: string | null }>("PATCH", `/api/build/portfolio/photos/${id}`, input),
+
+  // Safety briefing template (public)
+  safetyBriefingTemplate: () =>
+    call<{ items: string[] }>("GET", "/api/build/safety-briefing/template"),
 };
 
 // ── Auth helpers (use existing /api/auth/* — not part of /api/build) ─

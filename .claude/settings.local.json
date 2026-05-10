@@ -75,7 +75,16 @@
       "Bash(BACKEND_URL=\"https://aevion.app/api-backend\" node /c/Users/user/aevion-core/aevion-globus-backend/scripts/auth-smoke.mjs)",
       "Bash(BACKEND_URL=\"https://aevion.app/api-backend\" node /c/Users/user/aevion-core/aevion-globus-backend/scripts/cyberchess-smoke.js)",
       "Bash(BASE=\"https://aevion.app/api-backend\" node /c/Users/user/aevion-core/aevion-globus-backend/scripts/planet-smoke.js)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(echo \"remaining aevion.tech count: $?\")",
+      "Bash(grep -v \"//.*http\")",
+      "Bash(gh issue *)",
+      "Bash(grep -v \"//\")",
+      "Bash(gh workflow *)",
+      "Bash(gh deployment *)",
+      "Bash(echo \"errors:$\\(npx tsc --noEmit 2>&1)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\user\\\\aevion-build\\\\frontend\\\\src\\\\app\\\\build\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

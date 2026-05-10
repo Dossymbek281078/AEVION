@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -89,7 +89,7 @@ function Body() {
       {loading && <p className="text-sm text-slate-400">Loading…</p>}
 
       <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full min-w-[800px] text-left text-xs">
+        <table className="w-full sm:min-w-[800px] text-left text-xs">
           <thead className="bg-white/5 text-slate-400 uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3">Name / Email</th>
@@ -113,7 +113,7 @@ function Body() {
                   <div className="text-slate-400">{u.email}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold uppercase ${
                     u.role === "ADMIN" ? "bg-fuchsia-500/20 text-fuchsia-200" : "bg-white/5 text-slate-300"
                   }`}>
                     {u.role}

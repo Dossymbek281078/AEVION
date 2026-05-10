@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
@@ -88,7 +88,7 @@ function AdminDocumentsInner() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium text-white">{DOC_LABEL[doc.docType] ?? doc.docType}</span>
-                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-300 font-bold">PENDING</span>
+                    <span className="rounded-full bg-amber-500/20 px-2 py-1 text-xs text-amber-300 font-bold">PENDING</span>
                   </div>
                   <p className="text-xs text-slate-400">
                     {doc.userName} ({doc.userEmail}) ·{" "}

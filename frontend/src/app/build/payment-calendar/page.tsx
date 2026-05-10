@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -133,7 +133,7 @@ function PaymentRow({ row, myId, onChanged }: { row: BuildPaymentEvent; myId: st
         )}
         {row.note && <p className="mt-0.5 text-xs text-slate-400">{row.note}</p>}
       </div>
-      <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+      <span className="rounded-full bg-black/30 px-2 py-1 text-xs font-bold uppercase tracking-wider">
         {row.status}
       </span>
       {row.status === "PENDING" && (

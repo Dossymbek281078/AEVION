@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -140,7 +140,7 @@ export default function AvailablePage() {
                 className="group relative flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-4 transition hover:border-emerald-500/30 hover:bg-white/10"
               >
                 {/* Available badge */}
-                <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                <div className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-emerald-500/20 px-2 py-1 text-xs font-bold text-emerald-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   {timeLeft(w.availableUntil)}
                 </div>
@@ -165,7 +165,7 @@ export default function AvailablePage() {
                 {(w.skills ?? []).length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {(w.skills ?? []).slice(0, 4).map((s) => (
-                      <span key={s} className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] text-slate-300">
+                      <span key={s} className="rounded-md bg-white/10 px-2 py-1 text-xs text-slate-300">
                         {s}
                       </span>
                     ))}

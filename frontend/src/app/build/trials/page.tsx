@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -208,7 +208,7 @@ function TaskCard({
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-white">{task.title}</span>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusCls}`}>
+            <span className={`rounded-full border px-2 py-1 text-xs font-semibold uppercase ${statusCls}`}>
               {task.status}
             </span>
           </div>

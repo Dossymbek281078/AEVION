@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -360,7 +360,7 @@ function TalentCard({ talent }: { talent: TalentRow }) {
           {talent.skills.slice(0, 6).map((s) => (
             <span
               key={s}
-              className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-200"
+              className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-200"
             >
               {s}
             </span>

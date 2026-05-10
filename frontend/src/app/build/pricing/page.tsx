@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -333,7 +333,7 @@ function OrdersLedger({
         Subscription and boost charges. Pending orders are confirmed automatically via the payment provider webhook.
       </p>
       <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full sm:min-w-[640px] text-left text-sm">
           <thead className="bg-white/5 text-xs uppercase tracking-wider text-slate-400">
             <tr>
               <th className="px-4 py-2.5">Created</th>
@@ -478,7 +478,7 @@ function PlanCard({
       }`}
     >
       {isPro && (
-        <div className="mb-3 inline-flex w-fit rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-950">
+        <div className="mb-3 inline-flex w-fit rounded-full bg-emerald-500 px-2 py-1 text-xs font-bold uppercase tracking-wider text-emerald-950">
           Most popular
         </div>
       )}
@@ -510,7 +510,7 @@ function PlanCard({
               <div className="text-xs text-slate-400">/ month</div>
             </div>
             {hasDiscount && tierLabel && (
-              <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-200">
+              <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1 text-xs font-semibold text-fuchsia-200">
                 <span>{tierLabel} −{tierDiscountBps / 100}%</span>
               </div>
             )}
@@ -571,7 +571,7 @@ function ComparisonTable({ plans }: { plans: BuildPlan[] }) {
         Цифры HH — публичные тарифы на 2026-04. Реальные суммы зависят от региона и условий аккаунт-менеджера.
       </p>
       <div className="mt-4 overflow-x-auto rounded-xl border border-white/10">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full sm:min-w-[720px] text-left text-sm">
           <thead className="bg-white/5 text-xs uppercase tracking-wider text-slate-400">
             <tr>
               <th className="px-4 py-3">Параметр</th>

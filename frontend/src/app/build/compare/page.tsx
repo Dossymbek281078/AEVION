@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -128,8 +128,8 @@ function CompareCol({ vacancy: v }: { vacancy: BuildVacancy }) {
         <span
           className={
             isClosed
-              ? "rounded bg-slate-500/20 px-2 py-0.5 text-[10px] uppercase text-slate-300"
-              : "rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] uppercase text-emerald-200"
+              ? "rounded bg-slate-500/20 px-2 py-1 text-xs uppercase text-slate-300"
+              : "rounded bg-emerald-500/20 px-2 py-1 text-xs uppercase text-emerald-200"
           }
         >
           {v.status}
@@ -158,7 +158,7 @@ function CompareCol({ vacancy: v }: { vacancy: BuildVacancy }) {
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Skills</div>
           <div className="flex flex-wrap gap-1">
             {v.skills.map((s) => (
-              <span key={s} className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+              <span key={s} className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200">
                 {s}
               </span>
             ))}

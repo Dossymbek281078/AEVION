@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
@@ -183,8 +183,8 @@ export default async function SkillPage({
                         key={s}
                         className={
                           s.toLowerCase() === skill.toLowerCase()
-                            ? "rounded-full bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-100"
-                            : "rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-300"
+                            ? "rounded-full bg-emerald-500/25 px-1.5 py-1 text-xs font-semibold text-emerald-100"
+                            : "rounded-full bg-white/5 px-1.5 py-1 text-xs text-slate-300"
                         }
                       >
                         {s}

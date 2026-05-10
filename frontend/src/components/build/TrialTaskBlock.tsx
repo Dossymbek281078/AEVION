@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";
@@ -231,7 +231,7 @@ function TaskRow({
               : "Unpaid trial"}
           </div>
         </div>
-        <span className="shrink-0 rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase">
+        <span className="shrink-0 rounded-full bg-black/20 px-2 py-1 text-xs font-bold uppercase">
           {task.status}
         </span>
       </div>

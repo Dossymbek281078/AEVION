@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { VideoEmbed } from "@/components/build/VideoEmbed";
@@ -182,13 +182,13 @@ export default async function PublicProfilePage({ params }: Props) {
               {data.verifiedAt && (
                 <span
                   title={data.verifiedReason ?? undefined}
-                  className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-200"
+                  className="rounded-full bg-sky-500/20 px-2 py-1 text-xs font-bold uppercase tracking-wider text-sky-200"
                 >
                   ✓ Verified
                 </span>
               )}
               {data.openToWork && (
-                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+                <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-xs font-bold uppercase tracking-wider text-emerald-200">
                   Open to work
                 </span>
               )}

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Link from "next/link";
 import { BuildShell } from "@/components/build/BuildShell";
 
@@ -174,7 +174,7 @@ export default function ChangelogPage() {
                 >
                   <div className="mb-1.5 flex flex-wrap items-center gap-2">
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${TAG_TONE[e.tag]}`}
+                      className={`rounded-full border px-2 py-1 text-xs font-semibold uppercase tracking-wider ${TAG_TONE[e.tag]}`}
                     >
                       {e.tag}
                     </span>

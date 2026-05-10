@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -122,7 +122,7 @@ function Column({
         <div className="text-sm font-semibold text-white">
           {column.emoji} {column.title}
         </div>
-        <span className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] text-slate-400">
+        <span className="rounded-full border border-white/10 bg-black/30 px-2 py-1 text-xs text-slate-400">
           {items.length}
         </span>
       </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
@@ -161,7 +161,7 @@ function ShiftsInner() {
                     <div key={s.id} className="flex flex-wrap items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLE[s.status] ?? STATUS_STYLE.PLANNED}`}>
+                          <span className={`rounded-full border px-2 py-1 text-xs font-bold ${STATUS_STYLE[s.status] ?? STATUS_STYLE.PLANNED}`}>
                             {STATUS_LABEL[s.status] ?? s.status}
                           </span>
                           {s.startTime && <span className="text-xs text-slate-400">{s.startTime}–{s.endTime ?? "?"}</span>}

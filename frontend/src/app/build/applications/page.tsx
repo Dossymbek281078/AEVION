@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -202,7 +202,7 @@ function ApplicationCard({
             >
               {app.vacancyTitle || "Vacancy"}
             </Link>
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${statusCls}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold uppercase ${statusCls}`}>
               {icon} {app.status}
             </span>
           </div>

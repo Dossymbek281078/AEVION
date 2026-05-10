@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { buildApi, type BuildMessage } from "@/lib/build/api";
@@ -325,7 +325,7 @@ function ReplySuggestions({
           type="button"
           onClick={load}
           disabled={busy}
-          className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-50"
+          className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-50"
           title="Generate 3 reply ideas based on the recent thread"
         >
           {busy ? "…" : "🤖 Suggest reply"}

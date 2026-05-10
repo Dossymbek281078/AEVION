@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -180,7 +180,7 @@ function Body() {
 
       {items && filtered.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full sm:min-w-[680px] text-sm">
             <thead className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">Vacancy</th>
@@ -339,7 +339,7 @@ function SourceBreakdownChart() {
               key={d}
               type="button"
               onClick={() => setDays(d)}
-              className={`rounded-md px-2 py-0.5 text-[11px] ${
+              className={`rounded-md px-2 py-1 text-[11px] ${
                 days === d
                   ? "bg-emerald-500/20 text-emerald-200"
                   : "text-slate-400 hover:bg-white/5"
@@ -1032,7 +1032,7 @@ function ClosingSoonBanner({
               <button
                 type="button"
                 onClick={() => extend(r.id)}
-                className="shrink-0 rounded-md border border-emerald-300/40 bg-emerald-300/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-300/25"
+                className="shrink-0 rounded-md border border-emerald-300/40 bg-emerald-300/15 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-300/25"
               >
                 +30d
               </button>

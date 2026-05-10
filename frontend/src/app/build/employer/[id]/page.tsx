@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 
@@ -161,11 +161,11 @@ export default async function EmployerPage({
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-extrabold text-white">{employer.name}</h1>
               {employer.verifiedAt && (
-                <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-200">
+                <span className="rounded-full bg-sky-500/20 px-2 py-1 text-xs font-bold uppercase text-sky-200">
                   ✓ verified
                 </span>
               )}
-              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-400">
+              <span className="rounded-full bg-white/5 px-2 py-1 text-xs font-medium uppercase text-slate-400">
                 {employer.buildRole}
               </span>
             </div>
@@ -231,7 +231,7 @@ export default async function EmployerPage({
                   {v.skills.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {v.skills.slice(0, 5).map((s) => (
-                        <span key={s} className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                        <span key={s} className="rounded-full bg-emerald-500/15 px-1.5 py-1 text-xs text-emerald-200">
                           {s}
                         </span>
                       ))}

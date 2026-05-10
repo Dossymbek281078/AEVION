@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -69,13 +69,13 @@ export function VacancyCard({
     >
       <div className="mb-2 flex flex-wrap gap-1">
         {isFeatured && (
-          <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+          <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-1 text-xs font-bold uppercase tracking-wider text-amber-200">
             ★ Featured
           </div>
         )}
         {isUrgent && !isClosed && (
           <div
-            className="inline-flex items-center gap-1 rounded-full border border-red-400/60 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-200 animate-pulse"
+            className="inline-flex items-center gap-1 rounded-full border border-red-400/60 bg-red-500/20 px-2 py-1 text-xs font-bold uppercase tracking-wider text-red-200 animate-pulse"
             title={(vacancy as {urgentNote?: string|null}).urgentNote ?? "Срочный найм"}
           >
             🚨 Срочно
@@ -83,7 +83,7 @@ export function VacancyCard({
         )}
         {hot && !isClosed && (
           <div
-            className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-200"
+            className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-1 text-xs font-bold uppercase tracking-wider text-rose-200"
             title="Trending — high applicant interest right now"
           >
             🔥 Hot
@@ -124,7 +124,7 @@ export function VacancyCard({
           {new Date(vacancy.createdAt).toLocaleDateString()}
           {expiringSoon && (
             <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+              className={`rounded-full px-1.5 py-1 text-xs font-semibold ${
                 daysLeft! <= 1
                   ? "bg-rose-500/20 text-rose-200"
                   : daysLeft! <= 3

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -289,12 +289,12 @@ function TierCard({
       <div className="flex items-center justify-between">
         <div className="text-2xl">{theme.emoji}</div>
         {isCurrent && (
-          <span className="rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+          <span className="rounded-full bg-fuchsia-500 px-2 py-1 text-xs font-bold uppercase tracking-wider text-white">
             Ваш
           </span>
         )}
         {!isCurrent && isReached && (
-          <span className="rounded-full bg-emerald-500/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
+          <span className="rounded-full bg-emerald-500/30 px-2 py-1 text-xs font-bold uppercase tracking-wider text-emerald-200">
             Достигнут
           </span>
         )}

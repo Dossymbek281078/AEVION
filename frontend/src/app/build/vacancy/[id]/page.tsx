@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { use } from "react";
@@ -672,7 +672,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
                 {r.keys.map((k) => (
                   <kbd
                     key={k}
-                    className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[11px] font-mono text-slate-200"
+                    className="rounded border border-white/15 bg-white/5 px-1.5 py-1 text-[11px] font-mono text-slate-200"
                   >
                     {k}
                   </kbd>
@@ -749,7 +749,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
                 {v.overlapSkills.slice(0, 4).map((s) => (
                   <span
                     key={s}
-                    className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
+                    className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200"
                   >
                     ✓ {s}
                   </span>
@@ -854,7 +854,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                     >
                       {c.name}
                     </Link>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${matchTone}`}>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-bold ${matchTone}`}>
                       {c.matchScore}% match
                     </span>
                     {c.openToWork && (
@@ -873,7 +873,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                       {c.matchedSkills.slice(0, 6).map((s) => (
                         <span
                           key={s}
-                          className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
+                          className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200"
                         >
                           ✓ {s}
                         </span>
@@ -968,7 +968,7 @@ function ApplicationRow({
             </Link>
             {matchScore != null && (
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${matchTone}`}
+                className={`rounded-full px-2 py-1 text-xs font-bold ${matchTone}`}
                 title={`${app.matchedSkills?.length || 0} of required skills matched`}
               >
                 {matchScore}% match
@@ -978,7 +978,7 @@ function ApplicationRow({
               <button
                 type="button"
                 onClick={() => setAiOpen((v) => !v)}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${aiTone}`}
+                className={`rounded-full px-2 py-1 text-xs font-bold ${aiTone}`}
                 title="Click to see AI breakdown"
               >
                 ✨ AI {aiScore}/100
@@ -995,7 +995,7 @@ function ApplicationRow({
             )}
             {app.sourceTag && (
               <span
-                className="rounded bg-slate-500/20 px-1.5 py-0.5 text-[10px] text-slate-300"
+                className="rounded bg-slate-500/20 px-1.5 py-1 text-xs text-slate-300"
                 title={`Source: ${app.sourceTag}`}
               >
                 ↩ {app.sourceTag.replace(/^utm:/, "@").replace(/^ref:/, "←")}
@@ -1007,7 +1007,7 @@ function ApplicationRow({
               {app.matchedSkills!.slice(0, 6).map((s) => (
                 <span
                   key={s}
-                  className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200"
+                  className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200"
                 >
                   ✓ {s}
                 </span>
@@ -1116,7 +1116,7 @@ function ApplicationRow({
             <div key={i} className="rounded border border-white/10 bg-black/20 p-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-fuchsia-200">Q{i + 1}.</span>
-                <span className="rounded-full bg-fuchsia-500/20 px-2 py-0.5 text-[10px] text-fuchsia-100">
+                <span className="rounded-full bg-fuchsia-500/20 px-2 py-1 text-xs text-fuchsia-100">
                   {pa.score}/100
                 </span>
               </div>
@@ -1218,7 +1218,7 @@ function ApplicationLabelFilter({
       <span className="text-[10px] uppercase tracking-wider text-slate-500">Filter by label:</span>
       <button
         onClick={() => onChange("ALL")}
-        className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${
+        className={`rounded-md px-2 py-1 text-[11px] font-medium ${
           value === "ALL" ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"
         }`}
       >
@@ -1232,7 +1232,7 @@ function ApplicationLabelFilter({
           <button
             key={l}
             onClick={() => onChange(l)}
-            className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+            className={`rounded-md border px-2 py-1 text-[11px] font-medium ${
               active ? LABEL_TONE[l] : "border-transparent bg-white/5 text-slate-400 hover:bg-white/10"
             }`}
           >
@@ -1358,7 +1358,7 @@ function ApplicationLabelPicker({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+        className={`rounded-full border px-2 py-1 text-xs font-semibold ${
           current ? LABEL_TONE[current] : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
         }`}
         title="Recruiter label (private)"
@@ -2115,7 +2115,7 @@ function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
         <div className="flex items-center gap-2 font-semibold text-amber-100">
           ⚡ Boost ROI
           {data.active && (
-            <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-amber-200">
+            <span className="rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-1 text-xs uppercase tracking-wider text-amber-200">
               Active
             </span>
           )}
@@ -2325,7 +2325,7 @@ function VacancyTimeline({ vacancyId }: { vacancyId: string }) {
                 const t = KIND_TONE[e.kind] ?? { emoji: "•", cls: "border-white/10 bg-white/5 text-slate-200" };
                 return (
                   <li key={i} className="relative">
-                    <span className={`mr-2 inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] ${t.cls}`}>
+                    <span className={`mr-2 inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs ${t.cls}`}>
                       <span aria-hidden>{t.emoji}</span>
                     </span>
                     <span className="text-xs text-slate-200">{e.title}</span>
@@ -2414,7 +2414,7 @@ function ApplyRateChip({ views, apps }: { views: number; apps: number }) {
         : "border-slate-400/30 bg-slate-400/10 text-slate-200";
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tone}`}
+      className={`rounded-full border px-2 py-1 text-xs font-semibold ${tone}`}
       title={`${apps} applications / ${views} views — apply rate`}
     >
       📈 {pct.toFixed(1)}% apply rate
@@ -2434,7 +2434,7 @@ function VacancyExpiryBadge({
   if (days > 14) return null;
   if (days < 0) {
     return (
-      <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-200">
+      <span className="rounded-full bg-rose-500/20 px-2 py-1 text-xs font-semibold text-rose-200">
         expired
       </span>
     );
@@ -2447,7 +2447,7 @@ function VacancyExpiryBadge({
         : "bg-amber-500/15 text-amber-200";
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone}`}
+      className={`rounded-full px-2 py-1 text-xs font-semibold ${tone}`}
       title={`Closes ${new Date(expiresAt).toLocaleDateString()}`}
     >
       {days === 0 ? "ends today" : `${days} day${days === 1 ? "" : "s"} left`}
@@ -2501,12 +2501,12 @@ function WhyMatchButton({ applicationId }: { applicationId: string }) {
           {(data.skillsOverlap?.length || data.skillsMissing?.length) && (
             <div className="mt-2 flex flex-wrap gap-1">
               {data.skillsOverlap?.map((s) => (
-                <span key={`m-${s}`} className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+                <span key={`m-${s}`} className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200">
                   ✓ {s}
                 </span>
               ))}
               {data.skillsMissing?.map((s) => (
-                <span key={`x-${s}`} className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] text-rose-200">
+                <span key={`x-${s}`} className="rounded-full bg-rose-500/15 px-2 py-1 text-xs text-rose-200">
                   ✗ {s}
                 </span>
               ))}
@@ -2709,7 +2709,7 @@ function AiShortlistButton({
                     </span>
                     <button
                       onClick={() => applyLabel(p.applicationId, p.rank)}
-                      className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/15 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-200 hover:bg-fuchsia-500/25"
+                      className="rounded-md border border-fuchsia-500/40 bg-fuchsia-500/15 px-2 py-1 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/25"
                     >
                       Tag {p.rank === 1 ? "TOP_PICK" : "SHORTLIST"}
                     </button>
@@ -2812,7 +2812,7 @@ function BulkMessageButton({
               {templates.map((t) => (
                 <span
                   key={t.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-slate-200"
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200"
                 >
                   <button
                     type="button"
@@ -3026,7 +3026,7 @@ function TranslateVacancyButton({
                 <button
                   key={loc}
                   onClick={() => setActiveLoc(loc)}
-                  className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
+                  className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
                     activeLoc === loc ? "bg-fuchsia-500/20 text-fuchsia-100" : "bg-white/5 text-slate-400 hover:bg-white/10"
                   }`}
                 >

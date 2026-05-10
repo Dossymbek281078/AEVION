@@ -84,7 +84,12 @@
       "Bash(gh deployment *)",
       "Bash(echo \"errors:$\\(npx tsc --noEmit 2>&1)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\user\\\\aevion-build\\\\frontend\\\\src\\\\app\\\\build\" -Recurse -Directory)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(grep -v \"dependabot\\\\|HEAD\\\\|backup\\\\|/main$\\\\|docs/\")",
+      "PowerShell(git show *)",
+      "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx\\)..\\($idx+25\\)] | ForEach-Object {Write-Host $_} })",
+      "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges &&\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx-3\\)..\\($idx+30\\)] | ForEach-Object {Write-Host \"$\\($lines.IndexOf\\($_\\) + 1\\):  $_\"} })",
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)"
     ]
   }
 }

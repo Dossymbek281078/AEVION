@@ -1,4 +1,4 @@
-# AEVION — Investor Demo & Platform Overview
+﻿# AEVION — Investor Demo & Platform Overview
 
 ## The $1B+ Trust Infrastructure for the Creator Economy
 
@@ -119,31 +119,31 @@ AEVION is not a single product. It's a **superplatform** where each module drive
 **What it does:** Registers digital objects with SHA-256 hash, timestamp, author binding, and geolocation.
 **Why it matters:** First line of defense for IP claims. Hash proves existence at a point in time.
 **Revenue:** Freemium — free registration, paid priority processing and bulk API.
-**Status:** LIVE on aevion.vercel.app/qright
+**Status:** LIVE on aevion.app/qright
 
 #### 2. QSign — Cryptographic Signatures
 **What it does:** Signs any JSON payload with HMAC-SHA256, verifies integrity end-to-end.
 **Why it matters:** Proves data hasn't been tampered with since creation. Same format across all modules.
 **Revenue:** Included in platform — drives API usage.
-**Status:** LIVE on aevion.vercel.app/qsign
+**Status:** LIVE on aevion.app/qsign
 
 #### 3. IP Bureau — Patent Bureau
 **What it does:** Signs and verifies QRight records, produces certificate-ready format.
 **Why it matters:** Bridge between informal IP registration and formal legal proceedings.
 **Revenue:** Premium certificates, legal-grade exports.
-**Status:** LIVE on aevion.vercel.app/bureau
+**Status:** LIVE on aevion.app/bureau
 
 #### 4. Planet — Compliance & Certification
 **What it does:** Runs validators on submitted artifacts, community voting, evidence root generation, and signed certificates.
 **Why it matters:** The compliance backbone — connects everything to a verifiable audit trail.
 **Revenue:** Certification fees, API access for enterprise compliance.
-**Status:** LIVE on aevion.vercel.app/planet
+**Status:** LIVE on aevion.app/planet
 
 #### 5. AEVION Awards — Music & Film
 **What it does:** Two award tracks for AI/digital music and film. Community-driven voting with transparent metrics.
 **Why it matters:** Creates cultural relevance and draws creators to the platform.
 **Revenue:** Submission fees, sponsorships, event streaming.
-**Status:** LIVE on aevion.vercel.app/awards
+**Status:** LIVE on aevion.app/awards
 
 ### TIER 2: Financial Layer
 
@@ -151,7 +151,7 @@ AEVION is not a single product. It's a **superplatform** where each module drive
 **What it does:** Digital wallets, P2P transfers, automatic royalty distribution, AEC (AEVION Credits) economy.
 **Why it matters:** Makes the ecosystem sticky. Money stays in the platform.
 **Revenue:** 0.1% transaction fee, withdrawal fees, premium features.
-**Status:** LIVE on aevion.vercel.app/bank
+**Status:** LIVE on aevion.app/bank
 
 #### 7. QPayNet — Embedded Payments
 **What it does:** Payment processing infrastructure for all AEVION modules.
@@ -197,7 +197,7 @@ AEVION is not a single product. It's a **superplatform** where each module drive
 **What it does:** Full chess engine, 6 AI difficulty levels, time controls, ELO rating system, 9 titles, puzzles.
 **Why it matters:** Engagement magnet. Chess.com has 150M users and $170M+ revenue. AEVION integrates chess with Trust Score, Bank prizes, and social features.
 **Revenue:** Premium subscriptions, tournament entry fees (paid in AEC).
-**Status:** LIVE on aevion.vercel.app/cyberchess
+**Status:** LIVE on aevion.app/cyberchess
 
 #### 15. QPersona — Digital Avatar
 **What it does:** AI-powered digital representation for work, communication, and content creation.
@@ -362,4 +362,4 @@ AEVION is not a single product. It's a **superplatform** where each module drive
 
 *AEVION — Where trust meets creation.*
 
-*aevion.vercel.app · github.com/Dossymbek281078/AEVION*
+*aevion.app · github.com/Dossymbek281078/AEVION*

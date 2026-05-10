@@ -63,6 +63,12 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     apiHints: ["/api/qright/objects", "/api/qsign/*"],
     hint: "QRight + QSign UI",
   },
+  qbuild: {
+    tier: "mvp_live",
+    primaryPath: "/build",
+    apiHints: ["/api/build/*"],
+    hint: "Найм в стройке: проекты, вакансии, AI-coach, loyalty тиры",
+  },
   qtradeoffline: {
     tier: "mvp_live",
     primaryPath: "/qtrade",

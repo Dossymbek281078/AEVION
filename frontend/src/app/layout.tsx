@@ -1,7 +1,20 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClientProviders } from "@/components/ClientProviders";
+import { getSiteUrl } from "@/lib/siteUrl";
 import "./globals.css";
+
+const SITE = getSiteUrl();
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0f172a" },
+  ],
+  colorScheme: "light dark",
+  width: "device-width",
+  initialScale: 1,
+};
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,6 +27,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE),
   title: {
     default: "AEVION — Trust infrastructure for digital assets & IP",
     template: "%s · AEVION",
@@ -25,6 +39,40 @@ export const metadata: Metadata = {
     description:
       "Registry, signatures, bureau, compliance and product map. Live product environment.",
     type: "website",
+    siteName: "AEVION",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION — Trust OS",
+    description: "Registry · signatures · bureau · compliance · bank · awards · 27 nodes.",
+  },
+};
+
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "AEVION",
+  url: SITE,
+  logo: `${SITE}/icon.png`,
+  description:
+    "Trust infrastructure for digital assets and intellectual property. IP registry (QRight), cryptographic signatures (QSign), patent bureau, compliance certification (Planet), awards, digital banking.",
+  sameAs: [`${SITE}/pitch`],
+  contactPoint: [
+    { "@type": "ContactPoint", contactType: "investor relations", email: "yahiin1978@gmail.com", areaServed: "Worldwide" },
+  ],
+};
+
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "AEVION",
+  url: SITE,
+  inLanguage: ["en", "ru", "kk"],
+  publisher: { "@type": "Organization", name: "AEVION" },
+  potentialAction: {
+    "@type": "SearchAction",
+    target: { "@type": "EntryPoint", urlTemplate: `${SITE}/help?q={search_term_string}` },
+    "query-input": "required name=search_term_string",
   },
 };
 
@@ -40,6 +88,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}
       >
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
         <ClientProviders>
           {children}
         </ClientProviders>

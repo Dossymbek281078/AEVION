@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
@@ -145,6 +145,7 @@ export default function HomePage() {
           {id:"aevion-awards-music",code:"AWM",name:"Music Awards",description:"AEVION Music Awards",kind:"product",status:"live",priority:7,tags:["awards"],runtime:{tier:"mvp_live",primaryPath:"/awards/music",apiHints:[],hint:"Awards showcase"}},
           {id:"aevion-awards-film",code:"AWF",name:"Film Awards",description:"AEVION Film Awards",kind:"product",status:"live",priority:8,tags:["awards"],runtime:{tier:"mvp_live",primaryPath:"/awards/film",apiHints:[],hint:"Awards showcase"}},
           {id:"qcoreai",code:"AI",name:"QCoreAI",description:"Multi-model AI engine",kind:"product",status:"live",priority:9,tags:["ai"],runtime:{tier:"mvp_live",primaryPath:"/qcoreai",apiHints:[],hint:"AI chat"}},
+          {id:"qtradeoffline",code:"QTO",name:"QTradeOffline",description:"Offline-first AEV payments",kind:"product",status:"live",priority:9,tags:["payments","offline"],runtime:{tier:"mvp_live",primaryPath:"/qtradeoffline",apiHints:[],hint:"Sign offline, sync later"}},
           {id:"auth",code:"AU",name:"Auth",description:"Identity & JWT",kind:"infra",status:"live",priority:10,tags:["auth"],runtime:{tier:"mvp_live",primaryPath:"/auth",apiHints:[],hint:"Identity"}},
         ]);
         setQRightObjects([{id:"d1",title:"AI Music Generator"},{id:"d2",title:"Quantum Shield Protocol"},{id:"d3",title:"CyberChess Engine"},{id:"d4",title:"Smart Contract"},{id:"d5",title:"Planet Validator"}]);
@@ -228,9 +229,10 @@ export default function HomePage() {
       qright: "/qright",
       qsign: "/qsign",
       "aevion-ip-bureau": "/bureau",
-      qtradeoffline: "/qtrade",
+      qtradeoffline: "/qtradeoffline",
       qcoreai: "/qcoreai",
       "multichat-engine": "/multichat-engine",
+      healthai: "/healthai",
     }),
     []
   );
@@ -328,6 +330,19 @@ export default function HomePage() {
               }}
             >
               Full demo →
+            </Link>
+            <Link
+              href="/pitch"
+              style={{
+                ...btnGhost,
+                border: "2px solid rgba(251,191,36,0.7)",
+                background: "linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.18))",
+                color: "#fff",
+                fontWeight: 800,
+                boxShadow: "0 8px 24px rgba(251,191,36,0.25)",
+              }}
+            >
+              Investor pitch · $1B+ →
             </Link>
           </div>
 
@@ -474,7 +489,7 @@ export default function HomePage() {
               { title: "First-mover monopoly", desc: "The world's first electronic patent bureau. Any future competitor building similar systems creates a derivative work — our IP is self-protected.", metric: "Only 1", sub: "in the world" },
               { title: "$340B addressable market", desc: "IP licensing ($180B) + Creator economy ($104B) + Digital payments ($56B). AEVION sits at the intersection of all three.", metric: "$340B", sub: "TAM" },
               { title: "4 network effects", desc: "Trust Graph (data), Creator Economy (economic), Financial (switching costs), Cross-module (scope) — each one alone justifies investment.", metric: "4x", sub: "compounding moats" },
-              { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.vercel.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
+              { title: "29 live product nodes", desc: "Not slides. Working code deployed at aevion.app. Full pipeline: register → sign → certify → earn. Try it yourself.", metric: "29", sub: "modules live" },
               { title: "Quantum-resistant", desc: "Ed25519 + Shamir's Secret Sharing + HMAC-SHA256. Ready for post-quantum migration. No other IP platform has this.", metric: "3-layer", sub: "crypto shield" },
               { title: "Year 5: $2B+ revenue", desc: "Platform subscriptions + transaction fees + API licensing + advertising + banking services. Revenue compounds, not grows linearly.", metric: "$2B+", sub: "Year 5 ARR" },
             ].map((card) => (

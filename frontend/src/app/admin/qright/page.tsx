@@ -79,6 +79,14 @@ export default function AdminQRightPage() {
     }[]
   >([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [sources, setSources] = useState<{
+    days: number;
+    uniqueHosts: number;
+    totalFetches: number;
+    hosts: { host: string; totalFetches: number; uniqueObjects: number }[];
+  } | null>(null);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+  const [sourcesDays, setSourcesDays] = useState<7 | 30 | 90>(30);
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -241,6 +249,34 @@ export default function AdminQRightPage() {
   useEffect(() => {
     if (whoami?.isAdmin) loadAudit();
   }, [whoami, loadAudit]);
+
+  const loadSources = useCallback(async () => {
+    if (!whoami?.isAdmin) return;
+    setSourcesLoading(true);
+    try {
+      const r = await fetch(
+        apiUrl(`/api/qright/admin/sources?days=${sourcesDays}&limit=50`),
+        { headers: authHeaders() }
+      );
+      if (r.ok) {
+        const data = await r.json();
+        setSources({
+          days: data.days,
+          uniqueHosts: data.uniqueHosts || 0,
+          totalFetches: data.totalFetches || 0,
+          hosts: data.hosts || [],
+        });
+      }
+    } catch {
+      // Silent — abuse-detection panel is supplementary.
+    } finally {
+      setSourcesLoading(false);
+    }
+  }, [whoami, authHeaders, sourcesDays]);
+
+  useEffect(() => {
+    if (whoami?.isAdmin) loadSources();
+  }, [whoami, loadSources]);
 
   const submitBulk = async () => {
     if (selected.size === 0) return;
@@ -536,6 +572,104 @@ export default function AdminQRightPage() {
                               </button>
                             )}
                           </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ marginTop: 28, marginBottom: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <h2 style={{ fontSize: 16, fontWeight: 900, color: "#0f172a", margin: 0 }}>
+                  Top embed sources
+                </h2>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                  {sources
+                    ? `${sources.uniqueHosts} hosts · ${sources.totalFetches.toLocaleString()} fetches in last ${sources.days}d`
+                    : "Aggregated across all objects — useful for abuse detection"}
+                </span>
+                <div style={{ flex: 1 }} />
+                <div style={{ display: "flex", gap: 4 }}>
+                  {([7, 30, 90] as const).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setSourcesDays(d)}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(15,23,42,0.15)",
+                        background: sourcesDays === d ? "#0f172a" : "#fff",
+                        color: sourcesDays === d ? "#fff" : "#475569",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {d}d
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={loadSources}
+                  disabled={sourcesLoading}
+                  style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontSize: 11, fontWeight: 700, cursor: sourcesLoading ? "not-allowed" : "pointer" }}
+                >
+                  {sourcesLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+              {!sources || sources.hosts.length === 0 ? (
+                <div style={{ padding: 16, textAlign: "center", color: "#94a3b8", fontSize: 12, ...card }}>
+                  {sourcesLoading ? "Loading…" : "No fetch sources tracked yet."}
+                </div>
+              ) : (
+                <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 120px 100px",
+                      padding: "10px 14px",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      color: "#64748b",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      borderBottom: "1px solid rgba(15,23,42,0.08)",
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div>Source host</div>
+                    <div style={{ textAlign: "right" }}>Fetches</div>
+                    <div style={{ textAlign: "right" }}>Objects</div>
+                  </div>
+                  {sources.hosts.map((row) => {
+                    const isDirect = row.host === "(direct)";
+                    return (
+                      <div
+                        key={row.host}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 120px 100px",
+                          padding: "8px 14px",
+                          fontSize: 12,
+                          alignItems: "center",
+                          borderBottom: "1px solid rgba(15,23,42,0.04)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontFamily: "monospace",
+                            color: isDirect ? "#94a3b8" : "#0d9488",
+                            fontWeight: 700,
+                            wordBreak: "break-all",
+                          }}
+                        >
+                          {row.host}
+                        </div>
+                        <div style={{ textAlign: "right", fontWeight: 700, color: "#0f172a" }}>
+                          {row.totalFetches.toLocaleString()}
+                        </div>
+                        <div style={{ textAlign: "right", color: "#475569" }}>
+                          {row.uniqueObjects}
                         </div>
                       </div>
                     );

@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { feature as topoFeature } from "topojson-client";
 import countriesData from "world-atlas/countries-110m.json";
+import earcut from "earcut";
 
 type Project = {
   id: string;
@@ -68,6 +69,10 @@ const EARTH_TEXTURE_CANDIDATES = {
     "https://threejs.org/examples/textures/planets/earth_clouds_1024.png",
     "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_clouds_1024.png",
   ],
+  night: [
+    "https://threejs.org/examples/textures/planets/earth_lights_2048.png",
+    "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_lights_2048.png",
+  ],
 } as const;
 
 function loadTextureChain(
@@ -110,6 +115,233 @@ function geoFromLatLon(lat: number, lon: number, radius: number) {
 
 let borderVerticesCache: Float32Array | null = null;
 let borderVerticesBuildStarted = false;
+
+/** Кэш country-полигонов для point-in-polygon на ховере. */
+type CountryCacheEntry = {
+  name: string;
+  bbox: [number, number, number, number]; // [west, south, east, north]
+  rings: number[][][]; // массив полигонов (для MultiPolygon), каждый = массив колец, ring = [[lon,lat], ...]
+};
+let countriesCache: CountryCacheEntry[] | null = null;
+let countriesCacheBuildStarted = false;
+
+function pointInRing(lon: number, lat: number, ring: number[][]) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0],
+      yi = ring[i][1];
+    const xj = ring[j][0],
+      yj = ring[j][1];
+    if (
+      yi > lat !== yj > lat &&
+      lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * topojson country names ↔ имена в наших данных (`m.country`).
+ * 110m carto использует "United States of America" / "United Kingdom",
+ * у нас в `projectGeo`/`objectGeo` — "United States" / "UK".
+ */
+const COUNTRY_NAME_ALIASES: Record<string, string> = {
+  "United States of America": "United States",
+  "United Kingdom": "UK",
+  "Russian Federation": "Russia",
+};
+function aliasCountry(name: string): string {
+  return COUNTRY_NAME_ALIASES[name] ?? name;
+}
+
+/** Локализация названий стран для UI. Базовое имя — английское из topojson. */
+const COUNTRY_I18N: Record<string, { ru?: string; kk?: string }> = {
+  "United States": { ru: "США", kk: "АҚШ" },
+  UK: { ru: "Великобритания", kk: "Ұлыбритания" },
+  Russia: { ru: "Россия", kk: "Ресей" },
+  Germany: { ru: "Германия", kk: "Германия" },
+  France: { ru: "Франция", kk: "Франция" },
+  Italy: { ru: "Италия", kk: "Италия" },
+  Spain: { ru: "Испания", kk: "Испания" },
+  Netherlands: { ru: "Нидерланды", kk: "Нидерланды" },
+  Turkey: { ru: "Турция", kk: "Түркия" },
+  Japan: { ru: "Япония", kk: "Жапония" },
+  China: { ru: "Китай", kk: "Қытай" },
+  India: { ru: "Индия", kk: "Үндістан" },
+  Brazil: { ru: "Бразилия", kk: "Бразилия" },
+  Canada: { ru: "Канада", kk: "Канада" },
+  Australia: { ru: "Австралия", kk: "Австралия" },
+  Mexico: { ru: "Мексика", kk: "Мексика" },
+  Argentina: { ru: "Аргентина", kk: "Аргентина" },
+  "South Korea": { ru: "Южная Корея", kk: "Оңтүстік Корея" },
+  Indonesia: { ru: "Индонезия", kk: "Индонезия" },
+  Vietnam: { ru: "Вьетнам", kk: "Вьетнам" },
+  Thailand: { ru: "Таиланд", kk: "Тайланд" },
+  Singapore: { ru: "Сингапур", kk: "Сингапур" },
+  Malaysia: { ru: "Малайзия", kk: "Малайзия" },
+  Philippines: { ru: "Филиппины", kk: "Филиппин" },
+  "Saudi Arabia": { ru: "Саудовская Аравия", kk: "Сауд Арабиясы" },
+  "United Arab Emirates": { ru: "ОАЭ", kk: "БАӘ" },
+  Egypt: { ru: "Египет", kk: "Мысыр" },
+  "South Africa": { ru: "ЮАР", kk: "ОАР" },
+  Nigeria: { ru: "Нигерия", kk: "Нигерия" },
+  Israel: { ru: "Израиль", kk: "Израиль" },
+  Switzerland: { ru: "Швейцария", kk: "Швейцария" },
+  Sweden: { ru: "Швеция", kk: "Швеция" },
+  Norway: { ru: "Норвегия", kk: "Норвегия" },
+  Denmark: { ru: "Дания", kk: "Дания" },
+  Finland: { ru: "Финляндия", kk: "Финляндия" },
+  Poland: { ru: "Польша", kk: "Польша" },
+  Ukraine: { ru: "Украина", kk: "Украина" },
+  Kazakhstan: { ru: "Казахстан", kk: "Қазақстан" },
+  Belarus: { ru: "Беларусь", kk: "Беларусь" },
+  Belgium: { ru: "Бельгия", kk: "Бельгия" },
+  Austria: { ru: "Австрия", kk: "Австрия" },
+  Portugal: { ru: "Португалия", kk: "Португалия" },
+  Greece: { ru: "Греция", kk: "Греция" },
+  "Czech Republic": { ru: "Чехия", kk: "Чехия" },
+  Czechia: { ru: "Чехия", kk: "Чехия" },
+  Hungary: { ru: "Венгрия", kk: "Венгрия" },
+  Iran: { ru: "Иран", kk: "Иран" },
+  Iraq: { ru: "Ирак", kk: "Ирак" },
+  Pakistan: { ru: "Пакистан", kk: "Пәкістан" },
+  Bangladesh: { ru: "Бангладеш", kk: "Бангладеш" },
+  Ireland: { ru: "Ирландия", kk: "Ирландия" },
+  "New Zealand": { ru: "Новая Зеландия", kk: "Жаңа Зеландия" },
+  Chile: { ru: "Чили", kk: "Чили" },
+  Colombia: { ru: "Колумбия", kk: "Колумбия" },
+  Peru: { ru: "Перу", kk: "Перу" },
+  Romania: { ru: "Румыния", kk: "Румыния" },
+  Bulgaria: { ru: "Болгария", kk: "Болгария" },
+  Serbia: { ru: "Сербия", kk: "Сербия" },
+  Croatia: { ru: "Хорватия", kk: "Хорватия" },
+  Estonia: { ru: "Эстония", kk: "Эстония" },
+  Latvia: { ru: "Латвия", kk: "Латвия" },
+  Lithuania: { ru: "Литва", kk: "Литва" },
+  Georgia: { ru: "Грузия", kk: "Грузия" },
+  Armenia: { ru: "Армения", kk: "Армения" },
+  Azerbaijan: { ru: "Азербайджан", kk: "Әзірбайжан" },
+  Uzbekistan: { ru: "Узбекистан", kk: "Өзбекстан" },
+  Kyrgyzstan: { ru: "Кыргызстан", kk: "Қырғызстан" },
+  Tajikistan: { ru: "Таджикистан", kk: "Тәжікстан" },
+  Turkmenistan: { ru: "Туркменистан", kk: "Түрікменстан" },
+  Mongolia: { ru: "Монголия", kk: "Моңғолия" },
+  World: { ru: "Мир", kk: "Әлем" },
+};
+
+function detectLocale(): "en" | "ru" | "kk" {
+  if (typeof window === "undefined") return "en";
+  try {
+    const stored = window.localStorage.getItem("aevion:locale");
+    if (stored === "ru" || stored === "kk" || stored === "en") return stored;
+  } catch {}
+  const lang =
+    typeof navigator !== "undefined" && navigator.language
+      ? navigator.language.toLowerCase()
+      : "en";
+  if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("kk") || lang.startsWith("kz")) return "kk";
+  return "en";
+}
+
+function displayCountry(name: string, locale: "en" | "ru" | "kk"): string {
+  if (locale === "en") return name;
+  const e = COUNTRY_I18N[name];
+  if (!e) return name;
+  return (locale === "kk" ? e.kk : e.ru) ?? name;
+}
+
+function findCountryAt(lat: number, lon: number): string | null {
+  if (!countriesCache) return null;
+  for (const c of countriesCache) {
+    const [w, s, e, n] = c.bbox;
+    if (lat < s || lat > n) continue;
+    // Учёт wrap по долготе для стран на 180°.
+    if (w <= e ? lon < w || lon > e : lon < w && lon > e) continue;
+    for (const polygon of c.rings) {
+      // polygon[0] = outer ring; ignore holes для 110m carto.
+      if (pointInRing(lon, lat, polygon[0])) return c.name;
+    }
+  }
+  return null;
+}
+
+function pointToLatLon(p: THREE.Vector3): [number, number] {
+  const len = p.length() || 1;
+  const x = p.x / len;
+  const y = p.y / len;
+  const z = p.z / len;
+  const lat = Math.asin(Math.max(-1, Math.min(1, y))) * (180 / Math.PI);
+  let lon = Math.atan2(z, -x) * (180 / Math.PI) - 180;
+  while (lon < -180) lon += 360;
+  while (lon > 180) lon -= 360;
+  return [lat, lon];
+}
+
+function buildCountriesIfNeeded() {
+  if (countriesCache) return;
+  if (countriesCacheBuildStarted) return;
+  countriesCacheBuildStarted = true;
+
+  try {
+    const topoRoot = countriesData as Parameters<typeof topoFeature>[0];
+    const countriesObj = (
+      countriesData as { objects: { countries: Parameters<typeof topoFeature>[1] } }
+    ).objects.countries;
+    const geojson = topoFeature(topoRoot, countriesObj) as FeatureCollection;
+
+    const entries: CountryCacheEntry[] = [];
+    for (const f of geojson.features) {
+      const name: string =
+        (f.properties as Record<string, unknown> | null)?.name as string ??
+        (f.properties as Record<string, unknown> | null)?.NAME as string ??
+        "Unknown";
+      const geom = f.geometry;
+      if (!geom) continue;
+
+      const polys: number[][][] = [];
+      let west = 180, south = 90, east = -180, north = -90;
+
+      const processRing = (ring: number[][]) => {
+        for (const [lon, lat] of ring) {
+          if (lon < west) west = lon;
+          if (lon > east) east = lon;
+          if (lat < south) south = lat;
+          if (lat > north) north = lat;
+        }
+      };
+
+      if (geom.type === "Polygon") {
+        const poly = geom as Polygon;
+        if (!poly.coordinates?.length) continue;
+        polys.push(poly.coordinates[0]);
+        processRing(poly.coordinates[0]);
+      } else if (geom.type === "MultiPolygon") {
+        const mp = geom as MultiPolygon;
+        if (!mp.coordinates?.length) continue;
+        for (const poly of mp.coordinates) {
+          if (!poly?.length) continue;
+          polys.push(poly[0]);
+          processRing(poly[0]);
+        }
+      } else {
+        continue;
+      }
+
+      entries.push({
+        name,
+        bbox: [west, south, east, north],
+        rings: polys.map((ring) => [ring]),
+      });
+    }
+
+    countriesCache = entries;
+  } catch {
+    countriesCache = [];
+  }
+}
 
 function projectGeo(projectId: string) {
   const known: Record<
@@ -374,8 +606,47 @@ export default function Globus3D({
     tourRef.current = tour;
   }, [tour]);
 
-  /** Texture loading progress — albedo / normal / specular / clouds. */
-  const TEX_TOTAL = 4;
+  /** Time-lapse: ускоренный sun cycle (1 час за 1 реальную секунду = 3600x). */
+  const [timeLapse, setTimeLapse] = useState(false);
+  const timeLapseRef = useRef(false);
+  const timeLapseOffsetRef = useRef(0);
+  useEffect(() => {
+    timeLapseRef.current = timeLapse;
+    if (!timeLapse) timeLapseOffsetRef.current = 0;
+  }, [timeLapse]);
+
+  /** Canvas ref для PNG snapshot. */
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /** Setter для selected-country fill+outline (живёт в Three.js scope). */
+  const selectedCountryVizRef = useRef<((name: string | null) => void) | null>(null);
+
+  /** Setter для ecosystem-arcs от маркеров в выбранной стране к их «сородичам». */
+  const ecosystemArcsRef = useRef<
+    ((name: string | null, allMarkers: Marker[]) => void) | null
+  >(null);
+
+  /** Minimap dot — direct DOM update из RAF tick без React re-render. */
+  const minimapDotRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let raf: number;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const dot = minimapDotRef.current;
+      if (!dot) return;
+      const yaw = yawRef.current;
+      const pitch = pitchRef.current;
+      const r = 26; // half of minimap radius (px)
+      const x = Math.sin(yaw) * Math.cos(pitch) * r;
+      const y = -Math.sin(pitch) * r;
+      dot.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  /** Texture loading progress — albedo / normal / specular / clouds / night. */
+  const TEX_TOTAL = 5;
   const [texLoaded, setTexLoaded] = useState(0);
 
   /** Поиск и фильтр. Не пересоздаём сцену — меняем opacity у уже созданных мешей. */
@@ -444,6 +715,22 @@ export default function Globus3D({
   } | null>(null);
   const labelRef = useRef<typeof label>(null);
 
+  /** Country name detected by globe-surface point-in-polygon (shown as floating badge). */
+  const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
+  const hoveredCountryRef = useRef<string | null>(null);
+
+  /** Локаль для отображения country names. */
+  const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
+  useEffect(() => {
+    setLocale(detectLocale());
+  }, []);
+  const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const selectedCountryRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedCountryRef.current = selectedCountry;
+  }, [selectedCountry]);
+
   useEffect(() => {
     labelRef.current = label;
   }, [label]);
@@ -454,6 +741,16 @@ export default function Globus3D({
     onNavigateRef.current = onNavigate;
     onSelectLocationRef.current = onSelectLocation;
   }, [onNavigate, onSelectLocation]);
+
+  /** Рефы на сеттеры — чтобы Three.js-обработчики могли менять search/filter без эффекта-зависимости. */
+  const setQueryRef = useRef(setQuery);
+  const setFilterToAllRef = useRef(() => setFilter("all"));
+  const setSelectedCountryRef = useRef(setSelectedCountry);
+  useEffect(() => {
+    setQueryRef.current = setQuery;
+    setFilterToAllRef.current = () => setFilter("all");
+    setSelectedCountryRef.current = setSelectedCountry;
+  });
 
   /** Прокси для onPointerUp — функция определена ниже, но обёртка стабильна. */
   const focusMarkerRef = useRef<(m: Marker) => void>(() => {});
@@ -600,11 +897,19 @@ export default function Globus3D({
     return [...projectMarkers, ...objectMarkers];
   }, [projects, qrightObjects, focusProjectIds]);
 
+  /** Маркеры в выбранной стране — для side-sheet списка. */
+  const selectedCountryMarkers = useMemo<Marker[]>(() => {
+    if (!selectedCountry) return [];
+    return markers.filter((m) => m.country === selectedCountry);
+  }, [selectedCountry, markers]);
+
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
     const q = query.trim().toLowerCase();
+    const sel = selectedCountry;
     const matches = (m: Marker) => {
       if (filter !== "all" && m.category !== filter) return false;
+      if (sel && m.country !== sel) return false;
       if (!q) return true;
       const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
       return (
@@ -632,7 +937,7 @@ export default function Globus3D({
         visibleByKey.get(a.fromKey) === true &&
         visibleByKey.get(a.toKey) === true;
     }
-  }, [query, filter, markers]);
+  }, [query, filter, selectedCountry, markers]);
 
   /** Auto-focus при единственном совпадении поиска. */
   useEffect(() => {
@@ -746,6 +1051,7 @@ export default function Globus3D({
       alpha: true,
       powerPreference: "high-performance",
       failIfMajorPerformanceCaveat: false,
+      preserveDrawingBuffer: true,
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -758,6 +1064,7 @@ export default function Globus3D({
     canvas.style.height = "100%";
     canvas.style.verticalAlign = "top";
     el.appendChild(canvas);
+    canvasRef.current = canvas;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 2000);
@@ -799,6 +1106,7 @@ export default function Globus3D({
     let albedoTex: THREE.Texture | null = null;
     let normalTex: THREE.Texture | null = null;
     let specTex: THREE.Texture | null = null;
+    let nightTex: THREE.Texture | null = null;
 
     setTexLoaded(0);
     let loadedCount = 0;
@@ -807,6 +1115,9 @@ export default function Globus3D({
       setTexLoaded(loadedCount);
     };
 
+    /** Sun direction в world space — глобус в (0,0,0), sun в фиксированной позиции. */
+    const sunWorldDir = new THREE.Vector3(260, 80, 180).normalize();
+
     const applyEarthMaterial = () => {
       if (!albedoTex) return;
       albedoTex.colorSpace = THREE.SRGBColorSpace;
@@ -814,6 +1125,65 @@ export default function Globus3D({
       if (normalTex) {
         normalTex.colorSpace = THREE.NoColorSpace;
       }
+
+      // Если есть night-карта — собираем кастомный shader с day/night миксом.
+      if (nightTex) {
+        nightTex.colorSpace = THREE.SRGBColorSpace;
+        nightTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+
+        const shaderMat = new THREE.ShaderMaterial({
+          uniforms: {
+            dayMap: { value: albedoTex },
+            nightMap: { value: nightTex },
+            normalMap: { value: normalTex },
+            useNormalMap: { value: normalTex ? 1 : 0 },
+            sunDir: { value: sunWorldDir.clone() },
+          },
+          vertexShader: [
+            "varying vec2 vUv;",
+            "varying vec3 vWorldNormal;",
+            "void main() {",
+            "  vUv = uv;",
+            "  vWorldNormal = normalize(mat3(modelMatrix) * normal);",
+            "  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);",
+            "}",
+          ].join("\n"),
+          fragmentShader: [
+            "uniform sampler2D dayMap;",
+            "uniform sampler2D nightMap;",
+            "uniform sampler2D normalMap;",
+            "uniform float useNormalMap;",
+            "uniform vec3 sunDir;",
+            "varying vec2 vUv;",
+            "varying vec3 vWorldNormal;",
+            "void main() {",
+            "  vec3 day = texture2D(dayMap, vUv).rgb;",
+            "  vec3 night = texture2D(nightMap, vUv).rgb;",
+            "  // Лёгкий perturbation нормали по normalMap (если есть).",
+            "  vec3 N = normalize(vWorldNormal);",
+            "  if (useNormalMap > 0.5) {",
+            "    vec3 nm = texture2D(normalMap, vUv).rgb * 2.0 - 1.0;",
+            "    N = normalize(N + nm * 0.18);",
+            "  }",
+            "  float dotNL = dot(N, sunDir);",
+            "  // Smooth terminator: -0.12 (полная ночь) → 0.22 (полный день).",
+            "  float t = smoothstep(-0.12, 0.22, dotNL);",
+            "  // Ambient + diffuse на дневной стороне.",
+            "  vec3 dayLit = day * (0.18 + 0.92 * max(dotNL, 0.0));",
+            "  // Ночные огни — ярче в темноте, гасятся к терминатору.",
+            "  vec3 nightLit = night * (1.5 - t * 1.4);",
+            "  // Лёгкий синий тон ночной поверхности (без огней).",
+            "  vec3 nightDark = day * 0.04 + vec3(0.012, 0.018, 0.045);",
+            "  vec3 col = mix(nightDark + nightLit, dayLit, t);",
+            "  gl_FragColor = vec4(col, 1.0);",
+            "}",
+          ].join("\n"),
+        });
+        globe.material = shaderMat;
+        return;
+      }
+
+      // Fallback — обычный Phong (если night текстура не подгрузилась).
       const mat = new THREE.MeshPhongMaterial({
         map: albedoTex,
         specular: new THREE.Color(0x111122),
@@ -903,6 +1273,21 @@ export default function Globus3D({
       },
       () => {
         cloudMesh.visible = false;
+        oneTexDone();
+      },
+    );
+
+    loadTextureChain(
+      loader,
+      EARTH_TEXTURE_CANDIDATES.night,
+      (t) => {
+        nightTex = t;
+        bumpApply();
+        oneTexDone();
+      },
+      () => {
+        nightTex = null;
+        bumpApply();
         oneTexDone();
       },
     );
@@ -1063,6 +1448,219 @@ export default function Globus3D({
       const borders = new THREE.LineSegments(borderGeom, borderMat);
       earthGroup.add(borders);
     }
+
+    // Density heatmap — постоянный нежный контур стран, в которых есть наши маркеры.
+    const presenceOutlineGroup = new THREE.Group();
+    earthGroup.add(presenceOutlineGroup);
+
+    // Hovered-country outline — светящийся контур поверх borders, пересоздаётся при смене страны.
+    const countryOutlineGroup = new THREE.Group();
+    earthGroup.add(countryOutlineGroup);
+
+    const countryOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+    });
+    countryOutlineMat.blending = THREE.AdditiveBlending;
+
+    let lastHighlightedCountry: string | null = null;
+    const setCountryHighlight = (countryName: string | null) => {
+      if (countryName === lastHighlightedCountry) return;
+      lastHighlightedCountry = countryName;
+      // Освобождаем прошлые линии страны.
+      while (countryOutlineGroup.children.length > 0) {
+        const child = countryOutlineGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        countryOutlineGroup.remove(child);
+        child.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const entry = countriesCache.find((c) => c.name === countryName);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 2) continue;
+        // Линия контура — чуть выше borders, чтобы не утонула.
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 0.95);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, countryOutlineMat);
+        line.renderOrder = 5;
+        countryOutlineGroup.add(line);
+      }
+    };
+
+    // Selected-country visualization — постоянная заливка + жирный outline.
+    const selectedCountryGroup = new THREE.Group();
+    earthGroup.add(selectedCountryGroup);
+
+    const selectedFillMat = new THREE.MeshBasicMaterial({
+      color: 0x4cc1ff,
+      transparent: true,
+      opacity: 0.22,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    selectedFillMat.blending = THREE.AdditiveBlending;
+
+    const selectedOutlineMat = new THREE.LineBasicMaterial({
+      color: 0x9be9ff,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+    });
+    selectedOutlineMat.blending = THREE.AdditiveBlending;
+
+    const setSelectedCountryViz = (countryName: string | null) => {
+      while (selectedCountryGroup.children.length > 0) {
+        const ch = selectedCountryGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        selectedCountryGroup.remove(ch);
+        ch.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const entry = countriesCache.find((c) => c.name === countryName);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 4) continue;
+
+        // Skip polygons crossing 180° meridian — earcut в lon/lat 2D не поймёт wrap.
+        let wraps = false;
+        for (let i = 1; i < ring.length; i++) {
+          if (Math.abs(ring[i][0] - ring[i - 1][0]) > 180) {
+            wraps = true;
+            break;
+          }
+        }
+
+        // Жирный outline — всегда (даже для wrap-стран).
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 1.05);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, selectedOutlineMat);
+        line.renderOrder = 6;
+        selectedCountryGroup.add(line);
+
+        if (wraps) continue;
+
+        // Triangulated fill — earcut over [lon,lat,...] flat.
+        const flat: number[] = [];
+        for (const [lon, lat] of ring) flat.push(lon, lat);
+        const indices = earcut(flat, undefined, 2);
+        if (indices.length === 0) continue;
+
+        const vCount = flat.length / 2;
+        const positions = new Float32Array(vCount * 3);
+        for (let i = 0; i < vCount; i++) {
+          const lon = flat[i * 2];
+          const lat = flat[i * 2 + 1];
+          const p = geoFromLatLon(lat, lon, radius + 0.5);
+          positions[i * 3] = p.x;
+          positions[i * 3 + 1] = p.y;
+          positions[i * 3 + 2] = p.z;
+        }
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geom.setIndex(
+          new THREE.BufferAttribute(
+            vCount > 65535 ? new Uint32Array(indices) : new Uint16Array(indices),
+            1,
+          ),
+        );
+
+        const mesh = new THREE.Mesh(geom, selectedFillMat);
+        mesh.renderOrder = 4;
+        selectedCountryGroup.add(mesh);
+      }
+    };
+
+    selectedCountryVizRef.current = setSelectedCountryViz;
+
+    // Ecosystem arcs — динамические дуги от маркеров выбранной страны к их
+    // «сородичам» в других странах (top-3 ближайших одной категории).
+    const ecosystemArcsGroup = new THREE.Group();
+    earthGroup.add(ecosystemArcsGroup);
+
+    const setEcosystemArcs = (
+      countryName: string | null,
+      allMarkers: Marker[],
+    ) => {
+      while (ecosystemArcsGroup.children.length > 0) {
+        const ch = ecosystemArcsGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+          material?: { dispose?: () => void };
+        };
+        ecosystemArcsGroup.remove(ch);
+        ch.geometry?.dispose?.();
+        ch.material?.dispose?.();
+      }
+      if (!countryName) return;
+
+      const inCountry = allMarkers.filter((m) => m.country === countryName);
+      if (inCountry.length === 0) return;
+      const others = allMarkers.filter((m) => m.country !== countryName);
+      if (others.length === 0) return;
+
+      const links: Array<{ a: Marker; b: Marker; color: number }> = [];
+      for (const a of inCountry) {
+        const sameCat = others.filter((b) => b.category === a.category);
+        if (sameCat.length === 0) continue;
+        const sorted = sameCat
+          .map((b) => ({
+            b,
+            d: Math.hypot(
+              a.lat - b.lat,
+              (a.lon - b.lon) * Math.cos((a.lat * Math.PI) / 180),
+            ),
+          }))
+          .sort((p, q) => p.d - q.d)
+          .slice(0, 3);
+        for (const { b } of sorted) links.push({ a, b, color: a.color });
+      }
+
+      for (const link of links) {
+        const pa = geoFromLatLon(link.a.lat, link.a.lon, radius + 1.5);
+        const pb = geoFromLatLon(link.b.lat, link.b.lon, radius + 1.5);
+        const start = new THREE.Vector3(pa.x, pa.y, pa.z);
+        const end = new THREE.Vector3(pb.x, pb.y, pb.z);
+        const midDir = start.clone().add(end).normalize();
+        const lift = 1.18 + Math.min(0.4, start.distanceTo(end) / (radius * 4));
+        const control = midDir.multiplyScalar(radius * lift);
+        const curve = new THREE.QuadraticBezierCurve3(start, control, end);
+        const points = curve.getPoints(48);
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const mat = new THREE.LineBasicMaterial({
+          color: link.color,
+          transparent: true,
+          opacity: 0.55,
+          depthTest: false,
+        });
+        mat.blending = THREE.AdditiveBlending;
+        const line = new THREE.Line(geo, mat);
+        line.renderOrder = 7;
+        ecosystemArcsGroup.add(line);
+      }
+    };
+
+    ecosystemArcsRef.current = setEcosystemArcs;
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -1237,21 +1835,66 @@ export default function Globus3D({
     const arcStartTime = performance.now();
     const ARC_DRAW_MS = 1400;
 
-    // Освещение настроено для day/night эффекта без external night-texture:
-    // ambient очень мягкий → ночная сторона глубоко тёмная (terminator-эффект).
-    const hemi = new THREE.HemisphereLight(0x6e8ed0, 0x040612, 0.32);
+    // Density heatmap: outline стран, где у нас живут маркеры. Контур повторяется по
+    // числу маркеров (через increment opacity), и игнорирует hover-overlay по renderOrder.
+    {
+      buildCountriesIfNeeded();
+      if (countriesCache && countriesCache.length > 0) {
+        const presenceCount = new Map<string, number>();
+        for (const m of markers) {
+          const name = findCountryAt(m.lat, m.lon);
+          if (!name) continue;
+          presenceCount.set(name, (presenceCount.get(name) ?? 0) + 1);
+        }
+        const sortedTop: Array<[string, number]> = [...presenceCount.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+        setTopCountries(sortedTop);
+        for (const [name, count] of presenceCount) {
+          const entry = countriesCache.find((c) => c.name === name);
+          if (!entry) continue;
+          // Densitу — больше маркеров → ярче контур (clamped).
+          const op = Math.min(0.55, 0.18 + 0.08 * count);
+          const mat = new THREE.LineBasicMaterial({
+            color: 0x6cd6ff,
+            transparent: true,
+            opacity: op,
+            depthWrite: false,
+          });
+          mat.blending = THREE.AdditiveBlending;
+          for (const polygon of entry.rings) {
+            const ring = polygon[0];
+            if (!ring || ring.length < 2) continue;
+            const linePts: THREE.Vector3[] = [];
+            for (const [lon, lat] of ring) {
+              const p = geoFromLatLon(lat, lon, radius + 0.7);
+              linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+            }
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+            const line = new THREE.LineLoop(lineGeo, mat);
+            line.renderOrder = 3;
+            presenceOutlineGroup.add(line);
+          }
+        }
+      }
+    }
+
+    // Освещение для облаков и halo (globe — shader-based, не зависит от scene lights).
+    // hemi пониже — иначе облака на ночной стороне светятся, разрушая terminator.
+    const hemi = new THREE.HemisphereLight(0x6e8ed0, 0x040612, 0.18);
     scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xffffff, 1.55);
     sun.position.set(260, 80, 180);
     scene.add(sun);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.05);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.04);
     scene.add(ambient);
 
     let raf = 0;
     let isHovering = false;
     let lastTime = 0;
+    let lastSunUpdate = -1000;
 
     /** Drag/inertia. */
     let dragging = false;
@@ -1298,7 +1941,35 @@ export default function Globus3D({
         setLabel(null);
         isHovering = false;
         canvas.style.cursor = dragging ? "grabbing" : "grab";
+
+        // Globe-surface country detection — raycast the globe sphere.
+        buildCountriesIfNeeded();
+        const globeHits = raycaster.intersectObject(globe, false);
+        if (globeHits.length > 0) {
+          const pt = globeHits[0].point;
+          // Undo the earthGroup rotation (earthGroup has no rotation in this scene).
+          const [lat, lon] = pointToLatLon(pt);
+          const country = findCountryAt(lat, lon);
+          if (country !== hoveredCountryRef.current) {
+            hoveredCountryRef.current = country;
+            setHoveredCountry(country);
+            setCountryHighlight(country);
+          }
+        } else {
+          if (hoveredCountryRef.current !== null) {
+            hoveredCountryRef.current = null;
+            setHoveredCountry(null);
+            setCountryHighlight(null);
+          }
+        }
         return;
+      }
+
+      // If a marker is hovered, clear the country badge.
+      if (hoveredCountryRef.current !== null) {
+        hoveredCountryRef.current = null;
+        setHoveredCountry(null);
+        setCountryHighlight(null);
       }
 
       const top = intersects[0];
@@ -1408,6 +2079,13 @@ export default function Globus3D({
             country: cur.marker.country,
             city: cur.marker.city,
           });
+        } else if (hoveredCountryRef.current) {
+          // Клик по пустой стране → выбираем её: side sheet + фильтр по стране.
+          const aliased = aliasCountry(hoveredCountryRef.current);
+          setFilterToAllRef.current();
+          setQueryRef.current("");
+          setSelectedCountryRef.current(aliased);
+          onSelectLocationRef.current({ country: aliased });
         }
       }
     };
@@ -1424,6 +2102,11 @@ export default function Globus3D({
         setLabel(null);
         isHovering = false;
         cursorXYRef.current = null;
+        if (hoveredCountryRef.current !== null) {
+          hoveredCountryRef.current = null;
+          setHoveredCountry(null);
+          setCountryHighlight(null);
+        }
       }
     };
 
@@ -1471,6 +2154,39 @@ export default function Globus3D({
 
       // Облака чуть-чуть бегут всегда — оживляет сцену.
       cloudMesh.rotation.y += dt * 0.00004;
+
+      // Dynamic sun: пересчитываем sunDir по реальному UTC раз в ~250мс
+      // (или каждые 50мс в time-lapse — иначе дёргается).
+      if (timeLapseRef.current) {
+        timeLapseOffsetRef.current += dt * 3600;
+      }
+      const sunInterval = timeLapseRef.current ? 50 : 250;
+      if (t - lastSunUpdate > sunInterval) {
+        lastSunUpdate = t;
+        const now = new Date(Date.now() + timeLapseOffsetRef.current);
+        const utcH =
+          now.getUTCHours() +
+          now.getUTCMinutes() / 60 +
+          now.getUTCSeconds() / 3600;
+        const lonSun = -(utcH - 12) * 15;
+        const yearStart = Date.UTC(now.getUTCFullYear(), 0, 0);
+        const doy = (now.getTime() - yearStart) / 86400000;
+        const decDeg =
+          23.45 * Math.sin(((doy - 81) * 2 * Math.PI) / 365.25);
+        const sp = geoFromLatLon(decDeg, lonSun, 1);
+        sunWorldDir.set(sp.x, sp.y, sp.z).normalize();
+        const gm: any = globe.material;
+        if (gm?.uniforms?.sunDir?.value) {
+          gm.uniforms.sunDir.value.copy(sunWorldDir);
+        }
+        sun.position.copy(sunWorldDir).multiplyScalar(300);
+      }
+
+      // Дыхание контура страны под курсором — синусоида 1.4с.
+      if (countryOutlineGroup.children.length > 0) {
+        const phase = (t % 1400) / 1400;
+        countryOutlineMat.opacity = 0.6 + 0.35 * Math.sin(phase * Math.PI * 2);
+      }
 
       // Прорисовка дуг от 0 до total за ARC_DRAW_MS (только при первом рендере).
       if (arcs.length > 0) {
@@ -1770,6 +2486,7 @@ export default function Globus3D({
     setTour(false);
     setQuery("");
     setFilter("all");
+    setSelectedCountry(null);
     setKbSelectedKey(null);
   };
 
@@ -1893,7 +2610,7 @@ export default function Globus3D({
 
   /** ESC закрывает focus-режим и тур. */
   useEffect(() => {
-    if (!focused && !tour) return;
+    if (!focused && !tour && !selectedCountry) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         targetYawRef.current = null;
@@ -1901,11 +2618,12 @@ export default function Globus3D({
         targetDistRef.current = null;
         setFocused(null);
         setTour(false);
+        setSelectedCountry(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focused, tour]);
+  }, [focused, tour, selectedCountry]);
 
   /** Tour mode — последовательный focus по приоритету. */
   const tourQueue = useMemo(() => {
@@ -1960,6 +2678,66 @@ export default function Globus3D({
     persistViewDebounced();
   };
 
+  /** Camera fly-to при выборе страны: центроид bbox + дистанция по размеру страны. */
+  useEffect(() => {
+    if (!selectedCountry) return;
+    buildCountriesIfNeeded();
+    if (!countriesCache) return;
+    const entry = countriesCache.find((c) => c.name === selectedCountry);
+    if (!entry) return;
+    const [w, s, e, n] = entry.bbox;
+    const centerLat = (s + n) / 2;
+    let centerLon = (w + e) / 2;
+    if (w > e) {
+      // bbox wraps через 180° (Russia, Fiji) — берём «среднее» с учётом разрыва.
+      centerLon = ((w + e + 360) / 2) % 360;
+      if (centerLon > 180) centerLon -= 360;
+    }
+    const latRange = Math.abs(n - s);
+    const lonRange = Math.abs(e - w);
+    const spread = Math.max(
+      latRange,
+      lonRange * Math.cos((centerLat * Math.PI) / 180),
+    );
+    const dist = Math.max(180, Math.min(280, 160 + spread * 3));
+    flyToLatLon(centerLat, centerLon, dist);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCountry]);
+
+  /** Selected-country fill+outline на самом глобусе. */
+  useEffect(() => {
+    selectedCountryVizRef.current?.(selectedCountry);
+  }, [selectedCountry]);
+
+  /** Ecosystem arcs от выбранной страны к маркерам той же категории в других странах. */
+  useEffect(() => {
+    ecosystemArcsRef.current?.(selectedCountry, markers);
+  }, [selectedCountry, markers]);
+
+  /** URL ?country=Russia — deep-link на конкретную страну (mount-only). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const c = sp.get("country");
+      if (c) setSelectedCountry(c);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Синхронизация URL ?country=... при изменении selectedCountry — shareable. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (selectedCountry) sp.set("country", selectedCountry);
+      else sp.delete("country");
+      const qs = sp.toString();
+      const url = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", url);
+    } catch {}
+  }, [selectedCountry]);
+
   const locateMe = () => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setShareToast("geo-failed");
@@ -1980,6 +2758,43 @@ export default function Globus3D({
       { timeout: 6000, maximumAge: 5 * 60 * 1000 },
     );
   };
+  const snapshotPng = () => {
+    const c = canvasRef.current;
+    if (!c) return;
+    try {
+      c.toBlob((blob) => {
+        if (!blob) {
+          setShareToast("failed");
+          window.setTimeout(() => setShareToast(null), 2200);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = `aevion-globus-${stamp}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    } catch {
+      setShareToast("failed");
+      window.setTimeout(() => setShareToast(null), 2200);
+    }
+  };
+
+  const randomCountry = () => {
+    const counts: Record<string, number> = {};
+    for (const m of markers) counts[m.country] = (counts[m.country] || 0) + 1;
+    const eligible = Object.keys(counts).filter((c) => c && c !== "World");
+    if (eligible.length === 0) return;
+    const pool = eligible.filter((c) => c !== selectedCountry);
+    const list = pool.length > 0 ? pool : eligible;
+    const pick = list[Math.floor(Math.random() * list.length)];
+    setSelectedCountry(pick);
+  };
+
   const shareView = async () => {
     if (typeof window === "undefined") return;
     try {
@@ -1990,6 +2805,8 @@ export default function Globus3D({
       );
       if (filter !== "all") sp.set("filter", filter);
       else sp.delete("filter");
+      if (selectedCountry) sp.set("country", selectedCountry);
+      else sp.delete("country");
       const url = `${window.location.origin}${window.location.pathname}?${sp.toString()}`;
       await navigator.clipboard.writeText(url);
       setShareToast("copied");
@@ -2242,6 +3059,61 @@ export default function Globus3D({
               <span style={{ fontWeight: 700 }}>{row.label}</span>
             </div>
           ))}
+
+          {topCountries.length > 0 ? (
+            <>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#7a8fb0",
+                  marginTop: 12,
+                  marginBottom: 6,
+                  borderTop: "1px solid rgba(120,160,220,0.16)",
+                  paddingTop: 10,
+                }}
+              >
+                Top countries
+              </div>
+              {topCountries.map(([name, count]) => (
+                <div
+                  key={name}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: 14,
+                    marginTop: 3,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#cbd5e1",
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: 110,
+                    }}
+                  >
+                    {displayCountry(name, locale)}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#6cd6ff",
+                      fontWeight: 900,
+                    }}
+                  >
+                    {count}
+                  </span>
+                </div>
+              ))}
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -2318,6 +3190,278 @@ export default function Globus3D({
               </span>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {!initError && selectedCountry ? (
+        <div
+          aria-label={`Country sheet: ${selectedCountry}`}
+          style={{
+            position: "absolute",
+            top: isNarrow ? 64 : 232,
+            right: 14,
+            zIndex: 5,
+            background: "rgba(12,18,32,0.78)",
+            border: "1px solid rgba(108,214,255,0.35)",
+            borderRadius: 12,
+            padding: "12px 14px",
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 10px 28px rgba(0,0,0,0.45)",
+            width: 234,
+            maxHeight: "60vh",
+            overflowY: "auto",
+            animation: "aev-hover-card-in 140ms ease-out",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>🌍</span>
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 900,
+                  color: "#e2e8f8",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {displayCountry(selectedCountry, locale)}
+              </span>
+            </div>
+            <button
+              type="button"
+              title="Clear country filter"
+              aria-label="Clear country filter"
+              onClick={() => setSelectedCountry(null)}
+              style={{
+                background: "transparent",
+                color: "#94a3b8",
+                border: "1px solid rgba(120,160,220,0.28)",
+                borderRadius: 8,
+                width: 24,
+                height: 24,
+                cursor: "pointer",
+                fontSize: 12,
+                lineHeight: 1,
+                padding: 0,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            style={{
+              fontSize: 11,
+              color: "#6cd6ff",
+              fontWeight: 800,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              marginTop: 6,
+              marginBottom: 6,
+              display: "flex",
+              alignItems: "baseline",
+              gap: 6,
+            }}
+          >
+            <span>
+              {selectedCountryMarkers.length}{" "}
+              {selectedCountryMarkers.length === 1 ? "node" : "nodes"}
+            </span>
+            {selectedCountryMarkers.length > 0 && markers.length > 0 ? (
+              <span
+                style={{
+                  fontSize: 10,
+                  color: "#94a3b8",
+                  fontWeight: 600,
+                  letterSpacing: "0.04em",
+                  textTransform: "none",
+                }}
+              >
+                · {((selectedCountryMarkers.length / markers.length) * 100).toFixed(1)}% of ecosystem
+              </span>
+            ) : null}
+          </div>
+
+          {selectedCountryMarkers.length > 0 ? (
+            <div
+              aria-label="Category breakdown"
+              style={{
+                display: "flex",
+                gap: 2,
+                height: 5,
+                borderRadius: 3,
+                overflow: "hidden",
+                background: "rgba(20,28,46,0.6)",
+                marginBottom: 10,
+              }}
+            >
+              {(["focus", "award", "product", "infra", "qright"] as const).map(
+                (cat) => {
+                  const n = selectedCountryMarkers.filter(
+                    (m) => m.category === cat,
+                  ).length;
+                  if (n === 0) return null;
+                  const colors: Record<string, string> = {
+                    focus: "#fbbf24",
+                    award: "#e879f9",
+                    product: "#7dd3fc",
+                    infra: "#94a3b8",
+                    qright: "#34d399",
+                  };
+                  return (
+                    <div
+                      key={cat}
+                      title={`${cat}: ${n}`}
+                      style={{
+                        flex: n,
+                        background: colors[cat],
+                        opacity: 0.85,
+                      }}
+                    />
+                  );
+                },
+              )}
+            </div>
+          ) : null}
+
+          {selectedCountryMarkers.length === 0 ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#94a3b8",
+                lineHeight: 1.45,
+              }}
+            >
+              No AEVION nodes registered in {displayCountry(selectedCountry, locale)} yet.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {selectedCountryMarkers.slice(0, 8).map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => focusOnMarker(m)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 8px",
+                    background: "rgba(20,28,46,0.6)",
+                    border: "1px solid rgba(120,160,220,0.18)",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    color: "#e2e8f8",
+                    textAlign: "left",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: m.color,
+                      boxShadow: `0 0 6px ${m.color}aa`,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      flex: 1,
+                    }}
+                  >
+                    {m.title || m.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "#94a3b8",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {m.city || ""}
+                  </span>
+                </button>
+              ))}
+              {selectedCountryMarkers.length > 8 ? (
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#7a8fb0",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  + {selectedCountryMarkers.length - 8} more
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {!initError && !isNarrow ? (
+        <div
+          aria-label="View compass minimap"
+          title="Camera angle indicator"
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: 14,
+            width: 64,
+            height: 64,
+            zIndex: 5,
+            pointerEvents: "none",
+          }}
+        >
+          <svg
+            viewBox="-32 -32 64 64"
+            width={64}
+            height={64}
+            style={{ display: "block" }}
+          >
+            <circle
+              cx={0}
+              cy={0}
+              r={28}
+              fill="rgba(12,18,32,0.72)"
+              stroke="rgba(108,214,255,0.45)"
+              strokeWidth={1}
+            />
+            <line x1={-28} x2={28} y1={0} y2={0} stroke="rgba(108,214,255,0.18)" strokeWidth={0.6} />
+            <line x1={0} x2={0} y1={-28} y2={28} stroke="rgba(108,214,255,0.18)" strokeWidth={0.6} />
+            <ellipse cx={0} cy={0} rx={28} ry={11} fill="none" stroke="rgba(108,214,255,0.22)" strokeWidth={0.6} />
+            <ellipse cx={0} cy={0} rx={11} ry={28} fill="none" stroke="rgba(108,214,255,0.22)" strokeWidth={0.6} />
+            <text x={0} y={-30} fill="#94a3b8" fontSize={6} fontWeight={700} textAnchor="middle">N</text>
+          </svg>
+          <div
+            style={{
+              position: "absolute",
+              left: 32,
+              top: 32,
+              width: 6,
+              height: 6,
+              marginLeft: -3,
+              marginTop: -3,
+              borderRadius: 3,
+              background: "#5eead4",
+              boxShadow: "0 0 8px rgba(94,234,212,0.9), 0 0 14px rgba(94,234,212,0.5)",
+              transition: "transform 60ms linear",
+            }}
+            ref={minimapDotRef}
+          />
         </div>
       ) : null}
 
@@ -2403,6 +3547,37 @@ export default function Globus3D({
             style={ctrlBtn}
           >
             ⌖
+          </button>
+          <button
+            type="button"
+            title="Random country"
+            aria-label="Random country"
+            onClick={randomCountry}
+            style={ctrlBtn}
+          >
+            🎲
+          </button>
+          <button
+            type="button"
+            title={timeLapse ? "Stop time-lapse" : "Time-lapse (1h / sec)"}
+            aria-label={timeLapse ? "Stop time-lapse" : "Time-lapse"}
+            onClick={() => setTimeLapse((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: timeLapse ? "rgba(245,158,11,0.85)" : ctrlBtn.background,
+              borderColor: timeLapse ? "rgba(253,224,71,0.6)" : ctrlBtn.border as string,
+            }}
+          >
+            {timeLapse ? "⏸" : "⏱"}
+          </button>
+          <button
+            type="button"
+            title="Download PNG snapshot"
+            aria-label="Download PNG snapshot"
+            onClick={snapshotPng}
+            style={ctrlBtn}
+          >
+            📷
           </button>
         </div>
       ) : null}
@@ -2939,6 +4114,7 @@ export default function Globus3D({
             onClick={() => {
               setQuery("");
               setFilter("all");
+              setSelectedCountry(null);
             }}
             style={{
               padding: "8px 14px",
@@ -2953,6 +4129,56 @@ export default function Globus3D({
           >
             Clear filters
           </button>
+        </div>
+      ) : null}
+
+      {/* Country badge — shown on globe-surface hover when no marker is hovered. */}
+      {hoveredCountry && !label ? (
+        <div
+          aria-live="polite"
+          style={{
+            position: "absolute",
+            bottom: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 6,
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(8,12,24,0.88)",
+            border: "1px solid rgba(120,160,220,0.35)",
+            borderRadius: 999,
+            padding: "5px 12px 5px 9px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.42)",
+            animation: "aev-hover-card-in 120ms ease-out",
+          }}
+        >
+          <span style={{ fontSize: 13, opacity: 0.75 }}>🌍</span>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: "#e2e8f8",
+              letterSpacing: "0.02em",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {displayCountry(hoveredCountry, locale)}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: "rgba(180,210,255,0.7)",
+              marginLeft: 4,
+              borderLeft: "1px solid rgba(120,160,220,0.28)",
+              paddingLeft: 8,
+              whiteSpace: "nowrap",
+            }}
+          >
+            click → filter
+          </span>
         </div>
       ) : null}
 

@@ -44,11 +44,21 @@ export type QSignRevocationRow = {
   revokedAt: Date;
 };
 
+/**
+ * Two-mode Dilithium block. PREVIEW carries `digest`; REAL carries
+ * `signature` + `publicKey`. Either may be present, but only one mode at
+ * a time. Kept as a union so consumers can narrow on `mode`.
+ *
+ * Type name is preserved (not "Block" rename) for backward compat with
+ * any external imports of `QSignDilithiumPreview`.
+ */
 export type QSignDilithiumPreview = {
   algo: "ML-DSA-65";
   kid: string;
-  mode: "preview";
-  digest: string;
+  mode: "preview" | "real";
+  digest?: string;
+  signature?: string;
+  publicKey?: string;
   valid: boolean | null;
   note: string;
 };

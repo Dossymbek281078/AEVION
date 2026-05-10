@@ -93,23 +93,85 @@ function fmtNum(v: number | null | undefined) {
    Page
    ═══════════════════════════════════════════════════════════════════════ */
 
+type TimeseriesPoint = { date: string; runs: number; costUsd: number };
+type TagCount = { tag: string; count: number };
+
 export default function QCoreAnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null);
+  const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
+  const [topTags, setTopTags] = useState<TagCount[]>([]);
+  const [topSessions, setTopSessions] = useState<Array<{ id: string; title: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>>([]);
+  const [tagCosts, setTagCosts] = useState<Array<{ tag: string; runs: number; totalCostUsd: number; avgCostUsd: number }>>([]);
+  const [providerLatency, setProviderLatency] = useState<Array<{ provider: string; avgDurationMs: number; minDurationMs: number; maxDurationMs: number; calls: number }>>([]);
+  const [goal, setGoal] = useState<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null>(null);
+  const [goalEdit, setGoalEdit] = useState(false);
+  const [goalRuns, setGoalRuns] = useState("");
+  const [goalCost, setGoalCost] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     setError(null);
     try {
-      const res = await fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+      const [aRes, tsRes, tagRes, sessRes, tagCostRes] = await Promise.all([
+        fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/timeseries?days=30"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/tags?limit=15"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/sessions?days=7&limit=5"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/by-tag?limit=15"), { headers: bearerHeader() }),
+      ]);
+      const json = await aRes.json();
+      if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
       setData(json);
+      const tsJson = await tsRes.json().catch(() => ({}));
+      if (Array.isArray(tsJson?.items)) setTimeseries(tsJson.items);
+      const tagJson = await tagRes.json().catch(() => ({}));
+      if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
+      const sessJson = await sessRes.json().catch(() => ({}));
+      if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
+      const tagCostJson = await tagCostRes.json().catch(() => ({}));
+      if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
+
+      // Provider latency
+      try {
+        const latRes = await fetch(apiUrl("/api/qcoreai/analytics/provider-latency"), { headers: bearerHeader() });
+        const latData = await latRes.json().catch(() => ({}));
+        if (Array.isArray(latData?.items)) setProviderLatency(latData.items);
+      } catch { /* non-critical */ }
+
+      // Load analytics goals
+      try {
+        const gRes = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { headers: bearerHeader() });
+        const gData = await gRes.json().catch(() => ({}));
+        if (gData?.goal) setGoal(gData.goal);
+      } catch { /* non-critical */ }
     } catch (e: any) {
       setError(e?.message || "Failed to load analytics");
     }
   };
 
   useEffect(() => { refresh(); }, []);
+
+  /* Linear regression on the last min(14, n) days to project the next 7 days. */
+  const forecast = useMemo(() => {
+    const tail = timeseries.slice(-14);
+    if (tail.length < 2) return null;
+    const xs = tail.map((_, i) => i);
+    const ys = tail.map((p) => p.costUsd);
+    const n = xs.length;
+    const sumX = xs.reduce((a, b) => a + b, 0);
+    const sumY = ys.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+    const sumXX = xs.reduce((acc, x) => acc + x * x, 0);
+    const denom = n * sumXX - sumX * sumX;
+    if (denom === 0) return null;
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    const next7Total = Array.from({ length: 7 }, (_, k) =>
+      Math.max(0, intercept + slope * (n + k))
+    ).reduce((a, b) => a + b, 0);
+    const monthlyRunRate = next7Total > 0 ? next7Total * (30 / 7) : 0;
+    return { slope, intercept, next7Total, monthlyRunRate };
+  }, [timeseries]);
 
   const maxStrategyRuns = useMemo(() => {
     if (!data) return 1;
@@ -163,6 +225,17 @@ export default function QCoreAnalyticsPage() {
             >
               ← Back to multi-agent
             </Link>
+            <a
+              href={apiUrl("/api/qcoreai/analytics/export?days=30")}
+              download="qcoreai-analytics-30d.csv"
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)",
+                color: "#fff", textDecoration: "none",
+              }}
+            >
+              ↓ Export CSV
+            </a>
           </div>
         </div>
 
@@ -195,7 +268,191 @@ export default function QCoreAnalyticsPage() {
               <Tile label="Tokens" value={fmtNum(data.totals.tokensIn + data.totals.tokensOut)} accent="#f59e0b" sub={`${fmtNum(data.totals.tokensIn)} in · ${fmtNum(data.totals.tokensOut)} out`} />
               <Tile label="Cost" value={fmtMoney(data.totals.costUsd)} accent="#7c3aed" />
               <Tile label="Compute time" value={fmtDur(data.totals.durationMs)} accent="#ef4444" />
+              {timeseries.length > 0 && (() => {
+                // Calculate active-day streak from timeseries
+                const today = new Date().toISOString().slice(0, 10);
+                let streak = 0;
+                const sorted = [...timeseries].sort((a, b) => b.date.localeCompare(a.date));
+                let expected = today;
+                for (const pt of sorted) {
+                  if (pt.date === expected && pt.runs > 0) {
+                    streak++;
+                    const d = new Date(expected);
+                    d.setDate(d.getDate() - 1);
+                    expected = d.toISOString().slice(0, 10);
+                  } else break;
+                }
+                return streak > 0 ? <Tile label="Day streak 🔥" value={`${streak}d`} accent="#f97316" sub={streak >= 7 ? "Week streak!" : streak >= 30 ? "Month streak!" : "Keep going"} /> : null;
+              })()}
             </section>
+
+            {/* Monthly goals */}
+            {data && (
+              <div style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>🎯 Monthly goals</span>
+                  <button onClick={() => { setGoalEdit((v) => !v); if (!goalEdit) { setGoalRuns(goal?.monthlyRuns?.toString() || ""); setGoalCost(goal?.monthlyCostUsd?.toString() || ""); } }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", color: "#475569" }}>
+                    {goalEdit ? "Cancel" : goal ? "Edit" : "+ Set goals"}
+                  </button>
+                </div>
+                {goalEdit ? (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <label style={{ fontSize: 10, color: "#64748b", display: "block", marginBottom: 2 }}>Monthly runs target</label>
+                      <input type="number" value={goalRuns} onChange={(e) => setGoalRuns(e.target.value)} min={0} placeholder="e.g. 100" style={{ width: 100, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, color: "#64748b", display: "block", marginBottom: 2 }}>Monthly cost target ($)</label>
+                      <input type="number" value={goalCost} onChange={(e) => setGoalCost(e.target.value)} min={0} step={0.1} placeholder="e.g. 5.00" style={{ width: 100, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }} />
+                    </div>
+                    <button onClick={async () => {
+                      const body = { monthlyRuns: goalRuns ? parseInt(goalRuns) : null, monthlyCostUsd: goalCost ? parseFloat(goalCost) : null };
+                      const res = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify(body) });
+                      const d = await res.json().catch(() => ({}));
+                      if (d.goal) { setGoal(d.goal); setGoalEdit(false); }
+                    }} style={{ alignSelf: "flex-end", padding: "5px 14px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                  </div>
+                ) : goal ? (
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                    {goal.monthlyRuns && (
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#475569", marginBottom: 4 }}>
+                          <span>Runs</span>
+                          <span style={{ fontWeight: 700 }}>{data.runs} / {goal.monthlyRuns}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: data.runs >= goal.monthlyRuns ? "#10b981" : "#3b82f6", width: `${Math.min(100, Math.round((data.runs / goal.monthlyRuns) * 100))}%` }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{Math.round((data.runs / goal.monthlyRuns) * 100)}%</div>
+                      </div>
+                    )}
+                    {goal.monthlyCostUsd && (
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#475569", marginBottom: 4 }}>
+                          <span>Cost</span>
+                          <span style={{ fontWeight: 700 }}>{fmtMoney(data.totals.costUsd)} / ${goal.monthlyCostUsd.toFixed(2)}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: data.totals.costUsd >= goal.monthlyCostUsd ? "#ef4444" : "#10b981", width: `${Math.min(100, Math.round((data.totals.costUsd / goal.monthlyCostUsd) * 100))}%` }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{Math.round((data.totals.costUsd / goal.monthlyCostUsd) * 100)}%</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Set monthly run count and cost goals to track your usage against targets.</p>
+                )}
+              </div>
+            )}
+
+            {/* Cost over time + 7-day forecast */}
+            {timeseries.length > 0 && (
+              <Section title="Cost over time">
+                <CostTimeseriesChart points={timeseries} forecast={forecast} />
+                {forecast && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#475569" }}>
+                    Linear projection on last {Math.min(14, timeseries.length)} days:{" "}
+                    <strong style={{ color: "#0f172a" }}>{fmtMoney(forecast.next7Total, 4)}</strong> next 7d ·{" "}
+                    <strong style={{ color: "#0f172a" }}>{fmtMoney(forecast.monthlyRunRate, 2)}</strong> per month at this rate
+                    {forecast.slope > 0 && <span style={{ marginLeft: 8, color: "#dc2626" }}>↑ trending up</span>}
+                    {forecast.slope < 0 && <span style={{ marginLeft: 8, color: "#16a34a" }}>↓ trending down</span>}
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {/* Activity heatmap (last 12 weeks) */}
+            {timeseries.length > 0 && (
+              <Section title="Activity heatmap">
+                {(() => {
+                  const today = new Date();
+                  const weeks = 12;
+                  const cells: Array<{ date: string; runs: number; cost: number }> = [];
+                  for (let i = weeks * 7 - 1; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(d.getDate() - i);
+                    const dateStr = d.toISOString().slice(0, 10);
+                    const pt = timeseries.find((p) => p.date === dateStr);
+                    cells.push({ date: dateStr, runs: pt?.runs ?? 0, cost: pt?.costUsd ?? 0 });
+                  }
+                  const maxRuns = Math.max(1, ...cells.map((c) => c.runs));
+                  return (
+                    <div>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${weeks}, 1fr)`, gap: 2 }}>
+                        {Array.from({ length: weeks }, (_, w) => (
+                          <div key={w} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {cells.slice(w * 7, w * 7 + 7).map((c) => {
+                              const intensity = c.runs === 0 ? 0 : Math.max(0.15, c.runs / maxRuns);
+                              return (
+                                <div
+                                  key={c.date}
+                                  title={`${c.date}: ${c.runs} run${c.runs !== 1 ? "s" : ""} · ${c.cost > 0 ? `$${c.cost.toFixed(4)}` : "$0"}`}
+                                  style={{
+                                    width: "100%", aspectRatio: "1",
+                                    borderRadius: 2,
+                                    background: c.runs === 0 ? "#f1f5f9" : `rgba(124,58,237,${intensity})`,
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 6, fontSize: 10, color: "#94a3b8", alignItems: "center" }}>
+                        <span>Less</span>
+                        {[0, 0.2, 0.5, 0.8, 1].map((v) => (
+                          <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: v === 0 ? "#f1f5f9" : `rgba(124,58,237,${v})` }} />
+                        ))}
+                        <span>More</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
+            {/* Top tags chart */}
+            {topTags.length > 0 && (
+              <Section title="Top tags">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {topTags.map((t) => {
+                    const max = Math.max(1, ...topTags.map((x) => x.count));
+                    const pct = (t.count / max) * 100;
+                    return (
+                      <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 140,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#0f766e",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={t.tag}
+                        >
+                          {t.tag}
+                        </div>
+                        <div style={{ flex: 1, height: 14, background: "rgba(13,148,136,0.08)", borderRadius: 999, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              height: "100%",
+                              background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                              borderRadius: 999,
+                            }}
+                          />
+                        </div>
+                        <div style={{ width: 40, textAlign: "right", fontSize: 12, color: "#0f172a", fontWeight: 700 }}>
+                          {t.count}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
 
             {/* Strategy breakdown */}
             <Section title="By strategy">
@@ -229,6 +486,12 @@ export default function QCoreAnalyticsPage() {
                       <span>{fmtNum(s.tokens)} tok</span>
                       <span>~{fmtDur(s.avgDurationMs)}</span>
                     </div>
+                    {s.runs > 0 && (
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 6, display: "flex", justifyContent: "space-between" }}>
+                        <span>avg cost/run: {fmtMoney(s.costUsd / s.runs)}</span>
+                        <span>avg {fmtNum(Math.round(s.tokens / s.runs))} tok/run</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -256,7 +519,59 @@ export default function QCoreAnalyticsPage() {
               </div>
             </Section>
 
+            {/* Provider latency */}
+            {providerLatency.length > 0 && (
+              <Section title="Provider latency (avg ms/call)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(() => {
+                    const maxAvg = Math.max(...providerLatency.map((p) => p.avgDurationMs));
+                    return providerLatency.map((p) => (
+                      <div key={p.provider} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <span style={{ minWidth: 80, fontSize: 12, fontWeight: 700, color: PROVIDER_COLORS[p.provider] || "#475569" }}>{providerLabel[p.provider] || p.provider}</span>
+                        <div style={{ flex: 1 }}>
+                          <Bar value={p.avgDurationMs} max={maxAvg} color={PROVIDER_COLORS[p.provider] || "#475569"} height={6} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", minWidth: 60, textAlign: "right" }}>{Math.round(p.avgDurationMs)}ms</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 40 }}>{p.calls} calls</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 60 }}>{Math.round(p.minDurationMs)}–{Math.round(p.maxDurationMs)}ms</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </Section>
+            )}
+
             {/* Model breakdown table */}
+            {/* Duration distribution histogram */}
+            {data.recent.length >= 5 && (
+              <Section title="Duration distribution">
+                {(() => {
+                  const durations = data.recent.filter((r) => r.totalDurationMs).map((r) => r.totalDurationMs!);
+                  if (durations.length < 3) return null;
+                  const BUCKETS = [0, 2000, 5000, 10000, 20000, 60000, Infinity];
+                  const labels = ["<2s", "2-5s", "5-10s", "10-20s", "20-60s", ">60s"];
+                  const counts = new Array(BUCKETS.length - 1).fill(0);
+                  for (const d of durations) {
+                    for (let i = 0; i < BUCKETS.length - 1; i++) {
+                      if (d >= BUCKETS[i] && d < BUCKETS[i + 1]) { counts[i]++; break; }
+                    }
+                  }
+                  const maxCount = Math.max(1, ...counts);
+                  return (
+                    <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 80 }}>
+                      {counts.map((cnt, i) => (
+                        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 9, color: "#94a3b8" }}>{cnt}</span>
+                          <div style={{ width: "100%", height: Math.max(2, (cnt / maxCount) * 60), background: cnt > 0 ? "#4338ca" : "#f1f5f9", borderRadius: "3px 3px 0 0" }} />
+                          <span style={{ fontSize: 9, color: "#94a3b8", textAlign: "center" }}>{labels[i]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
             <Section title="Top models">
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#fff", borderRadius: 10, overflow: "hidden" }}>
@@ -321,6 +636,65 @@ export default function QCoreAnalyticsPage() {
                 ))}
               </div>
             </Section>
+
+            {/* Per-tag cost breakdown */}
+            {tagCosts.length > 0 && (
+              <Section title="Cost by tag">
+                {(() => {
+                  const maxCost = Math.max(...tagCosts.map((t) => t.totalCostUsd));
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {tagCosts.map((t) => (
+                        <div key={t.tag} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <span style={{ minWidth: 90, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>#{t.tag}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" }}>
+                              <div style={{ height: "100%", borderRadius: 3, background: "#7c3aed", width: maxCost > 0 ? `${(t.totalCostUsd / maxCost) * 100}%` : "0%" }} />
+                            </div>
+                          </div>
+                          <span style={{ width: 40, textAlign: "right", fontSize: 11, color: "#64748b" }}>{t.runs}r</span>
+                          <span style={{ width: 80, textAlign: "right", fontSize: 11, fontWeight: 700, color: "#0f172a" }}>{fmtMoney(t.totalCostUsd)}</span>
+                          <span style={{ width: 70, textAlign: "right", fontSize: 10, color: "#94a3b8" }}>{fmtMoney(t.avgCostUsd)}/run</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
+            {/* Top sessions by cost (7-day window) */}
+            {topSessions.length > 0 && (
+              <Section title="Top sessions (7d by cost)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {topSessions.map((s) => (
+                    <Link
+                      key={s.id}
+                      href="/qcoreai/multi"
+                      style={{
+                        display: "flex", gap: 10, alignItems: "center",
+                        padding: "8px 12px", borderRadius: 10,
+                        background: "#fff", border: "1px solid #e2e8f0",
+                        textDecoration: "none", color: "#0f172a", fontSize: 12,
+                      }}
+                    >
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{s.title}</span>
+                      <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{s.runCount} run{s.runCount !== 1 ? "s" : ""}</span>
+                      <span style={{ fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
+                        {s.totalCostUsd > 0 ? `$${s.totalCostUsd.toFixed(4)}` : "—"}
+                      </span>
+                      <Link
+                        href={`/qcoreai/compare?a=${s.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ fontSize: 10, color: "#4338ca", fontWeight: 700, textDecoration: "none" }}
+                      >
+                        ⚖️
+                      </Link>
+                    </Link>
+                  ))}
+                </div>
+              </Section>
+            )}
           </>
         )}
       </ProductPageShell>
@@ -372,10 +746,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Bar({ value, max, color }: { value: number; max: number; color: string }) {
+function Bar({ value, max, color, height = 8 }: { value: number; max: number; color: string; height?: number }) {
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 2;
   return (
-    <div style={{ height: 10, background: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
+    <div style={{ height, background: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
       <div
         style={{
           width: `${pct}%`,
@@ -385,6 +759,112 @@ function Bar({ value, max, color }: { value: number; max: number; color: string 
           transition: "width 0.3s",
         }}
       />
+    </div>
+  );
+}
+
+function CostTimeseriesChart({
+  points,
+  forecast,
+}: {
+  points: TimeseriesPoint[];
+  forecast: { slope: number; intercept: number; next7Total: number; monthlyRunRate: number } | null;
+}) {
+  const W = 700;
+  const H = 180;
+  const PAD_L = 36;
+  const PAD_R = 8;
+  const PAD_T = 8;
+  const PAD_B = 28;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const projected = forecast
+    ? Array.from({ length: 7 }, (_, k) => Math.max(0, forecast.intercept + forecast.slope * (points.length + k)))
+    : [];
+  const allCosts = [...points.map((p) => p.costUsd), ...projected];
+  const maxCost = Math.max(0.0001, ...allCosts);
+  const total = points.length + projected.length;
+
+  const xFor = (i: number) => PAD_L + (total <= 1 ? 0 : (i / (total - 1)) * innerW);
+  const yFor = (cost: number) => PAD_T + innerH - (cost / maxCost) * innerH;
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(i)} ${yFor(p.costUsd)}`).join(" ");
+  const projPath = projected.length > 0
+    ? `M ${xFor(points.length - 1)} ${yFor(points[points.length - 1].costUsd)}` +
+      projected.map((c, k) => ` L ${xFor(points.length + k)} ${yFor(c)}`).join("")
+    : "";
+
+  // Y-axis ticks (3 levels)
+  const yTicks = [0, maxCost / 2, maxCost];
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={W} height={H} role="img" aria-label="Cost over time" style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", display: "block", minWidth: W }}>
+        {/* Grid */}
+        {yTicks.map((v, i) => (
+          <g key={i}>
+            <line x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)} stroke="#f1f5f9" strokeWidth={1} />
+            <text x={PAD_L - 4} y={yFor(v) + 3} fontSize={9} fill="#94a3b8" textAnchor="end">
+              ${v.toFixed(v < 0.01 ? 4 : 2)}
+            </text>
+          </g>
+        ))}
+        {/* Forecast region */}
+        {projected.length > 0 && (
+          <rect
+            x={xFor(points.length - 1)}
+            y={PAD_T}
+            width={W - PAD_R - xFor(points.length - 1)}
+            height={innerH}
+            fill="rgba(124,58,237,0.04)"
+          />
+        )}
+        {/* Cost line */}
+        <path d={linePath} fill="none" stroke="#0d9488" strokeWidth={2} />
+        {/* Forecast line (dashed) */}
+        {projPath && (
+          <path d={projPath} fill="none" stroke="#7c3aed" strokeWidth={2} strokeDasharray="4 4" />
+        )}
+        {/* Points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={xFor(i)} cy={yFor(p.costUsd)} r={2.5} fill="#0d9488">
+            <title>{`${p.date}: ${p.runs} runs · $${p.costUsd.toFixed(4)}`}</title>
+          </circle>
+        ))}
+        {/* X-axis labels (first, mid, last + forecast end) */}
+        {points.length > 0 && (
+          <>
+            <text x={xFor(0)} y={H - 10} fontSize={9} fill="#64748b" textAnchor="start">
+              {points[0].date.slice(5)}
+            </text>
+            {points.length > 2 && (
+              <text x={xFor(Math.floor((points.length - 1) / 2))} y={H - 10} fontSize={9} fill="#64748b" textAnchor="middle">
+                {points[Math.floor((points.length - 1) / 2)].date.slice(5)}
+              </text>
+            )}
+            <text x={xFor(points.length - 1)} y={H - 10} fontSize={9} fill="#64748b" textAnchor="middle">
+              {points[points.length - 1].date.slice(5)}
+            </text>
+            {projected.length > 0 && (
+              <text x={xFor(total - 1)} y={H - 10} fontSize={9} fill="#7c3aed" textAnchor="end" fontWeight={700}>
+                +7d
+              </text>
+            )}
+          </>
+        )}
+        {/* Legend */}
+        <g transform={`translate(${PAD_L}, ${PAD_T + 4})`}>
+          <line x1={0} x2={14} y1={0} y2={0} stroke="#0d9488" strokeWidth={2} />
+          <text x={18} y={3} fontSize={10} fill="#475569">Actual</text>
+          {projPath && (
+            <>
+              <line x1={62} x2={76} y1={0} y2={0} stroke="#7c3aed" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={80} y={3} fontSize={10} fill="#475569">Forecast</text>
+            </>
+          )}
+        </g>
+      </svg>
     </div>
   );
 }

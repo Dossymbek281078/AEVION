@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
@@ -2005,28 +2006,28 @@ function buildCurlSnippet(signed: SignResponse | null): string {
   const sigId = signed?.id ?? "<signature-id>";
   const hmacKid = signed?.hmac.kid ?? "qsign-hmac-v1";
   return `# 1. health
-curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/health | jq
+curl -s https://api.aevion.app/api/qsign/v2/health | jq
 
 # 2. sign (idempotent)
-curl -s -X POST https://aevion-production-a70c.up.railway.app/api/qsign/v2/sign \\
+curl -s -X POST https://api.aevion.app/api/qsign/v2/sign \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: order-2026-04-28-001" \\
   -d '{"payload":{"artifact":"invoice-001","amount":1500.00,"currency":"USD"}}' | jq
 
 # 3. public verify (no auth)
-curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/${sigId}/public | jq
+curl -s https://api.aevion.app/api/qsign/v2/${sigId}/public | jq
 
 # 4. PDF stamp
-curl -sL "https://aevion-production-a70c.up.railway.app/api/qsign/v2/${sigId}/pdf?download=1" \\
+curl -sL "https://api.aevion.app/api/qsign/v2/${sigId}/pdf?download=1" \\
   -o signed-${sigId.slice(0, 8)}.pdf
 
 # 5. recent activity
-curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/audit?limit=20 \\
+curl -s https://api.aevion.app/api/qsign/v2/audit?limit=20 \\
   -H "Authorization: Bearer $TOKEN" | jq
 
 # 6. Prometheus metrics scrape
-curl -s https://aevion-production-a70c.up.railway.app/api/qsign/v2/metrics`;
+curl -s https://api.aevion.app/api/qsign/v2/metrics`;
 }
 
 function buildTsSnippet(signed: SignResponse | null): string {
@@ -2035,7 +2036,7 @@ function buildTsSnippet(signed: SignResponse | null): string {
 import { QSignClient } from "@aevion/qsign-client";
 
 const qsign = new QSignClient({
-  baseUrl: "https://aevion-production-a70c.up.railway.app/api/qsign/v2",
+  baseUrl: "https://api.aevion.app/api/qsign/v2",
   token: process.env.AEVION_TOKEN,
 });
 
@@ -2074,7 +2075,7 @@ function buildPythonSnippet(signed: SignResponse | null): string {
   return `# pip install requests
 import os, requests
 
-BASE = "https://aevion-production-a70c.up.railway.app/api/qsign/v2"
+BASE = "https://api.aevion.app/api/qsign/v2"
 TOKEN = os.environ["AEVION_TOKEN"]
 H = {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 

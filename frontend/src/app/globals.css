@@ -335,47 +335,6 @@ code {
 @keyframes cc-spin {
   to { transform: rotate(360deg); }
 }
-@keyframes cc-tip-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes cc-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-4px); opacity: 1; }
-}
-/* Piece animations — subtle, recognisable */
-@keyframes cc-piece-place {
-  /* Lands a fresh piece with a tiny "settle" — over-shoots then relaxes */
-  0%   { transform: scale(0.78) translateY(-3px); }
-  55%  { transform: scale(1.10) translateY(0); }
-  100% { transform: scale(1.04) translateY(0); }
-}
-@keyframes cc-piece-breathe {
-  /* Selected/premove-source piece breathes gently */
-  0%, 100% { transform: scale(1.08); }
-  50%      { transform: scale(1.13); }
-}
-
-/* Mobile / desktop visibility helpers (768px breakpoint) */
-.cc-desktop-only { display: initial; }
-.cc-mobile-only { display: none; }
-@media (max-width: 767px) {
-  .cc-desktop-only { display: none !important; }
-  .cc-mobile-only { display: initial !important; }
-}
-
-/* Reserve room for fixed bottom nav on mobile */
-@media (max-width: 767px) {
-  .cc-page-bottom-pad { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
-}
-
-/* Embed mode (?embed=1) — used when /cyberchess is iframed inside Studio.
-   Overrides ProductPageShell padding/maxWidth and removes outer chrome. */
-.cc-embed-mode > div {
-  padding: 4px 4px 8px !important;
-  max-width: 100vw !important;
-  margin: 0 !important;
-}
 
 /* ── CyberChess utility classes ───────────────────────── */
 
@@ -452,6 +411,99 @@ code {
   }
 }
 
+/* ── Chess piece hover lift (grab cursor squares only) ── */
+/* Subtle scale on hover for grab-cursor cells (own pieces on your turn).
+   transition on the board cell itself so child inherits; no JS needed. */
+.cc-board-cell {
+  will-change: auto;
+  /* Prevent browser from stealing touch for scroll/zoom on board cells.
+     Mirrors touch-action:none on board container — belt-and-suspenders. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cc-board-cell[style*="cursor: grab"]:hover {
+  z-index: 2;
+}
+/* No hover scale — user wants pieces to glide horizontally only, no jumps */
+
+/* ── Captured piece pop+fade on the capture square ────── */
+@keyframes cc-capture-pop {
+  0%   { transform: scale(1);    opacity: 1; }
+  35%  { transform: scale(1.22); opacity: 1; }
+  100% { transform: scale(0.40); opacity: 0; }
+}
+
+/* Piece snap removed — user wants pieces to glide horizontally only,
+   no scale changes on landing. */
+.cc-piece-snap {
+  animation: none;
+}
+
+/* ── "Your turn" board flash — fires when AI just moved ── */
+@keyframes cc-turn-flash {
+  0%   { box-shadow: inset 0 0 0 0 rgba(5, 150, 105, 0.0); opacity: 0; }
+  18%  { box-shadow: inset 0 0 28px 4px rgba(5, 150, 105, 0.55); opacity: 1; }
+  100% { box-shadow: inset 0 0 0 0 rgba(5, 150, 105, 0.0); opacity: 0; }
+}
+.cc-turn-flash {
+  animation: cc-turn-flash 720ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-turn-flash { animation: none !important; opacity: 0 !important; }
+}
+
+/* ── Drag hover ring — gentle pulse when over a legal target ─── */
+@keyframes cc-hover-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 1; }
+  50%      { transform: scale(0.98); opacity: 0.85; }
+}
+.cc-hover-pulse {
+  animation: cc-hover-pulse 720ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-hover-pulse { animation: none !important; }
+}
+
+/* ── Premove-cancel flash — red pulse on the cancelled FROM cell ─ */
+@keyframes cc-cancel-flash {
+  0%   { box-shadow: inset 0 0 0 4px rgba(220, 38, 38, 0.0), inset 0 0 0 0 rgba(220, 38, 38, 0.0); background: rgba(220, 38, 38, 0.0); }
+  20%  { box-shadow: inset 0 0 0 4px rgba(220, 38, 38, 0.95), inset 0 0 18px 6px rgba(220, 38, 38, 0.45); background: rgba(220, 38, 38, 0.18); }
+  100% { box-shadow: inset 0 0 0 0 rgba(220, 38, 38, 0.0), inset 0 0 0 0 rgba(220, 38, 38, 0.0); background: rgba(220, 38, 38, 0.0); }
+}
+.cc-cancel-flash {
+  animation: cc-cancel-flash 620ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-cancel-flash { animation: none !important; box-shadow: inset 0 0 0 4px rgba(220, 38, 38, 0.7) !important; }
+}
+
+/* Reduce-motion: skip the bounce, keep the visual change instant. */
+@media (prefers-reduced-motion: reduce) {
+  .cc-piece-snap > div { animation: none !important; }
+}
+
+/* ── Global a11y focus ring ───────────────────────────── */
+/* All keyboard-focused interactive controls get a visible accent ring,
+   regardless of their inline-styled background. Drop-in for default outline. */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Skip mouse-focus halos so visual styling stays clean on click. */
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Safe-area insets for iOS / notched devices */
 @supports (padding: max(0px)) {
   .cc-safe-bottom {
@@ -459,5 +511,157 @@ code {
   }
   .cc-safe-top {
     padding-top: max(var(--cc-space-4), env(safe-area-inset-top));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CyberChess Mobile Layout — responsive overrides for ≤ 768px
+   Key changes:
+   • Board fills full width, panels stack vertically
+   • Right sidebar collapses to accordion / bottom sheet
+   • Tab nav becomes a compact scrollable strip
+   • Typography scales down slightly
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Board container — fill viewport width */
+  [style*="min(1040px"] {
+    width: min(100vw - 8px, calc(100vh - 180px)) !important;
+  }
+
+  /* Main flex row (board + right panel) — stack vertically */
+  .cc-main-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  /* Right panel — full width below board */
+  .cc-right-panel {
+    flex: unset !important;
+    min-width: unset !important;
+    max-width: unset !important;
+    width: 100% !important;
+  }
+
+  /* Media pane — hidden on mobile by default (too cramped) */
+  .cc-media-pane {
+    display: none !important;
+  }
+
+  /* Header sub text — hide on very small screens */
+  .cc-header-sub {
+    display: none;
+  }
+
+  /* WorkspaceToolbar — make chips smaller */
+  .cc-ws-chip {
+    padding: 3px 7px !important;
+    font-size: 10px !important;
+  }
+
+  /* Move list — smaller font */
+  .cc-move-list {
+    font-size: 11px !important;
+    max-height: 180px !important;
+  }
+
+  /* Buttons under board — wrap tightly */
+  .cc-controls-row {
+    gap: 5px !important;
+  }
+  .cc-controls-row button {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+  }
+
+  /* Coach quick actions — 2-per-row on mobile */
+  .cc-coach-actions {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* AEVION ecosystem strip — scroll horizontally */
+  .cc-ecosystem-strip {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cc-ecosystem-strip a {
+    flex-shrink: 0;
+  }
+
+  /* Variant strip in Setup — 3 per row */
+  .cc-variant-strip {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Puzzle right panel — full width */
+  .cc-puzzle-panel {
+    width: 100% !important;
+    max-height: 280px !important;
+    overflow-y: auto;
+  }
+
+  /* Modal — full screen */
+  [role="dialog"] > div {
+    max-height: 95vh !important;
+    width: 100% !important;
+    border-radius: 14px 14px 0 0 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    top: auto !important;
+  }
+
+  /* Sticky header — compact */
+  .cc-sticky-header {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+  }
+
+  /* Logo — smaller */
+  .cc-logo-icon {
+    width: 30px !important;
+    height: 30px !important;
+    font-size: 15px !important;
+  }
+  .cc-logo-title {
+    font-size: 13px !important;
+  }
+
+  /* Board coordinates — hide file/rank labels to save space */
+  .cc-coord-label {
+    font-size: 8px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Very small phones — hide rating badge text, keep number */
+  .cc-rating-label { display: none; }
+
+  /* WorkspaceToolbar — icon only */
+  .cc-ws-chip-label { display: none !important; }
+
+  /* Bottom buttons — icon only for secondary actions */
+  .cc-btn-secondary-label { display: none !important; }
+}
+
+/* Touch: larger tap targets on mobile */
+@media (hover: none) and (pointer: coarse) {
+  .cc-board-cell {
+    /* Slightly larger invisible tap area */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Board pieces — prevent context menu on long press */
+  .cc-piece svg, .cc-piece img {
+    -webkit-touch-callout: none;
+    pointer-events: none;
+  }
+
+  /* Buttons — minimum 44px tap target (WCAG) */
+  button.cc-game-btn {
+    min-height: 44px !important;
+    min-width: 44px !important;
   }
 }

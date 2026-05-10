@@ -1,0 +1,1065 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { use } from "react";
+import Link from "next/link";
+import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
+import { VacancyCard } from "@/components/build/VacancyCard";
+import { AiImprove } from "@/components/build/AiImprove";
+import { AiVacancyGen } from "@/components/build/AiVacancyGen";
+import {
+  EligibleReviewsBlock,
+  ReviewsByProjectSection,
+} from "@/components/build/ReviewsSection";
+import {
+  buildApi,
+  type BuildVacancy,
+  type BuildProject,
+  type BuildFile,
+  type ProjectStatus,
+} from "@/lib/build/api";
+import { useBuildAuth } from "@/lib/build/auth";
+import { useToast } from "@/components/build/Toast";
+
+const STATUSES: ProjectStatus[] = ["OPEN", "IN_PROGRESS", "DONE"];
+
+type ProjectBundle = {
+  project: BuildProject;
+  vacancies: BuildVacancy[];
+  files: BuildFile[];
+  client: { id: string; email: string; name: string } | null;
+};
+
+export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const me = useBuildAuth((s) => s.user);
+
+  const [bundle, setBundle] = useState<ProjectBundle | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    buildApi
+      .getProject(id)
+      .then((r) => setBundle(r as ProjectBundle))
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  if (loading) {
+    return (
+      <BuildShell>
+        <p className="py-8 text-sm text-slate-400">Loading project…</p>
+      </BuildShell>
+    );
+  }
+  if (error || !bundle) {
+    return (
+      <BuildShell>
+        <p className="py-8 text-sm text-rose-300">{error || "Project not found."}</p>
+        <Link href="/build" className="text-sm text-emerald-300 underline">
+          ← Back to projects
+        </Link>
+      </BuildShell>
+    );
+  }
+
+  const { project, vacancies, files, client } = bundle;
+  const isOwner = me?.id === project.clientId;
+
+  return (
+    <BuildShell>
+      <Link href="/build" className="text-xs text-slate-400 underline-offset-2 hover:underline">
+        ← All projects
+      </Link>
+
+      <div className="mt-2 mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">{project.title}</h1>
+          <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
+            <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
+            {project.city && <span>· {project.city}</span>}
+            {project.budget > 0 && <span>· Budget ${project.budget.toLocaleString()}</span>}
+          </div>
+        </div>
+        <div className="flex items-start gap-2">
+          <ShareButton projectId={project.id} />
+          {isOwner && project.status !== "DONE" && (
+            <ProjectStatusButton
+              projectId={project.id}
+              currentStatus={project.status}
+              onUpdated={refresh}
+            />
+          )}
+          {client && (
+            <div className="text-right text-xs text-slate-400">
+              <div>Posted by</div>
+              <div className="text-sm font-medium text-slate-200">{client.name}</div>
+              <div>{client.email}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-slate-400">
+              Description
+            </h2>
+            <p className="whitespace-pre-wrap text-sm text-slate-200">{project.description}</p>
+          </div>
+
+          <div className="mt-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">
+                Vacancies <span className="text-slate-500">({vacancies.length})</span>
+              </h2>
+              {isOwner && (
+                <div className="flex items-center gap-2">
+                  <BulkImportButton projectId={project.id} onCreated={refresh} />
+                  <NewVacancyButton
+                    projectId={project.id}
+                    onCreated={refresh}
+                    existingTitles={vacancies
+                      .filter((v) => v.status !== "ARCHIVED")
+                      .map((v) => v.title)}
+                  />
+                </div>
+              )}
+            </div>
+            {vacancies.length === 0 ? (
+              <p className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-sm text-slate-400">
+                No vacancies yet.{" "}
+                {isOwner ? "Add one above to start receiving applications." : "Check back later."}
+              </p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {vacancies.map((v) => (
+                  <div key={v.id} className="space-y-1.5">
+                    <VacancyCard vacancy={v} />
+                    {isOwner && (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <VacancyBoostButton vacancy={v} onUpdated={refresh} />
+                        <VacancyOwnerToggle vacancy={v} onUpdated={refresh} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {files.length > 0 && (
+            <div className="mt-6">
+              <h2 className="mb-2 text-lg font-semibold text-white">Files</h2>
+              <ul className="divide-y divide-white/5 rounded-xl border border-white/10 bg-white/5">
+                {files.map((f) => (
+                  <li key={f.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate text-emerald-300 hover:underline"
+                    >
+                      {f.name || f.url}
+                    </a>
+                    <span className="text-xs text-slate-500">
+                      {f.sizeBytes ? `${(f.sizeBytes / 1024).toFixed(0)} KB` : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <aside className="space-y-4">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+            <div className="text-xs uppercase tracking-wider text-slate-400">Status</div>
+            <div className="mt-2 text-2xl font-semibold text-white">{project.status}</div>
+            {isOwner && <OwnerStatusControls project={project} onUpdated={refresh} />}
+          </div>
+
+          {vacancies.length > 0 && (
+            <HiringProgressCard vacancies={vacancies} />
+          )}
+
+          {isOwner && <OwnerFileUpload projectId={project.id} onUploaded={refresh} />}
+
+          {isOwner && <ProjectAnalyticsWidget projectId={project.id} />}
+
+          {isOwner && (
+            <a
+              href={`/api/build/projects/${encodeURIComponent(project.id)}/export.pdf`}
+              download
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs font-medium text-slate-300 transition hover:bg-white/5"
+            >
+              ⬇ Export project PDF
+            </a>
+          )}
+        </aside>
+      </div>
+
+      {me && <EligibleReviewsBlock scopeProjectId={project.id} />}
+      <ReviewsByProjectSection projectId={project.id} />
+    </BuildShell>
+  );
+}
+
+function ShareButton({ projectId }: { projectId: string }) {
+  const [copied, setCopied] = useState(false);
+  const onClick = useCallback(() => {
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/build/p/${projectId}`
+        : `/build/p/${projectId}`;
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        })
+        .catch(() => {});
+    }
+  }, [projectId]);
+  return (
+    <button
+      onClick={onClick}
+      title="Copy public link to clipboard"
+      className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-white/10"
+    >
+      {copied ? "✓ Link copied" : "🔗 Share"}
+    </button>
+  );
+}
+
+function VacancyBoostButton({
+  vacancy,
+  onUpdated,
+}: {
+  vacancy: BuildVacancy;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const isFeatured = !!vacancy.boostUntil && new Date(vacancy.boostUntil) > new Date();
+  return (
+    <button
+      disabled={busy || vacancy.status !== "OPEN"}
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isFeatured) return;
+        if (!confirm("Boost this vacancy for 7 days? Free if your plan has boosts left, otherwise creates a 990 ₽ pending order.")) {
+          return;
+        }
+        setBusy(true);
+        try {
+          const r = await buildApi.boostVacancy(vacancy.id, 7);
+          onUpdated();
+          if (r.source === "PLAN") {
+            toast.success("Boost activated! Vacancy is featured for 7 days.");
+          } else {
+            toast.info(
+              `Boost is a pending order (id ${r.orderId?.slice(0, 8)}…). Pay on Pricing to activate.`,
+            );
+          }
+        } catch (err) {
+          toast.error((err as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+      title={isFeatured ? `Featured until ${new Date(vacancy.boostUntil!).toLocaleDateString()}` : "Boost this vacancy for 7 days"}
+      className={`w-full rounded-md px-2.5 py-1 text-xs ${
+        isFeatured
+          ? "bg-amber-500/15 text-amber-200"
+          : "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+      } disabled:opacity-50`}
+    >
+      {busy ? "…" : isFeatured ? "★ Featured" : "★ Boost 7d"}
+    </button>
+  );
+}
+
+function VacancyOwnerToggle({
+  vacancy,
+  onUpdated,
+}: {
+  vacancy: BuildVacancy;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const isClosed = vacancy.status === "CLOSED";
+  return (
+    <button
+      disabled={busy}
+      onClick={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setBusy(true);
+        try {
+          await buildApi.updateVacancy(vacancy.id, isClosed ? "OPEN" : "CLOSED");
+          onUpdated();
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className={`w-full rounded-md px-2.5 py-1 text-xs ${
+        isClosed
+          ? "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+          : "bg-white/5 text-slate-300 hover:bg-white/10"
+      }`}
+    >
+      {busy ? "…" : isClosed ? "↻ Reopen vacancy" : "✕ Close vacancy"}
+    </button>
+  );
+}
+
+function OwnerStatusControls({
+  project,
+  onUpdated,
+}: {
+  project: BuildProject;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="mt-3 flex flex-wrap gap-1">
+      {STATUSES.map((s: any) => (
+        <button
+          key={s}
+          disabled={busy || project.status === s}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await buildApi.updateProject(project.id, { status: s });
+              onUpdated();
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className={`rounded-md px-2.5 py-1 text-xs ${
+            project.status === s
+              ? "bg-emerald-500/20 text-emerald-200"
+              : "bg-white/5 text-slate-300 hover:bg-white/10"
+          }`}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TemplatePicker({
+  onPick,
+}: {
+  onPick: (t: {
+    title: string;
+    description: string;
+    salary: number;
+    skills: string[];
+    questions: string[];
+  }) => void;
+}) {
+  const [items, setItems] = useState<Awaited<ReturnType<typeof buildApi.listVacancyTemplates>>["items"]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (loaded) return;
+    buildApi
+      .listVacancyTemplates()
+      .then((r) => setItems(r.items))
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [loaded]);
+
+  if (!loaded || items.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/[0.06] p-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-fuchsia-200">★ Use template</span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-[10px] text-fuchsia-300 hover:underline"
+        >
+          {open ? "Hide" : `${items.length} saved`}
+        </button>
+      </div>
+      {open && (
+        <ul className="mt-2 max-h-48 space-y-0.5 overflow-y-auto">
+          {items.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPick({
+                    title: t.title,
+                    description: t.description,
+                    salary: t.salary,
+                    skills: t.skills ?? [],
+                    questions: t.questions ?? [],
+                  });
+                  setOpen(false);
+                }}
+                className="block w-full rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-fuchsia-500/10"
+              >
+                <span className="font-semibold">{t.name}</span>
+                <span className="ml-2 text-slate-500">→ {t.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [csv, setCsv] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ created: number; errors: { index: number; error: string }[] } | null>(null);
+
+  function parse(text: string): { rows: { title: string; description: string; salary?: number; city?: string; skills?: string }[]; parseErrors: string[] } {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return { rows: [], parseErrors: ["Empty input"] };
+    // First line treated as header iff contains 'title'.
+    const looksLikeHeader = /title/i.test(lines[0]);
+    const dataLines = looksLikeHeader ? lines.slice(1) : lines;
+    const out: { title: string; description: string; salary?: number; city?: string; skills?: string }[] = [];
+    for (const line of dataLines) {
+      const cols = splitCsvLine(line);
+      const [title, description, salary, city, skills] = cols;
+      if (!title || !description) {
+        // skip silently — bulk endpoint will report per-row errors anyway
+        out.push({ title: title ?? "", description: description ?? "" });
+        continue;
+      }
+      const row: { title: string; description: string; salary?: number; city?: string; skills?: string } = {
+        title,
+        description,
+      };
+      if (salary && /^\d+$/.test(salary.trim())) row.salary = Number(salary);
+      if (city) row.city = city;
+      if (skills) row.skills = skills;
+      out.push(row);
+    }
+    return { rows: out, parseErrors: [] };
+  }
+
+  async function submit() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const { rows } = parse(csv);
+      if (rows.length === 0) throw new Error("No rows parsed");
+      const r = await buildApi.bulkCreateVacancies({ projectId, rows });
+      setResult({ created: r.created, errors: r.errors });
+      if (r.created > 0) onCreated();
+    } catch (e) {
+      setResult({ created: 0, errors: [{ index: -1, error: (e as Error).message }] });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+        title="Paste CSV with title,description,salary,city,skills to create many vacancies at once"
+      >
+        ↑ Bulk import CSV
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-slate-900 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-white">Bulk import vacancies</h3>
+              <button onClick={() => setOpen(false)} aria-label="Close" className="text-slate-400 hover:text-white">×</button>
+            </div>
+            <p className="mb-2 text-xs text-slate-400">
+              CSV columns: <code className="rounded bg-white/10 px-1 text-slate-200">title,description,salary,city,skills</code>.
+              Skills are pipe-separated within the cell (welding|autocad). Header row optional. Up to 50 rows per call.
+            </p>
+            <textarea
+              value={csv}
+              onChange={(e) => setCsv(e.target.value)}
+              rows={10}
+              placeholder={`title,description,salary,city,skills\n"Senior welder","TIG/MIG, certified, 5+y",800000,Astana,"welding|tig|certified"`}
+              className="w-full rounded-md border border-white/10 bg-black/40 p-2 font-mono text-[11px] text-slate-100 focus:border-emerald-500/40 focus:outline-none"
+            />
+            {result && (
+              <div className="mt-3 rounded-md border border-white/10 bg-white/[0.03] p-2 text-xs">
+                <div className="font-semibold text-emerald-300">Created: {result.created}</div>
+                {result.errors.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-rose-200">
+                    {result.errors.slice(0, 8).map((e, i) => (
+                      <li key={i}>
+                        Row {e.index >= 0 ? e.index + 1 : "?"}: {e.error}
+                      </li>
+                    ))}
+                    {result.errors.length > 8 && <li>+{result.errors.length - 8} more…</li>}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy || csv.trim().length < 10}
+                className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+              >
+                {busy ? "Importing…" : "Import"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += c;
+      }
+    } else {
+      if (c === '"') {
+        inQuotes = true;
+      } else if (c === ",") {
+        out.push(cur.trim());
+        cur = "";
+      } else {
+        cur += c;
+      }
+    }
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function NewVacancyButton({
+  projectId,
+  onCreated,
+  existingTitles = [],
+}: {
+  projectId: string;
+  onCreated: () => void;
+  existingTitles?: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [salary, setSalary] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillInput, setSkillInput] = useState("");
+  const [popularSkills, setPopularSkills] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [questionInput, setQuestionInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Cheap fuzzy-match: normalise → token-set Jaccard. Triggers a soft warning
+  // if there's an active vacancy in this project with very similar title.
+  const duplicateCandidate = useMemo(() => {
+    const t = title.trim();
+    if (t.length < 4 || existingTitles.length === 0) return null;
+    const tokenize = (s: string) =>
+      new Set(
+        s
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .split(/\s+/)
+          .filter((w) => w.length >= 3),
+      );
+    const a = tokenize(t);
+    if (a.size === 0) return null;
+    let best: { title: string; score: number } | null = null;
+    for (const other of existingTitles) {
+      const b = tokenize(other);
+      if (b.size === 0) continue;
+      let inter = 0;
+      a.forEach((w) => {
+        if (b.has(w)) inter++;
+      });
+      const union = a.size + b.size - inter;
+      const score = union ? inter / union : 0;
+      if (score >= 0.6 && (!best || score > best.score)) {
+        best = { title: other, score };
+      }
+    }
+    return best;
+  }, [title, existingTitles]);
+
+  // Load popular skills the first time the dialog opens.
+  useEffect(() => {
+    if (!open || popularSkills.length > 0) return;
+    buildApi
+      .popularSkills()
+      .then((r) => setPopularSkills(r.items.slice(0, 30).map((s) => s.skill)))
+      .catch(() => {});
+  }, [open, popularSkills.length]);
+
+  function addSkill() {
+    const v = skillInput.trim();
+    if (!v || skills.includes(v)) {
+      setSkillInput("");
+      return;
+    }
+    setSkills([...skills, v].slice(0, 30));
+    setSkillInput("");
+  }
+
+  function addQuestion() {
+    const v = questionInput.trim();
+    if (!v || questions.includes(v)) {
+      setQuestionInput("");
+      return;
+    }
+    setQuestions([...questions, v].slice(0, 5));
+    setQuestionInput("");
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await buildApi.createVacancy({
+        projectId,
+        title: title.trim(),
+        description: description.trim(),
+        salary: salary ? Number(salary) : undefined,
+        skills,
+        questions,
+      });
+      setOpen(false);
+      setTitle("");
+      setDescription("");
+      setSalary("");
+      setSkills([]);
+      setQuestions([]);
+      onCreated();
+    } catch (e) {
+      const apiErr = e as { code?: string; payload?: Record<string, unknown> };
+      if (apiErr.code === "plan_vacancy_limit_reached") {
+        setError(
+          `Plan limit reached: ${apiErr.payload?.used}/${apiErr.payload?.limit} active vacancies. Upgrade your plan on /build/pricing.`,
+        );
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/30"
+      >
+        + Add vacancy
+      </button>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="w-full space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm"
+    >
+      <TemplatePicker
+        onPick={(t) => {
+          setTitle(t.title);
+          setDescription(t.description);
+          setSalary(t.salary > 0 ? String(t.salary) : "");
+          setSkills(t.skills ?? []);
+          setQuestions(t.questions ?? []);
+        }}
+      />
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Role title (e.g. Welder, day shift)"
+        required
+        minLength={3}
+        className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
+      />
+      {duplicateCandidate && (
+        <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-100">
+          ⚠ Looks similar to an existing vacancy in this project:{" "}
+          <span className="font-semibold">“{duplicateCandidate.title}”</span>
+          <span className="ml-1 text-amber-200/70">
+            ({Math.round(duplicateCandidate.score * 100)}% match)
+          </span>
+          . Consider editing the existing one — duplicates split applicant attention.
+        </div>
+      )}
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Requirements, schedule, equipment provided… (Markdown ok: **bold**, _italic_, - bullet, 1. numbered)"
+        required
+        minLength={10}
+        rows={4}
+        className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
+      />
+      <div className="text-[10px] text-slate-500">
+        Supports Markdown: <code className="text-slate-300">**bold**</code> <code className="text-slate-300">_italic_</code> <code className="text-slate-300">- bullet</code> <code className="text-slate-300">1. numbered</code> <code className="text-slate-300">`code`</code>
+      </div>
+      <AiImprove
+        value={description}
+        onAccept={(v) => setDescription(v)}
+        kind="vacancy_description"
+        hint="Сделать описание вакансии конкретнее"
+      />
+      <input
+        type="number"
+        min={0}
+        step="any"
+        value={salary}
+        onChange={(e) => setSalary(e.target.value)}
+        placeholder="Monthly salary (USD, optional)"
+        className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
+      />
+      <div className="rounded-md border border-white/10 bg-white/5 p-2">
+        <div className="mb-1 text-xs text-slate-400">Required skills (Enter to add — used for match score)</div>
+        <div className="flex flex-wrap gap-1.5">
+          {skills.map((s: any) => (
+            <span
+              key={s}
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-200"
+            >
+              {s}
+              <button
+                type="button"
+                onClick={() => setSkills(skills.filter((x) => x !== s))}
+                className="text-emerald-200/60 hover:text-emerald-200"
+                aria-label={`Remove ${s}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <input
+            value={skillInput}
+            onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                addSkill();
+              }
+            }}
+            onBlur={addSkill}
+            placeholder={skills.length === 0 ? "Welding, AutoCAD…" : ""}
+            list="qbuild-skill-suggestions"
+            className="flex-1 min-w-[100px] bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+          />
+          <datalist id="qbuild-skill-suggestions">
+            {popularSkills
+              .filter((s) => !skills.includes(s))
+              .map((s) => (
+                <option key={s} value={s} />
+              ))}
+          </datalist>
+        </div>
+        {popularSkills.length > 0 && skills.length < 5 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">Popular:</span>
+            {popularSkills
+              .filter((s) => !skills.includes(s))
+              .slice(0, 12)
+              .map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSkills([...skills, s].slice(0, 30))}
+                  className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] px-1.5 py-0 text-[10px] text-emerald-300 hover:bg-emerald-500/15"
+                >
+                  + {s}
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+      <div className="rounded-md border border-fuchsia-500/20 bg-fuchsia-500/5 p-2">
+        <div className="mb-1 text-xs text-fuchsia-200/80">
+          Quick questions for applicants (max 5) — Claude will score answers automatically ✨
+        </div>
+        <div className="space-y-1.5">
+          {questions.map((q, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 rounded-md bg-fuchsia-500/10 px-2 py-1 text-xs text-fuchsia-100"
+            >
+              <span className="font-mono text-fuchsia-300/70">Q{i + 1}.</span>
+              <span className="flex-1">{q}</span>
+              <button
+                type="button"
+                onClick={() => setQuestions(questions.filter((x) => x !== q))}
+                className="text-fuchsia-200/60 hover:text-fuchsia-100"
+                aria-label={`Remove question ${i + 1}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {questions.length < 5 && (
+            <input
+              value={questionInput}
+              onChange={(e) => setQuestionInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addQuestion();
+                }
+              }}
+              onBlur={addQuestion}
+              placeholder="e.g. Опишите проект где вы работали с AutoCAD"
+              className="w-full rounded-md border border-fuchsia-500/20 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-fuchsia-300/40"
+            />
+          )}
+        </div>
+      </div>
+      {error && <p className="text-xs text-rose-300">{error}</p>}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+        >
+          {busy ? "…" : "Create vacancy"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function OwnerFileUpload({ projectId, onUploaded }: { projectId: string; onUploaded: () => void }) {
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await buildApi.uploadFile({
+        projectId,
+        url: url.trim(),
+        name: name.trim() || undefined,
+      });
+      setUrl("");
+      setName("");
+      onUploaded();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border border-white/10 bg-white/5 p-5 text-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
+        Attach file URL
+      </h3>
+      <input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://…"
+        required
+        className="mb-2 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
+      />
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Display name (optional)"
+        className="mb-3 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
+      />
+      {error && <p className="mb-2 text-xs text-rose-300">{error}</p>}
+      <button
+        type="submit"
+        disabled={busy || !url}
+        className="w-full rounded-md bg-white/10 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-white/20 disabled:opacity-50"
+      >
+        {busy ? "Saving…" : "Attach file"}
+      </button>
+      <p className="mt-2 text-xs text-slate-500">
+        Files are stored externally. Paste a public URL (CDN, object store).
+      </p>
+    </form>
+  );
+}
+
+function HiringProgressCard({ vacancies }: { vacancies: { status: string; applicationsCount?: number }[] }) {
+  const total = vacancies.length;
+  const closed = vacancies.filter((v) => v.status === "CLOSED").length;
+  const open = vacancies.filter((v) => v.status === "OPEN").length;
+  const pct = total > 0 ? Math.round((closed / total) * 100) : 0;
+  const totalApps = vacancies.reduce((acc, v) => acc + (v.applicationsCount ?? 0), 0);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Hiring progress</div>
+      <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+        <span>{closed}/{total} positions filled</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-white/10">
+        <div
+          className="h-2 rounded-full bg-emerald-500 transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <div>
+          <div className="font-bold text-white">{total}</div>
+          <div className="text-slate-500">Total</div>
+        </div>
+        <div>
+          <div className="font-bold text-emerald-300">{open}</div>
+          <div className="text-slate-500">Open</div>
+        </div>
+        <div>
+          <div className="font-bold text-slate-300">{totalApps}</div>
+          <div className="text-slate-500">Applies</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectAnalyticsWidget({ projectId }: { projectId: string }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof buildApi.projectAnalytics>> | null>(null);
+
+  useEffect(() => {
+    buildApi.projectAnalytics(projectId).then(setData).catch(() => {});
+  }, [projectId]);
+
+  if (!data) return null;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Analytics</div>
+      <div className="grid grid-cols-2 gap-2 text-center">
+        <Metric label="Views" value={data.vacancies.totalViews} />
+        <Metric label="Applied" value={data.applications.total} />
+        <Metric label="Accepted" value={data.applications.accepted} tone="emerald" />
+        <Metric label="Conv%" value={`${data.applications.conversionRate}%`} />
+      </div>
+      {data.reviews.count > 0 && (
+        <div className="mt-3 border-t border-white/5 pt-3 text-center text-xs text-slate-400">
+          {"★".repeat(Math.round(data.reviews.avgRating))} {data.reviews.avgRating.toFixed(1)} ({data.reviews.count} review{data.reviews.count !== 1 ? "s" : ""})
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Metric({ label, value, tone }: { label: string; value: number | string; tone?: "emerald" }) {
+  return (
+    <div className="rounded-lg border border-white/5 bg-white/5 py-2">
+      <div className={`text-lg font-bold ${tone === "emerald" ? "text-emerald-300" : "text-white"}`}>{value}</div>
+      <div className="text-[10px] text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+function ProjectStatusButton({
+  projectId,
+  currentStatus,
+  onUpdated,
+}: {
+  projectId: string;
+  currentStatus: string;
+  onUpdated: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  const next =
+    currentStatus === "OPEN" ? "IN_PROGRESS" :
+    currentStatus === "IN_PROGRESS" ? "DONE" : null;
+
+  if (!next) return null;
+
+  const label =
+    next === "IN_PROGRESS" ? "Mark In Progress" :
+    next === "DONE" ? "Mark Complete ✓" : "";
+
+  const cls =
+    next === "DONE"
+      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20"
+      : "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20";
+
+  async function advance() {
+    setBusy(true);
+    try {
+      await buildApi.updateProject(projectId, { status: next as "IN_PROGRESS" | "DONE" });
+      toast.success(next === "DONE" ? "Project marked complete ✓" : "Project moved to In Progress");
+      onUpdated();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      onClick={advance}
+      disabled={busy}
+      className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${cls}`}
+    >
+      {busy ? "…" : label}
+    </button>
+  );
+}

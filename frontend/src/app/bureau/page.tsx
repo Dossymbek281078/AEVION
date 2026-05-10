@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { getDeviceId } from "@/lib/aevApi";
 
 type Certificate = {
   id: string;
@@ -14,6 +16,7 @@ type Certificate = {
   author: string;
   location?: string | null;
   contentHash: string;
+  fileHash?: string | null;
   algorithm: string;
   protectedAt: string;
   verifiedCount: number;
@@ -21,6 +24,7 @@ type Certificate = {
   verificationLevel?: "anonymous" | "verified";
   verifiedName?: string | null;
   verifiedAt?: string | null;
+  shieldId?: string | null;
 };
 
 const KIND_ICONS: Record<string, string> = {
@@ -59,10 +63,22 @@ type DashboardData = {
     createdAt: string;
     completedAt: string | null;
   }>;
+  trustEdges?: Array<{
+    id: string;
+    certId: string;
+    tier: string;
+    aecRewardPlanned: number | null;
+    aecRewardClaimedAt: string | null;
+    createdAt: string;
+  }>;
+  aecSummary?: { totalPlanned: number; totalClaimed: number; unclaimed: number };
   pricing: { verifiedTierCents: number; currency: string };
 };
 
 const TOKEN_KEY = "aevion_auth_token_v1";
+const WAITLIST_KEY = "aevion_notarized_waitlist_v1";
+
+type SortMode = "newest" | "oldest" | "verified";
 
 export default function BureauPage() {
   const { showToast } = useToast();
@@ -70,8 +86,79 @@ export default function BureauPage() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, totalVerifications: 0 });
 
+  // Prior-art search + filter + sort over the public registry.
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<string>("all");
+  const [sort, setSort] = useState<SortMode>("newest");
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+
+  // File drag-drop on /bureau: compute SHA-256 → populate search query.
+  const [fileDragOver, setFileDragOver] = useState(false);
+  const [fileChecking, setFileChecking] = useState(false);
+  const hashAndSearch = async (file: File) => {
+    setFileChecking(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buf);
+      const hex = Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      setQuery(hex);
+      setKindFilter("all");
+      setVerifiedOnly(false);
+    } catch {
+      showToast("Could not hash file", "error");
+    } finally {
+      setFileChecking(false);
+    }
+  };
+
   const [authed, setAuthed] = useState(false);
+
+  // Notarized tier waitlist.
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistDone, setWaitlistDone] = useState(() => {
+    try { return !!localStorage.getItem(WAITLIST_KEY); } catch { return false; }
+  });
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
+  const submitWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistEmail.trim() || waitlistDone) return;
+    setWaitlistBusy(true);
+    // Store locally — no backend endpoint yet; will wire up when Notarized goes live.
+    try { localStorage.setItem(WAITLIST_KEY, waitlistEmail.trim()); } catch {}
+    await new Promise((r) => setTimeout(r, 600));
+    setWaitlistDone(true);
+    setWaitlistBusy(false);
+    showToast("You're on the waitlist!", "success");
+  };
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [claimingEdgeId, setClaimingEdgeId] = useState<string | null>(null);
+
+  const claimAec = async (edgeId: string) => {
+    setClaimingEdgeId(edgeId);
+    try {
+      const deviceId = getDeviceId();
+      const r = await fetch(apiUrl(`/api/bureau/trust-edges/${edgeId}/claim-aec`), {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ deviceId }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        showToast(j?.error || `claim failed (${r.status})`, "error");
+        return;
+      }
+      showToast(`Claimed ${j.amount} AEC`, "success");
+      // Refetch dashboard so the row flips to "claimed".
+      const dr = await fetch(apiUrl("/api/bureau/dashboard"), { headers: authHeaders() });
+      if (dr.ok) setDashboard((await dr.json()) as DashboardData);
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setClaimingEdgeId(null);
+    }
+  };
 
   const authHeaders = (): HeadersInit => {
     try {
@@ -138,6 +225,41 @@ export default function BureauPage() {
     );
   })();
 
+  const filteredCerts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let out = certificates;
+    if (q) {
+      out = out.filter((c) => {
+        const hay = [c.title, c.author, c.contentHash, c.fileHash || "", c.location || ""].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    if (kindFilter !== "all") {
+      out = out.filter((c) => c.kind === kindFilter);
+    }
+    if (verifiedOnly) {
+      out = out.filter((c) => c.verificationLevel === "verified");
+    }
+    const sorted = [...out];
+    if (sort === "newest") {
+      sorted.sort((a, b) => +new Date(b.protectedAt) - +new Date(a.protectedAt));
+    } else if (sort === "oldest") {
+      sorted.sort((a, b) => +new Date(a.protectedAt) - +new Date(b.protectedAt));
+    } else if (sort === "verified") {
+      sorted.sort((a, b) => (b.verifiedCount || 0) - (a.verifiedCount || 0));
+    }
+    return sorted;
+  }, [certificates, query, kindFilter, sort, verifiedOnly]);
+
+  const kindCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of certificates) counts[c.kind] = (counts[c.kind] || 0) + 1;
+    return counts;
+  }, [certificates]);
+
+  const hashLooksLikeSha256 = /^[a-f0-9]{64}$/i.test(query.trim());
+  const filtersActive = query.trim() !== "" || kindFilter !== "all" || verifiedOnly || sort !== "newest";
+
   const copy = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
       () => showToast(`${label} copied!`, "success"),
@@ -166,6 +288,9 @@ export default function BureauPage() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 🛡️ Protect Your Work
+              </Link>
+              <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+                🔎 Search prior art
               </Link>
               <Link href="/quantum-shield" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
                 Quantum Shield Dashboard
@@ -221,8 +346,59 @@ export default function BureauPage() {
           </div>
         )}
 
+        {/* ── Trust Graph (authed users with at least one earned edge) ── */}
+        {authed && dashboard?.trustEdges && dashboard.trustEdges.length > 0 && (
+          <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(217,119,6,0.25)", background: "linear-gradient(135deg, rgba(245,158,11,0.04), rgba(217,119,6,0.06))", padding: "18px 22px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: "#92400e" }}>
+                🔗 Trust Graph — your earned tiers
+              </div>
+              {dashboard.aecSummary && (
+                <div style={{ fontSize: 12, color: "#78350f" }}>
+                  Total earned <b>{dashboard.aecSummary.totalPlanned}</b> AEC ·
+                  claimed <b>{dashboard.aecSummary.totalClaimed}</b> ·
+                  unclaimed <b style={{ color: dashboard.aecSummary.unclaimed > 0 ? "#b45309" : "#78350f" }}>{dashboard.aecSummary.unclaimed}</b>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {dashboard.trustEdges.map((e) => {
+                const claimed = !!e.aecRewardClaimedAt;
+                const claimable = !claimed && (e.aecRewardPlanned ?? 0) > 0;
+                const isClaiming = claimingEdgeId === e.id;
+                return (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.7)", border: "1px solid rgba(217,119,6,0.15)" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "#92400e", textTransform: "capitalize" }}>{e.tier}</span>
+                      <span style={{ fontSize: 11, color: "#78716c", fontFamily: "ui-monospace, monospace" }}>cert {e.certId.slice(0, 8)}…</span>
+                      <span style={{ fontSize: 11, color: "#a8a29e" }}>{new Date(e.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>{e.aecRewardPlanned ?? 0} AEC</span>
+                      {claimed ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ claimed</span>
+                      ) : claimable ? (
+                        <button
+                          type="button"
+                          disabled={isClaiming}
+                          onClick={() => claimAec(e.id)}
+                          style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: isClaiming ? "#a8a29e" : "linear-gradient(135deg, #d97706, #ea580c)", color: "#fff", fontWeight: 800, fontSize: 12, cursor: isClaiming ? "default" : "pointer" }}
+                        >
+                          {isClaiming ? "Claiming…" : "Claim AEC"}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, color: "#a8a29e" }}>no reward</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── Stats ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 28 }}>
           {[
             { value: stats.total, label: "Certificates Issued", color: "#0d9488" },
             { value: stats.totalVerifications, label: "Total Verifications", color: "#3b82f6" },
@@ -239,7 +415,7 @@ export default function BureauPage() {
         {/* ── How It Works ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 14 }}>How AEVION IP Bureau Works</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
             {[
               { n: "1", title: "Register", desc: "Describe your work — we create a SHA-256 content hash", icon: "📋", color: "#0d9488" },
               { n: "2", title: "Sign", desc: "HMAC-SHA256 cryptographic signature proves integrity", icon: "🔏", color: "#3b82f6" },
@@ -264,7 +440,7 @@ export default function BureauPage() {
           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
             Anonymous certificates are free and cryptographically complete. Higher tiers add identity attestation and (soon) notary co-signing — useful when an IP claim needs strong author identification in court.
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
             {[
               {
                 name: "Free / Anonymous",
@@ -285,13 +461,13 @@ export default function BureauPage() {
               {
                 name: "Notarized",
                 price: "From $89 / cert",
-                blurb: "Licensed notary in KZ co-signs the certificate, producing an apostille-ready document admissible in EAEU courts. Filed-tier upgrade leads to full Kazpatent / WIPO PCT submission.",
-                badge: "soon",
-                badgeColor: "#94a3b8",
-                cta: null as { label: string; href: string } | null,
+                blurb: "Licensed notary co-signs the certificate with Ed25519, producing an apostille-ready document admissible in EAEU courts.",
+                badge: "▲ live",
+                badgeColor: "#7c3aed",
+                cta: { label: "View Notary Registry", href: "/bureau/notaries" },
               },
             ].map((tier) => (
-              <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
+              <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
                   <span style={{ fontSize: 10, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
@@ -303,17 +479,162 @@ export default function BureauPage() {
                     {tier.cta.label}
                   </Link>
                 )}
+                {tier.name === "Notarized" && (
+                  <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 11, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
+                    Upgrade your Verified cert — select a notary and submit a request.
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </div>
 
         {/* ── Certificate Registry ── */}
-        <div style={{ marginBottom: 28 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>Certificate Registry ({certificates.length})</div>
+        <div id="registry" style={{ marginBottom: 28, scrollMarginTop: 80 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 12, flexWrap: "wrap" as const }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>
+              Certificate Registry{" "}
+              <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 14 }}>
+                ({filtersActive ? `${filteredCerts.length} of ${certificates.length}` : certificates.length})
+              </span>
+            </div>
             <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
           </div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+            Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or <strong>drop a file below</strong> to check it instantly.
+          </div>
+
+          {/* Search + filter toolbar (hidden until certs load to avoid layout flash). */}
+          {/* File drop zone — drag any file to compute SHA-256 and search instantly */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setFileDragOver(true); }}
+            onDragLeave={() => setFileDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setFileDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) hashAndSearch(f); }}
+            style={{
+              marginBottom: 10,
+              padding: "12px 16px",
+              borderRadius: 10,
+              border: `2px dashed ${fileDragOver ? "#0d9488" : "rgba(15,23,42,0.12)"}`,
+              background: fileDragOver ? "rgba(13,148,136,0.04)" : "transparent",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              transition: "border-color 0.15s, background 0.15s",
+              cursor: "default",
+            }}
+          >
+            <span style={{ fontSize: 20 }}>{fileChecking ? "⏳" : "📂"}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                {fileChecking ? "Computing SHA-256…" : "Drop a file here to check prior art"}
+              </div>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                {fileChecking ? "Searching registry…" : "Any format — computes SHA-256 in your browser, then searches the registry instantly"}
+              </div>
+            </div>
+            <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
+              Browse
+              <input type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
+            </label>
+          </div>
+
+          {!loading && certificates.length > 0 && (
+            <div style={{ display: "grid", gap: 10, marginBottom: 14, padding: 12, borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" as const }}>
+                <div style={{ position: "relative" as const, flex: "1 1 280px", minWidth: 0 }}>
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search title, author, or paste SHA-256 hash…"
+                    aria-label="Search registry"
+                    style={{
+                      width: "100%",
+                      padding: "8px 30px 8px 32px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      fontSize: 13,
+                      fontFamily: hashLooksLikeSha256 ? "monospace" : undefined,
+                      color: "#0f172a",
+                      background: "#f8fafc",
+                      outline: "none",
+                      boxSizing: "border-box" as const,
+                    }}
+                  />
+                  <span style={{ position: "absolute" as const, left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontSize: 14, pointerEvents: "none" as const }}>🔎</span>
+                  {query && (
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      aria-label="Clear search"
+                      style={{ position: "absolute" as const, right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "transparent", color: "#94a3b8", fontSize: 16, cursor: "pointer", padding: "2px 6px", lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value as SortMode)}
+                  aria-label="Sort registry"
+                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 12, fontWeight: 700, color: "#334155", background: "#fff", cursor: "pointer" }}
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="verified">Most verified</option>
+                </select>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: `1px solid ${verifiedOnly ? "rgba(16,185,129,0.45)" : "rgba(15,23,42,0.15)"}`, background: verifiedOnly ? "rgba(16,185,129,0.08)" : "#fff", fontSize: 12, fontWeight: 700, color: verifiedOnly ? "#065f46" : "#334155", cursor: "pointer", userSelect: "none" as const }}>
+                  <input
+                    type="checkbox"
+                    checked={verifiedOnly}
+                    onChange={(e) => setVerifiedOnly(e.target.checked)}
+                    style={{ margin: 0, cursor: "pointer" }}
+                  />
+                  ⭐ Verified only
+                </label>
+                {filtersActive && (
+                  <button
+                    type="button"
+                    onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
+                    style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer" }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                {(["all", "music", "code", "design", "text", "video", "idea", "other"] as const).map((k) => {
+                  const active = kindFilter === k;
+                  const count = k === "all" ? certificates.length : (kindCounts[k] || 0);
+                  if (k !== "all" && count === 0) return null;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setKindFilter(k)}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 999,
+                        border: `1px solid ${active ? "rgba(13,148,136,0.45)" : "rgba(15,23,42,0.12)"}`,
+                        background: active ? "rgba(13,148,136,0.12)" : "#fff",
+                        color: active ? "#0d9488" : "#475569",
+                        fontWeight: 700,
+                        fontSize: 11,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      {k === "all" ? "All" : <>{KIND_ICONS[k]} {KIND_LABELS[k]?.split(" / ")[0] || k}</>}
+                      <span style={{ fontSize: 10, opacity: 0.7 }}>({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>Loading certificates...</div>
@@ -324,9 +645,34 @@ export default function BureauPage() {
               <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
               <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>🛡️ Protect Your Work</Link>
             </div>
+          ) : filteredCerts.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🔎</div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a", marginBottom: 4 }}>
+                {hashLooksLikeSha256 ? "No prior art for this hash" : "Nothing matches your filters"}
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14, lineHeight: 1.55 }}>
+                {hashLooksLikeSha256
+                  ? "Your content is unique in the AEVION registry — safe to register as new IP."
+                  : "Try a different search term or reset filters."}
+              </div>
+              {hashLooksLikeSha256 ? (
+                <Link href="/qright" style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                  🛡️ Register this work
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, color: "#334155", cursor: "pointer" }}
+                >
+                  Reset filters
+                </button>
+              )}
+            </div>
           ) : (
             <div style={{ display: "grid", gap: 12 }}>
-              {certificates.map((cert) => (
+              {filteredCerts.map((cert) => (
                 <div key={cert.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 14, padding: 16, background: "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
                     <div>
@@ -350,12 +696,23 @@ export default function BureauPage() {
                     </div>
                   </div>
 
-                  <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
-                      <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
+                  <div style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                    <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
+                        <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
+                      </div>
+                      <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
                     </div>
-                    <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
+                    {cert.fileHash && (
+                      <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(13,148,136,0.03)", border: "1px solid rgba(13,148,136,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#0d9488", textTransform: "uppercase" as const }}>📎 File Hash (SHA-256)</div>
+                          <div style={{ fontSize: 11, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>{cert.fileHash}</div>
+                        </div>
+                        <button onClick={() => copy(cert.fileHash!, "File Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.2)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#0d9488", flexShrink: 0 }}>Copy</button>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -378,6 +735,15 @@ export default function BureauPage() {
                     )}
                     <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
                     <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy ID</button>
+                    {cert.shieldId && (
+                      <Link
+                        href={`/quantum-shield/${cert.shieldId}`}
+                        title={`Quantum Shield ${cert.shieldId}`}
+                        style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(13,148,136,0.1)", color: "#0d9488", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(13,148,136,0.25)" }}
+                      >
+                        🛡️ Shield
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}
@@ -391,7 +757,7 @@ export default function BureauPage() {
           <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
             AEVION IP Bureau operates under established international copyright and digital signature laws. Our certificates serve as cryptographic proof of prior art — admissible evidence in IP disputes worldwide.
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
             {LEGAL_FRAMEWORKS.map((l) => (
               <div key={l.name} style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>

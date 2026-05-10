@@ -97,6 +97,8 @@ type RunState = {
   agentConfig?: any;
   persisted?: boolean;
   shareToken?: string | null;
+  /** Free-form tags attached by the owner (PATCH /runs/:id/tags). */
+  tags?: string[];
 };
 
 type SessionSummary = {
@@ -157,6 +159,18 @@ type QRightObjectLite = {
   id: string;
   title: string | null;
   kind: string | null;
+};
+
+type TemplateItem = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  input: string;
+  strategy: string;
+  overrides: Record<string, { provider: string; model: string }>;
+  isPublic: boolean;
+  useCount: number;
 };
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -320,6 +334,16 @@ export default function QCoreMultiAgentPage() {
     writerB: { provider: "", model: "" },
     critic: { provider: "", model: "" },
   });
+  // V6-P integration: per-role custom system prompt selection. Holds the
+  // promptId that the orchestrator will fetch + inject as systemPrompt for
+  // that role. Empty string = use the role's default prompt.
+  const [promptSelections, setPromptSelections] = useState<Record<ConfigRoleId, string>>({
+    analyst: "",
+    writer: "",
+    writerB: "",
+    critic: "",
+  });
+  const [userPrompts, setUserPrompts] = useState<Array<{ id: string; name: string; role: string; version: number }>>([]);
   const [maxRevisions, setMaxRevisions] = useState(1);
   // Optional spend cap per run (USD). 0 = no cap. Persisted in localStorage
   // so investors don't accidentally start a $5 run during a demo.
@@ -329,6 +353,21 @@ export default function QCoreMultiAgentPage() {
   const [presets, setPresets] = useState<AgentPreset[]>([]);
   const [savingPreset, setSavingPreset] = useState(false);
   const [presetName, setPresetName] = useState("");
+  // V4-E agent marketplace
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [marketplacePresets, setMarketplacePresets] = useState<Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    strategy: string;
+    overrides: any;
+    importCount: number;
+    updatedAt: string;
+  }>>([]);
+  const [marketplaceQuery, setMarketplaceQuery] = useState("");
+  const [marketplaceBusy, setMarketplaceBusy] = useState(false);
+  const [marketplaceShareFor, setMarketplaceShareFor] = useState<string | null>(null);
+  const [marketplaceShareDesc, setMarketplaceShareDesc] = useState("");
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   // Per-user webhook config (auth-required). null = not loaded yet,
   // undefined = loaded but user has no webhook set.
@@ -348,12 +387,101 @@ export default function QCoreMultiAgentPage() {
   const [qrightObjects, setQrightObjects] = useState<QRightObjectLite[] | null>(null);
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
 
+  // V22: prompt history (localStorage)
+  const [promptHistory, setPromptHistory] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const h = JSON.parse(localStorage.getItem("qcore_prompt_history") || "[]");
+      if (Array.isArray(h)) setPromptHistory(h.slice(0, 20));
+    } catch { /* noop */ }
+  }, []);
+
+  const addToHistory = (text: string) => {
+    if (!text.trim() || text.length < 10) return;
+    setPromptHistory((prev) => {
+      const next = [text.slice(0, 200), ...prev.filter((p) => p !== text)].slice(0, 20);
+      try { localStorage.setItem("qcore_prompt_history", JSON.stringify(next)); } catch { /* noop */ }
+      return next;
+    });
+  };
+
+  // V19: agent personas (V52: extended with bio + systemPromptHint)
+  const [personas, setPersonas] = useState<Record<string, { name: string; emoji?: string; color?: string; defaultProvider?: string; defaultModel?: string; bio?: string; systemPromptHint?: string }>>({});
+  const [personaEditRole, setPersonaEditRole] = useState<string | null>(null);
+  const [personaName, setPersonaName] = useState("");
+  const [personaEmoji, setPersonaEmoji] = useState("");
+  const [personaBio, setPersonaBio] = useState("");
+  const [personaSystemHint, setPersonaSystemHint] = useState("");
+
+  // V18: command palette state
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const paletteRef = useRef<HTMLInputElement>(null);
+  const [paletteRunResults, setPaletteRunResults] = useState<Array<{ type: string; id: string; sessionId?: string; snippet: string; title?: string | null }>>([]);
+  // V32: shortcut cheatsheet modal
+  const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
+
+  // V35: presence indicator — online count for the active session
+  const [presenceCount, setPresenceCount] = useState(0);
+
+  // V37: multi-select mode for bulk session ops
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+
+  // V7-T: id of the run being continued (thread reply context).
+  const [continueFromRunId, setContinueFromRunId] = useState<string | null>(null);
+  // V7-Tmpl: run templates — save/load named input+strategy bundles.
+  const [templates, setTemplates] = useState<TemplateItem[]>([]);
+  const [publicTemplates, setPublicTemplates] = useState<TemplateItem[]>([]);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState("");
+  const [saveTemplateFor, setSaveTemplateFor] = useState<string | null>(null);
+
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunState[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  // Sidebar quick-find + tag chip strip (feat/qcore-extras 2026-04-29).
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<Array<{
+    runId: string; sessionId: string; sessionTitle: string;
+    matched: "input" | "final" | "title" | "tag"; preview: string;
+  }>>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [topTags, setTopTags] = useState<Array<{ tag: string; count: number }>>([]);
+  // Inline refine state per-run.
+  const [refineOpen, setRefineOpen] = useState<string | null>(null);
+  const [refineText, setRefineText] = useState<string>("");
+  const [refineBusy, setRefineBusy] = useState<boolean>(false);
+
+  // V31 — smart suggestions.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+
+  // V31 — annotations per run.
+  type AnnotationRow = { id: string; runId: string; messageRole: string; messageIdx: number; note: string; color: string; createdAt: string };
+  const [annotationsMap, setAnnotationsMap] = useState<Record<string, AnnotationRow[]>>({});
+  const [annotatingRunId, setAnnotatingRunId] = useState<string | null>(null);
+  const [annotateText, setAnnotateText] = useState("");
+  const [annotateSaving, setAnnotateSaving] = useState(false);
+
+  // V47 — AI summary popover.
+  const [aiSummaryText, setAiSummaryText] = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [showAiSummary, setShowAiSummary] = useState(false);
+
+  // V55 — Invite copy feedback (sessionId that was just invited).
+  const [inviteCopiedSid, setInviteCopiedSid] = useState<string | null>(null);
+
+  // V48 — Run timeline points.
+  type TimelinePoint = { runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string };
+  const [timelinePoints, setTimelinePoints] = useState<TimelinePoint[]>([]);
 
   const timelineRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -364,6 +492,75 @@ export default function QCoreMultiAgentPage() {
   const userScrolledUpRef = useRef(false);
   // Tells `sendCompareAll` to stop firing remaining strategies. Set by Stop.
   const compareAbortRef = useRef(false);
+
+  /* ── ⌘K Command palette + keyboard shortcuts ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // ⌘K / Ctrl+K — palette
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        setPaletteQuery("");
+        return;
+      }
+      if (e.key === "Escape") { setPaletteOpen(false); return; }
+      // Skip if focused on input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // n — new session
+      if (e.key === "n" && !e.metaKey && !e.ctrlKey) { e.preventDefault(); newSession(); return; }
+      // / — focus search or palette
+      if (e.key === "/" && !e.metaKey) { e.preventDefault(); setPaletteOpen(true); setPaletteQuery(""); return; }
+      // 1/2/3 — strategy shortcuts
+      if (e.key === "1") { e.preventDefault(); setStrategy("sequential"); return; }
+      if (e.key === "2") { e.preventDefault(); setStrategy("parallel"); return; }
+      if (e.key === "3") { e.preventDefault(); setStrategy("debate"); return; }
+      // ? — show shortcuts modal
+      if (e.key === "?") { e.preventDefault(); setShortcutModalOpen(true); return; }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (paletteOpen) setTimeout(() => paletteRef.current?.focus(), 50);
+  }, [paletteOpen]);
+
+  // V31 — debounced backend search when ⌘K query is 3+ chars.
+  useEffect(() => {
+    if (!paletteOpen || paletteQuery.length < 3) { setPaletteRunResults([]); return; }
+    const t = setTimeout(async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+      if (!token) return;
+      try {
+        const r = await fetch(apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(paletteQuery)}&limit=5`), { headers: { Authorization: `Bearer ${token}` } });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok && Array.isArray(d.results)) setPaletteRunResults(d.results.filter((x: any) => x.type === "run"));
+      } catch { /* non-fatal */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [paletteOpen, paletteQuery]);
+
+  /* ── V35: Presence ping — heartbeat every 20s when a session is active ── */
+  useEffect(() => {
+    if (!activeSessionId) { setPresenceCount(0); return; }
+    const ping = async () => {
+      try {
+        const r = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/presence/ping`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...bearerHeader() },
+        });
+        if (r.ok) {
+          const d = await r.json().catch(() => ({}));
+          setPresenceCount(d.onlineCount ?? 0);
+        }
+      } catch { /* non-fatal */ }
+    };
+    ping();
+    const interval = setInterval(ping, 20_000);
+    return () => clearInterval(interval);
+  }, [activeSessionId]);
 
   /* ── Load providers + role defaults + sessions + pricing on mount ── */
   useEffect(() => {
@@ -402,11 +599,102 @@ export default function QCoreMultiAgentPage() {
           setOverrides(next);
         }
         if (Array.isArray(sessData?.items)) setSessions(sessData.items);
+
+        // V19: load agent personas
+        try {
+          const pRes = await fetch(apiUrl("/api/qcoreai/me/personas"), { headers: bearerHeader() });
+          const pData = await pRes.json().catch(() => ({}));
+          if (Array.isArray(pData?.personas)) {
+            const map: Record<string, { name: string; emoji?: string; color?: string }> = {};
+            for (const p of pData.personas) map[p.roleId] = { name: p.name, emoji: p.emoji, color: p.color };
+            setPersonas(map);
+          }
+        } catch { /* non-critical */ }
+
+        // V7-Tmpl: load user's own templates in the background.
+        try {
+          const [tmplRes, pubTmplRes] = await Promise.all([
+            fetch(apiUrl("/api/qcoreai/templates"), { headers: bearerHeader() }),
+            fetch(apiUrl("/api/qcoreai/templates/public?limit=20")),
+          ]);
+          const tmplData = await tmplRes.json().catch(() => ({}));
+          const pubData = await pubTmplRes.json().catch(() => ({}));
+          if (Array.isArray(tmplData?.items)) setTemplates(tmplData.items);
+          if (Array.isArray(pubData?.items)) setPublicTemplates(pubData.items);
+        } catch { /* templates are non-critical */ }
       } catch (e: any) {
         setGlobalError(e?.message || "Failed to load QCoreAI config");
       }
     })();
   }, []);
+
+  /* ── V12: inject notebook snippet + V20: pipeline inject ── */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const from = url.searchParams.get("from");
+
+    if (from === "notebook") {
+      const snippet = sessionStorage.getItem("qcore_notebook_inject");
+      if (snippet) {
+        setInput(snippet);
+        sessionStorage.removeItem("qcore_notebook_inject");
+        url.searchParams.delete("from");
+        window.history.replaceState({}, "", url.toString());
+        setTimeout(() => { if (textareaRef.current) textareaRef.current.focus(); }, 100);
+      }
+    } else if (from === "pipeline") {
+      const raw = sessionStorage.getItem("qcore_pipeline_inject");
+      if (raw) {
+        try {
+          const steps = JSON.parse(raw) as Array<{ role: string; name?: string; systemPrompt?: string; provider?: string; model?: string }>;
+          // Map pipeline steps to overrides — use first writer step for writer, first critic for critic etc.
+          const overrideMap: Record<string, { provider: string; model: string }> = {};
+          for (const step of steps) {
+            const key = step.role === "writer" ? "writer" : step.role === "analyst" ? "analyst" : step.role === "critic" ? "critic" : null;
+            if (key && step.provider && step.model && !overrideMap[key]) {
+              overrideMap[key] = { provider: step.provider, model: step.model };
+            }
+          }
+          if (Object.keys(overrideMap).length > 0) {
+            setOverrides((prev) => ({ ...prev, ...overrideMap }));
+          }
+        } catch { /* ignore invalid */ }
+        sessionStorage.removeItem("qcore_pipeline_inject");
+        url.searchParams.delete("from");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }
+  }, []);
+
+  /* ── Lazy-load user's prompts when config panel opens ── */
+  useEffect(() => {
+    if (!configOpen) return;
+    if (typeof window === "undefined") return;
+    const headers = bearerHeader();
+    if (!("Authorization" in headers)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/qcoreai/prompts?limit=200"), { headers });
+        if (!r.ok || cancelled) return;
+        const data = await r.json();
+        if (!cancelled) {
+          setUserPrompts(
+            (data.items || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              role: p.role,
+              version: p.version,
+            }))
+          );
+        }
+      } catch {
+        /* ignore — prompts panel just stays empty */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [configOpen]);
 
   /* ── Lazy-load personal webhook config when config panel opens ── */
   useEffect(() => {
@@ -574,6 +862,77 @@ export default function QCoreMultiAgentPage() {
     persistPresets(presets.filter((p) => p.id !== id));
   }, [presets, persistPresets]);
 
+  /* ── V4-E Agent marketplace ── */
+  const loadMarketplace = useCallback(async (q?: string) => {
+    setMarketplaceBusy(true);
+    try {
+      const url = q
+        ? apiUrl(`/api/qcoreai/presets/public?q=${encodeURIComponent(q)}`)
+        : apiUrl(`/api/qcoreai/presets/public`);
+      const res = await fetch(url, { headers: bearerHeader() });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setMarketplacePresets(data.items);
+    } catch { /* ignore */ } finally {
+      setMarketplaceBusy(false);
+    }
+  }, []);
+
+  const importMarketplacePreset = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/presets/${encodeURIComponent(id)}/import`), {
+        method: "POST",
+        headers: bearerHeader(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.preset) throw new Error(data?.error || "import failed");
+      const p = data.preset;
+      // Add to localStorage presets — generate new local id, suffix collisions.
+      const existingNames = new Set(presets.map((x) => x.name));
+      let name = p.name;
+      let n = 2;
+      while (existingNames.has(name)) name = `${p.name} (${n++})`;
+      const next: AgentPreset[] = [
+        ...presets,
+        {
+          id: crypto.randomUUID(),
+          name,
+          strategy: (p.strategy === "parallel" || p.strategy === "debate" ? p.strategy : "sequential") as Strategy,
+          overrides: (p.overrides && typeof p.overrides === "object" ? p.overrides : {}) as AgentPreset["overrides"],
+          maxRevisions: typeof p.maxRevisions === "number" ? p.maxRevisions : 1,
+        },
+      ];
+      persistPresets(next);
+      // Refresh the list (importCount bumped server-side).
+      void loadMarketplace(marketplaceQuery);
+    } catch (e: any) {
+      setGlobalError(e?.message || "import failed");
+    }
+  }, [presets, persistPresets, marketplaceQuery, loadMarketplace]);
+
+  const sharePresetToMarketplace = useCallback(async (preset: AgentPreset, description: string) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/presets/share`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({
+          name: preset.name,
+          description: description.trim() || null,
+          strategy: preset.strategy,
+          overrides: preset.overrides,
+          isPublic: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setMarketplaceShareFor(null);
+      setMarketplaceShareDesc("");
+      // Refresh to show our new entry.
+      if (marketplaceOpen) void loadMarketplace(marketplaceQuery);
+    } catch (e: any) {
+      setGlobalError(e?.message || "share failed");
+    }
+  }, [marketplaceOpen, marketplaceQuery, loadMarketplace]);
+
   /* ── Auto-scroll on new chunks (only if user is at the bottom) ── */
   useEffect(() => {
     const el = timelineRef.current;
@@ -589,6 +948,51 @@ export default function QCoreMultiAgentPage() {
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     userScrolledUpRef.current = distFromBottom > 80;
+  }, []);
+
+  /* ── Sidebar quick-find: debounced search across all the user's runs. ── */
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchBusy(false);
+      return;
+    }
+    setSearchBusy(true);
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          apiUrl(`/api/qcoreai/search?q=${encodeURIComponent(q)}`),
+          { headers: bearerHeader(), signal: ctrl.signal }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setSearchResults(data.items);
+        else setSearchResults([]);
+      } catch {
+        /* aborted or network */
+      } finally {
+        setSearchBusy(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searchQuery]);
+
+  /* ── Load top tags chip strip on mount. ── */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+          headers: bearerHeader(),
+        });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data?.items)) setTopTags(data.items);
+      } catch { /* ignore */ }
+    })();
   }, []);
 
   /* ── Load a session's runs when selected ── */
@@ -615,9 +1019,21 @@ export default function QCoreMultiAgentPage() {
         agentConfig: r.agentConfig ?? undefined,
         persisted: true,
         shareToken: r.shareToken ?? null,
+        tags: Array.isArray(r.tags) ? r.tags : [],
       }));
       setRuns(hydrated);
       setActiveSessionId(sessionId);
+      // V47 — clear cached summary when switching sessions.
+      setAiSummaryText(null);
+      setShowAiSummary(false);
+      // V48 — load timeline.
+      try {
+        const tlRes = await fetch(apiUrl(`/api/qcoreai/sessions/${sessionId}/timeline`), { headers: bearerHeader() });
+        if (tlRes.ok) {
+          const tlData = await tlRes.json().catch(() => ({}));
+          if (Array.isArray(tlData?.points)) setTimelinePoints(tlData.points);
+        }
+      } catch { /* non-fatal */ }
     } catch (e: any) {
       setGlobalError(e?.message || "Failed to load session");
     }
@@ -710,6 +1126,83 @@ export default function QCoreMultiAgentPage() {
     setBusy(false);
     setGlobalError(null);
     setInput("");
+    setContinueFromRunId(null);
+  }, []);
+
+  /* V7-T: continue a run — fills the textarea and marks thread context. */
+  const continueRun = useCallback((runId: string) => {
+    setContinueFromRunId(runId);
+    setInput("");
+    // Scroll textarea into view and focus it.
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 80);
+  }, []);
+
+  /* V7-Tmpl: save current run as a template. */
+  const saveAsTemplate = useCallback(async (runId: string, name: string) => {
+    const run = runs.find((r) => r.id === runId);
+    if (!run || !name.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const body = {
+        name: name.trim(),
+        input: run.userInput,
+        strategy: run.strategy || strategy,
+        overrides: {
+          analyst: overrides.analyst,
+          writer: overrides.writer,
+          writerB: overrides.writerB,
+          critic: overrides.critic,
+        },
+        isPublic: false,
+      };
+      const res = await fetch(apiUrl("/api/qcoreai/templates"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.template) {
+        setTemplates((prev) => [data.template, ...prev]);
+        setSaveTemplateFor(null);
+        setTemplateNameInput("");
+      } else {
+        setGlobalError(data.error || "Failed to save template");
+      }
+    } catch (e: any) {
+      setGlobalError(e?.message || "Failed to save template");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [runs, strategy, overrides]);
+
+  /* V7-Tmpl: apply a template — fills form fields. */
+  const applyTemplate = useCallback(async (t: TemplateItem) => {
+    setInput(t.input);
+    if (t.strategy === "sequential" || t.strategy === "parallel" || t.strategy === "debate") {
+      setStrategy(t.strategy as Strategy);
+    }
+    if (t.overrides && typeof t.overrides === "object") {
+      setOverrides((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          Object.entries(t.overrides).filter(([, v]) => v?.provider && v?.model)
+        ),
+      }));
+    }
+    setTemplatePanelOpen(false);
+    // Bump useCount in background.
+    fetch(apiUrl(`/api/qcoreai/templates/${t.id}/use`), { method: "POST" }).catch(() => {});
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(t.input.length, t.input.length);
+      }
+    }, 80);
   }, []);
 
   const removeSession = useCallback(async (id: string) => {
@@ -726,6 +1219,37 @@ export default function QCoreMultiAgentPage() {
       setGlobalError(e?.message || "Delete failed");
     }
   }, [activeSessionId, newSession]);
+
+  const archiveSessionCb = useCallback(async (id: string, archive: boolean) => {
+    try {
+      await fetch(apiUrl(`/api/qcoreai/sessions/${id}/archive`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ archive }),
+      });
+      if (archive) {
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        if (activeSessionId === id) newSession();
+      }
+    } catch (e: any) {
+      setGlobalError(e?.message || "Archive failed");
+    }
+  }, [activeSessionId, newSession]);
+
+  const tagSessionPrompt = useCallback(async (s: SessionSummary) => {
+    const current = ((s as any).tags || []).join(", ");
+    const next = typeof window !== "undefined" ? window.prompt("Session tags (comma-separated):", current) : null;
+    if (next === null) return;
+    const tags = next.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    try {
+      await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}/tags`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ tags }),
+      });
+      setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, tags } as any : x)));
+    } catch (e: any) { setGlobalError(e?.message || "Tag failed"); }
+  }, []);
 
   const renameSessionPrompt = useCallback(async (s: SessionSummary) => {
     const next = typeof window !== "undefined" ? window.prompt("Rename session", s.title) : null;
@@ -754,6 +1278,7 @@ export default function QCoreMultiAgentPage() {
     // it so they don't lose what they wrote.
     const clearedFromInput = !text;
     if (clearedFromInput) setInput("");
+    addToHistory(msg);
     setGlobalError(null);
     setBusy(true);
     // Reset the manual-scroll flag for this new run — they want to follow it.
@@ -795,6 +1320,16 @@ export default function QCoreMultiAgentPage() {
       };
       if (attachedIds.length > 0) body.qrightAttachmentIds = attachedIds;
       if (maxCostUsd > 0) body.maxCostUsd = maxCostUsd;
+      if (continueFromRunId) body.continueFromRunId = continueFromRunId;
+      // V6-P integration: send promptOverrides if user picked custom prompts.
+      const promptOverridesBody: Record<string, { promptId: string }> = {};
+      (Object.keys(promptSelections) as ConfigRoleId[]).forEach((role) => {
+        const id = promptSelections[role];
+        if (id) promptOverridesBody[role] = { promptId: id };
+      });
+      if (Object.keys(promptOverridesBody).length > 0) {
+        body.promptOverrides = promptOverridesBody;
+      }
       const res = await fetch(apiUrl("/api/qcoreai/multi-agent"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...bearerHeader() },
@@ -825,6 +1360,8 @@ export default function QCoreMultiAgentPage() {
             realSessionId = payload.sessionId;
             setRuns((prev) => prev.map((r) => (r.id === tempRunId ? { ...r, id: realRunId, sessionId: realSessionId } : r)));
             if (!activeSessionId) setActiveSessionId(realSessionId);
+            // Clear thread continuation after the run is confirmed started.
+            setContinueFromRunId(null);
             break;
           case "agent_start":
             setRuns((prev) =>
@@ -963,6 +1500,14 @@ export default function QCoreMultiAgentPage() {
                 totalCostUsd: payload.totalCostUsd,
               } : r))
             );
+            // Cost alert — notify if run exceeded per-run cap threshold
+            if (maxCostUsd > 0 && payload.totalCostUsd > maxCostUsd * 0.8) {
+              const pct = Math.round((payload.totalCostUsd / maxCostUsd) * 100);
+              setGlobalError(`⚠ Run cost $${payload.totalCostUsd.toFixed(4)} (${pct}% of $${maxCostUsd} cap)`);
+              setTimeout(() => setGlobalError(null), 6000);
+            }
+            // V31 — load suggestions after run completes.
+            if (activeSessionId) setTimeout(() => loadSuggestions(activeSessionId), 800);
             break;
           case "sse_end":
             break;
@@ -1028,6 +1573,66 @@ export default function QCoreMultiAgentPage() {
       try { abortRef.current.abort(); } catch { /* noop */ }
       abortRef.current = null;
     }
+  }, []);
+
+  // V31 — fetch smart suggestions for the active session.
+  const loadSuggestions = useCallback(async (sessionId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token || suggestBusy) return;
+    setSuggestBusy(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/sessions/${sessionId}/suggest`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.suggestions)) setSuggestions(d.suggestions);
+    } catch { /* non-fatal */ }
+    finally { setSuggestBusy(false); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // V31 — load annotations for a run.
+  const loadAnnotations = useCallback(async (runId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token) return;
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/annotations`), { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.annotations)) {
+        setAnnotationsMap((prev) => ({ ...prev, [runId]: d.annotations }));
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
+  // V31 — save annotation.
+  const saveAnnotation = useCallback(async (runId: string, note: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token || !note.trim()) return;
+    setAnnotateSaving(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/annotations`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ note: note.trim(), messageRole: "final", messageIdx: 0, color: "yellow" }),
+      });
+      if (r.ok) {
+        await loadAnnotations(runId);
+        setAnnotatingRunId(null);
+        setAnnotateText("");
+      }
+    } catch { /* non-fatal */ }
+    finally { setAnnotateSaving(false); }
+  }, [loadAnnotations]);
+
+  // V31 — delete annotation.
+  const deleteAnnotation = useCallback(async (annotationId: string, runId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    if (!token) return;
+    try {
+      await fetch(apiUrl(`/api/qcoreai/annotations/${annotationId}`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      setAnnotationsMap((prev) => ({ ...prev, [runId]: (prev[runId] || []).filter((a) => a.id !== annotationId) }));
+    } catch { /* non-fatal */ }
   }, []);
 
   /** Run the same prompt through all three strategies back-to-back. */
@@ -1120,6 +1725,25 @@ export default function QCoreMultiAgentPage() {
     }, 0);
   }, [strategy, overrides, maxRevisions]);
 
+  /** Clone a run into a brand-new session — preserves input + config. */
+  const cloneToNewSession = useCallback((run: RunState) => {
+    newSession();
+    const cfg = run.agentConfig || {};
+    const nextStrategy: Strategy = cfg.strategy === "parallel" ? "parallel" : cfg.strategy === "debate" ? "debate" : (run.strategy as Strategy) || strategy;
+    setStrategy(nextStrategy);
+    if (cfg.overrides && typeof cfg.overrides === "object") {
+      const pick = (k: ConfigRoleId) => {
+        const v = (cfg.overrides as any)?.[k];
+        return v && typeof v === "object" && v.provider ? { provider: v.provider, model: v.model || "" } : overrides[k];
+      };
+      setOverrides({ analyst: pick("analyst"), writer: pick("writer"), writerB: pick("writerB"), critic: pick("critic") });
+    }
+    setTimeout(() => {
+      setInput(run.userInput || "");
+      if (textareaRef.current) { textareaRef.current.focus(); textareaRef.current.scrollIntoView({ behavior: "smooth" }); }
+    }, 100);
+  }, [newSession, strategy, overrides]);
+
   /** Restore a past run's config + resend its prompt — the "Rerun" button. */
   const rerun = useCallback((run: RunState) => {
     const cfg = run.agentConfig || {};
@@ -1148,6 +1772,66 @@ export default function QCoreMultiAgentPage() {
     setMaxRevisions(nextMaxRev);
     send(run.userInput, { strategy: nextStrategy, overrides: nextOverrides, maxRevisions: nextMaxRev });
   }, [send, strategy, overrides, maxRevisions]);
+
+  /** Apply a one-pass refinement on top of a finished run. */
+  const refineRun = useCallback(async (runId: string, instruction: string) => {
+    const trimmed = instruction.trim();
+    if (!trimmed) return;
+    setRefineBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/refine`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ instruction: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setRuns((prev) =>
+        prev.map((r) =>
+          r.id === runId
+            ? {
+                ...r,
+                finalContent: data.content,
+                totalCostUsd: data.runTotalCostUsd ?? r.totalCostUsd,
+                totalDurationMs: data.runTotalDurationMs ?? r.totalDurationMs,
+              }
+            : r
+        )
+      );
+      setRefineOpen(null);
+      setRefineText("");
+    } catch (e: any) {
+      setGlobalError(e?.message || "refine failed");
+    } finally {
+      setRefineBusy(false);
+    }
+  }, []);
+
+  /** Replace a run's tags via PATCH and refresh chip strip. */
+  const updateRunTags = useCallback(async (runId: string, tags: string[]) => {
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/tags`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ tags }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setRuns((prev) =>
+        prev.map((r) => (r.id === runId ? { ...r, tags: data.tags || [] } : r))
+      );
+      // Refresh top-tags chip ranking.
+      try {
+        const r2 = await fetch(apiUrl(`/api/qcoreai/tags?limit=20`), {
+          headers: bearerHeader(),
+        });
+        const d2 = await r2.json().catch(() => ({}));
+        if (Array.isArray(d2?.items)) setTopTags(d2.items);
+      } catch { /* ignore */ }
+    } catch (e: any) {
+      setGlobalError(e?.message || "set tags failed");
+    }
+  }, []);
 
   const configuredProviders = useMemo(() => providers.filter((p) => p.configured), [providers]);
   const anyConfigured = configuredProviders.length > 0;
@@ -1425,6 +2109,25 @@ export default function QCoreMultiAgentPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => { setMarketplaceShareFor(p.id); setMarketplaceShareDesc(""); }}
+                    aria-label={`Share preset ${p.name}`}
+                    title="Share to community marketplace"
+                    style={{
+                      border: "none",
+                      borderLeft: "1px solid rgba(255,255,255,0.15)",
+                      background: "transparent",
+                      color: "rgba(13,148,136,0.85)",
+                      padding: "0 7px",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      lineHeight: 1,
+                      fontWeight: 700,
+                    }}
+                  >
+                    🌐
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => deletePreset(p.id)}
                     aria-label={`Delete preset ${p.name}`}
                     title="Delete preset"
@@ -1520,7 +2223,220 @@ export default function QCoreMultiAgentPage() {
                   + Save current
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !marketplaceOpen;
+                  setMarketplaceOpen(next);
+                  if (next && marketplacePresets.length === 0) void loadMarketplace();
+                }}
+                title="Browse community-shared agent presets"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 8,
+                  border: marketplaceOpen
+                    ? "1px solid rgba(13,148,136,0.7)"
+                    : "1px dashed rgba(13,148,136,0.5)",
+                  background: marketplaceOpen ? "rgba(13,148,136,0.2)" : "transparent",
+                  color: "rgba(13,148,136,0.95)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🌐 Browse community
+              </button>
             </div>
+
+            {/* Share-preset modal-ish row — appears when user clicks 🌐 on a saved preset */}
+            {marketplaceShareFor && (() => {
+              const p = presets.find((x) => x.id === marketplaceShareFor);
+              if (!p) return null;
+              return (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 10,
+                    background: "rgba(13,148,136,0.12)",
+                    border: "1px solid rgba(13,148,136,0.4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>
+                    Share preset <span style={{ color: "#5eead4" }}>{p.name}</span> to community
+                  </div>
+                  <textarea
+                    value={marketplaceShareDesc}
+                    onChange={(e) => setMarketplaceShareDesc(e.target.value)}
+                    placeholder="Optional description: when to use this preset, model rationale, etc."
+                    maxLength={400}
+                    rows={2}
+                    style={{
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      outline: "none",
+                      resize: "vertical",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button
+                      onClick={() => sharePresetToMarketplace(p, marketplaceShareDesc)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 8,
+                        border: "none",
+                        background: "#0d9488",
+                        color: "#fff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Share publicly
+                    </button>
+                    <button
+                      onClick={() => { setMarketplaceShareFor(null); setMarketplaceShareDesc(""); }}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "transparent",
+                        color: "rgba(255,255,255,0.7)",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <span style={{ fontSize: 10, color: "rgba(226,232,240,0.6)" }}>
+                      Auth required. Public until you delete it.
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Browse community panel */}
+            {marketplaceOpen && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "rgba(15,23,42,0.4)",
+                  border: "1px solid rgba(13,148,136,0.3)",
+                  color: "#e2e8f0",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                  <input
+                    type="search"
+                    value={marketplaceQuery}
+                    onChange={(e) => {
+                      setMarketplaceQuery(e.target.value);
+                      // Debounced via simple timeout — recreate on keystroke.
+                      window.clearTimeout((window as any).__qcoreMarketTimer);
+                      (window as any).__qcoreMarketTimer = window.setTimeout(
+                        () => loadMarketplace(e.target.value),
+                        250
+                      );
+                    }}
+                    placeholder="Search community presets…"
+                    style={{
+                      flex: 1,
+                      padding: "5px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(255,255,255,0.95)",
+                      color: "#0f172a",
+                      fontSize: 12,
+                      fontFamily: "inherit",
+                      outline: "none",
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: "rgba(226,232,240,0.6)" }}>
+                    {marketplaceBusy ? "…" : `${marketplacePresets.length} preset${marketplacePresets.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
+                {marketplacePresets.length === 0 && !marketplaceBusy ? (
+                  <div style={{ fontSize: 12, color: "rgba(226,232,240,0.5)", padding: "12px 4px", fontStyle: "italic" }}>
+                    No public presets yet. Be the first — save a lineup, click 🌐 to share.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                    {marketplacePresets.map((mp) => (
+                      <div
+                        key={mp.id}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "rgba(15,23,42,0.5)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700, fontSize: 12, color: "#fff" }}>{mp.name}</span>
+                            <span
+                              style={{
+                                fontSize: 9,
+                                fontWeight: 700,
+                                padding: "1px 6px",
+                                borderRadius: 999,
+                                background: "rgba(13,148,136,0.2)",
+                                color: "#5eead4",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {mp.strategy}
+                            </span>
+                            <span style={{ fontSize: 10, color: "rgba(226,232,240,0.5)" }}>
+                              ↑ {mp.importCount}
+                            </span>
+                          </div>
+                          {mp.description && (
+                            <div style={{ marginTop: 3, fontSize: 11, color: "rgba(226,232,240,0.7)", lineHeight: 1.4 }}>
+                              {mp.description}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => importMarketplacePreset(mp.id)}
+                          title="Import to your saved presets"
+                          style={{
+                            padding: "5px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(13,148,136,0.5)",
+                            background: "rgba(13,148,136,0.2)",
+                            color: "#5eead4",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ↓ Import
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {configOpen && (
@@ -1550,6 +2466,9 @@ export default function QCoreMultiAgentPage() {
                       pricing={pricing}
                       value={overrides[r.id]}
                       onChange={(v) => setOverrides((prev) => ({ ...prev, [r.id]: v }))}
+                      promptId={promptSelections[r.id] || ""}
+                      onPromptChange={(id) => setPromptSelections((prev) => ({ ...prev, [r.id]: id }))}
+                      availablePrompts={userPrompts.filter((p) => p.role === r.id || p.role === "writer" || p.role === "system")}
                     />
                   ))}
               </div>
@@ -1718,7 +2637,41 @@ export default function QCoreMultiAgentPage() {
                     >
                       {whBusy ? "…" : "Remove"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setWhBusy(true);
+                        try {
+                          const res = await fetch(apiUrl("/api/qcoreai/me/webhook/test"), {
+                            method: "POST", headers: bearerHeader(),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok) alert(`Test sent to ${data.sentTo}`);
+                          else alert(data.error || "Test failed");
+                        } catch (e: any) {
+                          alert(e?.message || "Test failed");
+                        } finally {
+                          setWhBusy(false);
+                        }
+                      }}
+                      disabled={whBusy}
+                      style={{
+                        padding: "5px 10px",
+                        borderRadius: 8,
+                        background: "#fff",
+                        border: "1px solid #bfdbfe",
+                        color: "#1d4ed8",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Send test
+                    </button>
                   </div>
+                )}
+                {userWebhook && (
+                  <WebhookLogPanel />
                 )}
               </div>
 
@@ -1808,9 +2761,71 @@ export default function QCoreMultiAgentPage() {
                 )}
               </div>
 
+              {/* V7-Budget: monthly spend summary + limit setting */}
+              <SpendLimitPanel />
+
+              {/* V19: Agent Personas */}
+              <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.1)", background: "#f8fafc" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontWeight: 800, fontSize: 12, color: "#0f172a", flex: 1 }}>Agent personas</span>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>Custom names for agents</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {["analyst", "writer", "writerB", "critic"].map((role) => {
+                    const persona = personas[role];
+                    const editing = personaEditRole === role;
+                    return (
+                      <div key={role} style={{ position: "relative" }}>
+                        <button
+                          onClick={() => {
+                            if (editing) { setPersonaEditRole(null); return; }
+                            setPersonaEditRole(role);
+                            setPersonaName(persona?.name || "");
+                            setPersonaEmoji(persona?.emoji || "");
+                            setPersonaBio(persona?.bio || "");
+                            setPersonaSystemHint(persona?.systemPromptHint || "");
+                          }}
+                          style={{
+                            padding: "4px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            border: editing ? "1px solid #7c3aed" : "1px solid #e2e8f0",
+                            background: editing ? "rgba(124,58,237,0.08)" : "#fff",
+                            color: persona ? "#0f172a" : "#94a3b8",
+                          }}
+                        >
+                          {persona?.emoji ? `${persona.emoji} ` : ""}{persona?.name || role}
+                        </button>
+                        {editing && (
+                          <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 100, marginTop: 4, padding: 10, borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", minWidth: 240 }}>
+                            <input value={personaName} onChange={(e) => setPersonaName(e.target.value)} placeholder="Name…" style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            <input value={personaEmoji} onChange={(e) => setPersonaEmoji(e.target.value)} placeholder="Emoji (opt.)…" maxLength={4} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            {/* V52: bio + system prompt hint */}
+                            <input value={personaBio} onChange={(e) => setPersonaBio(e.target.value)} placeholder="Bio (e.g. senior software architect)…" style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            <textarea value={personaSystemHint} onChange={(e) => setPersonaSystemHint(e.target.value)} placeholder="System prompt hint (e.g. Always use bullet points)…" rows={2} style={{ width: "100%", padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", resize: "vertical", marginBottom: 6, boxSizing: "border-box" }} />
+                            <div style={{ display: "flex", gap: 5 }}>
+                              <button onClick={async () => {
+                                if (!personaName.trim()) return;
+                                const res = await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify({ name: personaName.trim(), emoji: personaEmoji.trim() || null, bio: personaBio.trim() || null, systemPromptHint: personaSystemHint.trim() || null }) });
+                                const d = await res.json().catch(() => ({}));
+                                if (d.persona) { setPersonas((p) => ({ ...p, [role]: { name: d.persona.name, emoji: d.persona.emoji, bio: d.persona.bio, systemPromptHint: d.persona.systemPromptHint } })); }
+                                setPersonaEditRole(null);
+                              }} style={{ flex: 1, padding: "4px", borderRadius: 5, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                              {personas[role] && <button onClick={async () => {
+                                await fetch(apiUrl(`/api/qcoreai/me/personas/${role}`), { method: "DELETE", headers: bearerHeader() });
+                                setPersonas((p) => { const n = { ...p }; delete n[role]; return n; });
+                                setPersonaEditRole(null);
+                              }} style={{ padding: "4px 8px", borderRadius: 5, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, cursor: "pointer" }}>Reset</button>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Budget cap selector — applies to every strategy. */}
               <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700 }}>Spend cap:</span>
+                <span style={{ fontWeight: 700 }}>Per-run cap:</span>
                 {[
                   { v: 0, label: "No cap" },
                   { v: 0.05, label: "$0.05" },
@@ -1911,16 +2926,273 @@ export default function QCoreMultiAgentPage() {
               <span style={{ fontSize: 10, color: "#64748b" }}>{sidebarOpen ? "▲ Hide" : "▼ Show"}</span>
             </button>
             <div className="qc-sidebar-body" data-open={sidebarOpen ? "true" : "false"}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <button
+                onClick={newSession}
+                style={{
+                  flex: 1, padding: "10px 12px", borderRadius: 10,
+                  border: "1px solid #0f172a", background: "#0f172a", color: "#fff",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                + New session
+              </button>
+              <a
+                href="/qcoreai/search"
+                title="Search all sessions and runs"
+                style={{ padding: "10px 11px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              >
+                🔎
+              </a>
+              {/* V37: Select toggle */}
+              <button
+                onClick={() => { setSelectMode((v) => !v); setSelectedSessionIds(new Set()); }}
+                title="Multi-select sessions"
+                style={{
+                  padding: "10px 10px", borderRadius: 10,
+                  border: "1px solid rgba(15,23,42,0.15)", background: selectMode ? "#f0fdf4" : "#fff",
+                  color: selectMode ? "#16a34a" : "#475569", fontSize: 11, fontWeight: 700,
+                  cursor: "pointer", flexShrink: 0,
+                }}
+              >
+                ☑
+              </button>
+            </div>
+            {/* V37: Bulk action bar */}
+            {selectMode && selectedSessionIds.size > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                <button
+                  onClick={async () => {
+                    const ids = Array.from(selectedSessionIds);
+                    try {
+                      await fetch(apiUrl("/api/qcoreai/sessions/bulk-delete"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...bearerHeader() },
+                        body: JSON.stringify({ sessionIds: ids }),
+                      });
+                      setSessions((prev) => prev.filter((s) => !ids.includes(s.id)));
+                      setSelectedSessionIds(new Set());
+                      setSelectMode(false);
+                    } catch { /* noop */ }
+                  }}
+                  style={{
+                    flex: 1, padding: "6px 8px", borderRadius: 8,
+                    border: "1px solid #fca5a5", background: "#fef2f2",
+                    color: "#dc2626", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  Delete ({selectedSessionIds.size})
+                </button>
+                <button
+                  onClick={async () => {
+                    const ids = Array.from(selectedSessionIds);
+                    try {
+                      await fetch(apiUrl("/api/qcoreai/sessions/bulk-archive"), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...bearerHeader() },
+                        body: JSON.stringify({ sessionIds: ids, archive: true }),
+                      });
+                      setSessions((prev) => prev.filter((s) => !ids.includes(s.id)));
+                      setSelectedSessionIds(new Set());
+                      setSelectMode(false);
+                    } catch { /* noop */ }
+                  }}
+                  style={{
+                    flex: 1, padding: "6px 8px", borderRadius: 8,
+                    border: "1px solid #fcd34d", background: "#fffbeb",
+                    color: "#92400e", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  }}
+                >
+                  Archive ({selectedSessionIds.size})
+                </button>
+              </div>
+            )}
+            {/* dummy element to keep original + New session HTML shape */}
             <button
-              onClick={newSession}
+              onClick={() => { setPaletteOpen(true); setPaletteQuery(""); }}
+              title="Open command palette (⌘K / Ctrl+K)"
               style={{
-                width: "100%", padding: "10px 12px", borderRadius: 10,
-                border: "1px solid #0f172a", background: "#0f172a", color: "#fff",
-                fontSize: 13, fontWeight: 700, cursor: "pointer", marginBottom: 10,
+                width: "100%", padding: "6px 10px", borderRadius: 8, marginBottom: 10,
+                border: "1px solid #e2e8f0", background: "#f8fafc",
+                color: "#94a3b8", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6, textAlign: "left",
               }}
             >
-              + New session
+              <span>⌘</span>
+              <span style={{ flex: 1 }}>Quick search…</span>
+              <kbd style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: "#e2e8f0", color: "#475569" }}>K</kbd>
             </button>
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search runs… (text, tags)"
+                style={{
+                  width: "100%",
+                  padding: "8px 32px 8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#0f172a",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
+                  style={{
+                    position: "absolute",
+                    right: 6,
+                    top: 6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 6,
+                    border: "none",
+                    background: "transparent",
+                    color: "#94a3b8",
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {topTags.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 4,
+                  marginBottom: 10,
+                  paddingBottom: 8,
+                  borderBottom: "1px dashed rgba(15,23,42,0.08)",
+                }}
+              >
+                {topTags.slice(0, 12).map((t) => {
+                  const active = searchQuery.trim().toLowerCase() === t.tag.toLowerCase();
+                  return (
+                    <button
+                      key={t.tag}
+                      type="button"
+                      onClick={() => setSearchQuery(active ? "" : t.tag)}
+                      title={`${t.count} run${t.count === 1 ? "" : "s"} tagged "${t.tag}"`}
+                      style={{
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        border: active
+                          ? "1px solid #0f766e"
+                          : "1px solid rgba(13,148,136,0.25)",
+                        background: active ? "#0f766e" : "rgba(13,148,136,0.06)",
+                        color: active ? "#fff" : "#0f766e",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {t.tag}
+                      <span
+                        style={{
+                          marginLeft: 4,
+                          opacity: 0.6,
+                          fontWeight: 500,
+                          fontSize: 9,
+                        }}
+                      >
+                        {t.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {searchQuery.trim() && (
+              <div style={{ marginBottom: 12 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: "#64748b",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    padding: "4px 6px 6px",
+                  }}
+                >
+                  Search {searchBusy ? "…" : `(${searchResults.length})`}
+                </div>
+                {!searchBusy && searchResults.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#94a3b8", padding: "6px" }}>
+                    No matches.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {searchResults.map((hit) => (
+                      <button
+                        key={hit.runId}
+                        onClick={() => loadSession(hit.sessionId)}
+                        title={hit.preview}
+                        style={{
+                          textAlign: "left",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          border: "1px solid rgba(13,148,136,0.2)",
+                          background:
+                            activeSessionId === hit.sessionId ? "rgba(13,148,136,0.08)" : "#fff",
+                          color: "#0f172a",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            fontSize: 11,
+                            color: "#0f766e",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              flex: 1,
+                            }}
+                          >
+                            {hit.sessionTitle || "(untitled)"}
+                          </span>
+                          <span style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase" }}>
+                            {hit.matched}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 11,
+                            color: "#475569",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {hit.preview}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", padding: "8px 6px 4px" }}>
               Sessions
             </div>
@@ -1932,8 +3204,23 @@ export default function QCoreMultiAgentPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {sessions.map((s) => (
                   <div key={s.id} style={{ display: "flex", alignItems: "stretch", gap: 2 }}>
+                    {/* V37: multi-select checkbox */}
+                    {selectMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedSessionIds.has(s.id)}
+                        onChange={() => {
+                          setSelectedSessionIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+                            return next;
+                          });
+                        }}
+                        style={{ alignSelf: "center", marginRight: 2, cursor: "pointer" }}
+                      />
+                    )}
                     <button
-                      onClick={() => loadSession(s.id)}
+                      onClick={() => selectMode ? setSelectedSessionIds((prev) => { const n = new Set(prev); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n; }) : loadSession(s.id)}
                       style={{
                         flex: 1, textAlign: "left",
                         padding: "8px 10px", borderRadius: 8,
@@ -1948,6 +3235,129 @@ export default function QCoreMultiAgentPage() {
                     >
                       {s.title || "(untitled)"}
                     </button>
+                    {/* Session tags — quick inline edit on active session */}
+                    {activeSessionId === s.id && (s as any).tags?.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginBottom: 2 }}>
+                        {((s as any).tags || []).map((t: string) => (
+                          <span key={t} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 999, background: "rgba(124,58,237,0.08)", color: "#6d28d9", border: "1px solid rgba(124,58,237,0.15)" }}>#{t}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Session stats chip + AI summary button */}
+                    {activeSessionId === s.id && runs.length > 0 && (() => {
+                      const donRuns = runs.filter((r) => r.status !== "running");
+                      const totalCost = donRuns.reduce((a, r) => a + (r.totalCostUsd ?? 0), 0);
+                      return (
+                        <span style={{ display: "flex", gap: 4, alignItems: "center", position: "relative" }}>
+                          {donRuns.length > 0 && (
+                            <span style={{ fontSize: 9, color: "#94a3b8", whiteSpace: "nowrap" }}>
+                              {donRuns.length}r · {totalCost > 0 ? `$${totalCost.toFixed(4)}` : "$0"}
+                            </span>
+                          )}
+                          <button
+                            title="AI summary of this session"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (showAiSummary) { setShowAiSummary(false); return; }
+                              setShowAiSummary(true);
+                              if (!aiSummaryText) {
+                                setAiSummaryLoading(true);
+                                try {
+                                  const res = await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}/ai-summary`), {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", ...bearerHeader() },
+                                  }).catch(() => null);
+                                  const d = await res?.json().catch(() => ({}));
+                                  setAiSummaryText(d?.summary || "Could not generate summary.");
+                                } catch {
+                                  setAiSummaryText("Error generating summary.");
+                                } finally {
+                                  setAiSummaryLoading(false);
+                                }
+                              }
+                            }}
+                            style={{ border: "none", background: showAiSummary ? "rgba(14,116,144,0.15)" : "transparent", cursor: "pointer", fontSize: 10, color: showAiSummary ? "#0e7490" : "#94a3b8", padding: "1px 3px", borderRadius: 4 }}
+                          >
+                            ∑
+                          </button>
+                          {/* V47 — AI summary popover */}
+                          {showAiSummary && activeSessionId === s.id && (
+                            <div
+                              style={{
+                                position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+                                background: "#0f172a", border: "1px solid rgba(14,116,144,0.3)",
+                                borderRadius: 8, padding: "10px 12px", width: 240, boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div style={{ fontSize: 9, fontWeight: 700, color: "#0e7490", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                AI Summary
+                              </div>
+                              {aiSummaryLoading ? (
+                                <div style={{ fontSize: 11, color: "#94a3b8" }}>Generating...</div>
+                              ) : (
+                                <div style={{ fontSize: 11, color: "#e2e8f0", lineHeight: 1.55 }}>{aiSummaryText}</div>
+                              )}
+                              <button
+                                onClick={() => setShowAiSummary(false)}
+                                style={{ marginTop: 8, fontSize: 9, color: "#64748b", border: "none", background: "transparent", cursor: "pointer", padding: 0 }}
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          )}
+                        </span>
+                      );
+                    })()}
+                    {/* V48 — Mini sparkline timeline below stats */}
+                    {activeSessionId === s.id && timelinePoints.length > 0 && (() => {
+                      const dots = timelinePoints.slice(-20);
+                      return (
+                        <div style={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "nowrap", marginTop: 2, marginBottom: 2 }}>
+                          {dots.map((pt) => {
+                            const color = pt.status === "done" ? "#22c55e" : pt.status === "error" ? "#ef4444" : "#f59e0b";
+                            const tip = [pt.strategy, pt.costUsd != null ? `$${pt.costUsd.toFixed(4)}` : null].filter(Boolean).join(" · ");
+                            return (
+                              <div
+                                key={pt.runId}
+                                title={tip}
+                                style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0, cursor: "default" }}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                    <button
+                      onClick={async () => {
+                        const pinned = !(s as any).pinned;
+                        try {
+                          await fetch(apiUrl(`/api/qcoreai/sessions/${s.id}/pin`), {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json", ...bearerHeader() },
+                            body: JSON.stringify({ pinned }),
+                          });
+                          setSessions((prev) => prev.map((x) => x.id === s.id ? { ...x, pinned } as any : x));
+                        } catch { /* noop */ }
+                      }}
+                      title={(s as any).pinned ? "Unpin session" : "Pin session (floats to top)"}
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: (s as any).pinned ? "#f59e0b" : "#94a3b8",
+                        cursor: "pointer", fontSize: 13,
+                      }}
+                    >
+                      ★
+                    </button>
+                    <button
+                      onClick={() => tagSessionPrompt(s)}
+                      title="Edit session tags"
+                      style={{ width: 24, borderRadius: 6, border: "1px solid transparent", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 11 }}
+                    >
+                      #
+                    </button>
                     <button
                       onClick={() => renameSessionPrompt(s)}
                       title="Rename session"
@@ -1959,9 +3369,32 @@ export default function QCoreMultiAgentPage() {
                     >
                       ✎
                     </button>
+                    <a
+                      href={apiUrl(`/api/qcoreai/sessions/${s.id}/export?format=md`)}
+                      download
+                      title="Export all runs as Markdown"
+                      style={{
+                        width: 24, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center",
+                        border: "1px solid transparent", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", fontSize: 11, textDecoration: "none",
+                      }}
+                    >
+                      ⬇
+                    </a>
+                    <button
+                      onClick={() => archiveSessionCb(s.id, true)}
+                      title="Archive session (hide from list, recoverable)"
+                      style={{
+                        width: 24, borderRadius: 6,
+                        border: "1px solid transparent", background: "transparent",
+                        color: "#94a3b8", cursor: "pointer", fontSize: 12,
+                      }}
+                    >
+                      🗄
+                    </button>
                     <button
                       onClick={() => removeSession(s.id)}
-                      title="Delete session"
+                      title="Delete session permanently"
                       style={{
                         width: 24, borderRadius: 6,
                         border: "1px solid transparent", background: "transparent",
@@ -1979,6 +3412,46 @@ export default function QCoreMultiAgentPage() {
 
           {/* Main conversation */}
           <section>
+            {/* V35: Presence badge + V55: Invite button */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, minHeight: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {activeSessionId && presenceCount > 0 && (
+                  <>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                    <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>{presenceCount} online</span>
+                  </>
+                )}
+              </div>
+              {activeSessionId && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/invites`), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...bearerHeader() },
+                        body: JSON.stringify({ role: "viewer" }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      const invite = await res.json();
+                      const link = `${typeof window !== "undefined" ? window.location.origin : ""}/qcoreai/multi?invite=${invite.token}`;
+                      try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
+                      const prev = inviteCopiedSid;
+                      setInviteCopiedSid(activeSessionId);
+                      setTimeout(() => setInviteCopiedSid((cur) => cur === activeSessionId ? null : cur), 2000);
+                    } catch { /* ignore */ }
+                  }}
+                  style={{
+                    padding: "3px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", background: "#fff",
+                    color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 4,
+                  }}
+                  title="Create read-only invite link and copy to clipboard"
+                >
+                  {inviteCopiedSid === activeSessionId ? "Link copied!" : "🔗 Invite"}
+                </button>
+              )}
+            </div>
             <div
               ref={timelineRef}
               onScroll={onTimelineScroll}
@@ -2011,9 +3484,34 @@ export default function QCoreMultiAgentPage() {
                     run={run}
                     onLoadDetails={run.persisted && run.turns.length === 0 ? () => expandRunDetails(run.id) : undefined}
                     onRerun={() => rerun(run)}
+                    onClone={() => cloneToNewSession(run)}
                     onEdit={() => editAndResend(run)}
                     onShare={() => shareRun(run.id)}
                     onUnshare={() => unshareRun(run.id)}
+                    onUpdateTags={(tags: string[]) => updateRunTags(run.id, tags)}
+                    refineOpen={refineOpen === run.id}
+                    refineText={refineOpen === run.id ? refineText : ""}
+                    refineBusy={refineOpen === run.id ? refineBusy : false}
+                    onOpenRefine={() => { setRefineOpen(run.id); setRefineText(""); }}
+                    onChangeRefineText={setRefineText}
+                    onCancelRefine={() => { setRefineOpen(null); setRefineText(""); }}
+                    onApplyRefine={() => refineRun(run.id, refineText)}
+                    onContinue={continueRun}
+                    personas={personas}
+                    onSaveTemplate={(runId) => {
+                      setSaveTemplateFor(runId);
+                      setTemplateNameInput("");
+                      setTemplatePanelOpen(false);
+                    }}
+                    annotations={annotationsMap[run.id] || []}
+                    annotatingOpen={annotatingRunId === run.id}
+                    annotateText={annotatingRunId === run.id ? annotateText : ""}
+                    annotateSaving={annotatingRunId === run.id ? annotateSaving : false}
+                    onOpenAnnotate={() => { setAnnotatingRunId(run.id); setAnnotateText(""); loadAnnotations(run.id); }}
+                    onChangeAnnotateText={setAnnotateText}
+                    onSaveAnnotation={() => saveAnnotation(run.id, annotateText)}
+                    onCancelAnnotate={() => { setAnnotatingRunId(null); setAnnotateText(""); }}
+                    onDeleteAnnotation={(id) => deleteAnnotation(id, run.id)}
                   />
                 ))
               )}
@@ -2124,6 +3622,197 @@ export default function QCoreMultiAgentPage() {
               </div>
             )}
 
+            {/* V7-Tmpl: save-template inline form */}
+            {saveTemplateFor && (
+              <div
+                style={{
+                  marginBottom: 10, padding: 12, borderRadius: 12,
+                  border: "1px solid rgba(15,23,42,0.15)", background: "#f8fafc",
+                  display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>📋 Save as template:</span>
+                <input
+                  autoFocus
+                  value={templateNameInput}
+                  onChange={(e) => setTemplateNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveAsTemplate(saveTemplateFor, templateNameInput);
+                    if (e.key === "Escape") setSaveTemplateFor(null);
+                  }}
+                  placeholder="Template name…"
+                  style={{
+                    flex: 1, padding: "5px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", fontSize: 12, outline: "none",
+                    background: "#fff", minWidth: 140,
+                  }}
+                />
+                <button
+                  onClick={() => saveAsTemplate(saveTemplateFor, templateNameInput)}
+                  disabled={savingTemplate || !templateNameInput.trim()}
+                  style={{
+                    padding: "5px 14px", borderRadius: 8, border: "none",
+                    background: templateNameInput.trim() ? "#0f172a" : "#94a3b8",
+                    color: "#fff", fontSize: 12, fontWeight: 700,
+                    cursor: templateNameInput.trim() ? "pointer" : "default",
+                  }}
+                >
+                  {savingTemplate ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setSaveTemplateFor(null)}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", background: "#fff",
+                    color: "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* V7-T: thread continuation pill */}
+            {continueFromRunId && (
+              <div
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
+                  padding: "6px 12px", borderRadius: 10,
+                  background: "rgba(124,58,237,0.08)",
+                  border: "1px solid rgba(124,58,237,0.25)",
+                  fontSize: 12, color: "#6d28d9", fontWeight: 600,
+                }}
+              >
+                <span>↩</span>
+                <span style={{ flex: 1 }}>Continuing thread — context from previous run loaded</span>
+                <button
+                  onClick={() => setContinueFromRunId(null)}
+                  title="Cancel continuation"
+                  style={{
+                    border: "none", background: "transparent", cursor: "pointer",
+                    color: "#7c3aed", fontSize: 16, lineHeight: 1, padding: "0 2px",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* V7-Tmpl: template panel */}
+            {templatePanelOpen && (
+              <div
+                style={{
+                  marginBottom: 10, borderRadius: 12,
+                  border: "1px solid rgba(15,23,42,0.12)",
+                  background: "#f8fafc", padding: 12,
+                  maxHeight: 320, overflowY: "auto",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>📋 Templates</span>
+                  <input
+                    placeholder="Filter…"
+                    value={templateQuery}
+                    onChange={(e) => setTemplateQuery(e.target.value)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 8, border: "1px solid #cbd5e1",
+                      fontSize: 12, width: 130, outline: "none", background: "#fff",
+                    }}
+                  />
+                  <button
+                    onClick={() => setTemplatePanelOpen(false)}
+                    style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: "#475569" }}
+                  >
+                    ×
+                  </button>
+                </div>
+                {templates.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+                      My Templates
+                    </div>
+                    {templates
+                      .filter((t) => !templateQuery || t.name.toLowerCase().includes(templateQuery.toLowerCase()))
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                            padding: "6px 10px", borderRadius: 8, background: "#fff",
+                            border: "1px solid rgba(15,23,42,0.08)", cursor: "pointer",
+                          }}
+                          onClick={() => applyTemplate(t)}
+                        >
+                          <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
+                          <span style={{ fontSize: 10, color: "#94a3b8", borderRadius: 6, padding: "2px 6px", background: "#f1f5f9" }}>{t.strategy}</span>
+                          {t.description && (
+                            <span style={{ fontSize: 11, color: "#64748b", flex: 2 }} title={t.description}>
+                              {t.description.slice(0, 60)}{t.description.length > 60 ? "…" : ""}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                  </>
+                )}
+                {publicTemplates.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, margin: "8px 0 4px" }}>
+                      Community
+                    </div>
+                    {publicTemplates
+                      .filter((t) => !templateQuery || t.name.toLowerCase().includes(templateQuery.toLowerCase()))
+                      .map((t) => (
+                        <div
+                          key={t.id}
+                          style={{
+                            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+                            padding: "6px 10px", borderRadius: 8, background: "#fff",
+                            border: "1px solid rgba(124,58,237,0.12)", cursor: "pointer",
+                          }}
+                          onClick={() => applyTemplate(t)}
+                        >
+                          <span style={{ fontSize: 13, flex: 1, fontWeight: 600 }}>{t.name}</span>
+                          <span style={{ fontSize: 10, color: "#6d28d9", borderRadius: 6, padding: "2px 6px", background: "rgba(124,58,237,0.07)" }}>{t.useCount} uses</span>
+                        </div>
+                      ))}
+                  </>
+                )}
+                {templates.length === 0 && publicTemplates.length === 0 && (
+                  <p style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", margin: "12px 0" }}>
+                    No templates yet. Save a run as a template to reuse it.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* V31 — Smart suggestion chips */}
+            {suggestions.length > 0 && !busy && (
+              <div style={{ marginBottom: 8, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>Suggest:</span>
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setInput(s); setSuggestions([]); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                    style={{
+                      padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(13,148,136,0.3)",
+                      background: "rgba(13,148,136,0.06)", color: "#0d9488",
+                      fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >
+                    {s.length > 60 ? s.slice(0, 60) + "…" : s}
+                  </button>
+                ))}
+                <button onClick={() => setSuggestions([])} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#94a3b8", padding: "2px 4px" }}>✕</button>
+              </div>
+            )}
+            {!busy && activeSessionId && runs.some((r) => r.status === "done") && suggestions.length === 0 && !suggestBusy && (
+              <button
+                onClick={() => loadSuggestions(activeSessionId)}
+                style={{ marginBottom: 8, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", background: "transparent", color: "#94a3b8", fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                ✨ Suggest follow-ups
+              </button>
+            )}
             {/* Input */}
             <div style={{ display: "flex", gap: 8 }}>
               <textarea
@@ -2167,22 +3856,69 @@ export default function QCoreMultiAgentPage() {
                   Stop
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => compareMode ? sendCompareAll() : send()}
-                  disabled={!input.trim() || !anyConfigured}
-                  style={{
-                    padding: "12px 24px", borderRadius: 12, border: "none",
-                    background: !input.trim() || !anyConfigured ? "#94a3b8"
-                      : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
-                      : "linear-gradient(135deg, #0d9488, #06b6d4)",
-                    color: "#fff", fontWeight: 800, fontSize: 14,
-                    cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
-                    alignSelf: "stretch", whiteSpace: "nowrap",
-                  }}
-                >
-                  {compareMode ? "Send × 3" : "Send"}
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignSelf: "stretch" }}>
+                  <button
+                    type="button"
+                    onClick={() => compareMode ? sendCompareAll() : send()}
+                    disabled={!input.trim() || !anyConfigured}
+                    style={{
+                      flex: 1, padding: "12px 24px", borderRadius: 12, border: "none",
+                      background: !input.trim() || !anyConfigured ? "#94a3b8"
+                        : compareMode ? "linear-gradient(135deg, #f59e0b, #ef4444)"
+                        : "linear-gradient(135deg, #0d9488, #06b6d4)",
+                      color: "#fff", fontWeight: 800, fontSize: 14,
+                      cursor: !input.trim() || !anyConfigured ? "default" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {compareMode ? "Send × 3" : "Send"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplatePanelOpen((v) => !v)}
+                    title="Browse and apply run templates"
+                    style={{
+                      padding: "6px 12px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)",
+                      background: templatePanelOpen ? "rgba(124,58,237,0.1)" : "#fff",
+                      color: templatePanelOpen ? "#6d28d9" : "#475569",
+                      fontWeight: 700, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    📋 Templates
+                  </button>
+                  {promptHistory.length > 0 && (
+                    <div style={{ position: "relative" }}>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryOpen((v) => !v)}
+                        title="Recent prompts"
+                        style={{
+                          padding: "6px 10px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)",
+                          background: historyOpen ? "rgba(15,23,42,0.08)" : "#fff",
+                          color: "#475569", fontWeight: 700, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap",
+                        }}
+                      >
+                        🕐 History
+                      </button>
+                      {historyOpen && (
+                        <div style={{ position: "absolute", bottom: "100%", right: 0, marginBottom: 4, width: 320, maxHeight: 280, overflowY: "auto", background: "#fff", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.1)", zIndex: 100 }}>
+                          <div style={{ padding: "8px 12px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>Recent prompts</span>
+                            <button onClick={() => { setPromptHistory([]); localStorage.removeItem("qcore_prompt_history"); setHistoryOpen(false); }} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#fca5a5" }}>Clear</button>
+                          </div>
+                          {promptHistory.map((h, i) => (
+                            <div key={i} onClick={() => { setInput(h); setHistoryOpen(false); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                              style={{ padding: "7px 12px", cursor: "pointer", fontSize: 12, color: "#0f172a", borderTop: "1px solid #f8fafc", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
+                              {h}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </section>
@@ -2207,8 +3943,206 @@ export default function QCoreMultiAgentPage() {
             .qc-sidebar-toggle { display: flex !important; }
             .qc-sidebar-body[data-open="false"] { display: none; }
           }
+          @media (max-width: 640px) {
+            .qc-run-footer { flex-wrap: wrap; gap: 4px !important; }
+            .qc-run-footer a, .qc-run-footer button { font-size: 10px !important; padding: 3px 7px !important; }
+            .qc-agent-card { padding: 8px 10px !important; }
+            .qc-input-row { flex-direction: column; gap: 8px !important; }
+            .qc-input-row button { align-self: stretch; }
+          }
         `}</style>
       </ProductPageShell>
+
+      {/* ⌘K Command palette */}
+      {paletteOpen && (() => {
+        const q = paletteQuery.toLowerCase();
+        const matchedSessions = q
+          ? sessions.filter((s) => s.title.toLowerCase().includes(q)).slice(0, 5)
+          : sessions.slice(0, 5);
+        // V31 — also run backend full-text search when palette is open and query is long enough.
+        // We don't await here — search is triggered via separate effect + state.
+        const NAV_COMMANDS = [
+          { icon: "📊", label: "Analytics", href: "/qcoreai/analytics" },
+          { icon: "🧪", label: "Eval harness", href: "/qcoreai/eval" },
+          { icon: "📝", label: "Prompts library", href: "/qcoreai/prompts" },
+          { icon: "⚡", label: "Batch runs", href: "/qcoreai/batch" },
+          { icon: "🕐", label: "Scheduled batches", href: "/qcoreai/schedule" },
+          { icon: "📓", label: "Notebook", href: "/qcoreai/notebook" },
+          { icon: "🎮", label: "Playground", href: "/qcoreai/playground" },
+          { icon: "⭐", label: "Top rated runs", href: "/qcoreai/top" },
+          { icon: "◈", label: "AI Providers", href: "/qcoreai/providers" },
+          { icon: "📖", label: "API Docs", href: "/qcoreai/docs" },
+          { icon: "⚖️", label: "Compare runs", href: "/qcoreai/compare" },
+          { icon: "🗂️", label: "Workspaces", href: "/qcoreai/workspaces" },
+          { icon: "🔖", label: "Bookmarks", href: "/qcoreai/bookmarks" },
+          { icon: "🏢", label: "Organizations", href: "/qcoreai/orgs" },
+          { icon: "🔑", label: "API Keys", href: "/qcoreai/api-keys" },
+          { icon: "🔗", label: "Prompt chains", href: "/qcoreai/chains" },
+          { icon: "📋", label: "Audit log", href: "/qcoreai/audit-log" },
+          { icon: "📊", label: "Model benchmarks", href: "/qcoreai/benchmarks" },
+        ].filter((c) => !q || c.label.toLowerCase().includes(q));
+        return (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 9999,
+              background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)",
+              display: "flex", alignItems: "flex-start", justifyContent: "center",
+              paddingTop: "15vh",
+            }}
+            onClick={() => setPaletteOpen(false)}
+          >
+            <div
+              style={{
+                width: "min(600px, 90vw)", borderRadius: 16,
+                background: "#fff", boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+                overflow: "hidden",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                <span style={{ fontSize: 18 }}>⌘</span>
+                <input
+                  ref={paletteRef}
+                  value={paletteQuery}
+                  onChange={(e) => setPaletteQuery(e.target.value)}
+                  placeholder="Search sessions, navigate…"
+                  style={{ flex: 1, border: "none", outline: "none", fontSize: 15, fontFamily: "inherit", color: "#0f172a" }}
+                />
+                <kbd style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" }}>Esc</kbd>
+              </div>
+              <div style={{ maxHeight: 400, overflowY: "auto" }}>
+                {matchedSessions.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Sessions</div>
+                    {matchedSessions.map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          setPaletteOpen(false);
+                          setActiveSessionId(s.id);
+                          loadSession(s.id);
+                        }}
+                        style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontSize: 14 }}>💬</span>
+                        <span style={{ fontSize: 13, color: "#0f172a", flex: 1 }}>{s.title || "(untitled)"}</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>
+                          {new Date(s.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* V31 — run search results */}
+                {paletteRunResults.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Runs</div>
+                    {paletteRunResults.map((r) => (
+                      <div
+                        key={r.id}
+                        onClick={() => {
+                          setPaletteOpen(false);
+                          if (r.sessionId) { setActiveSessionId(r.sessionId); loadSession(r.sessionId); }
+                        }}
+                        style={{ padding: "8px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontSize: 13, flexShrink: 0 }}>▶</span>
+                        <span style={{ fontSize: 12, color: "#475569", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{r.snippet}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {NAV_COMMANDS.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Navigate</div>
+                    {NAV_COMMANDS.slice(0, 6).map((c) => (
+                      <a
+                        key={c.href}
+                        href={c.href}
+                        style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center", textDecoration: "none", color: "inherit" }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "#f8fafc")}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "")}
+                        onClick={() => setPaletteOpen(false)}
+                      >
+                        <span style={{ fontSize: 14 }}>{c.icon}</span>
+                        <span style={{ fontSize: 13, color: "#0f172a" }}>{c.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {!q && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", padding: "8px 16px 4px", textTransform: "uppercase", letterSpacing: 1 }}>Actions</div>
+                    {[
+                      { icon: "✨", label: "New session", action: () => { newSession(); setPaletteOpen(false); } },
+                      { icon: "🔎", label: "Search runs & sessions", action: () => { window.location.href = "/qcoreai/search"; } },
+                      { icon: "📓", label: "Open notebook", action: () => { window.location.href = "/qcoreai/notebook"; } },
+                      { icon: "🎮", label: "Open playground", action: () => { window.location.href = "/qcoreai/playground"; } },
+                      { icon: "⌨️", label: "Keyboard shortcuts (?)", action: () => { setShortcutModalOpen(true); setPaletteOpen(false); } },
+                    ].map((a) => (
+                      <div
+                        key={a.label}
+                        onClick={a.action}
+                        style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                      >
+                        <span style={{ fontSize: 14 }}>{a.icon}</span>
+                        <span style={{ fontSize: 13, color: "#0f172a" }}>{a.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ padding: "8px 16px", borderTop: "1px solid #f1f5f9", fontSize: 10, color: "#94a3b8", display: "flex", gap: 12 }}>
+                <span>↑↓ navigate</span><span>↵ select</span><span>Esc close</span><span>⌘K toggle</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* V32 — Keyboard shortcut cheatsheet modal */}
+      {shortcutModalOpen && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={() => setShortcutModalOpen(false)}
+        >
+          <div
+            style={{ width: "min(480px, 90vw)", borderRadius: 16, background: "#fff", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 18 }}>⌨️</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>Keyboard shortcuts</span>
+              <button onClick={() => setShortcutModalOpen(false)} style={{ marginLeft: "auto", border: "none", background: "transparent", cursor: "pointer", fontSize: 18, color: "#94a3b8" }}>×</button>
+            </div>
+            <div style={{ padding: "12px 20px 20px" }}>
+              {[
+                { key: "n", desc: "New session" },
+                { key: "⌘K / Ctrl+K", desc: "Command palette" },
+                { key: "/", desc: "Open command palette (search)" },
+                { key: "1", desc: "Sequential strategy" },
+                { key: "2", desc: "Parallel strategy" },
+                { key: "3", desc: "Debate strategy" },
+                { key: "?", desc: "This shortcuts cheatsheet" },
+                { key: "Enter", desc: "Send prompt (in textarea)" },
+                { key: "Shift+Enter", desc: "New line in textarea" },
+                { key: "Esc", desc: "Close palette / modal" },
+              ].map(({ key, desc }) => (
+                <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid #f8fafc" }}>
+                  <kbd style={{ padding: "3px 8px", borderRadius: 6, background: "#f1f5f9", border: "1px solid #e2e8f0", fontSize: 11, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", minWidth: 90, textAlign: "center" }}>{key}</kbd>
+                  <span style={{ fontSize: 13, color: "#475569" }}>{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -2216,6 +4150,198 @@ export default function QCoreMultiAgentPage() {
 /* ═══════════════════════════════════════════════════════════════════════
    Subcomponents
    ═══════════════════════════════════════════════════════════════════════ */
+
+function WebhookLogPanel() {
+  const [log, setLog] = useState<Array<{ id: string; event: string; statusCode: number | null; durationMs: number | null; error: string | null; createdAt: string }>>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/webhook/log?limit=10"), { headers: bearerHeader() });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setLog(data.items);
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 10, borderTop: "1px solid #f1f5f9", paddingTop: 8 }}>
+      <button
+        onClick={() => { setOpen((v) => !v); if (!open && log.length === 0) load(); }}
+        style={{ fontSize: 11, fontWeight: 700, color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        {open ? "▾" : "▸"} Delivery log
+        <button onClick={(e) => { e.stopPropagation(); load(); }} style={{ marginLeft: 6, fontSize: 10, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>↻</button>
+      </button>
+      {open && (
+        <div style={{ marginTop: 6 }}>
+          {loading && <p style={{ fontSize: 11, color: "#94a3b8" }}>Loading…</p>}
+          {!loading && log.length === 0 && <p style={{ fontSize: 11, color: "#94a3b8" }}>No deliveries yet.</p>}
+          {log.map((l) => (
+            <div key={l.id} style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0", borderBottom: "1px solid #f8fafc", fontSize: 10 }}>
+              <span style={{
+                width: 42, textAlign: "center", borderRadius: 4, fontWeight: 800,
+                padding: "1px 4px",
+                background: l.statusCode && l.statusCode < 300 ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.08)",
+                color: l.statusCode && l.statusCode < 300 ? "#065f46" : "#991b1b",
+              }}>
+                {l.statusCode ?? "ERR"}
+              </span>
+              <span style={{ flex: 1, color: "#475569" }}>{l.event}</span>
+              {l.durationMs != null && <span style={{ color: "#94a3b8" }}>{l.durationMs}ms</span>}
+              <span style={{ color: "#cbd5e1" }}>
+                {new Date(l.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              {(!l.statusCode || l.statusCode >= 300) && (
+                <button
+                  onClick={async () => {
+                    await fetch(apiUrl("/api/qcoreai/me/webhook/retry"), {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", ...bearerHeader() },
+                      body: JSON.stringify({ event: l.event }),
+                    });
+                    load();
+                  }}
+                  title="Retry this event"
+                  style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#4338ca", fontWeight: 700, padding: "1px 4px" }}
+                >
+                  ↻
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SpendLimitPanel() {
+  const [summary, setSummary] = useState<{
+    spentUsd: number; limitUsd: number | null; alertAt: number; pct: number | null;
+    alerting: boolean; exceeded: boolean;
+  } | null>(null);
+  const [limitInput, setLimitInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    fetch(apiUrl("/api/qcoreai/me/spend-summary"), { headers: bearerHeader() })
+      .then((r) => r.json()).then((d) => { if (d.spentUsd !== undefined) setSummary(d); })
+      .catch(() => {});
+  }, []);
+
+  if (!summary) return null;
+
+  const pctNum = summary.pct !== null ? Math.min(100, Math.round(summary.pct * 100)) : null;
+  const barColor = summary.exceeded ? "#ef4444" : summary.alerting ? "#f59e0b" : "#10b981";
+
+  const save = async () => {
+    const v = parseFloat(limitInput);
+    if (!isFinite(v) || v <= 0) return;
+    setSaving(true);
+    try {
+      const res = await fetch(apiUrl("/api/qcoreai/me/spend-limit"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ monthlyLimitUsd: v }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSummary((prev) => prev ? { ...prev, limitUsd: v, pct: prev.spentUsd / v, alerting: prev.spentUsd / v >= 0.8, exceeded: prev.spentUsd >= v } : prev);
+        setEditing(false);
+        setLimitInput("");
+      } else {
+        alert(data.error || "Failed to save limit");
+      }
+    } finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    setSaving(true);
+    try {
+      await fetch(apiUrl("/api/qcoreai/me/spend-limit"), { method: "DELETE", headers: bearerHeader() });
+      setSummary((prev) => prev ? { ...prev, limitUsd: null, pct: null, alerting: false, exceeded: false } : prev);
+      setEditing(false);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 12, padding: "10px 12px", borderRadius: 10,
+        border: `1px solid ${summary.alerting ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.1)"}`,
+        background: summary.alerting ? "rgba(245,158,11,0.05)" : "#f8fafc",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ fontWeight: 800, color: "#0f172a" }}>Monthly spend</span>
+        <span style={{ fontWeight: 700, color: summary.exceeded ? "#dc2626" : "#0f172a" }}>
+          ${summary.spentUsd.toFixed(4)}
+        </span>
+        {summary.limitUsd && (
+          <span style={{ color: "#64748b" }}>/ ${summary.limitUsd.toFixed(2)}</span>
+        )}
+        {summary.alerting && !summary.exceeded && (
+          <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: "rgba(245,158,11,0.15)", color: "#92400e" }}>
+            ⚠ 80%+ of limit
+          </span>
+        )}
+        {summary.exceeded && (
+          <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, background: "rgba(239,68,68,0.1)", color: "#991b1b" }}>
+            LIMIT REACHED
+          </span>
+        )}
+        <button
+          onClick={() => { setEditing((v) => !v); setLimitInput(summary.limitUsd ? String(summary.limitUsd) : ""); }}
+          style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer", color: "#475569" }}
+        >
+          {editing ? "Close" : summary.limitUsd ? "Edit limit" : "+ Set limit"}
+        </button>
+      </div>
+
+      {summary.limitUsd && pctNum !== null && (
+        <div style={{ height: 4, borderRadius: 2, background: "#e2e8f0", overflow: "hidden", marginBottom: editing ? 8 : 0 }}>
+          <div style={{ height: "100%", borderRadius: 2, background: barColor, width: `${pctNum}%`, transition: "width 0.5s" }} />
+        </div>
+      )}
+
+      {editing && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: "#64748b" }}>$/month:</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={limitInput}
+            onChange={(e) => setLimitInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+            placeholder="e.g. 10"
+            style={{ width: 80, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 11, fontFamily: "inherit" }}
+          />
+          <button
+            onClick={save}
+            disabled={saving}
+            style={{ padding: "4px 10px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+          >
+            {saving ? "…" : "Save"}
+          </button>
+          {summary.limitUsd && (
+            <button
+              onClick={remove}
+              disabled={saving}
+              style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid #fecaca", background: "#fff", color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function LiveCostBadge({ run }: { run: RunState }) {
   const stats = runStats(run);
@@ -2259,6 +4385,9 @@ function RoleConfigCard({
   pricing,
   value,
   onChange,
+  promptId,
+  onPromptChange,
+  availablePrompts,
 }: {
   role: RoleDefault;
   strategy: Strategy;
@@ -2266,6 +4395,9 @@ function RoleConfigCard({
   pricing: PricingRow[];
   value: { provider: string; model: string };
   onChange: (v: { provider: string; model: string }) => void;
+  promptId?: string;
+  onPromptChange?: (id: string) => void;
+  availablePrompts?: Array<{ id: string; name: string; role: string; version: number }>;
 }) {
   const s = roleSlotStyle(role.id, strategy);
   const label = roleSlotLabel(role.id, strategy);
@@ -2342,6 +4474,34 @@ function RoleConfigCard({
         <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>
           <b>${priceRow.inputPer1M.toFixed(2)}</b>/M input · <b>${priceRow.outputPer1M.toFixed(2)}</b>/M output
         </div>
+      )}
+      {onPromptChange && (
+        <>
+          <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: "#475569", marginTop: 10, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Custom prompt
+          </label>
+          <select
+            value={promptId || ""}
+            onChange={(e) => onPromptChange(e.target.value)}
+            style={{
+              width: "100%", padding: "6px 8px", borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.15)", background: "#fff",
+              fontSize: 12,
+            }}
+          >
+            <option value="">— role default —</option>
+            {(availablePrompts || []).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · v{p.version} ({p.role})
+              </option>
+            ))}
+          </select>
+          {(!availablePrompts || availablePrompts.length === 0) && (
+            <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+              No prompts yet — create at <a href="/qcoreai/prompts" style={{ color: "#4f46e5" }}>/qcoreai/prompts</a>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -2478,19 +4638,64 @@ function RunCard({
   run,
   onLoadDetails,
   onRerun,
+  onClone,
   onEdit,
   onShare,
   onUnshare,
+  onUpdateTags,
+  refineOpen,
+  refineText,
+  refineBusy,
+  onOpenRefine,
+  onChangeRefineText,
+  onCancelRefine,
+  onApplyRefine,
+  onContinue,
+  onSaveTemplate,
+  personas,
+  annotations = [],
+  annotatingOpen = false,
+  annotateText = "",
+  annotateSaving = false,
+  onOpenAnnotate,
+  onChangeAnnotateText,
+  onSaveAnnotation,
+  onCancelAnnotate,
+  onDeleteAnnotation,
 }: {
   run: RunState;
   onLoadDetails?: () => void;
   onRerun?: () => void;
+  onClone?: () => void;
   onEdit?: () => void;
   onShare?: () => void;
   onUnshare?: () => void;
+  onUpdateTags?: (tags: string[]) => void;
+  refineOpen?: boolean;
+  refineText?: string;
+  refineBusy?: boolean;
+  onOpenRefine?: () => void;
+  onChangeRefineText?: (text: string) => void;
+  onCancelRefine?: () => void;
+  onApplyRefine?: () => void;
+  onContinue?: (runId: string) => void;
+  onSaveTemplate?: (runId: string) => void;
+  personas?: Record<string, { name: string; emoji?: string }>;
+  annotations?: Array<{ id: string; note: string; color: string; createdAt: string }>;
+  annotatingOpen?: boolean;
+  annotateText?: string;
+  annotateSaving?: boolean;
+  onOpenAnnotate?: () => void;
+  onChangeAnnotateText?: (text: string) => void;
+  onSaveAnnotation?: () => void;
+  onCancelAnnotate?: () => void;
+  onDeleteAnnotation?: (id: string) => void;
 }) {
   const hasAgents = run.turns.length > 0;
   const grouped = groupTurns(run.turns);
+  const [tagInput, setTagInput] = useState<string>("");
+  const [tagInputOpen, setTagInputOpen] = useState<boolean>(false);
+  const tags = run.tags || [];
   const stats = runStats(run);
   const displayStrategy = (run.strategy as Strategy) || "sequential";
   const totalDur = run.totalDurationMs ?? stats.durationMs;
@@ -2557,16 +4762,26 @@ function RunCard({
         };
         grouped.forEach((item, i) => {
           flushGuidanceBefore(consumedTurns);
+          const makeNotebookSave = (t: AgentTurn) => !t.content ? undefined : async () => {
+            const tok = typeof window !== "undefined"
+              ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+            if (!tok) return;
+            await fetch(apiUrl("/api/qcoreai/notebook"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+              body: JSON.stringify({ runId: run.id, role: t.role, content: t.content.slice(0, 32000) }),
+            }).catch(() => {});
+          };
           if ("pair" in item) {
             out.push(
               <div key={`pair-${i}`} className="qc-pair-grid" style={{ marginBottom: 0 }}>
-                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} />
-                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} />
+                <AgentTurnCard turn={item.pair[0]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[0])} personas={personas} />
+                <AgentTurnCard turn={item.pair[1]} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item.pair[1])} personas={personas} />
               </div>
             );
             consumedTurns += 2;
           } else {
-            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} />);
+            out.push(<AgentTurnCard key={i} turn={item} strategy={displayStrategy} onSaveToNotebook={makeNotebookSave(item)} personas={personas} />);
             consumedTurns += 1;
           }
         });
@@ -2592,7 +4807,178 @@ function RunCard({
       )}
 
       {/* Final */}
-      {run.finalContent && <FinalCard content={run.finalContent} runId={run.id} stopped={run.status === "stopped"} />}
+      {run.finalContent && (
+        <>
+          <FinalCard
+            content={run.finalContent}
+            runId={run.id}
+            stopped={run.status === "stopped"}
+            onContinue={onContinue}
+          />
+          {run.status !== "running" && onOpenRefine && !refineOpen && (
+            <button
+              onClick={onOpenRefine}
+              title="One-pass surgical edit on top of this answer"
+              style={{
+                marginTop: 6,
+                alignSelf: "flex-start",
+                padding: "4px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(124,58,237,0.06)",
+                color: "#6d28d9",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              ✎ Refine
+            </button>
+          )}
+          {run.finalContent && run.status !== "running" && onSaveTemplate && (
+            <button
+              onClick={() => onSaveTemplate(run.id)}
+              title="Save this prompt + config as a reusable template"
+              style={{
+                marginTop: 6,
+                alignSelf: "flex-start",
+                padding: "4px 10px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.2)",
+                background: "#f8fafc",
+                color: "#475569",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              📋 Save as template
+            </button>
+          )}
+          {refineOpen && (
+            <div
+              style={{
+                marginTop: 6,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(124,58,237,0.04)",
+                borderRadius: 10,
+                padding: 10,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <textarea
+                value={refineText || ""}
+                onChange={(e) => onChangeRefineText && onChangeRefineText(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    onApplyRefine && onApplyRefine();
+                  } else if (e.key === "Escape") {
+                    onCancelRefine && onCancelRefine();
+                  }
+                }}
+                placeholder="e.g. Add a TL;DR section at the top, tighten the conclusion, fix the table…"
+                disabled={refineBusy}
+                rows={3}
+                style={{
+                  resize: "vertical",
+                  borderRadius: 8,
+                  border: "1px solid rgba(124,58,237,0.25)",
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  background: "#fff",
+                  color: "#0f172a",
+                  outline: "none",
+                  minHeight: 60,
+                }}
+              />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={onApplyRefine}
+                  disabled={refineBusy || !(refineText || "").trim()}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 8,
+                    background: refineBusy ? "#a78bfa" : "#7c3aed",
+                    color: "#fff",
+                    border: "none",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: refineBusy ? "default" : "pointer",
+                  }}
+                >
+                  {refineBusy ? "Refining…" : "Apply (⌘/Ctrl+Enter)"}
+                </button>
+                <button
+                  onClick={onCancelRefine}
+                  disabled={refineBusy}
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    background: "#fff",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel (Esc)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* V31 — Annotation panel */}
+          {run.status !== "running" && (
+            <div style={{ marginTop: 6 }}>
+              {annotations.length > 0 && (
+                <div style={{ marginBottom: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {annotations.map((ann) => (
+                    <div key={ann.id} style={{ padding: "6px 10px", borderRadius: 8, background: "rgba(253,224,71,0.2)", border: "1px solid rgba(234,179,8,0.3)", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <span style={{ fontSize: 12 }}>📝</span>
+                      <span style={{ flex: 1, fontSize: 12, color: "#713f12", lineHeight: 1.4 }}>{ann.note}</span>
+                      {onDeleteAnnotation && (
+                        <button onClick={() => onDeleteAnnotation(ann.id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: 11, padding: 0, flexShrink: 0 }}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!annotatingOpen && onOpenAnnotate && (
+                <button
+                  onClick={onOpenAnnotate}
+                  title="Add a personal note to this run"
+                  style={{ padding: "3px 9px", borderRadius: 8, border: "1px dashed rgba(234,179,8,0.5)", background: "rgba(253,224,71,0.06)", color: "#92400e", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                >
+                  ✎ Add note
+                </button>
+              )}
+              {annotatingOpen && (
+                <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <textarea
+                    value={annotateText}
+                    onChange={(e) => onChangeAnnotateText && onChangeAnnotateText(e.target.value)}
+                    placeholder="Your note about this run…"
+                    rows={2}
+                    autoFocus
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(234,179,8,0.4)", fontSize: 12, fontFamily: "inherit", resize: "vertical", outline: "none", background: "rgba(253,224,71,0.06)" }}
+                  />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={onSaveAnnotation} disabled={annotateSaving || !annotateText.trim()} style={{ padding: "4px 12px", borderRadius: 8, background: "#ca8a04", color: "#fff", border: "none", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                      {annotateSaving ? "Saving…" : "Save note"}
+                    </button>
+                    <button onClick={onCancelAnnotate} style={{ padding: "4px 10px", borderRadius: 8, background: "#fff", color: "#475569", border: "1px solid #cbd5e1", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Error */}
       {run.error && !run.finalContent && (
@@ -2668,6 +5054,106 @@ function RunCard({
             💲 {formatMoney(totalCost)}
           </span>
 
+          {/* Tag chips + + Tag input — owner-only edit, displayed for everyone. */}
+          {run.persisted && run.id && !run.id.startsWith("tmp_") && (
+            <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                    padding: "2px 6px 2px 8px",
+                    borderRadius: 999,
+                    background: "rgba(13,148,136,0.08)",
+                    border: "1px solid rgba(13,148,136,0.25)",
+                    color: "#0f766e",
+                    fontSize: 10,
+                    fontWeight: 700,
+                  }}
+                >
+                  {t}
+                  {onUpdateTags && (
+                    <button
+                      onClick={() => onUpdateTags(tags.filter((x) => x !== t))}
+                      title={`Remove "${t}"`}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#0f766e",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        padding: 0,
+                        lineHeight: 1,
+                        opacity: 0.6,
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+              {onUpdateTags && tags.length < 16 && (
+                tagInputOpen ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onBlur={() => {
+                      const v = tagInput.trim();
+                      if (v && !tags.includes(v)) onUpdateTags([...tags, v]);
+                      setTagInput("");
+                      setTagInputOpen(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const v = tagInput.trim();
+                        if (v && !tags.includes(v)) onUpdateTags([...tags, v]);
+                        setTagInput("");
+                        setTagInputOpen(false);
+                      } else if (e.key === "Escape") {
+                        setTagInput("");
+                        setTagInputOpen(false);
+                      }
+                    }}
+                    placeholder="tag…"
+                    maxLength={32}
+                    style={{
+                      width: 80,
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(13,148,136,0.4)",
+                      background: "#fff",
+                      fontSize: 10,
+                      color: "#0f766e",
+                      fontWeight: 600,
+                      outline: "none",
+                    }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setTagInputOpen(true)}
+                    title="Add a tag"
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      border: "1px dashed rgba(13,148,136,0.35)",
+                      background: "transparent",
+                      color: "#0f766e",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    + Tag
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
           <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
             {onEdit && run.status !== "running" && (
               <button
@@ -2695,6 +5181,15 @@ function RunCard({
                 ↻ Rerun
               </button>
             )}
+            {onClone && run.status !== "running" && (
+              <button
+                onClick={onClone}
+                style={{ padding: "5px 10px", borderRadius: 8, background: "#fff", border: "1px solid #cbd5e1", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                title="Clone to new session — same prompt + config, fresh context"
+              >
+                ⧉ Clone
+              </button>
+            )}
             {run.persisted && run.id && !run.id.startsWith("tmp_") && (
               <>
                 {run.shareToken ? (
@@ -2711,6 +5206,35 @@ function RunCard({
                     >
                       🔗 Public
                     </a>
+                    <button
+                      onClick={async () => {
+                        const origin = typeof window !== "undefined" ? window.location.origin : "";
+                        const snippet =
+                          `<iframe\n` +
+                          `  src="${origin}/qcoreai/embed/${run.shareToken}?theme=light"\n` +
+                          `  width="100%"\n` +
+                          `  height="520"\n` +
+                          `  frameborder="0"\n` +
+                          `  loading="lazy"\n` +
+                          `  title="QCoreAI run"\n` +
+                          `  style="border:1px solid rgba(15,23,42,0.1); border-radius:14px;"\n` +
+                          `></iframe>`;
+                        try {
+                          await navigator.clipboard.writeText(snippet);
+                          alert("Iframe snippet copied!\n\nTip: pass ?theme=dark&compact=1 to render minimal/dark.");
+                        } catch {
+                          window.prompt("Copy this iframe snippet:", snippet);
+                        }
+                      }}
+                      title="Copy embed iframe snippet to clipboard"
+                      style={{
+                        padding: "5px 10px", borderRadius: 8,
+                        background: "rgba(13,148,136,0.08)", border: "1px solid rgba(13,148,136,0.3)",
+                        color: "#0f766e", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      &lt;/&gt; Embed
+                    </button>
                     {onUnshare && (
                       <button
                         onClick={onUnshare}
@@ -2761,6 +5285,40 @@ function RunCard({
                   title="Download as JSON"
                 >
                   ⬇ JSON
+                </a>
+                <a
+                  href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=csv`}
+                  download
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid #cbd5e1",
+                    color: "#0f172a", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Download as CSV"
+                >
+                  ⬇ CSV
+                </a>
+                <a
+                  href={`/qcoreai/compare?a=${run.id}`}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid #c7d2fe",
+                    color: "#4338ca", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Compare this run with another"
+                >
+                  ⚖️ Compare
+                </a>
+                <a
+                  href={`/qcoreai/replay/${run.id}`}
+                  style={{
+                    padding: "5px 10px", borderRadius: 8,
+                    background: "#fff", border: "1px solid rgba(124,58,237,0.3)",
+                    color: "#6d28d9", fontSize: 11, fontWeight: 700, textDecoration: "none",
+                  }}
+                  title="Step through agent events with replay controls"
+                >
+                  ▶ Replay
                 </a>
               </>
             )}
@@ -2821,8 +5379,9 @@ function GuidanceChip({ item }: { item: GuidanceItem }) {
   );
 }
 
-function AgentTurnCard({ turn, strategy }: { turn: AgentTurn; strategy: Strategy }) {
+function AgentTurnCard({ turn, strategy, onSaveToNotebook, personas }: { turn: AgentTurn; strategy: Strategy; onSaveToNotebook?: () => void; personas?: Record<string, { name: string; emoji?: string }> }) {
   const s = turnStyle(turn.role, turn.stage, turn.instance, strategy);
+  const persona = personas?.[turn.role === "writer" && turn.instance === "b" ? "writerB" : turn.role];
   const streaming = turn.status === "streaming";
   const stageBadge =
     turn.stage === "revision" ? " (revision)" :
@@ -2849,10 +5408,10 @@ function AgentTurnCard({ turn, strategy }: { turn: AgentTurn; strategy: Strategy
             fontSize: 11, fontWeight: 900,
           }}
         >
-          {s.tag}
+          {persona?.emoji || s.tag}
         </span>
         <span style={{ fontWeight: 800, fontSize: 12, color: s.color }}>
-          {s.label}{stageBadge}
+          {persona?.name || s.label}{stageBadge}
         </span>
         {turn.model && (
           <span style={{ fontSize: 11, color: "#94a3b8" }}>
@@ -2872,6 +5431,15 @@ function AgentTurnCard({ turn, strategy }: { turn: AgentTurn; strategy: Strategy
           )}
           {!streaming && turn.costUsd != null && turn.costUsd > 0 && (
             <span style={{ color: "#0f172a", fontWeight: 700 }}>{formatMoney(turn.costUsd)}</span>
+          )}
+          {!streaming && onSaveToNotebook && turn.content && (
+            <button
+              onClick={onSaveToNotebook}
+              title="Save to notebook"
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 10, color: "#94a3b8", padding: 0 }}
+            >
+              ⊞
+            </button>
           )}
         </div>
       </div>
@@ -2927,13 +5495,69 @@ function groupTurns(turns: AgentTurn[]): TurnGroup[] {
   return out;
 }
 
-function FinalCard({ content, runId, stopped }: { content: string; runId: string; stopped?: boolean }) {
+function wordCount(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0;
+}
+
+function FinalCard({
+  content, runId, stopped, onContinue,
+}: {
+  content: string; runId: string; stopped?: boolean;
+  onContinue?: (runId: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [userRating, setUserRating] = useState<1 | -1 | null>(null);
+  const [ratingCounts, setRatingCounts] = useState<{ thumbsUp: number; thumbsDown: number } | null>(null);
+  const [bookmarked, setBookmarked] = useState(false);
+
+  const toggleBookmark = async () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+    if (!token) return;
+    if (bookmarked) {
+      await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      setBookmarked(false);
+    } else {
+      await fetch(apiUrl(`/api/qcoreai/runs/${runId}/bookmark`), { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({}) }).catch(() => {});
+      setBookmarked(true);
+    }
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
+    } catch { /* noop */ }
+  };
+  const saveToNotebook = async () => {
+    try {
+      const token = typeof window !== "undefined"
+        ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token")
+        : null;
+      if (!token) return;
+      await fetch(apiUrl("/api/qcoreai/notebook"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ runId, role: "final", content: content.slice(0, 32000) }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* noop */ }
+  };
+
+  const rate = async (rating: 1 | -1) => {
+    if (userRating === rating) return; // already rated this
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/runs/${runId}/rate`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ rating }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setUserRating(rating);
+        setRatingCounts({ thumbsUp: data.summary?.thumbsUp ?? 0, thumbsDown: data.summary?.thumbsDown ?? 0 });
+      }
     } catch { /* noop */ }
   };
   return (
@@ -2961,22 +5585,118 @@ function FinalCard({ content, runId, stopped }: { content: string; runId: string
         <span style={{ fontWeight: 800, fontSize: 13, color: stopped ? "#92400e" : "#581c87" }}>
           {stopped ? "Partial answer (stopped)" : "Final answer"}
         </span>
-        <button
-          onClick={copy}
-          style={{
-            marginLeft: "auto",
-            padding: "4px 10px",
-            borderRadius: 8,
-            border: "1px solid rgba(124,58,237,0.3)",
-            background: copied ? "rgba(124,58,237,0.12)" : "#fff",
-            color: "#6d28d9",
-            fontSize: 11,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
+        {content && (() => {
+          const wc = wordCount(content);
+          const mins = Math.max(1, Math.round(wc / 200));
+          return (
+            <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: 8 }}>
+              {wc.toLocaleString()} words · ~{mins} min read
+            </span>
+          );
+        })()}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+          <button
+            onClick={toggleBookmark}
+            title={bookmarked ? "Remove bookmark" : "Bookmark this run"}
+            style={{
+              padding: "4px 8px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+              border: `1px solid ${bookmarked ? "rgba(245,158,11,0.4)" : "rgba(15,23,42,0.15)"}`,
+              background: bookmarked ? "rgba(245,158,11,0.1)" : "#fff",
+              color: bookmarked ? "#92400e" : "#475569",
+            }}
+          >
+            {bookmarked ? "🔖" : "🏷️"}
+          </button>
+          <button
+            onClick={saveToNotebook}
+            title="Save to notebook"
+            style={{
+              padding: "4px 10px", borderRadius: 8,
+              border: "1px solid rgba(15,23,42,0.2)",
+              background: saved ? "rgba(16,185,129,0.1)" : "#fff",
+              color: saved ? "#065f46" : "#475569",
+              fontSize: 11, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            {saved ? "Saved ✓" : "⊞ Notebook"}
+          </button>
+          <a
+            href={`/qcoreai/eval`}
+            onClick={async (e) => {
+              // Quick create eval suite with this run's input as test case
+              e.preventDefault();
+              const token = typeof window !== "undefined" ? localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") : null;
+              if (!token) { window.location.href = "/qcoreai/eval"; return; }
+              try {
+                const res = await fetch(apiUrl("/api/qcoreai/eval/suites"), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ name: `Quick eval - ${new Date().toLocaleDateString()}`, cases: [{ id: `q-${runId}`, name: "From run", input: content.slice(0, 4000), judge: { type: "min_length", chars: 20 } }] }),
+                });
+                const d = await res.json().catch(() => ({}));
+                if (res.ok && d.suite?.id) { window.location.href = `/qcoreai/eval/${d.suite.id}`; } else { window.location.href = "/qcoreai/eval"; }
+              } catch { window.location.href = "/qcoreai/eval"; }
+            }}
+            style={{ padding: "4px 10px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.2)", background: "#fff", color: "#6d28d9", fontSize: 11, fontWeight: 700, textDecoration: "none", cursor: "pointer" }}
+            title="Create quick eval case from this run"
+          >
+            🧪 Eval
+          </a>
+          {onContinue && (
+            <button
+              onClick={() => onContinue(runId)}
+              title="Continue this thread — sends a follow-up with full context"
+              style={{
+                padding: "4px 10px", borderRadius: 8,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "#fff", color: "#6d28d9",
+                fontSize: 11, fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              ↩ Continue
+            </button>
+          )}
+          {/* Rating buttons */}
+          <button
+            onClick={() => rate(1)}
+            title="Thumbs up — this answer was helpful"
+            style={{
+              padding: "4px 8px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+              border: `1px solid ${userRating === 1 ? "rgba(16,185,129,0.5)" : "rgba(15,23,42,0.15)"}`,
+              background: userRating === 1 ? "rgba(16,185,129,0.12)" : "#fff",
+              color: userRating === 1 ? "#065f46" : "#475569",
+            }}
+          >
+            👍{ratingCounts && ratingCounts.thumbsUp > 0 ? <span style={{ fontSize: 10, marginLeft: 3 }}>{ratingCounts.thumbsUp}</span> : null}
+          </button>
+          <button
+            onClick={() => rate(-1)}
+            title="Thumbs down — this answer needs improvement"
+            style={{
+              padding: "4px 8px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+              border: `1px solid ${userRating === -1 ? "rgba(239,68,68,0.5)" : "rgba(15,23,42,0.15)"}`,
+              background: userRating === -1 ? "rgba(239,68,68,0.08)" : "#fff",
+              color: userRating === -1 ? "#991b1b" : "#475569",
+            }}
+          >
+            👎{ratingCounts && ratingCounts.thumbsDown > 0 ? <span style={{ fontSize: 10, marginLeft: 3 }}>{ratingCounts.thumbsDown}</span> : null}
+          </button>
+          <button
+            onClick={copy}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(124,58,237,0.3)",
+              background: copied ? "rgba(124,58,237,0.12)" : "#fff",
+              color: "#6d28d9",
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
       <div style={{ fontSize: 14, lineHeight: 1.6, color: "#0f172a" }}>
         <Markdown source={content} />

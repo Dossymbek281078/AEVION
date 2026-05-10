@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
+import { sendToUser } from "./push";
 
 export const shiftsRouter = Router();
 
@@ -37,6 +38,16 @@ shiftsRouter.post("/", async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [id, applicationId.value, appRow.rows[0].workerId, auth.sub, shiftDate.value, startTime, endTime, notes],
     );
+
+    // Push to worker — shift scheduled (fire-and-forget)
+    const timeRange = startTime && endTime ? ` ${startTime}–${endTime}` : "";
+    void sendToUser(appRow.rows[0].workerId, {
+      title: "Shift scheduled 📅",
+      body: `${shiftDate.value}${timeRange}${notes ? " — " + notes.slice(0, 60) : ""}`,
+      url: "/build/shifts",
+      tag: `shift-${id}`,
+    }).catch(() => {});
+
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
     return fail(res, 500, "shift_create_failed", { details: (err as Error).message });

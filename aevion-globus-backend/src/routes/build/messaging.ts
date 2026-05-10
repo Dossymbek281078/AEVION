@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber } from "../../lib/build";
+import { sendToUser } from "./push";
 
 export const messagingRouter = Router();
 
@@ -25,6 +26,16 @@ messagingRouter.post("/messages", async (req, res) => {
       `INSERT INTO "BuildMessage" ("id","senderId","receiverId","content") VALUES ($1,$2,$3,$4) RETURNING *`,
       [id, auth.sub, receiverId.value, content.value],
     );
+
+    // Push to recipient — new message (fire-and-forget)
+    const preview = content.value.slice(0, 80) + (content.value.length > 80 ? "…" : "");
+    void sendToUser(receiverId.value, {
+      title: "New message",
+      body: preview,
+      url: `/build/messages`,
+      tag: `msg-${auth.sub}`,
+    }).catch(() => {});
+
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
     return fail(res, 500, "message_send_failed", { details: (err as Error).message });

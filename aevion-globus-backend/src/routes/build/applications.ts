@@ -11,6 +11,7 @@ import {
   APPLICATION_STATUSES,
   getRecruiterTier,
 } from "../../lib/build";
+import { sendToUser } from "./push";
 
 export const applicationsRouter = Router();
 
@@ -153,6 +154,14 @@ applicationsRouter.post("/", async (req, res) => {
       void notifyNewApplication(vacancy.rows[0].clientId, {
         applicationId: id, vacancyId: vacancyId.value, vacancyTitle: vacancy.rows[0].title,
         candidateId: auth.sub,
+      }).catch(() => {});
+
+      // Push to recruiter — new applicant arrived
+      void sendToUser(vacancy.rows[0].clientId, {
+        title: "New application",
+        body: `Someone applied to "${vacancy.rows[0].title}"`,
+        url: `/build/vacancy/${vacancyId.value}/review/${id}`,
+        tag: `apply-${id}`,
       }).catch(() => {});
 
       return ok(res, result.rows[0], 201);
@@ -458,9 +467,19 @@ applicationsRouter.patch("/:id", async (req, res) => {
       }
     }
 
-    // Fire-and-forget email notification to candidate
+    // Fire-and-forget email + push to candidate
     const candidateId = row.rows[0].userId;
     void notifyCandidate(candidateId, status.value as "ACCEPTED" | "REJECTED").catch(() => {});
+    if (status.value === "ACCEPTED" || status.value === "REJECTED") {
+      void sendToUser(candidateId, {
+        title: status.value === "ACCEPTED" ? "Application accepted 🎉" : "Application update",
+        body: status.value === "ACCEPTED"
+          ? "The employer accepted your application. Check messages."
+          : "The employer has reviewed your application.",
+        url: "/build/applications",
+        tag: `status-${id}`,
+      }).catch(() => {});
+    }
 
     return ok(res, { ...result.rows[0], hireOrder });
   } catch (err: unknown) {

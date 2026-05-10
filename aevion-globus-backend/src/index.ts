@@ -41,6 +41,7 @@ import { qcontractRouter } from "./routes/qcontract";
 import { healthaiRouter } from "./routes/healthai";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { apiQuotasRouter } from "./routes/apiQuotas";
+import { apiKeysRouter } from "./routes/apiKeys";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -384,6 +385,7 @@ app.use("/api/coach", coachRouter);
 // Pricing / GTM
 // ==========================
 app.use("/api/quotas", apiQuotasRouter);
+app.use("/api/keys", apiKeysRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/pricing/events", eventsRouter);

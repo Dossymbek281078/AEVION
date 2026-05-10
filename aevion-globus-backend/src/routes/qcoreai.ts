@@ -195,6 +195,15 @@ import {
   // V56 — Audit log
   logAudit,
   listAuditLog,
+  // V59 — AI Memory
+  addMemory,
+  listMemories,
+  deleteMemory,
+  updateMemory,
+  extractMemoriesFromRun,
+  listPinnedMemories,
+  // V60 — Template pin
+  pinTemplate,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -1953,6 +1962,25 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
         overrides[role] = { ...cur, systemPrompt: content };
       }
     }
+  }
+
+  // V59 — Inject pinned AI memories into the analyst's system prompt so the
+  // agent has persistent cross-session user context. Non-blocking — silently
+  // skipped when no memories exist or DB is unavailable.
+  if (userId) {
+    try {
+      const pinnedMems = await listPinnedMemories(userId, 5);
+      if (pinnedMems.length > 0) {
+        const memContext = "User context:\n" + pinnedMems.map((m) => `- ${m.content}`).join("\n");
+        const cur = overrides.analyst || {};
+        overrides.analyst = {
+          ...cur,
+          systemPrompt: cur.systemPrompt
+            ? `${memContext}\n\n${cur.systemPrompt}`
+            : memContext,
+        };
+      }
+    } catch { /* non-critical */ }
   }
 
   // Pre-fetch any QRight attachments the user wants the agents to reason
@@ -5169,6 +5197,215 @@ const BENCHMARK_DATA = {
 
 qcoreaiRouter.get("/benchmarks", (_req, res) => {
   res.json(BENCHMARK_DATA);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V59 — AI Memory
+   POST   /me/memories           — add a memory
+   GET    /me/memories           — list memories (?category=&pinned=&limit=)
+   PATCH  /me/memories/:id       — update content/category/pinned
+   DELETE /me/memories/:id       — delete
+   POST   /me/memories/extract   — extract from a run (body: {runId})
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/me/memories", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { content, category, pinned } = req.body || {};
+  if (!content?.trim()) return res.status(400).json({ error: "content required" });
+  try {
+    const mem = await addMemory(auth.sub, String(content).slice(0, 4000), { category, pinned });
+    res.json({ memory: mem });
+  } catch (err: any) { res.status(500).json({ error: "add memory failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/me/memories", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const category = typeof req.query.category === "string" ? req.query.category : undefined;
+  const pinnedQ = req.query.pinned;
+  const pinned = pinnedQ === "true" ? true : pinnedQ === "false" ? false : undefined;
+  const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10) || 50));
+  try {
+    const memories = await listMemories(auth.sub, { category, pinned, limit });
+    res.json({ memories });
+  } catch (err: any) { res.status(500).json({ error: "list memories failed", details: err?.message }); }
+});
+
+// Extract must come before :id to avoid routing collision
+qcoreaiRouter.post("/me/memories/extract", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { runId } = req.body || {};
+  if (!runId) return res.status(400).json({ error: "runId required" });
+  try {
+    const run = await getRun(String(runId));
+    if (!run) return res.status(404).json({ error: "run not found" });
+    // Fire-and-forget — non-blocking
+    void extractMemoriesFromRun(auth.sub, run.finalContent || "", run.userInput);
+    res.json({ ok: true, runId });
+  } catch (err: any) { res.status(500).json({ error: "extract failed", details: err?.message }); }
+});
+
+qcoreaiRouter.patch("/me/memories/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const { content, category, pinned } = req.body || {};
+  try {
+    const mem = await updateMemory(String(req.params.id), auth.sub, { content, category, pinned });
+    if (!mem) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ memory: mem });
+  } catch (err: any) { res.status(500).json({ error: "update memory failed", details: err?.message }); }
+});
+
+qcoreaiRouter.delete("/me/memories/:id", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  try {
+    const ok = await deleteMemory(String(req.params.id), auth.sub);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ deleted: true });
+  } catch (err: any) { res.status(500).json({ error: "delete memory failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V60 — Template suggestions + pin + usage stats
+   POST   /templates/suggest      — AI-powered template suggestions
+   GET    /templates/:id/usage-stats
+   PATCH  /templates/:id/pin      — toggle pin
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Suggest must come before :id routes
+qcoreaiRouter.post("/templates/suggest", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? null;
+
+  const STATIC_FALLBACK = [
+    { name: "Research Summary", description: "Summarize recent findings on a topic", input: "Summarize the key findings on [topic] from the last 2 years.", strategy: "sequential" },
+    { name: "Code Review", description: "Review code for bugs and best practices", input: "Review this code for bugs and suggest improvements:\n\n```\n[paste code here]\n```", strategy: "debate" },
+    { name: "Creative Brainstorm", description: "Generate creative ideas in parallel", input: "Generate 5 creative ideas for [project/problem].", strategy: "parallel" },
+  ];
+
+  try {
+    // Load recent run inputs for context
+    let recentInputs: string[] = [];
+    if (userId) {
+      try {
+        const sessions = await listSessions(userId, 5);
+        for (const s of sessions) {
+          const runs = await listRuns(s.id, 3);
+          for (const r of runs) {
+            if (r.userInput) recentInputs.push(r.userInput.slice(0, 200));
+          }
+        }
+        recentInputs = [...new Set(recentInputs)].slice(0, 10);
+      } catch { /* fallback to static */ }
+    }
+
+    if (recentInputs.length === 0) {
+      return res.json({ suggestions: STATIC_FALLBACK });
+    }
+
+    try {
+      const providerId = resolveProvider();
+      if (providerId === "stub") return res.json({ suggestions: STATIC_FALLBACK });
+
+      const prompt = `Suggest 3 prompt templates based on these recent prompts. Return JSON only (no markdown): [{"name": "...", "description": "...", "input": "...", "strategy": "sequential|parallel|debate"}, ...]\n\nRecent prompts:\n${recentInputs.map((i, n) => `${n + 1}. ${i}`).join("\n")}`;
+      const prov = getProviders().find((p) => p.id === providerId);
+      const result = await callProvider(
+        providerId,
+        [{ role: "user", content: prompt }],
+        prov?.defaultModel ?? "",
+        0.7
+      );
+      let suggestions: any[] = [];
+      try {
+        const cleaned = result.reply.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        suggestions = JSON.parse(cleaned);
+        if (!Array.isArray(suggestions)) throw new Error("not array");
+        suggestions = suggestions.slice(0, 3).map((s: any) => ({
+          name: String(s.name || "Untitled").slice(0, 60),
+          description: String(s.description || "").slice(0, 200),
+          input: String(s.input || "").slice(0, 2000),
+          strategy: ["sequential", "parallel", "debate"].includes(s.strategy) ? s.strategy : "sequential",
+        }));
+      } catch { suggestions = STATIC_FALLBACK; }
+      return res.json({ suggestions });
+    } catch { return res.json({ suggestions: STATIC_FALLBACK }); }
+  } catch (err: any) {
+    res.status(500).json({ error: "suggest failed", details: err?.message });
+  }
+});
+
+qcoreaiRouter.get("/templates/:id/usage-stats", async (req, res) => {
+  try {
+    const t = await getTemplate(String(req.params.id));
+    if (!t) return res.status(404).json({ error: "template not found" });
+    res.json({
+      useCount: t.useCount,
+      lastUsedAt: t.updatedAt,
+      avgCostUsd: null,
+      avgDurationMs: null,
+    });
+  } catch (err: any) { res.status(500).json({ error: "usage stats failed", details: err?.message }); }
+});
+
+qcoreaiRouter.patch("/templates/:id/pin", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+  const pinned = req.body?.pinned !== false; // default true
+  try {
+    const ok = await pinTemplate(String(req.params.id), auth.sub, pinned);
+    if (!ok) return res.status(404).json({ error: "not found or forbidden" });
+    res.json({ pinned });
+  } catch (err: any) { res.status(500).json({ error: "pin template failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V61 — Provider health monitoring (live status checks)
+   GET /providers/health
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// Cache results for 60s to avoid hammering provider APIs
+const providerHealthCache = new Map<string, { result: any; cachedAt: number }>();
+
+qcoreaiRouter.get("/providers/health", async (_req, res) => {
+  const now = Date.now();
+  const CACHE_TTL = 60_000;
+
+  const providers = getProviders().filter((p) => p.configured);
+  if (providers.length === 0) {
+    return res.json({ providers: [], checkedAt: new Date().toISOString() });
+  }
+
+  const results = await Promise.all(
+    providers.map(async (p) => {
+      const cached = providerHealthCache.get(p.id);
+      if (cached && now - cached.cachedAt < CACHE_TTL) {
+        return cached.result;
+      }
+      const start = Date.now();
+      let status: "ok" | "degraded" | "down" = "down";
+      let latencyMs = 0;
+      try {
+        const r = await Promise.race([
+          callProvider(p.id, [{ role: "user", content: "Say: OK" }], p.defaultModel, 0),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+        ]);
+        latencyMs = Date.now() - start;
+        status = latencyMs > 3000 ? "degraded" : "ok";
+        void r; // suppress unused warning
+      } catch {
+        latencyMs = Date.now() - start;
+        status = "down";
+      }
+      const result = { id: p.id, name: p.name, status, latencyMs, checkedAt: new Date().toISOString() };
+      providerHealthCache.set(p.id, { result, cachedAt: now });
+      return result;
+    })
+  );
+
+  res.json({ providers: results, checkedAt: new Date().toISOString() });
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

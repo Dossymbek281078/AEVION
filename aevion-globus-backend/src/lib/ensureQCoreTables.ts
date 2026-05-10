@@ -642,6 +642,27 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreUserAuditLog_user_created_idx" ON "QCoreUserAuditLog" ("userId", "createdAt" DESC);`);
 
+  // V59 — AI Memory: persistent cross-session user context.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreMemory" (
+      "id"        TEXT PRIMARY KEY,
+      "userId"    TEXT NOT NULL,
+      "content"   TEXT NOT NULL,
+      "category"  TEXT NOT NULL DEFAULT 'general',
+      "source"    TEXT,
+      "pinned"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreMemory_user_idx"
+      ON "QCoreMemory" ("userId", "pinned" DESC, "createdAt" DESC);
+  `);
+
+  // V60 — Template pin column.
+  await pool.query(`ALTER TABLE "QCoreTemplate" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

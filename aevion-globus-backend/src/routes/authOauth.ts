@@ -367,7 +367,7 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({
       error: "oauth callback failed",
-      details: err?.message || String(err),
+      details: err instanceof Error ? err.message : String(err),
     });
   }
 });

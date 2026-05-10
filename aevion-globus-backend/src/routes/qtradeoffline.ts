@@ -249,3 +249,135 @@ qtradeOfflineRouter.post("/sync", (req, res) => {
   }
   res.json({ results });
 });
+
+// GET /api/qtradeoffline/openapi.json — public OpenAPI 3.1 spec.
+qtradeOfflineRouter.options("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.status(204).end();
+});
+qtradeOfflineRouter.get("/openapi.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
+  res.json({
+    openapi: "3.1.0",
+    info: {
+      title: "AEVION QTradeOffline",
+      version: "1.0.0",
+      description:
+        "Offline-first P2P AEV transfers. Wallets sign transfers with ECDSA P-256 while offline; batch-sync to backend when online. Designed for low-bandwidth, embargoed, and conflict-zone environments.",
+      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+      license: { name: "Proprietary" },
+    },
+    servers: [{ url: `${base}/api/qtradeoffline`, description: "Production" }],
+    tags: [
+      { name: "Wallet" },
+      { name: "Sync" },
+      { name: "Public" },
+    ],
+    components: {
+      schemas: {
+        SignedTransfer: {
+          type: "object",
+          required: ["from", "to", "amount", "nonce", "signature"],
+          properties: {
+            from: { type: "string", description: "Sender wallet id (public-key SHA-256)" },
+            to: { type: "string", description: "Receiver wallet id" },
+            amount: { type: "number", minimum: 0.000001 },
+            nonce: { type: "string", description: "Unique per-sender nonce (replay protection)" },
+            signature: { type: "string", description: "ECDSA P-256 over canonical JSON" },
+            signedAt: { type: "string", format: "date-time" },
+          },
+        },
+      },
+    },
+    paths: {
+      "/health": {
+        get: {
+          tags: ["Public"],
+          summary: "Service health",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/wallet/register": {
+        post: {
+          tags: ["Wallet"],
+          summary: "Register a wallet (public key) with optional initial seed",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["publicKey"],
+                  properties: {
+                    publicKey: { type: "string", description: "ECDSA P-256 SPKI base64" },
+                    label: { type: "string" },
+                    initialBalance: { type: "number", description: "Test-only seeding" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": { description: "Returns wallet id (SHA-256 of publicKey) + balance" },
+            "400": { description: "invalid_public_key" },
+          },
+        },
+      },
+      "/wallet/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: {
+          tags: ["Wallet"],
+          summary: "Wallet info (id, balance, label)",
+          responses: { "200": { description: "OK" }, "404": { description: "wallet_not_found" } },
+        },
+      },
+      "/history/{id}": {
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        get: {
+          tags: ["Wallet"],
+          summary: "Wallet ledger (incoming + outgoing transfers)",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/leaderboard": {
+        get: {
+          tags: ["Public"],
+          summary: "Top wallets by balance (anon)",
+          responses: { "200": { description: "OK" } },
+        },
+      },
+      "/sync": {
+        post: {
+          tags: ["Sync"],
+          summary: "Batch-apply offline-signed transfers (idempotent via nonce)",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["transfers"],
+                  properties: {
+                    transfers: {
+                      type: "array",
+                      items: { $ref: "#/components/schemas/SignedTransfer" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Per-transfer result: applied / signature_invalid / nonce_replay / insufficient_balance",
+            },
+          },
+        },
+      },
+    },
+  });
+});

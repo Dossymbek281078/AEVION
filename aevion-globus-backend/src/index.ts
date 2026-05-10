@@ -13,12 +13,14 @@ import { authRouter } from "./routes/auth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { qcoreaiRouter } from "./routes/qcoreai";
+import { puzzlesRouter } from "./routes/puzzles";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { aevRouter } from "./routes/aev";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
+import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 
@@ -72,6 +74,7 @@ app.get("/api/globus/projects/:id", (req, res) => {
 app.use("/api/modules", modulesRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
+app.use("/api/puzzles", puzzlesRouter);
 
 /** Минимальная машиночитаемая карта API для ускорения интеграций */
 app.get("/api/openapi.json", (_req, res) => {
@@ -215,6 +218,10 @@ app.get("/api/openapi.json", (_req, res) => {
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/aev", aevRouter);
 app.use("/api/smeta-trainer", smetaTrainerRouter);
+// Public share-link route mounted BEFORE the auth-gated multichat router so
+// /api/multichat/shared/:token bypasses requireAuth.
+app.use("/api/multichat", multichatPublicRouter);
+app.use("/api/multichat", multichatRouter);
 app.use("/api/qright", qrightRouter);
 
 // ==========================

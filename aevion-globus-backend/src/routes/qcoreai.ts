@@ -186,6 +186,15 @@ import {
   incrPromptChainRunCount,
   // V54 — User stats
   getUserStats,
+  // V55 — Session invites
+  createSessionInvite,
+  getSessionInvite,
+  listSessionInvites,
+  deleteSessionInvite,
+  incrementInviteUseCount,
+  // V56 — Audit log
+  logAudit,
+  listAuditLog,
 } from "../services/qcoreai/store";
 import { runEvalSuite } from "../services/qcoreai/evalRunner";
 import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
@@ -1993,6 +2002,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
     // V41: fire session.created when a brand-new session was created
     if (!prevSessionId || prevSessionId !== sessionId) {
       void notifyEvent({ event: "session.created", sessionId, userId: userId ?? null, title: session.title, createdAt: session.createdAt }, null, userId);
+      if (userId) void logAudit(userId, "session.created", { resourceId: sessionId, resourceType: "session" });
     }
     const run = await createRun({
       sessionId,
@@ -2086,6 +2096,7 @@ qcoreaiRouter.post("/multi-agent", multiAgentLimiter, async (req, res) => {
         startedAt: new Date().toISOString(),
       }, userOverrideWh);
     }
+    if (userId) void logAudit(userId, "run.started", { resourceId: runId, resourceType: "run" });
   })();
 
   // When continuing a thread, walk up the parent chain for precise context;
@@ -4528,6 +4539,7 @@ qcoreaiRouter.post("/me/api-keys", apiKeyLimiter, async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ error: "name required" });
     const expires = typeof expiresInDays === "number" && expiresInDays > 0 ? Math.floor(expiresInDays) : undefined;
     const result = await createApiKey(auth.sub, String(name).trim().slice(0, 80), expires);
+    void logAudit(auth.sub, "api-key.created", { resourceId: result.id, resourceType: "api-key" });
     res.status(201).json(result);
   } catch (err: any) {
     res.status(500).json({ error: "create api-key failed", details: err?.message });
@@ -4551,6 +4563,7 @@ qcoreaiRouter.delete("/me/api-keys/:id", apiKeyLimiter, async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const ok = await deleteApiKey(String(req.params.id), auth.sub);
     if (!ok) return res.status(404).json({ error: "api key not found or not yours" });
+    void logAudit(auth.sub, "api-key.deleted", { resourceId: String(req.params.id), resourceType: "api-key" });
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: "delete api-key failed", details: err?.message });
@@ -5064,6 +5077,98 @@ qcoreaiRouter.get("/me/stats", async (req, res) => {
     const stats = await getUserStats(auth.sub);
     res.json({ stats });
   } catch (err: any) { res.status(500).json({ error: "stats failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V55 — Session invites
+   POST /sessions/:id/invites   — create invite (owner only)
+   GET  /sessions/:id/invites   — list invites (owner only)
+   DELETE /sessions/:id/invites/:inviteId — delete invite (owner only)
+   GET  /invites/:token         — resolve invite (public)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.post("/sessions/:id/invites", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(req.params.id, null);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    if (session.userId && session.userId !== auth.sub) return res.status(403).json({ error: "not session owner" });
+    const { role, expiresInDays } = req.body || {};
+    const invite = await createSessionInvite(req.params.id, auth.sub, {
+      role: typeof role === "string" ? role : "viewer",
+      expiresInDays: typeof expiresInDays === "number" && expiresInDays > 0 ? Math.floor(expiresInDays) : undefined,
+    });
+    void logAudit(auth.sub, "session.shared", { resourceId: req.params.id, resourceType: "session", meta: { inviteId: invite.id, role: invite.role } });
+    res.status(201).json(invite);
+  } catch (err: any) { res.status(500).json({ error: "create invite failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/sessions/:id/invites", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const session = await getSession(req.params.id, null);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    if (session.userId && session.userId !== auth.sub) return res.status(403).json({ error: "not session owner" });
+    const invites = await listSessionInvites(req.params.id, auth.sub);
+    res.json({ invites });
+  } catch (err: any) { res.status(500).json({ error: "list invites failed", details: err?.message }); }
+});
+
+qcoreaiRouter.delete("/sessions/:id/invites/:inviteId", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const ok = await deleteSessionInvite(req.params.inviteId, auth.sub);
+    if (!ok) return res.status(404).json({ error: "invite not found or not yours" });
+    res.json({ ok: true });
+  } catch (err: any) { res.status(500).json({ error: "delete invite failed", details: err?.message }); }
+});
+
+qcoreaiRouter.get("/invites/:token", async (req, res) => {
+  try {
+    const invite = await getSessionInvite(String(req.params.token));
+    if (!invite) return res.json({ valid: false, sessionId: null, role: null });
+    await incrementInviteUseCount(invite.token);
+    res.json({ sessionId: invite.sessionId, role: invite.role, valid: true });
+  } catch (err: any) { res.status(500).json({ error: "resolve invite failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V56 — User audit log
+   GET /me/audit-log?limit=50
+   ═══════════════════════════════════════════════════════════════════════ */
+
+qcoreaiRouter.get("/me/audit-log", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10) || 50));
+    const entries = await listAuditLog(auth.sub, limit);
+    res.json({ entries });
+  } catch (err: any) { res.status(500).json({ error: "audit log failed", details: err?.message }); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V57 — Model benchmarks
+   GET /benchmarks
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const BENCHMARK_DATA = {
+  models: [
+    { provider: "anthropic", model: "claude-sonnet-4-20250514", speedScore: 88, qualityScore: 95, costScore: 72, contextWindow: 200000 },
+    { provider: "openai", model: "gpt-4o", speedScore: 85, qualityScore: 92, costScore: 70, contextWindow: 128000 },
+    { provider: "gemini", model: "gemini-2.5-flash", speedScore: 92, qualityScore: 88, costScore: 95, contextWindow: 1000000 },
+    { provider: "deepseek", model: "deepseek-chat", speedScore: 80, qualityScore: 85, costScore: 98, contextWindow: 64000 },
+    { provider: "grok", model: "grok-3", speedScore: 82, qualityScore: 87, costScore: 78, contextWindow: 131072 },
+  ],
+  lastUpdated: "2026-05-10",
+  note: "Scores based on QCoreAI internal benchmarks",
+};
+
+qcoreaiRouter.get("/benchmarks", (_req, res) => {
+  res.json(BENCHMARK_DATA);
 });
 
 /* ═══════════════════════════════════════════════════════════════════════

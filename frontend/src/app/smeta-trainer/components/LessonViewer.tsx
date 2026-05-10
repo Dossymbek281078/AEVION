@@ -145,7 +145,7 @@ export function LessonViewer({ level }: Props) {
         />
       )}
       <aside className={`
-        bg-slate-50 border-r border-slate-200 overflow-auto print:hidden
+        bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 overflow-auto print:hidden
         ${sidebarOpen ? "fixed left-0 top-0 bottom-0 z-50 w-72" : "hidden"}
         md:relative md:flex md:w-64 md:shrink-0 md:flex-col md:z-auto
       `}>
@@ -272,7 +272,7 @@ export function LessonViewer({ level }: Props) {
       </aside>
 
       {/* Main — содержимое урока */}
-      <main className="flex-1 overflow-auto bg-white">
+      <main className="flex-1 overflow-auto bg-white dark:bg-slate-950">
         <div className="max-w-3xl mx-auto px-6 py-6">
           {/* Заголовок */}
           <div className="mb-5 lesson-print-area">
@@ -296,14 +296,14 @@ export function LessonViewer({ level }: Props) {
                 🖨 Печать урока
               </button>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">{lesson.title}</h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{lesson.title}</h1>
             <div className="hidden print:block text-[10px] text-slate-500 mt-1">
               AEVION · Сметный тренажёр РК · Уровень {level}, урок {activeIdx + 1} · ~{lesson.durationMin} мин
             </div>
           </div>
 
           {/* Теория */}
-          <article className="prose prose-sm max-w-none text-slate-800 leading-relaxed">
+          <article className="prose prose-sm max-w-none text-slate-800 dark:text-slate-200 leading-relaxed">
             <Markdown text={lesson.content} autoGloss />
           </article>
 

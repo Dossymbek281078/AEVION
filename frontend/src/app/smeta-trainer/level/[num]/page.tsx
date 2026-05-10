@@ -3,6 +3,7 @@ import { Level2View } from "../../components/Level2View";
 import { Level3View } from "../../components/Level3View";
 import { Level4View } from "../../components/Level4View";
 import { Level5View } from "../../components/Level5View";
+import { ThemeToggle } from "../../components/ThemeToggle";
 import Link from "next/link";
 import { LEVELS } from "../../lib/levels";
 
@@ -49,6 +50,7 @@ export default function LevelPage({ params }: Props) {
               <span className="text-[10px] text-slate-400">⏱ ~{levelDef.timeHours} ч</span>
             )}
             <span className="text-[10px] text-slate-400">НДЦС РК 8.01-08-2022</span>
+            <ThemeToggle />
           </div>
         </div>
         {/* Прогресс-полоска уровней */}

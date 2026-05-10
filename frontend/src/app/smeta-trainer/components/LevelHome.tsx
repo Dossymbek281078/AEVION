@@ -100,16 +100,16 @@ export function LevelHome() {
   }, [progress]);
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] bg-slate-50 p-6">
+    <div className="min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-slate-950 p-6 transition-colors">
       {/* Заголовок курса */}
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                 Курс «Сметное дело в РК»
               </h1>
-              <p className="text-slate-500 mt-1 text-sm">
+              <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
                 Сквозной кейс — Капитальный ремонт школы №47, г. Алматы · 5 уровней · 88 учебных часов
               </p>
             </div>
@@ -315,6 +315,15 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/all-lessons"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📖 Весь курс PDF
+              <span className="text-[10px] text-emerald-500 font-normal">
+                47 уроков печатно
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/lessons-search"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-sky-300 text-sky-700 hover:bg-sky-50 text-xs font-semibold rounded-lg"
             >
@@ -402,11 +411,11 @@ export function LevelHome() {
               <Link
                 key={level.num}
                 href={isLocked ? "#" : `/smeta-trainer/level/${level.num}`}
-                className={`block border-2 rounded-xl bg-white p-5 transition-all ${statusBorder[status]} ${isLocked ? "cursor-not-allowed" : "cursor-pointer"}`}
+                className={`block border-2 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 p-5 transition-all ${statusBorder[status]} ${isLocked ? "cursor-not-allowed" : "cursor-pointer"}`}
               >
                 <div className="flex items-start gap-4">
                   {/* Иконка и номер */}
-                  <div className="shrink-0 w-14 h-14 rounded-xl bg-slate-100 flex flex-col items-center justify-center">
+                  <div className="shrink-0 w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center">
                     <span className="text-2xl">{level.icon}</span>
                     <span className="text-[10px] text-slate-400 font-mono">Ур. {level.num}</span>
                   </div>
@@ -426,7 +435,7 @@ export function LevelHome() {
                         </span>
                       )}
                     </div>
-                    <h2 className="text-base font-bold text-slate-900 mt-0.5">{level.title}</h2>
+                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">{level.title}</h2>
                     <p className="text-xs text-slate-500 mt-1 leading-relaxed">{level.description}</p>
                     <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
                       <span>⏱ ~{level.timeHours} ч</span>

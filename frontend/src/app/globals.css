@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Class-based dark mode для смета-тренажёра (toggle через useTheme hook).
+   Применяется только когда .dark стоит на <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;

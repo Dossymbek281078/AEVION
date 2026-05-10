@@ -20,8 +20,22 @@ export const overheadRules: OverheadRules[] = seed.overheadRules;
 export const indexes: IndexSet[] = seed.indexes;
 export const learningObjects: LearningObject[] = seed.objects;
 
+/** Runtime-overrides расценок (для CSV-импорта пользовательских расценок). */
+const runtimeRates = new Map<string, Rate>();
+
+/** Зарегистрировать расценку в runtime-карте. Используется import-check для
+ *  загрузки пользовательских расценок, которых нет в seed-корпусе. */
+export function registerRuntimeRate(rate: Rate): void {
+  runtimeRates.set(rate.code, rate);
+}
+
+/** Очистить runtime-карту (например, перед новым импортом). */
+export function clearRuntimeRates(): void {
+  runtimeRates.clear();
+}
+
 export function findRate(code: string): Rate | undefined {
-  return rates.find((r) => r.code === code);
+  return runtimeRates.get(code) ?? rates.find((r) => r.code === code);
 }
 
 export function findOverhead(category: Rate["category"]): OverheadRules | undefined {

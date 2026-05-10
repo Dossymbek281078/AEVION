@@ -611,6 +611,37 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
   await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "systemPromptHint" TEXT;`);
 
+  // V55 — Session invites (read-only share links with token).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSessionInvite" (
+      "id"          TEXT PRIMARY KEY,
+      "sessionId"   TEXT NOT NULL,
+      "invitedBy"   TEXT NOT NULL,
+      "token"       TEXT NOT NULL UNIQUE,
+      "role"        TEXT NOT NULL DEFAULT 'viewer',
+      "expiresAt"   TIMESTAMPTZ,
+      "usedCount"   INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSessionInvite_token_idx" ON "QCoreSessionInvite" ("token");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSessionInvite_session_idx" ON "QCoreSessionInvite" ("sessionId");`);
+
+  // V56 — Comprehensive user audit log.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreUserAuditLog" (
+      "id"           TEXT PRIMARY KEY,
+      "userId"       TEXT NOT NULL,
+      "action"       TEXT NOT NULL,
+      "resourceId"   TEXT,
+      "resourceType" TEXT,
+      "meta"         JSONB,
+      "ip"           TEXT,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreUserAuditLog_user_created_idx" ON "QCoreUserAuditLog" ("userId", "createdAt" DESC);`);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

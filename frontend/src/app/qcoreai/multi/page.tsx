@@ -476,6 +476,9 @@ export default function QCoreMultiAgentPage() {
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [showAiSummary, setShowAiSummary] = useState(false);
 
+  // V55 — Invite copy feedback (sessionId that was just invited).
+  const [inviteCopiedSid, setInviteCopiedSid] = useState<string | null>(null);
+
   // V48 — Run timeline points.
   type TimelinePoint = { runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string };
   const [timelinePoints, setTimelinePoints] = useState<TimelinePoint[]>([]);
@@ -3409,13 +3412,46 @@ export default function QCoreMultiAgentPage() {
 
           {/* Main conversation */}
           <section>
-            {/* V35: Presence badge */}
-            {activeSessionId && presenceCount > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-                <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>{presenceCount} online</span>
+            {/* V35: Presence badge + V55: Invite button */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, minHeight: 24 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {activeSessionId && presenceCount > 0 && (
+                  <>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                    <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 600 }}>{presenceCount} online</span>
+                  </>
+                )}
               </div>
-            )}
+              {activeSessionId && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(apiUrl(`/api/qcoreai/sessions/${activeSessionId}/invites`), {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", ...bearerHeader() },
+                        body: JSON.stringify({ role: "viewer" }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      const invite = await res.json();
+                      const link = `${typeof window !== "undefined" ? window.location.origin : ""}/qcoreai/multi?invite=${invite.token}`;
+                      try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
+                      const prev = inviteCopiedSid;
+                      setInviteCopiedSid(activeSessionId);
+                      setTimeout(() => setInviteCopiedSid((cur) => cur === activeSessionId ? null : cur), 2000);
+                    } catch { /* ignore */ }
+                  }}
+                  style={{
+                    padding: "3px 10px", borderRadius: 8,
+                    border: "1px solid #cbd5e1", background: "#fff",
+                    color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 4,
+                  }}
+                  title="Create read-only invite link and copy to clipboard"
+                >
+                  {inviteCopiedSid === activeSessionId ? "Link copied!" : "🔗 Invite"}
+                </button>
+              )}
+            </div>
             <div
               ref={timelineRef}
               onScroll={onTimelineScroll}
@@ -3942,6 +3978,8 @@ export default function QCoreMultiAgentPage() {
           { icon: "🏢", label: "Organizations", href: "/qcoreai/orgs" },
           { icon: "🔑", label: "API Keys", href: "/qcoreai/api-keys" },
           { icon: "🔗", label: "Prompt chains", href: "/qcoreai/chains" },
+          { icon: "📋", label: "Audit log", href: "/qcoreai/audit-log" },
+          { icon: "📊", label: "Model benchmarks", href: "/qcoreai/benchmarks" },
         ].filter((c) => !q || c.label.toLowerCase().includes(q));
         return (
           <div

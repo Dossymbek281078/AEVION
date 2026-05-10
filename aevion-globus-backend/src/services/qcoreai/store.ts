@@ -4048,6 +4048,159 @@ export async function incrPromptChainRunCount(id: string): Promise<void> {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   V55 — Session invites (read-only share links)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type InviteRow = {
+  id: string;
+  sessionId: string;
+  invitedBy: string;
+  token: string;
+  role: string;
+  expiresAt: string | null;
+  usedCount: number;
+  createdAt: string;
+};
+
+const memInvites = new Map<string, InviteRow>();
+
+export async function createSessionInvite(
+  sessionId: string,
+  invitedBy: string,
+  opts?: { role?: string; expiresInDays?: number }
+): Promise<InviteRow> {
+  await ensureQCoreTables(pool);
+  const id = crypto.randomUUID();
+  const token = "si_" + crypto.randomBytes(24).toString("base64url");
+  const role = opts?.role || "viewer";
+  const expiresAt = opts?.expiresInDays
+    ? new Date(Date.now() + opts.expiresInDays * 86400_000).toISOString()
+    : null;
+
+  if (!isDbReady()) {
+    const row: InviteRow = { id, sessionId, invitedBy, token, role, expiresAt, usedCount: 0, createdAt: nowIso() };
+    memInvites.set(token, row);
+    return row;
+  }
+  const r = await pool.query(
+    `INSERT INTO "QCoreSessionInvite" ("id","sessionId","invitedBy","token","role","expiresAt")
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [id, sessionId, invitedBy, token, role, expiresAt]
+  );
+  return r.rows[0] as InviteRow;
+}
+
+export async function getSessionInvite(token: string): Promise<InviteRow | null> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const row = memInvites.get(token);
+    if (!row) return null;
+    if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
+    return row;
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreSessionInvite" WHERE "token"=$1 AND ("expiresAt" IS NULL OR "expiresAt" > NOW())`,
+    [token]
+  );
+  return (r.rows[0] as InviteRow) ?? null;
+}
+
+export async function listSessionInvites(sessionId: string, userId: string): Promise<InviteRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return Array.from(memInvites.values())
+      .filter((inv) => inv.sessionId === sessionId && inv.invitedBy === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreSessionInvite" WHERE "sessionId"=$1 AND "invitedBy"=$2 ORDER BY "createdAt" DESC`,
+    [sessionId, userId]
+  );
+  return r.rows as InviteRow[];
+}
+
+export async function deleteSessionInvite(id: string, userId: string): Promise<boolean> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    for (const [token, inv] of memInvites.entries()) {
+      if (inv.id === id && inv.invitedBy === userId) { memInvites.delete(token); return true; }
+    }
+    return false;
+  }
+  const r = await pool.query(
+    `DELETE FROM "QCoreSessionInvite" WHERE "id"=$1 AND "invitedBy"=$2`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+export async function incrementInviteUseCount(token: string): Promise<void> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    const row = memInvites.get(token);
+    if (row) row.usedCount += 1;
+    return;
+  }
+  await pool.query(
+    `UPDATE "QCoreSessionInvite" SET "usedCount"="usedCount"+1 WHERE "token"=$1`,
+    [token]
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   V56 — User audit log
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type UserAuditLogRow = {
+  id: string;
+  userId: string;
+  action: string;
+  resourceId: string | null;
+  resourceType: string | null;
+  meta: any | null;
+  ip: string | null;
+  createdAt: string;
+};
+
+// In-memory: per-user list, max 100 entries each
+const memUserAuditLog = new Map<string, UserAuditLogRow[]>();
+
+export async function logAudit(
+  userId: string,
+  action: string,
+  opts?: { resourceId?: string; resourceType?: string; meta?: any; ip?: string }
+): Promise<void> {
+  try {
+    await ensureQCoreTables(pool);
+    const id = crypto.randomUUID();
+    if (!isDbReady()) {
+      const list = memUserAuditLog.get(userId) ?? [];
+      list.unshift({ id, userId, action, resourceId: opts?.resourceId ?? null, resourceType: opts?.resourceType ?? null, meta: opts?.meta ?? null, ip: opts?.ip ?? null, createdAt: nowIso() });
+      if (list.length > 100) list.length = 100;
+      memUserAuditLog.set(userId, list);
+      return;
+    }
+    await pool.query(
+      `INSERT INTO "QCoreUserAuditLog" ("id","userId","action","resourceId","resourceType","meta","ip")
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, userId, action, opts?.resourceId ?? null, opts?.resourceType ?? null, opts?.meta ? JSON.stringify(opts.meta) : null, opts?.ip ?? null]
+    );
+  } catch { /* fire-and-forget — never throws */ }
+}
+
+export async function listAuditLog(userId: string, limit = 50): Promise<UserAuditLogRow[]> {
+  await ensureQCoreTables(pool);
+  if (!isDbReady()) {
+    return (memUserAuditLog.get(userId) ?? []).slice(0, limit);
+  }
+  const r = await pool.query(
+    `SELECT * FROM "QCoreUserAuditLog" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT $2`,
+    [userId, limit]
+  );
+  return r.rows as UserAuditLogRow[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    V54 — Comprehensive user stats (/me/stats)
    ═══════════════════════════════════════════════════════════════════════ */
 

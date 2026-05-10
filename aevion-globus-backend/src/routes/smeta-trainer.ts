@@ -54,7 +54,7 @@ function readUserIdFromBearer(req: Request): string | null {
   if (!header?.startsWith("Bearer ")) return null;
   const token = header.slice(7);
   try {
-    const decoded = jwt.verify(token, getJwtSecret());
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] });
     if (typeof decoded === "object" && decoded !== null && "sub" in decoded) {
       const sub = (decoded as { sub: unknown }).sub;
       return typeof sub === "string" ? sub : null;

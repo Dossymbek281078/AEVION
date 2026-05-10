@@ -29,6 +29,7 @@ export const smetaTrainerRouter = Router();
 const STUDENTS_FILE = "smeta_students.json";
 const ATTEMPTS_FILE = "smeta_attempts.json";
 const OVERRIDES_FILE = "smeta_material_overrides.json";
+const WEBHOOKS_FILE = "smeta_webhooks.json";
 
 // ── Rate limits ────────────────────────────────────────────────────
 const writeLimiter = rateLimit({
@@ -163,6 +164,111 @@ function isValidLevel(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= 5;
 }
 
+// ── Webhooks (LMS integration) ────────────────────────────────────
+type WebhookEvent = "level.completed" | "lesson.completed" | "capstone.passed" | "achievement.unlocked";
+
+interface WebhookConfig {
+  id: string;
+  url: string;
+  /** HMAC-секрет (показывается клиенту только при создании). */
+  secret: string;
+  /** Подписка на типы событий (пустой массив = все). */
+  events: WebhookEvent[];
+  createdBy: string;        // userId куратора
+  createdAt: number;
+  lastSentAt: number | null;
+  failureCount: number;
+  /** Краткое имя для UI. */
+  label: string;
+}
+
+interface WebhookPayload {
+  event: WebhookEvent;
+  studentId: string;
+  displayName: string | null;
+  group: string | null;
+  level?: number;
+  lessonId?: string;
+  achievementId?: string;
+  score?: number | null;
+  ts: number;
+}
+
+async function loadWebhooks(): Promise<Record<string, WebhookConfig>> {
+  return readJsonFile<Record<string, WebhookConfig>>(WEBHOOKS_FILE, {});
+}
+async function saveWebhooks(w: Record<string, WebhookConfig>): Promise<void> {
+  await writeJsonFile(WEBHOOKS_FILE, w);
+}
+
+/**
+ * Эмиттер событий: отправляет POST на все подписанные webhook URLs.
+ * Не блокирует основной запрос — fire-and-forget с try/catch.
+ * При неудаче инкрементирует failureCount.
+ */
+async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
+  let webhooks: Record<string, WebhookConfig>;
+  try {
+    webhooks = await loadWebhooks();
+  } catch {
+    return;
+  }
+  const subscribers = Object.values(webhooks).filter(
+    (w) => w.events.length === 0 || w.events.includes(event.event),
+  );
+  if (subscribers.length === 0) return;
+
+  const body = JSON.stringify(event);
+  await Promise.all(subscribers.map(async (w) => {
+    try {
+      const sig = crypto.createHmac("sha256", w.secret).update(body).digest("hex");
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(w.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "AEVION-SmetaTrainer-Webhook/1",
+          "x-aevion-signature": `sha256=${sig}`,
+          "x-aevion-event": event.event,
+        },
+        body,
+        signal: ctrl.signal,
+      });
+      clearTimeout(timeout);
+      const fresh = await loadWebhooks();
+      if (fresh[w.id]) {
+        fresh[w.id].lastSentAt = Date.now();
+        if (!res.ok) fresh[w.id].failureCount = (fresh[w.id].failureCount ?? 0) + 1;
+        else fresh[w.id].failureCount = 0;
+        await saveWebhooks(fresh);
+      }
+    } catch {
+      try {
+        const fresh = await loadWebhooks();
+        if (fresh[w.id]) {
+          fresh[w.id].failureCount = (fresh[w.id].failureCount ?? 0) + 1;
+          await saveWebhooks(fresh);
+        }
+      } catch {}
+    }
+  }));
+}
+
+/** Diff: какие новые уровни сданы между snapshot'ами. */
+function findNewlyCompletedLevels(
+  before: Record<string, LevelProgress> | undefined,
+  after: Record<string, LevelProgress>,
+): LevelProgress[] {
+  const out: LevelProgress[] = [];
+  for (const [k, lp] of Object.entries(after)) {
+    if (lp.status !== "done") continue;
+    const prev = before?.[k];
+    if (prev?.status !== "done") out.push(lp);
+  }
+  return out;
+}
+
 // ── GET /student/:deviceId ─────────────────────────────────────────
 smetaTrainerRouter.get("/student/:deviceId", readLimiter, async (req, res) => {
   const { deviceId } = req.params;
@@ -212,9 +318,27 @@ smetaTrainerRouter.post("/student/:deviceId/sync", writeLimiter, async (req, res
     startedAt: existing?.startedAt ?? now,
     updatedAt: now,
     levels: cleanLevels,
+    lessons: existing?.lessons,
+    practice: existing?.practice,
+    capstonePassedAt: existing?.capstonePassedAt,
+    achievements: existing?.achievements,
   };
   students[deviceId] = rec;
   await saveStudents(students);
+
+  // Emit level.completed для каждого нового зачёта
+  const newlyDone = findNewlyCompletedLevels(existing?.levels, cleanLevels);
+  for (const lp of newlyDone) {
+    emitWebhookEvent({
+      event: "level.completed",
+      studentId: deviceId,
+      displayName: rec.displayName,
+      group: rec.group,
+      level: lp.level,
+      score: lp.score ?? null,
+      ts: now,
+    });
+  }
   res.json({ student: rec });
 });
 
@@ -250,10 +374,27 @@ smetaTrainerRouter.post("/student/:deviceId/lessons", writeLimiter, async (req, 
       ts: typeof lp.ts === "number" ? Math.max(prev?.ts ?? 0, lp.ts) : Date.now(),
     };
   }
+  // Emit lesson.completed для впервые закрытых уроков (по diff completed)
+  const prevLessons = (await loadStudents())[deviceId]?.lessons ?? {};
+  const newlyDone: string[] = [];
+  for (const [lessonId, l] of Object.entries(merged)) {
+    if (l.completed && !prevLessons[lessonId]?.completed) newlyDone.push(lessonId);
+  }
   existing.lessons = merged;
   existing.updatedAt = Date.now();
   students[deviceId] = existing;
   await saveStudents(students);
+  for (const lessonId of newlyDone) {
+    emitWebhookEvent({
+      event: "lesson.completed",
+      studentId: deviceId,
+      displayName: existing.displayName,
+      group: existing.group,
+      lessonId,
+      score: merged[lessonId].quizScore ?? null,
+      ts: Date.now(),
+    });
+  }
   res.json({ student: existing });
 });
 
@@ -300,11 +441,21 @@ smetaTrainerRouter.post("/student/:deviceId/capstone", writeLimiter, async (req,
   const existing = students[deviceId];
   if (!existing) return res.status(404).json({ error: "student_not_found" });
   // Не сбрасываем уже сданный капстоун
+  const wasPassed = !!existing.capstonePassedAt;
   if (passed && !existing.capstonePassedAt) existing.capstonePassedAt = Date.now();
   if (!passed) existing.capstonePassedAt = null;
   existing.updatedAt = Date.now();
   students[deviceId] = existing;
   await saveStudents(students);
+  if (passed && !wasPassed) {
+    emitWebhookEvent({
+      event: "capstone.passed",
+      studentId: deviceId,
+      displayName: existing.displayName,
+      group: existing.group,
+      ts: Date.now(),
+    });
+  }
   res.json({ student: existing });
 });
 
@@ -322,11 +473,23 @@ smetaTrainerRouter.post("/student/:deviceId/achievements", writeLimiter, async (
   const existing = students[deviceId];
   if (!existing) return res.status(404).json({ error: "student_not_found" });
   // Объединяем со старым множеством — бейдж нельзя «отнять»
-  const merged = new Set([...(existing.achievements ?? []), ...clean]);
+  const prevAch = new Set(existing.achievements ?? []);
+  const merged = new Set([...prevAch, ...clean]);
+  const newOnes = [...merged].filter((id) => !prevAch.has(id));
   existing.achievements = [...merged];
   existing.updatedAt = Date.now();
   students[deviceId] = existing;
   await saveStudents(students);
+  for (const achievementId of newOnes) {
+    emitWebhookEvent({
+      event: "achievement.unlocked",
+      studentId: deviceId,
+      displayName: existing.displayName,
+      group: existing.group,
+      achievementId,
+      ts: Date.now(),
+    });
+  }
   res.json({ student: existing });
 });
 
@@ -585,4 +748,115 @@ smetaTrainerRouter.delete("/material-overrides", writeLimiter, async (req, res) 
   delete all[key];
   await saveOverrides(all);
   res.json({ ok: true });
+});
+
+// ── Webhooks CRUD (admin / JWT) ────────────────────────────────────
+const VALID_EVENTS: WebhookEvent[] = [
+  "level.completed",
+  "lesson.completed",
+  "capstone.passed",
+  "achievement.unlocked",
+];
+
+// GET /admin/webhooks — список настроенных webhook'ов (без секретов)
+smetaTrainerRouter.get("/admin/webhooks", readLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const all = await loadWebhooks();
+  // Не отдаём секрет наружу — только при создании
+  const safe = Object.values(all).map((w) => ({
+    ...w,
+    secret: w.secret.slice(0, 8) + "…",
+  }));
+  res.json({ webhooks: safe });
+});
+
+// POST /admin/webhooks — создать webhook, вернуть секрет один раз
+smetaTrainerRouter.post("/admin/webhooks", writeLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const { url, label, events } = req.body ?? {};
+  if (typeof url !== "string" || !/^https?:\/\//.test(url) || url.length > 500) {
+    return res.status(400).json({ error: "bad_url" });
+  }
+  if (typeof label !== "string" || label.length < 1 || label.length > 60) {
+    return res.status(400).json({ error: "bad_label" });
+  }
+  let cleanEvents: WebhookEvent[] = [];
+  if (Array.isArray(events)) {
+    cleanEvents = events.filter((e): e is WebhookEvent =>
+      typeof e === "string" && VALID_EVENTS.includes(e as WebhookEvent),
+    );
+  }
+  const all = await loadWebhooks();
+  const id = crypto.randomUUID();
+  const secret = crypto.randomBytes(32).toString("hex");
+  const rec: WebhookConfig = {
+    id,
+    url,
+    secret,
+    events: cleanEvents,
+    label,
+    createdBy: userId,
+    createdAt: Date.now(),
+    lastSentAt: null,
+    failureCount: 0,
+  };
+  all[id] = rec;
+  await saveWebhooks(all);
+  // Отдаём полный секрет ОДИН раз — клиент должен сохранить
+  res.json({ webhook: rec });
+});
+
+// DELETE /admin/webhooks/:id
+smetaTrainerRouter.delete("/admin/webhooks/:id", writeLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const id = String(req.params.id ?? "");
+  const all = await loadWebhooks();
+  if (!(id in all)) return res.status(404).json({ error: "not_found" });
+  delete all[id];
+  await saveWebhooks(all);
+  res.json({ ok: true });
+});
+
+// POST /admin/webhooks/:id/test — отправить тестовое событие
+smetaTrainerRouter.post("/admin/webhooks/:id/test", writeLimiter, async (req, res) => {
+  const userId = readUserIdFromBearer(req);
+  if (!userId) return res.status(401).json({ error: "auth_required" });
+  const id = String(req.params.id ?? "");
+  const all = await loadWebhooks();
+  const w = all[id];
+  if (!w) return res.status(404).json({ error: "not_found" });
+  // Singleton-эмит для теста (не идёт через broadcast)
+  const body = JSON.stringify({
+    event: "level.completed",
+    studentId: "test-student",
+    displayName: "Тестовый студент",
+    group: "test",
+    level: 1,
+    score: 95,
+    ts: Date.now(),
+  });
+  try {
+    const sig = crypto.createHmac("sha256", w.secret).update(body).digest("hex");
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch(w.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "user-agent": "AEVION-SmetaTrainer-Webhook/1",
+        "x-aevion-signature": `sha256=${sig}`,
+        "x-aevion-event": "level.completed",
+        "x-aevion-test": "1",
+      },
+      body,
+      signal: ctrl.signal,
+    });
+    clearTimeout(timeout);
+    res.json({ ok: r.ok, status: r.status, statusText: r.statusText });
+  } catch (e) {
+    res.json({ ok: false, error: e instanceof Error ? e.message : "unknown" });
+  }
 });

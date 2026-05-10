@@ -262,6 +262,62 @@ export async function fetchAdminStudents(
   );
 }
 
+// ── Webhooks (LMS integration) ──────────────────────────────────────
+export type WebhookEvent =
+  | "level.completed"
+  | "lesson.completed"
+  | "capstone.passed"
+  | "achievement.unlocked";
+
+export interface WebhookConfig {
+  id: string;
+  url: string;
+  /** При создании — полный секрет; при чтении — обрезанный с «…». */
+  secret: string;
+  events: WebhookEvent[];
+  createdBy: string;
+  createdAt: number;
+  lastSentAt: number | null;
+  failureCount: number;
+  label: string;
+}
+
+export async function fetchWebhooks(jwt: string): Promise<WebhookConfig[]> {
+  const r = await api<{ webhooks: WebhookConfig[] }>(`/api/smeta-trainer/admin/webhooks`, {
+    headers: { authorization: `Bearer ${jwt}` },
+  });
+  return r.webhooks;
+}
+
+export async function createWebhook(
+  jwt: string,
+  payload: { url: string; label: string; events: WebhookEvent[] },
+): Promise<WebhookConfig> {
+  const r = await api<{ webhook: WebhookConfig }>(`/api/smeta-trainer/admin/webhooks`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${jwt}` },
+    body: JSON.stringify(payload),
+  });
+  return r.webhook;
+}
+
+export async function deleteWebhook(jwt: string, id: string): Promise<void> {
+  await api<{ ok: true }>(`/api/smeta-trainer/admin/webhooks/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${jwt}` },
+  });
+}
+
+export async function testWebhook(
+  jwt: string,
+  id: string,
+): Promise<{ ok: boolean; status?: number; statusText?: string; error?: string }> {
+  return api<{ ok: boolean; status?: number; statusText?: string; error?: string }>(
+    `/api/smeta-trainer/admin/webhooks/${encodeURIComponent(id)}/test`,
+    { method: "POST", headers: { authorization: `Bearer ${jwt}` } },
+  );
+}
+
 export async function fetchStats(): Promise<SmetaStats> {
   return api<SmetaStats>(`/api/smeta-trainer/stats`);
 }

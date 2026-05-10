@@ -6,8 +6,14 @@ import {
   fetchAdminStudents,
   fetchGroups,
   pingBackend,
+  fetchWebhooks,
+  createWebhook,
+  deleteWebhook,
+  testWebhook,
   type AdminStudentRecord,
   type GroupInfo,
+  type WebhookConfig,
+  type WebhookEvent,
 } from "../lib/progressApi";
 import { LEVELS } from "../lib/levels";
 
@@ -37,7 +43,63 @@ export default function AdminPage() {
     if (!storedJwt) return;
     fetchGroups().then(setGroups).catch(() => {});
     loadStudents(storedJwt, "");
+    loadWebhooks(storedJwt);
   }, [storedJwt]);
+
+  // Webhooks state
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+  const [showWebhookForm, setShowWebhookForm] = useState(false);
+  const [newSecret, setNewSecret] = useState<{ id: string; secret: string } | null>(null);
+  const [whUrl, setWhUrl] = useState("");
+  const [whLabel, setWhLabel] = useState("");
+  const [whEvents, setWhEvents] = useState<Set<WebhookEvent>>(new Set());
+
+  async function loadWebhooks(token: string) {
+    try {
+      const list = await fetchWebhooks(token);
+      setWebhooks(list);
+    } catch {}
+  }
+
+  async function handleCreateWebhook() {
+    if (!storedJwt) return;
+    try {
+      const created = await createWebhook(storedJwt, {
+        url: whUrl.trim(),
+        label: whLabel.trim(),
+        events: [...whEvents],
+      });
+      setNewSecret({ id: created.id, secret: created.secret });
+      setWhUrl("");
+      setWhLabel("");
+      setWhEvents(new Set());
+      setShowWebhookForm(false);
+      await loadWebhooks(storedJwt);
+    } catch {
+      alert("Ошибка создания webhook'а — проверьте URL и JWT.");
+    }
+  }
+
+  async function handleDeleteWebhook(id: string) {
+    if (!storedJwt) return;
+    if (!confirm("Удалить webhook?")) return;
+    try {
+      await deleteWebhook(storedJwt, id);
+      await loadWebhooks(storedJwt);
+    } catch {}
+  }
+
+  async function handleTestWebhook(id: string) {
+    if (!storedJwt) return;
+    try {
+      const r = await testWebhook(storedJwt, id);
+      if (r.ok) alert(`✓ Тест прошёл (${r.status})`);
+      else alert(`✗ Тест не прошёл: ${r.status ? `HTTP ${r.status} ${r.statusText}` : r.error}`);
+      await loadWebhooks(storedJwt);
+    } catch {
+      alert("Ошибка теста webhook'а.");
+    }
+  }
 
   async function loadStudents(token: string, group: string) {
     setLoading(true);
@@ -255,6 +317,197 @@ export default function AdminPage() {
                 </table>
               </div>
             )}
+
+            {/* ── Webhooks (LMS integration) ─────────────────── */}
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden mt-4">
+              <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">🔗 LMS Webhooks</h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    POST на ваш URL при level/lesson/capstone/achievement событиях.
+                    Подпись HMAC-SHA256 в <code className="text-[10px] bg-slate-100 px-1 rounded">X-Aevion-Signature</code>.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowWebhookForm((v) => !v)}
+                  className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded hover:bg-emerald-700"
+                >
+                  {showWebhookForm ? "Отмена" : "+ Создать"}
+                </button>
+              </div>
+
+              {newSecret && (
+                <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 text-xs">
+                  <div className="font-bold text-amber-900 mb-1">
+                    ⚠ Сохраните секрет — он показывается ОДИН РАЗ
+                  </div>
+                  <div className="font-mono text-[11px] bg-white border border-amber-300 rounded p-2 break-all">
+                    {newSecret.secret}
+                  </div>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(newSecret.secret)}
+                    className="mt-1 text-[10px] text-amber-700 underline"
+                  >
+                    📋 Копировать
+                  </button>
+                  <button
+                    onClick={() => setNewSecret(null)}
+                    className="ml-3 mt-1 text-[10px] text-slate-500 underline"
+                  >
+                    Я записал, скрыть
+                  </button>
+                </div>
+              )}
+
+              {showWebhookForm && (
+                <div className="px-4 py-3 border-b border-slate-200 space-y-2 bg-slate-50">
+                  <input
+                    type="text"
+                    value={whLabel}
+                    onChange={(e) => setWhLabel(e.target.value)}
+                    placeholder="Имя (например: Moodle production)"
+                    maxLength={60}
+                    className="w-full border border-slate-300 rounded px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    type="url"
+                    value={whUrl}
+                    onChange={(e) => setWhUrl(e.target.value)}
+                    placeholder="https://lms.example.com/webhooks/aevion"
+                    maxLength={500}
+                    className="w-full border border-slate-300 rounded px-2 py-1.5 text-xs font-mono"
+                  />
+                  <div className="text-[10px] text-slate-500">События (если не выбрано — все):</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {(["level.completed", "lesson.completed", "capstone.passed", "achievement.unlocked"] as const).map((ev) => (
+                      <label key={ev} className="flex items-center gap-1 text-[11px] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={whEvents.has(ev)}
+                          onChange={(e) => {
+                            const next = new Set(whEvents);
+                            if (e.target.checked) next.add(ev);
+                            else next.delete(ev);
+                            setWhEvents(next);
+                          }}
+                        />
+                        <code className="text-[10px]">{ev}</code>
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    onClick={handleCreateWebhook}
+                    disabled={!whUrl.trim() || !whLabel.trim()}
+                    className="w-full py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded hover:bg-emerald-700 disabled:opacity-40"
+                  >
+                    Создать webhook
+                  </button>
+                </div>
+              )}
+
+              {webhooks.length === 0 ? (
+                <div className="px-4 py-6 text-center text-slate-400 text-xs">
+                  Webhook'и не настроены. Создайте первый — и события курса начнут
+                  отправляться на ваш URL.
+                </div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600">
+                      <th className="px-3 py-2 text-left">Имя / URL</th>
+                      <th className="px-3 py-2 text-left">События</th>
+                      <th className="px-3 py-2 text-center">Секрет</th>
+                      <th className="px-3 py-2 text-center">Статус</th>
+                      <th className="px-3 py-2 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {webhooks.map((w) => (
+                      <tr key={w.id} className="border-t hover:bg-slate-50">
+                        <td className="px-3 py-2">
+                          <div className="font-semibold text-slate-900">{w.label}</div>
+                          <div className="text-[10px] font-mono text-slate-400 truncate max-w-[280px]">{w.url}</div>
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-slate-600">
+                          {w.events.length === 0 ? <span className="text-emerald-600">все</span> : w.events.join(", ")}
+                        </td>
+                        <td className="px-3 py-2 text-center font-mono text-[10px] text-slate-400">{w.secret}</td>
+                        <td className="px-3 py-2 text-center">
+                          {w.failureCount > 0 ? (
+                            <span className="text-red-600 font-bold">⚠ {w.failureCount}</span>
+                          ) : w.lastSentAt ? (
+                            <span className="text-emerald-600">✓</span>
+                          ) : (
+                            <span className="text-slate-300">·</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right space-x-1">
+                          <button
+                            onClick={() => handleTestWebhook(w.id)}
+                            className="text-[10px] text-emerald-600 hover:text-emerald-800 underline"
+                          >
+                            Тест
+                          </button>
+                          <button
+                            onClick={() => handleDeleteWebhook(w.id)}
+                            className="text-[10px] text-red-500 hover:text-red-700 underline"
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              <details className="px-4 py-3 border-t border-slate-100">
+                <summary className="text-[11px] text-slate-600 font-semibold cursor-pointer">
+                  📖 Документация payload + проверка подписи
+                </summary>
+                <div className="mt-2 text-[10px] text-slate-600 space-y-2">
+                  <div>
+                    <strong>HTTP-заголовки исходящего POST:</strong>
+                    <pre className="bg-slate-900 text-emerald-300 rounded p-2 overflow-x-auto mt-1 text-[10px]">
+{`Content-Type: application/json
+User-Agent: AEVION-SmetaTrainer-Webhook/1
+X-Aevion-Signature: sha256=<hex>
+X-Aevion-Event: level.completed | lesson.completed | capstone.passed | achievement.unlocked`}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Тело (JSON):</strong>
+                    <pre className="bg-slate-900 text-emerald-300 rounded p-2 overflow-x-auto mt-1 text-[10px]">
+{`{
+  "event": "level.completed",
+  "studentId": "smeta-abc123-xyz",
+  "displayName": "Иван Петров",
+  "group": "ПГС-201",
+  "level": 3,
+  "score": 87,
+  "ts": 1729000000000
+}`}
+                    </pre>
+                  </div>
+                  <div>
+                    <strong>Проверка подписи (Node.js):</strong>
+                    <pre className="bg-slate-900 text-emerald-300 rounded p-2 overflow-x-auto mt-1 text-[10px]">
+{`import crypto from "node:crypto";
+
+const sig = req.headers["x-aevion-signature"]; // "sha256=..."
+const expected = "sha256=" + crypto
+  .createHmac("sha256", WEBHOOK_SECRET)
+  .update(rawBody)
+  .digest("hex");
+
+if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+  return res.status(401).end();
+}`}
+                    </pre>
+                  </div>
+                </div>
+              </details>
+            </div>
 
             <div className="text-[10px] text-slate-400 text-center italic">
               JWT хранится в localStorage этого браузера. Выход чистит токен.

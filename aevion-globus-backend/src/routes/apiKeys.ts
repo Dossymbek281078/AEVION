@@ -25,6 +25,8 @@ export const apiKeysRouter = Router();
 const pool = getPool();
 
 const createLimiter = rateLimit({ windowMs: 60_000, max: 5, standardHeaders: true, legacyHeaders: false });
+const verifyLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false,
+  message: { error: "rate_limit_exceeded" } });
 
 // ── Ensure table ──────────────────────────────────────────────────────────────
 
@@ -117,8 +119,9 @@ apiKeysRouter.post("/", createLimiter, async (req, res) => {
       monthlyLimit: 10000,
       note: "Store this key securely — it will not be shown again.",
     });
-  } catch (err: any) {
-    res.status(500).json({ error: "create_key_failed", details: err?.message });
+  } catch (err: unknown) {
+    console.error("[apiKeys] create_key_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "create_key_failed" });
   }
 });
 
@@ -153,8 +156,9 @@ apiKeysRouter.get("/", async (req, res) => {
         createdAt: r.createdAt,
       })),
     });
-  } catch (err: any) {
-    res.status(500).json({ error: "list_keys_failed", details: err?.message });
+  } catch (err: unknown) {
+    console.error("[apiKeys] list_keys_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "list_keys_failed" });
   }
 });
 
@@ -177,14 +181,15 @@ apiKeysRouter.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "key_not_found_or_already_revoked" });
     }
     res.json({ ok: true, revokedId: req.params.id });
-  } catch (err: any) {
-    res.status(500).json({ error: "revoke_key_failed", details: err?.message });
+  } catch (err: unknown) {
+    console.error("[apiKeys] revoke_key_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "revoke_key_failed" });
   }
 });
 
 // ── GET /api/keys/verify — for downstream service auth ────────────────────
 
-apiKeysRouter.get("/verify", async (req, res) => {
+apiKeysRouter.get("/verify", verifyLimiter, async (req, res) => {
   try {
     await ensureTables();
     const raw = req.headers["x-api-key"] as string | undefined;
@@ -209,7 +214,8 @@ apiKeysRouter.get("/verify", async (req, res) => {
 
     const key = r.rows[0] as any;
     res.json({ valid: true, userId: key.userId, tier: key.tier, env: key.env });
-  } catch (err: any) {
-    res.status(500).json({ error: "verify_failed", details: err?.message });
+  } catch (err: unknown) {
+    console.error("[apiKeys] verify_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "verify_failed" });
   }
 });

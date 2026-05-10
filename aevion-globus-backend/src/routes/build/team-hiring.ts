@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber } from "../../lib/build";
 
@@ -45,7 +45,7 @@ teamHiringRouter.post("/", async (req, res) => {
     );
     return ok(res, { ...result.rows[0], roles }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "team_request_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "team_request_create_failed");
   }
 });
 
@@ -77,7 +77,7 @@ teamHiringRouter.get("/", async (req, res) => {
     }));
     return ok(res, { items, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "team_requests_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "team_requests_list_failed");
   }
 });
 
@@ -108,7 +108,7 @@ teamHiringRouter.get("/:id", async (req, res) => {
     const row = req_.rows[0];
     return ok(res, { ...row, roles: JSON.parse(String(row.rolesJson || "[]")), applications: apps.rows });
   } catch (err: unknown) {
-    return fail(res, 500, "team_request_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "team_request_fetch_failed");
   }
 });
 
@@ -144,6 +144,6 @@ teamHiringRouter.post("/:id/apply", async (req, res) => {
       throw e;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "team_apply_failed", { details: (err as Error).message });
+    return fail(res, 500, "team_apply_failed");
   }
 });

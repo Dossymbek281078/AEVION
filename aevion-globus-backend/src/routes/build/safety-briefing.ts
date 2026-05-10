@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -75,7 +75,7 @@ safetyBriefingRouter.post("/", async (req, res) => {
       throw err;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "safety_briefing_failed", { details: (err as Error).message });
+    return fail(res, 500, "safety_briefing_failed");
   }
 });
 
@@ -107,6 +107,6 @@ safetyBriefingRouter.get("/shift/:id", async (req, res) => {
     }));
     return ok(res, { items, total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "safety_briefing_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "safety_briefing_list_failed");
   }
 });

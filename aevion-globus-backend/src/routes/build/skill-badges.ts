@@ -1,4 +1,4 @@
-/**
+﻿/**
  * QBuild Skill Tests & Badges — verify candidates' competencies.
  *
  * 3 built-in tests: welding / concrete / electrician
@@ -179,7 +179,7 @@ skillBadgesRouter.post("/skill-tests/:id/submit", async (req, res) => {
 
     return ok(res, { score, passed, passingScore: test.passingScore, correct, total: test.questions.length, feedback });
   } catch (err: unknown) {
-    return fail(res, 500, "submit_failed", { details: (err as Error).message });
+    return fail(res, 500, "submit_failed");
   }
 });
 
@@ -201,7 +201,7 @@ skillBadgesRouter.get("/skill-badges/me", async (req, res) => {
     }));
     return ok(res, { badges });
   } catch (err: unknown) {
-    return fail(res, 500, "get_badges_failed", { details: (err as Error).message });
+    return fail(res, 500, "get_badges_failed");
   }
 });
 
@@ -220,6 +220,6 @@ skillBadgesRouter.get("/skill-badges/user/:userId", async (req, res) => {
     }));
     return ok(res, { badges });
   } catch (err: unknown) {
-    return fail(res, 500, "get_badges_failed", { details: (err as Error).message });
+    return fail(res, 500, "get_badges_failed");
   }
 });

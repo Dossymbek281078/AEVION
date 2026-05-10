@@ -15,7 +15,7 @@ alertsRouter.get("/me", async (req, res) => {
     );
     return ok(res, { alert: r.rows[0] ?? null });
   } catch (err: unknown) {
-    return fail(res, 500, "alerts_me_failed", { details: (err as Error).message });
+    return fail(res, 500, "alerts_me_failed");
   }
 });
 
@@ -55,7 +55,7 @@ alertsRouter.post("/", async (req, res) => {
     );
     return ok(res, { alert: r.rows[0] }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "alerts_upsert_failed", { details: (err as Error).message });
+    return fail(res, 500, "alerts_upsert_failed");
   }
 });
 
@@ -67,7 +67,7 @@ alertsRouter.delete("/me", async (req, res) => {
     await pool.query(`UPDATE "BuildJobAlert" SET "active" = false WHERE "userId" = $1`, [auth.sub]);
     return ok(res, { unsubscribed: true });
   } catch (err: unknown) {
-    return fail(res, 500, "alerts_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "alerts_delete_failed");
   }
 });
 

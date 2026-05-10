@@ -72,7 +72,7 @@ async function requirePartnerKey(req: Request, res: Response, next: NextFunction
       .catch(() => {});
     return next();
   } catch (err: unknown) {
-    return fail(res, 500, "key_check_failed", { details: (err as Error).message });
+    return fail(res, 500, "key_check_failed");
   }
 }
 
@@ -130,7 +130,7 @@ publicRouter.get("/v1/vacancies", publicRateLimiter, requirePartnerKey, async (r
     res.setHeader("Cache-Control", "private, max-age=30");
     return ok(res, { items, total: items.length, limit, offset });
   } catch (err: unknown) {
-    return fail(res, 500, "public_vacancies_failed", { details: (err as Error).message });
+    return fail(res, 500, "public_vacancies_failed");
   }
 });
 
@@ -166,7 +166,7 @@ publicRouter.get("/v1/vacancies/:id", publicRateLimiter, requirePartnerKey, asyn
     res.setHeader("Cache-Control", "private, max-age=30");
     return ok(res, item);
   } catch (err: unknown) {
-    return fail(res, 500, "public_vacancy_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "public_vacancy_fetch_failed");
   }
 });
 
@@ -251,7 +251,7 @@ ${items}
     res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
     return res.send(xml);
   } catch (err: unknown) {
-    return fail(res, 500, "rss_failed", { details: (err as Error).message });
+    return fail(res, 500, "rss_failed");
   }
 });
 

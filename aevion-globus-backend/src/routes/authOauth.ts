@@ -1,4 +1,4 @@
-// /api/auth/oauth/* — OAuth bridge for Google + GitHub.
+﻿// /api/auth/oauth/* — OAuth bridge for Google + GitHub.
 //
 // Implementation is dependency-free (no passport.js): the OAuth 2.0 dance
 // is short enough that wiring it directly with fetch is simpler than a
@@ -265,7 +265,6 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
     if (!tokenRes.ok || !tokenData.access_token) {
       return res.status(502).json({
         error: "token exchange failed",
-        details: tokenData.error_description || tokenData.error || `${tokenRes.status}`,
       });
     }
 
@@ -367,7 +366,6 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({
       error: "oauth callback failed",
-      details: err instanceof Error ? err.message : String(err),
     });
   }
 });

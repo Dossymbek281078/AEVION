@@ -1,4 +1,4 @@
-/**
+﻿/**
  * QBuild References — post-project employer references for workers.
  *
  * After a project is DONE, CLIENT can write a reference for a WORKER
@@ -90,7 +90,7 @@ referencesRouter.post("/projects/:id/references", async (req, res) => {
     );
     return ok(res, { reference: r.rows[0] }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "create_reference_failed", { details: (err as Error).message });
+    return fail(res, 500, "create_reference_failed");
   }
 });
 
@@ -117,7 +117,7 @@ referencesRouter.get("/projects/:id/references", async (req, res) => {
       })),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "get_references_failed", { details: (err as Error).message });
+    return fail(res, 500, "get_references_failed");
   }
 });
 
@@ -147,7 +147,7 @@ referencesRouter.get("/worker-references/:userId", async (req, res) => {
       : null;
     return ok(res, { references: refs, total: refs.length, avgRating: avg ? parseFloat(avg.toFixed(2)) : null });
   } catch (err: unknown) {
-    return fail(res, 500, "get_worker_references_failed", { details: (err as Error).message });
+    return fail(res, 500, "get_worker_references_failed");
   }
 });
 
@@ -173,7 +173,7 @@ referencesRouter.get("/references/my", async (req, res) => {
     );
     return ok(res, { references: rows.rows, total: rows.rowCount ?? 0 });
   } catch (err: unknown) {
-    return fail(res, 500, "get_my_references_failed", { details: (err as Error).message });
+    return fail(res, 500, "get_my_references_failed");
   }
 });
 
@@ -194,6 +194,6 @@ referencesRouter.delete("/references/:id", async (req, res) => {
     if ((r.rowCount ?? 0) === 0) return fail(res, 404, "reference_not_found_or_too_old");
     return ok(res, { deleted: true });
   } catch (err: unknown) {
-    return fail(res, 500, "delete_reference_failed", { details: (err as Error).message });
+    return fail(res, 500, "delete_reference_failed");
   }
 });

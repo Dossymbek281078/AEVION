@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 
@@ -59,7 +59,7 @@ videoRoomsRouter.post("/", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "video_room_failed", { details: (err as Error).message });
+    return fail(res, 500, "video_room_failed");
   }
 });
 
@@ -81,7 +81,7 @@ videoRoomsRouter.get("/my", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "video_rooms_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "video_rooms_my_failed");
   }
 });
 
@@ -100,7 +100,7 @@ videoRoomsRouter.patch("/:id/end", async (req, res) => {
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "video_room_end_failed", { details: (err as Error).message });
+    return fail(res, 500, "video_room_end_failed");
   }
 });
 
@@ -135,6 +135,6 @@ videoRoomsRouter.post("/:id/invite", async (req, res) => {
     );
     return ok(res, { invited: true, roomUrl: room.rows[0].roomUrl });
   } catch (err: unknown) {
-    return fail(res, 500, "video_invite_failed", { details: (err as Error).message });
+    return fail(res, 500, "video_invite_failed");
   }
 });

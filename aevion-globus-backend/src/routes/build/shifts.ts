@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 import { sendToUser } from "./push";
@@ -50,7 +50,7 @@ shiftsRouter.post("/", async (req, res) => {
 
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "shift_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "shift_create_failed");
   }
 });
 
@@ -78,7 +78,7 @@ shiftsRouter.get("/my", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "shifts_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "shifts_my_failed");
   }
 });
 
@@ -107,7 +107,7 @@ shiftsRouter.patch("/:id/checkin", async (req, res) => {
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "shift_checkin_failed", { details: (err as Error).message });
+    return fail(res, 500, "shift_checkin_failed");
   }
 });
 
@@ -131,6 +131,6 @@ shiftsRouter.patch("/:id/checkout", async (req, res) => {
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "shift_checkout_failed", { details: (err as Error).message });
+    return fail(res, 500, "shift_checkout_failed");
   }
 });

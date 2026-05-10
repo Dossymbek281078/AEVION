@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
   buildPool as pool,
@@ -135,7 +135,7 @@ ${vacQ.rows
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_consult_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_consult_failed");
   }
 });
 
@@ -206,7 +206,7 @@ aiRouter.post("/parse-resume", aiRateLimiter, async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_parse_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_parse_failed");
   }
 });
 
@@ -260,7 +260,7 @@ ${kindGuide[kind]}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_improve_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_improve_failed");
   }
 });
 
@@ -390,7 +390,7 @@ Pick up to 3 strongest candidates. Возвращай только JSON в фо�
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_shortlist_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_shortlist_failed");
   }
 });
 
@@ -491,7 +491,7 @@ Cover note: ${String(row.message ?? "").slice(0, 400) || "—"}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_interview_prep_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_interview_prep_failed");
   }
 });
 
@@ -578,7 +578,7 @@ Hard rules:
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_translate_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_translate_failed");
   }
 });
 
@@ -667,7 +667,7 @@ ${p.summary || "—"}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_cover_letter_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_cover_letter_failed");
   }
 });
 
@@ -765,7 +765,7 @@ Summary: ${String(row.summary || "").slice(0, 400) || "(none)"}
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_why_match_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_why_match_failed");
   }
 });
 
@@ -854,7 +854,7 @@ aiRouter.post("/vacancy-feedback", aiRateLimiter, async (req, res) => {
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_vacancy_feedback_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_vacancy_feedback_failed");
   }
 });
 
@@ -932,6 +932,6 @@ aiRouter.post("/dm-suggest", aiRateLimiter, async (req, res) => {
       usage: { input: reply.inputTokens, output: reply.outputTokens },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "ai_dm_suggest_failed", { details: (err as Error).message });
+    return fail(res, 500, "ai_dm_suggest_failed");
   }
 });

@@ -36,7 +36,7 @@ adminRouter.get("/stats", async (req, res) => {
       verificationPending: Number(r[11].rows[0].n),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_stats_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_stats_failed");
   }
 });
 
@@ -53,7 +53,7 @@ adminRouter.get("/partner-keys", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "partner_keys_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "partner_keys_list_failed");
   }
 });
 
@@ -78,7 +78,7 @@ adminRouter.post("/partner-keys", async (req, res) => {
     );
     return ok(res, { ...r.rows[0], plaintext }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "partner_key_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "partner_key_create_failed");
   }
 });
 
@@ -113,7 +113,7 @@ adminRouter.get("/partner-keys/usage", async (req, res) => {
     }
     return ok(res, { items: Array.from(byKey.values()), windowDays: days });
   } catch (err: unknown) {
-    return fail(res, 500, "partner_keys_usage_failed", { details: (err as Error).message });
+    return fail(res, 500, "partner_keys_usage_failed");
   }
 });
 
@@ -151,7 +151,7 @@ adminRouter.post("/partner-keys/:id/rotate", async (req, res) => {
     );
     return ok(res, { ...r.rows[0], plaintext, replacedKeyId: id }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "partner_key_rotate_failed", { details: (err as Error).message });
+    return fail(res, 500, "partner_key_rotate_failed");
   }
 });
 
@@ -170,7 +170,7 @@ adminRouter.post("/partner-keys/:id/revoke", async (req, res) => {
     if (r.rowCount === 0) return fail(res, 404, "key_not_found");
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "partner_key_revoke_failed", { details: (err as Error).message });
+    return fail(res, 500, "partner_key_revoke_failed");
   }
 });
 
@@ -205,7 +205,7 @@ adminRouter.get("/leads", async (req, res) => {
     ]);
     return ok(res, { items: list.rows, total: Number(total.rows[0]?.n ?? 0), limit, offset });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_leads_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_leads_failed");
   }
 });
 
@@ -257,7 +257,7 @@ adminRouter.get("/leads.csv", async (req, res) => {
     );
     return res.send(`${header}\n${body}`);
   } catch (err: unknown) {
-    return fail(res, 500, "admin_leads_csv_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_leads_csv_failed");
   }
 });
 
@@ -291,7 +291,7 @@ adminRouter.get("/users", async (req, res) => {
     );
     return ok(res, { items: rows.rows, total: Number(countRes.rows[0].n) });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_users_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_users_failed");
   }
 });
 
@@ -310,7 +310,7 @@ adminRouter.post("/users/:id/verify", async (req, res) => {
     if (r.rowCount === 0) return fail(res, 404, "profile_not_found");
     return ok(res, { userId, verified: true, verifiedAt: r.rows[0].verifiedAt });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_verify_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_verify_failed");
   }
 });
 
@@ -327,7 +327,7 @@ adminRouter.delete("/users/:id/verify", async (req, res) => {
     );
     return ok(res, { userId, verified: false });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_unverify_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_unverify_failed");
   }
 });
 
@@ -344,7 +344,7 @@ adminRouter.post("/vacancies/close-expired", async (req, res) => {
     );
     return ok(res, { closed: r.rowCount, ids: r.rows.map((row: { id: string }) => row.id) });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_close_expired_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_close_expired_failed");
   }
 });
 
@@ -374,7 +374,7 @@ adminRouter.get("/flags", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_flags_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_flags_failed");
   }
 });
 
@@ -399,7 +399,7 @@ adminRouter.patch("/flags/:id", async (req, res) => {
     if (r.rowCount === 0) return fail(res, 404, "flag_not_found");
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "admin_flag_resolve_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_flag_resolve_failed");
   }
 });
 
@@ -472,7 +472,7 @@ adminRouter.get("/insights", async (req, res) => {
       topVacancies: topVacancies.rows,
     });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_insights_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_insights_failed");
   }
 });
 
@@ -558,7 +558,7 @@ adminRouter.get("/weekly-preview/:userId", async (req, res) => {
       windowStart: wkStart.toISOString(),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "weekly_preview_failed", { details: (err as Error).message });
+    return fail(res, 500, "weekly_preview_failed");
   }
 });
 

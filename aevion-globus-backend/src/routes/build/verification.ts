@@ -32,7 +32,7 @@ verificationRouter.post("/request", async (req, res) => {
     );
     return ok(res, { request: r.rows[0] }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "verification_request_failed", { details: (err as Error).message });
+    return fail(res, 500, "verification_request_failed");
   }
 });
 
@@ -47,7 +47,7 @@ verificationRouter.get("/my", async (req, res) => {
     );
     return ok(res, { request: r.rows[0] ?? null });
   } catch (err: unknown) {
-    return fail(res, 500, "verification_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "verification_my_failed");
   }
 });
 
@@ -68,7 +68,7 @@ verificationRouter.get("/admin/queue", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "verification_queue_failed", { details: (err as Error).message });
+    return fail(res, 500, "verification_queue_failed");
   }
 });
 
@@ -104,7 +104,7 @@ verificationRouter.post("/admin/:userId/approve", async (req, res) => {
     }
     return ok(res, { userId, approved: true });
   } catch (err: unknown) {
-    return fail(res, 500, "verification_approve_failed", { details: (err as Error).message });
+    return fail(res, 500, "verification_approve_failed");
   }
 });
 
@@ -123,6 +123,6 @@ verificationRouter.post("/admin/:userId/reject", async (req, res) => {
     );
     return ok(res, { userId, rejected: true });
   } catch (err: unknown) {
-    return fail(res, 500, "verification_reject_failed", { details: (err as Error).message });
+    return fail(res, 500, "verification_reject_failed");
   }
 });

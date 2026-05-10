@@ -171,7 +171,7 @@ applicationsRouter.post("/", async (req, res) => {
       throw err;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "application_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_create_failed");
   }
 });
 
@@ -216,7 +216,7 @@ applicationsRouter.get("/my", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "applications_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "applications_my_failed");
   }
 });
 
@@ -242,7 +242,7 @@ applicationsRouter.get("/mine/pipeline", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "pipeline_failed", { details: (err as Error).message });
+    return fail(res, 500, "pipeline_failed");
   }
 });
 
@@ -268,7 +268,7 @@ applicationsRouter.get("/mine/interviews", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "interviews_mine_failed", { details: (err as Error).message });
+    return fail(res, 500, "interviews_mine_failed");
   }
 });
 
@@ -319,7 +319,7 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${new Date().toISOString().slice(0, 10)}.csv"`);
     return res.send(`${header}\n${body}`);
   } catch (err: unknown) {
-    return fail(res, 500, "applications_csv_failed", { details: (err as Error).message });
+    return fail(res, 500, "applications_csv_failed");
   }
 });
 
@@ -375,7 +375,7 @@ applicationsRouter.get("/by-vacancy/:id", async (req, res) => {
 
     return ok(res, { items, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "applications_by_vacancy_failed", { details: (err as Error).message });
+    return fail(res, 500, "applications_by_vacancy_failed");
   }
 });
 
@@ -483,7 +483,7 @@ applicationsRouter.patch("/:id", async (req, res) => {
 
     return ok(res, { ...result.rows[0], hireOrder });
   } catch (err: unknown) {
-    return fail(res, 500, "application_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_update_failed");
   }
 });
 
@@ -516,7 +516,7 @@ applicationsRouter.get("/:id/notes", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "application_notes_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_notes_fetch_failed");
   }
 });
 
@@ -550,7 +550,7 @@ applicationsRouter.post("/:id/notes", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "application_note_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_note_create_failed");
   }
 });
 
@@ -632,7 +632,7 @@ applicationsRouter.post("/bulk-status", async (req, res) => {
 
     return ok(res, { updated: okIds.length, skipped, status: status.value });
   } catch (err: unknown) {
-    return fail(res, 500, "applications_bulk_status_failed", { details: (err as Error).message });
+    return fail(res, 500, "applications_bulk_status_failed");
   }
 });
 
@@ -676,7 +676,7 @@ applicationsRouter.patch("/:id/label", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "application_label_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_label_failed");
   }
 });
 
@@ -712,7 +712,7 @@ applicationsRouter.patch("/:id/notes/:noteId", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "application_note_pin_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_note_pin_failed");
   }
 });
 
@@ -741,7 +741,7 @@ applicationsRouter.delete("/:id/notes/:noteId", async (req, res) => {
     await pool.query(`DELETE FROM "BuildApplicationNote" WHERE "id" = $1`, [noteId]);
     return ok(res, { id: noteId });
   } catch (err: unknown) {
-    return fail(res, 500, "application_note_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_note_delete_failed");
   }
 });
 
@@ -808,7 +808,7 @@ applicationsRouter.post("/bulk-message/:vacancyId", async (req, res) => {
     }
     return ok(res, { sent, recipients: capped });
   } catch (err: unknown) {
-    return fail(res, 500, "bulk_message_failed", { details: (err as Error).message });
+    return fail(res, 500, "bulk_message_failed");
   }
 });
 
@@ -842,7 +842,7 @@ applicationsRouter.post("/:id/withdraw", async (req, res) => {
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "application_withdraw_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_withdraw_failed");
   }
 });
 
@@ -879,7 +879,7 @@ applicationsRouter.post("/:id/snooze", async (req, res) => {
     );
     return ok(res, { snoozedUntil: until.toISOString() });
   } catch (err: unknown) {
-    return fail(res, 500, "application_snooze_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_snooze_failed");
   }
 });
 
@@ -925,7 +925,7 @@ applicationsRouter.post("/:id/flag", async (req, res) => {
     );
     return ok(res, { id: flagId }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "application_flag_failed", { details: (err as Error).message });
+    return fail(res, 500, "application_flag_failed");
   }
 });
 

@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { buildPool as pool, ok, fail } from "../../lib/build";
 
 export const salaryStatsRouter = Router();
@@ -112,6 +112,6 @@ salaryStatsRouter.get("/", async (req, res) => {
       generatedAt: new Date().toISOString(),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "salary_stats_failed", { details: (err as Error).message });
+    return fail(res, 500, "salary_stats_failed");
   }
 });

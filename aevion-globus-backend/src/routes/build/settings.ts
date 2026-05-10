@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
 
 export const settingsRouter = Router();
@@ -34,7 +34,7 @@ settingsRouter.get("/notifications", async (req, res) => {
     }
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "notifications_get_failed", { details: (err as Error).message });
+    return fail(res, 500, "notifications_get_failed");
   }
 });
 
@@ -72,6 +72,6 @@ settingsRouter.put("/notifications", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "notifications_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "notifications_update_failed");
   }
 });

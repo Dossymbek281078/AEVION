@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import {
   buildPool as pool,
   ok,
@@ -97,7 +97,7 @@ interviewsRouter.post("/", async (req, res) => {
     );
     return ok(res, { interview: r.rows[0] }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "create_interview_failed", { details: (err as Error).message });
+    return fail(res, 500, "create_interview_failed");
   }
 });
 
@@ -126,7 +126,7 @@ interviewsRouter.get("/my", async (req, res) => {
 
     return ok(res, { interviews: rows.rows, total: rows.rowCount ?? 0 });
   } catch (err: unknown) {
-    return fail(res, 500, "list_interviews_failed", { details: (err as Error).message });
+    return fail(res, 500, "list_interviews_failed");
   }
 });
 
@@ -149,7 +149,7 @@ interviewsRouter.get("/by-application/:id", async (req, res) => {
     );
     return ok(res, { interviews: rows.rows });
   } catch (err: unknown) {
-    return fail(res, 500, "get_interviews_failed", { details: (err as Error).message });
+    return fail(res, 500, "get_interviews_failed");
   }
 });
 
@@ -176,7 +176,7 @@ interviewsRouter.patch("/:id/confirm", async (req, res) => {
     if ((r.rowCount ?? 0) === 0) return fail(res, 404, "interview_not_found_or_slot_invalid");
     return ok(res, { interview: r.rows[0] });
   } catch (err: unknown) {
-    return fail(res, 500, "confirm_interview_failed", { details: (err as Error).message });
+    return fail(res, 500, "confirm_interview_failed");
   }
 });
 
@@ -202,7 +202,7 @@ interviewsRouter.patch("/:id/cancel", async (req, res) => {
     if ((r.rowCount ?? 0) === 0) return fail(res, 404, "interview_not_found_or_not_cancelable");
     return ok(res, { interview: r.rows[0] });
   } catch (err: unknown) {
-    return fail(res, 500, "cancel_interview_failed", { details: (err as Error).message });
+    return fail(res, 500, "cancel_interview_failed");
   }
 });
 
@@ -223,6 +223,6 @@ interviewsRouter.patch("/:id/complete", async (req, res) => {
     if ((r.rowCount ?? 0) === 0) return fail(res, 404, "interview_not_found_or_not_confirmed");
     return ok(res, { interview: r.rows[0] });
   } catch (err: unknown) {
-    return fail(res, 500, "complete_interview_failed", { details: (err as Error).message });
+    return fail(res, 500, "complete_interview_failed");
   }
 });

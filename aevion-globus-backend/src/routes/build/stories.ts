@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -45,7 +45,7 @@ storiesRouter.get("/", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "stories_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "stories_list_failed");
   }
 });
 
@@ -59,7 +59,7 @@ storiesRouter.get("/by-user/:id", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "stories_user_failed", { details: (err as Error).message });
+    return fail(res, 500, "stories_user_failed");
   }
 });
 
@@ -86,7 +86,7 @@ storiesRouter.post("/", async (req, res) => {
     );
     return ok(res, r.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "story_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "story_create_failed");
   }
 });
 
@@ -126,7 +126,7 @@ storiesRouter.post("/:id/like", async (req, res) => {
     );
     return ok(res, { liked: true, likeCount: upd.rows[0]?.likeCount ?? 0 });
   } catch (err: unknown) {
-    return fail(res, 500, "story_like_failed", { details: (err as Error).message });
+    return fail(res, 500, "story_like_failed");
   }
 });
 
@@ -143,6 +143,6 @@ storiesRouter.delete("/:id", async (req, res) => {
     await pool.query(`DELETE FROM "BuildStory" WHERE "id" = $1`, [storyId]);
     return ok(res, { ok: true });
   } catch (err: unknown) {
-    return fail(res, 500, "story_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "story_delete_failed");
   }
 });

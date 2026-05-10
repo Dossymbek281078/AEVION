@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vEnum } from "../../lib/build";
 
@@ -33,7 +33,7 @@ documentsRouter.post("/", async (req, res) => {
     if ((result.rowCount ?? 0) === 0) return fail(res, 409, "document_already_exists");
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "document_upload_failed", { details: (err as Error).message });
+    return fail(res, 500, "document_upload_failed");
   }
 });
 
@@ -48,7 +48,7 @@ documentsRouter.get("/me", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "documents_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "documents_my_failed");
   }
 });
 
@@ -65,7 +65,7 @@ documentsRouter.get("/user/:userId", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "documents_user_failed", { details: (err as Error).message });
+    return fail(res, 500, "documents_user_failed");
   }
 });
 
@@ -84,7 +84,7 @@ documentsRouter.get("/admin/pending", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "admin_documents_failed", { details: (err as Error).message });
+    return fail(res, 500, "admin_documents_failed");
   }
 });
 
@@ -103,7 +103,7 @@ documentsRouter.patch("/:id/verify", async (req, res) => {
     if (result.rowCount === 0) return fail(res, 404, "document_not_found");
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "document_verify_failed", { details: (err as Error).message });
+    return fail(res, 500, "document_verify_failed");
   }
 });
 
@@ -123,7 +123,7 @@ documentsRouter.patch("/:id/reject", async (req, res) => {
     if (result.rowCount === 0) return fail(res, 404, "document_not_found");
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "document_reject_failed", { details: (err as Error).message });
+    return fail(res, 500, "document_reject_failed");
   }
 });
 

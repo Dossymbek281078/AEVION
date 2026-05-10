@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber, TRIAL_TASK_STATUSES } from "../../lib/build";
 import { sendTrialTaskProposed, sendTrialTaskApproved } from "../../lib/build/email";
@@ -81,7 +81,7 @@ trialTasksRouter.post("/", async (req, res) => {
 
     return ok(res, r.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "trial_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_create_failed");
   }
 });
 
@@ -96,7 +96,7 @@ trialTasksRouter.post("/:id/accept", async (req, res) => {
     const r = await pool.query(`UPDATE "BuildTrialTask" SET "status" = 'ACCEPTED', "updatedAt" = NOW() WHERE "id" = $1 RETURNING *`, [row.id]);
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "trial_accept_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_accept_failed");
   }
 });
 
@@ -116,7 +116,7 @@ trialTasksRouter.post("/:id/submit", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "trial_submit_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_submit_failed");
   }
 });
 
@@ -169,7 +169,7 @@ trialTasksRouter.post("/:id/approve", async (req, res) => {
       throw innerErr;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "trial_approve_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_approve_failed");
   }
 });
 
@@ -192,7 +192,7 @@ trialTasksRouter.post("/:id/reject", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "trial_reject_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_reject_failed");
   }
 });
 
@@ -209,7 +209,7 @@ trialTasksRouter.get("/by-application/:applicationId", async (req, res) => {
     }
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "trial_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_list_failed");
   }
 });
 
@@ -229,7 +229,7 @@ trialTasksRouter.get("/my", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "trial_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_my_failed");
   }
 });
 
@@ -300,6 +300,6 @@ trialTasksRouter.get("/:id/invoice.pdf", async (req, res) => {
     const pdf = Buffer.concat(chunks);
     return res.send(pdf);
   } catch (err: unknown) {
-    return fail(res, 500, "trial_invoice_failed", { details: (err as Error).message });
+    return fail(res, 500, "trial_invoice_failed");
   }
 });

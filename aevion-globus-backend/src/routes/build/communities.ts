@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 
@@ -39,7 +39,7 @@ communitiesRouter.get("/", async (_req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "communities_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "communities_list_failed");
   }
 });
 
@@ -68,7 +68,7 @@ communitiesRouter.get("/:slug", async (req, res) => {
     );
     return ok(res, { community: community.rows[0], messages: messages.rows.reverse(), total: messages.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "community_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "community_fetch_failed");
   }
 });
 
@@ -89,7 +89,7 @@ communitiesRouter.post("/:slug/join", async (req, res) => {
     await pool.query(`UPDATE "BuildCommunity" SET "memberCount" = (SELECT COUNT(*) FROM "BuildCommunityMember" WHERE "communityId" = $1) WHERE "id" = $1`, [cid]);
     return ok(res, { joined: true });
   } catch (err: unknown) {
-    return fail(res, 500, "community_join_failed", { details: (err as Error).message });
+    return fail(res, 500, "community_join_failed");
   }
 });
 
@@ -106,7 +106,7 @@ communitiesRouter.post("/:slug/leave", async (req, res) => {
     await pool.query(`UPDATE "BuildCommunity" SET "memberCount" = (SELECT COUNT(*) FROM "BuildCommunityMember" WHERE "communityId" = $1) WHERE "id" = $1`, [cid]);
     return ok(res, { left: true });
   } catch (err: unknown) {
-    return fail(res, 500, "community_leave_failed", { details: (err as Error).message });
+    return fail(res, 500, "community_leave_failed");
   }
 });
 
@@ -130,6 +130,6 @@ communitiesRouter.post("/:slug/messages", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "community_message_failed", { details: (err as Error).message });
+    return fail(res, 500, "community_message_failed");
   }
 });

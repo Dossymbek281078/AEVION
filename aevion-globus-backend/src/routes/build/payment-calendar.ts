@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -59,7 +59,7 @@ paymentCalendarRouter.post("/", async (req, res) => {
     );
     return ok(res, r.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "payment_event_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "payment_event_create_failed");
   }
 });
 
@@ -103,7 +103,7 @@ paymentCalendarRouter.get("/my", async (req, res) => {
       summary: { due, paid, overdue },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "payment_calendar_my_failed", { details: (err as Error).message });
+    return fail(res, 500, "payment_calendar_my_failed");
   }
 });
 
@@ -154,7 +154,7 @@ paymentCalendarRouter.patch("/:id", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "payment_event_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "payment_event_update_failed");
   }
 });
 
@@ -170,6 +170,6 @@ paymentCalendarRouter.delete("/:id", async (req, res) => {
     await pool.query(`DELETE FROM "BuildPaymentEvent" WHERE "id" = $1`, [id]);
     return ok(res, { ok: true });
   } catch (err: unknown) {
-    return fail(res, 500, "payment_event_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "payment_event_delete_failed");
   }
 });

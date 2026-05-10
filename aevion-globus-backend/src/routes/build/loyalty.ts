@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import {
   buildPool as pool,
   ok,
@@ -68,7 +68,7 @@ loyaltyRouter.get("/me", async (req, res) => {
       })),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "loyalty_failed", { details: (err as Error).message });
+    return fail(res, 500, "loyalty_failed");
   }
 });
 
@@ -91,7 +91,7 @@ loyaltyRouter.get("/tiers", async (_req, res) => {
       })),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "tiers_failed", { details: (err as Error).message });
+    return fail(res, 500, "tiers_failed");
   }
 });
 
@@ -142,7 +142,7 @@ loyaltyRouter.post("/cashback/claim", async (req, res) => {
       throw innerErr;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "cashback_claim_failed", { details: (err as Error).message });
+    return fail(res, 500, "cashback_claim_failed");
   }
 });
 
@@ -172,6 +172,6 @@ loyaltyRouter.get("/cashback", async (req, res) => {
       ledger: tail.rows,
     });
   } catch (err: unknown) {
-    return fail(res, 500, "cashback_failed", { details: (err as Error).message });
+    return fail(res, 500, "cashback_failed");
   }
 });

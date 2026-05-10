@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
 
 export const referralsRouter = Router();
@@ -23,7 +23,7 @@ referralsRouter.get("/leaderboard", async (req, res) => {
     );
     return ok(res, { items: r.rows, limit });
   } catch (err: unknown) {
-    return fail(res, 500, "leaderboard_failed", { details: (err as Error).message });
+    return fail(res, 500, "leaderboard_failed");
   }
 });
 
@@ -60,6 +60,6 @@ referralsRouter.get("/me", async (req, res) => {
       recent: tail.rows,
     });
   } catch (err: unknown) {
-    return fail(res, 500, "referrals_me_failed", { details: (err as Error).message });
+    return fail(res, 500, "referrals_me_failed");
   }
 });

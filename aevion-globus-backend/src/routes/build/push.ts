@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -79,7 +79,7 @@ pushRouter.post("/subscribe", async (req, res) => {
     );
     return ok(res, { id, refreshed: false }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "push_subscribe_failed", { details: (err as Error).message });
+    return fail(res, 500, "push_subscribe_failed");
   }
 });
 
@@ -96,7 +96,7 @@ pushRouter.post("/unsubscribe", async (req, res) => {
     );
     return ok(res, { removed: r.rowCount ?? 0 });
   } catch (err: unknown) {
-    return fail(res, 500, "push_unsubscribe_failed", { details: (err as Error).message });
+    return fail(res, 500, "push_unsubscribe_failed");
   }
 });
 
@@ -114,7 +114,7 @@ pushRouter.post("/test", async (req, res) => {
     });
     return ok(res, sent);
   } catch (err: unknown) {
-    return fail(res, 500, "push_test_failed", { details: (err as Error).message });
+    return fail(res, 500, "push_test_failed");
   }
 });
 

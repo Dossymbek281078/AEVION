@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail } from "../../lib/build";
 
@@ -46,6 +46,6 @@ leadsRouter.post("/", async (req, res) => {
     );
     return ok(res, { alreadyExists: false }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "lead_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "lead_create_failed");
   }
 });

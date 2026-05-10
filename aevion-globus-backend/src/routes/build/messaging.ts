@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber } from "../../lib/build";
 import { sendToUser } from "./push";
@@ -38,7 +38,7 @@ messagingRouter.post("/messages", async (req, res) => {
 
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "message_send_failed", { details: (err as Error).message });
+    return fail(res, 500, "message_send_failed");
   }
 });
 
@@ -68,7 +68,7 @@ messagingRouter.get("/messages/:userId", async (req, res) => {
 
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "messages_thread_failed", { details: (err as Error).message });
+    return fail(res, 500, "messages_thread_failed");
   }
 });
 
@@ -97,7 +97,7 @@ messagingRouter.get("/messages", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "messages_inbox_failed", { details: (err as Error).message });
+    return fail(res, 500, "messages_inbox_failed");
   }
 });
 
@@ -135,7 +135,7 @@ messagingRouter.post("/files/upload", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "file_upload_failed", { details: (err as Error).message });
+    return fail(res, 500, "file_upload_failed");
   }
 });
 
@@ -159,7 +159,7 @@ messagingRouter.post("/notifications/read", async (req, res) => {
     );
     return ok(res, { markedRead: result.rowCount ?? 0 });
   } catch (err: unknown) {
-    return fail(res, 500, "notifications_read_failed", { details: (err as Error).message });
+    return fail(res, 500, "notifications_read_failed");
   }
 });
 
@@ -191,7 +191,7 @@ messagingRouter.get("/notifications/summary", async (req, res) => {
     const applicationUpdates = updates.rows[0]?.c ?? 0;
     return ok(res, { unreadMessages, pendingApplications, applicationUpdates, total: unreadMessages + pendingApplications + applicationUpdates });
   } catch (err: unknown) {
-    return fail(res, 500, "notifications_summary_failed", { details: (err as Error).message });
+    return fail(res, 500, "notifications_summary_failed");
   }
 });
 
@@ -243,7 +243,7 @@ messagingRouter.get("/notifications", async (req, res) => {
     items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
     return ok(res, { items: items.slice(0, limit), total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "notifications_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "notifications_list_failed");
   }
 });
 
@@ -255,7 +255,7 @@ messagingRouter.post("/notifications/mark-read", async (req, res) => {
     await pool.query(`UPDATE "BuildMessage" SET "readAt" = NOW() WHERE "receiverId" = $1 AND "readAt" IS NULL`, [auth.sub]);
     return ok(res, { marked: true });
   } catch (err: unknown) {
-    return fail(res, 500, "notifications_mark_read_failed", { details: (err as Error).message });
+    return fail(res, 500, "notifications_mark_read_failed");
   }
 });
 
@@ -271,7 +271,7 @@ messagingRouter.get("/bulk-templates", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "bulk_templates_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "bulk_templates_list_failed");
   }
 });
 
@@ -302,7 +302,7 @@ messagingRouter.post("/bulk-templates", async (req, res) => {
     );
     return ok(res, r.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "bulk_template_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "bulk_template_create_failed");
   }
 });
 
@@ -319,6 +319,6 @@ messagingRouter.delete("/bulk-templates/:id", async (req, res) => {
     if (r.rowCount === 0) return fail(res, 404, "template_not_found");
     return ok(res, { id });
   } catch (err: unknown) {
-    return fail(res, 500, "bulk_template_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "bulk_template_delete_failed");
   }
 });

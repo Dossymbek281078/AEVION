@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
 
 export const contractsRouter = Router();
@@ -80,6 +80,6 @@ contractsRouter.post("/:id/contract", async (req, res) => {
       hint: "Open qsignUrl in the browser — both parties sign with QSign v2",
     });
   } catch (err: unknown) {
-    return fail(res, 500, "contract_generation_failed", { details: (err as Error).message });
+    return fail(res, 500, "contract_generation_failed");
   }
 });

@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import { buildPool as pool, ok, fail, requireBuildAuth } from "../../lib/build";
 
 export const statsRouter = Router();
@@ -37,7 +37,7 @@ statsRouter.get("/", async (_req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "stats_failed", { details: (err as Error).message });
+    return fail(res, 500, "stats_failed");
   }
 });
 
@@ -90,7 +90,7 @@ statsRouter.get("/activity", async (_req, res) => {
     events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
     return ok(res, { items: events.slice(0, 20), total: events.length });
   } catch (err: unknown) {
-    return fail(res, 500, "stats_activity_failed", { details: (err as Error).message });
+    return fail(res, 500, "stats_activity_failed");
   }
 });
 
@@ -146,7 +146,7 @@ statsRouter.get("/timeseries", async (_req, res) => {
       projects: densify(projects.rows as { day: string | Date; n: number }[]),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "stats_timeseries_failed", { details: (err as Error).message });
+    return fail(res, 500, "stats_timeseries_failed");
   }
 });
 
@@ -182,7 +182,7 @@ statsRouter.get("/salary", async (req, res) => {
       count: Number(row.count ?? 0),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "salary_stats_failed", { details: (err as Error).message });
+    return fail(res, 500, "salary_stats_failed");
   }
 });
 
@@ -207,7 +207,7 @@ statsRouter.get("/hires", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "hires_failed", { details: (err as Error).message });
+    return fail(res, 500, "hires_failed");
   }
 });
 
@@ -246,7 +246,7 @@ statsRouter.get("/featured-employers", async (_req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "featured_employers_failed", { details: (err as Error).message });
+    return fail(res, 500, "featured_employers_failed");
   }
 });
 
@@ -331,7 +331,7 @@ statsRouter.get("/employers/:id/overview", async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "employer_overview_failed", { details: (err as Error).message });
+    return fail(res, 500, "employer_overview_failed");
   }
 });
 
@@ -382,7 +382,7 @@ statsRouter.get("/reject-reasons", async (req, res) => {
 
     return ok(res, { days, total, buckets });
   } catch (err: unknown) {
-    return fail(res, 500, "stats_reject_reasons_failed", { details: (err as Error).message });
+    return fail(res, 500, "stats_reject_reasons_failed");
   }
 });
 
@@ -454,7 +454,7 @@ statsRouter.get("/export/all", async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "export_all_failed", { details: (err as Error).message });
+    return fail(res, 500, "export_all_failed");
   }
 });
 
@@ -525,7 +525,7 @@ statsRouter.get("/sources", async (req, res) => {
       buckets,
     });
   } catch (err: unknown) {
-    return fail(res, 500, "stats_sources_failed", { details: (err as Error).message });
+    return fail(res, 500, "stats_sources_failed");
   }
 });
 
@@ -561,7 +561,7 @@ statsRouter.get("/leaderboard", async (_req, res) => {
     ]);
     return ok(res, { employers: emps.rows, workers: workers.rows });
   } catch (err: unknown) {
-    return fail(res, 500, "leaderboard_failed", { details: (err as Error).message });
+    return fail(res, 500, "leaderboard_failed");
   }
 });
 
@@ -631,6 +631,6 @@ statsRouter.get("/weekly", async (req, res) => {
       hires: delta(hiresThis.rows[0].n, hiresPrev.rows[0].n),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "stats_weekly_failed", { details: (err as Error).message });
+    return fail(res, 500, "stats_weekly_failed");
   }
 });

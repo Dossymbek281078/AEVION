@@ -81,7 +81,7 @@ billingRouter.get("/usage/me", async (req, res) => {
       },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "usage_me_failed", { details: (err as Error).message });
+    return fail(res, 500, "usage_me_failed");
   }
 });
 
@@ -96,7 +96,7 @@ billingRouter.get("/plans", async (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     return ok(res, { items, total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "plans_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "plans_list_failed");
   }
 });
 
@@ -115,7 +115,7 @@ billingRouter.get("/subscriptions/me", async (req, res) => {
     if (sub.rowCount === 0) return ok(res, { subscription: null });
     return ok(res, { subscription: sub.rows[0] });
   } catch (err: unknown) {
-    return fail(res, 500, "subscription_me_failed", { details: (err as Error).message });
+    return fail(res, 500, "subscription_me_failed");
   }
 });
 
@@ -174,7 +174,7 @@ billingRouter.post("/subscriptions/start", async (req, res) => {
       throw innerErr;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "subscription_start_failed", { details: (err as Error).message });
+    return fail(res, 500, "subscription_start_failed");
   }
 });
 
@@ -189,7 +189,7 @@ billingRouter.get("/orders/me", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "orders_me_failed", { details: (err as Error).message });
+    return fail(res, 500, "orders_me_failed");
   }
 });
 
@@ -245,7 +245,7 @@ billingRouter.post("/orders/:id/checkout", async (req, res) => {
 
     return ok(res, { url: session.url, sessionId: session.id });
   } catch (err: unknown) {
-    return fail(res, 500, "checkout_session_failed", { details: (err as Error).message });
+    return fail(res, 500, "checkout_session_failed");
   }
 });
 
@@ -266,7 +266,7 @@ billingRouter.post("/orders/:id/pay", async (req, res) => {
     const result = await markOrderPaid(id);
     return ok(res, { order: result.order });
   } catch (err: unknown) {
-    return fail(res, 500, "order_pay_failed", { details: (err as Error).message });
+    return fail(res, 500, "order_pay_failed");
   }
 });
 
@@ -335,6 +335,6 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
     }
     return fail(res, 400, "unknown_event", { event });
   } catch (err: unknown) {
-    return fail(res, 500, "webhook_failed", { details: (err as Error).message });
+    return fail(res, 500, "webhook_failed");
   }
 });

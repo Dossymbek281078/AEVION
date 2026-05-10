@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import {
@@ -105,7 +105,7 @@ reviewsRouter.post("/", reviewPostLimiter, async (req, res) => {
       throw innerErr;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "review_submit_failed", { details: (err as Error).message });
+    return fail(res, 500, "review_submit_failed");
   }
 });
 
@@ -148,7 +148,7 @@ reviewsRouter.get("/by-user/:userId", async (req, res) => {
       offset,
     });
   } catch (err: unknown) {
-    return fail(res, 500, "reviews_by_user_failed", { details: (err as Error).message });
+    return fail(res, 500, "reviews_by_user_failed");
   }
 });
 
@@ -172,7 +172,7 @@ reviewsRouter.get("/by-project/:id", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount ?? 0 });
   } catch (err: unknown) {
-    return fail(res, 500, "reviews_by_project_failed", { details: (err as Error).message });
+    return fail(res, 500, "reviews_by_project_failed");
   }
 });
 
@@ -217,6 +217,6 @@ reviewsRouter.get("/eligible", async (req, res) => {
     ];
     return ok(res, { items, total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "reviews_eligible_failed", { details: (err as Error).message });
+    return fail(res, 500, "reviews_eligible_failed");
   }
 });

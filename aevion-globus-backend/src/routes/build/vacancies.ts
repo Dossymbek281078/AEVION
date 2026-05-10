@@ -91,7 +91,7 @@ vacanciesRouter.post("/", async (req, res) => {
     void dispatchJobAlerts({ id: row.id, title: row.title, description: row.description, skillsJson: row.skillsJson, city: row.city, salary: row.salary }).catch(() => {});
     return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]), questions: safeParseJson(row.questionsJson, [] as string[]) }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_create_failed");
   }
 });
 
@@ -173,7 +173,7 @@ vacanciesRouter.get("/", async (req, res) => {
     }));
     return ok(res, { items, total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancies_feed_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancies_feed_failed");
   }
 });
 
@@ -214,7 +214,7 @@ vacanciesRouter.post("/:id/invite", async (req, res) => {
 
     return ok(res, { invited: true, email: emailVal.value });
   } catch (err: unknown) {
-    return fail(res, 500, "invite_failed", { details: (err as Error).message });
+    return fail(res, 500, "invite_failed");
   }
 });
 
@@ -240,7 +240,7 @@ vacanciesRouter.get("/skills/popular", async (_req, res) => {
       .map(([skill, count]) => ({ skill, count }));
     return ok(res, { items: top });
   } catch (err: unknown) {
-    return fail(res, 500, "skills_popular_failed", { details: (err as Error).message });
+    return fail(res, 500, "skills_popular_failed");
   }
 });
 
@@ -257,7 +257,7 @@ vacanciesRouter.get("/by-project/:id", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancies_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancies_list_failed");
   }
 });
 
@@ -286,7 +286,7 @@ vacanciesRouter.get("/templates", async (req, res) => {
     }));
     return ok(res, { items, total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "templates_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "templates_list_failed");
   }
 });
 
@@ -333,7 +333,7 @@ vacanciesRouter.post("/templates", async (req, res) => {
     );
     return ok(res, r.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "template_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "template_create_failed");
   }
 });
 
@@ -352,7 +352,7 @@ vacanciesRouter.delete("/templates/:id", async (req, res) => {
     if (r.rowCount === 0) return fail(res, 404, "template_not_found_or_not_owned");
     return ok(res, { id });
   } catch (err: unknown) {
-    return fail(res, 500, "template_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "template_delete_failed");
   }
 });
 
@@ -373,7 +373,7 @@ vacanciesRouter.get("/:id", async (req, res) => {
     const row = result.rows[0];
     return ok(res, { ...row, skills: safeParseJson(row.skillsJson, [] as string[]), questions: safeParseJson(row.questionsJson, [] as string[]) });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_fetch_failed");
   }
 });
 
@@ -406,7 +406,7 @@ vacanciesRouter.get("/mine/funnel", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancies_mine_funnel_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancies_mine_funnel_failed");
   }
 });
 
@@ -488,7 +488,7 @@ vacanciesRouter.get("/:id/similar", async (req, res) => {
 
     return ok(res, { items: scored, total: scored.length });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_similar_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_similar_failed");
   }
 });
 
@@ -540,7 +540,7 @@ vacanciesRouter.get("/:id/match-candidates", async (req, res) => {
 
     return ok(res, { items: ranked, total: ranked.length, requiredSkills: required });
   } catch (err: unknown) {
-    return fail(res, 500, "match_candidates_failed", { details: (err as Error).message });
+    return fail(res, 500, "match_candidates_failed");
   }
 });
 
@@ -601,7 +601,7 @@ vacanciesRouter.post("/:id/boost", async (req, res) => {
       throw innerErr;
     }
   } catch (err: unknown) {
-    return fail(res, 500, "boost_failed", { details: (err as Error).message });
+    return fail(res, 500, "boost_failed");
   }
 });
 
@@ -673,7 +673,7 @@ vacanciesRouter.post("/bulk", async (req, res) => {
 
     return ok(res, { created: created.length, items: created, errors });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancies_bulk_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancies_bulk_failed");
   }
 });
 
@@ -749,7 +749,7 @@ vacanciesRouter.patch("/:id", async (req, res) => {
 
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_update_failed");
   }
 });
 
@@ -790,7 +790,7 @@ vacanciesRouter.get("/:id/history", async (req, res) => {
     });
     return ok(res, { items, total: items.length });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_history_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_history_failed");
   }
 });
 
@@ -831,7 +831,7 @@ vacanciesRouter.delete("/:id", async (req, res) => {
     await pool.query(`DELETE FROM "BuildVacancy" WHERE "id" = $1`, [id]);
     return ok(res, { id });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_delete_failed");
   }
 });
 
@@ -903,7 +903,7 @@ vacanciesRouter.get("/:id/boost-roi", async (req, res) => {
       apps: { during, before, delta, pct },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "boost_roi_failed", { details: (err as Error).message });
+    return fail(res, 500, "boost_roi_failed");
   }
 });
 
@@ -938,7 +938,7 @@ vacanciesRouter.get("/:id/notes", async (req, res) => {
     );
     return ok(res, { items: r.rows, total: r.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_notes_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_notes_failed");
   }
 });
 
@@ -972,7 +972,7 @@ vacanciesRouter.post("/:id/notes", async (req, res) => {
     );
     return ok(res, r.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_note_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_note_create_failed");
   }
 });
 
@@ -1002,7 +1002,7 @@ vacanciesRouter.delete("/:id/notes/:noteId", async (req, res) => {
     if (r.rowCount === 0) return fail(res, 404, "note_not_found");
     return ok(res, { id: r.rows[0].id, deleted: true });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_note_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_note_delete_failed");
   }
 });
 
@@ -1110,7 +1110,7 @@ vacanciesRouter.get("/:id/timeline", async (req, res) => {
     events.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
     return ok(res, { events: events.slice(0, 80), total: events.length });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_timeline_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_timeline_failed");
   }
 });
 
@@ -1160,7 +1160,7 @@ vacanciesRouter.post("/:id/republish", async (req, res) => {
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_republish_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_republish_failed");
   }
 });
 
@@ -1201,7 +1201,7 @@ vacanciesRouter.post("/:id/extend", async (req, res) => {
     );
     return ok(res, { vacancy: result.rows[0], extendedDays: days, newExpiresAt: newExpiry.toISOString() });
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_extend_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_extend_failed");
   }
 });
 
@@ -1242,7 +1242,7 @@ vacanciesRouter.post("/:id/duplicate", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "vacancy_duplicate_failed", { details: (err as Error).message });
+    return fail(res, 500, "vacancy_duplicate_failed");
   }
 });
 
@@ -1281,6 +1281,6 @@ vacanciesRouter.patch("/:id/urgent", async (req, res) => {
     );
     return ok(res, { vacancy: r.rows[0] });
   } catch (err: unknown) {
-    return fail(res, 500, "set_urgent_failed", { details: (err as Error).message });
+    return fail(res, 500, "set_urgent_failed");
   }
 });

@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString } from "../../lib/build";
 
@@ -30,7 +30,7 @@ portfolioPhotosRouter.post("/", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "portfolio_photo_add_failed", { details: (err as Error).message });
+    return fail(res, 500, "portfolio_photo_add_failed");
   }
 });
 
@@ -45,7 +45,7 @@ portfolioPhotosRouter.get("/:userId", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "portfolio_photos_failed", { details: (err as Error).message });
+    return fail(res, 500, "portfolio_photos_failed");
   }
 });
 
@@ -61,7 +61,7 @@ portfolioPhotosRouter.delete("/:id", async (req, res) => {
     await pool.query(`DELETE FROM "BuildPortfolioPhoto" WHERE "id" = $1`, [id]);
     return ok(res, { deleted: true });
   } catch (err: unknown) {
-    return fail(res, 500, "portfolio_photo_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "portfolio_photo_delete_failed");
   }
 });
 
@@ -88,6 +88,6 @@ portfolioPhotosRouter.patch("/:id", async (req, res) => {
     );
     return ok(res, upd.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "portfolio_photo_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "portfolio_photo_update_failed");
   }
 });

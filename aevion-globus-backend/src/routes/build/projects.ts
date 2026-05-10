@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -40,7 +40,7 @@ projectsRouter.post("/", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "project_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "project_create_failed");
   }
 });
 
@@ -85,7 +85,7 @@ projectsRouter.get("/", async (req, res) => {
     );
     return ok(res, { items: result.rows, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "projects_list_failed", { details: (err as Error).message });
+    return fail(res, 500, "projects_list_failed");
   }
 });
 
@@ -109,7 +109,7 @@ projectsRouter.get("/:id", async (req, res) => {
 
     return ok(res, { project: project.rows[0], vacancies: vacancies.rows, files: files.rows, client: client.rows[0] || null });
   } catch (err: unknown) {
-    return fail(res, 500, "project_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "project_fetch_failed");
   }
 });
 
@@ -143,7 +143,7 @@ projectsRouter.get("/:id/public", async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=60");
     return ok(res, { project: project.rows[0], vacancies: vacancies.rows, files: files.rows, client: client.rows[0] || null });
   } catch (err: unknown) {
-    return fail(res, 500, "project_public_failed", { details: (err as Error).message });
+    return fail(res, 500, "project_public_failed");
   }
 });
 
@@ -195,7 +195,7 @@ projectsRouter.patch("/:id", async (req, res) => {
     );
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "project_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "project_update_failed");
   }
 });
 
@@ -248,7 +248,7 @@ projectsRouter.get("/:id/analytics", async (req, res) => {
       reviews: { avgRating: r.avg ?? 0, count: r.count },
     });
   } catch (err: unknown) {
-    return fail(res, 500, "project_analytics_failed", { details: (err as Error).message });
+    return fail(res, 500, "project_analytics_failed");
   }
 });
 
@@ -320,6 +320,6 @@ projectsRouter.get("/:id/export.pdf", async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="qbuild-project-${id.slice(0, 8)}.pdf"`);
     return res.send(Buffer.concat(chunks));
   } catch (err: unknown) {
-    return fail(res, 500, "project_export_failed", { details: (err as Error).message });
+    return fail(res, 500, "project_export_failed");
   }
 });

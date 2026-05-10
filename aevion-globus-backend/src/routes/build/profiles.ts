@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -54,7 +54,7 @@ profilesRouter.get("/users/me", async (req, res) => {
 
     return ok(res, { user: u.rows[0], profile });
   } catch (err: unknown) {
-    return fail(res, 500, "users_me_failed", { details: (err as Error).message });
+    return fail(res, 500, "users_me_failed");
   }
 });
 
@@ -213,7 +213,7 @@ profilesRouter.post("/profiles", async (req, res) => {
       toolsOwned: safeParseJson(row.toolsOwnedJson, [] as string[]),
     }, 201);
   } catch (err: unknown) {
-    return fail(res, 500, "profile_upsert_failed", { details: (err as Error).message });
+    return fail(res, 500, "profile_upsert_failed");
   }
 });
 
@@ -308,7 +308,7 @@ profilesRouter.get("/profiles/:id", async (req, res, next) => {
       }),
     });
   } catch (err: unknown) {
-    return fail(res, 500, "profile_fetch_failed", { details: (err as Error).message });
+    return fail(res, 500, "profile_fetch_failed");
   }
 });
 
@@ -503,7 +503,7 @@ profilesRouter.get("/profiles/search", async (req, res) => {
     }));
     return ok(res, { items, total: result.rowCount });
   } catch (err: unknown) {
-    return fail(res, 500, "profiles_search_failed", { details: (err as Error).message });
+    return fail(res, 500, "profiles_search_failed");
   }
 });
 
@@ -525,7 +525,7 @@ profilesRouter.post("/profiles/:id/verify", async (req, res) => {
     if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "profile_verify_failed", { details: (err as Error).message });
+    return fail(res, 500, "profile_verify_failed");
   }
 });
 
@@ -545,7 +545,7 @@ profilesRouter.delete("/profiles/:id/verify", async (req, res) => {
     if (result.rowCount === 0) return fail(res, 404, "profile_not_found");
     return ok(res, result.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "profile_unverify_failed", { details: (err as Error).message });
+    return fail(res, 500, "profile_unverify_failed");
   }
 });
 
@@ -658,7 +658,7 @@ profilesRouter.get("/profiles/:id/resume.pdf", async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=60");
     res.status(200).send(buf);
   } catch (err: unknown) {
-    return fail(res, 500, "resume_pdf_failed", { details: (err as Error).message });
+    return fail(res, 500, "resume_pdf_failed");
   }
 });
 
@@ -684,7 +684,7 @@ profilesRouter.post("/experiences", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "experience_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "experience_create_failed");
   }
 });
 
@@ -716,7 +716,7 @@ profilesRouter.patch("/experiences/:id", async (req, res) => {
     );
     return ok(res, upd.rows[0]);
   } catch (err: unknown) {
-    return fail(res, 500, "experience_update_failed", { details: (err as Error).message });
+    return fail(res, 500, "experience_update_failed");
   }
 });
 
@@ -732,7 +732,7 @@ profilesRouter.delete("/experiences/:id", async (req, res) => {
     await pool.query(`DELETE FROM "BuildExperience" WHERE "id" = $1`, [id]);
     return ok(res, { id, deleted: true });
   } catch (err: unknown) {
-    return fail(res, 500, "experience_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "experience_delete_failed");
   }
 });
 
@@ -757,7 +757,7 @@ profilesRouter.post("/education", async (req, res) => {
     );
     return ok(res, result.rows[0], 201);
   } catch (err: unknown) {
-    return fail(res, 500, "education_create_failed", { details: (err as Error).message });
+    return fail(res, 500, "education_create_failed");
   }
 });
 
@@ -773,7 +773,7 @@ profilesRouter.delete("/education/:id", async (req, res) => {
     await pool.query(`DELETE FROM "BuildEducation" WHERE "id" = $1`, [id]);
     return ok(res, { id, deleted: true });
   } catch (err: unknown) {
-    return fail(res, 500, "education_delete_failed", { details: (err as Error).message });
+    return fail(res, 500, "education_delete_failed");
   }
 });
 
@@ -799,6 +799,6 @@ profilesRouter.patch("/users/me/password", async (req, res) => {
     await pool.query(`UPDATE "AEVIONUser" SET "passwordHash" = $1 WHERE "id" = $2`, [hash, auth.sub]);
     return ok(res, { changed: true });
   } catch (err: unknown) {
-    return fail(res, 500, "password_change_failed", { details: (err as Error).message });
+    return fail(res, 500, "password_change_failed");
   }
 });

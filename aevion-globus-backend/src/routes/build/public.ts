@@ -1,6 +1,6 @@
 ﻿import { Router, type Request, type Response, type NextFunction } from "express";
 import crypto from "crypto";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { buildPool as pool, ok, fail, safeParseJson } from "../../lib/build";
 
 export const publicRouter = Router();
@@ -30,7 +30,7 @@ const publicRateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const k = (req as Request & { partnerKeyId?: string }).partnerKeyId;
-    return k ? `pk:${k}` : `ip:${req.ip ?? "anon"}`;
+    return k ? `pk:${k}` : ipKeyGenerator(req.ip ?? "::1");
   },
   message: {
     success: false,

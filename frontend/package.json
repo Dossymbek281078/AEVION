@@ -25,7 +25,7 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-leaflet": "^5.0.0",
-    "three": "^0.183.2",
+    "three": "^0.184.0",
     "three-globe": "^2.45.2",
     "topojson-client": "^3.1.0",
     "web-push": "^3.6.7",

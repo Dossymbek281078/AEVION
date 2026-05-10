@@ -2,9 +2,95 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
+import { ACHIEVEMENTS, computeEarned, type Achievement } from "../lib/achievements";
 import { useProgress } from "../lib/useProgress";
 import { loadLessonProgress } from "../lib/lessons";
+
+/** Сгенерировать PNG-карточку бейджа через Canvas и скачать. */
+function shareAchievement(a: Achievement): void {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630; // OpenGraph-формат для соцсетей
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  // Фон-градиент (emerald → slate)
+  const grad = ctx.createLinearGradient(0, 0, 1200, 630);
+  grad.addColorStop(0, "#065f46");
+  grad.addColorStop(1, "#0f172a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1200, 630);
+
+  // Декоративная сетка
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 1200; i += 40) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 630); ctx.stroke();
+  }
+  for (let i = 0; i < 630; i += 40) {
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(1200, i); ctx.stroke();
+  }
+
+  // AEVION ярлык
+  ctx.fillStyle = "#10b981";
+  ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("AEVION", 80, 80);
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.font = "20px system-ui, -apple-system, sans-serif";
+  ctx.fillText("· Сметный тренажёр РК", 195, 80);
+
+  // Иконка бейджа (центр)
+  ctx.font = "240px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(a.icon, 600, 290);
+
+  // Метка «Достижение разблокировано»
+  ctx.fillStyle = "#fbbf24";
+  ctx.font = "bold 18px system-ui, sans-serif";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("✨ ДОСТИЖЕНИЕ РАЗБЛОКИРОВАНО", 600, 450);
+
+  // Заголовок бейджа
+  ctx.fillStyle = "white";
+  ctx.font = "bold 56px system-ui, sans-serif";
+  ctx.fillText(a.title, 600, 510);
+
+  // Описание (с word-wrap)
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.font = "22px system-ui, sans-serif";
+  const words = a.description.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > 1000) {
+      lines.push(line);
+      line = w;
+    } else line = test;
+  }
+  if (line) lines.push(line);
+  lines.forEach((l, i) => ctx.fillText(l, 600, 555 + i * 28));
+
+  // Подвал
+  ctx.fillStyle = "rgba(255,255,255,0.4)";
+  ctx.font = "16px system-ui, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("aevion.kz/smeta-trainer", 1120, 600);
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aevion-badge-${a.id}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, "image/png");
+}
 
 export default function AchievementsPage() {
   const { progress } = useProgress();
@@ -85,6 +171,14 @@ export default function AchievementsPage() {
                   <p className="text-xs text-slate-600 mt-1 leading-relaxed">
                     {a.description}
                   </p>
+                  {isEarned && (
+                    <button
+                      onClick={() => shareAchievement(a)}
+                      className="mt-2 text-[10px] text-emerald-700 hover:text-emerald-900 underline"
+                    >
+                      📤 Скачать карточку
+                    </button>
+                  )}
                 </div>
               </div>
             );

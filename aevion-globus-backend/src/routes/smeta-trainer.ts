@@ -167,6 +167,17 @@ function isValidLevel(n: unknown): n is number {
 // ── Webhooks (LMS integration) ────────────────────────────────────
 type WebhookEvent = "level.completed" | "lesson.completed" | "capstone.passed" | "achievement.unlocked";
 
+interface WebhookEventLog {
+  ts: number;
+  event: WebhookEvent;
+  /** HTTP-статус ответа или null при ошибке сети. */
+  status: number | null;
+  /** Текст статуса или сообщение об ошибке. */
+  message: string;
+  /** Сокращённый payload для дебага. */
+  payloadHint: string;
+}
+
 interface WebhookConfig {
   id: string;
   url: string;
@@ -180,6 +191,8 @@ interface WebhookConfig {
   failureCount: number;
   /** Краткое имя для UI. */
   label: string;
+  /** Последние 10 отправок (для аудита). */
+  recentEvents?: WebhookEventLog[];
 }
 
 interface WebhookPayload {
@@ -241,13 +254,32 @@ async function emitWebhookEvent(event: WebhookPayload): Promise<void> {
         fresh[w.id].lastSentAt = Date.now();
         if (!res.ok) fresh[w.id].failureCount = (fresh[w.id].failureCount ?? 0) + 1;
         else fresh[w.id].failureCount = 0;
+        // Добавляем в recentEvents
+        const log = fresh[w.id].recentEvents ?? [];
+        log.unshift({
+          ts: Date.now(),
+          event: event.event,
+          status: res.status,
+          message: res.statusText || (res.ok ? "OK" : "Error"),
+          payloadHint: `student=${event.studentId.slice(0, 14)}…${event.level ? ` lvl=${event.level}` : ""}${event.score != null ? ` score=${event.score}` : ""}`,
+        });
+        fresh[w.id].recentEvents = log.slice(0, 10);
         await saveWebhooks(fresh);
       }
-    } catch {
+    } catch (e) {
       try {
         const fresh = await loadWebhooks();
         if (fresh[w.id]) {
           fresh[w.id].failureCount = (fresh[w.id].failureCount ?? 0) + 1;
+          const log = fresh[w.id].recentEvents ?? [];
+          log.unshift({
+            ts: Date.now(),
+            event: event.event,
+            status: null,
+            message: e instanceof Error ? e.message : "network error",
+            payloadHint: `student=${event.studentId.slice(0, 14)}…`,
+          });
+          fresh[w.id].recentEvents = log.slice(0, 10);
           await saveWebhooks(fresh);
         }
       } catch {}

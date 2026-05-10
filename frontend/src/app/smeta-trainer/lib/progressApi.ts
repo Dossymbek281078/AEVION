@@ -269,6 +269,14 @@ export type WebhookEvent =
   | "capstone.passed"
   | "achievement.unlocked";
 
+export interface WebhookEventLog {
+  ts: number;
+  event: WebhookEvent;
+  status: number | null;
+  message: string;
+  payloadHint: string;
+}
+
 export interface WebhookConfig {
   id: string;
   url: string;
@@ -280,6 +288,7 @@ export interface WebhookConfig {
   lastSentAt: number | null;
   failureCount: number;
   label: string;
+  recentEvents?: WebhookEventLog[];
 }
 
 export async function fetchWebhooks(jwt: string): Promise<WebhookConfig[]> {

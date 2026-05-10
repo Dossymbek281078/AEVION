@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   fetchAdminStudents,
   fetchGroups,
@@ -431,39 +431,72 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {webhooks.map((w) => (
-                      <tr key={w.id} className="border-t hover:bg-slate-50">
-                        <td className="px-3 py-2">
-                          <div className="font-semibold text-slate-900">{w.label}</div>
-                          <div className="text-[10px] font-mono text-slate-400 truncate max-w-[280px]">{w.url}</div>
-                        </td>
-                        <td className="px-3 py-2 text-[10px] text-slate-600">
-                          {w.events.length === 0 ? <span className="text-emerald-600">все</span> : w.events.join(", ")}
-                        </td>
-                        <td className="px-3 py-2 text-center font-mono text-[10px] text-slate-400">{w.secret}</td>
-                        <td className="px-3 py-2 text-center">
-                          {w.failureCount > 0 ? (
-                            <span className="text-red-600 font-bold">⚠ {w.failureCount}</span>
-                          ) : w.lastSentAt ? (
-                            <span className="text-emerald-600">✓</span>
-                          ) : (
-                            <span className="text-slate-300">·</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right space-x-1">
-                          <button
-                            onClick={() => handleTestWebhook(w.id)}
-                            className="text-[10px] text-emerald-600 hover:text-emerald-800 underline"
-                          >
-                            Тест
-                          </button>
-                          <button
-                            onClick={() => handleDeleteWebhook(w.id)}
-                            className="text-[10px] text-red-500 hover:text-red-700 underline"
-                          >
-                            Удалить
-                          </button>
-                        </td>
-                      </tr>
+                      <Fragment key={w.id}>
+                        <tr className="border-t hover:bg-slate-50">
+                          <td className="px-3 py-2">
+                            <div className="font-semibold text-slate-900">{w.label}</div>
+                            <div className="text-[10px] font-mono text-slate-400 truncate max-w-[280px]">{w.url}</div>
+                          </td>
+                          <td className="px-3 py-2 text-[10px] text-slate-600">
+                            {w.events.length === 0 ? <span className="text-emerald-600">все</span> : w.events.join(", ")}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-[10px] text-slate-400">{w.secret}</td>
+                          <td className="px-3 py-2 text-center">
+                            {w.failureCount > 0 ? (
+                              <span className="text-red-600 font-bold">⚠ {w.failureCount}</span>
+                            ) : w.lastSentAt ? (
+                              <span className="text-emerald-600">✓</span>
+                            ) : (
+                              <span className="text-slate-300">·</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right space-x-1">
+                            <button
+                              onClick={() => handleTestWebhook(w.id)}
+                              className="text-[10px] text-emerald-600 hover:text-emerald-800 underline"
+                            >
+                              Тест
+                            </button>
+                            <button
+                              onClick={() => handleDeleteWebhook(w.id)}
+                              className="text-[10px] text-red-500 hover:text-red-700 underline"
+                            >
+                              Удалить
+                            </button>
+                          </td>
+                        </tr>
+                        {w.recentEvents && w.recentEvents.length > 0 && (
+                          <tr className="bg-slate-50">
+                            <td colSpan={5} className="px-3 py-1">
+                              <details>
+                                <summary className="text-[10px] text-slate-500 cursor-pointer hover:text-emerald-700">
+                                  📜 Журнал отправок (последние {w.recentEvents.length})
+                                </summary>
+                                <div className="mt-2 space-y-1 ml-4">
+                                  {w.recentEvents.map((ev, i) => (
+                                    <div key={i} className="text-[10px] flex items-center gap-2 font-mono">
+                                      <span className="text-slate-400 w-32 shrink-0">
+                                        {new Date(ev.ts).toLocaleString("ru-RU")}
+                                      </span>
+                                      <span className="text-slate-700 w-44 shrink-0">{ev.event}</span>
+                                      <span className={`w-12 shrink-0 font-bold ${
+                                        ev.status == null ? "text-red-600"
+                                          : ev.status >= 200 && ev.status < 300 ? "text-emerald-600"
+                                          : "text-amber-600"
+                                      }`}>
+                                        {ev.status ?? "ERR"}
+                                      </span>
+                                      <span className="text-slate-500 truncate flex-1">
+                                        {ev.message} · {ev.payloadHint}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

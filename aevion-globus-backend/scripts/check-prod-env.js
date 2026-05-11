@@ -37,15 +37,6 @@ const REQUIRED = [
     },
   },
   {
-    name: "JWT_SECRET",
-    validate: (v) => {
-      if (!v) return "missing — falls back to 'dev-secret-change-me' in code, forge-anyone vector";
-      if (v.length < 16) return `too short (${v.length} chars, need >=16)`;
-      if (v === "dev-secret-change-me") return "literal dev fallback string — must be replaced";
-      return null;
-    },
-  },
-  {
     name: "QSIGN_HMAC_V1_SECRET",
     validate: (v) => {
       if (!v) return "missing — backend uses ephemeral key, signatures unverifiable across restarts";

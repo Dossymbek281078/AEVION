@@ -324,6 +324,10 @@ export default function AdvancedDrawingsPage() {
               className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-semibold rounded-lg">
               Пройти снова
             </button>
+            <Link href="/smeta-trainer/drawings-practice/foundation"
+              className="px-4 py-2 bg-indigo-700 text-white text-sm font-semibold rounded-lg hover:bg-indigo-800">
+              → Фундамент: объёмы по разрезу
+            </Link>
             <Link href="/smeta-trainer/drawings-practice/errors"
               className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700">
               → Найди ошибку в ВОР (уровень 5)

@@ -48,6 +48,8 @@ import { apiKeysRouter } from "./routes/apiKeys";
 import { qgoodRouter } from "./routes/qgood";
 import { qmaskcardRouter } from "./routes/qmaskcard";
 import { veilnetxLedgerRouter } from "./routes/veilnetxLedger";
+import { ztideRouter } from "./routes/ztide";
+import { qchaingovRouter } from "./routes/qchaingov";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -398,6 +400,8 @@ app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
 app.use("/api/qmaskcard", qmaskcardRouter);
 app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
+app.use("/api/ztide", ztideRouter);
+app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/pricing/events", eventsRouter);

@@ -520,7 +520,16 @@ export default function CyberChessPage(){
   // Coach Chat — conversational AI tutor with current position as context.
   // Messages: { role, content }. Sent to /api/coach/chat with a coach system prompt.
   type CoachMsg={role:"user"|"assistant";content:string;ts:number};
-  const[coachChat,sCoachChat]=useState<CoachMsg[]>([]);
+  // Coach chat persistence — restore last session's conversation from localStorage
+  const COACH_CHAT_KEY="aevion_coach_chat_v2";
+  function ldCoachChat():CoachMsg[]{
+    try{const raw=localStorage.getItem(COACH_CHAT_KEY);if(!raw)return[];const d=JSON.parse(raw);
+    // Keep only last 7 days
+    const cutoff=Date.now()-7*86_400_000;
+    return Array.isArray(d)?d.filter((m:CoachMsg)=>m.ts>cutoff):[];}catch{return[]}
+  }
+  const[coachChat,sCoachChat]=useState<CoachMsg[]>(()=>typeof window!=="undefined"?ldCoachChat():[]);
+  useEffect(()=>{try{localStorage.setItem(COACH_CHAT_KEY,JSON.stringify(coachChat.slice(-50)))}catch{}},[coachChat]);
   const[coachChatInput,sCoachChatInput]=useState("");
   const[coachChatLoading,sCoachChatLoading]=useState(false);
   const coachChatScrollRef=useRef<HTMLDivElement|null>(null);
@@ -2634,7 +2643,10 @@ export default function CyberChessPage(){
     // In analysis tab: play both sides freely (use whoever's turn it is)
     const sideToMove=(tab==="analysis"||hotseat)?game.turn():pCol;
     if(sel){
-      if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){if(autoQueen){exec(sel,sq,"q");return}sPromo({from:sel,to:sq});return}exec(sel,sq);return}
+      if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){
+        // Knight Riders: pawns always promote to knight (thematic rule)
+        if(variant==="knightriders"){exec(sel,sq,"n");return}
+        if(autoQueen){exec(sel,sq,"q");return}sPromo({from:sel,to:sq});return}exec(sel,sq);return}
       if(sel===sq){sSel(null);sVm(new Set());return}
       if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));return}
       sSel(null);sVm(new Set());return;
@@ -6037,7 +6049,31 @@ export default function CyberChessPage(){
                     {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{th}</option>)}
                   </select>
                 </div>
-                {(pzFilterGoal!=="all"||pzFilterPhase!=="all"||pzFilterSide!=="all"||pzFilterTheme!=="all"||pzFilterMate!==0)&&<button onClick={()=>{sPzFilterGoal("all");sPzFilterPhase("all");sPzFilterSide("all");sPzFilterTheme("all");sPzFilterMate(0);sPzI(0);}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.danger}`,background:"#fff",color:T.danger,fontSize:12,fontWeight:700,cursor:"pointer",alignSelf:"flex-start"}}>✕ Сбросить</button>}
+                {/* Rating range filter */}
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Сложность (рейтинг)</div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {([["all","Все"],[0,800,"Новичок"],[800,1200,"Лёгкий"],[1200,1600,"Средний"],[1600,2000,"Сложный"],[2000,3000,"Мастер"]] as const).map((entry,i)=>{
+                      const isAll=entry[0]==="all";
+                      const label=isAll?entry[1]:entry[2] as string;
+                      const active=isAll?(pzFilterRating[0]===0&&pzFilterRating[1]===3000):(pzFilterRating[0]===(entry[0] as number)&&pzFilterRating[1]===(entry[1] as number));
+                      return <button key={i} onClick={()=>{
+                        if(isAll){sPzFilterRating([0,3000]);}
+                        else{sPzFilterRating([entry[0] as number,entry[1] as number]);}
+                        sPzI(0);
+                      }} style={{padding:"4px 9px",borderRadius:6,border:"none",background:active?"#1e293b":"#f3f4f6",color:active?"#fff":T.dim,fontSize:11,fontWeight:700,cursor:"pointer"}}>{label}</button>;
+                    })}
+                    <button onClick={()=>{
+                      // Match ELO — puzzles ±200 of player rating
+                      const lo=Math.max(0,rat-200),hi=Math.min(3000,rat+200);
+                      sPzFilterRating([lo,hi]);sPzI(0);
+                      showToast(`Пазлы подобраны под ELO ${rat} (${lo}–${hi})`,"info");
+                    }} style={{padding:"4px 9px",borderRadius:6,border:"1px solid #7c3aed",background:Math.abs(pzFilterRating[0]-(Math.max(0,rat-200)))<50?"#7c3aed":"transparent",color:Math.abs(pzFilterRating[0]-(Math.max(0,rat-200)))<50?"#fff":"#7c3aed",fontSize:11,fontWeight:800,cursor:"pointer"}}>
+                      ⚡ Матч ELO {rat}
+                    </button>
+                  </div>
+                </div>
+                {(pzFilterGoal!=="all"||pzFilterPhase!=="all"||pzFilterSide!=="all"||pzFilterTheme!=="all"||pzFilterMate!==0||pzFilterRating[0]!==0||pzFilterRating[1]!==3000)&&<button onClick={()=>{sPzFilterGoal("all");sPzFilterPhase("all");sPzFilterSide("all");sPzFilterTheme("all");sPzFilterMate(0);sPzFilterRating([0,3000]);sPzI(0);}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.danger}`,background:"#fff",color:T.danger,fontSize:12,fontWeight:700,cursor:"pointer",alignSelf:"flex-start"}}>✕ Сбросить</button>}
               </div>}
             </div>
 
@@ -6451,8 +6487,14 @@ ${question.trim()}`;
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:14}}>💬</span>
                   <span style={{fontSize:11,fontWeight:900,color:T.blue,letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Спроси Coach — chat с AI</span>
-                  {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
+                  {coachChat.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:600}}>{coachChat.length} сообщ.</span>}
+                  {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить историю" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
                 </div>
+                {coachChat.length>0&&coachChat[0]?.ts&&Date.now()-coachChat[0].ts>60000&&(
+                  <div style={{fontSize:10,color:"#1e40af",padding:"4px 8px",borderRadius:6,background:"rgba(30,64,175,0.08)",border:"1px solid #bfdbfe"}}>
+                    📂 История восстановлена из прошлой сессии
+                  </div>
+                )}
                 {coachChat.length===0&&<div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                   {SUGGESTED.map(s=><button key={s.q} onClick={()=>sendChat(s.q)} disabled={coachChatLoading}
                     style={{padding:"5px 9px",borderRadius:RADIUS.full,border:`1px solid ${T.border}`,background:"#fff",color:"#1e3a8a",fontSize:11,fontWeight:700,cursor:"pointer",lineHeight:1.3,opacity:coachChatLoading?0.5:1}}>

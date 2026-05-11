@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -38,7 +39,7 @@ function Body() {
     if (!token) return;
     setLoading(true);
     try {
-      const r = await fetch("/api/build/verification/admin/queue", {
+      const r = await fetch(apiUrl("/api/build/verification/admin/queue"), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const j = await r.json();

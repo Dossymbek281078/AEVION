@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -3788,7 +3788,7 @@ export default function QCoreMultiAgentPage() {
                     setTemplateSuggestBusy(true);
                     try {
                       const tok = typeof window !== "undefined" ? (localStorage.getItem("aevion_token") || sessionStorage.getItem("aevion_token") || "") : "";
-                      const r = await fetch("/api/qcoreai/templates/suggest", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
+                      const r = await fetch(apiUrl("/api/qcoreai/templates/suggest"), { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
                       const d = await r.json().catch(() => ({}));
                       if (Array.isArray(d?.suggestions)) setTemplateSuggestions(d.suggestions);
                     } catch { /* ignore */ } finally { setTemplateSuggestBusy(false); }

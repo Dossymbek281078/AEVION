@@ -615,6 +615,12 @@ export default function CyberChessPage(){
   const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
   const[pzSolvedCount,sPzSolvedCount]=useState(0);
   const[pzFailedCount,sPzFailedCount]=useState(0);
+  // Cross-session puzzle streak — persisted in localStorage
+  const PZ_STREAK_KEY="aevion_pz_streak_v1";
+  const[pzStreak,sPzStreak]=useState<{cur:number;best:number}>(()=>{try{const v=JSON.parse(localStorage.getItem(PZ_STREAK_KEY)||"{}");return{cur:v.cur??0,best:v.best??0}}catch{return{cur:0,best:0}}});
+  const savePzStreak=(s:{cur:number;best:number})=>{try{localStorage.setItem(PZ_STREAK_KEY,JSON.stringify(s))}catch{}};
+  const incPzStreak=()=>sPzStreak(s=>{const n=s.cur+1;const nb=Math.max(s.best,n);const ns={cur:n,best:nb};savePzStreak(ns);return ns});
+  const resetPzStreak=()=>sPzStreak(s=>{const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
   // Daily goals tracking — stored by todayKey() in localStorage
   const DG_KEY="aevion_daily_goals_v1";
   const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string}>(()=>{
@@ -1476,7 +1482,7 @@ export default function CyberChessPage(){
                 sPzCurrent({...pzCurrent,sol:pzCurrent.sol.slice(2)});
                 showToast("Продолжай решение...","info");
               }else{
-                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
+                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
                 // Rush: +1..+3 sec по сложности, streak, score, Chessy
                 if(pzMode==="rush"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
@@ -1509,7 +1515,7 @@ export default function CyberChessPage(){
           },280); // ждём пока закончится slide-animation хода юзера (160ms) + ~100ms на восприятие
         }else{
           // Single-move puzzle — solved
-          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");
+          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
           if(pzMode==="rush"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
             sPzTimeLeft(v=>Math.min(180,v+bonus));
@@ -1538,7 +1544,7 @@ export default function CyberChessPage(){
         }
         return true;
       }else{
-        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");
+        sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");resetPzStreak();
         if(pzMode==="rush"){
           sPzTimeLeft(v=>Math.max(0,v-5));
           sRushStreak(0);
@@ -2828,7 +2834,7 @@ export default function CyberChessPage(){
     if(pzMode!=="rush"&&pzAttempt==="correct")return;
     const t=setInterval(()=>sPzTimeLeft(v=>{
       if(v<=1){
-        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong")}
+        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak()}
         return 0;
       }
       return v-1;
@@ -3632,7 +3638,8 @@ export default function CyberChessPage(){
                   onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 14px 28px rgba(5,150,105,0.45), inset 0 1px 0 rgba(255,255,255,0.3)"}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.transform="";(e.currentTarget as HTMLButtonElement).style.boxShadow="0 10px 24px rgba(5,150,105,0.38), inset 0 1px 0 rgba(255,255,255,0.25)"}}
                   onMouseDown={e=>{(e.currentTarget as HTMLButtonElement).style.transform="scale(0.98)"}}
-                  onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"}}>
+                  onMouseUp={e=>{(e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"}}
+                  aria-label="Начать новую партию">
                   <Icon.Play width={18} height={18}/> QUICK START
                 </button>
                 <Btn size="lg" variant="secondary" onClick={()=>{
@@ -3668,6 +3675,7 @@ export default function CyberChessPage(){
                 </button>
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
                   className="cc-focus-ring"
+                  aria-label="Запустить Puzzle Rush"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
@@ -4695,6 +4703,10 @@ export default function CyberChessPage(){
               }catch{showToast(`Невозможный ход: ${san}`,"error")}
             }}>⌨️ Ход текстом</Btn>}
             {over&&<Btn size="md" variant="gold" onClick={()=>newG()}>🔁 Rematch</Btn>}
+            {over&&<Btn size="md" variant="secondary" title="Скопировать итог партии" onClick={()=>{
+              const summary=`AEVION CyberChess · ${over} · ${hist.length} ходов · ${currentOpening?.name||"Стандарт"} · ELO ${rat}\nhttps://aevion.app/cyberchess`;
+              try{navigator.clipboard.writeText(summary).then(()=>showToast("📤 Итог скопирован в буфер","success")).catch(()=>showToast("Не удалось скопировать","error"))}catch{showToast("Clipboard недоступен","error")}
+            }}>📤 Поделиться</Btn>}
             {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого AI-уровня" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
@@ -5220,6 +5232,50 @@ export default function CyberChessPage(){
             </div>;
           })()}
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+
+          {/* ── Game Insights — auto summary after analysis completes ── */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>3&&(()=>{
+            const isWin=over.includes("win")||over.includes("win!");
+            const isDraw=over.includes("draw")||over.includes("Draw")||over.includes("Stalemate");
+            const isLoss=!isWin&&!isDraw;
+            // User's move quality summary
+            const myPlies=analysis.filter((_,i)=>(pCol==="w")===(i%2===0));
+            const blunders=myPlies.filter(a=>a.quality==="blunder").length;
+            const mistakes=myPlies.filter(a=>a.quality==="mistake").length;
+            const great=myPlies.filter(a=>a.quality==="great").length;
+            const opening=currentOpening?.name;
+            const moveCount=hist.length;
+            // Generate a short coach-style insight
+            const insights:string[]=[];
+            if(isWin&&blunders===0)insights.push("Чистая победа без блундеров — отличное исполнение!");
+            else if(isWin&&blunders>0)insights.push(`Победа, но ${blunders} блундер${blunders>1?"а":""} — стоит разобрать.`);
+            else if(isLoss&&blunders>=2)insights.push(`${blunders} блундера привели к поражению — разбери в Analysis.`);
+            else if(isLoss&&mistakes>=3)insights.push(`${mistakes} ошибки сыграли роль — работай над точностью расчёта.`);
+            else if(isDraw)insights.push("Ничья — хорошая борьба. Попробуй найти упущенный шанс в Analysis.");
+            else insights.push("Неплохая партия — проверь ключевые моменты в Analysis.");
+            if(great>=2)insights.push(`${great} отличных хода 🌟 — ты видел хорошие возможности!`);
+            if(opening)insights.push(`Дебют: ${opening}.`);
+            if(moveCount<20)insights.push("Короткая партия — анализ поможет понять где пошло не так.");
+            else if(moveCount>50)insights.push("Долгая партия — значит хорошая борьба в эндшпиле.");
+            return <div style={{
+              marginTop:8,padding:"10px 14px",borderRadius:10,
+              background:isWin?"linear-gradient(135deg,#f0fdf4,#dcfce7)":isLoss?"linear-gradient(135deg,#fef2f2,#fee2e2)":"linear-gradient(135deg,#f0f9ff,#dbeafe)",
+              border:`1px solid ${isWin?"#86efac":isLoss?"#fca5a5":"#93c5fd"}`
+            }}>
+              <div style={{fontSize:11,fontWeight:900,color:isWin?"#15803d":isLoss?"#b91c1c":"#1e40af",letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:6}}>
+                💬 Coach · итог партии
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {insights.slice(0,3).map((ins,i)=><div key={i} style={{fontSize:12,color:isWin?"#166534":isLoss?"#991b1b":"#1e3a8a",lineHeight:1.5}}>{ins}</div>)}
+              </div>
+              <button onClick={()=>{
+                const q=`Партия завершена: ${over}. Было ${blunders} блундеров и ${mistakes} ошибок. Дебют: ${opening||"нет данных"}. Дай мне 3 конкретных совета что улучшить.`;
+                sCoachPrefillQ(q);sTab("coach");
+              }} style={{marginTop:8,padding:"5px 10px",borderRadius:6,border:"none",background:"rgba(0,0,0,0.08)",color:"inherit",fontSize:11,fontWeight:800,cursor:"pointer"}}>
+                🎓 Подробный разбор с Coach →
+              </button>
+            </div>;
+          })()}
 
           {/* ── Time-per-move analytics ── per-ply time chart with red flags for time-management coach.
               Visible after game ends with ≥4 moves recorded. Coach-style insights below the chart. */}
@@ -5857,6 +5913,10 @@ export default function CyberChessPage(){
                 <div style={{fontSize:20,fontWeight:900,color:"#78350f",lineHeight:1}}>{rushBest}</div>
                 <div style={{fontSize:10,color:"#92400e",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Rush best</div>
               </Card>}
+              {pzStreak.best>0&&<Card padding={SPACE[2]} tone="surface1" style={{background:"linear-gradient(135deg,#fff7ed,#ffedd5)",borderColor:"#fdba74",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:900,color:"#c2410c",lineHeight:1}}>🔥{pzStreak.best}</div>
+                <div style={{fontSize:10,color:"#9a3412",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Рекорд серии</div>
+              </Card>}
             </div>
 
             {/* ── Theme Browser ── lichess-style visual theme grid (top 16 by count). One click sets the
@@ -6145,9 +6205,12 @@ export default function CyberChessPage(){
             };
             const curPly=browseIdx<0?hist.length-1:browseIdx-1;
             return <div style={{borderRadius:RADIUS.lg,background:T.surface,border:`1px solid ${T.border}`,padding:`${SPACE[3]}px ${SPACE[4]}px`,display:"flex",flexDirection:"column",gap:SPACE[2]}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                 <div style={{fontSize:11,fontWeight:900,letterSpacing:0.5,textTransform:"uppercase" as const,color:T.purple}}>📈 Эval graph · {pts.length} ходов</div>
-                <div style={{fontSize:10,color:T.dim,fontWeight:700}}>клик по точке → переход к ходу</div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <button onClick={()=>{try{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}catch{}}} style={{padding:"3px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}} title="Скопировать FEN текущей позиции">📋 Скопировать FEN</button>
+                  <div style={{fontSize:10,color:T.dim,fontWeight:700}}>клик по точке → переход к ходу</div>
+                </div>
               </div>
               <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
                 style={{width:"100%",height:78,background:"linear-gradient(180deg,#fafafa 0%,#f3f4f6 50%,#fafafa 100%)",borderRadius:6,cursor:"crosshair"}}>
@@ -6392,6 +6455,35 @@ export default function CyberChessPage(){
 
           {/* ── Coach Tab ── */}
           {tab==="coach"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {/* ─── Best 3 games card — shown when user has ≥3 games and is in setup view ─── */}
+            {setup&&savedGames.length>=3&&(()=>{
+              const isW=(g:SavedGame)=>g.result.includes("You win")||g.result.includes("win!");
+              const isD=(g:SavedGame)=>g.result.includes("Draw")||g.result.includes("draw")||g.result.includes("Stalemate")||g.result.includes("repetition")||g.result.includes("Insufficient");
+              const wins=savedGames.filter(g=>isW(g)).slice(0,3);
+              const toShow=wins.length>=3?wins:savedGames.slice(0,3);
+              return <div style={{borderRadius:10,background:"linear-gradient(135deg,#fefce8,#fef9c3)",border:"1px solid #fde047",padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:14}}>🏅</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#713f12",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Лучшие партии</span>
+                  <span style={{fontSize:10,color:"#92400e",fontWeight:700}}>{savedGames.length} всего</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                  {toShow.map((g,i)=>{
+                    const w=isW(g);const d=isD(g);
+                    return <div key={g.id||i} style={{
+                      display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
+                      borderRadius:7,background:"rgba(255,255,255,0.65)",
+                      border:"1px solid rgba(253,224,71,0.5)",fontSize:12
+                    }}>
+                      <span style={{fontSize:14,minWidth:18}}>{w?"🏆":d?"🤝":"💔"}</span>
+                      <span style={{fontWeight:700,color:"#451a03",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.opening||"Стандарт"}</span>
+                      <span style={{color:"#78350f",fontWeight:700,whiteSpace:"nowrap"}}>{g.moves?.length||0} ходов</span>
+                      <span style={{color:w?"#059669":d?"#6b7280":"#dc2626",fontWeight:900,fontSize:11}}>{g.rating||rat}</span>
+                    </div>;
+                  })}
+                </div>
+              </div>;
+            })()}
             {/* ─── Personal Opening Repertoire summary ─── lichess-style mini-tracker.
                 Shows white/black entry counts, top-3 most-used lines with W/L,
                 CTA to add current line and to open the full modal. */}

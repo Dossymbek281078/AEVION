@@ -6207,7 +6207,7 @@ qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
 
     return res.status(201).json({ branch: { ...branch, status: "completed", resultRunId: newRun.id }, run: { id: newRun.id, sessionId: newRun.sessionId } });
   } catch (err: any) {
-    return res.status(500).json({ error: "branch failed", details: err?.message });
+    return res.status(500).json({ error: "branch failed" });
   }
 });
 
@@ -6217,7 +6217,7 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
     const branches = await listBranches(parentRunId);
     return res.json({ branches });
   } catch (err: any) {
-    return res.status(500).json({ error: "list branches failed", details: err?.message });
+    return res.status(500).json({ error: "list branches failed" });
   }
 });
 

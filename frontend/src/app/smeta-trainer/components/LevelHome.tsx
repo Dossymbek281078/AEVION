@@ -343,6 +343,14 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/drawings-practice"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs font-semibold rounded-lg"
+            >
+              📐 Чтение чертежей
+              <span className="text-[10px] text-indigo-500 font-normal">
+                план + разрез → ВОР</span>
+            </Link>
+            <Link
               href="/smeta-trainer/lessons-search"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-sky-300 text-sky-700 hover:bg-sky-50 text-xs font-semibold rounded-lg"
             >

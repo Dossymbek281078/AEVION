@@ -548,6 +548,13 @@ export default function CyberChessPage(){
   const[activeLesson,sActiveLesson]=useState<{id:string;step:number;title:string;emoji:string}|null>(null);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
+  // Blunder Book — positions where user blundered, for later practice
+  type BlunderEntry={fen:string;san:string;date:string;opening?:string;moveNum:number};
+  const BB_KEY="aevion_blunder_book_v1";
+  const[blunderBook,sBlunderBook]=useState<BlunderEntry[]>(()=>{
+    try{const raw=localStorage.getItem(BB_KEY);return raw?JSON.parse(raw):[];}catch{return[];}
+  });
+  useEffect(()=>{try{localStorage.setItem(BB_KEY,JSON.stringify(blunderBook.slice(0,50)))}catch{}},[blunderBook]);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
@@ -2936,6 +2943,22 @@ export default function CyberChessPage(){
       prevCp=cp;
     }
     sAnalysis(results);sAnalyzing(false);sShowAnal(true);
+    // Auto-populate blunder book: find positions where player blundered
+    const blunders:BlunderEntry[]=[];
+    const playerIsWhite=pCol==="w";
+    for(let i=0;i<results.length;i++){
+      const isPlayerMove=playerIsWhite?(i%2===0):(i%2===1);
+      if(isPlayerMove&&results[i].quality==="blunder"&&fenHist[i]){
+        blunders.push({fen:fenHist[i],san:hist[i]||"",date:new Date().toISOString().slice(0,10),opening:currentOpening?.name,moveNum:Math.floor(i/2)+1});
+      }
+    }
+    if(blunders.length>0){
+      sBlunderBook(prev=>{
+        const existingFens=new Set(prev.map(b=>b.fen));
+        const newOnes=blunders.filter(b=>!existingFens.has(b.fen));
+        return [...newOnes,...prev].slice(0,50);
+      });
+    }
   },[fenHist,showToast]);
 
   /* ── UCI moves to SAN ── */
@@ -6752,6 +6775,39 @@ ${question.trim()}`;
                 </div>}
               </div>;
             })()}
+            {/* ── Blunder Book ── Personal collection of positions where user blundered */}
+            {blunderBook.length>0&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#fef2f2,#fff1f2)",border:"1px solid #fca5a5",padding:"10px 12px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                <span style={{fontSize:14}}>📕</span>
+                <span style={{fontSize:11,fontWeight:900,color:"#991b1b",letterSpacing:0.5,textTransform:"uppercase" as const,flex:1}}>Блундер-бук · {blunderBook.length} позиций</span>
+                <button onClick={()=>sBlunderBook([])} title="Очистить" style={{fontSize:10,fontWeight:700,color:"#6b7280",border:"1px solid #fca5a5",borderRadius:4,padding:"2px 6px",background:"#fff",cursor:"pointer"}}>× очистить</button>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {blunderBook.slice(0,5).map((b,i)=>(
+                  <button key={i} onClick={()=>{
+                    try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);
+                      showToast(`Позиция загружена — найди лучший ход вместо ${b.san}!`,"info");
+                    }catch{showToast("Ошибка загрузки позиции","error")}}
+                  } style={{
+                    padding:"6px 10px",borderRadius:6,border:"1px solid #fca5a5",background:"#fff",
+                    cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8
+                  }}>
+                    <span style={{fontSize:16,flexShrink:0}}>💀</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#991b1b"}}>
+                        Ход {b.moveNum}: {b.san} ??{b.opening?` · ${b.opening.slice(0,25)}`:""}
+                      </div>
+                      <div style={{fontSize:9,color:"#6b7280",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {b.fen.slice(0,40)}…
+                      </div>
+                    </div>
+                    <span style={{fontSize:10,color:"#991b1b",fontWeight:700,flexShrink:0}}>→</span>
+                  </button>
+                ))}
+              </div>
+              {blunderBook.length>5&&<div style={{fontSize:10,color:"#991b1b",marginTop:4,textAlign:"center"}}>+{blunderBook.length-5} ещё позиций</div>}
+            </div>}
+
             {/* Mode selector — 5 ways to start a Coach session */}
             {(()=>{
               const modeBtn=(icon:string,title:string,sub:string,onClick:()=>void,active?:boolean)=>(

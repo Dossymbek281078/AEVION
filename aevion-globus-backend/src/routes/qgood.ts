@@ -26,6 +26,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
 
 export const qgoodRouter = Router();
@@ -253,6 +254,24 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
        WHERE "id" = $2`,
       [amount, id],
     );
+
+    // Fire-and-forget: record financial trail + reputation boost for donor.
+    const donorAuth = verifyBearerOptional(req);
+    emitEcosystemEvent({
+      module: "qgood",
+      ledger: {
+        kind: "donation",
+        fromIdentifier: emailHash || donorAuth?.sub || "anon",
+        toIdentifier: `qgood:${id}`,
+        amountCents: amount,
+        currency: String(currency).toUpperCase(),
+        meta: { campaignId: id, anonymous: Boolean(anonymous) },
+      },
+      reputation: donorAuth?.sub
+        ? { userId: donorAuth.sub, kind: "qgood-donation", meta: { campaignId: id } }
+        : undefined,
+    });
+
     res.status(201).json({ id: donationId, campaignId: id, amountCents: amount });
   } catch (err: unknown) {
     console.error("[qgood] donation_failed", err instanceof Error ? err.message : err);

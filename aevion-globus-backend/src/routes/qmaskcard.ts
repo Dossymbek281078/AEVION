@@ -36,6 +36,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { emitVeilNetXEntry } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
 
 export const qmaskcardRouter = Router();
@@ -299,6 +300,18 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
     if (mask.kind === "single-use") {
       await pool.query(`UPDATE "QMaskCardMask" SET "revokedAt" = NOW() WHERE "id" = $1`, [maskId]);
     }
+
+    // Fire-and-forget: record settlement on VeilNetX ledger.
+    void emitVeilNetXEntry({
+      module: "qmaskcard",
+      kind: "settlement",
+      fromIdentifier: `qmaskcard:${maskId}`,
+      toIdentifier: merchantName ? `merchant:${String(merchantName).slice(0, 80)}` : "merchant:unknown",
+      amountCents: amount,
+      currency: String(currency).toUpperCase(),
+      meta: { chargeId, riskScore, merchantCategory, geoCountry },
+    }).catch(() => null);
+
     res.status(201).json({
       id: chargeId, maskId, status: "authorized",
       amountCents: amount, riskScore, autoRevoked: mask.kind === "single-use",

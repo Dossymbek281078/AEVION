@@ -54,6 +54,16 @@ const SMOKES = [
   { name: "healthai", script: "healthai-smoke.js", readOnly: false },
   // Platform API keys — self-serve key issuance (Phase B). Creates/verifies/revokes.
   { name: "apikeys", script: "apikeys-smoke.js", readOnly: false },
+  // QGood — charity campaigns. Registers test user, creates draft campaign.
+  { name: "qgood", script: "qgood-smoke.js", readOnly: false },
+  // QMaskCard — virtual payment masking. Issues mask, charges, revokes.
+  { name: "qmaskcard", script: "qmaskcard-smoke.js", readOnly: false },
+  // VeilNetX Ledger — chain integrity + entry write.
+  { name: "veilnetx-ledger", script: "veilnetx-ledger-smoke.js", readOnly: false },
+  // Z-Tide — leaderboard read + me lookup (no admin events fired in smoke).
+  { name: "ztide", script: "ztide-smoke.js", readOnly: false },
+  // QChainGov — proposal create + auth/validation gates.
+  { name: "qchaingov", script: "qchaingov-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

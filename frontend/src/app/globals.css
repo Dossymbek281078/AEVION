@@ -717,3 +717,9 @@ button:focus:not(:focus-visible) {
     width: 260px !important;
   }
 }
+
+/* Puzzle Rush HUD mobile — smaller fire emojis, compact layout */
+@media (max-width: 600px) {
+  .cc-rush-hud { font-size: 20px !important; }
+  .cc-rush-streak { font-size: 28px !important; }
+}

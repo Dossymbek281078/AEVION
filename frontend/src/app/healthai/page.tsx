@@ -1890,6 +1890,20 @@ export default function HealthAIPage() {
               >
                 📋 {lang === "en" ? "My Health Plan" : "Мой план здоровья"}
               </a>
+              <a
+                href="/healthai/family"
+                style={{
+                  ...primaryBtn,
+                  background: "rgba(167,139,250,0.18)",
+                  borderColor: "rgba(167,139,250,0.45)",
+                  color: "#c4b5fd",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                👨‍👩‍👧 {lang === "en" ? "Family" : "Семья"}
+              </a>
             </div>
           </Card>
         ) : null}

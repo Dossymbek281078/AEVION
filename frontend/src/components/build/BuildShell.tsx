@@ -16,6 +16,8 @@ const NAV: { href: string; label: string; authOnly?: boolean }[] = [
   { href: "/build/coach", label: "AI Coach", authOnly: true },
   { href: "/build/applications", label: "My Apps", authOnly: true },
   { href: "/build/interviews", label: "📅 Interviews", authOnly: true },
+  { href: "/build/alerts", label: "🔔 Алерты", authOnly: true },
+  { href: "/build/safety-briefing", label: "⚠️ Safety", authOnly: true },
   { href: "/build/trials", label: "Trials", authOnly: true },
   { href: "/build/reviews", label: "Reviews", authOnly: true },
   { href: "/build/saved", label: "Saved", authOnly: true },

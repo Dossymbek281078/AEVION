@@ -219,3 +219,43 @@ describe("regression: HMAC verify must use req.rawBody not re-serialised body", 
     expect(offenders).toEqual([]);
   });
 });
+
+// Anti-pattern: `details: err.message` (or variants) in JSON error responses.
+// Internal Postgres errors, stack traces, and framework internals must never
+// reach the client. The fix is to log server-side and respond with a fixed
+// error code string only. Tier 3 sweep (2026-05-10) removed 273 occurrences
+// across 73 route files — this test prevents regression.
+describe("regression: no details:err.message info-leaks in 500 responses", () => {
+  const routesDir = path.join(__dirname, "..", "src", "routes");
+
+  function walkTs(dir: string): string[] {
+    const out: string[] = [];
+    for (const ent of readdirSync(dir)) {
+      const full = path.join(dir, ent);
+      const st = statSync(full);
+      if (st.isDirectory()) out.push(...walkTs(full));
+      else if (ent.endsWith(".ts")) out.push(full);
+    }
+    return out;
+  }
+
+  // Matches any of the known leak patterns:
+  //   details: err.message / err?.message / (err as Error).message
+  //   details: String(err) / err instanceof Error ? err.message : String(err)
+  //   details: e.message / e?.message / (e as Error).message
+  const leakRegex =
+    /details\s*:\s*(?:err\??\.message|\(err as Error\)\.message|String\(err\)|err instanceof Error[^,}]+|e\??\.message|\(e as Error\)\.message)/;
+
+  test("no route file exposes internal error details in JSON responses", () => {
+    const files = walkTs(routesDir);
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      const stripped = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      if (leakRegex.test(stripped)) {
+        offenders.push(path.relative(routesDir, f));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

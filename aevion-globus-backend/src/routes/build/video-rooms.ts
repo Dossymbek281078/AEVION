@@ -48,7 +48,7 @@ videoRoomsRouter.post("/", async (req, res) => {
       const room = await createDailyRoom(roomName);
       roomUrl = room.url;
     } catch (e) {
-      return fail(res, 502, "video_room_creation_failed", { details: (e as Error).message });
+      return fail(res, 502, "video_room_creation_failed");
     }
 
     const id = crypto.randomUUID();

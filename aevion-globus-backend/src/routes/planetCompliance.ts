@@ -1,4 +1,4 @@
-import { Router } from "express";
+﻿import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
@@ -430,7 +430,7 @@ function requireAuth(req: any, res: any) {
     // Shared secret resolution, fails closed in prod, HS256 pinned.
     return jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as any;
   } catch (e: any) {
-    res.status(401).json({ error: "invalid token", details: e?.message });
+    res.status(401).json({ error: "invalid token" });
     return null;
   }
 }
@@ -1316,7 +1316,7 @@ planetComplianceRouter.post("/submissions", async (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     const msg = err?.message || "submission_failed";
-    return res.status(500).json({ error: "submission_failed", details: msg });
+    return res.status(500).json({ error: "submission_failed" });
   }
 });
 
@@ -1939,7 +1939,7 @@ planetComplianceRouter.get("/me/code-symbol", async (req, res) => {
     const codeSymbol = await getOrCreateActiveCodeSymbol(auth.sub);
     res.json({ codeSymbol, userId: auth.sub });
   } catch (e: any) {
-    res.status(500).json({ error: "code_symbol_failed", details: e?.message });
+    res.status(500).json({ error: "code_symbol_failed" });
   }
 });
 
@@ -1971,7 +1971,7 @@ planetComplianceRouter.post("/me/code-symbol/rotate", async (req, res) => {
         "Прошлые голоса в снапшотах остаются привязаны к прежнему символу на момент голосования; новый символ используется только для новых действий.",
     });
   } catch (e: any) {
-    res.status(500).json({ error: "rotate_failed", details: e?.message });
+    res.status(500).json({ error: "rotate_failed" });
   }
 });
 

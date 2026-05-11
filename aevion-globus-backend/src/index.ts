@@ -46,6 +46,7 @@ import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { apiQuotasRouter } from "./routes/apiQuotas";
 import { apiKeysRouter } from "./routes/apiKeys";
 import { isSentryEnabled, captureException } from "./lib/sentry";
+import { devhubRouter } from "./routes/devhub";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -438,6 +439,9 @@ app.use("/api/veilnetx", veilnetxRouter);
 for (const cfg of PLANNING_MODULES) {
   app.use(`/api/${cfg.id}`, createPlanningStubRouter(cfg));
 }
+
+// DevHub — AI-powered developer platform
+app.use("/api/devhub", devhubRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

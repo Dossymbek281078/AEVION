@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -33,14 +34,14 @@ export default function CreateDocument() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    fetch("/api/qcontract/templates")
+    fetch(apiUrl("/api/qcontract/templates"))
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates ?? []))
       .catch(() => {});
   }, []);
 
   async function applyTemplate(id: string) {
-    const res = await fetch(`/api/qcontract/templates/${id}`);
+    const res = await fetch(apiUrl(`/api/qcontract/templates/${id}`));
     const t = await res.json();
     setTitle(t.title);
     setContent(t.content);
@@ -64,7 +65,7 @@ export default function CreateDocument() {
       if (requireSignature) body.requireSignature = true;
       if (useQright && qrightId.trim()) body.qrightId = qrightId.trim();
 
-      const res = await fetch("/api/qcontract/documents", {
+      const res = await fetch(apiUrl("/api/qcontract/documents"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),

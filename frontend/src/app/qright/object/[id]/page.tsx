@@ -40,6 +40,28 @@ async function loadEmbed(id: string): Promise<EmbedView | null> {
   }
 }
 
+type BureauCertView = {
+  certId: string;
+  status: string;
+  verificationLevel: "anonymous" | "verified" | "premium" | string;
+  protectedAt: string;
+  viewUrl: string;
+  upgradeUrl: string | null;
+};
+
+async function loadBureauCert(qrightObjectId: string): Promise<BureauCertView | null> {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/bureau/cert-for-qright/${encodeURIComponent(qrightObjectId)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as BureauCertView;
+  } catch {
+    return null;
+  }
+}
+
 async function getOrigin(): Promise<string> {
   try {
     const h = await headers();
@@ -137,6 +159,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
   const t = (key: string, vars?: Record<string, string | number>) =>
     tString("object", lang, key, vars);
   const data = await loadEmbed(id);
+  const bureauCert = await loadBureauCert(id);
   const origin = await getOrigin();
 
   const badgeUrl = `${getApiBase()}/api/qright/badge/${encodeURIComponent(id)}.svg`;
@@ -414,6 +437,124 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
           )}
           <div style={dt}>{t("objectId")}</div>
           <p style={{ ...dd, ...mono }}>{id}</p>
+        </div>
+
+        {/* ── AIPB cross-product card: Bureau certificate status ─────────── */}
+        <div
+          style={{
+            ...card,
+            marginBottom: 18,
+            borderColor: bureauCert
+              ? bureauCert.verificationLevel === "verified"
+                ? "rgba(16,185,129,0.4)"
+                : "rgba(245,158,11,0.4)"
+              : "rgba(99,102,241,0.3)",
+            background: bureauCert
+              ? bureauCert.verificationLevel === "verified"
+                ? "linear-gradient(135deg, rgba(16,185,129,0.06), #fff)"
+                : "linear-gradient(135deg, rgba(245,158,11,0.06), #fff)"
+              : "linear-gradient(135deg, rgba(99,102,241,0.05), #fff)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  fontWeight: 900,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase" as const,
+                  marginBottom: 8,
+                  background: bureauCert
+                    ? bureauCert.verificationLevel === "verified"
+                      ? "rgba(16,185,129,0.12)"
+                      : "rgba(245,158,11,0.12)"
+                    : "rgba(99,102,241,0.10)",
+                  color: bureauCert
+                    ? bureauCert.verificationLevel === "verified"
+                      ? "#047857"
+                      : "#92400e"
+                    : "#4338ca",
+                }}
+              >
+                <span>🏛</span>
+                <span>AEVION IP Bureau</span>
+              </div>
+              <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: 0, marginBottom: 4 }}>
+                {bureauCert
+                  ? bureauCert.verificationLevel === "verified"
+                    ? "Bureau-verified certificate"
+                    : "Bureau certificate (unverified)"
+                  : "Upgrade to legal-grade certificate"}
+              </h2>
+              <p style={{ fontSize: 12, color: "#475569", margin: 0, lineHeight: 1.55, maxWidth: 460 }}>
+                {bureauCert
+                  ? bureauCert.verificationLevel === "verified"
+                    ? "This work is sealed by KYC-verified identity + notarized chain. Court-admissible in 130+ countries (Hague Convention)."
+                    : "Anonymous cert is registered. Complete KYC + payment to upgrade to a legally-binding Bureau certificate."
+                  : "Add KYC identity verification + Stripe-secured payment to receive a notary-grade IP certificate linked to this work."}
+              </p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+              {bureauCert ? (
+                <>
+                  <Link
+                    href={bureauCert.viewUrl}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 10,
+                      background: bureauCert.verificationLevel === "verified" ? "#059669" : "#334155",
+                      color: "#fff",
+                      textDecoration: "none",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    View certificate →
+                  </Link>
+                  {bureauCert.upgradeUrl && (
+                    <Link
+                      href={bureauCert.upgradeUrl}
+                      style={{
+                        padding: "9px 14px",
+                        borderRadius: 10,
+                        background: "#f59e0b",
+                        color: "#1f2937",
+                        textDecoration: "none",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Upgrade to verified →
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <Link
+                  href={`/bureau?qrightObjectId=${encodeURIComponent(id)}`}
+                  style={{
+                    padding: "9px 14px",
+                    borderRadius: 10,
+                    background: "#4338ca",
+                    color: "#fff",
+                    textDecoration: "none",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Start protection →
+                </Link>
+              )}
+            </div>
+          </div>
         </div>
 
         <div style={{ ...card, marginBottom: 18 }}>

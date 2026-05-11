@@ -2647,3 +2647,52 @@ bureauRouter.post("/admin/notary/seed", async (req, res) => {
   }
   res.json({ ok: true, results });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// AIPB cross-product: lookup Bureau cert by QRight objectId.
+// Used by QRight object detail page to show cert status + upgrade CTA.
+// Public (no auth) — returns whatever public fields are safe.
+// ─────────────────────────────────────────────────────────────────────────
+bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const qrightObjectId = String(req.params.qrightObjectId || "").trim();
+    if (!qrightObjectId) {
+      return res.status(400).json({ error: "qrightObjectId required" });
+    }
+    const r = await pool.query(
+      `SELECT "id","status","authorVerificationLevel","protectedAt"
+       FROM "IPCertificate"
+       WHERE "objectId" = $1 AND "status" != 'revoked'
+       ORDER BY "protectedAt" DESC
+       LIMIT 1`,
+      [qrightObjectId],
+    );
+    if (r.rowCount === 0) {
+      return res.status(404).json({
+        error: "no_cert_for_qright",
+        message: "This QRight object has no Bureau certificate yet.",
+        upgradeUrl: `/bureau?qrightObjectId=${encodeURIComponent(qrightObjectId)}`,
+      });
+    }
+    const row = r.rows[0] as {
+      id: string;
+      status: string;
+      authorVerificationLevel: string;
+      protectedAt: Date;
+    };
+    res.json({
+      certId: row.id,
+      status: row.status,
+      verificationLevel: row.authorVerificationLevel,
+      protectedAt: row.protectedAt,
+      viewUrl: `/bureau/cert/${row.id}`,
+      upgradeUrl: row.authorVerificationLevel === "anonymous"
+        ? `/bureau/upgrade/${row.id}`
+        : null,
+    });
+  } catch (err: unknown) {
+    console.error("[bureau] cert_for_qright_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "lookup_failed" });
+  }
+});

@@ -6,6 +6,36 @@ import { loadDrawingsProgress } from "../../lib/useDrawingsProgress";
 
 const MODULES = [
   {
+    id: "normatives",
+    href: "/smeta-trainer/drawings-practice/normatives",
+    icon: "📋",
+    title: "Нормативная база",
+    subtitle: "СНиП РК, ЭСН РК, категории грунтов, откосы, Кр, ширина траншей",
+    level: "L2",
+    exercises: 2,
+    color: "slate",
+  },
+  {
+    id: "rate-selector",
+    href: "/smeta-trainer/drawings-practice/rate-selector",
+    icon: "🎯",
+    title: "Задачник: выбери расценку ЭСН",
+    subtitle: "5 сценариев — котлован, траншея, вода, засыпка, скала",
+    level: "L3",
+    exercises: 5,
+    color: "slate",
+  },
+  {
+    id: "trenches",
+    href: "/smeta-trainer/drawings-practice/trenches",
+    icon: "🔗",
+    title: "Траншеи под сети",
+    subtitle: "Нормативная ширина, объём, подушка, ручная засыпка",
+    level: "L3",
+    exercises: 4,
+    color: "teal",
+  },
+  {
     id: "excavation",
     href: "/smeta-trainer/drawings-practice/excavation",
     icon: "🔶",

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
+import { saveDrawingsProgress, loadDrawingsProgress } from "../lib/useDrawingsProgress";
 
 // ── Типы упражнений ──────────────────────────────────────────────────
 
@@ -407,6 +408,17 @@ export default function DrawingsPracticePage() {
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [done, setDone] = useState<Set<string>>(new Set());
 
+  // Восстановить сохранённый прогресс при монтировании
+  useEffect(() => {
+    const saved = loadDrawingsProgress();
+    if (saved.basicDone > 0) {
+      // Отмечаем первые N упражнений как пройденные
+      setDone(new Set(EXERCISES.slice(0, saved.basicDone).map((e) => e.id)));
+      setExIdx(Math.min(saved.basicDone, EXERCISES.length - 1));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const ex = EXERCISES[exIdx];
   const step = ex.steps[stepIdx];
   const key = `${ex.id}-${step.id}`;
@@ -422,7 +434,11 @@ export default function DrawingsPracticePage() {
           setStepIdx(stepIdx + 1);
           setRevealed({});
         } else {
-          setDone((d) => new Set([...d, ex.id]));
+          setDone((d) => {
+            const next = new Set([...d, ex.id]);
+            saveDrawingsProgress({ basicDone: next.size, basicTotal: EXERCISES.length });
+            return next;
+          });
         }
       }, 900);
     }

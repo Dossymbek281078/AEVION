@@ -126,6 +126,15 @@ export function Level2View() {
               </div>
             </div>
           )}
+          {/* Чертежи → ВОР */}
+          <div className="px-3 pt-2">
+            <a
+              href="/smeta-trainer/drawings-practice"
+              className="block text-center text-[10px] px-2 py-1.5 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 rounded font-semibold"
+            >
+              📐 Чертежи → объёмы (практика)
+            </a>
+          </div>
           <div className="p-3 space-y-1">
             <p className="text-xs text-amber-700 mb-3">
               Составьте ЛСР «Отделочные работы крыла Б школы №47». Отмечайте шаги по мере выполнения.

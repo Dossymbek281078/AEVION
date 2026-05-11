@@ -125,6 +125,19 @@ export function Level5View() {
         </div>
 
         <div className="px-4 py-3 border-t border-slate-700 space-y-2">
+          {/* Практика поиска ошибок в ВОР */}
+          <a
+            href="/smeta-trainer/drawings-practice/errors"
+            className="block text-center text-[10px] px-2 py-1.5 bg-red-800 hover:bg-red-700 text-red-100 rounded font-semibold"
+          >
+            🔍 Найди ошибку в ВОР (практика)
+          </a>
+          <a
+            href="/smeta-trainer/drawings-practice/advanced"
+            className="block text-center text-[10px] px-2 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded font-semibold"
+          >
+            📐 Продвинутые объёмы (L4)
+          </a>
           <div className="flex justify-between text-xs text-slate-300">
             <span>Найдено: {found.size}/{EXPERT_ERRORS.length}</span>
             {submitted && (

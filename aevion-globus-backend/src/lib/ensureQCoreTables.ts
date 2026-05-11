@@ -527,9 +527,9 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // Run follow-up link — track which run was forked from which.
   await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "followUpFromId" TEXT;`);
 
-  // Full-text search index on run inputs.
-  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_userInput_search_idx" ON "QCoreRun" USING gin(to_tsvector('english', COALESCE("userInput",'')));`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_title_search_idx" ON "QCoreSession" USING gin(to_tsvector('english', COALESCE("title",'')));`);
+  // Search indexes on run inputs and session titles (btree for ILIKE queries).
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_userInput_idx" ON "QCoreRun" ("userInput");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_title_idx" ON "QCoreSession" ("title");`);
 
   // V39 — Organizations (multi-user teams).
   await pool.query(`

@@ -19,7 +19,7 @@ export interface DrawingsProgress {
 
 const DEFAULTS: DrawingsProgress = {
   basicDone: 0, basicTotal: 5,
-  advancedDone: 0, advancedTotal: 3,
+  advancedDone: 0, advancedTotal: 6,  // 3 основных + 3 фундамент
   errorsDone: 0, errorsTotal: 3,
   lastUpdated: 0,
 };

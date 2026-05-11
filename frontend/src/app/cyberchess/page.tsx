@@ -533,6 +533,8 @@ export default function CyberChessPage(){
   const[coachChatInput,sCoachChatInput]=useState("");
   const[coachChatLoading,sCoachChatLoading]=useState(false);
   const coachChatScrollRef=useRef<HTMLDivElement|null>(null);
+  // Coach prefill — when puzzle page triggers "🎓 Coach →" we queue a question here
+  const[coachPrefillQ,sCoachPrefillQ]=useState<string|null>(null);
   // Auto-scroll chat to bottom on new message
   useEffect(()=>{
     const el=coachChatScrollRef.current;
@@ -1845,6 +1847,15 @@ export default function CyberChessPage(){
   useEffect(()=>{sSanBuf("");sSanFlash(null)},[bk,tab]);
   // Track coach tab open for daily goals
   useEffect(()=>{if(tab==="coach"&&!dailyGoals.coachOpened){sDailyGoals(g=>({...g,coachOpened:true}))}},[tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // cc:coach-prefill: set coach input + auto-send when coach tab is shown
+  const sendChatRef=useRef<((q:string)=>Promise<void>)|null>(null);
+  useEffect(()=>{
+    if(!coachPrefillQ||tab!=="coach")return;
+    const q=coachPrefillQ;sCoachPrefillQ(null);
+    // Auto-fill input and trigger send via ref
+    sCoachChatInput(q);
+    setTimeout(()=>{if(sendChatRef.current)sendChatRef.current(q);},150);
+  },[coachPrefillQ,tab]); // eslint-disable-line react-hooks/exhaustive-deps
   // Daily goals completion bonus — fire once when all 3 goals first satisfied
   const dailyGoalsBonusFiredRef=useRef(false);
   useEffect(()=>{
@@ -6463,6 +6474,7 @@ export default function CyberChessPage(){
               const sendChat=async(question:string)=>{
                 if(coachChatLoading)return;
                 if(!question.trim())return;
+                sendChatRef.current=sendChat;
                 const fen=game.fen();
                 const turn=game.turn()==="w"?"белые":"чёрные";
                 const lastMove=hist.length>0?hist[hist.length-1]:"(партия не начата)";

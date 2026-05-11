@@ -150,11 +150,32 @@ function MilestoneList({ moduleId }: { moduleId: string }) {
   );
 }
 
+function buildJsonLd(props: PlanningLandingProps) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: `AEVION ${props.code}`,
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description: props.heroSubtitle,
+    url: `https://aevion.app/${props.id}`,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    featureList: props.features.map((f) => f.t),
+    publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+    softwareVersion: "preview",
+    releaseNotes: `Status: ${props.badge}. Live status: https://api.aevion.app/api/${props.id}/status`,
+  };
+}
+
 export default function PlanningLanding(props: PlanningLandingProps) {
   const c = COLORS[props.highlightColor] ?? COLORS.emerald;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildJsonLd(props)) }}
+      />
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/" className="text-slate-400 hover:text-white text-sm">← AEVION</Link>

@@ -12,8 +12,8 @@ interface JobAlert {
   skills: string;
   city: string | null;
   active: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const POPULAR_SKILLS = ["Сварщик", "Штукатур", "Электрик", "Плотник", "Прораб", "Каменщик", "Слесарь", "Маляр"];
@@ -51,7 +51,7 @@ function AlertContent() {
   async function save() {
     setSaving(true);
     try {
-      await buildApi.upsertAlert({ keywords, skills, city: city || null });
+      await buildApi.upsertAlert({ keywords, skills, city: city || undefined });
       toast.success("Алерт сохранён — вы будете получать письма о новых вакансиях");
       await load();
     } catch (e) {

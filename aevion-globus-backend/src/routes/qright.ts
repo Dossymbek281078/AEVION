@@ -2149,3 +2149,134 @@ ${urls.join("\n")}
     res.status(500).json({ error: "sitemap failed" });
   }
 });
+
+// ═════════════════════════════════════════════════════════════════════════
+// QRight Policies — usage rights / licenses / restrictions on protected works.
+// Working v1 milestone per CLAUDE.md (политики/экспорт/аудит).
+// ═════════════════════════════════════════════════════════════════════════
+
+const POLICY_TYPES = new Set(["license", "restriction", "attribution"]);
+const POLICY_SCOPES = new Set(["commercial", "non-commercial", "educational", "all"]);
+
+let policiesTableReady = false;
+async function ensurePoliciesTable(): Promise<void> {
+  if (policiesTableReady) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightPolicy" (
+      "id" TEXT PRIMARY KEY,
+      "objectId" TEXT NOT NULL,
+      "type" TEXT NOT NULL,
+      "scope" TEXT NOT NULL,
+      "termsText" TEXT NOT NULL,
+      "spdxId" TEXT,
+      "url" TEXT,
+      "validFrom" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "validUntil" TIMESTAMPTZ,
+      "revokedAt" TIMESTAMPTZ,
+      "createdBy" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QRightPolicy_object_idx" ON "QRightPolicy" ("objectId", "revokedAt");`);
+  policiesTableReady = true;
+}
+
+// GET /api/qright/objects/:id/policies — list active policies for an object.
+// Public — anyone can see how a work may be used.
+qrightRouter.get("/objects/:id/policies", embedRateLimit, async (req, res) => {
+  try {
+    await ensurePoliciesTable();
+    const objectId = String(req.params.id || "").trim();
+    if (!objectId) return res.status(400).json({ error: "id required" });
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT "id","type","scope","termsText","spdxId","url","validFrom","validUntil","createdAt"
+       FROM "QRightPolicy"
+       WHERE "objectId" = $1 AND "revokedAt" IS NULL
+         AND ("validUntil" IS NULL OR "validUntil" > NOW())
+       ORDER BY "createdAt" DESC`,
+      [objectId],
+    );
+    res.json({ objectId, policies: r.rows, total: r.rowCount });
+  } catch (err: any) {
+    captureQrightError(err, { route: "policies_list" });
+    res.status(500).json({ error: "policies_list_failed" });
+  }
+});
+
+// POST /api/qright/objects/:id/policies — add a policy. Owner-only.
+qrightRouter.post("/objects/:id/policies", async (req, res) => {
+  try {
+    await ensurePoliciesTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const objectId = String(req.params.id || "").trim();
+    if (!objectId) return res.status(400).json({ error: "objectId required" });
+
+    // Ownership check — only the QRight object owner can attach policies.
+    const pool = getPool();
+    const owner = await pool.query(
+      `SELECT "ownerUserId" FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [objectId],
+    );
+    if (owner.rowCount === 0) return res.status(404).json({ error: "object_not_found" });
+    if ((owner.rows[0] as { ownerUserId: string | null }).ownerUserId !== auth.sub) {
+      return res.status(403).json({ error: "not_object_owner" });
+    }
+
+    const { type, scope, termsText, spdxId, url, validUntil } = req.body || {};
+    if (!POLICY_TYPES.has(type)) {
+      return res.status(400).json({ error: "invalid_type", allowed: Array.from(POLICY_TYPES) });
+    }
+    if (!POLICY_SCOPES.has(scope)) {
+      return res.status(400).json({ error: "invalid_scope", allowed: Array.from(POLICY_SCOPES) });
+    }
+    if (typeof termsText !== "string" || termsText.trim().length < 3 || termsText.length > 5000) {
+      return res.status(400).json({ error: "termsText must be 3..5000 chars" });
+    }
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "QRightPolicy" ("id","objectId","type","scope","termsText","spdxId","url","validUntil","createdBy")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        id, objectId, type, scope, termsText.trim(),
+        spdxId ? String(spdxId).slice(0, 50) : null,
+        url ? String(url).slice(0, 500) : null,
+        validUntil ? new Date(validUntil) : null,
+        auth.sub,
+      ],
+    );
+    res.status(201).json({ id, objectId, type, scope });
+  } catch (err: any) {
+    captureQrightError(err, { route: "policies_create" });
+    res.status(500).json({ error: "policies_create_failed" });
+  }
+});
+
+// DELETE /api/qright/policies/:policyId — soft-revoke a policy. Owner-only.
+qrightRouter.delete("/policies/:policyId", async (req, res) => {
+  try {
+    await ensurePoliciesTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const policyId = String(req.params.policyId || "").trim();
+    if (!policyId) return res.status(400).json({ error: "policyId required" });
+    const pool = getPool();
+    // Ownership via createdBy + revoke if not already.
+    const r = await pool.query(
+      `UPDATE "QRightPolicy" SET "revokedAt" = NOW()
+       WHERE "id" = $1 AND "createdBy" = $2 AND "revokedAt" IS NULL
+       RETURNING "id"`,
+      [policyId, auth.sub],
+    );
+    if ((r.rowCount ?? 0) === 0) {
+      return res.status(404).json({ error: "policy_not_found_or_not_owner" });
+    }
+    res.json({ ok: true, revokedId: policyId });
+  } catch (err: any) {
+    captureQrightError(err, { route: "policies_revoke" });
+    res.status(500).json({ error: "policies_revoke_failed" });
+  }
+});

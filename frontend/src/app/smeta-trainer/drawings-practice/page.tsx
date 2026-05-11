@@ -469,6 +469,22 @@ export default function DrawingsPracticePage() {
       </header>
 
       {/* Intro */}
+      {/* Навигация между режимами */}
+      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 px-4 py-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide mr-2">Режим:</span>
+        <Link href="/smeta-trainer/drawings-practice"
+          className="text-[11px] px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold">
+          📐 Базовый (L2)
+        </Link>
+        <Link href="/smeta-trainer/drawings-practice/advanced"
+          className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-indigo-300 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 font-semibold">
+          📐 Продвинутый (L4)
+        </Link>
+        <Link href="/smeta-trainer/drawings-practice/errors"
+          className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-red-300 text-red-700 dark:text-red-400 hover:bg-red-50 font-semibold">
+          🔍 Найди ошибку (L5)
+        </Link>
+      </div>
       <div className="bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-200 dark:border-emerald-800 px-4 py-2 text-xs text-emerald-800 dark:text-emerald-300">
         💡 Чертёж слева — читайте размеры, которые на нём указаны. Подсвеченные зоны относятся к текущему упражнению.
         Допуск ±1.5% при вводе чисел.

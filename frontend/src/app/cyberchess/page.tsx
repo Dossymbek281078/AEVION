@@ -548,6 +548,13 @@ export default function CyberChessPage(){
   const[activeLesson,sActiveLesson]=useState<{id:string;step:number;title:string;emoji:string}|null>(null);
   const[coachLevel,sCoachLevel]=useState<"beginner"|"intermediate"|"advanced">("intermediate");
   const[coachTipsExpanded,sCoachTipsExpanded]=useState(false);
+  // Puzzle theme performance — track correct/wrong per theme
+  const TP_KEY="aevion_pz_theme_perf_v1";
+  type ThemePerf=Record<string,{c:number;w:number}>;
+  const[themePerf,sThemePerf]=useState<ThemePerf>(()=>{try{const r=localStorage.getItem(TP_KEY);return r?JSON.parse(r):{}}catch{return{}}});
+  useEffect(()=>{try{localStorage.setItem(TP_KEY,JSON.stringify(themePerf))}catch{}},[themePerf]);
+  const addThemeResult=(theme:string,correct:boolean)=>sThemePerf(p=>({...p,[theme]:{c:(p[theme]?.c||0)+(correct?1:0),w:(p[theme]?.w||0)+(correct?0:1)}}));
+
   // Blunder Book — positions where user blundered, for later practice
   type BlunderEntry={fen:string;san:string;date:string;opening?:string;moveNum:number};
   const BB_KEY="aevion_blunder_book_v1";
@@ -1490,6 +1497,7 @@ export default function CyberChessPage(){
                 showToast("Продолжай решение...","info");
               }else{
                 sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
+                if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
                 // Rush: +1..+3 sec по сложности, streak, score, Chessy
                 if(pzMode==="rush"){
                   const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
@@ -1523,6 +1531,7 @@ export default function CyberChessPage(){
         }else{
           // Single-move puzzle — solved
           sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
+          if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
           if(pzMode==="rush"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
             sPzTimeLeft(v=>Math.min(180,v+bonus));
@@ -1552,6 +1561,7 @@ export default function CyberChessPage(){
         return true;
       }else{
         sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");resetPzStreak();
+        if(pzCurrent?.theme)addThemeResult(pzCurrent.theme,false);
         if(pzMode==="rush"){
           sPzTimeLeft(v=>Math.max(0,v-5));
           sRushStreak(0);
@@ -5874,9 +5884,16 @@ export default function CyberChessPage(){
                     </div>
                   </div>
                 </div>}
-                {/* Tags */}
-                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
+                {/* Tags + rating */}
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10,alignItems:"center"}}>
+                  {pzCurrent.r>0&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,
+                    background:pzCurrent.r<1000?"#f0fdf4":pzCurrent.r<1500?"#fef9c3":pzCurrent.r<2000?"#fff7ed":"#fef2f2",
+                    color:pzCurrent.r<1000?"#065f46":pzCurrent.r<1500?"#92400e":pzCurrent.r<2000?"#9a3412":"#991b1b",
+                    fontWeight:800,border:"1px solid currentColor",opacity:0.7}}>
+                    ⭐ {pzCurrent.r}
+                  </span>}
                   {[pzCurrent.phase,pzCurrent.theme].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
+                  {pzCurrent.goal==="Mate"&&pzCurrent.mateIn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#fef2f2",color:"#991b1b",fontWeight:800}}>Мат в {pzCurrent.mateIn}</span>}
                 </div>
                 {/* Result banner */}
                 {pzAttempt==="correct"&&<div style={{
@@ -5941,6 +5958,25 @@ export default function CyberChessPage(){
                 <div style={{fontSize:10,color:"#9a3412",fontWeight:800,marginTop:2,letterSpacing:0.5,textTransform:"uppercase" as const}}>Рекорд серии</div>
               </Card>}
             </div>
+
+            {/* ── Слабые темы — темы с наибольшим % ошибок (мин. 3 попытки) */}
+            {Object.keys(themePerf).length>=3&&(()=>{
+              const weak=Object.entries(themePerf)
+                .filter(([,v])=>v.c+v.w>=3)
+                .map(([th,v])=>({th,wr:Math.round(v.c/(v.c+v.w)*100),total:v.c+v.w}))
+                .sort((a,b)=>a.wr-b.wr)
+                .slice(0,3);
+              if(weak.length===0)return null;
+              return <div style={{padding:"8px 12px",borderRadius:8,background:"linear-gradient(135deg,#fef9c3,#fef3c7)",border:"1px solid #fde68a",fontSize:11}}>
+                <div style={{fontWeight:900,color:"#92400e",marginBottom:5}}>⚠ Тренируй слабые темы:</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {weak.map(w=><button key={w.th} onClick={()=>{sPzFilterTheme(w.th);sPzI(0);sPzCategory("all")}}
+                    style={{padding:"3px 9px",borderRadius:999,border:"1px solid #fbbf24",background:pzFilterTheme===w.th?"#fbbf24":"#fffbeb",color:pzFilterTheme===w.th?"#fff":"#92400e",fontWeight:800,cursor:"pointer",fontSize:10}}>
+                    {w.th} · {w.wr}% ({w.total})
+                  </button>)}
+                </div>
+              </div>;
+            })()}
 
             {/* ── Theme Browser ── lichess-style visual theme grid (top 16 by count). One click sets the
                 theme filter and resets the index. Bigger cards than the category selector to draw the eye. */}

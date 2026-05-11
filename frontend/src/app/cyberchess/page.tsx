@@ -3390,6 +3390,21 @@ export default function CyberChessPage(){
               {streakType==="W"?"🔥":"💔"} {streak}× {streakType==="W"?"серия побед":"серия поражений"}
             </span>}
             <span style={{flex:1}}/>
+            {/* Rating sparkline from last 15 saved games */}
+            {savedGames.length>=3&&(()=>{
+              const pts=savedGames.slice(0,15).map(g=>g.rating).reverse();
+              const mn=Math.min(...pts),mx=Math.max(...pts);const rng=Math.max(mx-mn,50);
+              const W=48,H=16,pad=2;
+              const x=(i:number)=>pad+(i/(pts.length-1))*(W-pad*2);
+              const y=(v:number)=>H-pad-(v-mn)/(rng)*(H-pad*2);
+              const d=pts.map((v,i)=>`${i===0?"M":"L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+              const up=pts[pts.length-1]>=pts[0];
+              const col=up?"#10b981":"#ef4444";
+              return <svg width={W} height={H} style={{flexShrink:0,opacity:0.85}} aria-hidden>
+                <polyline points={pts.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")} fill="none" stroke={col} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx={x(pts.length-1).toFixed(1)} cy={y(pts[pts.length-1]).toFixed(1)} r={2.5} fill={col}/>
+              </svg>;
+            })()}
             <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ELO <b style={{color:CC.gold}}>{rat}</b></span>
           </div>}
 

@@ -545,6 +545,8 @@ export default function CyberChessPage(){
   const[sfOk,sSfOk]=useState(false);
   const[rat,sRat]=useState(800);
   const[sts,sSts]=useState({w:0,l:0,d:0});
+  // totalGames at component scope for daily goals tracking
+  const totalGames=sts.w+sts.l+sts.d;
   const[evalCp,sEvalCp]=useState(0);
   const[evalMate,sEvalMate]=useState(0);
   const[fenHist,sFenHist]=useState<string[]>([new Chess().fen()]);
@@ -600,6 +602,14 @@ export default function CyberChessPage(){
   const[pzCurrent,sPzCurrent]=useState<Puzzle|null>(null);
   const[pzSolvedCount,sPzSolvedCount]=useState(0);
   const[pzFailedCount,sPzFailedCount]=useState(0);
+  // Daily goals tracking — stored by todayKey() in localStorage
+  const DG_KEY="aevion_daily_goals_v1";
+  const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string}>(()=>{
+    const today=todayKey();
+    try{const raw=localStorage.getItem(DG_KEY);if(raw){const d=JSON.parse(raw);if(d?.date===today)return d;}}catch{}
+    return{coachOpened:false,gamesGoal:5,puzzleGoal:5,date:today};
+  });
+  useEffect(()=>{try{localStorage.setItem(DG_KEY,JSON.stringify(dailyGoals))}catch{}},[dailyGoals]);
   // Puzzle Rush state
   const[rushActive,sRushActive]=useState(false);
   const[rushScore,sRushScore]=useState(0);
@@ -1823,6 +1833,21 @@ export default function CyberChessPage(){
   },[game,tab,on,over,pCol,hotseat,pzCurrent,promo,sanBuf,exec]);
   // Очистка буфера когда меняется ход / состояние
   useEffect(()=>{sSanBuf("");sSanFlash(null)},[bk,tab]);
+  // Track coach tab open for daily goals
+  useEffect(()=>{if(tab==="coach"&&!dailyGoals.coachOpened){sDailyGoals(g=>({...g,coachOpened:true}))}},[tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Daily goals completion bonus — fire once when all 3 goals first satisfied
+  const dailyGoalsBonusFiredRef=useRef(false);
+  useEffect(()=>{
+    if(dailyGoalsBonusFiredRef.current)return;
+    const g1done=totalGames>=dailyGoals.gamesGoal;
+    const g2done=pzSolvedCount>=dailyGoals.puzzleGoal;
+    const g3done=dailyGoals.coachOpened;
+    if(g1done&&g2done&&g3done){
+      dailyGoalsBonusFiredRef.current=true;
+      setTimeout(()=>addChessy(30,"🏆 Все цели дня выполнены!"),400);
+      setTimeout(()=>showToast("🏆 Цели дня выполнены — +30 Chessy!","success"),600);
+    }
+  },[totalGames,pzSolvedCount,dailyGoals,addChessy,showToast]);
 
   /* ── Rival learning — after each encounter, adapt profile and save ── */
   const rivalLearnedRef=useRef<string|null>(null);
@@ -3323,7 +3348,7 @@ export default function CyberChessPage(){
         const activeCat:"Bullet"|"Blitz"|"Rapid"|"Custom"=useCustom?"Custom":(TCS[tcI]?.cat as any)||"Blitz";
         const catTcs=TCS.map((t,i)=>({t,i})).filter(x=>x.t.cat===activeCat);
         const catColor={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Classical:"#3b82f6",Custom:CC.accent}[activeCat];
-        const totalGames=sts.w+sts.l+sts.d;
+        // totalGames is defined at component scope
         const winPct=totalGames?Math.round(sts.w/totalGames*100):0;
         const achTotal=Object.keys(ACH_LABELS).length;
         const achGot=Object.keys(chessy.ach).length;
@@ -3366,6 +3391,54 @@ export default function CyberChessPage(){
             <span style={{flex:1}}/>
             <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ELO <b style={{color:CC.gold}}>{rat}</b></span>
           </div>}
+
+          {/* ─── Daily Goals mini-card ─── */}
+          {(()=>{
+            const gamesToday=totalGames;const puzzlesToday=pzSolvedCount;
+            const g1=Math.min(gamesToday,dailyGoals.gamesGoal);const g2=Math.min(puzzlesToday,dailyGoals.puzzleGoal);
+            const g1done=gamesToday>=dailyGoals.gamesGoal;const g2done=puzzlesToday>=dailyGoals.puzzleGoal;
+            const g3done=dailyGoals.coachOpened;
+            const allDone=g1done&&g2done&&g3done;
+            const doneCount=(g1done?1:0)+(g2done?1:0)+(g3done?1:0);
+            const overallPct=Math.round(doneCount/3*100);
+            return <div style={{
+              padding:"10px 14px",borderRadius:RADIUS.lg,
+              background:allDone?"linear-gradient(135deg,#f0fdf4,#dcfce7)":"linear-gradient(135deg,#fff,#f9fafb)",
+              border:`1px solid ${allDone?"#86efac":CC.border}`,
+              display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"
+            }}>
+              {/* Label */}
+              <div style={{display:"flex",alignItems:"center",gap:6,minWidth:100}}>
+                <span style={{fontSize:14}}>{allDone?"🏆":"🎯"}</span>
+                <div>
+                  <div style={{fontSize:11,fontWeight:900,color:allDone?"#15803d":CC.text,lineHeight:1.2}}>Цели на сегодня</div>
+                  <div style={{fontSize:9,color:CC.textDim,fontWeight:700}}>{doneCount}/3 выполнено</div>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div style={{flex:"0 0 60px",height:4,borderRadius:2,background:CC.surface2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${overallPct}%`,background:allDone?"#10b981":CC.brand,transition:"width 0.5s ease",borderRadius:2}}/>
+              </div>
+              {/* Goal chips */}
+              {([
+                {icon:"♟",label:`Сыграй ${dailyGoals.gamesGoal}`,cur:g1,max:dailyGoals.gamesGoal,done:g1done,onClick:()=>{}},
+                {icon:"◆",label:`Реши ${dailyGoals.puzzleGoal} пазлов`,cur:g2,max:dailyGoals.puzzleGoal,done:g2done,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+                {icon:"🎓",label:"Открой Coach",cur:g3done?1:0,max:1,done:g3done,onClick:()=>{sTab("coach");sSetup(false)}},
+              ]).map(g=><button key={g.label} onClick={g.onClick} style={{
+                display:"inline-flex",alignItems:"center",gap:5,
+                padding:"4px 10px",borderRadius:RADIUS.full,
+                border:`1px solid ${g.done?"#86efac":CC.border}`,
+                background:g.done?"rgba(16,185,129,0.08)":CC.surface1,
+                cursor:g.done?"default":"pointer",
+                fontSize:11,fontWeight:700,color:g.done?"#15803d":CC.text,
+              }}>
+                <span>{g.icon}</span>
+                {g.done?<span style={{fontWeight:900}}>✓</span>:<span style={{color:CC.textDim}}>{g.cur}/{g.max}</span>}
+                <span style={{textDecoration:g.done?"line-through":"none",opacity:g.done?0.6:1}}>{g.label}</span>
+              </button>)}
+              {allDone&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:900,color:"#15803d"}}>+30 Chessy завтра!</span>}
+            </div>;
+          })()}
 
           {/* ─── HERO: format + color + AI + premoves — компактно вместе ─── */}
           <Card padding={SPACE[3]} elevation="md">
@@ -4954,15 +5027,15 @@ export default function CyberChessPage(){
               </>}
               {variant==="knightriders"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11}}>🐎 только кони + пешки</span>
+                <span style={{fontSize:11}}>🐎 кони + пешки · цель — мат</span>
               </>}
               {variant==="pawnapocalypse"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11}}>💀 пешечная война</span>
+                <span style={{fontSize:11,color:"#b91c1c",fontWeight:800}}>💀 двойные пешки · продвигай до превращения</span>
               </>}
               {variant==="powerdrop"&&<>
                 <div style={{flex:1}}/>
-                <span style={{fontSize:11}}>след. дроп через <b>{5-(hist.length%5)}</b> ходов</span>
+                {(()=>{const rem=hist.length%5;const next=rem===0?0:5-rem;return<span style={{fontSize:11,fontWeight:800,color:next===0?"#c2410c":undefined}}>{next===0?"🔥 DROP ДОСТУПЕН!":`след. дроп через ${next} ход${next===1?"":"ов"}`}</span>;})()}
               </>}
               {variant==="crazyhouse"&&<>
                 <div style={{flex:1}}/>
@@ -4986,7 +5059,7 @@ export default function CyberChessPage(){
                       if(!canDrop){
                         if(game.turn()!==pCol)showToast("Дождись своего хода","info");
                         else if(variant==="crazyhouse")showToast("Нужно сначала захватить фигуру соперника","info");
-                        else showToast(`Drop доступен через ${dropEvery-(hist.length%dropEvery)} ходов`,"info");
+                        else{const rem=hist.length%dropEvery;const next=rem===0?0:dropEvery-rem;showToast(next===0?"Drop доступен — но пул пуст. Захвати фигуру!":`Drop доступен через ${next} ход${next===1?"":"ов"}`,"info");}
                         return;
                       }
                       sSelectedDropPiece(t);sDropPickerOpen(true);

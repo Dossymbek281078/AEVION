@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -54,7 +55,7 @@ export default function AdminReconcilePage() {
     setLoading(true);
     setError("");
     try {
-      const r = await fetch("/api/qpaynet/admin/reconcile", {
+      const r = await fetch(apiUrl("/api/qpaynet/admin/reconcile"), {
         headers: { Authorization: `Bearer ${t}` },
       });
       if (r.status === 403) {

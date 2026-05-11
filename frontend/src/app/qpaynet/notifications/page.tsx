@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -40,7 +41,7 @@ export default function NotificationsPage() {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
-    fetch("/api/qpaynet/notifications", { headers: { Authorization: `Bearer ${t}` } })
+    fetch(apiUrl("/api/qpaynet/notifications"), { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.json())
       .then(d => setItems(d.notifications ?? []))
       .finally(() => setLoading(false));
@@ -55,7 +56,7 @@ export default function NotificationsPage() {
   }
 
   async function markAll() {
-    await fetch("/api/qpaynet/notifications/read-all", {
+    await fetch(apiUrl("/api/qpaynet/notifications/read-all"), {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });

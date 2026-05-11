@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -54,14 +55,14 @@ export default function KycPage() {
   }, []);
 
   async function refresh(t: string) {
-    const r = await fetch("/api/qpaynet/kyc/status", { headers: { Authorization: `Bearer ${t}` } });
+    const r = await fetch(apiUrl("/api/qpaynet/kyc/status"), { headers: { Authorization: `Bearer ${t}` } });
     if (r.ok) setData(await r.json());
   }
 
   async function submit() {
     setSubmitting(true); setError("");
     try {
-      const r = await fetch("/api/qpaynet/kyc/submit", {
+      const r = await fetch(apiUrl("/api/qpaynet/kyc/submit"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ fullName, iin, address }),

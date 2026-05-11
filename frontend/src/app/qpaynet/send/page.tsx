@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -38,7 +39,7 @@ function SendForm() {
     if (!amount || parseFloat(amount) <= 0) { setError("Введите сумму"); return; }
     setLoading(true); setError("");
     try {
-      const r = await fetch("/api/qpaynet/transfer", {
+      const r = await fetch(apiUrl("/api/qpaynet/transfer"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ fromWalletId: walletId, toWalletId: toWalletId.trim(), amount: parseFloat(amount), description }),

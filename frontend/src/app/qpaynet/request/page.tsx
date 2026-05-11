@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -23,7 +24,7 @@ function RequestForm() {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
     if (!t) return;
-    fetch("/api/qpaynet/wallets", { headers: { Authorization: `Bearer ${t}` } })
+    fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.json())
       .then(d => {
         setWallets(d.wallets ?? []);
@@ -39,7 +40,7 @@ function RequestForm() {
     let link: string | null = null;
     let notifySecret: string | undefined;
     try {
-      const r = await fetch("/api/qpaynet/requests", {
+      const r = await fetch(apiUrl("/api/qpaynet/requests"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({

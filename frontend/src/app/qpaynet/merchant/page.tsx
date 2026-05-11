@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -34,8 +35,8 @@ export default function MerchantPage() {
     setToken(t);
     if (!t) { setLoading(false); return; }
     Promise.all([
-      fetch("/api/qpaynet/merchant/keys", { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
-      fetch("/api/qpaynet/wallets", { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/merchant/keys"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
     ]).then(([kd, wd]) => {
       setKeys(kd.keys ?? []);
       setWallets(wd.wallets ?? []);
@@ -46,7 +47,7 @@ export default function MerchantPage() {
   async function createKey() {
     if (!newKeyWallet) return;
     setCreating(true);
-    const r = await fetch("/api/qpaynet/merchant/keys", {
+    const r = await fetch(apiUrl("/api/qpaynet/merchant/keys"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name: newKeyName || "API Key", walletId: newKeyWallet }),
@@ -200,7 +201,7 @@ function WebhookSubs({ token }: { token: string }) {
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
-    fetch("/api/qpaynet/webhook-subs", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(apiUrl("/api/qpaynet/webhook-subs"), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => setSubs(d.subscriptions ?? []))
       .finally(() => setLoading(false));
@@ -212,7 +213,7 @@ function WebhookSubs({ token }: { token: string }) {
     if (!newUrl.trim()) return;
     setCreating(true);
     try {
-      const r = await fetch("/api/qpaynet/webhook-subs", {
+      const r = await fetch(apiUrl("/api/qpaynet/webhook-subs"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ url: newUrl.trim() }),
@@ -299,7 +300,7 @@ function WebhookTester({ token }: { token: string }) {
     setRunning(true);
     setResult(null);
     try {
-      const r = await fetch("/api/qpaynet/webhooks/test", {
+      const r = await fetch(apiUrl("/api/qpaynet/webhooks/test"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ url: url.trim(), secret: secret.trim() }),

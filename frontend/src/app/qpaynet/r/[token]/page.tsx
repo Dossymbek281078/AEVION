@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -54,7 +55,7 @@ export default function PayRequestPage() {
     if (stage !== "ready") return;
     const t = localStorage.getItem("aevion_token") ?? "";
     if (!t) return;
-    fetch("/api/qpaynet/wallets", { headers: { Authorization: `Bearer ${t}` } })
+    fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } })
       .then((r) => r.json())
       .then((d) => {
         const ws = (d.wallets ?? []).filter((w: Wallet) => w.currency === (meta?.currency ?? "KZT"));

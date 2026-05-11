@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -180,11 +181,11 @@ export default function AdminIndexPage() {
     try {
       const headers = { Authorization: `Bearer ${t}` };
       const [rec, pay, kycR, stuck, ana] = await Promise.all([
-        fetch("/api/qpaynet/admin/reconcile", { headers }),
-        fetch("/api/qpaynet/admin/payouts/stats", { headers }),
-        fetch("/api/qpaynet/admin/kyc/pending", { headers }).catch(() => null),
-        fetch("/api/qpaynet/admin/webhook-deliveries?status=stuck&limit=200", { headers }),
-        fetch("/api/qpaynet/admin/analytics?days=30", { headers }),
+        fetch(apiUrl("/api/qpaynet/admin/reconcile"), { headers }),
+        fetch(apiUrl("/api/qpaynet/admin/payouts/stats"), { headers }),
+        fetch(apiUrl("/api/qpaynet/admin/kyc/pending"), { headers }).catch(() => null),
+        fetch(apiUrl("/api/qpaynet/admin/webhook-deliveries?status=stuck&limit=200"), { headers }),
+        fetch(apiUrl("/api/qpaynet/admin/analytics?days=30"), { headers }),
       ]);
       if (rec.status === 403) {
         setAuthed("denied");

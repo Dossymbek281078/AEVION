@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -130,7 +131,7 @@ export default function AdminRefundPage() {
     });
     setBulkSubmitting(true);
     try {
-      const r = await fetch("/api/qpaynet/admin/refund/bulk", {
+      const r = await fetch(apiUrl("/api/qpaynet/admin/refund/bulk"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -190,7 +191,7 @@ export default function AdminRefundPage() {
         body.amount = n;
       }
       const idemKey = `refund-${txId.trim()}-${Date.now()}`;
-      const r = await fetch("/api/qpaynet/admin/refund", {
+      const r = await fetch(apiUrl("/api/qpaynet/admin/refund"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

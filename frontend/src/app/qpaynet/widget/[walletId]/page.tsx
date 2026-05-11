@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
@@ -59,9 +59,9 @@ function WidgetInner() {
           <span className="text-violet-400 font-black">₸</span>
           <span className="text-xs font-bold text-slate-300">QPayNet</span>
           {wallet.active ? (
-            <span className="ml-auto text-[10px] bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">активен</span>
+            <span className="ml-auto text-xs bg-emerald-900 text-emerald-300 px-2 py-1 rounded-full">активен</span>
           ) : (
-            <span className="ml-auto text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">неактивен</span>
+            <span className="ml-auto text-xs bg-slate-700 text-slate-400 px-2 py-1 rounded-full">неактивен</span>
           )}
         </div>
 

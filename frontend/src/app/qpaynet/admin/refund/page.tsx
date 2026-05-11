@@ -446,7 +446,7 @@ export default function AdminRefundPage() {
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-900 text-red-300">
+                      <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-red-900 text-red-300">
                         REFUND
                       </span>
                       <span className="text-[10px] text-slate-500">{fmtDate(r.createdAt)}</span>

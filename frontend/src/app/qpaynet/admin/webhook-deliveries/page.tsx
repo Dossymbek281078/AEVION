@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -191,7 +191,7 @@ export default function AdminWebhookDeliveriesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${s.chip}`}
+                        className={`text-xs px-2.5 py-1 rounded-full font-semibold ${s.chip}`}
                       >
                         {s.label}
                       </span>

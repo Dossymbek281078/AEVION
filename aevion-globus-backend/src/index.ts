@@ -41,6 +41,7 @@ import { qcontractRouter } from "./routes/qcontract";
 import { healthaiRouter } from "./routes/healthai";
 import { qfusionaiRouter } from "./routes/qfusionai";
 import { veilnetxRouter } from "./routes/veilnetx";
+import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { apiQuotasRouter } from "./routes/apiQuotas";
 import { apiKeysRouter } from "./routes/apiKeys";
@@ -432,6 +433,11 @@ app.use("/api/qfusionai", qfusionaiRouter);
 
 // VeilNetX — privacy proxy pre-launch status + waitlist
 app.use("/api/veilnetx", veilnetxRouter);
+
+// Planning-stage modules — shared status + waitlist surface
+for (const cfg of PLANNING_MODULES) {
+  app.use(`/api/${cfg.id}`, createPlanningStubRouter(cfg));
+}
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

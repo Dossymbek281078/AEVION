@@ -70,6 +70,12 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qmaskcard", changeFrequency: "monthly", priority: 0.45 },
   { path: "/qpersona", changeFrequency: "monthly", priority: 0.45 },
   { path: "/qlife", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/qgood", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/voice-of-earth", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/kids-ai-content", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/startup-exchange", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/shadownet", changeFrequency: "monthly", priority: 0.4 },
+  { path: "/deepsan", changeFrequency: "monthly", priority: 0.45 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];

@@ -207,7 +207,14 @@ function ldDaily():DailyState|null{try{const s=localStorage.getItem(DK);if(!s)re
 function svDaily(s:DailyState){try{localStorage.setItem(DK,JSON.stringify(s))}catch{}}
 
 /* ═══ PGN utilities ═══ */
-function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:string;date?:string;event?:string}={}):string{
+// Symbol map from our UI annotation to standard PGN NAG codes
+const ANNOT_NAG:Record<string,string>={"!!":"$3","!":"$1","!?":"$5","?!":"$6","?":"$2","??":"$4"};
+
+function buildPGN(
+  moves:string[],
+  meta:{white?:string;black?:string;result?:string;date?:string;event?:string}={},
+  annotations:Record<number,string>={}
+):string{
   const d=meta.date||new Date().toISOString().slice(0,10).replace(/-/g,".");
   const headers=[
     `[Event "${meta.event||"AEVION CyberChess"}"]`,
@@ -219,8 +226,12 @@ function buildPGN(moves:string[],meta:{white?:string;black?:string;result?:strin
   ];
   const body:string[]=[];
   for(let i=0;i<moves.length;i+=2){
-    const n=i/2+1;const w=moves[i];const b=moves[i+1];
-    body.push(b?`${n}. ${w} ${b}`:`${n}. ${w}`);
+    const n=i/2+1;
+    const w=moves[i];
+    const wNag=annotations[i]?` ${ANNOT_NAG[annotations[i]]||""}`.trimEnd():"";
+    const b=moves[i+1];
+    const bNag=b&&annotations[i+1]?` ${ANNOT_NAG[annotations[i+1]]||""}`.trimEnd():"";
+    body.push(b?`${n}. ${w}${wNag} ${b}${bNag}`:`${n}. ${w}${wNag}`);
   }
   return headers.join("\n")+"\n\n"+body.join(" ")+(meta.result?` ${meta.result}`:" *");
 }
@@ -4100,7 +4111,7 @@ export default function CyberChessPage(){
       })()}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
@@ -4574,7 +4585,7 @@ export default function CyberChessPage(){
 
         {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
             and media pane get more breathing room. */}
-        {wsShowRight&&<div style={{flex:"0 1 360px",minWidth:300,maxWidth:420,display:"flex",flexDirection:"column",gap:10}}>
+        {wsShowRight&&<div className="cc-right-panel" style={{flex:"0 1 360px",minWidth:300,maxWidth:420,display:"flex",flexDirection:"column",gap:10}}>
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
@@ -4605,7 +4616,7 @@ export default function CyberChessPage(){
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
                   const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
-                  const pgn=buildPGN(hist,{white,black,result});
+                  const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
                   const share=`${pgn}\n\n🔗 Смотреть: ${url}`;
                   try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Clipboard API недоступно","error")}
@@ -4973,7 +4984,8 @@ export default function CyberChessPage(){
                     const isSel=selectedDropPiece===t&&dropPickerOpen;
                     return <button key={t} onClick={()=>{
                       if(!canDrop){
-                        if(variant==="crazyhouse")showToast("Дождись своего хода — drop только после захвата фигуры","info");
+                        if(game.turn()!==pCol)showToast("Дождись своего хода","info");
+                        else if(variant==="crazyhouse")showToast("Нужно сначала захватить фигуру соперника","info");
                         else showToast(`Drop доступен через ${dropEvery-(hist.length%dropEvery)} ходов`,"info");
                         return;
                       }
@@ -6252,18 +6264,24 @@ export default function CyberChessPage(){
                 sCoachChat(newMsgs);
                 sCoachChatInput("");
                 sCoachChatLoading(true);
+                // Annotated moves summary for coach context
+                const annotSummary=Object.keys(moveAnnotations).length>0
+                  ?"\nАннотации игрока: "+Object.entries(moveAnnotations).map(([i,a])=>{const mv=hist[Number(i)];return mv?`${mv}${a}`:"";}).filter(Boolean).join(", ")
+                  :"";
+                const openingCtx=currentOpening?`\nДебют: ${currentOpening.eco} ${currentOpening.name}`:"";
+                const variantCtx=variant!=="standard"?`\nВариант: ${variant}`:"";
                 // Build context block prepended to the user's question for the API.
                 const contextBlock=`КОНТЕКСТ ПОЗИЦИИ:
 FEN: ${fen}
-Ход ${Math.floor(hist.length/2)+1}, ${turn} ходят. Фаза: ${phase}.
+Ход ${Math.floor(hist.length/2)+1}, ${turn} ходят. Фаза: ${phase}.${openingCtx}${variantCtx}
 Последние ходы: ${recent||"начало партии"}
 Последний ход: ${lastMove}
 Engine eval: ${evalCpStr} (с точки зрения белых)
-Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}
+Игрок играет: ${pCol==="w"?"белыми":"чёрными"}, рейтинг ${rat}${annotSummary}
 
 ВОПРОС УЧЕНИКА:
 ${question.trim()}`;
-                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. Не выдумывай ходов.`;
+                const SYSTEM=`Ты AEVION CyberChess Coach — опытный шахматный тренер. Отвечай на русском, конкретно, по позиции. 2-5 предложений. Без воды и общих фраз. Если просят план — дай конкретные ходы (SAN) и идею. Если про ошибку — назови ход и худшую альтернативу. Используй FEN и engine eval как источник истины. Не выдумывай ходов. Если есть аннотации — прокомментируй отмеченные моменты.`;
                 try{
                   const ctrl=new AbortController();
                   const tId=setTimeout(()=>ctrl.abort(),30000);
@@ -7175,16 +7193,28 @@ ${question.trim()}`;
     {tourStep>=0&&(()=>{
       const slides=[
         {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
-          <p style={{margin:"0 0 10px"}}>Полноценный шахматный тренажёр с ИИ-коучем, ежедневными задачами и собственной валютой.</p>
-          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Ты уже получил <b style={{color:"#b45309"}}>+50 Chessy</b> за регистрацию.</p>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 5000+ пазлов, 12 вариантов игры и своя валюта.</p>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
+            {["⚡ Puzzle Rush","🎓 Coach AI","🎲 12 вариантов","📊 Analysis","🏆 Турниры"].map(f=><span key={f} style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:"rgba(5,150,105,0.12)",color:CC.brand,fontWeight:700}}>{f}</span>)}
+          </div>
+          <p style={{margin:"12px 0 0",color:CC.textDim,fontSize:13}}>+50 Chessy уже на счёте. Начнём?</p>
         </>},
-        {icon:"💰",title:"Зарабатывай Chessy",body:<>
-          <p style={{margin:"0 0 10px"}}>За победы, решённые пазлы, достижения и ежедневный заход. Streak 7 дней — +100.</p>
-          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Трать на премиум: разблокировка Master AI, эксклюзивные темы доски, глубокий разбор партии от тренера.</p>
+        {icon:"🎯",title:"5000+ пазлов и тайм-режимы",body:<>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Puzzle Rush</b> — реши как можно больше за 3 минуты. Streak 🔥 увеличивает Chessy-бонус.</p>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Тайм-режимы</b> — 3мин / 5мин / свой: авто-переход после каждого решения, итоговый экран с WR%.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Puzzles</b> в верхней навигации → Выбери режим → Вперёд!</p>
         </>},
-        {icon:"🎓",title:"ИИ-тренер Алексей",body:<>
-          <p style={{margin:"0 0 10px"}}>Задай любой вопрос по позиции — тренер ответит на основе Stockfish-анализа, без фантазий.</p>
-          <p style={{margin:0,color:CC.textDim,fontSize:14}}>Можно <b>включить голос</b> в Coach — ответы будут зачитываться вслух. Этого нет на lichess и chess.com.</p>
+        {icon:"🎓",title:"AI Coach с Anthropic Claude",body:<>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Задай вопрос во вкладке Coach — тренер видит текущую позицию, оценку движка и историю ходов.</p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+            {["🔍 Объясни позицию","📋 Найди план","🎯 Где тактика","🛡 Слабости"].map(a=><div key={a} style={{fontSize:11,padding:"5px 8px",background:"rgba(124,58,237,0.08)",borderRadius:6,color:"#6d28d9",fontWeight:700,textAlign:"center"}}>{a}</div>)}
+          </div>
+          <p style={{margin:0,color:CC.textDim,fontSize:13}}>База знаний: 93 записи по тактике, дебютам, эндшпилям, времени и пути роста.</p>
+        </>},
+        {icon:"🎲",title:"12 вариантов шахмат",body:<>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Играй не только классику — доступны Fischer 960, Atomic, King of the Hill, Three-Check, Crazyhouse и ещё 7.</p>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Каждый вариант — свои правила, своя стратегия, своё место в таблице лидеров.</p>
+          <p style={{margin:0,color:CC.textDim,fontSize:13}}>На Setup экране нажми быстрый tile или <b>⚙ Настройки → Игра → 12 Вариантов</b>.</p>
         </>},
       ];
       const s=slides[tourStep];const last=tourStep===slides.length-1;

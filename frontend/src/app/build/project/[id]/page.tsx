@@ -96,6 +96,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               onUpdated={refresh}
             />
           )}
+          {isOwner && project.status === "DONE" && (
+            <Link
+              href={`/build/references/write/${project.id}`}
+              className="rounded-md border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/20 transition-colors"
+            >
+              📝 Рекомендации
+            </Link>
+          )}
           {client && (
             <div className="text-right text-xs text-slate-400">
               <div>Posted by</div>

@@ -665,3 +665,55 @@ button:focus:not(:focus-visible) {
     min-width: 44px !important;
   }
 }
+
+/* ═══ CyberChess mobile v2 — viewport-aware fixes ═══ */
+
+/* Phone portrait: board takes 100% width, right panel becomes scrollable strip */
+@media (max-width: 600px) {
+  /* Board max-width override — match screen exactly */
+  [style*="min(1040px"] {
+    width: calc(100vw - 8px) !important;
+    max-width: calc(100vw - 8px) !important;
+  }
+
+  /* Sticky header — smaller padding, hide Pro badge */
+  .cc-sticky-header {
+    padding: 5px 8px !important;
+    gap: 4px !important;
+  }
+
+  /* Ecosystem strip — 9px font on phone */
+  .cc-ecosystem-strip a {
+    font-size: 9.5px !important;
+    padding: 3px 7px !important;
+  }
+
+  /* Right panel — cap height on phone so board still visible */
+  .cc-right-panel {
+    max-height: 45vh !important;
+    overflow-y: auto;
+  }
+
+  /* Workspace toolbar chips — very compact */
+  .cc-ws-chip { font-size: 9px !important; padding: 2px 5px !important; }
+
+  /* Bottom controls: 2 rows, icon-only secondary buttons */
+  .cc-controls-row { gap: 4px !important; flex-wrap: wrap !important; }
+}
+
+/* Landscape phone: board on left, right panel scrolls on right */
+@media (max-width: 900px) and (orientation: landscape) {
+  .cc-main-row {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+    overflow-x: hidden;
+  }
+  .cc-right-panel {
+    flex: 0 0 260px !important;
+    max-height: 100vh !important;
+    overflow-y: auto;
+    width: 260px !important;
+  }
+}

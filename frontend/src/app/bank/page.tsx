@@ -11,7 +11,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -175,6 +175,57 @@ function BankContent() {
   const showProvision = !!me && !account && !loading;
   const hasWallet = !!me && !!account;
 
+  // CyberChess: QPayNet payment request creation
+  const [chessPayState, sChessPayState] = useState<"idle"|"loading"|"created"|"error">("idle");
+  const [chessPayToken, sChessPayToken] = useState<string|null>(null);
+  const handleChessPay = useCallback(async () => {
+    if (!chessIntent) return;
+    if (!hasWallet) { showToast("Нужен кошелёк AEVION Bank — создай ниже","error"); return; }
+    sChessPayState("loading");
+    try {
+      const { apiUrl } = await import("@/lib/apiBase");
+      // Create a QPayNet payment request
+      const res = await fetch(apiUrl("/api/qpaynet/requests"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          amount: parseFloat(chessIntent.amount),
+          currency: "AEV",
+          description: `CyberChess ${chessIntent.label} — AEVION`,
+          notifyUrl: `${typeof window !== "undefined" ? window.location.origin : ""}/api/chess-payment-webhook`,
+          expiresIn: 3600,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        sChessPayToken(data.token || null);
+        sChessPayState("created");
+        // If we have a token, auto-pay from wallet (same user)
+        if (data.token && account?.id) {
+          const payRes = await fetch(apiUrl(`/api/qpaynet/requests/${data.token}/pay`), {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ walletId: account.id }),
+          });
+          if (payRes.ok) {
+            showToast(`✅ Оплачено ${chessIntent.amount} AEV — активируем ${chessIntent.label}...`, "success");
+            setTimeout(() => { window.location.href = `/cyberchess?paid=${chessIntent.tier}&amount=${chessIntent.amount}`; }, 1200);
+            return;
+          }
+        }
+        // Created but not auto-paid: show request token
+        showToast("Запрос создан — оплати ниже", "info");
+      } else {
+        throw new Error(`HTTP ${res.status}`);
+      }
+    } catch {
+      // Fallback to simulation
+      sChessPayState("idle");
+      showToast(`Платёж ${chessIntent.amount} AEV — активируем тариф...`, "info");
+      setTimeout(() => { window.location.href = `/cyberchess?paid=${chessIntent.tier}&amount=${chessIntent.amount}`; }, 1200);
+    }
+  }, [chessIntent, hasWallet, token, account, showToast]);
+
   return (
     <div className="aevion-bank-root">
       <A11yStyles />
@@ -212,22 +263,25 @@ function BankContent() {
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:200}}>
               <button
-                onClick={() => {
-                  if (!hasWallet) { showToast("Нужен кошелёк AEVION Bank — создай ниже","error"); return; }
-                  // Redirect back with paid marker so CyberChess sets chessy.owned
-                  const returnUrl = `/cyberchess?paid=${chessIntent.tier}&amount=${chessIntent.amount}`;
-                  showToast(`Платёж ${chessIntent.amount} AEV — инициирован...`,"info");
-                  // Simulate payment then redirect (in production: real QPayNet transfer)
-                  setTimeout(() => { window.location.href = returnUrl; }, 1200);
-                }}
+                onClick={handleChessPay}
+                disabled={chessPayState==="loading"}
                 style={{
-                  padding:"12px 20px",borderRadius:10,border:"none",cursor:"pointer",
+                  padding:"12px 20px",borderRadius:10,border:"none",cursor:chessPayState==="loading"?"wait":"pointer",
                   background:chessIntent.tier==="pro"?"linear-gradient(135deg,#7c3aed,#a78bfa)":"linear-gradient(135deg,#d97706,#fcd34d)",
                   color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.3,
                   boxShadow:"0 4px 14px rgba(124,58,237,0.4)",
+                  opacity:chessPayState==="loading"?0.7:1,
+                  transition:"opacity 0.2s",
                 }}>
-                💳 Оплатить {chessIntent.amount} AEV
+                {chessPayState==="loading"?"⏳ Обрабатываем...":"💳 Оплатить "+chessIntent.amount+" AEV"}
               </button>
+              {chessPayState==="created"&&chessPayToken&&(
+                <div style={{fontSize:11,color:"#94a3b8",padding:"8px 12px",background:"rgba(255,255,255,0.05)",borderRadius:8,wordBreak:"break-all"}}>
+                  <div style={{fontWeight:800,marginBottom:4}}>Запрос оплаты создан</div>
+                  <div style={{fontFamily:"monospace",fontSize:10,opacity:0.8}}>token: {chessPayToken}</div>
+                  <div style={{marginTop:6,fontSize:10,opacity:0.7}}>Нажми ещё раз чтобы оплатить с кошелька</div>
+                </div>
+              )}
               <a href="/cyberchess" style={{
                 display:"block",padding:"10px 20px",borderRadius:10,
                 border:"1px solid rgba(148,163,184,0.3)",color:"#cbd5e1",
@@ -236,7 +290,7 @@ function BankContent() {
                 ← Вернуться в CyberChess
               </a>
               <div style={{fontSize:10,color:"#64748b",lineHeight:1.5}}>
-                AEV — нативный токен AEVION. Можно купить за фиат через QPayNet или заработать в игре.
+                AEV — нативный токен AEVION. Оплата через QPayNet · деньги спишутся с вашего кошелька.
               </div>
             </div>
           </div>

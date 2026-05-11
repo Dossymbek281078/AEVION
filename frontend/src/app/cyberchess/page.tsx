@@ -503,7 +503,7 @@ export default function CyberChessPage(){
   const[coachAIEnabled,sCoachAIEnabled]=useState(false);  // default off — user opts in via 🔮 button
   // Coach Quick-Actions remark — shown inline in the in-game panel after a quick-action.
   // null = nothing to show; { kind, title, body } = panel content.
-  const[coachRemark,sCoachRemark]=useState<{kind:"plan"|"tactic"|"position"|"weakness";title:string;body:string;hint?:string}|null>(null);
+  const[coachRemark,sCoachRemark]=useState<{kind:"plan"|"tactic"|"position"|"weakness"|"explain";title:string;body:string;hint?:string}|null>(null);
   // Move annotations — user-added symbols per ply index (0-based). Persists per-game via
   // a ref so it survives re-renders but resets on newG. Symbols: !! ! !? ?! ? ??
   const[moveAnnotations,sMoveAnnotations]=useState<Record<number,string>>({});
@@ -823,7 +823,7 @@ export default function CyberChessPage(){
     lastSpokenPlyRef.current="";
   },[showMasters]);
   // Opening Explorer (killer #18)
-  const[showOpeningExp,sShowOpeningExp]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_opening_exp_v1")==="1"}catch{return true}});
+  const[showOpeningExp,sShowOpeningExp]=useState(()=>{try{const v=localStorage.getItem("aevion_opening_exp_v1");return v===null?true:v==="1"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("aevion_opening_exp_v1",showOpeningExp?"1":"0")}catch{}},[showOpeningExp]);
   const[openingData,sOpeningData]=useState<OpeningEntry|null>(null);
   const[openingLoading,sOpeningLoading]=useState(false);
@@ -4829,6 +4829,30 @@ export default function CyberChessPage(){
                 const positional=evalAbs>200&&hist.length>20?"Позиция требует нового плана — текущая стратегия не работает":evalAbs<50?"Равная позиция — ищи мелкие улучшения фигур":"Позиция в порядке — продолжай план";
                 sCoachRemark({kind:"weakness",title:"🛡 Слабости в позиции",body:`Твой король: ${safety} (${myKsq})\nКороль соперника: ${attack} (${oppKsq})\n\n${positional}`,hint:myAtk>=2?"Защити короля немедленно!":oppAtk>=2?"Усиль атаку!":undefined});
               }}>🛡 Слабости</Btn>
+              <Btn size="sm" variant="secondary" onClick={()=>{
+                // Разбор последнего хода — качество + альтернативы + объяснение
+                if(hist.length===0){sCoachRemark({kind:"explain",title:"Нет ходов",body:"Партия ещё не началась"});return}
+                const lastSan=hist[hist.length-1];
+                const lastIdx=hist.length-1;
+                const myAnnot=moveAnnotations[lastIdx];
+                const evalBefore=analysis[lastIdx-1]?.cp??0;
+                const evalAfter=analysis[lastIdx]?.cp??0;
+                const quality=analysis[lastIdx]?.quality;
+                const movedBy=lastIdx%2===0?"Белые":"Чёрные";
+                const evalDiff=Math.abs(evalAfter-evalBefore);
+                const sign=lastIdx%2===0?1:-1;
+                const fromPerspective=(evalAfter-evalBefore)*sign;
+                const qualityLabel=quality==="great"?"🌟 Отличный":quality==="good"?"✅ Хороший":quality==="inacc"?"⚠ Неточность":quality==="mistake"?"❌ Ошибка":quality==="blunder"?"💀 Блундер":"";
+                const evalStr=`${evalAfter>0?"+":""}${(evalAfter/100).toFixed(2)}`;
+                const hint=fromPerspective<-100?"Потеря материала или позиции — рассмотри альтернативы":fromPerspective>100?"Этот ход улучшил позицию — хорошее решение!":quality==="blunder"?"Критическая ошибка — противник может использовать":"Нейтральный ход";
+                const annot=myAnnot?` (ты отметил: ${myAnnot})`:"";
+                sCoachRemark({
+                  kind:"explain",
+                  title:`📝 Разбор: ${lastSan}${annot}`,
+                  body:`${movedBy} сыграли ${lastSan}.\n${qualityLabel?qualityLabel+" ход\n":""}Eval: ${evalStr} (Δ ${evalDiff>0?"+":""}${(evalDiff/100).toFixed(2)} cp)\n${hint}`,
+                  hint:quality==="blunder"?"Используй 🔍 Объясни или 📋 Найди план чтобы понять позицию":undefined
+                });
+              }}>📝 Разбор</Btn>
               {coachRemark&&<Btn size="sm" variant="ghost" onClick={()=>sCoachRemark(null)}>✕ Скрыть</Btn>}
             </div>
             {coachRemark&&<div style={{

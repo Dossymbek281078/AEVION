@@ -4,25 +4,29 @@ import Link from "next/link";
 import { useState } from "react";
 
 /**
- * Нормативный справочник для подсчёта объёмов земляных работ и сетей.
+ * Нормативный справочник — подсчёт объёмов по всем разделам строительства.
  * Источники:
- *  • СНиП РК 5.01-03-2002 «Земляные сооружения, основания и фундаменты»
- *  • ЭСН РК Сборник 1 «Земляные работы» (Общая часть)
- *  • СНиП РК 3.05.04-2002 «Наружные сети и сооружения водоснабжения и канализации»
- *  • МДС 81-25.2004 «Методика определения стоимости строительной продукции»
- *  • ГОСТ 25100-2011 «Грунты. Классификация»
- *  • СН РК 1.04-09-2002 «Организация строительного производства»
+ *  Земля: СНиП РК 5.01-03-2002; ЭСН РК Сб.1; СНиП РК 3.05.04-2002; МДС 81-25.2004; ГОСТ 25100-2011
+ *  Бетон: ЭСН РК Сб.6 «Бетонные и ж/б конструкции монолитные»; СП РК 5.03-106
+ *  Кладка: ЭСН РК Сб.8 «Конструкции из кирпича и блоков»; ГОСТ 530, 6133
+ *  Кровля: ЭСН РК Сб.12 «Кровли»; СНиП РК 2.04-01; СП РК 2.04-106
+ *  Отделка: ЭСН РК Сб.15 «Отделочные работы»; ГОСТ 30246; ССЦ РК 8.04-08-2025
  */
 
-type Section = "soils" | "slopes" | "loosen" | "trenches" | "workspace" | "rates";
+type Section = "soils" | "slopes" | "loosen" | "trenches" | "workspace" | "rates"
+             | "concrete" | "masonry" | "roofing" | "finishing-norms";
 
 const SECTIONS: { id: Section; icon: string; title: string; normRef: string }[] = [
-  { id: "soils",     icon: "🪨", title: "Категории грунтов",            normRef: "ЭСН РК Сб.1 Общая часть, ГОСТ 25100" },
-  { id: "slopes",    icon: "📐", title: "Крутизна откосов",             normRef: "СНиП РК 5.01-03-2002, Табл. 1" },
-  { id: "loosen",    icon: "🔢", title: "Коэффициент разрыхления (Кр)", normRef: "ЭСН РК Сб.1 Табл. 1 Общая часть" },
-  { id: "trenches",  icon: "🔗", title: "Ширина траншей под сети",      normRef: "СНиП РК 3.05.04-2002, п. 4.3, Табл. 6" },
-  { id: "workspace", icon: "📏", title: "Рабочее пространство котлована", normRef: "МДС 81-25.2004, Прил. А; СН РК 1.04-09" },
-  { id: "rates",     icon: "📋", title: "Какую расценку ЭСН применить", normRef: "ЭСН РК Сб.1 «Земляные работы»" },
+  { id: "soils",          icon: "🪨", title: "Грунты I-IV кат.",             normRef: "ЭСН РК Сб.1, ГОСТ 25100" },
+  { id: "slopes",         icon: "📐", title: "Откосы котлованов",            normRef: "СНиП РК 5.01-03-2002, Табл. 1" },
+  { id: "loosen",         icon: "🔢", title: "Кр разрыхления",               normRef: "ЭСН РК Сб.1 Общая часть" },
+  { id: "trenches",       icon: "🔗", title: "Ширина траншей",               normRef: "СНиП РК 3.05.04-2002, п. 4.3" },
+  { id: "workspace",      icon: "📏", title: "Рабочее пространство",         normRef: "МДС 81-25.2004, Прил. А" },
+  { id: "rates",          icon: "📋", title: "Расценки ЭСН — земля",        normRef: "ЭСН РК Сб.1" },
+  { id: "concrete",       icon: "🔲", title: "Бетонные работы",              normRef: "ЭСН РК Сб.6; СП РК 5.03-106" },
+  { id: "masonry",        icon: "🧱", title: "Каменные работы",              normRef: "ЭСН РК Сб.8; ГОСТ 530" },
+  { id: "roofing",        icon: "🏠", title: "Кровельные работы",            normRef: "ЭСН РК Сб.12; СНиП РК 2.04-01" },
+  { id: "finishing-norms",icon: "🎨", title: "Отделка — нормы расхода",     normRef: "ЭСН РК Сб.15; ССЦ РК 8.04-08-2025" },
 ];
 
 // ── Данные нормативов ────────────────────────────────────────────────────────
@@ -560,6 +564,231 @@ export default function NormativesPage() {
                 <li><strong>Особые условия:</strong> с водоотливом (+30%), в стеснённых условиях (+15%), в зимнее время (+Кз)</li>
                 <li>Найти параграф в ЭСН РК Сб.1 и проверить единицу измерения (1000 м³ или м³)</li>
               </ol>
+            </div>
+          </div>
+        )}
+
+        {/* ── Бетонные работы ───────────────────────────────────────────── */}
+        {activeSection === "concrete" && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-300">
+              📖 <strong>ЭСН РК Сборник 6</strong> «Бетонные и железобетонные конструкции монолитные».
+              Единица измерения — <strong>1 м³</strong> бетона в деле (с учётом уплотнения).
+            </div>
+            <table className="w-full text-xs border-collapse">
+              <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Конструкция</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Расценка ЭСН РК</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Опалубка, м²/м³</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Арматура, кг/м³</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Примечание</th>
+              </tr></thead>
+              <tbody>
+                {[
+                  ["Фундаменты ленточные", "§6-1-1...§6-1-4", "3.0–5.5", "80–120", "Зависит от ширины: чем уже — больше опалубки"],
+                  ["Фундаменты под колонны", "§6-1-5...§6-1-8", "5.0–8.0", "120–180", "Много ребер → много опалубки на 1 м³"],
+                  ["Колонны h≤6м", "§6-2-1...§6-2-4", "12.0–18.0", "200–350", "Очень много опалубки — узкое сечение"],
+                  ["Балки и ригели", "§6-3-1...§6-3-6", "5.0–8.0", "150–250", "Боковые + дно; Т-образный профиль = меньше"],
+                  ["Плиты перекрытий h=200мм", "§6-6-1...§6-6-4", "5.5–6.5", "80–120", "Горизонталь + торцы; без колонн — меньше опалубки"],
+                  ["Стены подвала", "§6-4-1...§6-4-6", "8.0–12.0", "100–150", "Две стороны + торцы; чем тоньше — больше м²/м³"],
+                  ["Лестничные марши", "§6-8-1...§6-8-4", "4.0–6.0", "100–160", "Плита наклонная + ступени — отдельный параграф"],
+                ].map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 font-medium">{row[0]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-[11px] text-indigo-700 dark:text-indigo-400">{row[1]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-amber-700 dark:text-amber-400">{row[2]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-slate-600 dark:text-slate-400">{row[3]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-[10px] text-slate-500">{row[4]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
+              <div className="font-bold text-slate-700 dark:text-slate-300">📌 Порядок позиций ЛСР для монолитного бетона</div>
+              <ol className="list-decimal pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+                <li><strong>Установка опалубки</strong> — §6-1-x: ед. изм. <strong>100 м²</strong> контакта с бетоном</li>
+                <li><strong>Вязка арматуры</strong> — §6-10-x или §7-x: ед. изм. <strong>т</strong> арматуры</li>
+                <li><strong>Укладка и уплотнение бетона</strong> — §6-1-x: ед. изм. <strong>м³</strong></li>
+                <li><strong>Разборка опалубки</strong> — иногда в комплекте §6-1-x, иногда отдельно §6-9-x</li>
+                <li><strong>Уход за бетоном</strong> (Жаркий климат РК!) — §6-20-x: плёнка, полив — <strong>100 м²</strong></li>
+              </ol>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 rounded p-2 text-[10px] text-amber-800 dark:text-amber-300">
+                ⚠ В условиях Казахстана (жаркое лето, суточный перепад t° до 30°C) уход за бетоном <strong>обязателен</strong> по СП РК 5.03-106. Отдельная позиция в ЛСР.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Каменные работы ────────────────────────────────────────────── */}
+        {activeSection === "masonry" && (
+          <div className="space-y-4">
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg p-3 text-xs text-orange-800 dark:text-orange-300">
+              📖 <strong>ЭСН РК Сборник 8</strong> «Конструкции из кирпича и блоков».
+              Единица измерения — <strong>1 м³</strong> кладки «в деле».
+            </div>
+            <table className="w-full text-xs border-collapse">
+              <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Конструкция</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Расценка</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Кирпич, шт/м³</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Раствор, м³/м³</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Норматив</th>
+              </tr></thead>
+              <tbody>
+                {[
+                  ["Стены из кирпича полнот. δ=120 мм", "§8-1-1", "400 ± 10%", "0.19", "Шов 10мм; по ГОСТ 530-2012"],
+                  ["Стены из кирпича δ=250 мм (1 кирп.)", "§8-1-3", "404 ± 10%", "0.22", "Полуторный шов; учёт толщины"],
+                  ["Стены из кирпича δ=380 мм (1.5 кирп.)", "§8-1-4", "394 ± 10%", "0.234", "Стандартная наружная стена"],
+                  ["Стены из кирпича δ=510 мм (2 кирп.)", "§8-1-5", "394 ± 10%", "0.234", "Утолщённая стена"],
+                  ["Перегородки 120 мм (0.5 кирп.)", "§8-7-1", "400", "0.19", "Шов 10мм; высота до 4м"],
+                  ["Газобетон D500, блок 200×300×600", "§8-4-1", "27 блок/м³", "0.05", "Клей вместо раствора; ССЦ §402"],
+                  ["Газобетон D600, блок 100×250×600", "§8-4-2", "67 блок/м³", "0.03", "Перегородки тонкие"],
+                  ["Блоки пустотел. бетон 390×190×188", "§8-6-1", "12.5 бл/м²", "0.016 м³/м²", "Ед. изм. 1 м² кладки (НЕ м³)"],
+                ].map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 font-medium">{row[0]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-[11px] text-orange-700 dark:text-orange-400">{row[1]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-amber-700 dark:text-amber-400">{row[2]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-slate-600 dark:text-slate-400">{row[3]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-[10px] text-slate-500">{row[4]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
+              <div className="font-bold text-slate-700 dark:text-slate-300">🧮 Пример расчёта потребности в кирпиче</div>
+              <div className="font-mono bg-slate-50 dark:bg-slate-800 rounded p-3 text-[11px] space-y-1">
+                <div>Стена δ=510мм (2 кирп.): объём кладки = 165.0 м³</div>
+                <div>Кирпич: 165.0 × 394 шт. = <span className="font-bold text-orange-700">65 010 шт.</span> (базис)</div>
+                <div>+ бой и отходы 5%: 65 010 × 1.05 = <span className="font-bold">68 261 шт.</span></div>
+                <div>Раствор М-75: 165.0 × 0.234 = <span className="font-bold text-slate-700">38.6 м³</span></div>
+              </div>
+              <div className="text-[10px] text-slate-500 italic">Нормы расхода — из спецификации к ЭСН РК. Отходы принимаются по производственным нормам: кирпич — 3-5%, газобетон — 2-3%.</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Кровельные работы ────────────────────────────────────────── */}
+        {activeSection === "roofing" && (
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 text-xs text-blue-800 dark:text-blue-300">
+              📖 <strong>ЭСН РК Сборник 12</strong> «Кровли». Единица измерения — <strong>100 м²</strong> кровли.
+              СНиП РК 2.04-01-2003 «Строительная климатология».
+            </div>
+            <table className="w-full text-xs border-collapse">
+              <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Вид кровли</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Расценка ЭСН</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Коэф. уклона К</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Особенности расчёта</th>
+              </tr></thead>
+              <tbody>
+                {[
+                  ["Мягкая кровля (рубероид 3 слоя)", "§12-1-1...§12-1-3", "1.000 (плоская)", "По горизонтальной проекции"],
+                  ["Мембранная ПВХ 1.5 мм", "§12-4-1...§12-4-4", "1.000 – 1.035", "При уклоне >5° — по наклонной"],
+                  ["Металлочерепица (уклон 22-30°)", "§12-8-1...§12-8-6", "1.082 – 1.155", "С учётом нахлёста +15-20% к материалу"],
+                  ["Профнастил НС-35", "§12-9-1...§12-9-4", "По уклону", "Нахлёст 150-200мм; +12% к материалу"],
+                  ["Черепица керамическая", "§12-10-1", "По уклону", "Нахлёст min 75мм; материал × 1.03"],
+                  ["Кровля из шифера (8-волновой)", "§12-6-1...§12-6-3", "По уклону", "Нахлёст 120-200мм; × 1.05 отходы"],
+                ].map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 font-medium">{row[0]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-[11px] text-blue-700 dark:text-blue-400">{row[1]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono font-bold text-indigo-700 dark:text-indigo-400">{row[2]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-[10px] text-slate-500">{row[3]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="overflow-x-auto">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">📐 Коэффициент уклона К = 1/cos(α)</div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                  {["Уклон α°", "5°", "10°", "15°", "20°", "25°", "30°", "35°", "40°", "45°"].map(h => (
+                    <th key={h} className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody><tr>
+                  {["К =", "1.004", "1.015", "1.035", "1.064", "1.103", "1.155", "1.221", "1.305", "1.414"].map((v, i) => (
+                    <td key={i} className={`border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-center font-mono ${i > 0 ? "text-indigo-700 dark:text-indigo-400 font-bold" : "text-slate-500"}`}>{v}</td>
+                  ))}
+                </tr></tbody>
+              </table>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
+              <div className="font-bold text-slate-700 dark:text-slate-300">⚠ Что считается отдельно от кровли (ЭСН Сб.12)</div>
+              <ul className="list-disc pl-5 space-y-1 text-slate-600 dark:text-slate-400">
+                <li><strong>Пароизоляция</strong> — §12-21-x (паробарьер) — м² отдельно</li>
+                <li><strong>Утеплитель</strong> — ЭСН Сб.19 §19-x — м³</li>
+                <li><strong>Водосток</strong> — трубы ЭСН Сб.18, желоба — м.п.</li>
+                <li><strong>Парапет + окантовка</strong> — §12-23-x — м.п. или м²</li>
+                <li><strong>Воронки водоприёмные</strong> — §12-24-x — шт</li>
+                <li><strong>Примыкания к стенам, трубам</strong> — §12-22-x — м.п.</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* ── Отделочные работы — нормы расхода ────────────────────────── */}
+        {activeSection === "finishing-norms" && (
+          <div className="space-y-4">
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-lg p-3 text-xs text-emerald-800 dark:text-emerald-300">
+              📖 <strong>ЭСН РК Сборник 15</strong> «Отделочные работы». Цены материалов — из <strong>ССЦ РК 8.04-08-2025</strong>.
+            </div>
+            <table className="w-full text-xs border-collapse">
+              <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-left">Вид работы</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Расценка ЭСН</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Ед. изм.</th>
+                <th className="border border-slate-300 dark:border-slate-600 px-3 py-2 text-center">Расход материала</th>
+              </tr></thead>
+              <tbody>
+                {[
+                  ["Штукатурка стен (цем.-известк. 20мм)", "§15-1-1...§15-1-6", "100 м²", "Раствор 0.020 м³/м²; сетка — при нестаб. осн."],
+                  ["Штукатурка потолков (цем.-изв. 15мм)", "§15-2-1...§15-2-3", "100 м²", "Раствор 0.015 м³/м²; К=1.05 к расценке"],
+                  ["Шпатлёвка стен (2 слоя)", "§15-4-1...§15-4-4", "100 м²", "Шпатлёвка 1.0–1.4 кг/м² на слой"],
+                  ["Окраска ВД (2 слоя, с грунтом)", "§15-6-1...§15-6-6", "100 м²", "Краска 0.12–0.15 кг/м² на слой; грунт 0.10"],
+                  ["Плитка керамическая пол 300×300", "§15-12-1...§15-12-4", "100 м²", "Плитка с отходами ×1.08–1.12; клей 4–6 кг/м²"],
+                  ["Плитка керамическая стены 250×400", "§15-13-1...§15-13-4", "100 м²", "Клей 3–5 кг/м²; фуга 0.15–0.30 кг/м²"],
+                  ["Облицовка натуральным камнем", "§15-14-1...§15-14-6", "100 м²", "Клей специальный; отходы ×1.15–1.20"],
+                  ["Линолеум коммерческий", "§15-20-1...§15-20-4", "100 м²", "Линолеум ×1.05 (раскрой); клей 0.35 кг/м²"],
+                  ["Ламинат 33 класс", "§15-21-1", "100 м²", "Ламинат ×1.07–1.10 (раскрой по диагонали)"],
+                  ["Гипсокартон стены (1 слой)", "§15-30-1...§15-30-4", "100 м²", "ГКЛ ×1.03; профиль CW/UW; шурупы; лента"],
+                ].map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 font-medium">{row[0]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-[11px] text-emerald-700 dark:text-emerald-400">{row[1]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center font-mono text-slate-500">{row[2]}</td>
+                    <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-[10px] text-slate-500">{row[3]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
+              <div className="font-bold text-slate-700 dark:text-slate-300">⚡ Ключевые правила подсчёта объёмов отделки</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">Вычитать из площади:</div>
+                  <ul className="list-disc pl-5 space-y-0.5 text-slate-500 text-[11px]">
+                    <li>{"Оконные проёмы (>0.5 м²)"}</li>
+                    <li>{"Дверные проёмы (>0.5 м²)"}</li>
+                    <li>Арки и ниши</li>
+                    <li>Пилоны и ригели (если отдельная позиция)</li>
+                  </ul>
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-600 dark:text-slate-400 mb-1">НЕ вычитать:</div>
+                  <ul className="list-disc pl-5 space-y-0.5 text-slate-500 text-[11px]">
+                    <li>Проёмы ≤0.5 м²</li>
+                    <li>Площадь пола под дверью</li>
+                    <li>Потолок — из площади пола (одинаково)</li>
+                    <li>Плинтус из площади пола</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="font-mono bg-slate-50 dark:bg-slate-800 rounded p-2 text-[11px]">
+                Расход плитки 300×300: 1/0.09 = 11.11 шт/м² × 1.10 (отходы) = <span className="font-bold">12.2 шт/м²</span>
+              </div>
             </div>
           </div>
         )}

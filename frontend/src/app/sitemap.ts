@@ -46,6 +46,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/healthai", changeFrequency: "weekly", priority: 0.8 },
   { path: "/healthai/screener", changeFrequency: "monthly", priority: 0.6 },
   { path: "/healthai/plan", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/healthai/cycle", changeFrequency: "daily", priority: 0.6 },
   // QCoreAI
   { path: "/qcoreai/budget", changeFrequency: "monthly", priority: 0.55 },
   { path: "/qcoreai/api-keys", changeFrequency: "monthly", priority: 0.5 },

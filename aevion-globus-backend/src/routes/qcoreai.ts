@@ -6228,7 +6228,7 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 // Simple in-memory rate limit for full-account export: 1 per hour per user
-const exportRateLimitMap = new Map<string, number>();
+// exportRateLimitMap shared from line 6018 above
 
 qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
   const auth = verifyBearerOptional(req);

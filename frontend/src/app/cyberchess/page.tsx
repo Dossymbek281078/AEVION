@@ -6171,6 +6171,36 @@ export default function CyberChessPage(){
                   </button>;
                 })}
               </div>}
+              {/* Critical moment card — largest single eval swing */}
+              {pts.length>=4&&(()=>{
+                let maxSwing=0;let swingIdx=1;
+                for(let i=1;i<pts.length;i++){
+                  const swing=Math.abs(pts[i].cp-pts[i-1].cp);
+                  if(swing>maxSwing){maxSwing=swing;swingIdx=i}
+                }
+                if(maxSwing<150)return null; // not significant
+                const p=pts[swingIdx];const prev=pts[swingIdx-1];
+                const isUserCaused=((pCol==="w")===(swingIdx%2===0));
+                const moveSan=hist[swingIdx]||`ход ${Math.floor(swingIdx/2)+1}`;
+                const cpChange=((p.cp-prev.cp)/100).toFixed(1);
+                return <div onClick={()=>goToPly(swingIdx)} style={{
+                  marginTop:4,padding:"7px 10px",borderRadius:8,cursor:"pointer",
+                  background:isUserCaused?"rgba(220,38,38,0.06)":"rgba(5,150,105,0.06)",
+                  border:`1px solid ${isUserCaused?"#fca5a5":"#a7f3d0"}`,
+                  display:"flex",alignItems:"center",gap:8,
+                }}>
+                  <span style={{fontSize:16}}>⚡</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,fontWeight:900,color:isUserCaused?"#b91c1c":"#065f46"}}>
+                      {isUserCaused?"Поворотный момент — здесь ты изменил ход партии":"Соперник изменил ход партии здесь"}
+                    </div>
+                    <div style={{fontSize:10,color:T.dim}}>
+                      {moveSan} · изменение {cpChange} cp · ход {Math.floor(swingIdx/2)+1}
+                    </div>
+                  </div>
+                  <span style={{fontSize:10,color:T.dim,fontWeight:700}}>→ перейти</span>
+                </div>;
+              })()}
             </div>;
           })()}
 

@@ -9,6 +9,7 @@ import { ACHIEVEMENTS, computeEarned } from "../lib/achievements";
 import { findLesson } from "../lib/lessons";
 import { backfillFromLessonProgress, computeDueToday, type DueLesson } from "../lib/spacedRepetition";
 import { currentStreak, longestStreak } from "../lib/streak";
+import { loadDrawingsProgress } from "../lib/useDrawingsProgress";
 import type { LevelStatus } from "../lib/useProgress";
 
 const statusLabel: Record<LevelStatus, string> = {
@@ -81,6 +82,14 @@ export function LevelHome() {
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   useEffect(() => {
     setStreak({ current: currentStreak(), longest: longestStreak() });
+  }, [progress]);
+
+  const [drawingsPct, setDrawingsPct] = useState(0);
+  useEffect(() => {
+    const dp = loadDrawingsProgress();
+    const total = dp.basicTotal + dp.advancedTotal + dp.errorsTotal;
+    const done  = dp.basicDone  + dp.advancedDone  + dp.errorsDone;
+    setDrawingsPct(total > 0 ? Math.round((done / total) * 100) : 0);
   }, [progress]);
 
   // Spaced repetition — что повторять сегодня
@@ -348,7 +357,7 @@ export function LevelHome() {
             >
               📐 Чтение чертежей
               <span className="text-[10px] text-indigo-500 font-normal">
-                план + разрез → ВОР</span>
+                {drawingsPct > 0 ? `${drawingsPct}% · ` : ""}план+разрез→ВОР</span>
             </Link>
             <Link
               href="/smeta-trainer/lessons-search"

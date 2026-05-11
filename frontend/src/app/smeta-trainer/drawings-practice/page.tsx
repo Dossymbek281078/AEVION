@@ -485,21 +485,26 @@ export default function DrawingsPracticePage() {
       </header>
 
       {/* Intro */}
-      {/* Навигация между режимами */}
+      {/* Навигация */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 px-4 py-2 flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide mr-2">Режим:</span>
+        <Link href="/smeta-trainer/drawings-practice/hub"
+          className="text-[11px] px-3 py-1 rounded-full bg-indigo-700 text-white font-semibold">
+          🗂 Все разделы
+        </Link>
         <Link href="/smeta-trainer/drawings-practice"
           className="text-[11px] px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold">
-          📐 Базовый (L2)
+          📐 Базовый L2
         </Link>
-        <Link href="/smeta-trainer/drawings-practice/advanced"
-          className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-indigo-300 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 font-semibold">
-          📐 Продвинутый (L4)
-        </Link>
-        <Link href="/smeta-trainer/drawings-practice/errors"
-          className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-red-300 text-red-700 dark:text-red-400 hover:bg-red-50 font-semibold">
-          🔍 Найди ошибку (L5)
-        </Link>
+        <Link href="/smeta-trainer/drawings-practice/excavation" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-amber-300 text-amber-700 hover:bg-amber-50 font-semibold">🔶 Котлован</Link>
+        <Link href="/smeta-trainer/drawings-practice/walls" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-orange-300 text-orange-700 hover:bg-orange-50 font-semibold">🧱 Стены</Link>
+        <Link href="/smeta-trainer/drawings-practice/slabs" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-400 text-slate-700 hover:bg-slate-50 font-semibold">🔲 Перекр.</Link>
+        <Link href="/smeta-trainer/drawings-practice/roof-flat" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-blue-300 text-blue-700 hover:bg-blue-50 font-semibold">🏠 Кровля</Link>
+        <Link href="/smeta-trainer/drawings-practice/windows-doors" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-sky-300 text-sky-700 hover:bg-sky-50 font-semibold">🪟 Окна</Link>
+        <Link href="/smeta-trainer/drawings-practice/stairs" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-violet-300 text-violet-700 hover:bg-violet-50 font-semibold">🪜 Лестн.</Link>
+        <Link href="/smeta-trainer/drawings-practice/finishing" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-semibold">🎨 Отделка</Link>
+        <Link href="/smeta-trainer/drawings-practice/utilities" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-purple-300 text-purple-700 hover:bg-purple-50 font-semibold">🔧 Инж.</Link>
+        <Link href="/smeta-trainer/drawings-practice/advanced" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-indigo-300 text-indigo-700 hover:bg-indigo-50 font-semibold">📐 L4</Link>
+        <Link href="/smeta-trainer/drawings-practice/errors" className="text-[11px] px-3 py-1 rounded-full bg-white dark:bg-slate-800 border border-red-300 text-red-700 hover:bg-red-50 font-semibold">🔍 Ошибки</Link>
       </div>
       <div className="bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-200 dark:border-emerald-800 px-4 py-2 text-xs text-emerald-800 dark:text-emerald-300">
         💡 Чертёж слева — читайте размеры, которые на нём указаны. Подсвеченные зоны относятся к текущему упражнению.

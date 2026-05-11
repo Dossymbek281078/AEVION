@@ -352,12 +352,12 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
-              href="/smeta-trainer/drawings-practice"
+              href="/smeta-trainer/drawings-practice/hub"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs font-semibold rounded-lg"
             >
-              📐 Чтение чертежей
+              📐 Чертежи → ВОР
               <span className="text-[10px] text-indigo-500 font-normal">
-                {drawingsPct > 0 ? `${drawingsPct}% · ` : ""}план+разрез→ВОР</span>
+                {drawingsPct > 0 ? `${drawingsPct}% · ` : ""}9 разделов строительства</span>
             </Link>
             <Link
               href="/smeta-trainer/lessons-search"

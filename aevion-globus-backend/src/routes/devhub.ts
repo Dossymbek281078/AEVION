@@ -7,6 +7,16 @@ import { callProvider, getProviders } from "../services/qcoreai/providers";
 
 export const devhubRouter = Router();
 
+// GET /api/devhub/health — module health probe for aevion hub
+devhubRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    module: "devhub",
+    db: isDevHubDbReady() ? "postgres" : "in-memory",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 const pool = getPool();
 
 // Bootstrap tables on first use

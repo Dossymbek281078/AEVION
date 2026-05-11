@@ -326,4 +326,156 @@ export const PLANNING_MODULES: PlanningStubConfig[] = [
       { id: "qcore-bridge", label: "Bridge к QCoreAI агентам", status: "planned" },
     ],
   },
+  {
+    id: "qmaskcard",
+    title: "AEVION QMaskCard",
+    description:
+      "Защищённая банковская карта: одноразовые виртуальные копии для каждой покупки, антифрод-механика, лимиты per-merchant и self-destruct по сценариям.",
+    phase: "planning",
+    eta: "Q3 2026",
+    principles: [
+      "Одна реальная карта → N виртуальных под каждый магазин/подписку",
+      "Каждая виртуалка с собственным лимитом и сроком",
+      "Self-destruct по сценарию (1 платёж, дата, сумма)",
+      "Антифрод на уровне network — merchant не видит реальный номер",
+    ],
+    milestones: [
+      { id: "virtual-issuer", label: "Виртуал-эмитент v1", status: "planned" },
+      { id: "merchant-limits", label: "Лимиты per-merchant", status: "planned" },
+      { id: "self-destruct", label: "Self-destruct по сценарию", status: "planned" },
+    ],
+  },
+  {
+    id: "qpersona",
+    title: "AEVION QPersona",
+    description:
+      "Цифровой аватар-заместитель: AI-двойник по вашим текстам, голосу и истории решений. Делегирует рутинные коммуникации, сохраняя ваш стиль.",
+    phase: "research",
+    eta: "Q3 2027",
+    principles: [
+      "3 модальности: текст / голос / прошлые решения",
+      "Стиль клонируется по 1000+ сообщений, не по «промпт-инжинирингу»",
+      "Эскалация к человеку на спорных случаях",
+      "Авторизация и аудит каждого ответа аватара через QSign",
+    ],
+    milestones: [
+      { id: "text-clone", label: "Клон стиля из 1000+ сообщений", status: "planned" },
+      { id: "voice-clone", label: "Голосовой клон (5 мин референса)", status: "planned" },
+      { id: "escalation-engine", label: "Engine эскалации", status: "planned" },
+    ],
+  },
+  {
+    id: "qlife",
+    title: "AEVION QLife",
+    description:
+      "Personal OS — сборка-композит 6 столпов AEVION (HealthAI / QRight / Multichat / QGood / QTradeOffline / QSign) в единый «жизненный» интерфейс.",
+    phase: "idea",
+    eta: "Q2 2028",
+    principles: [
+      "Не отдельный продукт — а интегрированный shell над AEVION-модулями",
+      "Один dashboard: здоровье / финансы / контент / коммуникации",
+      "Cross-module insights (AI: «вы реже звоните, когда HRV падает»)",
+      "Polyglot UI: 3+ языка с первого дня",
+    ],
+    milestones: [
+      { id: "shell-mvp", label: "Shell над HealthAI + Multichat + QGood", status: "planned" },
+      { id: "cross-insights", label: "Cross-module AI insights", status: "planned" },
+      { id: "polyglot", label: "Polyglot UI (3 языка)", status: "planned" },
+    ],
+  },
+  {
+    id: "psyapp-deps",
+    title: "AEVION PsyApp",
+    description:
+      "Платформа выхода из зависимостей (алкоголь / курение / ставки): триггер-детекция, групповая поддержка, профилактика срывов на основе поведенческой аналитики.",
+    phase: "research",
+    eta: "Q4 2027",
+    principles: [
+      "Trigger-детектор: ML на time-series поведения",
+      "Anonymous-by-default групповая поддержка",
+      "Профилактика срывов (early-warning за 12-48ч)",
+      "Эскалация к специалисту QGood при риске",
+    ],
+    milestones: [
+      { id: "trigger-detector", label: "ML trigger-детектор", status: "planned" },
+      { id: "group-support", label: "Анонимные группы поддержки", status: "planned" },
+      { id: "early-warning", label: "Early-warning срывов", status: "planned" },
+    ],
+  },
+  {
+    id: "mapreality",
+    title: "AEVION MapReality",
+    description:
+      "Карта реальных событий и потребностей: агрегирование сигналов общества — где нужны волонтёры, врачи, инструменты, информация. Без «новостной» искажающей подачи.",
+    phase: "idea",
+    eta: "Q1 2028",
+    principles: [
+      "Сигналы — от граждан, не от редакторов",
+      "Сырые данные с гео-привязкой, без интерпретации",
+      "QSign-аудит источников сигнала",
+      "Open API — любой может строить свою визуализацию",
+    ],
+    milestones: [
+      { id: "signal-collector", label: "Сборщик сигналов через QRight", status: "planned" },
+      { id: "geo-cluster", label: "Гео-кластеризация и фильтры", status: "planned" },
+      { id: "open-api", label: "Open API для сторонних карт", status: "planned" },
+    ],
+  },
+  {
+    id: "z-tide",
+    title: "AEVION Z-Tide",
+    description:
+      "Концептуальная валюта, связанная с энергией / эмоциями / социальным вкладом. Research-проект: можно ли строить экономику, где «единица» не truha количество, а энергозатраты + социальная польза.",
+    phase: "idea",
+    eta: "TBD",
+    principles: [
+      "Чисто research — не product roadmap",
+      "Привязка к измеримым актам (объём работы / влияние)",
+      "Без анонимности — каждая единица аудируема через QSign",
+      "Не replace AEV — параллельный экспериментальный слой",
+    ],
+    milestones: [
+      { id: "whitepaper", label: "Whitepaper v0", status: "planned" },
+      { id: "pilot-loop", label: "Pilot замкнутый контур", status: "planned" },
+      { id: "audit", label: "Внешний аудит концепции", status: "planned" },
+    ],
+  },
+  {
+    id: "lifebox",
+    title: "AEVION LifeBox",
+    description:
+      "Цифровой сейф для будущего «я»: документы, знания, инструкции, ценности. Долгоживущее хранилище с протоколом доступа после смерти и наследованием через QShield (Shamir-разбиение).",
+    phase: "planning",
+    eta: "Q2 2027",
+    principles: [
+      "100-летнее хранилище (forward-compatible форматы)",
+      "Inheritance через QShield Shamir-shares (наследники + опекуны)",
+      "QSign-аудит каждого доступа",
+      "Triggers: смерть / недееспособность / явное открытие",
+    ],
+    milestones: [
+      { id: "long-term-storage", label: "Хранилище с проверкой целостности", status: "planned" },
+      { id: "shamir-inheritance", label: "Наследование через QShield", status: "planned" },
+      { id: "trigger-engine", label: "Engine триггеров доступа", status: "planned" },
+    ],
+  },
+  {
+    id: "qchaingov",
+    title: "AEVION QChainGov",
+    description:
+      "DAO-платформа народного управления: голосования, инициативы, прозрачные процессы. Поверх AEVION Auth + QSign — без обхода идентификации через одноразовые кошельки.",
+    phase: "idea",
+    eta: "Q3 2028",
+    principles: [
+      "Identity-bound голоса (через AEVION Auth)",
+      "Открытые инициативы — любой создаёт предложение",
+      "QSign-цепочка под каждым голосом",
+      "Quadratic voting + delegate-trees",
+    ],
+    milestones: [
+      { id: "vote-engine", label: "Engine голосований + delegate-trees", status: "planned" },
+      { id: "initiatives", label: "Workflow инициатив", status: "planned" },
+      { id: "transparency", label: "Public transparency dashboard", status: "planned" },
+    ],
+  },
 ];

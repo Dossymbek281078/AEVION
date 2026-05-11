@@ -33,6 +33,14 @@ const SUB_HEALTH = [
   { name: "startup-exchange", path: "/api/startup-exchange/health" },
   { name: "shadownet", path: "/api/shadownet/health" },
   { name: "deepsan", path: "/api/deepsan/health" },
+  { name: "qmaskcard", path: "/api/qmaskcard/health" },
+  { name: "qpersona", path: "/api/qpersona/health" },
+  { name: "qlife", path: "/api/qlife/health" },
+  { name: "psyapp-deps", path: "/api/psyapp-deps/health" },
+  { name: "mapreality", path: "/api/mapreality/health" },
+  { name: "z-tide", path: "/api/z-tide/health" },
+  { name: "lifebox", path: "/api/lifebox/health" },
+  { name: "qchaingov", path: "/api/qchaingov/health" },
 ];
 
 const SUB_OPENAPI = [
@@ -50,6 +58,14 @@ const SUB_OPENAPI = [
   { name: "startup-exchange", path: "/api/startup-exchange/openapi.json", title: "AEVION Startup Exchange" },
   { name: "shadownet", path: "/api/shadownet/openapi.json", title: "AEVION ShadowNet" },
   { name: "deepsan", path: "/api/deepsan/openapi.json", title: "AEVION DeepSan" },
+  { name: "qmaskcard", path: "/api/qmaskcard/openapi.json", title: "AEVION QMaskCard" },
+  { name: "qpersona", path: "/api/qpersona/openapi.json", title: "AEVION QPersona" },
+  { name: "qlife", path: "/api/qlife/openapi.json", title: "AEVION QLife" },
+  { name: "psyapp-deps", path: "/api/psyapp-deps/openapi.json", title: "AEVION PsyApp" },
+  { name: "mapreality", path: "/api/mapreality/openapi.json", title: "AEVION MapReality" },
+  { name: "z-tide", path: "/api/z-tide/openapi.json", title: "AEVION Z-Tide" },
+  { name: "lifebox", path: "/api/lifebox/openapi.json", title: "AEVION LifeBox" },
+  { name: "qchaingov", path: "/api/qchaingov/openapi.json", title: "AEVION QChainGov" },
 ];
 
 /**

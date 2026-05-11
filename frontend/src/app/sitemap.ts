@@ -76,6 +76,11 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/startup-exchange", changeFrequency: "monthly", priority: 0.5 },
   { path: "/shadownet", changeFrequency: "monthly", priority: 0.4 },
   { path: "/deepsan", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/psyapp-deps", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/mapreality", changeFrequency: "monthly", priority: 0.4 },
+  { path: "/z-tide", changeFrequency: "monthly", priority: 0.35 },
+  { path: "/lifebox", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/qchaingov", changeFrequency: "monthly", priority: 0.4 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];

@@ -18,6 +18,11 @@ export default function DeepSanLanding() {
         { t: "🎯 Focus-сессии", d: "Принудительные фокус-блоки. Анти-task-switch logic блокирует прерывания контролируемо." },
         { t: "🤖 Bridge к QCoreAI", d: "Задачи могут запускать агентов через QCoreAI. Не «список» — а исполняемые сценарии." },
       ]}
+      relatedModules={[
+        { id: "qcoreai", title: "QCoreAI", summary: "Agent engine — куда DeepSan делегирует исполнение задач-состояний." },
+        { id: "multichat-engine", title: "Multichat Engine", summary: "Inbox-источник: DeepSan вытягивает action items прямо из переписок." },
+        { id: "qpersona", title: "QPersona", summary: "AI-двойник для исполнения рутинных задач вашим стилем." },
+      ]}
     />
   );
 }

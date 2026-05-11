@@ -18,6 +18,11 @@ export default function ZTideLanding() {
         { t: "🪪 Не анонимна", d: "Каждая единица аудируема через QSign. Опровергает гипотезу, что privacy = anonymity." },
         { t: "🪐 Параллельный слой", d: "Не replace AEV. Экспериментальный layer параллельно основному монетарному контуру." },
       ]}
+      relatedModules={[
+        { id: "aev", title: "AEV Token", summary: "Основной монетарный контур AEVION — относительно него Z-Tide эксперимент." },
+        { id: "qpaynet", title: "QPayNet", summary: "Платёжная инфраструктура — где Z-Tide мог бы циркулировать как параллельная валюта." },
+        { id: "qchaingov", title: "QChainGov", summary: "DAO-governance, где правила Z-Tide-экономики голосуются прозрачно." },
+      ]}
     />
   );
 }

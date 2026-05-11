@@ -18,6 +18,11 @@ export default function StartupExchangeLanding() {
         { t: "💸 QPayNet escrow", d: "Эскроу-платежи и роялти поверх QPayNet. Без посредников и просрочек." },
         { t: "👀 Public reputation", d: "Никаких анонимных инвесторов. История раундов и поведения — публична." },
       ]}
+      relatedModules={[
+        { id: "qright", title: "QRight", summary: "Авто-фиксация авторства pitch'а — фундамент Startup Exchange." },
+        { id: "qcontract", title: "QContract", summary: "Smart-NDA с self-destruct — гейт на раскрытие деталей инвесторам." },
+        { id: "qpaynet", title: "QPayNet", summary: "Эскроу-платежи и роялти — финансовая прослойка Exchange." },
+      ]}
     />
   );
 }

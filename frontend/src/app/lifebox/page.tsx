@@ -18,6 +18,11 @@ export default function LifeBoxLanding() {
         { t: "🔍 QSign audit", d: "Каждый доступ — подпись + аудит. Никаких незамеченных открытий." },
         { t: "🎚 Triggers", d: "Смерть / недееспособность / явное открытие — три независимых сценария разблокировки." },
       ]}
+      relatedModules={[
+        { id: "quantum-shield", title: "Quantum Shield", summary: "Shamir secret-sharing — техническая основа inheritance в LifeBox." },
+        { id: "qsign", title: "QSign", summary: "Подпись каждого доступа к LifeBox — никаких незамеченных открытий." },
+        { id: "qright", title: "QRight", summary: "Реестр объектов авторства — LifeBox хранит права и подтверждения." },
+      ]}
     />
   );
 }

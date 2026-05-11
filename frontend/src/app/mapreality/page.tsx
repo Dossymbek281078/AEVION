@@ -18,6 +18,11 @@ export default function MapRealityLanding() {
         { t: "🪪 QSign audit", d: "Каждый источник сигнала аудируем через QSign. Анти-fake-signal layer." },
         { t: "🔓 Open API", d: "Любой может строить свою визуализацию. Open API без vendor-lock." },
       ]}
+      relatedModules={[
+        { id: "planet", title: "AEVION Planet", summary: "Compliance + сертификаты + голосования — слой, поверх которого нарастает MapReality." },
+        { id: "qsign", title: "QSign", summary: "Подпись источников сигнала — anti-fake-signal защита для MapReality." },
+        { id: "qchaingov", title: "QChainGov", summary: "DAO-губернатор — куда MapReality передаёт сигналы на голосование." },
+      ]}
     />
   );
 }

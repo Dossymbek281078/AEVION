@@ -18,6 +18,11 @@ export default function QLifeLanding() {
         { t: "🩺 Healthy by default", d: "HealthAI триаж + QGood mental-health встроены, без переключения контекста." },
         { t: "🌐 Polyglot UI", d: "3+ языка с первого дня. Не «English first», а equal-tier." },
       ]}
+      relatedModules={[
+        { id: "healthai", title: "HealthAI", summary: "Здоровье-столп — триаж, screener, план. Уже работает." },
+        { id: "qgood", title: "QGood", summary: "Mental-health столп — AI-собеседник + clinical-grade сценарии." },
+        { id: "multichat-engine", title: "Multichat", summary: "Коммуникации-столп — диалоги через несколько LLM в одном чате." },
+      ]}
     />
   );
 }

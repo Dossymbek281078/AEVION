@@ -18,6 +18,11 @@ export default function KidsAILanding() {
         { t: "🗣 Логопедия", d: "Модуль произношения отслеживает прогресс. Голосовая ОС не имитация — реальная польза." },
         { t: "🎯 По возрасту", d: "Образовательный план привязан к возрастной шкале. Никакого «one-size-fits-all»." },
       ]}
+      relatedModules={[
+        { id: "qcoreai", title: "QCoreAI", summary: "AI engine + жёсткие фильтры контента — родительский dashboard над Kids AI." },
+        { id: "voice-of-earth", title: "Voice of Earth", summary: "Многоязычный аудиоконтент — параллельный лингвокультурный трек." },
+        { id: "smeta-trainer", title: "Smeta Trainer", summary: "Adult-vertical обучение в AEVION — структурно похожий learning-engine." },
+      ]}
     />
   );
 }

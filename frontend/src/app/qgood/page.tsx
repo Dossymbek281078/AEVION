@@ -18,6 +18,11 @@ export default function QGoodLanding() {
         { t: "🩺 Link с HealthAI", d: "PHQ-9 / GAD-7 скрининг встроен. Цифры — в QRight личного дашборда." },
         { t: "🚑 Escalation", d: "При обнаружении риска — мгновенный кейс на живого специалиста. Не имитация поддержки." },
       ]}
+      relatedModules={[
+        { id: "healthai", title: "HealthAI", summary: "PHQ-9 / GAD-7 скрининг + триаж — числовая основа для QGood-сессий." },
+        { id: "psyapp-deps", title: "PsyApp", summary: "Выход из зависимостей с поведенческой аналитикой — параллельный трек к QGood." },
+        { id: "qlife", title: "QLife", summary: "Personal OS, где QGood — один из 6 столпов." },
+      ]}
     />
   );
 }

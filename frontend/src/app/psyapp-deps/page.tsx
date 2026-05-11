@@ -18,6 +18,11 @@ export default function PsyAppLanding() {
         { t: "🚨 Early-warning", d: "Профилактика срывов: бот, наставник, специалист — по нарастающей." },
         { t: "🩺 Bridge → QGood", d: "Когда поведенческий риск переходит в клинический — мгновенный escalation." },
       ]}
+      relatedModules={[
+        { id: "qgood", title: "QGood", summary: "Clinical-grade mental-health — куда эскалируется поведенческий риск PsyApp." },
+        { id: "healthai", title: "HealthAI", summary: "Health-screener + триаж — фоновый сигнал биомаркеров для trigger-детектора." },
+        { id: "qlife", title: "QLife", summary: "Personal OS, в котором PsyApp работает фоном вместе с QGood." },
+      ]}
     />
   );
 }

@@ -18,6 +18,11 @@ export default function ShadowNetLanding() {
         { t: "🔐 E2E без метаданных", d: "End-to-end шифрование + минимизация side-channel и timing-leak." },
         { t: "📂 Open + reproducible", d: "Open-source клиенты + воспроизводимые сборки. Никаких «доверьтесь нам»." },
       ]}
+      relatedModules={[
+        { id: "veilnetx", title: "VeilNetX", summary: "Tor-маршрутизация — базовый слой, поверх которого работает ShadowNet." },
+        { id: "quantum-shield", title: "Quantum Shield", summary: "Shamir secret-sharing — для распределённого хранения ключей mesh-узлов." },
+        { id: "qsign", title: "QSign", summary: "Подпись сообщений в ShadowNet без раскрытия идентичности отправителя." },
+      ]}
     />
   );
 }

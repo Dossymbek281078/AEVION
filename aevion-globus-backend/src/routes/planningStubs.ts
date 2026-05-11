@@ -12,6 +12,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID, createHash } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { sendWaitlistConfirmation } from "../lib/planningEmail";
 
 export type PlanningStubConfig = {
   id: string;               // "qgood"
@@ -152,6 +153,17 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
     try {
       const { created, id } = await addToWaitlist(config.id, email);
       const count = await getWaitlistCount(config.id);
+      if (created) {
+        // Fire-and-forget confirmation. Silently skips if SMTP isn't configured.
+        sendWaitlistConfirmation({
+          toEmail: email,
+          moduleId: config.id,
+          moduleTitle: config.title,
+          modulePhase: config.phase,
+          moduleEta: config.eta,
+          moduleDescription: config.description,
+        });
+      }
       res.status(created ? 201 : 200).json({ ok: true, id, alreadyJoined: !created, waitlistCount: count });
     } catch {
       res.status(500).json({ error: "waitlist-failed" });
@@ -212,25 +224,8 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
 // ── Module configs ──────────────────────────────────────────────────────────
 
 export const PLANNING_MODULES: PlanningStubConfig[] = [
-  {
-    id: "qgood",
-    title: "AEVION QGood",
-    description:
-      "AI-сопровождение психологического благополучия: разговорный AI-собеседник, офлайн-режим, глубокая персонализация.",
-    phase: "research",
-    eta: "Q3 2027",
-    principles: [
-      "Clinical-grade prompts с супервизией",
-      "On-device режим для приватности",
-      "Cross-link с HealthAI скринером (PHQ-9 / GAD-7)",
-      "Эскалация к живому специалисту при риске",
-    ],
-    milestones: [
-      { id: "clinical-review", label: "Сценарии под клиническим ревью", status: "planned" },
-      { id: "offline-mvp", label: "Офлайн-MVP на устройстве", status: "planned" },
-      { id: "supervisor-net", label: "Сеть супервизоров", status: "planned" },
-    ],
-  },
+  // NOTE: qgood removed from factory — has dedicated MVP router at /api/qgood
+  //       (mounted via qgoodRouter in index.ts) with /campaigns, /donations, /stats.
   {
     id: "voice-of-earth",
     title: "AEVION Voice of Earth",
@@ -326,25 +321,8 @@ export const PLANNING_MODULES: PlanningStubConfig[] = [
       { id: "qcore-bridge", label: "Bridge к QCoreAI агентам", status: "planned" },
     ],
   },
-  {
-    id: "qmaskcard",
-    title: "AEVION QMaskCard",
-    description:
-      "Защищённая банковская карта: одноразовые виртуальные копии для каждой покупки, антифрод-механика, лимиты per-merchant и self-destruct по сценариям.",
-    phase: "planning",
-    eta: "Q3 2026",
-    principles: [
-      "Одна реальная карта → N виртуальных под каждый магазин/подписку",
-      "Каждая виртуалка с собственным лимитом и сроком",
-      "Self-destruct по сценарию (1 платёж, дата, сумма)",
-      "Антифрод на уровне network — merchant не видит реальный номер",
-    ],
-    milestones: [
-      { id: "virtual-issuer", label: "Виртуал-эмитент v1", status: "planned" },
-      { id: "merchant-limits", label: "Лимиты per-merchant", status: "planned" },
-      { id: "self-destruct", label: "Self-destruct по сценарию", status: "planned" },
-    ],
-  },
+  // NOTE: qmaskcard removed from factory — has dedicated MVP router at /api/qmaskcard
+  //       (mounted via qmaskcardRouter in index.ts) with /masks, /charges, /stats endpoints.
   {
     id: "qpersona",
     title: "AEVION QPersona",
@@ -459,23 +437,6 @@ export const PLANNING_MODULES: PlanningStubConfig[] = [
       { id: "trigger-engine", label: "Engine триггеров доступа", status: "planned" },
     ],
   },
-  {
-    id: "qchaingov",
-    title: "AEVION QChainGov",
-    description:
-      "DAO-платформа народного управления: голосования, инициативы, прозрачные процессы. Поверх AEVION Auth + QSign — без обхода идентификации через одноразовые кошельки.",
-    phase: "idea",
-    eta: "Q3 2028",
-    principles: [
-      "Identity-bound голоса (через AEVION Auth)",
-      "Открытые инициативы — любой создаёт предложение",
-      "QSign-цепочка под каждым голосом",
-      "Quadratic voting + delegate-trees",
-    ],
-    milestones: [
-      { id: "vote-engine", label: "Engine голосований + delegate-trees", status: "planned" },
-      { id: "initiatives", label: "Workflow инициатив", status: "planned" },
-      { id: "transparency", label: "Public transparency dashboard", status: "planned" },
-    ],
-  },
+  // NOTE: qchaingov removed from factory — has dedicated MVP router at /api/qchaingov
+  //       (mounted via qchaingovRouter in index.ts) with vote-engine + initiatives.
 ];

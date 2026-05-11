@@ -18,6 +18,11 @@ export default function QPersonaLanding() {
         { t: "🧠 Решения", d: "100+ прошлых решений (купить/отказать/перенести) — учим when-to-escalate." },
         { t: "🪪 QSign-аудит", d: "Каждый ответ аватара подписан и аудируем. Никаких незаметных подмен." },
       ]}
+      relatedModules={[
+        { id: "qcoreai", title: "QCoreAI", summary: "AI engine + история диалогов — топливо для клонирования стиля QPersona." },
+        { id: "deepsan", title: "DeepSan", summary: "Задачи-состояния → исполняет QPersona вашим стилем." },
+        { id: "qsign", title: "QSign", summary: "Подпись каждого ответа аватара — аудит и анти-deepfake защита." },
+      ]}
     />
   );
 }

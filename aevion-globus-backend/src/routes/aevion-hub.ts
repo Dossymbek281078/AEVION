@@ -53,20 +53,18 @@ const SUB_OPENAPI = [
   { name: "qtradeoffline", path: "/api/qtradeoffline/openapi.json", title: "AEVION QTradeOffline" },
   { name: "qfusionai", path: "/api/qfusionai/openapi.json", title: "AEVION QFusionAI" },
   { name: "veilnetx", path: "/api/veilnetx/openapi.json", title: "AEVION VeilNetX" },
-  { name: "qgood", path: "/api/qgood/openapi.json", title: "AEVION QGood" },
+  // qgood/qmaskcard/qchaingov: dedicated MVP routers — /openapi.json not yet exposed there
   { name: "voice-of-earth", path: "/api/voice-of-earth/openapi.json", title: "AEVION Voice of Earth" },
   { name: "kids-ai-content", path: "/api/kids-ai-content/openapi.json", title: "AEVION Kids AI Content" },
   { name: "startup-exchange", path: "/api/startup-exchange/openapi.json", title: "AEVION Startup Exchange" },
   { name: "shadownet", path: "/api/shadownet/openapi.json", title: "AEVION ShadowNet" },
   { name: "deepsan", path: "/api/deepsan/openapi.json", title: "AEVION DeepSan" },
-  { name: "qmaskcard", path: "/api/qmaskcard/openapi.json", title: "AEVION QMaskCard" },
   { name: "qpersona", path: "/api/qpersona/openapi.json", title: "AEVION QPersona" },
   { name: "qlife", path: "/api/qlife/openapi.json", title: "AEVION QLife" },
   { name: "psyapp-deps", path: "/api/psyapp-deps/openapi.json", title: "AEVION PsyApp" },
   { name: "mapreality", path: "/api/mapreality/openapi.json", title: "AEVION MapReality" },
   { name: "z-tide", path: "/api/z-tide/openapi.json", title: "AEVION Z-Tide" },
   { name: "lifebox", path: "/api/lifebox/openapi.json", title: "AEVION LifeBox" },
-  { name: "qchaingov", path: "/api/qchaingov/openapi.json", title: "AEVION QChainGov" },
 ];
 
 /**

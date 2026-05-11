@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+export type RelatedModule = {
+  id: string;       // route slug, e.g. "psyapp-deps" or "healthai"
+  title: string;    // "PsyApp" or "HealthAI"
+  summary: string;  // one-line teaser
+};
+
 export type PlanningLandingProps = {
   id: string;            // backend module id, e.g. "qgood"
   code: string;          // short code, e.g. "QGOOD"
@@ -14,6 +20,7 @@ export type PlanningLandingProps = {
   heroAccent: string;    // gradient-accent words, e.g. "supported."
   heroSubtitle: string;  // paragraph below title
   features: { t: string; d: string }[];
+  relatedModules?: RelatedModule[];
 };
 
 type Status = {
@@ -242,6 +249,25 @@ export default function PlanningLanding(props: PlanningLandingProps) {
         <h2 className="text-3xl font-black">Roadmap</h2>
         <MilestoneList moduleId={props.id} />
       </section>
+
+      {props.relatedModules && props.relatedModules.length > 0 && (
+        <section className="max-w-5xl mx-auto px-6 py-12 space-y-6 border-t border-slate-800">
+          <h2 className="text-3xl font-black">Связано в AEVION</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {props.relatedModules.map((m) => (
+              <Link
+                key={m.id}
+                href={`/${m.id}`}
+                className="block bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-xl p-5 transition-colors"
+              >
+                <div className="text-lg font-bold mb-1">{m.title}</div>
+                <div className="text-sm text-slate-400 leading-relaxed">{m.summary}</div>
+                <div className={`text-xs ${c.accent} mt-2`}>→ Открыть</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

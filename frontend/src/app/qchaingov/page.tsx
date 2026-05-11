@@ -18,6 +18,11 @@ export default function QChainGovLanding() {
         { t: "✍️ QSign-цепочка", d: "Под каждым голосом — QSign-подпись. Откатить решение задним числом нельзя." },
         { t: "🎯 Quadratic + delegate", d: "Quadratic voting + delegate-trees: концентрация капитала ≠ концентрация решений." },
       ]}
+      relatedModules={[
+        { id: "planet", title: "AEVION Planet", summary: "Compliance + голосования — куда QChainGov добавляет identity-bound vote-engine." },
+        { id: "auth", title: "AEVION Auth", summary: "Identity-слой — фундамент QChainGov голосов без анонимных botnet." },
+        { id: "qsign", title: "QSign", summary: "Подпись под каждым голосом — откат решений задним числом невозможен." },
+      ]}
     />
   );
 }

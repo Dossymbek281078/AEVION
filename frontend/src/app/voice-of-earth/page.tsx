@@ -18,6 +18,11 @@ export default function VoiceOfEarthLanding() {
         { t: "💰 Open royalties", d: "Публичный счётчик распределения роялти. Соавторы видят свою долю в реальном времени." },
         { t: "🎬 В Awards / Globus", d: "Лонг-форм видеосерия с релизами через AEVION Awards и карту Globus." },
       ]}
+      relatedModules={[
+        { id: "awards", title: "AEVION Awards", summary: "Площадка релизов музыки и кино — куда идут эпизоды Voice of Earth." },
+        { id: "qright", title: "QRight", summary: "Реестр авторства — каждый трек VoE автоматически фиксируется в QRight." },
+        { id: "kids-ai-content", title: "Kids AI Content", summary: "Многоязычный контент для детей — параллельный лингвокультурный трек." },
+      ]}
     />
   );
 }

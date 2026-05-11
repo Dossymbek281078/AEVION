@@ -64,6 +64,12 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/smeta-trainer", changeFrequency: "weekly", priority: 0.75 },
   // QTradeOffline
   { path: "/qtradeoffline", changeFrequency: "weekly", priority: 0.6 },
+  // Planning / Idea landings
+  { path: "/qfusionai", changeFrequency: "monthly", priority: 0.55 },
+  { path: "/veilnetx", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/qmaskcard", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/qpersona", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/qlife", changeFrequency: "monthly", priority: 0.45 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];

@@ -419,7 +419,7 @@ export default function AdminIndexPage() {
                 <div className="text-2xl">{t.emoji}</div>
                 {t.badge && (
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${t.badge.className}`}
+                    className={`text-xs px-2.5 py-1 rounded-full font-semibold ${t.badge.className}`}
                   >
                     {t.badge.text}
                   </span>
@@ -542,7 +542,7 @@ export default function AdminIndexPage() {
                     className="flex items-center gap-3 text-xs bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
                   >
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${meta.chip}`}
+                      className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${meta.chip}`}
                     >
                       {meta.label}
                     </span>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -214,7 +214,7 @@ export default function AdminAuditPage() {
                 >
                   <div className="flex items-center gap-3 flex-wrap">
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                      className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${
                         ACTION_CHIP[e.action] ?? "bg-slate-800 text-slate-400"
                       }`}
                     >

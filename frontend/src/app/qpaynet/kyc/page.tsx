@@ -97,7 +97,7 @@ export default function KycPage() {
           <h1 className="text-sm font-bold">KYC верификация</h1>
         </div>
         {data && (
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${STATUS_CHIP[data.status]}`}>
+          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[data.status]}`}>
             {STATUS_LABEL[data.status]}
           </span>
         )}

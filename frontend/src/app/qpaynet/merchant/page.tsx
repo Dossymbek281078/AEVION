@@ -168,7 +168,7 @@ X-Api-Key: qpn_live_...
                   <div className="text-xs text-slate-500 font-mono mt-0.5">{k.key_prefix}... · создан {fmtDate(k.created_at)}</div>
                 </div>
                 {k.revoked_at ? (
-                  <span className="text-[10px] bg-red-900 text-red-400 px-2 py-0.5 rounded-full">Отозван</span>
+                  <span className="text-xs bg-red-900 text-red-400 px-2 py-1 rounded-full">Отозван</span>
                 ) : (
                   <button onClick={() => revokeKey(k.id)}
                     className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg">
@@ -273,7 +273,7 @@ function WebhookSubs({ token }: { token: string }) {
               <div className="text-[10px] text-slate-500 mt-0.5">{s.events}</div>
             </div>
             {s.revoked_at ? (
-              <span className="text-[10px] bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full shrink-0">Отозвана</span>
+              <span className="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded-full shrink-0">Отозвана</span>
             ) : (
               <button onClick={() => revoke(s.id)}
                 className="text-[10px] px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 rounded shrink-0">

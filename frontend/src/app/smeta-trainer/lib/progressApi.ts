@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Клиент для backend-API прогресса студента (/api/smeta-trainer/*).
  * Работает через AEVION backend (по умолчанию http://localhost:4001),
  * с graceful fallback: если бэкенд недоступен, локальные данные
@@ -6,6 +6,7 @@
  */
 
 import type { CourseProgress, LevelProgress } from "./useProgress";
+import { apiUrl } from "@/lib/apiBase";
 
 const API_BASE =
   (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_AEVION_API) ||
@@ -124,7 +125,7 @@ class BackendUnavailableError extends Error {
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(apiUrl(path), {
       ...init,
       headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
     });

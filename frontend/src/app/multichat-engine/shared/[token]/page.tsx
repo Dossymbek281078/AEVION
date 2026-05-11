@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -47,7 +48,7 @@ export default function SharedConversationPage() {
     setLoading(true);
     setError("");
     try {
-      const r = await fetch(`/api/multichat/shared/${encodeURIComponent(token)}`);
+      const r = await fetch(apiUrl(`/api/multichat/shared/${encodeURIComponent(token)}`));
       if (r.status === 404) {
         setError("Эта ссылка не найдена или была отозвана автором.");
         return;

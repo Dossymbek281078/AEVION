@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Клиент для backend QCoreAI (POST /api/qcoreai/chat).
  * Формирует system-prompt с контекстом текущей сметы + переписку,
  * шлёт на бэкенд, парсит ответ. Graceful fallback на локальную KB
@@ -8,6 +8,7 @@
 import type { Lsr, LsrCalc, AiNotice } from "./types";
 import type { AiMessage } from "./aiConsultant";
 import { askConsultant } from "./aiConsultant";
+import { apiUrl } from "@/lib/apiBase";
 import { formatKzt } from "./calc";
 
 const API_BASE =
@@ -115,7 +116,7 @@ let cachedProviders: ProviderInfo[] | null = null;
 
 export async function checkBackend(): Promise<{ status: BackendStatus; providers: ProviderInfo[] }> {
   try {
-    const res = await fetch(`${API_BASE}/api/qcoreai/providers`, { signal: AbortSignal.timeout(2500) });
+    const res = await fetch(apiUrl("/api/qcoreai/providers"), { signal: AbortSignal.timeout(2500) });
     if (!res.ok) {
       cachedStatus = "offline";
       cachedProviders = [];
@@ -177,7 +178,7 @@ export async function streamLLM(
 ): Promise<{ text: string; provider?: string; model?: string }> {
   const messages = buildMessages(question, history, lsr, calc, notices, opts.extraSystem);
   try {
-    const res = await fetch(`${API_BASE}/api/qcoreai/chat-stream`, {
+    const res = await fetch(apiUrl("/api/qcoreai/chat-stream"), {
       method: "POST",
       headers: { "content-type": "application/json", accept: "text/event-stream" },
       body: JSON.stringify({ messages, temperature: 0.5, provider: opts.provider }),
@@ -270,7 +271,7 @@ export async function askLLM(
   messages.push({ role: "user", content: question });
 
   try {
-    const res = await fetch(`${API_BASE}/api/qcoreai/chat`, {
+    const res = await fetch(apiUrl("/api/qcoreai/chat"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ messages, temperature: 0.5 }),

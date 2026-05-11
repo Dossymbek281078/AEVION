@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -69,7 +70,7 @@ export default function MultichatLibraryPage() {
   async function loadUsage(id: string) {
     if (usageMap[id]) return;
     try {
-      const r = await fetch(`/api/multichat/conversations/${id}/usage`, {
+      const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/usage`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) return;
@@ -86,7 +87,7 @@ export default function MultichatLibraryPage() {
     if (!next || next === current?.title) return;
     setBusyId(id);
     try {
-      const r = await fetch(`/api/multichat/conversations/${id}`, {
+      const r = await fetch(apiUrl(`/api/multichat/conversations/${id}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ title: next }),
@@ -107,7 +108,7 @@ export default function MultichatLibraryPage() {
     if (!confirm(`Удалить "${conv?.title}"? Это необратимо.`)) return;
     setBusyId(id);
     try {
-      const r = await fetch(`/api/multichat/conversations/${id}`, {
+      const r = await fetch(apiUrl(`/api/multichat/conversations/${id}`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -125,7 +126,7 @@ export default function MultichatLibraryPage() {
   async function share(id: string) {
     setBusyId(id);
     try {
-      const r = await fetch(`/api/multichat/conversations/${id}/share`, {
+      const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/share`), {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -147,7 +148,7 @@ export default function MultichatLibraryPage() {
     if (!confirm("Отозвать public-ссылку? Старая перестанет работать.")) return;
     setBusyId(id);
     try {
-      const r = await fetch(`/api/multichat/conversations/${id}/share`, {
+      const r = await fetch(apiUrl(`/api/multichat/conversations/${id}/share`), {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -1561,3 +1561,31 @@ ${urls.join("\n")}
     res.status(500).json({ error: "sitemap failed" });
   }
 });
+
+// GET /api/awards/stats — alias for /transparency (used by smoke + dashboards).
+awardsRouter.get("/stats", awardsEmbedRateLimit, async (_req, res) => {
+  try {
+    await ensureAwardsTables();
+    const r = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM "AwardSeason") AS "seasons",
+        (SELECT COUNT(*)::int FROM "AwardEntry") AS "entries",
+        (SELECT COUNT(*)::int FROM "AwardMedal") AS "medals"
+    `);
+    const row = r.rows[0] as { seasons: number; entries: number; medals: number };
+    res.json({ stats: { seasons: row.seasons, entries: row.entries, medals: row.medals }, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ error: "awards_stats_failed" });
+  }
+});
+
+// GET /api/awards/health — liveness probe.
+awardsRouter.get("/health", async (_req, res) => {
+  try {
+    await ensureAwardsTables();
+    const r = await pool.query(`SELECT COUNT(*)::int AS c FROM "AwardSeason"`);
+    res.json({ status: "ok", service: "AEVION Awards", seasons: r.rows[0].c, timestamp: new Date().toISOString() });
+  } catch {
+    res.json({ status: "ok", service: "AEVION Awards", timestamp: new Date().toISOString() });
+  }
+});

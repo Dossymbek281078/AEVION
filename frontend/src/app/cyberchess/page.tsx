@@ -541,6 +541,7 @@ export default function CyberChessPage(){
     if(el)el.scrollTop=el.scrollHeight;
   },[coachChat,coachChatLoading]);
   const[showKnowledge,sShowKnowledge]=useState(false);
+  const[dailyReward,sDailyReward]=useState<{bonus:number;streak:number;isWelcome:boolean}|null>(null);
   const[showLessons,sShowLessons]=useState(false);
   // Active lesson tracking — when user loads a position from a lesson step, show a sticky
   // "return to lesson" banner at the top of the board. Stores {lessonId, step, lessonTitle}.
@@ -1137,15 +1138,15 @@ export default function CyberChessPage(){
     let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
     if(!c.welcome){
       sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
-      setTimeout(()=>showToast("🎉 +50 Chessy · добро пожаловать!","success"),800);
-      if(!tourSeen)setTimeout(()=>sTourStep(0),1400);
+      setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),800);
+      if(!tourSeen)setTimeout(()=>sTourStep(0),2200);
     }else if(c.lastDaily!==tk){
       // Compute streak: consecutive days? Simple check — yesterday continues, else reset to 1
       const y=new Date();y.setDate(y.getDate()-1);const yk=`${y.getFullYear()}-${y.getMonth()+1}-${y.getDate()}`;
       const newStreak=c.lastDaily===yk?c.streak+1:1;
-      const bonus=newStreak>=7?100:newStreak>=3?30:5;
+      const bonus=newStreak>=14?200:newStreak>=7?100:newStreak>=3?30:5;
       sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
-      setTimeout(()=>showToast(`☀ +${bonus} Chessy · ${newStreak}-й день подряд`,"success"),800);
+      setTimeout(()=>sDailyReward({bonus,streak:newStreak,isWelcome:false}),800);
     }
     // Load bundled puzzles first (instant), then try to expand from cloud API.
     // Cloud API (/api-backend/puzzles) is Railway-hosted with the full Lichess CC0 DB.
@@ -7416,6 +7417,54 @@ ${question.trim()}`;
         💡 Открываются в Coach — спроси Алексея, как играть. Голос включается в шапке Coach'а (🔊).
       </div>
     </Modal>
+
+    {/* Daily Login Reward modal */}
+    {dailyReward&&<div role="dialog" aria-modal="true"
+      style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16}}
+      onClick={()=>sDailyReward(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
+        borderRadius:20,maxWidth:360,width:"100%",padding:"28px 32px",textAlign:"center",
+        boxShadow:"0 24px 64px -8px rgba(15,23,42,0.6)",border:"1px solid rgba(167,139,250,0.3)",
+      }}>
+        <div style={{fontSize:64,lineHeight:1,marginBottom:10}}>
+          {dailyReward.isWelcome?"🎉":dailyReward.streak>=14?"🔥":dailyReward.streak>=7?"⭐":dailyReward.streak>=3?"✨":"☀"}
+        </div>
+        <div style={{fontSize:22,fontWeight:900,marginBottom:4}}>
+          {dailyReward.isWelcome?"Добро пожаловать!":dailyReward.streak>=7?"Недельный стрик!":dailyReward.streak>=3?"Отличная серия!":"Ежедневный бонус"}
+        </div>
+        <div style={{fontSize:15,color:"#cbd5e1",marginBottom:16,lineHeight:1.4}}>
+          {dailyReward.isWelcome?"Твой первый визит — начнём вместе":"День "+dailyReward.streak+" подряд — продолжай в том же духе!"}
+        </div>
+        <div style={{
+          display:"inline-flex",alignItems:"center",gap:8,padding:"12px 24px",
+          borderRadius:999,background:"linear-gradient(135deg,#fef3c7,#fde68a)",
+          fontSize:24,fontWeight:900,color:"#78350f",
+          boxShadow:"0 4px 16px rgba(217,119,6,0.3)",marginBottom:16
+        }}>
+          <span>🪙</span>
+          <span>+{dailyReward.bonus} Chessy</span>
+        </div>
+        {/* Streak track */}
+        {!dailyReward.isWelcome&&<div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:16}}>
+          {[1,2,3,4,5,6,7].map(d=><div key={d} style={{
+            width:28,height:28,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,
+            background:d<=dailyReward.streak?"linear-gradient(135deg,#f59e0b,#fcd34d)":"rgba(255,255,255,0.08)",
+            color:d<=dailyReward.streak?"#78350f":"rgba(255,255,255,0.3)",
+            border:d===dailyReward.streak?"2px solid #fbbf24":"1px solid rgba(255,255,255,0.1)",
+          }}>{d<=dailyReward.streak?"✓":d}</div>)}
+        </div>}
+        <div style={{fontSize:11,color:"#94a3b8",marginBottom:16}}>
+          {dailyReward.streak>=14?"Следующий бонус: +200 (14 дней)":dailyReward.streak>=7?"Следующий рубеж: 14 дней → +200":dailyReward.streak>=3?"Следующий рубеж: 7 дней → +100":"Следующий рубеж: 3 дня → +30"}
+        </div>
+        <button onClick={()=>sDailyReward(null)} style={{
+          width:"100%",padding:"12px 20px",borderRadius:12,border:"none",
+          background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
+          fontSize:16,fontWeight:900,cursor:"pointer",letterSpacing:0.5,
+          boxShadow:"0 4px 14px rgba(124,58,237,0.4)",
+        }}>▶ Начать</button>
+      </div>
+    </div>}
 
     {/* First-time welcome tour */}
     {tourStep>=0&&(()=>{

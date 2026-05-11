@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -30,7 +31,7 @@ export default function NotificationPrefsPage() {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
-    fetch("/api/qpaynet/notifications/preferences", { headers: { Authorization: `Bearer ${t}` } })
+    fetch(apiUrl("/api/qpaynet/notifications/preferences"), { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.json())
       .then(d => setPrefs(d))
       .finally(() => setLoading(false));
@@ -45,7 +46,7 @@ export default function NotificationPrefsPage() {
       mutedKinds: next.mutedKinds ?? prefs.mutedKinds,
     };
     try {
-      const r = await fetch("/api/qpaynet/notifications/preferences", {
+      const r = await fetch(apiUrl("/api/qpaynet/notifications/preferences"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),

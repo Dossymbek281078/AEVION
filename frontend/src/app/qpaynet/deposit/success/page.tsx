@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -50,7 +51,7 @@ function SuccessInner() {
   async function confirmStub() {
     setConfirming(true);
     const t = localStorage.getItem("aevion_token") ?? "";
-    const r = await fetch("/api/qpaynet/deposit/confirm-stub", {
+    const r = await fetch(apiUrl("/api/qpaynet/deposit/confirm-stub"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
       body: JSON.stringify({ id: cid }),

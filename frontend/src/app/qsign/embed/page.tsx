@@ -2,6 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 
 function SignButton() {
   const params = useSearchParams();
@@ -25,7 +26,7 @@ function SignButton() {
       } catch {
         parsedPayload = payload;
       }
-      const res = await fetch("/api/qsign/v2/sign", {
+      const res = await fetch(apiUrl("/api/qsign/v2/sign"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

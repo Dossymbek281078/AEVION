@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -20,7 +21,7 @@ function DepositForm() {
     if (!token || !amount || parseFloat(amount) <= 0) { setError("Введите сумму и авторизуйтесь"); return; }
     setLoading(true); setError("");
     try {
-      const r = await fetch("/api/qpaynet/deposit", {
+      const r = await fetch(apiUrl("/api/qpaynet/deposit"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ walletId, amount: parseFloat(amount), description }),
@@ -37,7 +38,7 @@ function DepositForm() {
     if (!token || !amount || parseFloat(amount) <= 0) { setError("Введите сумму и авторизуйтесь"); return; }
     setLoading(true); setError("");
     try {
-      const r = await fetch("/api/qpaynet/deposit/checkout", {
+      const r = await fetch(apiUrl("/api/qpaynet/deposit/checkout"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ walletId, amount: parseFloat(amount) }),

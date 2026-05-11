@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -61,7 +62,7 @@ export default function AdminPayoutsPage() {
     try {
       const [list, st] = await Promise.all([
         fetch(`/api/qpaynet/admin/payouts${filter === "all" ? "" : `?status=${filter}`}`, { headers: { Authorization: `Bearer ${t}` } }),
-        fetch("/api/qpaynet/admin/payouts/stats", { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(apiUrl("/api/qpaynet/admin/payouts/stats"), { headers: { Authorization: `Bearer ${t}` } }),
       ]);
       if (list.status === 403 || st.status === 403) { setError("Не админ. Добавьте email в QPAYNET_ADMIN_EMAILS."); return; }
       const ld = await list.json();

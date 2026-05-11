@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -64,8 +65,8 @@ export default function PayoutsPage() {
     setToken(t);
     if (!t) { setLoading(false); return; }
     Promise.all([
-      fetch("/api/qpaynet/payouts", { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
-      fetch("/api/qpaynet/wallets", { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/payouts"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
     ]).then(([p, w]) => {
       setPayouts(p.payouts ?? []);
       setWallets(w.wallets ?? []);
@@ -77,14 +78,14 @@ export default function PayoutsPage() {
     if (!walletId || !amount || !destination) return;
     setSubmitting(true); setError("");
     try {
-      const r = await fetch("/api/qpaynet/payouts", {
+      const r = await fetch(apiUrl("/api/qpaynet/payouts"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ walletId, amount: parseFloat(amount), method, destination }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? "Ошибка");
-      const list = await fetch("/api/qpaynet/payouts", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
+      const list = await fetch(apiUrl("/api/qpaynet/payouts"), { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
       setPayouts(list.payouts ?? []);
       setAmount(""); setDestination("");
     } catch (e) {

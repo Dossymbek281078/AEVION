@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -61,11 +62,11 @@ export default function QPayNetDashboard() {
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
-    fetch("/api/qpaynet/stats").then(r => r.json()).then(setStats).catch(() => {});
+    fetch(apiUrl("/api/qpaynet/stats")).then(r => r.json()).then(setStats).catch(() => {});
     if (!t) { setLoading(false); return; }
     Promise.all([
-      fetch("/api/qpaynet/wallets", { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
-      fetch("/api/qpaynet/transactions?limit=20", { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/transactions?limit=20"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
     ]).then(([wd, td]) => {
       setWallets(wd.wallets ?? []);
       setTxs(td.transactions ?? []);
@@ -89,7 +90,7 @@ export default function QPayNetDashboard() {
 
   async function createWallet() {
     setCreating(true);
-    const r = await fetch("/api/qpaynet/wallets", {
+    const r = await fetch(apiUrl("/api/qpaynet/wallets"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ name: newWalletName || "Мой кошелёк" }),
@@ -301,7 +302,7 @@ function DashboardSummary({ token }: { token: string }) {
   const [data, setData] = useState<Dashboard | null>(null);
 
   useEffect(() => {
-    fetch("/api/qpaynet/me/dashboard", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(apiUrl("/api/qpaynet/me/dashboard"), { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setData)
       .catch(() => {});
@@ -357,7 +358,7 @@ function NotificationBell({ token }: { token: string }) {
   useEffect(() => {
     let cancelled = false;
     const tick = () => {
-      fetch("/api/qpaynet/notifications/unread-count", { headers: { Authorization: `Bearer ${token}` } })
+      fetch(apiUrl("/api/qpaynet/notifications/unread-count"), { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.ok ? r.json() : { unread: 0 })
         .then(d => { if (!cancelled) setCount(d.unread ?? 0); })
         .catch(() => {});

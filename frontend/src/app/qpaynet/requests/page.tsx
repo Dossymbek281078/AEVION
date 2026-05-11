@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -43,7 +44,7 @@ export default function MyRequestsPage() {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
     if (!t) { setError("Необходима авторизация"); setLoading(false); return; }
-    fetch("/api/qpaynet/requests", { headers: { Authorization: `Bearer ${t}` } })
+    fetch(apiUrl("/api/qpaynet/requests"), { headers: { Authorization: `Bearer ${t}` } })
       .then(r => r.json())
       .then(d => setReqs(d.requests ?? []))
       .catch(() => setError("Ошибка загрузки"))
@@ -82,7 +83,7 @@ export default function MyRequestsPage() {
           {token && reqs.length > 0 && (
             <button
               onClick={async () => {
-                const r = await fetch("/api/qpaynet/requests.csv", { headers: { Authorization: `Bearer ${token}` } });
+                const r = await fetch(apiUrl("/api/qpaynet/requests.csv"), { headers: { Authorization: `Bearer ${token}` } });
                 if (!r.ok) return;
                 const blob = await r.blob();
                 const url = URL.createObjectURL(blob);

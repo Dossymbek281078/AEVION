@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -124,7 +125,7 @@ function Body() {
     setSigning(true);
     try {
       const signedItems = templateItems.filter((_, i) => checked[String(i)]);
-      const res = await fetch("/api/build/safety-briefing", {
+      const res = await fetch(apiUrl("/api/build/safety-briefing"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

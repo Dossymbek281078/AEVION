@@ -50,6 +50,8 @@ const SMOKES = [
   { name: "cyberchess", script: "cyberchess-smoke.js", readOnly: false },
   { name: "smeta-trainer", script: "smeta-trainer-smoke.js", readOnly: false },
   { name: "multichat", script: "multichat-smoke.js", readOnly: false },
+  // HealthAI — profile/log/screener/plan/LLM-check (soft: needs ANTHROPIC_API_KEY)
+  { name: "healthai", script: "healthai-smoke.js", readOnly: false },
   // Platform API keys — self-serve key issuance (Phase B). Creates/verifies/revokes.
   { name: "apikeys", script: "apikeys-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping

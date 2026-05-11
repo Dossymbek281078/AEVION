@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -39,7 +40,7 @@ export default function QContractHome() {
     const t = localStorage.getItem("aevion_token") ?? "";
     setToken(t);
     if (!t) { setLoading(false); return; }
-    fetch("/api/qcontract/documents", { headers: { Authorization: `Bearer ${t}` } })
+    fetch(apiUrl("/api/qcontract/documents"), { headers: { Authorization: `Bearer ${t}` } })
       .then((r) => r.json())
       .then((d) => setDocs(d.documents ?? []))
       .catch(() => {})
@@ -49,7 +50,7 @@ export default function QContractHome() {
   async function revoke(id: string) {
     if (!confirm("Отозвать документ? Ссылка перестанет работать немедленно.")) return;
     setRevoking(id);
-    await fetch(`/api/qcontract/documents/${id}`, {
+    await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -61,7 +62,7 @@ export default function QContractHome() {
     const days = prompt("Продлить на сколько дней?", "7");
     const n = parseInt(days ?? "");
     if (!n || n < 1 || n > 365) return;
-    const r = await fetch(`/api/qcontract/documents/${id}`, {
+    const r = await fetch(apiUrl(`/api/qcontract/documents/${id}`), {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ extendDays: n }),
@@ -273,7 +274,7 @@ export default function QContractHome() {
 function QContractStats() {
   const [stats, setStats] = useState<{ totalDocuments: number; totalViews: number } | null>(null);
   useEffect(() => {
-    fetch("/api/qcontract/stats").then((r) => r.json()).then(setStats).catch(() => {});
+    fetch(apiUrl("/api/qcontract/stats")).then((r) => r.json()).then(setStats).catch(() => {});
   }, []);
   if (!stats) return null;
   return (

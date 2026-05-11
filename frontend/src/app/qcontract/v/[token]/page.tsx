@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
@@ -100,7 +101,7 @@ export default function ViewDocument() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/qcontract/view/${token}`)
+    fetch(apiUrl(`/api/qcontract/view/${token}`))
       .then((r) => r.json())
       .then((d) => {
         if (d.error) { setError(d.error); setStage("error"); return; }
@@ -119,7 +120,7 @@ export default function ViewDocument() {
     setSubmitting(true);
     setError("");
     try {
-      const res = await fetch(`/api/qcontract/view/${token}`, {
+      const res = await fetch(apiUrl(`/api/qcontract/view/${token}`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: pw, viewerEmail: email }),

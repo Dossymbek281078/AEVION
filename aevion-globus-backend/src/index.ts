@@ -43,6 +43,7 @@ import { qfusionaiRouter } from "./routes/qfusionai";
 import { veilnetxRouter } from "./routes/veilnetx";
 import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
+import { qtradeOfflineRouter } from "./routes/qtradeoffline";
 import { apiQuotasRouter } from "./routes/apiQuotas";
 import { apiKeysRouter } from "./routes/apiKeys";
 import { qgoodRouter } from "./routes/qgood";
@@ -456,6 +457,9 @@ app.use("/api/devhub", devhubRouter);
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);
 startQpaynetRetryWorker();
+
+// QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
+app.use("/api/qtradeoffline", qtradeOfflineRouter);
 
 app.use(
   (

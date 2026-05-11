@@ -6207,7 +6207,7 @@ qcoreaiRouter.post("/runs/:id/branch", async (req, res) => {
 
     return res.status(201).json({ branch: { ...branch, status: "completed", resultRunId: newRun.id }, run: { id: newRun.id, sessionId: newRun.sessionId } });
   } catch (err: any) {
-    return res.status(500).json({ error: "branch failed", details: err?.message });
+    return res.status(500).json({ error: "branch failed" });
   }
 });
 
@@ -6217,7 +6217,7 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
     const branches = await listBranches(parentRunId);
     return res.json({ branches });
   } catch (err: any) {
-    return res.status(500).json({ error: "list branches failed", details: err?.message });
+    return res.status(500).json({ error: "list branches failed" });
   }
 });
 
@@ -6284,7 +6284,7 @@ qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     return res.json(bundle);
   } catch (err: any) {
-    return res.status(500).json({ error: "export failed", details: err?.message });
+    return res.status(500).json({ error: "export failed" });
   }
 });
 
@@ -6329,7 +6329,7 @@ qcoreaiRouter.post("/export/full-account", async (req, res) => {
     res.setHeader("Content-Type", "application/json");
     return res.json(bundle);
   } catch (err: any) {
-    return res.status(500).json({ error: "full export failed", details: err?.message });
+    return res.status(500).json({ error: "full export failed" });
   }
 });
 
@@ -6360,7 +6360,7 @@ qcoreaiRouter.post("/me/routing-rules", async (req, res) => {
     await setUserSetting(userId, "routing_rules", sanitized);
     return res.json({ ok: true, rules: sanitized });
   } catch (err: any) {
-    return res.status(500).json({ error: "save routing rules failed", details: err?.message });
+    return res.status(500).json({ error: "save routing rules failed" });
   }
 });
 
@@ -6373,6 +6373,6 @@ qcoreaiRouter.get("/me/routing-rules", async (req, res) => {
     const rules = await getUserSetting(userId, "routing_rules");
     return res.json({ rules: rules ?? [] });
   } catch (err: any) {
-    return res.status(500).json({ error: "get routing rules failed", details: err?.message });
+    return res.status(500).json({ error: "get routing rules failed" });
   }
 });

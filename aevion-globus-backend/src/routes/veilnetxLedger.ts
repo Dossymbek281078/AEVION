@@ -1,4 +1,4 @@
-/**
+﻿/**
  * VeilNetX Ledger — privacy-blinded settlement ledger for the AEVION fintech
  * ecosystem. Mounts under /api/veilnetx-ledger to coexist with the waitlist
  * surface at /api/veilnetx.
@@ -54,7 +54,12 @@ const KIND_OPTIONS = new Set([
 const GENESIS_HASH = "0".repeat(64);
 
 function getSalt(): string {
-  return process.env.VEILNETX_SALT || process.env.SHARD_HMAC_SECRET || "veilnetx-dev-salt-change-in-prod";
+  const s = process.env.VEILNETX_SALT?.trim() || process.env.SHARD_HMAC_SECRET?.trim();
+  if (!s) {
+    if (process.env.NODE_ENV === "production") throw new Error("VEILNETX_SALT env is required in production");
+    return "veilnetx-dev-salt-change-in-prod";
+  }
+  return s;
 }
 
 function blind(identifier: string): string {

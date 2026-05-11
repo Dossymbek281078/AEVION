@@ -9,6 +9,7 @@ import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
 import CoachKnowledge from "./CoachKnowledgeModal";
+import { COACH_KNOWLEDGE } from "./coachKnowledge";
 import CoachLessonsModal from "./CoachLessonsModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
@@ -3703,6 +3704,37 @@ export default function CyberChessPage(){
             </div>
 
           </Card>
+
+          {/* ─── Совет дня из Coach Knowledge ─── */}
+          {(()=>{
+            // Pick a deterministic daily tip from COACH_KNOWLEDGE using date seed
+            const now=new Date();const seed=now.getFullYear()*10000+now.getMonth()*100+now.getDate();
+            const allEntries=COACH_KNOWLEDGE.flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
+            if(allEntries.length===0)return null;
+            const tip=allEntries[seed%allEntries.length];
+            const shortBody=typeof tip.description==="string"?tip.description.slice(0,120)+(tip.description.length>120?"…":""):String(tip.description).slice(0,120);
+            return <div style={{
+              padding:"10px 14px",borderRadius:RADIUS.lg,
+              background:"linear-gradient(135deg,#fefce8,#fef9c3)",
+              border:"1px solid #fde68a",
+              display:"flex",gap:10,alignItems:"flex-start"
+            }}>
+              <span style={{fontSize:20,flexShrink:0}}>💡</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10,fontWeight:900,color:"#92400e",letterSpacing:1,textTransform:"uppercase" as const,marginBottom:3}}>
+                  Совет дня · {tip.catTitle}
+                </div>
+                <div style={{fontSize:12,fontWeight:800,color:"#78350f",marginBottom:2}}>{tip.title}</div>
+                <div style={{fontSize:11,color:"#92400e",lineHeight:1.5}}>{shortBody}</div>
+              </div>
+              <button onClick={()=>{sShowKnowledge(true);sTab("coach");sSetup(false)}} style={{
+                flexShrink:0,padding:"4px 8px",borderRadius:6,border:"1px solid #fcd34d",
+                background:"#fffbeb",color:"#92400e",fontSize:10,fontWeight:800,cursor:"pointer"
+              }}>
+                Читать →
+              </button>
+            </div>;
+          })()}
 
           {/* ─── DAILY hub: Daily Variant Challenge + Daily Puzzle side-by-side ─── */}
           {(dailyVariantInfo||(dailyState&&PUZZLES[dailyState.idx]))&&(()=>{

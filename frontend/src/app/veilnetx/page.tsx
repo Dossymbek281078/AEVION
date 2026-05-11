@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+type Status = { phase: string; eta: string; version: string; waitlistCount: number };
 
 const FEATURES = [
   { t: "🧅 Tor-routed", d: "Каждый запрос проходит минимум 3 узла Tor — никто не знает источник + назначение одновременно." },
@@ -10,6 +13,103 @@ const FEATURES = [
   { t: "📂 Open-source", d: "Все клиенты (CLI, Electron desktop, mobile) — на GitHub под GPLv3. Воспроизводимые билды." },
   { t: "⚡ Wireguard fast-path", d: "Для not-paranoid режима — прямой WG-туннель без Tor (10x быстрее, без скрытия источника)." },
 ];
+
+function StatusPill() {
+  const [s, setS] = useState<Status | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api-backend/api/veilnetx/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: Status | null) => {
+        if (cancelled || !data) return;
+        setS({ phase: data.phase, eta: data.eta, version: data.version, waitlistCount: data.waitlistCount });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return (
+    <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+      <span className="bg-cyan-950/40 border border-cyan-800 text-cyan-300 px-2.5 py-1 rounded-full">
+        phase: {s?.phase ?? "…"}
+      </span>
+      <span className="bg-slate-950 border border-slate-800 text-slate-400 px-2.5 py-1 rounded-full">
+        eta: {s?.eta ?? "…"}
+      </span>
+      <span className="bg-slate-950 border border-slate-800 text-slate-400 px-2.5 py-1 rounded-full">
+        v{s?.version ?? "…"}
+      </span>
+      <span className="bg-slate-950 border border-slate-800 text-slate-400 px-2.5 py-1 rounded-full">
+        waitlist: {s?.waitlistCount ?? "…"}
+      </span>
+    </div>
+  );
+}
+
+function WaitlistForm() {
+  const [email, setEmail] = useState("");
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fetch("/api-backend/api/veilnetx/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setMsg({ kind: "err", text: data?.error || `HTTP ${r.status}` });
+        return;
+      }
+      setMsg({
+        kind: "ok",
+        text: data.alreadyJoined
+          ? "Вы уже в списке. Уведомим при запуске."
+          : "Готово — вы в списке. Уведомим при запуске.",
+      });
+      setEmail("");
+    } catch (err) {
+      setMsg({ kind: "err", text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2 max-w-md">
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+        placeholder="you@domain.com"
+        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-600"
+      />
+      <button
+        type="submit"
+        disabled={busy || !email}
+        className="px-4 py-2 bg-cyan-700 hover:bg-cyan-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg text-sm font-semibold"
+      >
+        {busy ? "…" : "Join waitlist"}
+      </button>
+      {msg && (
+        <div
+          className={`text-xs sm:basis-full ${
+            msg.kind === "ok" ? "text-emerald-400" : "text-red-400"
+          }`}
+        >
+          {msg.text}
+        </div>
+      )}
+    </form>
+  );
+}
 
 export default function VeilNetXLanding() {
   return (
@@ -40,7 +140,7 @@ export default function VeilNetXLanding() {
           <h1 className="text-sm font-bold">
             <span className="text-cyan-400">V</span>eilNetX
           </h1>
-          <span className="text-[10px] bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded-full">PLANNING</span>
+          <span className="text-[10px] bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded-full">PRE-LAUNCH</span>
         </div>
       </header>
 
@@ -59,13 +159,20 @@ export default function VeilNetXLanding() {
           логи. KYC нет. Tor-routing включён по умолчанию. Клиенты open-source с
           воспроизводимыми билдами.
         </p>
-        <div className="flex flex-wrap gap-3 pt-4">
-          <button
-            disabled
-            className="px-5 py-2.5 bg-slate-800 rounded-lg text-sm font-semibold opacity-60 cursor-not-allowed"
+        <StatusPill />
+        <div className="space-y-2 pt-2">
+          <div className="text-sm text-slate-400">
+            Запуск Q4 2026. Подпишитесь — уведомим первыми.
+          </div>
+          <WaitlistForm />
+        </div>
+        <div className="flex flex-wrap gap-3 pt-2">
+          <Link
+            href="https://api.aevion.app/api/veilnetx/status"
+            className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"
           >
-            Скоро · Q4 2026
-          </button>
+            Live status JSON →
+          </Link>
           <Link
             href="https://github.com/Dossymbek281078/AEVION"
             className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"

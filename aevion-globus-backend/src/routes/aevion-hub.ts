@@ -24,12 +24,20 @@ const SUB_HEALTH = [
   { name: "qpaynet", path: "/api/qpaynet/health" },
   { name: "smeta-trainer", path: "/api/smeta-trainer/health" },
   { name: "healthai", path: "/api/healthai/health" },
+  { name: "qtradeoffline", path: "/api/qtradeoffline/health" },
+  { name: "qfusionai", path: "/api/qfusionai/health" },
+  { name: "veilnetx", path: "/api/veilnetx/health" },
 ];
 
 const SUB_OPENAPI = [
   { name: "qsign-v2", path: "/api/qsign/v2/openapi.json", title: "AEVION QSign v2" },
   { name: "quantum-shield", path: "/api/quantum-shield/openapi.json", title: "AEVION Quantum Shield" },
   { name: "qpaynet", path: "/api/qpaynet/openapi.json", title: "AEVION QPayNet" },
+  { name: "qcontract", path: "/api/qcontract/openapi.json", title: "AEVION QContract" },
+  { name: "healthai", path: "/api/healthai/openapi.json", title: "AEVION HealthAI" },
+  { name: "qtradeoffline", path: "/api/qtradeoffline/openapi.json", title: "AEVION QTradeOffline" },
+  { name: "qfusionai", path: "/api/qfusionai/openapi.json", title: "AEVION QFusionAI" },
+  { name: "veilnetx", path: "/api/veilnetx/openapi.json", title: "AEVION VeilNetX" },
 ];
 
 /**

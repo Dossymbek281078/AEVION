@@ -39,6 +39,8 @@ import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { qcontractRouter } from "./routes/qcontract";
 import { healthaiRouter } from "./routes/healthai";
+import { qfusionaiRouter } from "./routes/qfusionai";
+import { veilnetxRouter } from "./routes/veilnetx";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { apiQuotasRouter } from "./routes/apiQuotas";
 import { apiKeysRouter } from "./routes/apiKeys";
@@ -424,6 +426,12 @@ app.use("/api/qcontract", qcontractRouter);
 
 // HealthAI — personal AI doctor
 app.use("/api/healthai", healthaiRouter);
+
+// QFusionAI — smart multi-provider LLM router
+app.use("/api/qfusionai", qfusionaiRouter);
+
+// VeilNetX — privacy proxy pre-launch status + waitlist
+app.use("/api/veilnetx", veilnetxRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

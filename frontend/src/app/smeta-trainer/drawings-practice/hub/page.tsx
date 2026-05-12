@@ -101,6 +101,11 @@ const MODULES: Module[] = [
   { id: "landscape-detailed",    category: "special",  href: "/smeta-trainer/drawings-practice/landscape-detailed",    icon: "🌳", title: "Ландшафт детально",                subtitle: "Газоны, деревья, ирригация Hunter, LED-освещение",            level: "L3", exercises: 4,  color: "emerald" },
   { id: "interior-design",       category: "special",  href: "/smeta-trainer/drawings-practice/interior-design",       icon: "🎨", title: "Дизайн интерьера",                 subtitle: "Этапы, наценки, спецификация, авторский надзор",              level: "L3", exercises: 4,  color: "purple"  },
   { id: "winter-garden",         category: "special",  href: "/smeta-trainer/drawings-practice/winter-garden",         icon: "🌿", title: "Зимний сад и фитодизайн",          subtitle: "Алюминий+стеклопакеты, климат, фитолампы, уход",              level: "L3", exercises: 4,  color: "lime"    },
+
+  // ── Финансы строителя ──
+  { id: "construction-taxes",        category: "process",  href: "/smeta-trainer/drawings-practice/construction-taxes",        icon: "💰", title: "Налоги строителя РК",            subtitle: "КПН/ИПН/НДС/соц., упрощёнка/патент, штрафы",                  level: "L3", exercises: 4,  color: "emerald" },
+  { id: "accounting-projects",       category: "process",  href: "/smeta-trainer/drawings-practice/accounting-projects",       icon: "📊", title: "Бухучёт по объектам",            subtitle: "Поэтапная готовность, счета 8010-8021, СБУ-7 РК",            level: "L4", exercises: 4,  color: "blue"    },
+  { id: "bank-guarantees-insurance", category: "process",  href: "/smeta-trainer/drawings-practice/bank-guarantees-insurance", icon: "🏦", title: "БГ и страхование СМР",            subtitle: "1%/3%/5% БГ, страх.СМР+ответств., тарифы банков РК",         level: "L4", exercises: 4,  color: "amber"   },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──

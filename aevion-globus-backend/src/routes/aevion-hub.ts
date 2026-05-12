@@ -8,6 +8,7 @@
  */
 
 import { Router, type Request } from "express";
+import { projects } from "../data/projects";
 
 export const aevionHubRouter = Router();
 
@@ -221,6 +222,81 @@ aevionHubRouter.get("/sitemap.xml", (req, res) => {
   res.setHeader("ETag", etag);
   if (req.headers["if-none-match"] === etag) return res.status(304).end();
   res.send(body);
+});
+
+/**
+ * GET /api/aevion/catalog — unified module catalog.
+ *
+ * Single call returning every module in the AEVION ecosystem (from
+ * projects.ts) enriched with the frontend URL, OpenGraph image URL,
+ * health-probe URL, OpenAPI spec URL (when available), and status tags.
+ *
+ * Designed for partners building dashboards / discovery widgets that need
+ * the whole AEVION surface in one HTTP round-trip.
+ *
+ * Filters:
+ *   ?status=mvp|working|in_progress|planning|idea  — comma-separated allowed
+ *   ?tag=ai,privacy  — comma-separated; matches any
+ *   ?kind=product|experiment
+ */
+aevionHubRouter.get("/catalog", (req, res) => {
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+  const apiBase = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/+$/, "");
+
+  const statusFilter = String(req.query.status ?? "").trim().toLowerCase();
+  const tagFilter = String(req.query.tag ?? "").trim().toLowerCase();
+  const kindFilter = String(req.query.kind ?? "").trim().toLowerCase();
+
+  const allowedStatuses = statusFilter ? new Set(statusFilter.split(",").map((s) => s.trim())) : null;
+  const allowedTags = tagFilter ? new Set(tagFilter.split(",").map((s) => s.trim())) : null;
+  const allowedKinds = kindFilter ? new Set(kindFilter.split(",").map((s) => s.trim())) : null;
+
+  const healthIndex = new Map(SUB_HEALTH.map((h) => [h.name, h.path]));
+  const openapiIndex = new Map(SUB_OPENAPI.map((o) => [o.name, o.path]));
+
+  const items = projects
+    .filter((p) => {
+      if (allowedStatuses && !allowedStatuses.has(String(p.status))) return false;
+      if (allowedKinds && !allowedKinds.has(String(p.kind))) return false;
+      if (allowedTags) {
+        const tags = Array.isArray(p.tags) ? p.tags.map((t) => String(t).toLowerCase()) : [];
+        if (!tags.some((t) => allowedTags.has(t))) return false;
+      }
+      return true;
+    })
+    .map((p) => {
+      const id = String(p.id);
+      const healthPath = healthIndex.get(id);
+      const openapiPath = openapiIndex.get(id);
+      return {
+        id,
+        code: p.code,
+        name: p.name,
+        description: p.description,
+        kind: p.kind,
+        status: p.status,
+        priority: p.priority,
+        tags: p.tags,
+        frontend: `${site}/${id}`,
+        ogImage: `${site}/${id}/opengraph-image`,
+        health: healthPath ? `${apiBase}${healthPath}` : null,
+        openapi: openapiPath ? `${apiBase}${openapiPath}` : null,
+        waitlist: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/waitlist")}` : null,
+        status_url: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/status")}` : null,
+      };
+    });
+
+  res.setHeader("Cache-Control", "public, max-age=120");
+  res.json({
+    total: items.length,
+    filters: {
+      status: statusFilter || null,
+      tag: tagFilter || null,
+      kind: kindFilter || null,
+    },
+    items,
+    generatedAt: new Date().toISOString(),
+  });
 });
 
 aevionHubRouter.get("/version", (_req, res) => {

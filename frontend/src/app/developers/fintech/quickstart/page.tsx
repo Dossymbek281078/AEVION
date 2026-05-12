@@ -122,6 +122,7 @@ export default function FintechQuickstartPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[
               { href: "/developers/fintech", label: "Full API reference — all 33+ endpoints" },
+              { href: "/developers/fintech/troubleshooting", label: "Troubleshooting — 8 common issues with severity + fix steps" },
               { href: "/fintech/status", label: "Live health dashboard — module uptime" },
               { href: "/fintech", label: "Fintech ecosystem overview" },
               { href: "https://github.com/Dossymbek281078/AEVION/issues", label: "GitHub Issues — report bugs or request endpoints" },

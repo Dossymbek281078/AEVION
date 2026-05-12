@@ -9,10 +9,13 @@
  * an anonymous post, etc.).
  *
  * Rather than ship 10 nearly-identical routers, this helper provides a
- * single shared table `module_concept_items` and three primitives:
- *   - createItem(module, ownerId|null, payload)
- *   - listItems(module, opts)        — paginated
- *   - statsFor(module)               — count + 7-day rolling
+ * single shared table `module_concept_items` and primitives:
+ *   - createItem            store one item with a JSONB payload
+ *   - listItems             paginated with optional owner/tag filter
+ *   - getItem               single fetch by id
+ *   - statsFor              count + 7-day rolling + topTags
+ *   - searchByPayloadField  exact match on a JSONB field
+ *   - searchByDistance      geo radius (lat/lng in payload)
  *
  * Per-module routers add concept-specific validation + transformations on
  * top of these primitives. They MUST NOT bypass them.
@@ -41,6 +44,11 @@ export async function ensureMvpTables(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_module_concept_items_module_created
         ON module_concept_items ("moduleId", "createdAt" DESC);
+      CREATE INDEX IF NOT EXISTS idx_module_concept_items_tags
+        ON module_concept_items USING GIN ("tags");
+      CREATE INDEX IF NOT EXISTS idx_module_concept_items_owner
+        ON module_concept_items ("moduleId", "ownerId", "createdAt" DESC)
+        WHERE "ownerId" IS NOT NULL;
     `);
     dbAvailable = true;
   } catch {
@@ -60,7 +68,6 @@ export type MvpItem = {
   createdAt: string;
 };
 
-// Memory fallback when DB is unreachable (CI tests, fresh boots).
 const memoryStore: Map<string, MvpItem[]> = new Map();
 
 function pushMem(item: MvpItem): void {
@@ -137,7 +144,7 @@ export async function listItems(moduleId: string, opts: ListItemsOpts = {}): Pro
       return {
         items: rows.rows.map((r: Record<string, unknown>) => ({
           ...(r as unknown as MvpItem),
-          payload: typeof r.payload === "string" ? JSON.parse(r.payload) : ((r.payload as Record<string, unknown>) ?? {}),
+          payload: typeof r.payload === "string" ? JSON.parse(r.payload as string) : ((r.payload as Record<string, unknown>) ?? {}),
           createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
         })),
         total: tot.rows[0]?.n ?? 0,
@@ -150,6 +157,89 @@ export async function listItems(moduleId: string, opts: ListItemsOpts = {}): Pro
   if (opts.ownerId) arr = arr.filter((i) => i.ownerId === opts.ownerId);
   if (opts.tag) arr = arr.filter((i) => i.tags.includes(opts.tag as string));
   return { items: arr.slice(offset, offset + limit), total: arr.length };
+}
+
+export async function searchByPayloadField(
+  moduleId: string, field: string, value: string, limit = 20,
+): Promise<MvpItem[]> {
+  await ensureMvpTables();
+  const safeField = String(field).replace(/[^a-zA-Z0-9_]/g, "");
+  if (!safeField) return [];
+  const cap = Math.max(1, Math.min(100, Number(limit)));
+  if (dbAvailable) {
+    try {
+      const pool = getPool();
+      const r = await pool.query(
+        `SELECT * FROM module_concept_items
+          WHERE "moduleId" = $1 AND payload->>'${safeField}' = $2
+          ORDER BY "createdAt" DESC LIMIT $3`,
+        [moduleId, String(value), cap],
+      );
+      return r.rows.map((row: Record<string, unknown>) => ({
+        ...(row as unknown as MvpItem),
+        payload: typeof row.payload === "string" ? JSON.parse(row.payload as string) : ((row.payload as Record<string, unknown>) ?? {}),
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+      }));
+    } catch {
+      // fall through to memory store
+    }
+  }
+  const arr = memoryStore.get(moduleId) ?? [];
+  return arr.filter((i) => String(i.payload[safeField] ?? "") === String(value)).slice(0, cap);
+}
+
+export async function searchByDistance(
+  moduleId: string, lat: number, lng: number, radiusKm: number, limit = 20,
+): Promise<(MvpItem & { distanceKm: number })[]> {
+  await ensureMvpTables();
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !(radiusKm > 0)) return [];
+  const cap = Math.max(1, Math.min(100, Number(limit)));
+  const degLat = radiusKm / 111.0;
+  const cosLat = Math.cos((lat * Math.PI) / 180) || 1e-6;
+  const degLng = radiusKm / (111.0 * Math.abs(cosLat));
+  const haversine = (lat2: number, lng2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat) * Math.PI) / 180;
+    const dLng = ((lng2 - lng) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+  };
+  let candidates: MvpItem[] = [];
+  if (dbAvailable) {
+    try {
+      const pool = getPool();
+      const r = await pool.query(
+        `SELECT * FROM module_concept_items
+          WHERE "moduleId" = $1
+            AND payload ? 'lat' AND payload ? 'lng'
+            AND (payload->>'lat')::float BETWEEN $2 AND $3
+            AND (payload->>'lng')::float BETWEEN $4 AND $5
+          ORDER BY "createdAt" DESC LIMIT 500`,
+        [moduleId, lat - degLat, lat + degLat, lng - degLng, lng + degLng],
+      );
+      candidates = r.rows.map((row: Record<string, unknown>) => ({
+        ...(row as unknown as MvpItem),
+        payload: typeof row.payload === "string" ? JSON.parse(row.payload as string) : ((row.payload as Record<string, unknown>) ?? {}),
+        createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+      }));
+    } catch {
+      // fall through to memory store
+    }
+  }
+  if (candidates.length === 0) {
+    candidates = (memoryStore.get(moduleId) ?? []).filter((i) =>
+      typeof i.payload.lat === "number" && typeof i.payload.lng === "number");
+  }
+  return candidates
+    .map((i) => {
+      const pLat = Number(i.payload.lat);
+      const pLng = Number(i.payload.lng);
+      return Number.isFinite(pLat) && Number.isFinite(pLng)
+        ? { ...i, distanceKm: haversine(pLat, pLng) } : null;
+    })
+    .filter((x): x is MvpItem & { distanceKm: number } => x !== null && x.distanceKm <= radiusKm)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, cap);
 }
 
 export async function getItem(moduleId: string, id: string): Promise<MvpItem | null> {

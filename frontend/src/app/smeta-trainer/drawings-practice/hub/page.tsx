@@ -149,6 +149,11 @@ const MODULES: Module[] = [
   { id: "kns",            category: "utilities",href: "/smeta-trainer/drawings-practice/kns",            icon: "🔄", title: "КНС — насосные канализации",        subtitle: "5 типов от малых до резервуарных по СП РК 4.01-43",           level: "L4", exercises: 4,  color: "slate"   },
   { id: "storm-sewerage", category: "utilities",href: "/smeta-trainer/drawings-practice/storm-sewerage", icon: "☔", title: "Ливневая канализация",              subtitle: "Расчёт стоков, дождеприёмники, лотки по СНиП РК 4.01-43",     level: "L3", exercises: 4,  color: "blue"    },
   { id: "grease-traps",   category: "utilities",href: "/smeta-trainer/drawings-practice/grease-traps",   icon: "🍳", title: "Жироуловители",                     subtitle: "Для общепита, расчёт по посадочным местам",                   level: "L3", exercises: 4,  color: "amber"   },
+
+  // ── Электроснабжение ──
+  { id: "power-supply-external", category: "utilities",href: "/smeta-trainer/drawings-practice/power-supply-external", icon: "⚡", title: "Внешнее электроснабжение",         subtitle: "ЛЭП, КТП, ВЛ, КЛ — от подстанции до ВРУ",                      level: "L4", exercises: 4,  color: "violet"  },
+  { id: "power-supply-internal", category: "utilities",href: "/smeta-trainer/drawings-practice/power-supply-internal", icon: "🔌", title: "Внутреннее электроснабжение",      subtitle: "ВРУ, щитовая, разводка по этажам, автоматы и УЗО",            level: "L3", exercises: 4,  color: "yellow"  },
+  { id: "grounding-lightning",   category: "utilities",href: "/smeta-trainer/drawings-practice/grounding-lightning",   icon: "🌩",  title: "Заземление и молниезащита",        subtitle: "TN-S, контур, категории МЗ по СП РК 3.04-01",                 level: "L3", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

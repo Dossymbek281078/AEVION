@@ -84,6 +84,11 @@ const MODULES: Module[] = [
   { id: "case-house",     category: "practice", href: "/smeta-trainer/drawings-practice/case-house",     icon: "🏘", title: "КЕЙС: 9-этажный жилой дом",         subtitle: "Капстоун №2 — 2300 м², 8 этапов от паркинга до отделки",      level: "L5", exercises: 8,  color: "purple"  },
   { id: "individual-rates",category: "tools",   href: "/smeta-trainer/drawings-practice/individual-rates",icon: "📝", title: "Индивидуальные расценки",          subtitle: "Когда ЭСН не подходит — методика составления и согласования", level: "L4", exercises: 3,  color: "sky"     },
   { id: "index-history",  category: "tools",    href: "/smeta-trainer/drawings-practice/index-history",  icon: "📈", title: "Динамика индексов 2001-2025",       subtitle: "23 года истории, 16 регионов, 15 видов работ",                level: "L3", exercises: 3,  color: "red"     },
+
+  // ── Финальная подборка — лучшие практики и проверка ──
+  { id: "best-practices", category: "process",  href: "/smeta-trainer/drawings-practice/best-practices", icon: "⚡", title: "Лучшие практики и ошибки",          subtitle: "22 типовые ошибки сметчиков из реальной практики РК",         level: "L4", exercises: 0,  color: "red"     },
+  { id: "case-pool",      category: "practice", href: "/smeta-trainer/drawings-practice/case-pool",      icon: "🏊", title: "КЕЙС: Крытый бассейн",              subtitle: "Капстоун №3 — 25×12 м, гидроизоляция, спец. отделка",         level: "L5", exercises: 8,  color: "sky"     },
+  { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

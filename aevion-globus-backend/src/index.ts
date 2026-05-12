@@ -55,6 +55,9 @@ import { isSentryEnabled, captureException } from "./lib/sentry";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
 import { paymentsRouter } from "./routes/payments";
+import { qaiRouter } from "./routes/qai";
+import { qstoreRouter } from "./routes/qstore";
+import { qlearnRouter } from "./routes/qlearn";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -459,6 +462,12 @@ app.use("/api/devhub", devhubRouter);
 app.use("/api/qmedia", qmediaRouter);
 // Payments — Stripe + PayBox KZ unified gateway
 app.use("/api/payments", paymentsRouter);
+// QAI — universal public AI assistant
+app.use("/api/qai", qaiRouter);
+// QStore — digital marketplace
+app.use("/api/qstore", qstoreRouter);
+// QLearn — learning platform
+app.use("/api/qlearn", qlearnRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

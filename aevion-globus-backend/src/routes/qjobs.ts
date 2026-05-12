@@ -3,6 +3,10 @@ import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQJobsTables, isQJobsDbReady } from "../lib/ensureQJobsTables";
+import { rateLimit } from "../lib/rateLimit";
+
+const postLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qjobs:post", message: "rate_limited" });
+const applyLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:apply", message: "rate_limited" });
 
 export const qjobsRouter = Router();
 
@@ -91,13 +95,20 @@ qjobsRouter.get("/jobs", async (req: Request, res: Response) => {
       if (type && JOB_TYPES.includes(type)) { conditions.push(`"type"=$${idx++}`); args.push(type); }
       if (location) { conditions.push(`"location" ILIKE $${idx++}`); args.push(`%${location}%`); }
       if (q) { conditions.push(`("title" ILIKE $${idx++} OR "company" ILIKE $${idx})`); args.push(`%${q}%`); idx++; args.push(`%${q}%`); }
+      if (skills) {
+        const skillList = skills.split(",").map((s: string) => s.trim()).filter(Boolean);
+        if (skillList.length > 0) {
+          conditions.push(`"skills" && $${idx++}::text[]`);
+          args.push(skillList);
+        }
+      }
 
       const where = conditions.join(" AND ");
-      const { rows } = await pool.query(
-        `SELECT * FROM "QJobsPosting" WHERE ${where} ORDER BY "createdAt" DESC LIMIT $${idx}`,
-        [...args, limitN],
-      );
-      return res.json({ jobs: rows });
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        pool.query(`SELECT * FROM "QJobsPosting" WHERE ${where} ORDER BY "createdAt" DESC LIMIT $${idx}`, [...args, limitN]),
+        pool.query(`SELECT COUNT(*)::int AS total FROM "QJobsPosting" WHERE ${where}`, args),
+      ]);
+      return res.json({ jobs: rows, total: countRows[0]?.total ?? rows.length });
     }
 
     let jobs = Array.from(memJobs.values()).filter((j) => j.isActive);
@@ -111,8 +122,9 @@ qjobsRouter.get("/jobs", async (req: Request, res: Response) => {
       const skillList = skills.split(",").map((s) => s.trim().toLowerCase());
       jobs = jobs.filter((j) => skillList.some((s) => j.skills.some((js) => js.toLowerCase().includes(s))));
     }
-    jobs = jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limitN);
-    return res.json({ jobs });
+    jobs = jobs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const total = jobs.length;
+    return res.json({ jobs: jobs.slice(0, limitN), total });
   } catch {
     return res.status(500).json({ error: "internal_error" });
   }
@@ -136,7 +148,7 @@ qjobsRouter.get("/jobs/:id", async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/qjobs/me/jobs ──────────────────────────────────────────────────
-qjobsRouter.post("/me/jobs", async (req: Request, res: Response) => {
+qjobsRouter.post("/me/jobs", postLimiter, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
@@ -255,7 +267,7 @@ qjobsRouter.delete("/me/jobs/:id", async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/qjobs/jobs/:id/apply ──────────────────────────────────────────
-qjobsRouter.post("/jobs/:id/apply", async (req: Request, res: Response) => {
+qjobsRouter.post("/jobs/:id/apply", applyLimiter, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
@@ -391,6 +403,35 @@ qjobsRouter.patch("/applications/:id", async (req: Request, res: Response) => {
     if (!job || job.employerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     application.status = status;
     return res.json({ application });
+  } catch {
+    return res.status(500).json({ error: "internal_error" });
+  }
+});
+
+// ─── GET /api/qjobs/stats ─────────────────────────────────────────────────────
+qjobsRouter.get("/stats", async (_req: Request, res: Response) => {
+  try {
+    if (isQJobsDbReady()) {
+      const [jobs, apps, byType] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE "isActive") ::int AS active FROM "QJobsPosting"`),
+        pool.query(`SELECT COUNT(*)::int AS total FROM "QJobsApplication"`),
+        pool.query(`SELECT "type", COUNT(*)::int AS count FROM "QJobsPosting" WHERE "isActive" GROUP BY "type" ORDER BY count DESC`),
+      ]);
+      return res.json({
+        postings: { total: jobs.rows[0].total, active: jobs.rows[0].active },
+        applications: { total: apps.rows[0].total },
+        byType: Object.fromEntries(byType.rows.map((r: { type: string; count: number }) => [r.type, r.count])),
+        backend: "postgres",
+      });
+    }
+    const allJobs = Array.from(memJobs.values());
+    const byType = JOB_TYPES.reduce((acc, t) => ({ ...acc, [t]: allJobs.filter((j) => j.type === t && j.isActive).length }), {} as Record<string, number>);
+    return res.json({
+      postings: { total: allJobs.length, active: allJobs.filter((j) => j.isActive).length },
+      applications: { total: memApplications.size },
+      byType,
+      backend: "memory",
+    });
   } catch {
     return res.status(500).json({ error: "internal_error" });
   }

@@ -1,147 +1,68 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-// Zone: aevion-core/main owns frontend/src/app/developers/fintech/**
-
 export const metadata: Metadata = {
-  title: "AEVION Fintech Rate Limits — per-endpoint quotas + backoff guide",
-  description:
-    "Per-endpoint rate limits for the AEVION fintech API: write quotas, public read quotas, partner-tier overrides, retry-after handling, exponential backoff sample code.",
+  title: "AEVION Fintech — Rate Limits",
+  description: "Rate limits, quotas, and backoff strategies for AEVION fintech APIs across all four tiers.",
   alternates: { canonical: "https://aevion.app/developers/fintech/rate-limits" },
-  robots: { index: true, follow: true },
 };
 
-const C = {
-  bg: "#0f172a", panel: "#1e293b", border: "#334155",
-  text: "#f1f5f9", dim: "#94a3b8", faint: "#64748b",
-  accent: "#a78bfa", green: "#34d399", red: "#ef4444", yellow: "#fbbf24",
-  cyan: "#22d3ee",
-};
+const C = { bg: "#050810", surface: "#0d1117", border: "#1e2a3a", text: "#e2e8f0", muted: "#64748b", code: "#0f1923", accent: "#6366f1", green: "#10b981", amber: "#f59e0b", red: "#ef4444" };
 
-type Tier = { name: string; writes: string; reads: string; bursts: string; cost: string };
-
-const TIERS: Tier[] = [
-  { name: "Anonymous", writes: "— (auth required)", reads: "300 req/min", bursts: "60 req/10s", cost: "Free" },
-  { name: "Authenticated", writes: "60 req/min", reads: "600 req/min", bursts: "120 req/10s", cost: "Free" },
-  { name: "Partner", writes: "300 req/min", reads: "3000 req/min", bursts: "600 req/10s", cost: "Contact" },
-  { name: "Enterprise", writes: "Custom", reads: "Custom", bursts: "Custom", cost: "SLA" },
+const TIERS = [
+  { name: "Developer", price: "Free",    perMin: 100,  perMonth: "10K",   burst: 150,  concurrency: 5 },
+  { name: "Build",     price: "$49/mo",  perMin: 500,  perMonth: "100K",  burst: 750,  concurrency: 20 },
+  { name: "Scale",     price: "$199/mo", perMin: 2000, perMonth: "1M",    burst: 3000, concurrency: 100 },
+  { name: "Enterprise",price: "Custom",  perMin: null, perMonth: "∞",     burst: null, concurrency: null },
 ];
 
-type EndpointBucket = {
-  module: string;
-  color: string;
-  buckets: { path: string; method: string; limit: string; note?: string }[];
-};
-
-const BUCKETS: EndpointBucket[] = [
-  {
-    module: "QGood",
-    color: "#34d399",
-    buckets: [
-      { path: "/api/qgood/campaigns", method: "GET",  limit: "600/min", note: "Public, cached 30s" },
-      { path: "/api/qgood/donate",    method: "POST", limit: "30/min",  note: "Stripe-gated, idempotency-key required" },
-      { path: "/api/qgood/stats",     method: "GET",  limit: "300/min", note: "Cached 60s upstream" },
-    ],
-  },
-  {
-    module: "QMaskCard",
-    color: "#c4b5fd",
-    buckets: [
-      { path: "/api/qmaskcard/issue",   method: "POST", limit: "20/min", note: "Single-use mask cost-gated" },
-      { path: "/api/qmaskcard/charge",  method: "POST", limit: "60/min", note: "Per-mask 1 charge until revoke" },
-      { path: "/api/qmaskcard/me/list", method: "GET",  limit: "120/min" },
-    ],
-  },
-  {
-    module: "VeilNetX",
-    color: "#a78bfa",
-    buckets: [
-      { path: "/api/veilnetx-ledger/head",          method: "GET",  limit: "1200/min", note: "Public, very hot — cached 5s" },
-      { path: "/api/veilnetx-ledger/chain/verify",  method: "GET",  limit: "10/min",   note: "Expensive — re-hashes full chain" },
-      { path: "/api/veilnetx-ledger/search",        method: "GET",  limit: "120/min",  note: "Hash-prefix lookup" },
-    ],
-  },
-  {
-    module: "Z-Tide",
-    color: "#fbbf24",
-    buckets: [
-      { path: "/api/ztide/leaderboard",   method: "GET",  limit: "600/min", note: "Public, cached 60s" },
-      { path: "/api/ztide/me",            method: "GET",  limit: "120/min" },
-      { path: "/api/ztide/claim-streak",  method: "POST", limit: "1/20h",   note: "Per-user 20-hour cooldown" },
-    ],
-  },
-  {
-    module: "QChainGov",
-    color: "#f472b6",
-    buckets: [
-      { path: "/api/qchaingov/proposals",            method: "GET",  limit: "600/min", note: "Public, cached 30s" },
-      { path: "/api/qchaingov/proposals/:id/vote",   method: "POST", limit: "6/min",   note: "1 vote per user per proposal (UNIQUE)" },
-      { path: "/api/qchaingov/proposals/:id/execute",method: "POST", limit: "10/min",  note: "Admin-only, audited" },
-    ],
-  },
+const MODULE_LIMITS = [
+  { module: "QPayNet",    writePerMin: 30,  readPerMin: 200, note: "Transfer & deposit endpoints share the write bucket" },
+  { module: "VeilNetX",   writePerMin: 10,  readPerMin: 120, note: "Ledger writes are batch-coalesced internally" },
+  { module: "QMaskCard",  writePerMin: 20,  readPerMin: 100, note: "Mask issuance is rate-limited independently from charge" },
+  { module: "QGood",      writePerMin: 10,  readPerMin: 150, note: "Donation writes share bucket with campaign mutations" },
+  { module: "Z-Tide",     writePerMin: 60,  readPerMin: 300, note: "Event submissions are high-throughput; reads are public" },
+  { module: "QChainGov",  writePerMin: 5,   readPerMin: 100, note: "Proposal creation is strictly rate-limited per user" },
 ];
 
-function MethodPill({ method }: { method: string }) {
-  const colors: Record<string, string> = {
-    GET: C.green, POST: C.accent, PATCH: C.cyan, DELETE: C.yellow,
-  };
-  return (
-    <span style={{
-      display: "inline-block",
-      minWidth: 50,
-      textAlign: "center",
-      fontSize: 10,
-      fontWeight: 800,
-      letterSpacing: 0.4,
-      padding: "2px 6px",
-      borderRadius: 4,
-      background: `${colors[method] ?? "#64748b"}20`,
-      color: colors[method] ?? "#94a3b8",
-      fontFamily: "ui-monospace, monospace",
-    }}>{method}</span>
-  );
-}
+const HEADERS_TABLE = [
+  { header: "X-RateLimit-Limit",     desc: "Requests per minute allowed for your tier" },
+  { header: "X-RateLimit-Remaining", desc: "Requests left in the current window" },
+  { header: "X-RateLimit-Reset",     desc: "Unix timestamp when the window resets" },
+  { header: "Retry-After",           desc: "Seconds to wait before retrying (only on 429)" },
+];
 
-export default function RateLimitsPage() {
+export default function FintechRateLimitsPage() {
   return (
-    <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
-      <article style={{ maxWidth: 880, margin: "0 auto" }}>
-        {/* Breadcrumb */}
-        <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
-          <Link href="/developers/fintech" style={{ color: C.dim, textDecoration: "none" }}>Fintech API</Link>
-          {" / "}<span style={{ color: C.text }}>Rate limits</span>
-        </div>
-
-        <h1 style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", margin: "0 0 8px" }}>
-          Rate limits
-        </h1>
-        <p style={{ fontSize: 14, color: C.dim, margin: "0 0 32px", lineHeight: 1.65 }}>
-          Per-endpoint quotas + tier overrides. All limits apply per-IP for anonymous traffic and per-user
-          for authenticated traffic. Limits are sliding-window, not fixed-window.
+    <main style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, system-ui, sans-serif" }}>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "3rem 1.5rem 4rem" }}>
+        <Link href="/developers/fintech" style={{ color: C.muted, fontSize: "0.8rem", textDecoration: "none", display: "inline-block", marginBottom: 16 }}>← Fintech Docs</Link>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, color: "#f1f5f9", margin: 0 }}>Rate Limits</h1>
+        <p style={{ color: C.muted, fontSize: "0.9rem", marginTop: 8 }}>
+          All AEVION fintech APIs are rate-limited per API key. Limits reset on a rolling 60-second window.
         </p>
 
         {/* Tier table */}
-        <section style={{ marginBottom: 36 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Tier overview</h2>
-          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f1f5f9", marginBottom: 14 }}>Limits by tier</h2>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
               <thead>
-                <tr style={{ background: "rgba(167,139,250,0.08)" }}>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>Tier</th>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>Writes</th>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>Reads</th>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>Bursts</th>
-                  <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 800, color: C.accent, textTransform: "uppercase", letterSpacing: 0.5 }}>Cost</th>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  {["Tier", "Price", "Req/min", "Req/month", "Burst", "Concurrency"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", fontSize: "0.72rem" }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {TIERS.map((t, i) => (
-                  <tr key={t.name} style={{ borderTop: i === 0 ? "none" : `1px solid ${C.border}` }}>
-                    <td style={{ padding: "10px 14px", fontWeight: 700, color: C.text }}>{t.name}</td>
-                    <td style={{ padding: "10px 14px", color: C.dim, fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{t.writes}</td>
-                    <td style={{ padding: "10px 14px", color: C.dim, fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{t.reads}</td>
-                    <td style={{ padding: "10px 14px", color: C.dim, fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{t.bursts}</td>
-                    <td style={{ padding: "10px 14px", color: C.dim }}>{t.cost}</td>
+                  <tr key={t.name} style={{ borderBottom: `1px solid ${C.border}30`, background: i % 2 === 0 ? "transparent" : `${C.surface}60` }}>
+                    <td style={{ padding: "9px 12px", fontWeight: 700, color: "#f1f5f9" }}>{t.name}</td>
+                    <td style={{ padding: "9px 12px", color: C.muted }}>{t.price}</td>
+                    <td style={{ padding: "9px 12px", color: t.perMin ? C.green : C.accent, fontWeight: 600 }}>{t.perMin ? t.perMin.toLocaleString() : "Dedicated"}</td>
+                    <td style={{ padding: "9px 12px", color: C.text }}>{t.perMonth}</td>
+                    <td style={{ padding: "9px 12px", color: C.muted }}>{t.burst ? t.burst.toLocaleString() : "Negotiated"}</td>
+                    <td style={{ padding: "9px 12px", color: C.muted }}>{t.concurrency ?? "Negotiated"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -149,100 +70,60 @@ export default function RateLimitsPage() {
           </div>
         </section>
 
-        {/* Per-module endpoint buckets */}
-        <section style={{ marginBottom: 36 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Per-endpoint buckets</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {BUCKETS.map((b) => (
-              <div key={b.module} style={{
-                background: C.panel,
-                border: `1px solid ${C.border}`,
-                borderLeft: `3px solid ${b.color}`,
-                borderRadius: 10,
-                padding: "14px 18px",
-              }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: b.color, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-                  {b.module}
+        {/* Per-module write limits */}
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f1f5f9", marginBottom: 14 }}>Per-module limits (Scale tier basis)</h2>
+          <p style={{ color: C.muted, fontSize: "0.83rem", marginBottom: 14 }}>
+            The global rate limit applies first. These are secondary per-module limits that apply on top of tier limits.
+          </p>
+          <div style={{ display: "grid", gap: 6 }}>
+            {MODULE_LIMITS.map(m => (
+              <div key={m.module} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f1f5f9", width: 100, flexShrink: 0 }}>{m.module}</span>
+                <div style={{ display: "flex", gap: 16 }}>
+                  <span style={{ fontSize: "0.8rem", color: C.muted }}>Write: <strong style={{ color: C.amber }}>{m.writePerMin}/min</strong></span>
+                  <span style={{ fontSize: "0.8rem", color: C.muted }}>Read: <strong style={{ color: C.green }}>{m.readPerMin}/min</strong></span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {b.buckets.map((e) => (
-                    <div key={e.path + e.method} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, lineHeight: 1.5 }}>
-                      <MethodPill method={e.method} />
-                      <code style={{ color: C.text, fontFamily: "ui-monospace, monospace", fontSize: 12, flex: 1 }}>{e.path}</code>
-                      <span style={{ color: C.green, fontFamily: "ui-monospace, monospace", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>{e.limit}</span>
-                    </div>
-                  ))}
-                </div>
-                {b.buckets.some((x) => x.note) && (
-                  <ul style={{ margin: "10px 0 0", paddingLeft: 20, fontSize: 11, color: C.faint, lineHeight: 1.6 }}>
-                    {b.buckets.filter((x) => x.note).map((x, i) => (
-                      <li key={i}><code style={{ color: C.dim, fontFamily: "ui-monospace, monospace" }}>{x.path}</code>: {x.note}</li>
-                    ))}
-                  </ul>
-                )}
+                <span style={{ fontSize: "0.75rem", color: C.muted, flex: 1 }}>{m.note}</span>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Headers */}
-        <section style={{ marginBottom: 36 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Response headers</h2>
-          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
-            <ul style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: C.dim, lineHeight: 1.8 }}>
-              <li><code style={{ color: C.cyan, fontFamily: "ui-monospace, monospace" }}>X-RateLimit-Limit</code> — quota per window</li>
-              <li><code style={{ color: C.cyan, fontFamily: "ui-monospace, monospace" }}>X-RateLimit-Remaining</code> — remaining in current window</li>
-              <li><code style={{ color: C.cyan, fontFamily: "ui-monospace, monospace" }}>X-RateLimit-Reset</code> — Unix seconds when window resets</li>
-              <li><code style={{ color: C.cyan, fontFamily: "ui-monospace, monospace" }}>Retry-After</code> — only on 429, seconds to wait</li>
-            </ul>
+        {/* Response headers */}
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f1f5f9", marginBottom: 14 }}>Rate limit headers</h2>
+          <div style={{ display: "grid", gap: 6 }}>
+            {HEADERS_TABLE.map(h => (
+              <div key={h.header} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                <code style={{ background: C.code, padding: "3px 8px", borderRadius: 4, fontSize: "0.78rem", fontFamily: "ui-monospace, monospace", color: "#a5f3fc", flexShrink: 0 }}>{h.header}</code>
+                <span style={{ fontSize: "0.82rem", color: C.muted }}>{h.desc}</span>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* Backoff sample */}
-        <section style={{ marginBottom: 36 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Backoff pattern (TypeScript)</h2>
-          <pre style={{
-            background: "#020617",
-            border: `1px solid ${C.border}`,
-            borderRadius: 10,
-            padding: "16px 18px",
-            margin: 0,
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: "#a5f3fc",
-            fontFamily: "ui-monospace, monospace",
-            overflowX: "auto",
-          }}>{`async function aevFetch(url: string, init: RequestInit = {}, attempt = 0): Promise<Response> {
-  const r = await fetch(url, init);
-  if (r.status !== 429 || attempt >= 5) return r;
-
-  const retryAfter = Number(r.headers.get("retry-after") ?? "0");
-  const wait = retryAfter > 0
-    ? retryAfter * 1000
-    : Math.min(2 ** attempt * 1000 + Math.random() * 250, 30_000);
-
-  await new Promise((res) => setTimeout(res, wait));
-  return aevFetch(url, init, attempt + 1);
-}`}</pre>
+        {/* Backoff recommendation */}
+        <section style={{ marginTop: 36 }}>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f1f5f9", marginBottom: 12 }}>Recommended backoff strategy</h2>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "1rem 1.25rem", fontSize: "0.82rem", color: C.muted, lineHeight: 1.7 }}>
+            <p style={{ marginBottom: 8 }}>On receiving HTTP 429:</p>
+            <ol style={{ paddingLeft: 20, margin: 0 }}>
+              <li>Read <code style={{ background: C.code, padding: "1px 6px", borderRadius: 4, fontSize: "0.75rem" }}>Retry-After</code> header (seconds).</li>
+              <li>Wait <code style={{ background: C.code, padding: "1px 6px", borderRadius: 4, fontSize: "0.75rem" }}>Retry-After + jitter(0–2s)</code>.</li>
+              <li>Retry up to 3 times with exponential backoff: 1s, 2s, 4s.</li>
+              <li>After 3 failures: queue for deferred retry (not synchronous user flow).</li>
+            </ol>
+            <p style={{ marginTop: 10 }}>The SDK handles this automatically — set <code style={{ background: C.code, padding: "1px 6px", borderRadius: 4, fontSize: "0.75rem" }}>{`{ retries: 3 }`}</code> in the client constructor.</p>
+          </div>
         </section>
 
-        {/* Bypass partner-tier */}
-        <div style={{ marginTop: 36, padding: "16px 20px", background: C.panel, borderRadius: 12, border: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 8 }}>Need higher limits?</div>
-          <div style={{ fontSize: 13, color: C.dim, lineHeight: 1.65 }}>
-            Partner tier unlocks 5× write and 5× read quotas plus dedicated rate-limit pools per integration.
-            Contact <a href="mailto:support@aevion.app" style={{ color: C.accent, textDecoration: "none" }}>support@aevion.app</a>
-            {" "}with your use case, expected RPM, and integration name.
-          </div>
+        <div style={{ marginTop: 36, display: "flex", gap: 20, fontSize: "0.8rem" }}>
+          <Link href="/fintech/compare" style={{ color: C.accent, textDecoration: "none" }}>Upgrade tier →</Link>
+          <Link href="/developers/fintech/errors" style={{ color: C.accent, textDecoration: "none" }}>Error codes →</Link>
+          <Link href="/developers/fintech/sdk" style={{ color: C.accent, textDecoration: "none" }}>SDK reference →</Link>
         </div>
-
-        {/* Related */}
-        <div style={{ marginTop: 24, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
-          <Link href="/developers/fintech" style={{ color: C.accent, textDecoration: "none" }}>← API Reference</Link>
-          <Link href="/developers/fintech/troubleshooting" style={{ color: C.accent, textDecoration: "none" }}>🔧 Troubleshooting</Link>
-          <Link href="/developers/fintech/errors" style={{ color: C.accent, textDecoration: "none" }}>⚠️ Error codes</Link>
-        </div>
-      </article>
+      </div>
     </main>
   );
 }

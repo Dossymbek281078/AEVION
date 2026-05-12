@@ -1086,6 +1086,11 @@ SMOKE_BASE=https://api.aevion.app npm run smoke:all`}</Pre>
           <li>scripts/ztide-smoke.js &mdash; 6 steps: service-key auth, ingest events, leaderboard pagination, rank promotion.</li>
           <li>scripts/qchaingov-smoke.js &mdash; 9 steps: propose, open, vote x3, close, verify tally + VeilNetX entry.</li>
           <li>scripts/qgood-smoke.js &mdash; 6 steps: propose, approve, donate, refund, verify ledger trail.</li>
+          <li>scripts/fintech-cross-module-smoke.mjs &mdash; 7 steps: cross-module health audit (all 5 fintech modules).</li>
+          <li>scripts/fintech-onboarding-guide.mjs &mdash; integrator walk-through; <Code>--probe</Code> hits live health endpoints.</li>
+          <li>scripts/fintech-stats-aggregator.mjs &mdash; CLI stats dashboard; <Code>--json</Code> emits machine-readable.</li>
+          <li>scripts/fintech-uptime-monitor.mjs &mdash; long-running monitor with p50/p95 latency.</li>
+          <li>scripts/fintech-weekly-report.mjs &mdash; markdown weekly digest.</li>
         </ul>
         <P>
           Smoke failures exit non-zero and dump the failing step + response body.

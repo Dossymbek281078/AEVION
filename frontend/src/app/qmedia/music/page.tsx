@@ -59,10 +59,10 @@ export default function QMediaMusicPage() {
         {addOpen && (
           <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: "1px solid rgba(13,148,136,0.3)", background: "rgba(13,148,136,0.04)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Title *" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
-              <input value={form.artist} onChange={e => setForm(p => ({ ...p, artist: e.target.value }))} placeholder="Artist" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} maxLength={200} aria-label="Название трека" placeholder="Title *" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input value={form.artist} onChange={e => setForm(p => ({ ...p, artist: e.target.value }))} maxLength={200} aria-label="Исполнитель" placeholder="Artist" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
             </div>
-            <input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} placeholder="Audio URL (mp3, ogg…)" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
+            <input type="url" inputMode="url" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} maxLength={2048} aria-label="URL аудио-файла" placeholder="Audio URL (mp3, ogg…)" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 8 }}>
               <select value={form.genre} onChange={e => setForm(p => ({ ...p, genre: e.target.value }))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["pop", "rock", "electronic", "classical", "jazz", "hip-hop", "other"].map(g => <option key={g} value={g}>{g}</option>)}

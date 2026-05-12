@@ -49,14 +49,14 @@ export default function QMediaVideosPage() {
         {addOpen && (
           <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.04)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Title *" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
-              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
+              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} maxLength={200} aria-label="Название видео" placeholder="Title *" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))} aria-label="Категория видео" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["tutorial", "music-video", "short-film", "documentary", "other"].map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <input value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} placeholder="Video URL (YouTube, mp4…)" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
+            <input type="url" inputMode="url" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))} maxLength={2048} aria-label="URL видео" placeholder="Video URL (YouTube, mp4…)" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit", boxSizing: "border-box", marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 8 }}>
-              <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Description" style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} maxLength={1000} aria-label="Описание видео" placeholder="Description" style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
               <button onClick={addVideo} style={{ padding: "8px 16px", borderRadius: 8, background: "#7c3aed", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
             </div>
           </div>

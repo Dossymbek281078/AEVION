@@ -77,6 +77,30 @@ async function run() {
   if (r.status === 402 && r.body?.status === "declined") ok("POST /charges insufficient → declined");
   else fail("POST /charges should decline", `${r.status}`);
 
+  // Idempotency — same (maskId, paymentRef) twice. Second call must return the
+  // existing charge (idempotent:true) without double-debiting the mask.
+  const idempKey = `smoke-idemp-${Date.now()}`;
+  r = await req("POST", "/api/qmaskcard/charges", {
+    maskId, amountCents: 500, currency: "USD",
+    merchantName: "Idemp Test", merchantCategory: "saas", geoCountry: "KZ",
+    paymentRef: idempKey,
+  }, token);
+  const firstChargeId = r.body?.id;
+  if ((r.status === 200 || r.status === 201) && r.body?.status === "authorized") {
+    ok("POST /charges with paymentRef (first call)", `id=${firstChargeId?.slice(0, 8)}`);
+  } else fail("POST /charges with paymentRef", `${r.status}`);
+
+  r = await req("POST", "/api/qmaskcard/charges", {
+    maskId, amountCents: 500, currency: "USD",
+    merchantName: "Idemp Test", merchantCategory: "saas", geoCountry: "KZ",
+    paymentRef: idempKey,
+  }, token);
+  if (r.status === 200 && r.body?.idempotent === true && r.body?.id === firstChargeId) {
+    ok("POST /charges replay returns idempotent:true with same id", `id=${r.body.id?.slice(0, 8)}`);
+  } else {
+    fail("POST /charges should be idempotent on same paymentRef", `${r.status} id=${r.body?.id?.slice(0, 8)} idemp=${r.body?.idempotent}`);
+  }
+
   // Revoke
   r = await req("POST", `/api/qmaskcard/masks/${maskId}/revoke`, {}, token);
   if (r.status === 200 && r.body?.ok) ok("POST /masks/:id/revoke");

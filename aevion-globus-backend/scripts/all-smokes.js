@@ -64,6 +64,8 @@ const SMOKES = [
   { name: "ztide", script: "ztide-smoke.js", readOnly: false },
   // QChainGov — proposal create + auth/validation gates.
   { name: "qchaingov", script: "qchaingov-smoke.js", readOnly: false },
+  // Fintech E2E — full flow exercises QPayNet→VeilNetX→Z-Tide→QMaskCard chain.
+  { name: "fintech-flow", script: "fintech-flow-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

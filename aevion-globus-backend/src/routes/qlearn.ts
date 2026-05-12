@@ -488,6 +488,36 @@ qlearnRouter.get("/certificates/:certificateNumber", (req: Request, res: Respons
   });
 });
 
+// POST /api/qlearn/certificates/batch-verify — verify multiple certificates at once
+qlearnRouter.post("/certificates/batch-verify", (req: Request, res: Response) => {
+  const body = req.body as { certificateNumbers?: unknown };
+  const nums = Array.isArray(body.certificateNumbers) ? body.certificateNumbers.slice(0, 50) : [];
+  if (nums.length === 0) {
+    res.status(400).json({ error: "certificateNumbers array required (max 50)" }); return;
+  }
+  const results = nums.map((rawNum) => {
+    const num = String(rawNum).slice(0, 100);
+    const cert = Array.from(memCertificates.values()).find((c) => c.certificateNumber === num);
+    if (!cert) return { certificateNumber: num, valid: false };
+    return {
+      certificateNumber: num,
+      valid: true,
+      courseTitle: cert.courseTitle,
+      completedAt: cert.completedAt,
+    };
+  });
+  const valid = results.filter((r) => r.valid).length;
+  res.json({ results, summary: { total: results.length, valid, invalid: results.length - valid } });
+});
+
+// GET /api/qlearn/me/certificates/count — quick count of user's certificates (no full list)
+qlearnRouter.get("/me/certificates/count", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const count = Array.from(memCertificates.values()).filter((c) => c.userId === auth.sub).length;
+  res.json({ count, userId: auth.sub });
+});
+
 // POST /api/qlearn/me/courses/:courseId/lessons/:lessonId/quiz — add quiz question (author only)
 qlearnRouter.post("/me/courses/:courseId/lessons/:lessonId/quiz", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);

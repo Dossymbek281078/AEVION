@@ -3264,7 +3264,7 @@ export default function CyberChessPage(){
         <div style={{display:"inline-flex",alignItems:"center",gap:2}}>
           <button
             onClick={()=>sShowShop(true)}
-            title={`Chessy · баланс ${chessy.balance} · клик → магазин`}
+            title={`Chessy · баланс ${chessy.balance} · всего заработано ${chessy.lifetime} · клик → магазин`}
             aria-label="Chessy shop"
             className="cc-focus-ring cc-touch"
             style={{
@@ -3282,6 +3282,8 @@ export default function CyberChessPage(){
           >
             <Icon.Coin width={18} height={18}/>
             <span>{chessy.balance}</span>
+            {chessy.owned.puzzle_boost&&<span title="Пазл-буст активен!" style={{fontSize:9,marginLeft:2,color:"#ea580c",fontWeight:900}}>⚡</span>}
+            {chessy.owned.streak_shield&&<span title="Щит стрика активен!" style={{fontSize:9,marginLeft:1,color:"#3b82f6",fontWeight:900}}>🛡</span>}
           </button>
           <button
             onClick={()=>sShowChessyInfo(true)}

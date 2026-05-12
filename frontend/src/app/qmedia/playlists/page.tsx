@@ -82,8 +82,8 @@ export default function PlaylistsPage() {
         {creating && (
           <div className="bg-slate-900 border border-violet-700/40 rounded-2xl p-5 mb-6 space-y-3">
             <h3 className="text-sm font-bold">Новый плейлист</h3>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Название *" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-            <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Описание (опционально)" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+            <input value={name} onChange={e => setName(e.target.value)} maxLength={100} aria-label="Название плейлиста" placeholder="Название *" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+            <input value={desc} onChange={e => setDesc(e.target.value)} maxLength={500} aria-label="Описание плейлиста" placeholder="Описание (опционально)" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={pub} onChange={e => setPub(e.target.checked)} className="w-4 h-4 accent-violet-500" />
               <span className="text-sm text-slate-300">Публичный</span>

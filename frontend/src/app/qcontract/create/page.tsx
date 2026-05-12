@@ -117,16 +117,16 @@ export default function CreateDocument() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/qcontract" className="text-slate-400 hover:text-white text-sm">← Назад</Link>
-          <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold">Создать документ</h1>
+      <header className="border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <Link href="/qcontract" className="text-slate-400 hover:text-white text-sm whitespace-nowrap">← Назад</Link>
+          <span className="text-slate-600 hidden sm:inline">·</span>
+          <h1 className="text-sm font-bold truncate">Создать документ</h1>
         </div>
         {templates.length > 0 && (
           <button
             onClick={() => setShowTemplates(!showTemplates)}
-            className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300"
+            className="text-xs px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 whitespace-nowrap min-h-[36px]"
           >
             📋 Шаблоны
           </button>
@@ -135,7 +135,7 @@ export default function CreateDocument() {
 
       {/* Templates panel */}
       {showTemplates && (
-        <div className="border-b border-slate-800 bg-slate-900 px-6 py-4">
+        <div className="border-b border-slate-800 bg-slate-900 px-4 sm:px-6 py-4">
           <p className="text-xs text-slate-500 mb-3 uppercase tracking-wider">Готовые шаблоны</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {templates.map((t) => (
@@ -152,7 +152,7 @@ export default function CreateDocument() {
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         {/* Title */}
         <div>
           <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Название</label>
@@ -252,7 +252,7 @@ export default function CreateDocument() {
               <input type="checkbox" checked={requireSignature} onChange={(e) => setRequireSignature(e.target.checked)} className="w-4 h-4 accent-red-500" />
               <div>
                 <span className="text-sm font-medium">✍️ Требовать email-подпись</span>
-                <p className="text-[11px] text-slate-500 mt-0.5">Читатель должен ввести email перед просмотром. Email войдёт в лог и будет виден на документе.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Читатель должен ввести email перед просмотром. Email войдёт в лог и будет виден на документе.</p>
               </div>
             </label>
           </div>
@@ -263,7 +263,7 @@ export default function CreateDocument() {
               <input type="checkbox" checked={useQright} onChange={(e) => setUseQright(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
               <div>
                 <span className="text-sm font-medium">🛡 Привязать к QRight (IP-защита)</span>
-                <p className="text-[11px] text-slate-500 mt-0.5">Читатель увидит значок «Охраняется IP» со ссылкой на объект в реестре.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Читатель увидит значок «Охраняется IP» со ссылкой на объект в реестре.</p>
               </div>
             </label>
             {useQright && (

@@ -1616,6 +1616,9 @@ export default function CyberChessPage(){
         return false;
       }
     }
+    // F2-phase: capture FEN BEFORE the move + prev eval for CPI metrics
+    const cpiFenBefore=game.fen();
+    const cpiPrevEvalCp=prevEvalCpForCpiRef.current;
     let mv;
     try{mv=game.move({from,to,promotion:pr||"q"});}catch{return false;}
     if(!mv)return false;
@@ -1638,10 +1641,44 @@ export default function CyberChessPage(){
     if(mv.color===pCol)pT.addInc();else aT.addInc();
     // Record time spent on this ply for time-management analytics
     const now=Date.now();
-    moveTimesRef.current=[...moveTimesRef.current,now-lastMoveStartRef.current];
+    const cpiTimeMs=now-lastMoveStartRef.current;
+    moveTimesRef.current=[...moveTimesRef.current,cpiTimeMs];
     sMoveTimes([...moveTimesRef.current]);
     lastMoveStartRef.current=now;
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
+    // F2-phase: record per-move metrics into the CPI collector.
+    // TODO F2-phase-2: feed engineTop3 from Stockfish multiPV=3 result; for now we
+    // use a minimal heuristic where CPL is derived from the live evalCp scalar
+    // and rank defaults to 1 (best) when CPL is small.
+    try{
+      const playedPly=hist.length+1; // 1-based ply count after this move
+      const cpiUci=`${mv.from}${mv.to}${mv.promotion||""}`;
+      const cpiCpl=computeCPL(cpiPrevEvalCp,evalCp,mv.color);
+      const cpiHadMate1=Math.abs(evalMate)===1;
+      const cpiHadMate2=Math.abs(evalMate)<=2&&Math.abs(evalMate)>0;
+      const cpiHadMate3=Math.abs(evalMate)<=3&&Math.abs(evalMate)>0;
+      const matedForUser=evalMate>0&&mv.color===pCol;
+      const cpiM:MoveMetric={
+        ply:playedPly,
+        fenBefore:cpiFenBefore,
+        san:mv.san,
+        uci:cpiUci,
+        engineTop3:[],
+        cpl:cpiCpl,
+        rank:cpiCpl<25?1:cpiCpl<60?2:cpiCpl<150?3:4,
+        hadMate1:cpiHadMate1,
+        hadMate2:cpiHadMate2,
+        hadMate3:cpiHadMate3,
+        foundMate1:cpiHadMate1&&matedForUser&&cpiCpl===0,
+        foundMate2:cpiHadMate2&&matedForUser&&cpiCpl===0,
+        foundMate3:cpiHadMate3&&matedForUser&&cpiCpl===0,
+        isHang:cpiCpl>=300,
+        isBrilliancy:false, // requires multiPV; populated in F2-phase-2
+        timeMs:cpiTimeMs,
+      };
+      metricsRef.current.recordMove(cpiM);
+      prevEvalCpForCpiRef.current=evalCp;
+    }catch{/* CPI is optional — never break the move flow */}
     if(game.isGameOver()){
       let r="";
       if(game.isCheckmate()){
@@ -1697,6 +1734,44 @@ export default function CyberChessPage(){
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
       saveGame(sg);sSavedGames(loadGames())}
     return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
+
+  /* ── F2-phase: centralized CPI update on every game-end ──
+     Watches `over` going from null → string. Fires applyGameToCPI exactly once
+     per game (dedup via cpiAppliedRef + fingerprint). This covers ALL game-end
+     transitions: normal mate/draw, timeout, resign, p2p, variant-specific
+     (KingOfHill / ThreeCheck / Atomic / TwinKings), endgame trainer — they all
+     funnel through `sOver(...)`. */
+  useEffect(()=>{
+    if(!over)return;
+    const fingerprint=`${gameStartTimeRef.current}|${over}`;
+    if(cpiAppliedRef.current===fingerprint)return;
+    cpiAppliedRef.current=fingerprint;
+    try{
+      if(metricsRef.current.size()===0)return;
+      // Derive result from the user's perspective. `over` is a localized human
+      // string ("Checkmate! You win!", "Checkmate — AI wins", "You resigned",
+      // "Time out", "Draw agreed", "Stalemate", "⚡ Три шаха — победа!", …).
+      const overLow=over.toLowerCase();
+      const winHints=["you win","победа!","трофей","цель достигнута","ai timed out","сдался — вы победили"];
+      const lossHints=["ai wins","поражение","you resigned","time out","king взорван","ферзь пал"];
+      const drawHints=["draw","stalemate","ничья","repetition","insufficient","50-move"];
+      let cpiResult:"w"|"l"|"d"="d";
+      if(drawHints.some(h=>overLow.includes(h)))cpiResult="d";
+      else if(winHints.some(h=>overLow.includes(h)))cpiResult="w";
+      else if(lossHints.some(h=>overLow.includes(h)))cpiResult="l";
+      // Opening book hits: count user moves in first 20 plies with small CPL
+      // (proxy until openingExplorer integration in F2-phase-2).
+      const snap=metricsRef.current.snapshot();
+      const userMovesEarly=snap.filter(m=>m.ply<=20&&(pCol==="w"?m.ply%2===1:m.ply%2===0)).slice(0,10);
+      const openingBookHits=userMovesEarly.filter(m=>m.cpl<40).length;
+      const totalTimeMs=tc.ini>0?tc.ini*1000:600000;
+      const metrics=metricsRef.current.toGameMetrics(pCol,cpiResult,openingBookHits,totalTimeMs);
+      const newState=applyGameToCPI(metrics,`game-${gameStartTimeRef.current}`);
+      const last=newState.history[newState.history.length-1];
+      const sign=last.delta>0?"+":"";
+      showToast(`📊 CPI: ${Math.round(newState.cpi)} (${sign}${Math.round(last.delta)})`,"info");
+    }catch{/* CPI is strictly optional — never break the game-end flow */}
+  },[over,pCol,tc.ini,showToast]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{

@@ -137,6 +137,15 @@ export default function TrainingHubPage() {
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://aevion.app/cyberchess/training",
+        name: "AEVION CyberChess Training Hub",
+        description: "Персональный ежедневный план тренировок — CPI weak factor, daily variant, Coach Knowledge spaced-repetition, AEV bonus.",
+        isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
+        about: { "@type": "Thing", name: "Chess training" },
+      }) }} />
       <style>{`
         @media (max-width: 640px) {
           h1 { font-size: 22px !important; }

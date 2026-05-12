@@ -81,6 +81,17 @@ const RIVALS = [
 export default function CPIPreviewPage() {
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "@id": "https://aevion.app/cyberchess/cpi",
+        headline: "AEVION CPI — Chess Performance Index Specification",
+        description: "Composite chess rating system. Awards points for quality of play across 11 factors, not just match results. Differentiates AEVION from FIDE Elo, Lichess Glicko-2, chess.com Glicko.",
+        datePublished: "2026-05-12",
+        author: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+        publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+        keywords: ["chess", "rating system", "Stockfish", "NNUE", "performance index", "centipawn loss", "brilliancy detection"],
+      }) }} />
       <style>{`
         @media (max-width: 640px) {
           h1 { font-size: 22px !important; }

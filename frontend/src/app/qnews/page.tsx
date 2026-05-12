@@ -272,6 +272,13 @@ const CATEGORIES = [
   { id: "world", label: "World" },
 ];
 
+function authHeaders(): HeadersInit {
+  try {
+    const t = localStorage.getItem("aevion_auth_token_v1");
+    return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+  } catch { return { "Content-Type": "application/json" }; }
+}
+
 export default function QNewsPage() {
   const [articles, setArticles] = useState<NewsItem[]>([]);
   const [trending, setTrending] = useState<NewsItem[]>([]);
@@ -280,6 +287,22 @@ export default function QNewsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [aiSummaries, setAiSummaries] = useState<Record<string, { summary: string; keyPoints: string[] }>>({});
   const [aiLoading, setAiLoading] = useState<string | null>(null);
+
+  // Submit article
+  const [showSubmit, setShowSubmit] = useState(false);
+  const [submitForm, setSubmitForm] = useState({ title: "", summary: "", url: "", source: "", category: "tech" });
+  const [submitBusy, setSubmitBusy] = useState(false);
+  const [submitMsg, setSubmitMsg] = useState("");
+
+  // Bookmarks
+  const [bookmarked, setBookmarked] = useState<Set<string>>(new Set());
+
+  // AI Digest
+  const [digest, setDigest] = useState<{ digest: string; highlights: string[] } | null>(null);
+  const [digestLoading, setDigestLoading] = useState(false);
+
+  // Stats
+  const [stats, setStats] = useState<{ total: number; byCategory: Record<string, number> } | null>(null);
 
   async function fetchArticles(cat: string) {
     setLoading(true);
@@ -302,14 +325,60 @@ export default function QNewsPage() {
         const data = await resp.json() as { articles: NewsItem[] };
         setTrending(data.articles ?? []);
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
+  }
+
+  async function fetchStats() {
+    try {
+      const resp = await fetch(apiUrl("/api/qnews/stats"));
+      if (resp.ok) setStats(await resp.json());
+    } catch { /* ignore */ }
+  }
+
+  async function toggleBookmark(articleId: string) {
+    try {
+      const resp = await fetch(apiUrl(`/api/qnews/articles/${articleId}/bookmark`), {
+        method: "POST", headers: authHeaders(),
+      });
+      if (resp.ok) {
+        setBookmarked((prev) => {
+          const next = new Set(prev);
+          if (next.has(articleId)) next.delete(articleId); else next.add(articleId);
+          return next;
+        });
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function fetchDigest() {
+    setDigestLoading(true);
+    try {
+      const resp = await fetch(apiUrl("/api/qnews/ai/digest"), { method: "POST", headers: { "Content-Type": "application/json" } });
+      if (resp.ok) setDigest(await resp.json());
+    } finally { setDigestLoading(false); }
+  }
+
+  async function submitArticle() {
+    if (!submitForm.title || !submitForm.url) return;
+    setSubmitBusy(true); setSubmitMsg("");
+    try {
+      const resp = await fetch(apiUrl("/api/qnews/articles"), {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify(submitForm),
+      });
+      if (resp.status === 401) { setSubmitMsg("Войдите чтобы публиковать статьи"); return; }
+      if (resp.ok) {
+        setSubmitMsg("Статья опубликована!"); setShowSubmit(false);
+        setSubmitForm({ title: "", summary: "", url: "", source: "", category: "tech" });
+        fetchArticles(category);
+      } else { setSubmitMsg("Ошибка публикации"); }
+    } finally { setSubmitBusy(false); }
   }
 
   useEffect(() => {
     fetchArticles(category);
     fetchTrending();
+    fetchStats();
   }, [category]);
 
   async function handleSummarize(articleId: string) {
@@ -346,14 +415,51 @@ export default function QNewsPage() {
       <Wave1Nav />
       <ProductPageShell>
         {/* Header */}
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 800, color: "#0f172a" }}>
-            QNews
-          </h1>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 15 }}>
-            Curated news with AI-powered summaries across tech, crypto, AI, business, science, and world.
-          </p>
+        <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1 style={{ margin: "0 0 4px", fontSize: 28, fontWeight: 800, color: "#0f172a" }}>QNews</h1>
+            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
+              Отраслевые новости экосистемы AEVION — tech, crypto, AI, business, science.
+              {stats && <span style={{ marginLeft: 8, fontWeight: 600, color: "#0d9488" }}>{stats.total} статей</span>}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowSubmit(true)}
+            style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+          >
+            + Опубликовать
+          </button>
         </div>
+
+        {/* Submit modal */}
+        {showSubmit && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+              <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 800 }}>Опубликовать статью</h2>
+              {(["title", "url", "source", "summary"] as const).map((field) => (
+                <div key={field} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>{field}</div>
+                  {field === "summary"
+                    ? <textarea value={submitForm[field]} onChange={(e) => setSubmitForm((p) => ({ ...p, [field]: e.target.value }))} rows={3} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, boxSizing: "border-box", resize: "vertical" }} />
+                    : <input value={submitForm[field]} onChange={(e) => setSubmitForm((p) => ({ ...p, [field]: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, boxSizing: "border-box" }} />}
+                </div>
+              ))}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>Категория</div>
+                <select value={submitForm.category} onChange={(e) => setSubmitForm((p) => ({ ...p, category: e.target.value }))} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13 }}>
+                  {CATEGORIES.filter(c => c.id).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </div>
+              {submitMsg && <div style={{ fontSize: 13, color: submitMsg.includes("!") ? "#0d9488" : "#dc2626", marginBottom: 10 }}>{submitMsg}</div>}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={submitArticle} disabled={submitBusy || !submitForm.title || !submitForm.url} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: submitBusy ? 0.6 : 1 }}>
+                  {submitBusy ? "Публикую…" : "Опубликовать"}
+                </button>
+                <button onClick={() => setShowSubmit(false)} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Отмена</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24 }}>
           {/* Main column */}
@@ -393,21 +499,59 @@ export default function QNewsPage() {
               </div>
             )}
             {articles.map((article) => (
-              <ArticleCard
-                key={article.id}
-                article={article}
-                expanded={expandedId === article.id}
-                onToggle={() => setExpandedId(expandedId === article.id ? null : article.id)}
-                onSummarize={handleSummarize}
-                aiSummary={aiSummaries[article.id] ?? null}
-                aiLoading={aiLoading === article.id}
-              />
+              <div key={article.id} style={{ position: "relative" }}>
+                <ArticleCard
+                  article={article}
+                  expanded={expandedId === article.id}
+                  onToggle={() => setExpandedId(expandedId === article.id ? null : article.id)}
+                  onSummarize={handleSummarize}
+                  aiSummary={aiSummaries[article.id] ?? null}
+                  aiLoading={aiLoading === article.id}
+                />
+                <button
+                  onClick={() => toggleBookmark(article.id)}
+                  title={bookmarked.has(article.id) ? "Remove bookmark" : "Bookmark"}
+                  style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", fontSize: 18, opacity: 0.7 }}
+                >
+                  {bookmarked.has(article.id) ? "🔖" : "📎"}
+                </button>
+              </div>
             ))}
           </div>
 
           {/* Sidebar */}
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* AI Digest */}
+            <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 18 }}>
+              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>🤖 AI Дайджест дня</span>
+                <button onClick={fetchDigest} disabled={digestLoading} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer", fontWeight: 600 }}>
+                  {digestLoading ? "…" : "Обновить"}
+                </button>
+              </div>
+              {digest ? (
+                <>
+                  <p style={{ fontSize: 13, color: "#475569", margin: "0 0 10px", lineHeight: 1.5 }}>{digest.digest}</p>
+                  {digest.highlights?.map((h, i) => (
+                    <div key={i} style={{ fontSize: 12, color: "#0d9488", marginBottom: 4 }}>• {h}</div>
+                  ))}
+                </>
+              ) : (
+                <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Нажмите «Обновить» для AI-дайджеста текущих новостей.</p>
+              )}
+            </div>
             <TrendingSidebar articles={trending} />
+            {/* Stats */}
+            {stats && (
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: "#0f172a" }}>📊 Статистика</div>
+                {Object.entries(stats.byCategory ?? {}).filter(([,v]) => (v as number) > 0).map(([cat, count]) => (
+                  <div key={cat} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                    <span>{cat}</span><span style={{ fontWeight: 700 }}>{count as number}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </ProductPageShell>

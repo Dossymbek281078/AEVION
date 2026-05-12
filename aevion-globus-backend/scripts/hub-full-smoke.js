@@ -111,6 +111,32 @@ async function get(path, expectJson = true) {
     assert(lines[0].startsWith("id,code,name,"), `header malformed: ${lines[0]}`);
   });
 
+  await step("GET /api/aevion/catalog?fields=id,name returns lean items", async () => {
+    const r = await fetch(`${BASE}/api/aevion/catalog?fields=id,name`);
+    assert(r.ok, `HTTP ${r.status}`);
+    const j = await r.json();
+    assert(Array.isArray(j.items), "items must be array");
+    const first = j.items[0];
+    assert(first.id && first.name, "id+name must be present");
+    assert(!("description" in first), "description should be projected out");
+    assert(!("frontend" in first), "frontend should be projected out");
+    assert(j.filters.fields === "id,name", "filters.fields echo wrong");
+  });
+
+  await step("GET /api/aevion/catalog/:id single lookup works", async () => {
+    const r = await fetch(`${BASE}/api/aevion/catalog/qpersona`);
+    assert(r.ok, `HTTP ${r.status}`);
+    const j = await r.json();
+    assert(j.id === "qpersona", `id=${j.id}, expected qpersona`);
+    assert(typeof j.frontend === "string" && j.frontend.includes("/qpersona"), "frontend URL malformed");
+    assert(Array.isArray(j.relatedModules), "relatedModules must be array");
+  });
+
+  await step("GET /api/aevion/catalog/:id returns 404 for unknown id", async () => {
+    const r = await fetch(`${BASE}/api/aevion/catalog/this-module-does-not-exist`);
+    assert(r.status === 404, `expected 404, got ${r.status}`);
+  });
+
   await step("GET /api/aevion/catalog?format=md returns markdown table", async () => {
     const r = await fetch(`${BASE}/api/aevion/catalog?format=md`);
     assert(r.ok, `HTTP ${r.status}`);

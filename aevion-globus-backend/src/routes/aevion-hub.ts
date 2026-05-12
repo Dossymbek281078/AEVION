@@ -306,6 +306,25 @@ aevionHubRouter.get("/catalog", (req, res) => {
       };
     });
 
+  // Optional field projection — partners can ask for a lean subset.
+  // Whitelist enforced so unknown keys silently drop (forward-compat).
+  const ALLOWED_FIELDS = new Set([
+    "id", "code", "name", "description", "kind", "status", "priority", "tags",
+    "frontend", "ogImage", "health", "openapi", "waitlist", "status_url", "relatedModules",
+  ]);
+  const fieldsFilter = String(req.query.fields ?? "").trim();
+  const projectedItems = fieldsFilter
+    ? items.map((it) => {
+        const out: Record<string, unknown> = {};
+        for (const f of fieldsFilter.split(",").map((s) => s.trim()).filter(Boolean)) {
+          if (ALLOWED_FIELDS.has(f) && f in it) {
+            out[f] = (it as Record<string, unknown>)[f];
+          }
+        }
+        return out;
+      })
+    : items;
+
   res.setHeader("Cache-Control", "public, max-age=120");
 
   const format = String(req.query.format ?? "json").trim().toLowerCase();
@@ -365,13 +384,68 @@ aevionHubRouter.get("/catalog", (req, res) => {
   }
 
   res.json({
-    total: items.length,
+    total: projectedItems.length,
     filters: {
       status: statusFilter || null,
       tag: tagFilter || null,
       kind: kindFilter || null,
+      fields: fieldsFilter || null,
     },
-    items,
+    items: projectedItems,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+/**
+ * GET /api/aevion/catalog/:id — single-module deep lookup.
+ *
+ * Returns the same enriched item shape as /catalog (frontend, OG, OpenAPI,
+ * waitlist, status URLs, related modules), or 404 if unknown id.
+ */
+aevionHubRouter.get("/catalog/:id", (req, res) => {
+  const id = String(req.params.id || "").trim().toLowerCase();
+  if (!id) return res.status(400).json({ error: "id-required" });
+  const p = projects.find((proj) => String(proj.id).toLowerCase() === id);
+  if (!p) return res.status(404).json({ error: "module-not-found", id });
+
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+  const apiBase = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/+$/, "");
+
+  const healthIndex = new Map(SUB_HEALTH.map((h) => [h.name, h.path]));
+  const openapiIndex = new Map(SUB_OPENAPI.map((o) => [o.name, o.path]));
+  const healthPath = healthIndex.get(String(p.id));
+  const openapiPath = openapiIndex.get(String(p.id));
+
+  const selfTags = (Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).toLowerCase());
+  const selfSet = new Set(selfTags);
+  const relatedModules = projects
+    .filter((q) => q.id !== p.id)
+    .map((q) => {
+      const tags = (Array.isArray(q.tags) ? q.tags : []).map((t) => String(t).toLowerCase());
+      const overlap = tags.filter((t) => selfSet.has(t)).length;
+      return { id: String(q.id), name: String(q.name), overlap };
+    })
+    .filter((r) => r.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap)
+    .slice(0, 5);
+
+  res.setHeader("Cache-Control", "public, max-age=120");
+  res.json({
+    id: String(p.id),
+    code: p.code,
+    name: p.name,
+    description: p.description,
+    kind: p.kind,
+    status: p.status,
+    priority: p.priority,
+    tags: p.tags,
+    frontend: `${site}/${p.id}`,
+    ogImage: `${site}/${p.id}/opengraph-image`,
+    health: healthPath ? `${apiBase}${healthPath}` : null,
+    openapi: openapiPath ? `${apiBase}${openapiPath}` : null,
+    waitlist: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/waitlist")}` : null,
+    status_url: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/status")}` : null,
+    relatedModules,
     generatedAt: new Date().toISOString(),
   });
 });

@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { use } from "react";
 import Link from "next/link";
-import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
+import { BuildShell } from "@/components/build/BuildShell";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { AiImprove } from "@/components/build/AiImprove";
-import { AiVacancyGen } from "@/components/build/AiVacancyGen";
 import {
   EligibleReviewsBlock,
   ReviewsByProjectSection,

@@ -48,7 +48,6 @@ function Body() {
 
       const hasProject = !!projects && projects.items.length > 0;
       const hasVacancy = !!funnel && funnel.items.length > 0;
-      const hasBookmark = !!bookmarks && bookmarks.items.length > 0;
       const hasReferral = !!referrals && referrals.totalReferred > 0;
 
       setSteps([

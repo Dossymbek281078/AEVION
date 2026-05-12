@@ -4,7 +4,7 @@ import { useState } from "react";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 
-export function VideoCallButton({ guestId, guestName }: { guestId: string; guestName: string }) {
+export function VideoCallButton({ guestId }: { guestId: string; guestName?: string }) {
   const token = useBuildAuth((s) => s.token);
   const [busy, setBusy] = useState(false);
   const [roomUrl, setRoomUrl] = useState<string | null>(null);

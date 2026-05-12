@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
+import { BuildShell } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
 import { useBuildAuth } from "@/lib/build/auth";
 

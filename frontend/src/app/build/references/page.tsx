@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi } from "@/lib/build/api";
-import { useBuildAuth } from "@/lib/build/auth";
 
 interface Reference {
   id: string;
@@ -77,7 +76,6 @@ function ReferenceCard({ ref: r, showWorker = false }: { ref: Reference; showWor
 }
 
 function MyReferencesContent() {
-  const user = useBuildAuth((s) => s.user);
   const [given, setGiven] = useState<Reference[]>([]);
   const [loading, setLoading] = useState(true);
 

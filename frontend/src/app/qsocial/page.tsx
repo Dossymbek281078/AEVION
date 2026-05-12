@@ -351,7 +351,10 @@ function TrendingWidget({ posts }: { posts: Post[] }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type FeedTab = "global" | "mine";
+type FeedTab = "global" | "mine" | "dm";
+
+type DMConversation = { userId: string; lastMessage: { fromId: string; content: string; createdAt: string }; unreadCount: number };
+type DMMessage = { id: string; fromId: string; toId: string; content: string; read: boolean; createdAt: string };
 
 export default function QSocialPage() {
   const [tab, setTab] = useState<FeedTab>("global");
@@ -367,6 +370,43 @@ export default function QSocialPage() {
 
   // Stats
   const [stats, setStats] = useState<{ posts: { total: number; public: number }; likes: number } | null>(null);
+
+  // DM
+  const [conversations, setConversations] = useState<DMConversation[]>([]);
+  const [activeDmUserId, setActiveDmUserId] = useState<string | null>(null);
+  const [dmMessages, setDmMessages] = useState<DMMessage[]>([]);
+  const [dmInput, setDmInput] = useState("");
+  const [dmSending, setDmSending] = useState(false);
+  const totalUnreadDm = conversations.reduce((s, c) => s + c.unreadCount, 0);
+
+  async function fetchConversations() {
+    if (!currentUserId) return;
+    try {
+      const r = await fetch(apiUrl("/api/qsocial/me/dms"), { headers: bearerHeader() });
+      if (r.ok) { const d = await r.json(); setConversations(d.conversations ?? []); }
+    } catch { /* ignore */ }
+  }
+
+  async function fetchDmThread(userId: string) {
+    try {
+      const r = await fetch(apiUrl(`/api/qsocial/dm/${encodeURIComponent(userId)}`), { headers: bearerHeader() });
+      if (r.ok) { const d = await r.json(); setDmMessages(d.messages ?? []); }
+      // Mark as read
+      fetch(apiUrl(`/api/qsocial/dm/${encodeURIComponent(userId)}/read`), { method: "PATCH", headers: bearerHeader() }).catch(() => {});
+    } catch { /* ignore */ }
+  }
+
+  async function sendDm() {
+    if (!activeDmUserId || !dmInput.trim() || dmSending) return;
+    setDmSending(true);
+    try {
+      const r = await fetch(apiUrl(`/api/qsocial/dm/${encodeURIComponent(activeDmUserId)}`), {
+        method: "POST", headers: { ...bearerHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ content: dmInput.trim() }),
+      });
+      if (r.ok) { setDmInput(""); await fetchDmThread(activeDmUserId); await fetchConversations(); }
+    } finally { setDmSending(false); }
+  }
 
   useEffect(() => {
     // Fetch notifications and stats
@@ -404,6 +444,14 @@ export default function QSocialPage() {
   useEffect(() => {
     fetchFeed();
   }, [fetchFeed]);
+
+  useEffect(() => {
+    if (tab === "dm" && currentUserId) fetchConversations();
+  }, [tab, currentUserId]);
+
+  useEffect(() => {
+    if (activeDmUserId) fetchDmThread(activeDmUserId);
+  }, [activeDmUserId]);
 
   async function handleLike(postId: string) {
     if (!currentUserId) return;
@@ -515,19 +563,85 @@ export default function QSocialPage() {
                   👤 My Feed
                 </button>
               )}
+              {currentUserId && (
+                <button style={tabStyle(tab === "dm")} onClick={() => setTab("dm")} title="Messages">
+                  💬 Messages{totalUnreadDm > 0 && <span style={{ marginLeft: 6, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: "50%", padding: "1px 5px" }}>{totalUnreadDm}</span>}
+                </button>
+              )}
             </div>
 
-            {/* Create post */}
-            {currentUserId && <CreatePostForm onCreated={handleCreated} />}
+            {/* DM tab */}
+            {tab === "dm" && (
+              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, height: 480 }}>
+                {/* Conversation list */}
+                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflowY: "auto" }}>
+                  <div style={{ padding: "10px 14px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid #f1f5f9" }}>Диалоги</div>
+                  {conversations.length === 0 && (
+                    <div style={{ padding: "20px 14px", fontSize: 12, color: "#94a3b8", textAlign: "center" }}>Нет сообщений</div>
+                  )}
+                  {conversations.map((c) => (
+                    <div
+                      key={c.userId}
+                      onClick={() => setActiveDmUserId(c.userId)}
+                      style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f8fafc", background: activeDmUserId === c.userId ? "#f0fdf4" : "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#0f172a" }}>{c.userId.slice(0, 8)}…</div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>{c.lastMessage?.content?.slice(0, 30)}</div>
+                      </div>
+                      {c.unreadCount > 0 && <span style={{ background: "#6366f1", color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: "50%", padding: "1px 5px" }}>{c.unreadCount}</span>}
+                    </div>
+                  ))}
+                </div>
 
-            {/* Posts */}
-            {loading && (
+                {/* Chat window */}
+                <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, display: "flex", flexDirection: "column" }}>
+                  {!activeDmUserId ? (
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>Выберите диалог</div>
+                  ) : (
+                    <>
+                      <div style={{ padding: "10px 14px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid #f1f5f9" }}>
+                        {activeDmUserId.slice(0, 8)}…
+                      </div>
+                      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                        {dmMessages.map((m) => (
+                          <div key={m.id} style={{ display: "flex", justifyContent: m.fromId === currentUserId ? "flex-end" : "flex-start" }}>
+                            <div style={{ maxWidth: "70%", background: m.fromId === currentUserId ? "#6366f1" : "#f1f5f9", color: m.fromId === currentUserId ? "#fff" : "#0f172a", padding: "8px 12px", borderRadius: 10, fontSize: 13, lineHeight: 1.4 }}>
+                              {m.content}
+                            </div>
+                          </div>
+                        ))}
+                        {dmMessages.length === 0 && <div style={{ color: "#94a3b8", fontSize: 13, textAlign: "center", marginTop: 40 }}>Напишите первое сообщение</div>}
+                      </div>
+                      <div style={{ padding: "10px 14px", borderTop: "1px solid #f1f5f9", display: "flex", gap: 8 }}>
+                        <input
+                          value={dmInput}
+                          onChange={(e) => setDmInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendDm(); } }}
+                          placeholder="Напишите сообщение..."
+                          style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13 }}
+                        />
+                        <button onClick={sendDm} disabled={dmSending || !dmInput.trim()} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#6366f1", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: dmSending ? 0.6 : 1 }}>
+                          {dmSending ? "…" : "→"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Create post (hide in DM mode) */}
+            {tab !== "dm" && currentUserId && <CreatePostForm onCreated={handleCreated} />}
+
+            {/* Posts (hide in DM mode) */}
+            {tab !== "dm" && loading && (
               <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>Loading feed...</p>
             )}
-            {error && (
+            {tab !== "dm" && error && (
               <p style={{ color: "#ef4444", textAlign: "center", padding: 20 }}>{error}</p>
             )}
-            {!loading && !error && posts.length === 0 && (
+            {tab !== "dm" && !loading && !error && posts.length === 0 && (
               <div
                 style={{
                   background: "#fff",
@@ -543,7 +657,7 @@ export default function QSocialPage() {
                 <div style={{ fontSize: 14 }}>Be the first to share something!</div>
               </div>
             )}
-            {posts.map((post) => (
+            {tab !== "dm" && posts.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}

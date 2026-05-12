@@ -72,6 +72,31 @@ const EXPIRY_OPTIONS = [
   { label: "365 days", value: 365 },
 ];
 
+function tabStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "7px 16px",
+    borderRadius: 8,
+    border: active ? "1px solid rgba(6,182,212,0.4)" : "1px solid rgba(255,255,255,0.07)",
+    background: active ? "rgba(6,182,212,0.12)" : "rgba(255,255,255,0.04)",
+    color: active ? "#67e8f9" : "#64748b",
+    fontWeight: active ? 700 : 500,
+    fontSize: 12,
+    cursor: "pointer",
+    textDecoration: "none",
+  };
+}
+
+function keyRowStyle(last: boolean): React.CSSProperties {
+  return {
+    padding: "14px 20px",
+    borderBottom: last ? "none" : "1px solid rgba(255,255,255,0.05)",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  };
+}
+
 const S = {
   page: {
     background: "#0b0f1a",
@@ -134,17 +159,6 @@ const S = {
 
   // Navigation tabs
   tabBar: { display: "flex", gap: 4, marginBottom: 20 },
-  tab: (active: boolean): React.CSSProperties => ({
-    padding: "7px 16px",
-    borderRadius: 8,
-    border: active ? "1px solid rgba(6,182,212,0.4)" : "1px solid rgba(255,255,255,0.07)",
-    background: active ? "rgba(6,182,212,0.12)" : "rgba(255,255,255,0.04)",
-    color: active ? "#67e8f9" : "#64748b",
-    fontWeight: active ? 700 : 500,
-    fontSize: 12,
-    cursor: "pointer",
-    textDecoration: "none",
-  }),
 
   // One-time reveal
   revealBox: {
@@ -222,15 +236,6 @@ const S = {
   listEmpty: { padding: "36px 20px", textAlign: "center" as const, color: "#475569", fontSize: 13 },
   listError: { padding: "16px 20px", color: "#f87171", fontSize: 12 },
 
-  // Key row
-  keyRow: (last: boolean): React.CSSProperties => ({
-    padding: "14px 20px",
-    borderBottom: last ? "none" : "1px solid rgba(255,255,255,0.05)",
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap" as const,
-  }),
   keyIcon: {
     width: 38,
     height: 38,
@@ -419,14 +424,14 @@ export default function ApiKeysPage() {
 
         {/* ── Nav tabs ── */}
         <div style={S.tabBar}>
-          <span style={S.tab(true)}>&#128273; API Keys</span>
-          <Link href="/qcoreai/webhooks" style={S.tab(false)}>
+          <span style={tabStyle(true)}>&#128273; API Keys</span>
+          <Link href="/qcoreai/webhooks" style={tabStyle(false)}>
             &#128161; Webhooks
           </Link>
-          <Link href="/qcoreai/settings" style={S.tab(false)}>
+          <Link href="/qcoreai/settings" style={tabStyle(false)}>
             &#9881;&#65039; Settings
           </Link>
-          <Link href="/qcoreai/audit-log" style={S.tab(false)}>
+          <Link href="/qcoreai/audit-log" style={tabStyle(false)}>
             &#128202; Audit Log
           </Link>
         </div>
@@ -587,7 +592,7 @@ export default function ApiKeysPage() {
 
           {!loading &&
             activeKeys.map((k, i) => (
-              <div key={k.id} style={S.keyRow(i === activeKeys.length - 1 && expiredKeys.length === 0)}>
+              <div key={k.id} style={keyRowStyle(i === activeKeys.length - 1 && expiredKeys.length === 0)}>
                 <div style={S.keyIcon}>{k.keyPrefix.slice(4, 8) || k.keyPrefix.slice(0, 4)}</div>
                 <div style={S.keyMeta}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -678,7 +683,7 @@ export default function ApiKeysPage() {
                 <div
                   key={k.id}
                   style={{
-                    ...S.keyRow(i === expiredKeys.length - 1),
+                    ...keyRowStyle(i === expiredKeys.length - 1),
                     opacity: 0.5,
                   }}
                 >

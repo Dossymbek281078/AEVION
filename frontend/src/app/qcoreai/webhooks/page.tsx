@@ -98,6 +98,20 @@ const EVENT_ICONS: Record<string, string> = {
 
 /* ─── Styles ─────────────────────────────────────────────────────────── */
 
+function wTabStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "7px 16px",
+    borderRadius: 8,
+    border: active ? "1px solid rgba(124,58,237,0.4)" : "1px solid rgba(255,255,255,0.07)",
+    background: active ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.04)",
+    color: active ? "#c4b5fd" : "#64748b",
+    fontWeight: active ? 700 : 500,
+    fontSize: 12,
+    cursor: "pointer",
+    textDecoration: "none",
+  };
+}
+
 const S = {
   page: {
     background: "#0b0f1a",
@@ -141,17 +155,6 @@ const S = {
   headerNote: { margin: 0, fontSize: 12, color: "rgba(226,232,240,0.55)", lineHeight: 1.6 },
 
   tabBar: { display: "flex", gap: 4, marginBottom: 20 },
-  tab: (active: boolean): React.CSSProperties => ({
-    padding: "7px 16px",
-    borderRadius: 8,
-    border: active ? "1px solid rgba(124,58,237,0.4)" : "1px solid rgba(255,255,255,0.07)",
-    background: active ? "rgba(124,58,237,0.12)" : "rgba(255,255,255,0.04)",
-    color: active ? "#c4b5fd" : "#64748b",
-    fontWeight: active ? 700 : 500,
-    fontSize: 12,
-    cursor: "pointer",
-    textDecoration: "none",
-  }),
 
   card: {
     background: "rgba(15,23,42,0.8)",
@@ -421,14 +424,14 @@ export default function WebhooksPage() {
 
         {/* ── Top nav ── */}
         <div style={S.tabBar}>
-          <Link href="/qcoreai/api-keys" style={S.tab(false)}>
+          <Link href="/qcoreai/api-keys" style={wTabStyle(false)}>
             &#128273; API Keys
           </Link>
-          <span style={S.tab(true)}>&#128161; Webhooks</span>
-          <Link href="/qcoreai/settings" style={S.tab(false)}>
+          <span style={wTabStyle(true)}>&#128161; Webhooks</span>
+          <Link href="/qcoreai/settings" style={wTabStyle(false)}>
             &#9881;&#65039; Settings
           </Link>
-          <Link href="/qcoreai/audit-log" style={S.tab(false)}>
+          <Link href="/qcoreai/audit-log" style={wTabStyle(false)}>
             &#128202; Audit Log
           </Link>
         </div>

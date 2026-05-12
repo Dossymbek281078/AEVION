@@ -149,6 +149,7 @@ export default function QRightPage() {
   const [loadingItems, setLoadingItems] = useState(false);
   const [registryScope, setRegistryScope] = useState<"all" | "mine">("all");
   const [registryQuery, setRegistryQuery] = useState("");
+  const [localSearch, setLocalSearch] = useState("");
   const [hasAuth, setHasAuth] = useState(false);
   const [revokingObj, setRevokingObj] = useState<RightObject | null>(null);
   const [revokeCode, setRevokeCode] = useState<string>("withdrawn");
@@ -1339,6 +1340,25 @@ export default function QRightPage() {
                   </div>
                 )}
               </div>
+              {!loadingItems && items.length > 1 && (
+                <input
+                  type="search"
+                  placeholder="Filter loaded results by title…"
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "7px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(15,23,42,0.12)",
+                    fontSize: 12,
+                    color: "#0f172a",
+                    background: "#f8fafc",
+                    marginBottom: 10,
+                    boxSizing: "border-box",
+                  }}
+                />
+              )}
               {loadingItems ? (
                 <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Loading registry...</div>
               ) : items.length === 0 ? (
@@ -1351,7 +1371,10 @@ export default function QRightPage() {
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: 10 }}>
-                  {items.map((x) => {
+                  {items.filter((x) =>
+                    localSearch.trim() === "" ||
+                    x.title.toLowerCase().includes(localSearch.trim().toLowerCase())
+                  ).map((x) => {
                     const isRevoked = !!x.revokedAt;
                     const showRevokeBtn = registryScope === "mine" && !isRevoked;
                     return (

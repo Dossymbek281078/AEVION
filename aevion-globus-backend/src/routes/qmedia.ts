@@ -30,6 +30,11 @@ console.warn("[qmedia] storage is in-process Map<> — data is NOT persistent ac
 
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
+function isValidHttpUrl(s: unknown): boolean {
+  if (typeof s !== "string") return false;
+  try { const u = new URL(s); return u.protocol === "https:" || u.protocol === "http:"; }
+  catch { return false; }
+}
 
 qmediaRouter.use(async (_req, _res, next) => {
   await ensureQMediaTables(pool).catch((err) => {
@@ -66,6 +71,8 @@ qmediaRouter.post("/me/tracks", writeLimit, async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { title, artist, genre, duration, url, coverUrl, lyrics, isPublic, tags } = req.body || {};
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
+    if (url != null && url !== "" && !isValidHttpUrl(url)) return res.status(400).json({ error: "invalid url — must be http:// or https://" });
+    if (coverUrl != null && coverUrl !== "" && !isValidHttpUrl(coverUrl)) return res.status(400).json({ error: "invalid coverUrl — must be http:// or https://" });
     const track: TrackRow = { id: uid(), userId: auth.sub, title: String(title).slice(0, 200), artist: typeof artist === "string" ? artist.slice(0, 200) : "", genre: typeof genre === "string" ? genre : "other", duration: typeof duration === "number" ? duration : 0, url: typeof url === "string" ? url : null, coverUrl: typeof coverUrl === "string" ? coverUrl : null, lyrics: typeof lyrics === "string" ? lyrics.slice(0, 10000) : null, playCount: 0, isPublic: Boolean(isPublic), tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
     memTracks.set(track.id, track);
     res.status(201).json(track);
@@ -79,6 +86,8 @@ qmediaRouter.patch("/me/tracks/:id", writeLimit, async (req, res) => {
     const track = memTracks.get(String(req.params.id));
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { title, artist, genre, url, coverUrl, lyrics, isPublic, tags } = req.body || {};
+    if (url != null && url !== "" && !isValidHttpUrl(url)) return res.status(400).json({ error: "invalid url — must be http:// or https://" });
+    if (coverUrl != null && coverUrl !== "" && !isValidHttpUrl(coverUrl)) return res.status(400).json({ error: "invalid coverUrl — must be http:// or https://" });
     if (title) track.title = String(title).slice(0, 200);
     if (artist !== undefined) track.artist = String(artist).slice(0, 200);
     if (genre) track.genre = String(genre);
@@ -209,6 +218,8 @@ qmediaRouter.post("/me/videos", writeLimit, async (req, res) => {
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { title, description, url, thumbnailUrl, duration, category, isPublic, tags } = req.body || {};
     if (!title || typeof title !== "string") return res.status(400).json({ error: "title required" });
+    if (url != null && url !== "" && !isValidHttpUrl(url)) return res.status(400).json({ error: "invalid url — must be http:// or https://" });
+    if (thumbnailUrl != null && thumbnailUrl !== "" && !isValidHttpUrl(thumbnailUrl)) return res.status(400).json({ error: "invalid thumbnailUrl — must be http:// or https://" });
     const video: VideoRow = { id: uid(), userId: auth.sub, title: title.slice(0, 200), description: description ? String(description).slice(0, 1000) : null, url: url ? String(url) : null, thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null, duration: typeof duration === "number" ? duration : 0, viewCount: 0, isPublic: Boolean(isPublic), category: typeof category === "string" ? category : "other", tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
     memVideos.set(video.id, video);
     res.status(201).json(video);
@@ -222,6 +233,8 @@ qmediaRouter.patch("/me/videos/:id", writeLimit, async (req, res) => {
     const video = memVideos.get(String(req.params.id));
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     const { title, description, url, thumbnailUrl, isPublic, category } = req.body || {};
+    if (url != null && url !== "" && !isValidHttpUrl(url)) return res.status(400).json({ error: "invalid url — must be http:// or https://" });
+    if (thumbnailUrl != null && thumbnailUrl !== "" && !isValidHttpUrl(thumbnailUrl)) return res.status(400).json({ error: "invalid thumbnailUrl — must be http:// or https://" });
     if (title) video.title = String(title).slice(0, 200);
     if (description !== undefined) video.description = description ? String(description).slice(0, 1000) : null;
     if (url !== undefined) video.url = url ? String(url) : null;

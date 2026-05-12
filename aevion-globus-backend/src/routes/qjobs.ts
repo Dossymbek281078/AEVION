@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQJobsTables, isQJobsDbReady } from "../lib/ensureQJobsTables";
 import { rateLimit } from "../lib/rateLimit";
+import { callProvider, getProviders } from "../services/qcoreai/providers";
 
 const postLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qjobs:post", message: "rate_limited" });
 const applyLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qjobs:apply", message: "rate_limited" });
@@ -51,6 +52,7 @@ interface JobApplication {
 
 const memJobs = new Map<string, JobPosting>();
 const memApplications = new Map<string, JobApplication>();
+const memSavedJobs = new Map<string, Set<string>>(); // userId -> Set<jobId>
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -364,6 +366,113 @@ qjobsRouter.get("/me/jobs/:id/applicants", async (req: Request, res: Response) =
   } catch {
     return res.status(500).json({ error: "internal_error" });
   }
+});
+
+// ─── POST /api/qjobs/ai/match ─────────────────────────────────────────────────
+qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+
+  const { skills, experience, preferences } = req.body as {
+    skills?: string[];
+    experience?: string;
+    preferences?: string;
+  };
+
+  if (!Array.isArray(skills) || skills.length === 0) {
+    return res.status(400).json({ error: "skills array required" });
+  }
+
+  const activeJobs = Array.from(memJobs.values()).filter((j) => j.isActive);
+
+  try {
+    const provider = getProviders().find((p) => p.configured);
+    if (provider) {
+      const jobSummaries = activeJobs.slice(0, 10).map((j) => ({
+        id: j.id, title: j.title, skills: j.skills, type: j.type,
+      }));
+      const prompt = `Given candidate skills: ${skills.join(", ")} and experience: ${experience ?? "not specified"}. Preferences: ${preferences ?? "none"}. From these jobs: ${JSON.stringify(jobSummaries)} Return JSON array of top 3 job IDs ranked by match: [{"jobId": "...", "matchScore": 0-100, "reason": "..."}]`;
+      const result = await callProvider(
+        provider.id,
+        [{ role: "user" as const, content: prompt }],
+        provider.defaultModel,
+        0.3,
+      );
+      const raw = result.reply.trim();
+      const jsonStr = raw.includes("[") ? raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1) : "[]";
+      const aiMatches = JSON.parse(jsonStr) as Array<{ jobId: string; matchScore: number; reason: string }>;
+      const matches = aiMatches
+        .map((m) => { const job = memJobs.get(m.jobId); return job ? { job, matchScore: m.matchScore, reason: m.reason } : null; })
+        .filter(Boolean);
+      return res.json({ matches, mode: "ai" });
+    }
+  } catch {
+    // fall through to simple match
+  }
+
+  // Fallback: simple skill overlap
+  const lowerSkills = skills.map((s) => s.toLowerCase());
+  const ranked = activeJobs
+    .map((j) => {
+      const overlap = j.skills.filter((js) => lowerSkills.some((s) => js.toLowerCase().includes(s))).length;
+      return { job: j, matchScore: Math.min(100, overlap * 25), reason: `Matched ${overlap} skill(s)` };
+    })
+    .filter((m) => m.matchScore > 0)
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 3);
+
+  return res.json({ matches: ranked, mode: "fallback" });
+});
+
+// ─── GET /api/qjobs/salary-insights ──────────────────────────────────────────
+const SALARY_MAP: Record<string, { min: number; max: number }> = {
+  "software engineer": { min: 80000, max: 150000 },
+  "frontend developer": { min: 70000, max: 130000 },
+  "backend developer": { min: 75000, max: 140000 },
+  "fullstack developer": { min: 75000, max: 145000 },
+  "data scientist": { min: 90000, max: 160000 },
+  "product manager": { min: 85000, max: 155000 },
+  "designer": { min: 60000, max: 110000 },
+  "devops engineer": { min: 85000, max: 150000 },
+  "qa engineer": { min: 60000, max: 110000 },
+  "data analyst": { min: 65000, max: 120000 },
+  "machine learning engineer": { min: 100000, max: 175000 },
+  "marketing manager": { min: 55000, max: 105000 },
+  "sales manager": { min: 50000, max: 120000 },
+};
+
+qjobsRouter.get("/salary-insights", (req: Request, res: Response) => {
+  const title = String(req.query.title ?? "").toLowerCase().trim();
+  const location = String(req.query.location ?? "").trim();
+  const key = Object.keys(SALARY_MAP).find((k) => title.includes(k) || k.includes(title));
+  const range = key
+    ? { ...SALARY_MAP[key], currency: "USD", source: "AEVION estimate" }
+    : { min: 40000, max: 120000, currency: "USD", source: "AEVION estimate", note: "Generic estimate" };
+  return res.json({ title: title || undefined, location: location || undefined, salary: range });
+});
+
+// ─── GET /api/qjobs/saved-jobs ────────────────────────────────────────────────
+qjobsRouter.get("/saved-jobs", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const saved = memSavedJobs.get(auth.sub) ?? new Set<string>();
+  const jobs = Array.from(saved).map((id) => memJobs.get(id)).filter(Boolean) as JobPosting[];
+  return res.json({ jobs });
+});
+
+// ─── POST /api/qjobs/jobs/:id/save — toggle ───────────────────────────────────
+qjobsRouter.post("/jobs/:id/save", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const jobId = param(req, "id");
+  const job = memJobs.get(jobId);
+  if (!job) return res.status(404).json({ error: "not_found" });
+  const saved = memSavedJobs.get(auth.sub) ?? new Set<string>();
+  let isSaved: boolean;
+  if (saved.has(jobId)) { saved.delete(jobId); isSaved = false; }
+  else { saved.add(jobId); isSaved = true; }
+  memSavedJobs.set(auth.sub, saved);
+  return res.json({ saved: isSaved });
 });
 
 // ─── PATCH /api/qjobs/applications/:id — employer updates status ──────────────

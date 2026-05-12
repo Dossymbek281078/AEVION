@@ -272,3 +272,165 @@ export function bracketSummary(t: Tournament): string {
   const m = (mt: Match) => `${nm(mt.a)} vs ${nm(mt.b)}${mt.winner ? ` → ${nm(mt.winner)}` : ""}`;
   return `QF: ${t.bracket.qf.map(m).join(" | ")}\nSF: ${t.bracket.sf.map(m).join(" | ")}\nF:  ${m(t.bracket.final)}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tournament polish — bracket visualization, badges, leaderboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type BracketRound = {
+  round: number;
+  matches: Array<{
+    p1: string;
+    p2: string;
+    winner?: string;
+    score?: { p1: number; p2: number };
+  }>;
+};
+
+/** Build elimination bracket from a flat results array. Players is the seeded
+ * list at round 0. Each subsequent round pairs winners of (i, i+1) by index.
+ * Results are matched to the slot via (p1, p2) (order-insensitive). */
+export function buildBracket(
+  players: string[],
+  results: Array<{ p1: string; p2: string; winner: string; score?: { p1: number; p2: number } }>,
+): BracketRound[] {
+  if (players.length < 2) return [];
+  const rounds: BracketRound[] = [];
+  const findResult = (a: string, b: string) =>
+    results.find(r => (r.p1 === a && r.p2 === b) || (r.p1 === b && r.p2 === a));
+  let current = players.slice();
+  let roundIdx = 0;
+  while (current.length >= 2) {
+    const matches: BracketRound["matches"] = [];
+    const nextRound: string[] = [];
+    for (let i = 0; i + 1 < current.length; i += 2) {
+      const p1 = current[i];
+      const p2 = current[i + 1];
+      const r = findResult(p1, p2);
+      const score = r?.score
+        ? (r.p1 === p1 ? r.score : { p1: r.score.p2, p2: r.score.p1 })
+        : undefined;
+      matches.push({ p1, p2, winner: r?.winner, score });
+      if (r?.winner) nextRound.push(r.winner);
+    }
+    rounds.push({ round: roundIdx, matches });
+    if (nextRound.length !== matches.length) break; // round incomplete, stop
+    current = nextRound;
+    roundIdx++;
+  }
+  return rounds;
+}
+
+/** Render bracket as ASCII for terminal/log preview. */
+export function bracketAscii(bracket: BracketRound[]): string {
+  if (bracket.length === 0) return "(empty bracket)";
+  const roundLabel = (idx: number, total: number): string => {
+    const fromEnd = total - 1 - idx;
+    if (fromEnd === 0) return "Final";
+    if (fromEnd === 1) return "Semifinal";
+    if (fromEnd === 2) return "Quarterfinal";
+    return `Round ${idx + 1}`;
+  };
+  const lines: string[] = [];
+  for (const r of bracket) {
+    lines.push(`── ${roundLabel(r.round, bracket.length)} ──`);
+    for (const m of r.matches) {
+      const sc = m.score ? ` (${m.score.p1}-${m.score.p2})` : "";
+      const win = m.winner ? `  → ${m.winner}` : "";
+      lines.push(`  ${m.p1.padEnd(16)} vs ${m.p2.padEnd(16)}${sc}${win}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export type TournamentBadge =
+  | "first-blood"
+  | "underdog"
+  | "champion"
+  | "perfect-run"
+  | "comeback-king";
+
+export type TournamentHistoryEntry = {
+  tournamentId: string;
+  placement: number;
+  w: number;
+  l: number;
+  d: number;
+  // Optional fields used by some badges:
+  startingRating?: number;
+  firstMatchResult?: "w" | "l" | "d";
+  ts?: number;
+};
+
+/** Award badges based on a player's tournament history.
+ * Returns a deduplicated list of badges earned across all tournaments. */
+export function awardBadges(
+  playerId: string,
+  history: TournamentHistoryEntry[],
+): TournamentBadge[] {
+  const earned = new Set<TournamentBadge>();
+  if (!history || history.length === 0) return [];
+  // first-blood: won first match in the first (earliest) tournament
+  const sorted = history.slice().sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+  const first = sorted[0];
+  if (first && first.firstMatchResult === "w") earned.add("first-blood");
+  // Otherwise infer: in the very first tournament played, the player has at least 1 win
+  if (first && first.firstMatchResult === undefined && first.w >= 1) earned.add("first-blood");
+  for (const h of history) {
+    if (h.placement === 1) earned.add("champion");
+    if (h.w >= 5 && h.l === 0 && h.d === 0) earned.add("perfect-run");
+    if (h.placement === 1 && typeof h.startingRating === "number" && h.startingRating < 1500) {
+      earned.add("underdog");
+    }
+    if (h.placement === 1 && h.firstMatchResult === "l") earned.add("comeback-king");
+  }
+  // playerId is accepted for future per-player scoping; current history is assumed pre-filtered
+  void playerId;
+  return Array.from(earned);
+}
+
+export type LeaderboardEntry = {
+  player: string;
+  tournaments: number;
+  wins: number;
+  podiums: number; // top-3 finishes
+  points: number; // 10 * wins + 5 * (top3 - wins) + tournaments
+};
+
+export type LeaderboardHistoryEntry = {
+  player: string;
+  tournamentId: string;
+  placement: number;
+};
+
+/** Aggregate a flat per-tournament history into a sorted leaderboard.
+ * Sort: points desc, then wins desc, then podiums desc, then player asc. */
+export function computeTournamentLeaderboard(
+  history: LeaderboardHistoryEntry[],
+): LeaderboardEntry[] {
+  const acc = new Map<string, LeaderboardEntry>();
+  for (const h of history) {
+    const e = acc.get(h.player) ?? {
+      player: h.player,
+      tournaments: 0,
+      wins: 0,
+      podiums: 0,
+      points: 0,
+    };
+    e.tournaments += 1;
+    if (h.placement === 1) e.wins += 1;
+    if (h.placement >= 1 && h.placement <= 3) e.podiums += 1;
+    acc.set(h.player, e);
+  }
+  const out = Array.from(acc.values());
+  for (const e of out) {
+    e.points = 10 * e.wins + 5 * (e.podiums - e.wins) + e.tournaments;
+  }
+  out.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (b.podiums !== a.podiums) return b.podiums - a.podiums;
+    return a.player.localeCompare(b.player);
+  });
+  return out;
+}

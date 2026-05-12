@@ -1465,6 +1465,12 @@ export default function QRightPage() {
                         >
                           Get embed code →
                         </Link>
+                        <Link
+                          href={`/qright/object/${x.id}/policies`}
+                          style={{ fontSize: 11, fontWeight: 800, color: "#7c3aed", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 6 }}
+                        >
+                          Policies →
+                        </Link>
                         {showRevokeBtn && (
                           <button
                             onClick={() => startRevoke(x)}

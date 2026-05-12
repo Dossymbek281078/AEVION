@@ -254,6 +254,25 @@ aevionHubRouter.get("/catalog", (req, res) => {
   const healthIndex = new Map(SUB_HEALTH.map((h) => [h.name, h.path]));
   const openapiIndex = new Map(SUB_OPENAPI.map((o) => [o.name, o.path]));
 
+  // Pre-compute tag-overlap relations across ALL projects (not just filtered)
+  // so /qpersona always shows related modules from full catalog, not just the
+  // current filter slice.
+  function deriveRelated(self: typeof projects[number]): { id: string; name: string; overlap: number }[] {
+    const selfTags = (Array.isArray(self.tags) ? self.tags : []).map((t) => String(t).toLowerCase());
+    if (selfTags.length === 0) return [];
+    const selfSet = new Set(selfTags);
+    return projects
+      .filter((p) => p.id !== self.id)
+      .map((p) => {
+        const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).toLowerCase());
+        const overlap = tags.filter((t) => selfSet.has(t)).length;
+        return { id: String(p.id), name: String(p.name), overlap };
+      })
+      .filter((r) => r.overlap > 0)
+      .sort((a, b) => b.overlap - a.overlap)
+      .slice(0, 3);
+  }
+
   const items = projects
     .filter((p) => {
       if (allowedStatuses && !allowedStatuses.has(String(p.status))) return false;
@@ -283,6 +302,7 @@ aevionHubRouter.get("/catalog", (req, res) => {
         openapi: openapiPath ? `${apiBase}${openapiPath}` : null,
         waitlist: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/waitlist")}` : null,
         status_url: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/status")}` : null,
+        relatedModules: deriveRelated(p),
       };
     });
 

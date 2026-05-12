@@ -119,6 +119,11 @@ const MODULES: Module[] = [
   { id: "steel-structures",category: "structure",href: "/smeta-trainer/drawings-practice/steel-structures",icon: "🏗", title: "Стальные конструкции",              subtitle: "Балки, колонны, фермы по СНиП РК 5.04-23, ЭСН Сб.9",          level: "L4", exercises: 4,  color: "slate"   },
   { id: "thermal-calc",   category: "tools",    href: "/smeta-trainer/drawings-practice/thermal-calc",   icon: "🌡", title: "Теплотехнический расчёт",           subtitle: "R сопротивление, толщина утеплителя по СП РК 2.04-104",       level: "L4", exercises: 4,  color: "blue"    },
   { id: "equipment-mounting",category: "structure",href: "/smeta-trainer/drawings-practice/equipment-mounting",icon: "🔧", title: "Монтаж оборудования",               subtitle: "Котлы, насосы, вентиляция, ПНР — ЭСН Сб.36-41",                level: "L4", exercises: 4,  color: "orange"  },
+
+  // ── Дополнительные ограждающие конструкции и каталог ──
+  { id: "sound-insulation",category: "structure",href: "/smeta-trainer/drawings-practice/sound-insulation",icon: "🔇", title: "Звукоизоляция",                     subtitle: "Rw для стен/перекрытий/окон по СН РК 4.04-22",                level: "L3", exercises: 4,  color: "violet"  },
+  { id: "wood-structures",category: "structure",href: "/smeta-trainer/drawings-practice/wood-structures",icon: "🪵", title: "Деревянные конструкции",            subtitle: "Балки, стропила, защита по СНиП РК 5.04-23, ЭСН Сб.10",       level: "L3", exercises: 4,  color: "amber"   },
+  { id: "esn-catalog",    category: "theory",   href: "/smeta-trainer/drawings-practice/esn-catalog",    icon: "📚", title: "Каталог 47 сборников ЭСН РК",       subtitle: "Полный список с описанием, поиск и связи с модулями",          level: "L2", exercises: 0,  color: "slate"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

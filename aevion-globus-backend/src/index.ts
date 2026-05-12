@@ -476,12 +476,14 @@ app.use("/api/qai", qaiRouter);
 app.use("/api/qstore", qstoreRouter);
 // QLearn — learning platform
 app.use("/api/qlearn", qlearnRouter);
-// QSocial — social network (posts, follows, feed)
-app.use("/api/qsocial", qsocialRouter);
-// QNews — news aggregator + AI summaries
+// QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
-// QJobs — job board (postings, applications)
+// QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
+app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);
+// QSocial → QBuild social layer. Canonical: /api/build/social, legacy: /api/qsocial
+app.use("/api/build/social", qsocialRouter);
+app.use("/api/qsocial", qsocialRouter);
 // QEvents — events platform (RSVP, create, attend)
 app.use("/api/qevents", qeventsRouter);
 

@@ -403,4 +403,17 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    id: "qnews",
+    code: "QNEWS",
+    name: "QNews — Отраслевой агрегатор новостей",
+    description:
+      "Агрегатор отраслевых новостей для экосистемы AEVION: строительство, крипто, IP-право, AI, финтех. Пользователи публикуют и читают релевантный контент. AI генерирует дайджест дня и суммаризует статьи.",
+    kind: "product",
+    status: "in_progress",
+    priority: 3,
+    tags: ["news", "aggregator", "ai", "media", "content"],
+    createdAt: now,
+    updatedAt: now,
+  },
 ];

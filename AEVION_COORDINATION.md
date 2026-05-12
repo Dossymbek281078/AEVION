@@ -81,11 +81,51 @@
 
 | Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
 |------|---------|-----------------|----------------------|----------------|
-| *пример* | ☐ | — | — | — |
+| build, qcontract, qpaynet, multichat-engine, qfusionai, veilnetx, z-tide, qchaingov, qgood, qmaskcard, components/build | ☑ | aevion-build / `feat/prod-readiness-2026-05-12` | mobile audit pass 2 + JSON-LD + a11y + perf (PR #224) | — |
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 
 Обновляйте таблицу **в том же коммите**, что и смысловые изменения, или отдельным микрокоммитом `chore: coord WIP`.
+
+---
+
+## LIVE ZONE OWNERSHIP
+
+Карта живых worktree-окон. **Каждое окно работает строго в своей зоне.** Перед изменением файла вне своей зоны: запись в "Pending cross-zone change requests" ниже, ждать ≥30 мин, потом действовать только если никто не возразил.
+
+| Worktree (директория) | Ветка | Окно зоны (модуль/путь под `frontend/src/app/`) |
+|---|---|---|
+| `aevion-core` | `main` | read-only база — никто не пишет в main напрямую |
+| `aevion-build` | `feat/*` (текущая `feat/prod-readiness-2026-05-12`) | **build, qcontract, qpaynet, multichat-engine, qfusionai, veilnetx, z-tide, qchaingov, qgood, qmaskcard, components/build** |
+| `aevion-bureau` | `feat/bureau-v2` | bureau |
+| `aevion-healthai` | `healthai-v1` | healthai |
+| `aevion-qsign` | `feat/qsign-v1.1` | qsign, qright |
+| `aevion-qtradeoffline` | `qtradeoffline-v1` | qtradeoffline |
+| `aevion-smeta-trainer` | `feat/eng-networks-detailed` | smeta-trainer |
+| `aevion-backend-modules` | `feat/platform-tier2-rest` | backend modules registry |
+| `frontend-exchange` | `aec-exchange` | qtrade, aev, cyberchess |
+| `frontend-globus` | `globus-polish` | globus, planet, awards, landing |
+| `frontend-gtm` | `gtm-pricing-api` | pricing, gtm |
+| `frontend-payments` | `payments-rail` | payments |
+| `frontend-qcore` | `feat/devhub-v1-*` | qcoreai, multichat-engine (см. ниже), devhub |
+| `frontend-qshield` | `feat/aevion-finalize-and-status` | qshield, quantum-shield |
+
+**Замечание про multichat-engine:** числится за `frontend-qcore` (QCoreAI track), но `aevion-build` тоже трогал public landing — координировать через cross-zone requests если несколько окон одновременно.
+
+**Shared компоненты** (`frontend/src/components/PlanningLanding.tsx` и подобные базовые) — менять только из `aevion-core/main` или с явным согласием **всех** окон-зависимостей в "Pending cross-zone change requests".
+
+---
+
+## Pending cross-zone change requests
+
+Перед удалением/правкой чужого файла: append строки сюда, **commit + push**, ждать ≥30 мин. Если за 30 мин владелец зоны не возразил — действуй. Возражение = строка "BLOCKED by @<owner>" под запросом.
+
+Формат строки:
+`YYYY-MM-DD HH:MM | <chat-id> | <action: delete|modify|rename> | <path> | <why в одну строку>`
+
+| Pending requests | |
+|---|---|
+| *(пусто)* | |
 
 ---
 

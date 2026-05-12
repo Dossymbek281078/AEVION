@@ -448,6 +448,83 @@ export default function DevelopersPage() {
           </pre>
         </section>
 
+        <section style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 14px" }}>Interactive playgrounds</h2>
+          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
+            <Link
+              href="/api-explorer/catalog"
+              style={{
+                display: "block",
+                padding: 18,
+                borderRadius: 14,
+                background: "#fff",
+                border: "1px solid rgba(14,165,233,0.25)",
+                textDecoration: "none",
+                color: "inherit",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>Catalog explorer</div>
+                <div style={{ padding: "3px 8px", borderRadius: 999, background: "rgba(14,165,233,0.1)", color: "#0ea5e9", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>
+                  Open →
+                </div>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+                Build queries by clicking chip filters. Live response preview. Copyable URL/curl/SDK snippets.
+              </div>
+            </Link>
+            <Link
+              href="/api-explorer/badges"
+              style={{
+                display: "block",
+                padding: 18,
+                borderRadius: 14,
+                background: "#fff",
+                border: "1px solid rgba(13,148,136,0.25)",
+                textDecoration: "none",
+                color: "inherit",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>Badge builder</div>
+                <div style={{ padding: "3px 8px", borderRadius: 999, background: "rgba(13,148,136,0.1)", color: "#0d9488", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>
+                  Open →
+                </div>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+                Pick modules → copy Markdown/HTML for shields.io-style status badges. Auto-refreshes when status changes.
+              </div>
+            </Link>
+            <a
+              href="https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client"
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                display: "block",
+                padding: 18,
+                borderRadius: 14,
+                background: "#fff",
+                border: "1px solid rgba(167,139,250,0.3)",
+                textDecoration: "none",
+                color: "inherit",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>TypeScript SDK</div>
+                <div style={{ padding: "3px 8px", borderRadius: 999, background: "rgba(167,139,250,0.12)", color: "#a78bfa", fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>
+                  GitHub ↗
+                </div>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+                Zero-dependency client for the Hub API.
+              </div>
+              <div style={{ marginTop: 10, padding: "6px 10px", borderRadius: 6, background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.22)", fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 12, color: "#7c3aed", display: "inline-block" }}>
+                npm i @aevion/catalog-client
+              </div>
+            </a>
+          </div>
+        </section>
+
         <section
           style={{
             marginTop: 24,

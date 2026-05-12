@@ -96,9 +96,11 @@ qmediaRouter.delete("/me/tracks/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const track = memTracks.get(String(req.params.id));
+    const id = String(req.params.id);
+    const track = memTracks.get(id);
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memTracks.delete(String(req.params.id));
+    memTracks.delete(id);
+    for (const key of memLikes.keys()) if (key.endsWith(`:track:${id}`)) memLikes.delete(key);
     res.json({ deleted: true });
   } catch (err) { console.error("[qmedia] delete track failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "delete track failed" }); }
 });
@@ -170,9 +172,11 @@ qmediaRouter.delete("/me/playlists/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const playlist = memPlaylists.get(String(req.params.id));
+    const id = String(req.params.id);
+    const playlist = memPlaylists.get(id);
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memPlaylists.delete(String(req.params.id));
+    memPlaylists.delete(id);
+    for (const key of memLikes.keys()) if (key.endsWith(`:playlist:${id}`)) memLikes.delete(key);
     res.json({ deleted: true });
   } catch (err) { console.error("[qmedia] delete playlist failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "delete playlist failed" }); }
 });
@@ -242,9 +246,11 @@ qmediaRouter.delete("/me/videos/:id", writeLimit, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const video = memVideos.get(String(req.params.id));
+    const id = String(req.params.id);
+    const video = memVideos.get(id);
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
-    memVideos.delete(String(req.params.id));
+    memVideos.delete(id);
+    for (const key of memLikes.keys()) if (key.endsWith(`:video:${id}`)) memLikes.delete(key);
     res.json({ deleted: true });
   } catch (err) { console.error("[qmedia] delete video failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "delete video failed" }); }
 });
@@ -258,6 +264,11 @@ qmediaRouter.post("/:type/:id/like", writeLimit, async (req, res) => {
     const type = String(req.params.type);
     const id = String(req.params.id);
     if (!["track", "video", "playlist"].includes(type)) return res.status(400).json({ error: "invalid type" });
+    const exists =
+      (type === "track" && memTracks.has(id)) ||
+      (type === "video" && memVideos.has(id)) ||
+      (type === "playlist" && memPlaylists.has(id));
+    if (!exists) return res.status(404).json({ error: "not found" });
     const key = `${auth.sub}:${type}:${id}`;
     const liked = !memLikes.get(key);
     if (liked) memLikes.set(key, true); else memLikes.delete(key);

@@ -19,6 +19,9 @@
     "smoke:awards": "node scripts/awards-smoke.js",
     "check:prod-env": "node scripts/check-prod-env.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
+    "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",
+    "veilnetx:rebuild": "node scripts/rebuild-veilnetx-chain.js",
+    "smoke:ecosystem-events": "node scripts/ecosystem-events-smoke.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

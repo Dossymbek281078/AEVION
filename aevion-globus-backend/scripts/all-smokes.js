@@ -74,6 +74,10 @@ const SMOKES = [
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.
   { name: "fintech-flow", script: "fintech-flow-smoke.js", readOnly: false },
+  // Ecosystem events — event-bus focused: each emission kind produces the
+  // right VeilNetX entry + Z-Tide weight. Complements fintech-flow (which is
+  // outcome-focused on the happy path).
+  { name: "ecosystem-events", script: "ecosystem-events-smoke.js", readOnly: false },
   // Z-Tide — leaderboard read + me lookup (no admin events fired in smoke).
   { name: "ztide", script: "ztide-smoke.js", readOnly: false },
   // QChainGov — proposal create + auth/validation gates.

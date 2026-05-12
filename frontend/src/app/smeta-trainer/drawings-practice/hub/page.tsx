@@ -104,6 +104,11 @@ const MODULES: Module[] = [
   { id: "accessibility",  category: "structure",href: "/smeta-trainer/drawings-practice/accessibility",  icon: "♿", title: "Доступная среда",                   subtitle: "Пандусы, поручни, тактильные плитки по СНиП РК 3.06-09",     level: "L3", exercises: 4,  color: "sky"     },
   { id: "elevators",      category: "structure",href: "/smeta-trainer/drawings-practice/elevators",      icon: "🛗", title: "Лифты и подъёмники",                subtitle: "12 типов, монтаж, шахта, эксплуатация — глава 3 Ф-3",         level: "L4", exercises: 4,  color: "slate"   },
   { id: "fire-safety",    category: "process",  href: "/smeta-trainer/drawings-practice/fire-safety",    icon: "🔥", title: "Пожарная безопасность",             subtitle: "АПС, СОУЭ, ВПВ, огнезащита по СНиП РК 2.02-05",              level: "L4", exercises: 4,  color: "red"     },
+
+  // ── Контроль и инженерное сопровождение ──
+  { id: "survey",         category: "process",  href: "/smeta-trainer/drawings-practice/survey",         icon: "📐", title: "Геодезические работы",              subtitle: "Разбивка, нивелирование, исполнительные схемы по СНиП РК 1.02-08", level: "L3", exercises: 4,  color: "indigo"  },
+  { id: "weld-control",   category: "process",  href: "/smeta-trainer/drawings-practice/weld-control",   icon: "🔥", title: "Контроль сварных соединений",       subtitle: "УЗК, рентген, цветной по ГОСТ 14782, СНиП РК 5.04-23",       level: "L4", exercises: 4,  color: "slate"   },
+  { id: "environmental",  category: "process",  href: "/smeta-trainer/drawings-practice/environmental",  icon: "🌍", title: "Экология строительства",            subtitle: "Эко-сборы, отходы, лимиты по ЭК РК и ПП РК № 595",            level: "L3", exercises: 4,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

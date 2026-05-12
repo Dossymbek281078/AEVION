@@ -269,35 +269,60 @@ qnewsRouter.post("/articles", submitLimiter, async (req: Request, res: Response)
 });
 
 // ─── POST /api/qnews/articles/:id/bookmark — toggle bookmark ─────────────────
-qnewsRouter.post("/articles/:id/bookmark", (req: Request, res: Response) => {
+qnewsRouter.post("/articles/:id/bookmark", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
-
   const id = param(req, "id");
-  if (!memNews.has(id)) return res.status(404).json({ error: "not_found" });
 
+  try {
+    if (isQNewsDbReady()) {
+      const existing = await pool.query(
+        `SELECT id FROM "QNewsBookmark" WHERE "userId"=$1 AND "articleId"=$2`,
+        [auth.sub, id],
+      );
+      if ((existing.rowCount ?? 0) > 0) {
+        await pool.query(`DELETE FROM "QNewsBookmark" WHERE "userId"=$1 AND "articleId"=$2`, [auth.sub, id]);
+        return res.json({ bookmarked: false });
+      } else {
+        await pool.query(
+          `INSERT INTO "QNewsBookmark"("id","userId","articleId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+          [crypto.randomUUID(), auth.sub, id],
+        );
+        return res.json({ bookmarked: true });
+      }
+    }
+  } catch (e) { console.error("[QNews] bookmark DB error", e); }
+
+  if (!memNews.has(id)) return res.status(404).json({ error: "not_found" });
   const key = `${auth.sub}:${id}`;
-  const current = memBookmarks.get(key) ?? false;
-  const bookmarked = !current;
-  if (bookmarked) {
-    memBookmarks.set(key, true);
-  } else {
-    memBookmarks.delete(key);
-  }
+  const bookmarked = !memBookmarks.get(key);
+  if (bookmarked) memBookmarks.set(key, true); else memBookmarks.delete(key);
   return res.json({ bookmarked });
 });
 
 // ─── GET /api/qnews/me/bookmarks — my bookmarked articles ────────────────────
-qnewsRouter.get("/me/bookmarks", (req: Request, res: Response) => {
+qnewsRouter.get("/me/bookmarks", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
+
+  try {
+    if (isQNewsDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT a.* FROM "QNewsArticle" a
+         JOIN "QNewsBookmark" b ON b."articleId" = a."id"
+         WHERE b."userId"=$1
+         ORDER BY b."createdAt" DESC LIMIT 50`,
+        [auth.sub],
+      );
+      return res.json({ articles: rows, total: rows.length });
+    }
+  } catch (e) { console.error("[QNews] /me/bookmarks DB error", e); }
 
   const prefix = `${auth.sub}:`;
   const articles: NewsItem[] = [];
   for (const [key] of memBookmarks) {
     if (key.startsWith(prefix)) {
-      const articleId = key.slice(prefix.length);
-      const article = memNews.get(articleId);
+      const article = memNews.get(key.slice(prefix.length));
       if (article) articles.push(article);
     }
   }

@@ -29,6 +29,17 @@ const { Client } = require("pg");
 const GENESIS_HASH = "0".repeat(64);
 const VEILNETX_CHAIN_LOCK_KEY = "6218442231490103630";
 
+// Mirror canonicalJson() in src/lib/ecosystemEvents.ts. Postgres JSONB
+// reorders meta keys on storage; the chain hash MUST be computed over
+// the canonical (key-sorted) form so insert and verify produce the same
+// bytes when reading meta back through JSONB.
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  const keys = Object.keys(value).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJson(value[k])).join(",") + "}";
+}
+
 function entryHash(input) {
   const payload = [
     input.prevHash, input.module, input.kind,
@@ -78,7 +89,8 @@ async function main() {
       const createdAtIso = row.createdAt instanceof Date
         ? row.createdAt.toISOString()
         : String(row.createdAt);
-      const metaJson = typeof row.meta === "string" ? row.meta : JSON.stringify(row.meta ?? {});
+      const metaObj = typeof row.meta === "string" ? JSON.parse(row.meta) : (row.meta ?? {});
+      const metaJson = canonicalJson(metaObj);
       const newHash = entryHash({
         prevHash,
         module: row.module,

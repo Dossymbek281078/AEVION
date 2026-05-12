@@ -1,0 +1,11 @@
+node_modules/
+src/
+__tests__/
+examples/
+*.test.ts
+*.tsbuildinfo
+vitest.config.ts
+package-lock.json
+.github/
+.gitignore
+*.log

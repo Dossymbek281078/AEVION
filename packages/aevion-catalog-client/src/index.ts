@@ -74,6 +74,40 @@ export interface CatalogItem {
   relatedModules: RelatedModule[];
 }
 
+export interface TextMatch {
+  id: string;
+  name: string;
+  code: string;
+  status: string;
+  score: number;
+}
+
+export interface DiffFieldEntry {
+  key: string;
+  a: unknown;
+  b: unknown;
+  equal: boolean;
+}
+
+export interface ModuleDiff {
+  a: { id: string; name: string };
+  b: { id: string; name: string };
+  fields: DiffFieldEntry[];
+  tags: {
+    shared: string[];
+    onlyA: string[];
+    onlyB: string[];
+    jaccard: number;
+  };
+}
+
+export interface ModuleFingerprint {
+  id: string;
+  hash: string;        // 8-char hex
+  length: number;      // canonical bytes
+  generatedAt: string;
+}
+
 export interface CatalogResponse {
   total: number;
   filters: {
@@ -317,6 +351,80 @@ export class AevionCatalog {
     return scored.slice(0, topK);
   }
 
+  // ── v0.5 search + diff + fingerprint ─────────────────────────────────────
+
+  /**
+   * Substring-search across module name + code + description + tags.
+   * Returns matches sorted by simple relevance (matches in name > code > tags > description).
+   * Single round-trip via fields projection.
+   */
+  async findByText(query: string, opts: { limit?: number } = {}): Promise<TextMatch[]> {
+    const limit = opts.limit ?? 20;
+    const q = query.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const { items } = await this.list({
+      fields: ["id", "code", "name", "description", "status", "tags"],
+    });
+    const matches: TextMatch[] = [];
+    for (const m of items) {
+      const name = (m.name ?? "").toLowerCase();
+      const code = (m.code ?? "").toLowerCase();
+      const tagsHit = (m.tags ?? []).some((t) => t.toLowerCase().includes(q));
+      const descHit = (m.description ?? "").toLowerCase().includes(q);
+      let score = 0;
+      if (name.includes(q)) score += name === q ? 100 : name.startsWith(q) ? 50 : 30;
+      if (code.includes(q)) score += code === q ? 80 : 25;
+      if (tagsHit) score += 15;
+      if (descHit) score += 5;
+      if (score > 0) matches.push({ id: m.id, name: m.name, code: m.code, status: m.status, score });
+    }
+    matches.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    return matches.slice(0, limit);
+  }
+
+  /**
+   * Pairwise diff of two modules: which fields agree / differ, plus
+   * tag-overlap stats. Useful for "compare module A vs B" UIs.
+   */
+  async diff(idA: string, idB: string): Promise<ModuleDiff> {
+    const [a, b] = await Promise.all([this.get(idA), this.get(idB)]);
+    const aTags = new Set(a.tags ?? []);
+    const bTags = new Set(b.tags ?? []);
+    const shared = [...aTags].filter((t) => bTags.has(t));
+    const onlyA = [...aTags].filter((t) => !bTags.has(t));
+    const onlyB = [...bTags].filter((t) => !aTags.has(t));
+    const fields: DiffFieldEntry[] = [];
+    const keys: (keyof CatalogItem)[] = ["status", "kind", "priority"];
+    for (const k of keys) {
+      fields.push({ key: k, a: a[k] as unknown, b: b[k] as unknown, equal: a[k] === b[k] });
+    }
+    return {
+      a: { id: a.id, name: a.name },
+      b: { id: b.id, name: b.name },
+      fields,
+      tags: { shared, onlyA, onlyB, jaccard: shared.length / (aTags.size + bTags.size - shared.length || 1) },
+    };
+  }
+
+  /**
+   * Stable content hash of a module's identity-defining fields. Useful
+   * for cache busting / "did anything important change" checks.
+   * Uses a tiny djb2-style hash — no crypto dependency.
+   */
+  async fingerprintModule(id: string): Promise<ModuleFingerprint> {
+    const m = await this.get(id);
+    const canonical = JSON.stringify({
+      id: m.id,
+      code: m.code,
+      status: m.status,
+      kind: m.kind,
+      priority: m.priority,
+      tags: [...(m.tags ?? [])].sort(),
+    });
+    const hash = djb2(canonical);
+    return { id: m.id, hash, length: canonical.length, generatedAt: new Date().toISOString() };
+  }
+
   // ── Hub aggregates (v0.3) ──────────────────────────────────────────────────
 
   /** GET /api/aevion/openapi.json — aggregate API index (AEVION-shaped). */
@@ -380,6 +488,12 @@ export interface SitemapEntry {
   lastmod: string | null;
   changefreq: string | null;
   priority: number | null;
+}
+
+function djb2(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(8, "0");
 }
 
 function parseSitemap(xml: string): SitemapEntry[] {
@@ -449,5 +563,15 @@ export const getGraph = (opts?: { topK?: number; minOverlap?: number }) => _defa
 /** Convenience: single-source neighbours of a module using default client (v0.4). */
 export const getNeighbours = (id: string, opts?: { topK?: number }) =>
   _default.neighbours(id, opts);
+
+/** Convenience: text search using default client (v0.5). */
+export const findByText = (query: string, opts?: { limit?: number }) =>
+  _default.findByText(query, opts);
+
+/** Convenience: pairwise module diff using default client (v0.5). */
+export const diff = (idA: string, idB: string) => _default.diff(idA, idB);
+
+/** Convenience: stable content fingerprint using default client (v0.5). */
+export const fingerprintModule = (id: string) => _default.fingerprintModule(id);
 
 export default AevionCatalog;

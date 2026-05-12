@@ -499,3 +499,131 @@ describe("v0.4 graph helpers", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("v0.5 search + diff + fingerprint", () => {
+  it("findByText('') returns []", async () => {
+    const { cat, fetchMock } = makeClient({ body: { items: [], total: 0 } });
+    const result = await cat.findByText("");
+    expect(result).toEqual([]);
+    // Should not call fetch at all
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("findByText('abc') calls list() with fields projection and returns sorted TextMatch[]", async () => {
+    const items = [
+      { id: "alpha", code: "alpha", name: "Alpha", description: "the abc tool", status: "mvp", tags: ["x"] },
+      { id: "beta", code: "beta", name: "Abc Beta", description: "", status: "launched", tags: ["abc"] },
+      { id: "gamma", code: "abc", name: "Gamma", description: "", status: "idea", tags: [] },
+      { id: "delta", code: "delta", name: "Delta", description: "no match here", status: "idea", tags: ["zzz"] },
+    ];
+    const { cat, fetchMock } = makeClient({ body: { items, total: items.length } });
+    const result = await cat.findByText("abc");
+    const url = urlFrom(fetchMock);
+    expect(url).toMatch(/fields=/);
+    // delta has no "abc" anywhere → excluded
+    expect(result.find((m) => m.id === "delta")).toBeUndefined();
+    // sorted by score desc
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i - 1].score).toBeGreaterThanOrEqual(result[i].score);
+    }
+    // each match has id/name/code/status/score
+    for (const m of result) {
+      expect(typeof m.id).toBe("string");
+      expect(typeof m.name).toBe("string");
+      expect(typeof m.code).toBe("string");
+      expect(typeof m.status).toBe("string");
+      expect(typeof m.score).toBe("number");
+    }
+  });
+
+  it("findByText: name match scores higher than description match", async () => {
+    const items = [
+      { id: "desc", code: "desc", name: "Other", description: "this is foo land", status: "mvp", tags: [] },
+      { id: "name", code: "name", name: "Foobar", description: "", status: "mvp", tags: [] },
+    ];
+    const { cat } = makeClient({ body: { items, total: items.length } });
+    const result = await cat.findByText("foo");
+    expect(result[0].id).toBe("name");
+    expect(result[0].score).toBeGreaterThan(result[1].score);
+  });
+
+  it("diff(a, b) calls get twice and returns ModuleDiff with field/tag breakdown", async () => {
+    const a = { id: "a", name: "A", code: "a", status: "mvp", kind: "product", priority: 1, tags: ["x", "y"] };
+    const b = { id: "b", name: "B", code: "b", status: "launched", kind: "product", priority: 2, tags: ["y", "z"] };
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call++;
+      const body = call === 1 ? a : b;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      } as unknown as Response;
+    });
+    const cat = new AevionCatalog({ fetch: fetchMock as unknown as typeof fetch });
+    const d = await cat.diff("a", "b");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(d.a).toEqual({ id: "a", name: "A" });
+    expect(d.b).toEqual({ id: "b", name: "B" });
+    // fields includes status/kind/priority
+    const keys = d.fields.map((f) => f.key);
+    expect(keys).toContain("status");
+    expect(keys).toContain("kind");
+    expect(keys).toContain("priority");
+    // status differs, kind same, priority differs
+    const statusF = d.fields.find((f) => f.key === "status")!;
+    const kindF = d.fields.find((f) => f.key === "kind")!;
+    expect(statusF.equal).toBe(false);
+    expect(kindF.equal).toBe(true);
+    // tag breakdown
+    expect(d.tags.shared).toEqual(["y"]);
+    expect(d.tags.onlyA).toEqual(["x"]);
+    expect(d.tags.onlyB).toEqual(["z"]);
+    expect(d.tags.jaccard).toBeCloseTo(1 / 3, 5);
+  });
+
+  it("diff(a, b) jaccard 1.0 when tag sets equal", async () => {
+    const a = { id: "a", name: "A", code: "a", status: "mvp", kind: "product", priority: 1, tags: ["x", "y"] };
+    const b = { id: "b", name: "B", code: "b", status: "mvp", kind: "product", priority: 1, tags: ["x", "y"] };
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call++;
+      const body = call === 1 ? a : b;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      } as unknown as Response;
+    });
+    const cat = new AevionCatalog({ fetch: fetchMock as unknown as typeof fetch });
+    const d = await cat.diff("a", "b");
+    expect(d.tags.jaccard).toBe(1);
+    expect(d.tags.onlyA).toEqual([]);
+    expect(d.tags.onlyB).toEqual([]);
+    for (const f of d.fields) expect(f.equal).toBe(true);
+  });
+
+  it("fingerprintModule(id) returns 8-char hex hash + length + generatedAt", async () => {
+    const m = { id: "x", code: "x", name: "X", status: "mvp", kind: "product", priority: 1, tags: ["a", "b"] };
+    const { cat } = makeClient({ body: m });
+    const fp = await cat.fingerprintModule("x");
+    expect(fp.id).toBe("x");
+    expect(fp.hash).toMatch(/^[0-9a-f]{8}$/);
+    expect(typeof fp.length).toBe("number");
+    expect(fp.length).toBeGreaterThan(0);
+    expect(typeof fp.generatedAt).toBe("string");
+    expect(() => new Date(fp.generatedAt).toISOString()).not.toThrow();
+  });
+
+  it("fingerprintModule(id) deterministic — same input → same hash", async () => {
+    const m = { id: "x", code: "x", name: "X", status: "mvp", kind: "product", priority: 1, tags: ["b", "a"] };
+    const { cat: cat1 } = makeClient({ body: m });
+    const { cat: cat2 } = makeClient({ body: m });
+    const fp1 = await cat1.fingerprintModule("x");
+    const fp2 = await cat2.fingerprintModule("x");
+    expect(fp1.hash).toBe(fp2.hash);
+    expect(fp1.length).toBe(fp2.length);
+  });
+});

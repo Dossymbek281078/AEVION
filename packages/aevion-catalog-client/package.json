@@ -1,6 +1,6 @@
 {
   "name": "@aevion/catalog-client",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges. Zero deps.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,7 +12,9 @@
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "dry-publish": "npm publish --dry-run --access public",
+    "verify-package": "npm pack --dry-run 2>&1 | tail -20 && echo '--- size estimate ---' && du -sh dist 2>/dev/null || true"
   },
   "keywords": [
     "aevion",

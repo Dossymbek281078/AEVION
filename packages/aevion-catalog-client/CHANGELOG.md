@@ -2,6 +2,20 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.5.0] — 2026-05-12
+
+### Added
+
+- `findByText(query, opts?)` — substring search across name/code/description/tags
+  with simple relevance scoring (name > code > tags > description)
+- `diff(idA, idB)` — pairwise comparison: field equality + tag-set Jaccard with
+  shared/onlyA/onlyB breakdown
+- `fingerprintModule(id)` — stable djb2 content hash of identity-defining
+  fields (id/code/status/kind/priority/sorted-tags) for cache invalidation
+- Types `TextMatch`, `DiffFieldEntry`, `ModuleDiff`, `ModuleFingerprint`
+- Convenience exports `findByText`, `diff`, `fingerprintModule`
+- New example `examples/search-diff.mjs`
+
 ## [0.4.0] — 2026-05-12
 
 ### Added

@@ -37,7 +37,7 @@ console.log(`${status}: ${healthy}/${t} services up`);
 
 ## Examples
 
-Seven runnable scripts under `examples/`:
+Eight runnable scripts under `examples/`:
 
 ```bash
 node examples/list-all.mjs              # registry dump grouped by status
@@ -47,6 +47,7 @@ node examples/urls.mjs                  # CSV/MD/badge URLs (no network)
 node examples/helpers.mjs               # v0.2 helpers: searchByTag/byStatus/...
 node examples/openapi-sitemap.mjs       # v0.3 Hub aggregates: openapi() + sitemap()
 node examples/graph.mjs                 # v0.4 graph helpers: graph() + neighbours()
+node examples/search-diff.mjs           # v0.5 search + diff + fingerprint
 ```
 
 See [`examples/README.md`](./examples/README.md).
@@ -98,6 +99,30 @@ const edges = await cat.graph({ topK: 5, minOverlap: 1 });
 `graph()` is a single round-trip (uses `fields=id,name,tags` projection) and
 runs the K-NN locally — no extra backend endpoints required.
 
+## Search + diff + fingerprint (v0.5)
+
+Client-side compute on top of the catalog — no extra endpoints:
+
+```ts
+// Substring search across name + code + description + tags, with
+// simple relevance scoring (name > code > tags > description).
+const hits = await cat.findByText("ai", { limit: 10 });
+hits.forEach(m => console.log(m.score, m.id, m.name));
+
+// Pairwise compare two modules: field equality + tag-set Jaccard.
+const d = await cat.diff("qsign", "qshield");
+console.log(d.tags.jaccard, d.tags.shared, d.tags.onlyA, d.tags.onlyB);
+d.fields.forEach(f => console.log(f.key, f.equal, f.a, "vs", f.b));
+
+// Stable djb2 hash of identity-defining fields (id/code/status/kind/
+// priority/sorted-tags) — for cache-busting / change detection.
+const fp = await cat.fingerprintModule("qsign");
+console.log(fp.hash); // 8-char hex
+```
+
+All three are single-round-trip (`findByText` + `fingerprintModule`) or two-round-trip
+(`diff`) calls. Zero crypto dependencies — djb2 is implemented inline.
+
 ## Convenience functions
 
 For one-off calls against `https://api.aevion.app`:
@@ -107,6 +132,7 @@ import {
   listCatalog, getModule, getStats, getHealth,
   searchByTag, byStatus, byKind, mvpsAndLaunched, topTags,
   getRelatedModules, getGraph, getNeighbours,
+  findByText, diff, fingerprintModule,
 } from "@aevion/catalog-client";
 
 const all   = await listCatalog();

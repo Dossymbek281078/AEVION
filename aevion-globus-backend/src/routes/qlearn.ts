@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQLearnTables, isQLearnDbReady } from "../lib/ensureQLearnTables";
+import { callProvider, getProviders } from "../services/qcoreai/providers";
 
 export const qlearnRouter = Router();
 
@@ -56,10 +57,21 @@ interface Enrollment {
   enrolledAt: string;
 }
 
+interface QuizQuestion {
+  id: string;
+  lessonId: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string | null;
+}
+
 // In-memory fallback maps
 const memCourses = new Map<string, Course>();
 const memLessons = new Map<string, Lesson>();
 const memEnrollments = new Map<string, Enrollment>();
+// key: lessonId -> QuizQuestion[]
+const memQuizzes = new Map<string, QuizQuestion[]>();
 
 const CATEGORIES = [
   { id: "tech", name: "Technology" },
@@ -374,4 +386,132 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   if (enrollment.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
   enrollment.progress = progress;
   res.json({ enrollment });
+});
+
+// POST /api/qlearn/me/courses/:courseId/lessons/:lessonId/quiz — add quiz question (author only)
+qlearnRouter.post("/me/courses/:courseId/lessons/:lessonId/quiz", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const courseId = param(req, "courseId");
+  const lessonId = param(req, "lessonId");
+
+  // Verify author ownership
+  const course = memCourses.get(courseId);
+  if (!course) { res.status(404).json({ error: "Course not found" }); return; }
+  if (course.authorId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const { question, options, correctIndex, explanation } = req.body as {
+    question?: string;
+    options?: string[];
+    correctIndex?: number;
+    explanation?: string;
+  };
+  if (!question || typeof question !== "string") { res.status(400).json({ error: "question is required" }); return; }
+  if (!Array.isArray(options) || options.length < 2) { res.status(400).json({ error: "options must be array with >=2 items" }); return; }
+  if (typeof correctIndex !== "number" || correctIndex < 0 || correctIndex >= options.length) {
+    res.status(400).json({ error: "correctIndex must be valid index into options" }); return;
+  }
+
+  const q: QuizQuestion = {
+    id: crypto.randomUUID(),
+    lessonId,
+    question: question.trim(),
+    options: options.map(String),
+    correctIndex,
+    explanation: explanation ? String(explanation).trim() : null,
+  };
+  const existing = memQuizzes.get(lessonId) ?? [];
+  existing.push(q);
+  memQuizzes.set(lessonId, existing);
+  res.status(201).json({ question: q });
+});
+
+// GET /api/qlearn/courses/:courseId/lessons/:lessonId/quiz — get quiz questions (correctIndex hidden for non-authors)
+qlearnRouter.get("/courses/:courseId/lessons/:lessonId/quiz", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  const courseId = param(req, "courseId");
+  const lessonId = param(req, "lessonId");
+  const course = memCourses.get(courseId);
+  const isAuthor = auth && course && course.authorId === auth.sub;
+  const questions = (memQuizzes.get(lessonId) ?? []).map((q) => {
+    if (isAuthor) return q;
+    const { correctIndex: _ci, explanation: _exp, ...safe } = q;
+    void _ci; void _exp;
+    return safe;
+  });
+  res.json({ questions, total: questions.length });
+});
+
+// POST /api/qlearn/courses/:courseId/lessons/:lessonId/quiz/submit — submit answer
+qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const lessonId = param(req, "lessonId");
+  const { questionId, answerIndex } = req.body as { questionId?: string; answerIndex?: number };
+  if (!questionId) { res.status(400).json({ error: "questionId is required" }); return; }
+  if (typeof answerIndex !== "number") { res.status(400).json({ error: "answerIndex is required" }); return; }
+
+  const questions = memQuizzes.get(lessonId) ?? [];
+  const q = questions.find((qq) => qq.id === questionId);
+  if (!q) { res.status(404).json({ error: "Question not found" }); return; }
+
+  const correct = answerIndex === q.correctIndex;
+  res.json({ correct, explanation: q.explanation ?? undefined, correctIndex: q.correctIndex });
+});
+
+// POST /api/qlearn/me/courses/:courseId/ai-generate-lesson — AI lesson generator
+qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const courseId = param(req, "courseId");
+
+  const course = memCourses.get(courseId);
+  if (!course) { res.status(404).json({ error: "Course not found" }); return; }
+  if (course.authorId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const { topic } = req.body as { topic?: string };
+  if (!topic || typeof topic !== "string" || !topic.trim()) {
+    res.status(400).json({ error: "topic is required" }); return;
+  }
+
+  let title = `Lesson: ${topic.trim()}`;
+  let content = `This lesson covers: ${topic.trim()}`;
+  let summary = `Introduction to ${topic.trim()}`;
+
+  // Try AI generation
+  const providers = getProviders();
+  const configured = providers.filter((p) => p.configured);
+  if (configured.length > 0) {
+    try {
+      const result = await callProvider(
+        configured[0].id,
+        [{ role: "user", content: `Generate a complete lesson about: ${topic.trim()}. Return JSON: {"title": string, "content": string, "summary": string}` }],
+        configured[0].defaultModel,
+        0.5,
+      );
+      const raw = result.reply.trim();
+      const jsonStr = raw.startsWith("{") ? raw : (raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw);
+      const parsed = JSON.parse(jsonStr) as { title?: string; content?: string; summary?: string };
+      if (parsed.title) title = String(parsed.title);
+      if (parsed.content) content = String(parsed.content);
+      if (parsed.summary) summary = String(parsed.summary);
+    } catch {
+      // fallback to stub already set above
+    }
+  }
+
+  const lessonId = crypto.randomUUID();
+  const nowTs = new Date().toISOString();
+  const lesson: Lesson = {
+    id: lessonId,
+    courseId,
+    title,
+    content: `${content}\n\n**Summary:** ${summary}`,
+    videoUrl: "",
+    duration: 0,
+    order: (Array.from(memLessons.values()).filter((l) => l.courseId === courseId).length) + 1,
+    createdAt: nowTs,
+  };
+  memLessons.set(lessonId, lesson);
+  res.status(201).json({ lesson });
 });

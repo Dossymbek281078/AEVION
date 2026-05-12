@@ -37,28 +37,49 @@ console.log(`${status}: ${healthy}/${t} services up`);
 
 ## Examples
 
-Four runnable scripts under `examples/`:
+Five runnable scripts under `examples/`:
 
 ```bash
 node examples/list-all.mjs          # registry dump grouped by status
 node examples/get-module.mjs qsign  # single-module deep lookup
 node examples/stats.mjs             # by-status / by-kind / top tags
 node examples/urls.mjs              # CSV/MD/badge URLs (no network)
+node examples/helpers.mjs           # v0.2 helpers: searchByTag/byStatus/...
 ```
 
 See [`examples/README.md`](./examples/README.md).
+
+## Helpers (v0.2)
+
+Each helper returns `CatalogItem[]` directly (skips the `{ items } =` destructure):
+
+```ts
+const tagged = await cat.searchByTag("ai");                    // any tag match
+const inMvp  = await cat.byStatus(["mvp", "launched"]);        // status filter
+const cores  = await cat.byKind("core");                       // kind filter
+const live   = await cat.mvpsAndLaunched();                    // sugar
+const top    = await cat.topTags(5);                           // [{tag,count}]
+```
+
+Same names are exported as standalone functions against the default backend.
 
 ## Convenience functions
 
 For one-off calls against `https://api.aevion.app`:
 
 ```ts
-import { listCatalog, getModule, getStats, getHealth } from "@aevion/catalog-client";
+import {
+  listCatalog, getModule, getStats, getHealth,
+  searchByTag, byStatus, byKind, mvpsAndLaunched, topTags,
+} from "@aevion/catalog-client";
 
-const all = await listCatalog();
-const x = await getModule("qfusionai");
-const s = await getStats();
-const h = await getHealth();
+const all   = await listCatalog();
+const x     = await getModule("qfusionai");
+const s     = await getStats();
+const h     = await getHealth();
+const ai    = await searchByTag("ai");
+const live  = await mvpsAndLaunched();
+const top5  = await topTags(5);
 ```
 
 ## Custom base URL

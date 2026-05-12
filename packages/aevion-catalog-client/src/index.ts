@@ -197,6 +197,37 @@ export class AevionCatalog {
       timestamp: string;
     }>;
   }
+
+  // ── Helpers (v0.2) ────────────────────────────────────────────────────────
+
+  /** Modules matching one or more tags (server-side filter, returns items only). */
+  async searchByTag(tag: string | string[]): Promise<CatalogItem[]> {
+    const { items } = await this.list({ tag });
+    return items;
+  }
+
+  /** Modules in the given status(es). */
+  async byStatus(status: ModuleStatus | ModuleStatus[]): Promise<CatalogItem[]> {
+    const { items } = await this.list({ status });
+    return items;
+  }
+
+  /** Modules of the given kind(s). */
+  async byKind(kind: ModuleKind | ModuleKind[]): Promise<CatalogItem[]> {
+    const { items } = await this.list({ kind });
+    return items;
+  }
+
+  /** Sugar for `byStatus(["mvp", "launched"])` — everything that's live. */
+  async mvpsAndLaunched(): Promise<CatalogItem[]> {
+    return this.byStatus(["mvp", "launched"]);
+  }
+
+  /** Top-N tags from registry stats (default 10). */
+  async topTags(n = 10): Promise<{ tag: string; count: number }[]> {
+    const s = await this.stats();
+    return s.byTag.slice(0, n);
+  }
 }
 
 // ── Convenience function exports ────────────────────────────────────────────
@@ -214,5 +245,20 @@ export const getStats = () => _default.stats();
 
 /** Convenience: aggregate health using default client. */
 export const getHealth = () => _default.health();
+
+/** Convenience: modules matching tag(s) using default client. */
+export const searchByTag = (tag: string | string[]) => _default.searchByTag(tag);
+
+/** Convenience: modules in given status(es) using default client. */
+export const byStatus = (status: ModuleStatus | ModuleStatus[]) => _default.byStatus(status);
+
+/** Convenience: modules of given kind(s) using default client. */
+export const byKind = (kind: ModuleKind | ModuleKind[]) => _default.byKind(kind);
+
+/** Convenience: MVPs + launched modules using default client. */
+export const mvpsAndLaunched = () => _default.mvpsAndLaunched();
+
+/** Convenience: top-N tags using default client. */
+export const topTags = (n?: number) => _default.topTags(n);
 
 export default AevionCatalog;

@@ -2,6 +2,18 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.2.0] — 2026-05-12
+
+### Added
+
+- `searchByTag(tag)` — modules matching one or more tags
+- `byStatus(status)` — modules in given status(es)
+- `byKind(kind)` — modules of given kind(s)
+- `mvpsAndLaunched()` — sugar for everything that's live
+- `topTags(n)` — top-N tags from registry stats
+- Convenience function exports for all five helpers
+- New example `examples/helpers.mjs` demonstrating each helper
+
 ## [0.1.0] — 2026-05-12
 
 ### Initial release

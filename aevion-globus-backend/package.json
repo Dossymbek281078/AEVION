@@ -28,6 +28,7 @@
     "ztide:audit": "node scripts/ztide-audit.js",
     "ztide:integrity": "node scripts/ztide-event-integrity.js",
     "smoke:ecosystem-events": "node scripts/ecosystem-events-smoke.js",
+    "coord:update": "node scripts/coord-update.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

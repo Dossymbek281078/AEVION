@@ -23,6 +23,8 @@
     "veilnetx:rebuild": "node scripts/rebuild-veilnetx-chain.js",
     "veilnetx:rebuild-dry": "node scripts/rebuild-veilnetx-chain.js --dry-run",
     "veilnetx:stats": "node scripts/veilnetx-stats.js",
+    "veilnetx:export-csv": "node scripts/veilnetx-export-csv.js",
+    "veilnetx:prometheus": "node scripts/chain-prometheus.js",
     "ztide:audit": "node scripts/ztide-audit.js",
     "ztide:integrity": "node scripts/ztide-event-integrity.js",
     "smoke:ecosystem-events": "node scripts/ecosystem-events-smoke.js",

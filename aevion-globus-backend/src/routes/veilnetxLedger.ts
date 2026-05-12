@@ -143,6 +143,10 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
     if (amount === BigInt(0) || amount < BigInt(-1_000_000_000_000) || amount > BigInt(1_000_000_000_000)) {
       return res.status(400).json({ error: "amountCents out of range or zero" });
     }
+    const currencyStr = String(currency).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currencyStr)) {
+      return res.status(400).json({ error: "invalid_currency", hint: "ISO 4217 3-letter code (e.g., USD, EUR, KZT)" });
+    }
     const blindedFrom = blind(String(fromIdentifier ?? ""));
     const blindedTo = blind(String(toIdentifier ?? ""));
     if (!blindedFrom && !blindedTo) {
@@ -151,8 +155,11 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
 
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    const safeMeta = (meta && typeof meta === "object") ? meta : {};
+    const safeMeta = (meta && typeof meta === "object" && !Array.isArray(meta)) ? meta : {};
     const metaJson = JSON.stringify(safeMeta);
+    if (metaJson.length > 4096) {
+      return res.status(400).json({ error: "meta_too_large", maxBytes: 4096 });
+    }
 
     // Serialize head-read + insert via Postgres advisory lock — same key as
     // lib/ecosystemEvents.ts so HTTP-path and lib-path emits never race.
@@ -175,13 +182,13 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
         prevHash, module, kind,
         blindedFrom, blindedTo,
         amountCents: amount.toString(),
-        currency: String(currency).toUpperCase(),
+        currency: currencyStr,
         metaJson, createdAt,
       });
       await client.query(
         `INSERT INTO "VeilNetXLedger" ("id","module","kind","blindedFrom","blindedTo","amountCents","currency","meta","prevHash","entryHash","createdAt")
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)`,
-        [id, module, kind, blindedFrom, blindedTo, amount.toString(), String(currency).toUpperCase(), metaJson, prevHash, hash, createdAt],
+        [id, module, kind, blindedFrom, blindedTo, amount.toString(), currencyStr, metaJson, prevHash, hash, createdAt],
       );
       await client.query("COMMIT");
     } catch (e) {
@@ -194,7 +201,7 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
       id, entryHash: hash, prevHash, module, kind,
       blindedFrom, blindedTo,
       amountCents: amount.toString(),
-      currency: String(currency).toUpperCase(),
+      currency: currencyStr,
       createdAt,
     });
   } catch (err: unknown) {

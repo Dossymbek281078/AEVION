@@ -106,6 +106,11 @@ const MODULES: Module[] = [
   { id: "construction-taxes",        category: "process",  href: "/smeta-trainer/drawings-practice/construction-taxes",        icon: "💰", title: "Налоги строителя РК",            subtitle: "КПН/ИПН/НДС/соц., упрощёнка/патент, штрафы",                  level: "L3", exercises: 4,  color: "emerald" },
   { id: "accounting-projects",       category: "process",  href: "/smeta-trainer/drawings-practice/accounting-projects",       icon: "📊", title: "Бухучёт по объектам",            subtitle: "Поэтапная готовность, счета 8010-8021, СБУ-7 РК",            level: "L4", exercises: 4,  color: "blue"    },
   { id: "bank-guarantees-insurance", category: "process",  href: "/smeta-trainer/drawings-practice/bank-guarantees-insurance", icon: "🏦", title: "БГ и страхование СМР",            subtitle: "1%/3%/5% БГ, страх.СМР+ответств., тарифы банков РК",         level: "L4", exercises: 4,  color: "amber"   },
+
+  // ── Профессионализм сметчика ──
+  { id: "bim-modeling",          category: "tools",    href: "/smeta-trainer/drawings-practice/bim-modeling",          icon: "🏗️", title: "BIM — Revit/ArchiCAD",            subtitle: "LOD 100-500, 5 ПО, плагины ЭСН РК, обязат. с 2025",          level: "L4", exercises: 4,  color: "indigo"  },
+  { id: "expertise-docs",        category: "process",  href: "/smeta-trainer/drawings-practice/expertise-docs",        icon: "🔬", title: "Экспертиза проекта",              subtitle: "ГосЭкспертиза vs негос., 5 этапов, 30 дней замечания",        level: "L4", exercises: 4,  color: "purple"  },
+  { id: "author-supervision",    category: "process",  href: "/smeta-trainer/drawings-practice/author-supervision",    icon: "👁️", title: "Авторский+тех. надзор",           subtitle: "АН раз/нед., ТН ежедн., журналы КС-6, АОСР",                  level: "L3", exercises: 4,  color: "teal"    },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──

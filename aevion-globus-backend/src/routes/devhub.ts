@@ -1067,7 +1067,11 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
 devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   const githubToken = process.env.GITHUB_TOKEN;
   if (!githubToken) {
-    return res.json({ ok: false, message: "GitHub integration not configured" });
+    return res.json({
+      ok: false,
+      message: "Set GITHUB_TOKEN env var to enable GitHub integration",
+      setupUrl: "https://github.com/settings/tokens",
+    });
   }
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
@@ -1081,24 +1085,72 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     return res.status(404).json({ error: "project not found" });
   }
   try {
-    const repoName = slugify(project.name) + "-" + project.id.slice(0, 8);
-    // Create repo via GitHub API
+    const projectSlug = slugify(project.name) + "-" + project.id.slice(0, 8);
+
+    // 1. Get authenticated GitHub username
+    const userResp = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        "User-Agent": "AEVION-DevHub",
+      },
+    });
+    if (!userResp.ok) {
+      const errText = await userResp.text();
+      return res.json({ ok: false, message: `GitHub auth error: ${errText}` });
+    }
+    const ghUser = await userResp.json() as { login: string };
+    const username = ghUser.login;
+
+    // 2. Create repo
     const createResp = await fetch("https://api.github.com/user/repos", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${githubToken}`,
         "Content-Type": "application/json",
-        "User-Agent": "AEVION-DevHub/1.0",
+        "User-Agent": "AEVION-DevHub",
       },
-      body: JSON.stringify({ name: repoName, description: project.description || "", private: false, auto_init: false }),
+      body: JSON.stringify({
+        name: projectSlug,
+        description: project.description || "Created by AEVION DevHub",
+        private: false,
+        auto_init: true,
+      }),
     });
     if (!createResp.ok) {
       const errText = await createResp.text();
-      return res.status(502).json({ ok: false, message: `GitHub error: ${errText}` });
+      return res.json({ ok: false, message: `GitHub repo create error: ${errText}` });
     }
-    const repoData = await createResp.json() as { html_url: string; full_name: string };
+    const repoData = await createResp.json() as { html_url: string };
     const repoUrl = repoData.html_url;
-    // Update project with repoUrl
+    const repoName = projectSlug;
+
+    // 3. Push each project file
+    const files = await dbListFiles(project.id);
+    let pushedFiles = 0;
+    for (const file of files) {
+      try {
+        const fileResp = await fetch(
+          `https://api.github.com/repos/${username}/${repoName}/contents/${file.path}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${githubToken}`,
+              "Content-Type": "application/json",
+              "User-Agent": "AEVION-DevHub",
+            },
+            body: JSON.stringify({
+              message: "Initial commit from AEVION DevHub",
+              content: Buffer.from(file.content).toString("base64"),
+            }),
+          },
+        );
+        if (fileResp.ok) pushedFiles += 1;
+      } catch {
+        // continue with other files
+      }
+    }
+
+    // 4. Update project repoUrl
     project.repoUrl = repoUrl;
     project.updatedAt = now();
     try {
@@ -1106,9 +1158,54 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
     } catch {
       memProjects.set(project.id, project);
     }
-    res.json({ ok: true, repoUrl, pushed: true });
+
+    return res.json({ ok: true, repoUrl, pushedFiles });
   } catch (e: any) {
-    res.status(500).json({ ok: false, message: e?.message || "GitHub push failed" });
+    return res.json({ ok: false, message: e?.message || "GitHub push failed" });
+  }
+});
+
+// GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
+devhubRouter.get("/projects/:id/github/status", async (req, res) => {
+  const githubToken = process.env.GITHUB_TOKEN;
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!project.repoUrl || !githubToken) {
+    return res.json({ exists: false });
+  }
+  try {
+    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (!match) return res.json({ exists: false });
+    const [, owner, repo] = match;
+    const ghResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        "User-Agent": "AEVION-DevHub",
+      },
+    });
+    if (!ghResp.ok) return res.json({ exists: false });
+    const ghData = await ghResp.json() as {
+      stargazers_count?: number;
+      open_issues_count?: number;
+      pushed_at?: string;
+    };
+    return res.json({
+      exists: true,
+      stars: ghData.stargazers_count ?? 0,
+      openIssues: ghData.open_issues_count ?? 0,
+      lastPush: ghData.pushed_at ?? null,
+    });
+  } catch {
+    return res.json({ exists: false });
   }
 });
 

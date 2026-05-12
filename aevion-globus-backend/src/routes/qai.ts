@@ -9,10 +9,20 @@ import {
 
 export const qaiRouter = Router();
 
+// ─── Personas ─────────────────────────────────────────────────────────────────
+const PERSONAS = [
+  { id: "assistant", name: "AEVION Assistant", systemPrompt: "You are AEVION's helpful AI assistant. Be concise and practical.", emoji: "🤖" },
+  { id: "coder", name: "Code Expert", systemPrompt: "You are an expert software engineer. Focus on clean, working code with explanations.", emoji: "💻" },
+  { id: "writer", name: "Creative Writer", systemPrompt: "You are a creative writer. Help with storytelling, copywriting, and creative content.", emoji: "✍️" },
+  { id: "analyst", name: "Data Analyst", systemPrompt: "You are a data analyst. Help with data interpretation, statistics, and insights.", emoji: "📊" },
+  { id: "tutor", name: "Learning Tutor", systemPrompt: "You are a patient tutor. Explain concepts clearly with examples appropriate for the learner's level.", emoji: "📚" },
+] as const;
+
 interface QaiSession {
   id: string;
   title: string | null;
   messages: ChatMessage[];
+  personaId: string | null;
   createdAt: string;
   ip: string;
 }
@@ -30,7 +40,7 @@ function getIp(req: Request): string {
 function getOrCreateSession(sessionId: string | undefined, ip: string): QaiSession {
   const id = sessionId && sessions.has(sessionId) ? sessionId : crypto.randomUUID();
   if (!sessions.has(id)) {
-    sessions.set(id, { id, title: null, messages: [], createdAt: new Date().toISOString(), ip });
+    sessions.set(id, { id, title: null, messages: [], personaId: null, createdAt: new Date().toISOString(), ip });
   }
   return sessions.get(id)!;
 }
@@ -41,7 +51,13 @@ function delay(ms: number): Promise<void> {
 
 // POST /api/qai/chat
 qaiRouter.post("/chat", async (req: Request, res: Response) => {
-  const { message, sessionId } = req.body as { message?: string; sessionId?: string };
+  const { message, sessionId, personaId, model: reqModel, provider: reqProvider } = req.body as {
+    message?: string;
+    sessionId?: string;
+    personaId?: string;
+    model?: string;
+    provider?: string;
+  };
 
   if (!message || typeof message !== "string" || !message.trim()) {
     res.status(400).json({ error: "message is required" });
@@ -51,20 +67,35 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
   const ip = getIp(req);
   const session = getOrCreateSession(sessionId, ip);
 
+  // Store personaId in session if provided
+  if (personaId) session.personaId = personaId;
+
   const userMsg: ChatMessage = { role: "user", content: message.trim() };
   session.messages.push(userMsg);
 
-  // Keep last 20 messages for context
-  const contextMessages: ChatMessage[] = session.messages.slice(-20);
+  // Build context messages — prepend system prompt if persona is set
+  let contextMessages: ChatMessage[] = session.messages.slice(-20);
+  const effectivePersonaId = personaId ?? session.personaId;
+  if (effectivePersonaId) {
+    const persona = PERSONAS.find((p) => p.id === effectivePersonaId);
+    if (persona) {
+      contextMessages = [
+        { role: "system", content: persona.systemPrompt },
+        ...contextMessages,
+      ];
+    }
+  }
 
-  // Pick first configured provider
-  const providerId = resolveProvider();
+  // Per-message provider/model override
   const providers = getProviders();
-  const provider = providers.find((p) => p.id === providerId) ?? providers[0];
-  const model = provider?.defaultModel ?? "gpt-4o-mini";
+  const resolvedProviderId = (reqProvider && providers.find((p) => p.id === reqProvider))
+    ? reqProvider
+    : resolveProvider();
+  const provider = providers.find((p) => p.id === resolvedProviderId) ?? providers[0];
+  const model = reqModel ?? provider?.defaultModel ?? "gpt-4o-mini";
 
   try {
-    const result = await callProvider(providerId, contextMessages, model, 0.7);
+    const result = await callProvider(resolvedProviderId, contextMessages, model, 0.7);
 
     const assistantMsg: ChatMessage = { role: "assistant", content: result.reply };
     session.messages.push(assistantMsg);
@@ -73,6 +104,7 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
       reply: result.reply,
       sessionId: session.id,
       model: result.model ?? model,
+      personaId: effectivePersonaId ?? undefined,
     });
   } catch (err) {
     // Remove the user message we appended if the call failed
@@ -230,6 +262,28 @@ qaiRouter.delete("/sessions/:id", (req: Request, res: Response) => {
   }
   sessions.delete(sid);
   res.json({ ok: true });
+});
+
+// GET /api/qai/personas — list built-in personas
+qaiRouter.get("/personas", (_req: Request, res: Response) => {
+  res.json({ personas: PERSONAS });
+});
+
+// GET /api/qai/sessions/:id — session info
+qaiRouter.get("/sessions/:id", (req: Request, res: Response) => {
+  const ip = getIp(req);
+  const sid = String(req.params.id);
+  const session = sessions.get(sid);
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  if (session.ip !== ip) { res.status(403).json({ error: "Forbidden" }); return; }
+  const lastMsg = session.messages[session.messages.length - 1];
+  res.json({
+    id: session.id,
+    messageCount: session.messages.length,
+    personaId: session.personaId,
+    createdAt: session.createdAt,
+    lastAt: lastMsg ? session.createdAt : session.createdAt,
+  });
 });
 
 // GET /api/qai/models — list configured providers

@@ -185,6 +185,36 @@ const MODULES = [
     exercises: 3,
     color: "red",
   },
+  {
+    id: "inspections",
+    href: "/smeta-trainer/drawings-practice/inspections",
+    icon: "✅",
+    title: "Приёмка работ",
+    subtitle: "АОСР, КС-2/КС-3, исполнительная документация",
+    level: "L4",
+    exercises: 0,
+    color: "indigo",
+  },
+  {
+    id: "safety",
+    href: "/smeta-trainer/drawings-practice/safety",
+    icon: "🦺",
+    title: "Охрана труда",
+    subtitle: "Расценки, ППР, ограждения, СИЗ — 0.4-1% от ФОТ",
+    level: "L3",
+    exercises: 3,
+    color: "orange",
+  },
+  {
+    id: "winter",
+    href: "/smeta-trainer/drawings-practice/winter",
+    icon: "❄️",
+    title: "Зимние работы",
+    subtitle: "Кз 1.10-1.60, прогрев бетона, противоморозные добавки",
+    level: "L4",
+    exercises: 3,
+    color: "blue",
+  },
 ];
 
 const LEVEL_COLORS: Record<string, string> = {

@@ -20,5 +20,24 @@ export const metadata: Metadata = {
 };
 
 export default function QMaskCardLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FinancialProduct",
+            name: "AEVION QMaskCard",
+            description: "Disposable virtual cards with per-mask spend limits, merchant/category locks, TTL, and AI fraud scoring. Real PAN never leaves your wallet.",
+            url: `${SITE}/qmaskcard`,
+            provider: { "@type": "Organization", name: "AEVION", url: SITE },
+            feesAndCommissionsSpecification: "Per-charge AI fraud scoring; no per-mask issuance fee.",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+          }),
+        }}
+      />
+      {children}
+    </>
+  );
 }

@@ -19,5 +19,23 @@ export const metadata: Metadata = {
 };
 
 export default function ZTideLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ResearchProject",
+            name: "AEVION Z-Tide",
+            description: "Research-grade reputation/contribution layer with rank-based gating. Energy-anchored experimental currency parallel to AEV.",
+            url: `${SITE}/z-tide`,
+            funder: { "@type": "Organization", name: "AEVION", url: SITE },
+            keywords: "reputation, contribution layer, soft scoring, AEVION ecosystem, energy currency",
+          }),
+        }}
+      />
+      {children}
+    </>
+  );
 }

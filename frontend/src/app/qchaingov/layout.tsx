@@ -19,5 +19,32 @@ export const metadata: Metadata = {
 };
 
 export default function QChainGovLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QChainGov",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web",
+            description: "DAO governance: identity-bound votes via AEVION Auth, QSign-chained decisions, quadratic voting, delegate trees, transparent process.",
+            url: `${SITE}/qchaingov`,
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Identity-bound votes (AEVION Auth)",
+              "QSign-chained immutable decisions",
+              "Quadratic voting",
+              "Delegate trees",
+              "Yes/No/Abstain · Ranked-choice · Weighted modes",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+          }),
+        }}
+      />
+      {children}
+    </>
+  );
 }

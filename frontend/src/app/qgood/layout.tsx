@@ -19,5 +19,31 @@ export const metadata: Metadata = {
 };
 
 export default function QGoodLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QGood",
+            applicationCategory: "HealthApplication",
+            operatingSystem: "Web",
+            description: "AI mental-health companion with clinical-grade scenarios, offline mode, HealthAI PHQ-9/GAD-7 link, and live-specialist escalation.",
+            url: `${SITE}/qgood`,
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Clinical-grade conversational AI",
+              "Offline private mode",
+              "HealthAI screener integration",
+              "Risk-based live-specialist escalation",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: SITE },
+          }),
+        }}
+      />
+      {children}
+    </>
+  );
 }

@@ -160,7 +160,7 @@ export default function NewMaskPage() {
 
       <form onSubmit={onSubmit} style={S.card}>
         <Row label="Label">
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Netflix subscription" style={S.input} required />
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} aria-label="Label (название маски)" placeholder="Netflix subscription" style={S.input} required />
         </Row>
 
         <Row label="Kind">
@@ -180,27 +180,27 @@ export default function NewMaskPage() {
 
         {kind === "merchant-locked" && (
           <Row label="Merchant">
-            <input type="text" value={lockedMerchant} onChange={(e) => setLockedMerchant(e.target.value)} placeholder="netflix.com" style={S.input} required />
+            <input type="text" value={lockedMerchant} onChange={(e) => setLockedMerchant(e.target.value)} aria-label="Merchant (домен/название мерчанта)" placeholder="netflix.com" style={S.input} required />
           </Row>
         )}
 
         {kind === "category-locked" && (
           <Row label="Category (MCC)">
-            <input type="text" value={lockedCategory} onChange={(e) => setLockedCategory(e.target.value)} placeholder="streaming" style={S.input} required />
+            <input type="text" value={lockedCategory} onChange={(e) => setLockedCategory(e.target.value)} aria-label="MCC категория мерчанта" placeholder="streaming" style={S.input} required />
           </Row>
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
           <Row label={`Spend limit (${currency})`}>
-            <input type="number" min={1} max={1_000_000} step="0.01" value={spendLimitUsd} onChange={(e) => setSpendLimitUsd(e.target.value)} style={S.input} required />
+            <input type="number" min={1} max={1_000_000} step="0.01" value={spendLimitUsd} onChange={(e) => setSpendLimitUsd(e.target.value)} aria-label={`Лимит расходов в ${currency}`} style={S.input} required />
           </Row>
           <Row label="Currency">
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={S.input}>
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)} aria-label="Валюта" style={S.input}>
               {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Row>
           <Row label="TTL (часов)">
-            <input type="number" min={1} max={8760} value={ttlHours} onChange={(e) => setTtlHours(e.target.value)} style={S.input} required />
+            <input type="number" min={1} max={8760} value={ttlHours} onChange={(e) => setTtlHours(e.target.value)} aria-label="Время жизни маски в часах" style={S.input} required />
           </Row>
         </div>
 

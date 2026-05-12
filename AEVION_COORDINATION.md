@@ -114,6 +114,31 @@ C) [третий вариант]
 
 ---
 
+## 🔴 WIP — ТЕКУЩАЯ АКТИВНАЯ РАБОТА (обновляется каждые 5 минут)
+
+> ⚠️ Перед началом любой задачи — прочитай этот раздел. Если файл/модуль уже в чьём-то WIP — НЕ БЕРИ. Запись протухает через 10 минут — если сессия не обновила WIP, значит она закончила или упала.
+
+| Сессия | Модуль / файл | Что делается | Обновлено |
+|--------|--------------|--------------|-----------|
+| `aevion-core/main` | **QNews** `qnews.ts` + `frontend/src/app/qnews/page.tsx` | Postgres persistence для статей (`ensureQNewsTables`), submit форма, bookmarks, AI digest | 2026-05-12 16:10 |
+| `aevion-core/main` | **QJobs** `qjobs.ts` + `frontend/src/app/qjobs/page.tsx` | Tabs (Все/Сохранённые/AI подбор), stats header, save jobs API | 2026-05-12 16:05 |
+| `aevion-core/main` | **QSocial** `qsocial.ts` + `frontend/src/app/qsocial/page.tsx` | Notifications bell, stats header, улучшенные табы | 2026-05-12 16:05 |
+| `aevion-core/main` | **scripts/** `qai-smoke.js`, `qlearn-smoke.js`, `qmedia-smoke.js` | Расширение smoke тестов (7+ проверок каждый) | 2026-05-12 16:10 |
+
+### Завершённые задачи этой сессии (сегодня, 2026-05-12)
+
+- ✅ Security Tier 3: убрано 273 `details:err.message` утечки из 73 route файлов
+- ✅ Regression test `sharedSecretsHardening.test.ts` — 11/11 pass
+- ✅ Smoke 24/24 PASS, audit 20/20 PASS (Railway prod)
+- ✅ Восстановлены `fintech/page.tsx` + `developers/fintech/page.tsx` (2032 строки)
+- ✅ QJobs prod-ready: rate limits + skills filter (Postgres) + stats + smoke
+- ✅ QNews prod-ready: rate limits + stats + smoke + submit форма + bookmarks + AI digest UI
+- ✅ QSocial prod-ready: rate limits + stats + smoke + notifications
+- ✅ QNews добавлен в projects.ts как проект #30
+- ✅ QJobs/QSocial перемонтированы в QBuild (`/api/build/jobs`, `/api/build/social`)
+
+---
+
 ## 📢 BROADCAST 2026-05-12 — приказ от пользователя ВСЕМ открытым сессиям
 
 > Команда напрямую от пользователя ко всем чатам Claude/Cursor в AEVION worktrees, разосланная через этот файл (увидите на ближайшем `git pull`).

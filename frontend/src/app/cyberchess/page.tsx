@@ -1941,9 +1941,14 @@ export default function CyberChessPage(){
   },[over,rivalMode,rivalProfile,currentOpening,hist.length,rat,addChessy,fenHist.length]);
 
   /* ── Variant: Twin Kings — losing the queen = losing the game ── */
+  // Migration 2026-05-12: switched from twinKingsLossSide(fen) which counted Q in FEN
+  // (broken — promoted pawn revives "second king"). Now checks capture history via
+  // capW/capB which store unicode glyphs ♕ (white queen) and ♛ (black queen).
   useEffect(()=>{
     if(variant!=="twinkings"||over||!on)return;
-    const lossSide=twinKingsLossSide(game.fen());
+    const whiteQueenCaptured = capW.includes("♕") || capB.includes("♕");
+    const blackQueenCaptured = capW.includes("♛") || capB.includes("♛");
+    const lossSide: "w" | "b" | null = whiteQueenCaptured ? "w" : blackQueenCaptured ? "b" : null;
     if(lossSide){
       const youLost=lossSide===pCol;
       sOver(youLost?"Твой королевский ферзь пал — поражение":"Королевский ферзь соперника пал — победа!");

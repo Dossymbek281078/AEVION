@@ -7474,6 +7474,17 @@ ${question.trim()}`;
           });
         }},
         {id:"deep_review",name:isPro?"Глубокий разбор ✨":"Глубокий разбор партии",desc:isPro?"Pro: бесплатно. Coach пройдёт по всем ходам и выдаст план на будущее.":"Coach пройдёт по всем ходам и выдаст план на будущее",cost:isPro?0:20,kind:"action",disabled:hist.length<4,onBuy:()=>{sTab("coach");sShowShop(false);showToast("Открой Coach — разбор готов","info")}},
+        // New shop items
+        {id:"theme_wood",name:"Тема Wood 🪵",desc:"Тёплая деревянная доска",cost:40,kind:"unlock"},
+        {id:"theme_ice",name:"Тема Ice ❄️",desc:"Холодный ледяной стиль",cost:40,kind:"unlock"},
+        {id:"theme_rose",name:"Тема Rose 🌹",desc:"Розовая романтика",cost:40,kind:"unlock"},
+        {id:"theme_dark",name:"Тема Dark 🌑",desc:"Тёмный минималистичный",cost:35,kind:"unlock"},
+        {id:"streak_shield",name:"Щит стрика 🛡",desc:"Защита от сброса стрика пазлов один раз",cost:25,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,owned:{...c.owned,streak_shield:true}}));sShowShop(false);showToast("🛡 Щит стрика активирован!","success");
+        }},
+        {id:"puzzle_boost",name:"Пазл-буст ⚡",desc:"Следующие 10 пазлов с двойным Chessy-бонусом",cost:30,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast("⚡ Пазл-буст активирован на 10 пазлов!","success");
+        }},
       ];
       const purchaseUnlock=(id:string,cost:number,name:string)=>{
         if(chessy.owned[id]){showToast("Уже куплено","info");return}

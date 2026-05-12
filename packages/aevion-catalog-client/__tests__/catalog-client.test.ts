@@ -381,3 +381,121 @@ describe("AevionCatalog v0.2 helpers", () => {
     expect(result[0]).toEqual({ tag: "t0", count: 15 });
   });
 });
+
+describe("v0.4 graph helpers", () => {
+  it("relatedModules(id) calls get(id) and returns its relatedModules array", async () => {
+    const related = [
+      { id: "qpersona", name: "QPersona", overlap: 3 },
+      { id: "qcoreai", name: "QCoreAI", overlap: 2 },
+    ];
+    const { cat, fetchMock } = makeClient({
+      body: { id: "qsign", name: "QSign", tags: ["ai", "security"], relatedModules: related },
+    });
+    const result = await cat.relatedModules("qsign");
+    expect(result).toEqual(related);
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/catalog/qsign");
+  });
+
+  it("relatedModules(id) returns [] when get returns module without relatedModules", async () => {
+    const { cat } = makeClient({
+      body: { id: "qsign", name: "QSign", tags: ["security"] },
+    });
+    const result = await cat.relatedModules("qsign");
+    expect(result).toEqual([]);
+  });
+
+  it("graph() calls list with fields projection, returns edges with from/to/overlap/score", async () => {
+    const items = [
+      { id: "a", name: "A", tags: ["x", "y", "z"] },
+      { id: "b", name: "B", tags: ["x", "y"] },
+      { id: "c", name: "C", tags: ["y", "z"] },
+      { id: "d", name: "D", tags: ["q"] },
+    ];
+    const { cat, fetchMock } = makeClient({ body: { items, total: items.length } });
+    const edges = await cat.graph();
+    const url = urlFrom(fetchMock);
+    expect(url).toMatch(/fields=(id%2Cname%2Ctags|id,name,tags)/);
+    expect(edges.length).toBeGreaterThan(0);
+    for (const e of edges) {
+      expect(typeof e.from).toBe("string");
+      expect(typeof e.to).toBe("string");
+      expect(typeof e.overlap).toBe("number");
+      expect(typeof e.score).toBe("number");
+      expect(e.from).not.toBe(e.to);
+    }
+    // a has overlap with b and c
+    const fromA = edges.filter((e) => e.from === "a").map((e) => e.to);
+    expect(fromA).toContain("b");
+    expect(fromA).toContain("c");
+    // d has no overlap with others
+    expect(edges.find((e) => e.from === "d")).toBeUndefined();
+  });
+
+  it("graph({ topK: 1 }) limits edges per node", async () => {
+    const items = [
+      { id: "a", name: "A", tags: ["x", "y", "z"] },
+      { id: "b", name: "B", tags: ["x", "y"] },
+      { id: "c", name: "C", tags: ["y", "z"] },
+      { id: "d", name: "D", tags: ["x"] },
+    ];
+    const { cat } = makeClient({ body: { items, total: items.length } });
+    const edges = await cat.graph({ topK: 1 });
+    const byFrom: Record<string, number> = {};
+    for (const e of edges) byFrom[e.from] = (byFrom[e.from] ?? 0) + 1;
+    for (const count of Object.values(byFrom)) {
+      expect(count).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("neighbours(id) returns scored array, sorted by score desc", async () => {
+    const me = { id: "a", name: "A", tags: ["x", "y", "z"] };
+    const items = [
+      me,
+      { id: "b", name: "B", status: "mvp", tags: ["x", "y", "z"] }, // perfect overlap
+      { id: "c", name: "C", status: "mvp", tags: ["x", "y"] }, // partial
+      { id: "d", name: "D", status: "launched", tags: ["x"] }, // weakest
+      { id: "e", name: "E", status: "idea", tags: ["q"] }, // no overlap
+    ];
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call++;
+      if (call === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => me,
+          text: async () => JSON.stringify(me),
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ items, total: items.length }),
+        text: async () => JSON.stringify({ items, total: items.length }),
+      } as unknown as Response;
+    });
+    const cat = new AevionCatalog({ fetch: fetchMock as unknown as typeof fetch });
+    const result = await cat.neighbours("a");
+    expect(result.length).toBe(3); // b, c, d (e excluded)
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i - 1].score).toBeGreaterThanOrEqual(result[i].score);
+    }
+    expect(result[0].id).toBe("b");
+    expect(result[0].sharedTags.sort()).toEqual(["x", "y", "z"]);
+    expect(result.find((r) => r.id === "e")).toBeUndefined();
+  });
+
+  it("neighbours(id) returns [] when source has no tags", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "a", name: "A", tags: [] }),
+      text: async () => JSON.stringify({ id: "a", name: "A", tags: [] }),
+    } as unknown as Response));
+    const cat = new AevionCatalog({ fetch: fetchMock as unknown as typeof fetch });
+    const result = await cat.neighbours("a");
+    expect(result).toEqual([]);
+    // Only one call (get); list should not have been invoked
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

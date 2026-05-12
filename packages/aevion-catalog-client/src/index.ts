@@ -40,6 +40,22 @@ export interface RelatedModule {
   overlap: number;
 }
 
+export interface GraphEdge {
+  from: string;
+  to: string;
+  overlap: number;
+  score: number; // 0..1 Jaccard
+}
+
+export interface NeighbourScore {
+  id: string;
+  name: string;
+  status: string;
+  overlap: number;
+  score: number;
+  sharedTags: string[];
+}
+
 export interface CatalogItem {
   id: string;
   code: string;
@@ -229,6 +245,78 @@ export class AevionCatalog {
     return s.byTag.slice(0, n);
   }
 
+  // ── Graph helpers (v0.4) ───────────────────────────────────────────────────
+
+  /** Returns the relatedModules array for a single module (server-side computed). */
+  async relatedModules(id: string): Promise<RelatedModule[]> {
+    const m = await this.get(id);
+    return m.relatedModules ?? [];
+  }
+
+  /**
+   * Build a full tag-overlap graph across the registry. Each item with its
+   * top-K (default 5) related modules. Single round-trip via /catalog?fields=...
+   * plus K-NN computed client-side using tag-Jaccard similarity.
+   * Useful for visualisations or recommendation prototypes.
+   */
+  async graph(opts: { topK?: number; minOverlap?: number } = {}): Promise<GraphEdge[]> {
+    const topK = opts.topK ?? 5;
+    const minOverlap = opts.minOverlap ?? 0;
+    const { items } = await this.list({ fields: ["id", "name", "tags"] });
+    const edges: GraphEdge[] = [];
+    for (const a of items) {
+      const aTags = new Set(a.tags ?? []);
+      if (aTags.size === 0) continue;
+      const candidates: { id: string; name: string; overlap: number; score: number }[] = [];
+      for (const b of items) {
+        if (b.id === a.id) continue;
+        const bTags = b.tags ?? [];
+        let overlap = 0;
+        for (const t of bTags) if (aTags.has(t)) overlap++;
+        if (overlap <= minOverlap) continue;
+        const union = aTags.size + bTags.length - overlap;
+        const score = union > 0 ? overlap / union : 0; // Jaccard
+        candidates.push({ id: b.id, name: b.name, overlap, score });
+      }
+      candidates.sort((x, y) => y.score - x.score || y.overlap - x.overlap);
+      for (const c of candidates.slice(0, topK)) {
+        edges.push({ from: a.id, to: c.id, overlap: c.overlap, score: Math.round(c.score * 1000) / 1000 });
+      }
+    }
+    return edges;
+  }
+
+  /**
+   * Find modules that share at least one tag with the given module's tags,
+   * scored by Jaccard similarity. Single-source neighbour query.
+   */
+  async neighbours(id: string, opts: { topK?: number } = {}): Promise<NeighbourScore[]> {
+    const topK = opts.topK ?? 10;
+    const me = await this.get(id);
+    const myTags = new Set(me.tags ?? []);
+    if (myTags.size === 0) return [];
+    const { items } = await this.list({ fields: ["id", "name", "status", "tags"] });
+    const scored: NeighbourScore[] = [];
+    for (const b of items) {
+      if (b.id === id) continue;
+      const bTags = b.tags ?? [];
+      let overlap = 0;
+      for (const t of bTags) if (myTags.has(t)) overlap++;
+      if (overlap === 0) continue;
+      const union = myTags.size + bTags.length - overlap;
+      scored.push({
+        id: b.id,
+        name: b.name,
+        status: b.status,
+        overlap,
+        score: union > 0 ? Math.round((overlap / union) * 1000) / 1000 : 0,
+        sharedTags: bTags.filter((t) => myTags.has(t)),
+      });
+    }
+    scored.sort((a, b) => b.score - a.score || b.overlap - a.overlap);
+    return scored.slice(0, topK);
+  }
+
   // ── Hub aggregates (v0.3) ──────────────────────────────────────────────────
 
   /** GET /api/aevion/openapi.json — aggregate API index (AEVION-shaped). */
@@ -351,5 +439,15 @@ export const getOpenApi = () => _default.openapi();
 
 /** Convenience: sitemap entries using default client. */
 export const getSitemap = () => _default.sitemap();
+
+/** Convenience: relatedModules for a module using default client (v0.4). */
+export const getRelatedModules = (id: string) => _default.relatedModules(id);
+
+/** Convenience: full tag-overlap graph using default client (v0.4). */
+export const getGraph = (opts?: { topK?: number; minOverlap?: number }) => _default.graph(opts);
+
+/** Convenience: single-source neighbours of a module using default client (v0.4). */
+export const getNeighbours = (id: string, opts?: { topK?: number }) =>
+  _default.neighbours(id, opts);
 
 export default AevionCatalog;

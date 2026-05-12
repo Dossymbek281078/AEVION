@@ -37,7 +37,7 @@ console.log(`${status}: ${healthy}/${t} services up`);
 
 ## Examples
 
-Six runnable scripts under `examples/`:
+Seven runnable scripts under `examples/`:
 
 ```bash
 node examples/list-all.mjs              # registry dump grouped by status
@@ -46,6 +46,7 @@ node examples/stats.mjs                 # by-status / by-kind / top tags
 node examples/urls.mjs                  # CSV/MD/badge URLs (no network)
 node examples/helpers.mjs               # v0.2 helpers: searchByTag/byStatus/...
 node examples/openapi-sitemap.mjs       # v0.3 Hub aggregates: openapi() + sitemap()
+node examples/graph.mjs                 # v0.4 graph helpers: graph() + neighbours()
 ```
 
 See [`examples/README.md`](./examples/README.md).
@@ -76,6 +77,27 @@ const urls = await cat.sitemap();  // sitemap.xml parsed to SitemapEntry[]
 console.log(urls[0].loc, urls[0].priority);
 ```
 
+## Graph helpers (v0.4)
+
+Module similarity via tag-Jaccard overlap, for "you might also like" widgets and
+ecosystem visualisations:
+
+```ts
+// Server-computed related modules for a single id (cheap, deep lookup)
+const rel = await cat.relatedModules("qsign");
+
+// Single-source neighbours, scored by Jaccard, with shared-tag breakdown
+const near = await cat.neighbours("qsign", { topK: 10 });
+near.forEach(n => console.log(n.score, n.id, n.sharedTags));
+
+// Full registry tag-overlap graph — top-K edges per node
+const edges = await cat.graph({ topK: 5, minOverlap: 1 });
+// edges: { from, to, overlap, score }[]
+```
+
+`graph()` is a single round-trip (uses `fields=id,name,tags` projection) and
+runs the K-NN locally — no extra backend endpoints required.
+
 ## Convenience functions
 
 For one-off calls against `https://api.aevion.app`:
@@ -84,6 +106,7 @@ For one-off calls against `https://api.aevion.app`:
 import {
   listCatalog, getModule, getStats, getHealth,
   searchByTag, byStatus, byKind, mvpsAndLaunched, topTags,
+  getRelatedModules, getGraph, getNeighbours,
 } from "@aevion/catalog-client";
 
 const all   = await listCatalog();

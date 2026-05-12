@@ -2,6 +2,19 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.4.0] — 2026-05-12
+
+### Added
+
+- `relatedModules(id)` — extracts server-computed relatedModules array
+- `graph(opts)` — full tag-overlap graph across registry, returns GraphEdge[]
+  (Jaccard-scored, top-K per node). Single round-trip via fields projection.
+- `neighbours(id, opts)` — single-source neighbours of a module, scored by
+  Jaccard with sharedTags list. Useful for "you might also like" widgets.
+- Types `GraphEdge`, `NeighbourScore`
+- Convenience exports `getRelatedModules`, `getGraph`, `getNeighbours`
+- New example `examples/graph.mjs`
+
 ## [0.3.0] — 2026-05-12
 
 ### Added

@@ -7026,6 +7026,7 @@ ${question.trim()}`;
 
                 <button onClick={()=>sShowKnowledge(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #a7f3d0`,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#065f46",textAlign:"left"}}>📚 База знаний</button>
                 <button onClick={()=>sShowLessons(true)} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #93c5fd`,background:"linear-gradient(135deg,#eff6ff,#dbeafe)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#1e3a8a",textAlign:"left"}}>📖 Курс (14 уроков)</button>
+                <button onClick={()=>{sShowFlashcards(true);sFlashcardIdx(0);sFlashcardFlipped(false)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid #fde68a`,background:"linear-gradient(135deg,#fefce8,#fef9c3)",fontSize:12,fontWeight:700,cursor:"pointer",color:"#92400e",textAlign:"left"}}>🃏 Флеш-карточки</button>
               </div>
             </div>
             {/* Combined AI Toggle + Level selector */}

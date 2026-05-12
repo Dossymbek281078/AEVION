@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";
 import { buildApi, type BuildVacancy } from "@/lib/build/api";
@@ -20,7 +19,6 @@ export default function StandaloneApplyPage({ params }: { params: Promise<{ id: 
 }
 
 function Body({ vacancyId }: { vacancyId: string }) {
-  const router = useRouter();
   const [vacancy, setVacancy] = useState<BuildVacancy | null>(null);
   const [loading, setLoading] = useState(true);
   const [applied, setApplied] = useState(false);

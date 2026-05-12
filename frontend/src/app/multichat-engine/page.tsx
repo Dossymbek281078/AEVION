@@ -4,10 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
-import { PitchValueCallout } from "@/components/PitchValueCallout";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
-import { launchedModules } from "@/data/pitchModel";
-import { useI18n, type Lang } from "@/lib/i18n";
+import { getBackendOrigin } from "@/lib/apiBase";
+import { type Lang } from "@/lib/i18n";
 
 /* ─────────────────────────────────────────────────────────────────
  * Module-local i18n — lives next to the module instead of bloating

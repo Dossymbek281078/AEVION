@@ -186,10 +186,12 @@ export default function CreateDocument() {
           {contentType === "url" ? (
             <input type="url" value={content} onChange={(e) => setContent(e.target.value)}
               placeholder="https://docs.google.com/..."
+              aria-label="URL документа"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors" />
           ) : (
             <textarea rows={9} value={content} onChange={(e) => setContent(e.target.value)}
               placeholder={contentType === "html" ? "<h1>Заголовок</h1>\n<p>Текст...</p>" : "Введите текст документа..."}
+              aria-label="Содержимое документа"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors resize-none font-mono text-sm" />
           )}
         </div>
@@ -216,6 +218,7 @@ export default function CreateDocument() {
                   </button>
                 ))}
                 <input type="number" min={1} value={maxViews} onChange={(e) => setMaxViews(Math.max(1, parseInt(e.target.value)||1))}
+                  aria-label="Максимум просмотров — произвольное число"
                   className="w-20 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-red-500" />
               </div>
             </div>
@@ -224,6 +227,7 @@ export default function CreateDocument() {
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
               <label className="text-xs text-slate-400 mb-2 block">Действует до</label>
               <input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)}
+                aria-label="Действует до"
                 className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 w-full" />
             </div>
           )}
@@ -242,6 +246,7 @@ export default function CreateDocument() {
             {usePassword && (
               <input type="text" value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="Придумайте пароль"
+                aria-label="Пароль для доступа к документу"
                 className="mt-3 w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500" />
             )}
           </div>
@@ -269,6 +274,7 @@ export default function CreateDocument() {
             {useQright && (
               <input type="text" value={qrightId} onChange={(e) => setQrightId(e.target.value)}
                 placeholder="ID объекта из реестра QRight"
+                aria-label="ID объекта в реестре QRight"
                 className="mt-3 w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
             )}
           </div>

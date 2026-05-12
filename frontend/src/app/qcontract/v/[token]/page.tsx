@@ -199,12 +199,14 @@ export default function ViewDocument() {
             {needPassword && (
               <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }}
                 placeholder="Пароль" autoFocus={!needSignature}
+                aria-label="Пароль для доступа к документу"
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-red-500 transition-colors" />
             )}
             {needSignature && (
               <div>
                 <input type="email" value={viewerEmail} onChange={(e) => { setViewerEmail(e.target.value); setError(""); }}
                   placeholder="Ваш email (будет виден в документе)" autoFocus={!needPassword}
+                  aria-label="Email для подписи документа"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors" />
                 <p className="text-[11px] text-slate-600 mt-1">Ваш email будет отображён на документе и в логе просмотра</p>
               </div>

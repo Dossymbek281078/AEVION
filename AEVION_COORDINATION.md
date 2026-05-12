@@ -403,22 +403,22 @@ C) [третий вариант]
 
 ## Текущая работа (WIP)
 
-> ⏱ Обновляется каждые 5 минут. Последнее обновление: **2026-05-12 12:14 UTC** (frontend-qcore heartbeat)
+> ⏱ Обновляется каждые 5 минут. Последнее обновление: **2026-05-12 12:19 UTC** (frontend-qcore heartbeat)
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |
-| `qcoreai.ts` + `qcoreai/**` | ✅ V31-V70 + collab viewer DONE | frontend-qcore | collab share link + 24h TTL + viewer count. Далее: streaming SSE | 12:14 UTC |
-| `devhub.ts` + `devhub/**` | ✅ V1-V3 DONE | frontend-qcore | GitHub API branches/sync. Далее: Monaco editor или Cloudflare domain | 12:14 UTC |
-| `qai.ts` + `qai/**` | ✅ V1 + markdown DONE | frontend-qcore | Markdown рендер + export .md + session history sidebar | 12:14 UTC |
-| `qmedia.ts` + `qmedia/**` | ✅ V1 + radio + smart playlists DONE | frontend-qcore | Далее: waveform visualizer или collab playlists | 12:14 UTC |
-| `qstore.ts` + `qstore/**` | ✅ V1 + dashboard DONE | frontend-qcore | Seller dashboard + daily chart + public seller profile | 12:14 UTC |
-| `qlearn.ts` + `qlearn/**` | ✅ V1 + certs DONE | frontend-qcore | Сертификаты + batch-verify + count endpoint | 12:14 UTC |
-| `qsocial.ts` + `qsocial/**` | ✅ V1 + DM + stories DONE | frontend-qcore | Уведомления, DM, истории, хэштеги | 12:14 UTC |
-| `qnews.ts` + `qnews/**` | ✅ V1 + RSS + bookmarks DONE | frontend-qcore | RSS + AI дайджест + закладки | 12:14 UTC |
-| `qjobs.ts` + `qjobs/**` | ✅ V1 + AI match DONE | frontend-qcore | AI matching + salary insights + save jobs | 12:14 UTC |
-| `qevents.ts` + `qevents/**` | ✅ V1 + calendar DONE | frontend-qcore | Calendar grouping + waitlist + share URL | 12:14 UTC |
-| `payments.ts` + `pricing/**` | ✅ DONE | frontend-qcore | Stripe test + PayBox KZ + Kaspi + pricing page | 12:14 UTC |
+| `qcoreai.ts` + `qcoreai/**` | ✅ V31-V70 + collab viewer DONE | frontend-qcore | collab share link + 24h TTL + viewer count. Далее: streaming SSE | 12:19 UTC |
+| `devhub.ts` + `devhub/**` | ✅ V1-V3 DONE | frontend-qcore | GitHub API branches/sync. Далее: Monaco editor или Cloudflare domain | 12:19 UTC |
+| `qai.ts` + `qai/**` | ✅ V1 + markdown DONE | frontend-qcore | Markdown рендер + export .md + session history sidebar | 12:19 UTC |
+| `qmedia.ts` + `qmedia/**` | ✅ V1 + radio + smart playlists DONE | frontend-qcore | Далее: waveform visualizer или collab playlists | 12:19 UTC |
+| `qstore.ts` + `qstore/**` | ✅ V1 + dashboard DONE | frontend-qcore | Seller dashboard + daily chart + public seller profile | 12:19 UTC |
+| `qlearn.ts` + `qlearn/**` | ✅ V1 + certs DONE | frontend-qcore | Сертификаты + batch-verify + count endpoint | 12:19 UTC |
+| `qsocial.ts` + `qsocial/**` | ✅ V1 + DM + stories DONE | frontend-qcore | Уведомления, DM, истории, хэштеги | 12:19 UTC |
+| `qnews.ts` + `qnews/**` | ✅ V1 + RSS + bookmarks DONE | frontend-qcore | RSS + AI дайджест + закладки | 12:19 UTC |
+| `qjobs.ts` + `qjobs/**` | ✅ V1 + AI match DONE | frontend-qcore | AI matching + salary insights + save jobs | 12:19 UTC |
+| `qevents.ts` + `qevents/**` | ✅ V1 + calendar DONE | frontend-qcore | Calendar grouping + waitlist + share URL | 12:19 UTC |
+| `payments.ts` + `pricing/**` | ✅ DONE | frontend-qcore | Stripe test + PayBox KZ + Kaspi + pricing page | 12:19 UTC |
 
 ### Следующие задачи (очередь frontend-qcore)
 

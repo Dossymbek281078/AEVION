@@ -29,6 +29,11 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/qcoreai/docs", changeFrequency: "monthly", priority: 0.7 },
   { path: "/qcoreai/providers", changeFrequency: "weekly", priority: 0.55 },
   { path: "/cyberchess", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/cyberchess/cpi", changeFrequency: "monthly", priority: 0.65 },
+  { path: "/cyberchess/cpi/dashboard", changeFrequency: "daily", priority: 0.7 },
+  { path: "/cyberchess/cpi/leaderboard", changeFrequency: "hourly", priority: 0.75 },
+  { path: "/cyberchess/economy", changeFrequency: "weekly", priority: 0.6 },
+  { path: "/cyberchess/training", changeFrequency: "daily", priority: 0.7 },
   // QBuild static routes
   { path: "/build", changeFrequency: "daily", priority: 1.0 },
   { path: "/build/vacancies", changeFrequency: "hourly", priority: 0.9 },

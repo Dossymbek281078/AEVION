@@ -2901,12 +2901,13 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(!rushActive||pzTimeLeft>0||pzMode!=="rush")return;
     // Timer hit 0 during rush — finalize
-    const chessy=rushScore*2+rushBestStreak; // 2 Chessy per solve + streak bonus
+    const boostMult=chessy.owned.puzzle_boost?2:1;
+    const earned=(rushScore*2+rushBestStreak)*boostMult; // 2 Chessy per solve + streak bonus; x2 with boost
     const isNewBest=rushScore>rushBest;
     if(isNewBest){sRushBest(rushScore);try{localStorage.setItem("aevion_puzzle_rush_best_v1",String(rushScore))}catch{}}
-    sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy,isNewBest});
+    sRushResult({score:rushScore,streak:rushBestStreak,best:isNewBest?rushScore:rushBest,chessy:earned,isNewBest});
     sRushActive(false);
-    if(chessy>0)addChessy(chessy,`Puzzle Rush · ${rushScore} решено`);
+    if(earned>0)addChessy(earned,`Puzzle Rush${boostMult>1?" ⚡2x":""} · ${rushScore} решено`);
     if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
     if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
   },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);

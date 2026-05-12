@@ -366,16 +366,28 @@ qnewsRouter.get("/rss", (_req: Request, res: Response) => {
 
 // ─── POST /api/qnews/ai/digest — AI daily digest ─────────────────────────────
 qnewsRouter.post("/ai/digest", aiLimiter, async (_req: Request, res: Response) => {
-  // Take last 5 articles from each category
-  const byCategory: Record<string, NewsItem[]> = {};
-  for (const cat of CATEGORIES) byCategory[cat] = [];
-  for (const article of memNews.values()) {
-    if (byCategory[article.category]) byCategory[article.category].push(article);
-  }
-  const selectedArticles: NewsItem[] = [];
-  for (const cat of CATEGORIES) {
-    const sorted = byCategory[cat].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 5);
-    selectedArticles.push(...sorted);
+  // Take last 5 articles per category — prefer Postgres, fallback to in-memory
+  let selectedArticles: NewsItem[] = [];
+  try {
+    if (isQNewsDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT ON ("category") * FROM (
+           SELECT * FROM "QNewsArticle" ORDER BY "category", "publishedAt" DESC
+         ) sub ORDER BY "category", "publishedAt" DESC LIMIT 50`,
+      );
+      selectedArticles = rows as NewsItem[];
+    }
+  } catch (e) { console.error("[QNews] digest DB error", e); }
+
+  if (selectedArticles.length === 0) {
+    const byCategory: Record<string, NewsItem[]> = {};
+    for (const cat of CATEGORIES) byCategory[cat] = [];
+    for (const article of memNews.values()) {
+      if (byCategory[article.category]) byCategory[article.category].push(article);
+    }
+    for (const cat of CATEGORIES) {
+      selectedArticles.push(...byCategory[cat].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 5));
+    }
   }
 
   const articlesText = selectedArticles
@@ -403,9 +415,15 @@ qnewsRouter.post("/ai/summarize", aiLimiter, async (req: Request, res: Response)
 
   let contentToSummarize = text ?? "";
   if (articleId) {
-    const article = memNews.get(articleId);
-    if (article) {
-      contentToSummarize = `${article.title}\n\n${article.summary}`;
+    try {
+      if (isQNewsDbReady()) {
+        const { rows } = await pool.query(`SELECT * FROM "QNewsArticle" WHERE "id"=$1`, [articleId]);
+        if (rows[0]) contentToSummarize = `${rows[0].title}\n\n${rows[0].summary}`;
+      }
+    } catch { /* fallback */ }
+    if (!contentToSummarize) {
+      const article = memNews.get(articleId);
+      if (article) contentToSummarize = `${article.title}\n\n${article.summary}`;
     }
   }
 

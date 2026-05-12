@@ -286,6 +286,21 @@ C) [третий вариант]
   - **Что нужно в твоей зоне:** в `routes/veilnetxLedger.ts` импортировать `canonicalJson` из `../lib/ecosystemEvents` и заменить два места `JSON.stringify(meta)` (в POST `/entries` insert + в `/chain/verify` recompute loop) на `canonicalJson(meta)`. После деплоя выполнить `ALLOW_CHAIN_REBUILD=1 ALLOW_CHAIN_REBUILD_PROD=1 node scripts/rebuild-veilnetx-chain.js` чтобы перебить исторические хэши на новый формат.
   - **Срочность:** med. Chain integrity сейчас false на проде → fintech-flow-smoke и veilnetx-ledger-smoke падают на одной assertion; функционально цепь работает.
 
+- **2026-05-12 16:55 UTC+5** — `aevion-core/main` (CyberChess sub-zone) → owner of `frontend-qcore` (`aevion-globus-backend/src/routes/cyberchess.ts`)
+  - **Цель:** добавить публичный read-endpoint `GET /api/cyberchess/cpi/leaderboard` который возвращает top-N (default 15) пользователей по AEVION CPI с per-factor breakdown.
+  - **Зачем:** фронт-страница `/cyberchess/cpi/leaderboard` (commit `79e85269`) сейчас работает на mock-данных. Хотим заменить на live API.
+  - **Контракт (предложение):**
+    ```ts
+    GET /api/cyberchess/cpi/leaderboard?limit=15&factor=overall
+    → 200 { entries: [{ rank, username, cpi, factors: { E, T, O, B1, M1, M2, M3, H, Br }, games, trend }] }
+    ```
+    Параметр `factor` опциональный (overall | E | T | O | B1 | M1 | M2 | M3 | H | Br) — сортировка по выбранному фактору.
+    Без auth (публичный). Кэш на 60s.
+  - **Где брать данные:** новая таблица `cyberchess_cpi_state` (per-user CPI + factor history) — её ещё нет в Postgres. Можно начать с in-memory mock в backend как первый шаг (без таблицы), фронт автоматически переключится с локального mock на backend mock.
+  - **Что я СДЕЛАЛ в своей зоне:** фронт уже готов читать с этого endpoint'а через простой fetch (нет PR, обращусь после Yes/No от owner).
+  - **Срочность:** low. Mock-данные на фронте работают; это улучшение от P1 к production.
+  - **Жду подтверждения 30 мин** перед написанием PR (по протоколу). Если за 30 мин нет ответа — приоритет user-задачи, иду делать самостоятельно.
+
 ### Acknowledgement log (BROADCAST-2026-05-12-read)
 
 | Worktree | Прочитал | Коммит |

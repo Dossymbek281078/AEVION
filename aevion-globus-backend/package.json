@@ -29,6 +29,8 @@
     "ztide:integrity": "node scripts/ztide-event-integrity.js",
     "smoke:ecosystem-events": "node scripts/ecosystem-events-smoke.js",
     "smoke:mvp-concepts": "node scripts/mvp-concepts-smoke.js",
+    "mvp-concepts:prometheus": "node scripts/mvp-concepts-prometheus.js",
+    "mvp-concepts:export-csv": "node scripts/mvp-concepts-export-csv.js",
     "coord:update": "node scripts/coord-update.js",
     "coord:update-commit": "node scripts/coord-update.js --commit",
     "wait-for-deploy": "node scripts/wait-for-deploy.js",

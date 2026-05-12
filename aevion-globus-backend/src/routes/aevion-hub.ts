@@ -336,6 +336,34 @@ aevionHubRouter.get("/catalog", (req, res) => {
     return res.send(lines.join("\r\n") + "\r\n");
   }
 
+  if (format === "md" || format === "markdown") {
+    const escMd = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+    const filterLabel =
+      statusFilter || tagFilter || kindFilter
+        ? ` (filtered: ${[
+            statusFilter && `status=${statusFilter}`,
+            tagFilter && `tag=${tagFilter}`,
+            kindFilter && `kind=${kindFilter}`,
+          ].filter(Boolean).join(", ")})`
+        : "";
+    const head =
+      `# AEVION Module Catalog\n\n` +
+      `**Generated:** ${new Date().toISOString()}  \n` +
+      `**Total:** ${items.length} modules${filterLabel}\n\n`;
+    const tableHead =
+      `| Code | Name | Status | Kind | Tags | Frontend | OpenAPI |\n` +
+      `|------|------|--------|------|------|----------|---------|\n`;
+    const rows = items.map((it) => {
+      const tags = Array.isArray(it.tags) ? it.tags.join(", ") : "";
+      const fe = `[link](${it.frontend})`;
+      const oa = it.openapi ? `[spec](${it.openapi})` : "—";
+      return `| \`${escMd(it.code)}\` | ${escMd(it.name)} | ${escMd(it.status)} | ${escMd(it.kind)} | ${escMd(tags)} | ${fe} | ${oa} |`;
+    }).join("\n");
+    res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="aevion-catalog.md"`);
+    return res.send(head + tableHead + rows + "\n");
+  }
+
   res.json({
     total: items.length,
     filters: {

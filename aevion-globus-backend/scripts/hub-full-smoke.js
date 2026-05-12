@@ -111,6 +111,18 @@ async function get(path, expectJson = true) {
     assert(lines[0].startsWith("id,code,name,"), `header malformed: ${lines[0]}`);
   });
 
+  await step("GET /api/aevion/catalog?format=md returns markdown table", async () => {
+    const r = await fetch(`${BASE}/api/aevion/catalog?format=md`);
+    assert(r.ok, `HTTP ${r.status}`);
+    const ct = r.headers.get("content-type") || "";
+    assert(ct.includes("text/markdown"), `content-type wrong: '${ct}'`);
+    const text = await r.text();
+    assert(text.startsWith("# AEVION Module Catalog"), "markdown header missing");
+    assert(text.includes("| Code | Name | Status | Kind |"), "markdown table header missing");
+    const rows = text.split("\n").filter((l) => l.startsWith("| `"));
+    assert(rows.length >= 10, `expected ≥10 markdown rows, got ${rows.length}`);
+  });
+
   console.log("");
   console.log(`[hub-full-smoke] PASS=${pass} FAIL=${fail}`);
   process.exit(fail > 0 ? 1 : 0);

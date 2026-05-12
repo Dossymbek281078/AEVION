@@ -31,7 +31,9 @@ export default function PlaylistsPage() {
       ]);
       if (mR.ok) { const d = await mR.json(); setMine(d.items ?? []); }
       if (pR.ok) { const d = await pR.json(); setPublic(d.items ?? []); }
-    } catch { /**/ }
+    } catch (err) {
+      console.warn("[qmedia/playlists] load failed", err instanceof Error ? err.message : err);
+    }
     finally { setLoading(false); }
   }
 
@@ -46,7 +48,9 @@ export default function PlaylistsPage() {
         body: JSON.stringify({ name: name.trim(), description: desc.trim() || null, isPublic: pub }),
       });
       if (r.ok) { setName(""); setDesc(""); setCreating(false); await load(); }
-    } catch { /**/ }
+    } catch (err) {
+      console.warn("[qmedia/playlists] create failed", err instanceof Error ? err.message : err);
+    }
     finally { setSaving(false); }
   }
 

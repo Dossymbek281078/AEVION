@@ -10,8 +10,8 @@ export default function QMediaPage() {
   const [videos, setVideos] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(apiUrl("/api/qmedia/tracks?limit=5")).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch(() => {});
-    fetch(apiUrl("/api/qmedia/videos?limit=5")).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch(() => {});
+    fetch(apiUrl("/api/qmedia/tracks?limit=5")).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch((err) => { console.warn("[qmedia/page] tracks preview failed", err instanceof Error ? err.message : err); });
+    fetch(apiUrl("/api/qmedia/videos?limit=5")).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch((err) => { console.warn("[qmedia/page] videos preview failed", err instanceof Error ? err.message : err); });
   }, []);
 
   const features = [

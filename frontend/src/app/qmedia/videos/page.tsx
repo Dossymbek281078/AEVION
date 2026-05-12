@@ -21,7 +21,7 @@ export default function QMediaVideosPage() {
 
   useEffect(() => {
     const c = category === "All" ? "" : category.toLowerCase().replace(/ /g, "-");
-    fetch(apiUrl(`/api/qmedia/videos?limit=50${c ? `&category=${c}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch(() => {});
+    fetch(apiUrl(`/api/qmedia/videos?limit=50${c ? `&category=${c}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch((err) => { console.warn("[qmedia/videos] videos list failed", err instanceof Error ? err.message : err); });
   }, [category]);
 
   const addVideo = async () => {
@@ -82,7 +82,7 @@ export default function QMediaVideosPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
           {videos.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13, gridColumn: "1/-1" }}>No videos yet. Be the first to add one!</p>}
           {videos.map(v => (
-            <div key={v.id} onClick={() => { setPlaying(v); fetch(apiUrl(`/api/qmedia/videos/${v.id}/view`), { method: "POST" }).catch(() => {}); }} style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff", cursor: "pointer" }}>
+            <div key={v.id} onClick={() => { setPlaying(v); fetch(apiUrl(`/api/qmedia/videos/${v.id}/view`), { method: "POST" }).catch((err) => { console.warn("[qmedia/videos] view count failed", err instanceof Error ? err.message : err); }); }} style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff", cursor: "pointer" }}>
               <div style={{ height: 120, background: v.thumbnailUrl ? `url(${v.thumbnailUrl}) center/cover` : "linear-gradient(135deg, #7c3aed, #0d9488)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>
                 {!v.thumbnailUrl && "▶"}
               </div>

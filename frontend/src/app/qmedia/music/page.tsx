@@ -25,13 +25,13 @@ export default function QMediaMusicPage() {
 
   useEffect(() => {
     const g = genre === "All" ? "" : genre.toLowerCase();
-    fetch(apiUrl(`/api/qmedia/tracks?limit=50${g ? `&genre=${g}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch(() => {});
+    fetch(apiUrl(`/api/qmedia/tracks?limit=50${g ? `&genre=${g}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch((err) => { console.warn("[qmedia/music] tracks list failed", err instanceof Error ? err.message : err); });
   }, [genre]);
 
   const play = (track: any) => {
     setCurrent(track);
     setIsPlaying(true);
-    fetch(apiUrl(`/api/qmedia/tracks/${track.id}/play`), { method: "POST" }).catch(() => {});
+    fetch(apiUrl(`/api/qmedia/tracks/${track.id}/play`), { method: "POST" }).catch((err) => { console.warn("[qmedia/music] play count failed", err instanceof Error ? err.message : err); });
   };
   const next = () => { if (!current) return; const i = tracks.findIndex(t => t.id === current.id); play(tracks[(i + 1) % tracks.length]); };
   const prev = () => { if (!current) return; const i = tracks.findIndex(t => t.id === current.id); play(tracks[(i - 1 + tracks.length) % tracks.length]); };

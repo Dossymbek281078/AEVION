@@ -24,7 +24,9 @@ export default function QMediaCreativePage() {
       const r = await fetch(apiUrl("/api/qmedia/ai/generate-lyrics"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lyricsForm) });
       const d = await r.json().catch(() => ({}));
       if (d.lyrics) setLyrics(d.lyrics);
-    } catch { } finally { setLyricsLoading(false); }
+    } catch (err) {
+      console.warn("[qmedia/creative] genLyrics failed", err instanceof Error ? err.message : err);
+    } finally { setLyricsLoading(false); }
   };
 
   const genTitles = async () => {
@@ -33,7 +35,9 @@ export default function QMediaCreativePage() {
       const r = await fetch(apiUrl("/api/qmedia/ai/generate-title"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(titlesForm) });
       const d = await r.json().catch(() => ({}));
       if (d.titles) setTitles(d.titles);
-    } catch { } finally { setTitlesLoading(false); }
+    } catch (err) {
+      console.warn("[qmedia/creative] genTitles failed", err instanceof Error ? err.message : err);
+    } finally { setTitlesLoading(false); }
   };
 
   const genPalette = async () => {
@@ -42,7 +46,9 @@ export default function QMediaCreativePage() {
       const r = await fetch(apiUrl("/api/qmedia/ai/generate-color-palette"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mood: selectedMood }) });
       const d = await r.json().catch(() => ({}));
       if (d.colors) setPalette(d.colors);
-    } catch { } finally { setPaletteLoading(false); }
+    } catch (err) {
+      console.warn("[qmedia/creative] genPalette failed", err instanceof Error ? err.message : err);
+    } finally { setPaletteLoading(false); }
   };
 
   return (

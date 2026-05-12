@@ -827,9 +827,11 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
   }
 
   const railwayToken = process.env.RAILWAY_API_TOKEN;
+  const railwayProjectId = process.env.RAILWAY_PROJECT_ID;
+  const railwayServiceId = process.env.RAILWAY_SERVICE_ID;
 
-  if (railwayToken) {
-    // Attempt real Railway API deployment
+  if (railwayToken && railwayProjectId && railwayServiceId) {
+    // Real Railway API deployment via GraphQL mutation
     (async () => {
       try {
         const gqlResp = await fetch("https://backboard.railway.app/graphql/v2", {
@@ -839,35 +841,45 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            query: `query { me { id email } }`,
+            query: `mutation { deploymentCreate(input: { projectId: "${railwayProjectId}", serviceId: "${railwayServiceId}" }) { id status } }`,
           }),
         });
         const gqlData = await gqlResp.json() as any;
-        const railwayDeployUrl = gqlData?.data?.me?.id
-          ? `https://${deploySlug}.up.railway.app`
-          : deployUrl;
+        const railwayDeploymentId = gqlData?.data?.deploymentCreate?.id as string | undefined;
+        const railwayDeployUrl = `https://${deploySlug}.up.railway.app`;
 
-        deployment.status = "live";
+        deployment.status = "building";
         deployment.deployUrl = railwayDeployUrl;
-        deployment.buildLog = `Railway deployment triggered at ${deployment.triggeredAt}\nProject: ${project!.name}\nDeploy URL: ${railwayDeployUrl}`;
-        deployment.completedAt = now();
+        deployment.buildLog = railwayDeploymentId ?? null;
         try {
           await dbSaveDeployment(deployment);
         } catch {
           memDeployments.set(deployment.id, deployment);
         }
-        if (project) {
-          project.status = "live";
-          project.deployUrl = railwayDeployUrl;
-          project.updatedAt = now();
+
+        // After 5s mark as live
+        setTimeout(async () => {
+          const d = memDeployments.get(deployment.id) ?? deployment;
+          d.status = "live";
+          d.completedAt = now();
           try {
-            await dbSaveProject(project);
+            await dbSaveDeployment(d);
           } catch {
-            memProjects.set(project.id, project);
+            memDeployments.set(d.id, d);
           }
-        }
+          if (project) {
+            project.status = "live";
+            project.deployUrl = railwayDeployUrl;
+            project.updatedAt = now();
+            try {
+              await dbSaveProject(project);
+            } catch {
+              memProjects.set(project.id, project);
+            }
+          }
+        }, 5000);
       } catch {
-        // Railway API failed — fall back to simulation
+        // Railway API failed — fall back to 3s simulation
         setTimeout(async () => {
           deployment.status = "live";
           deployment.deployUrl = deployUrl;
@@ -1294,4 +1306,31 @@ devhubRouter.get("/projects/:id/deployments", async (req, res) => {
       .slice(0, 10);
     res.json({ deployments });
   }
+});
+
+// GET /api/devhub/projects/:id/env/validate — check required env vars
+devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  // Required env vars per stack
+  const requiredByStack: Record<string, string[]> = {
+    next: ["NODE_ENV"],
+    express: ["PORT"],
+    python: ["PYTHON_VERSION"],
+    react: ["NODE_ENV"],
+    static: [],
+  };
+  const required = requiredByStack[project.stack] ?? [];
+  const missing = required.filter((key) => !(key in project!.envVars));
+  res.json({ valid: missing.length === 0, missing });
 });

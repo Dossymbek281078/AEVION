@@ -129,6 +129,11 @@ const MODULES: Module[] = [
   { id: "asphalt-detailed",category: "special",href: "/smeta-trainer/drawings-practice/asphalt-detailed",icon: "🛣", title: "Асфальтобетон детально",            subtitle: "Типы А/Б/В/ЩМА, расход битума, цены 2025 ГОСТ 9128",          level: "L3", exercises: 4,  color: "slate"   },
   { id: "water-treatment",category: "utilities",href: "/smeta-trainer/drawings-practice/water-treatment",icon: "🌊", title: "Очистные сооружения",               subtitle: "Септики до 1500 чел, биоочистка, УФ по СНиП РК 4.01-03",      level: "L4", exercises: 4,  color: "sky"     },
   { id: "faq",            category: "tools",    href: "/smeta-trainer/drawings-practice/faq",            icon: "❓", title: "FAQ — частые вопросы",              subtitle: "50+ вопросов с ответами по 7 категориям",                     level: "L2", exercises: 0,  color: "indigo"  },
+
+  // ── Внутренние инженерные сети ──
+  { id: "heating-internal",category: "utilities",href: "/smeta-trainer/drawings-practice/heating-internal",icon: "🔥", title: "Внутреннее отопление",              subtitle: "Радиаторы, тёплый пол, разводка по ЭСН Сб.18",                level: "L3", exercises: 4,  color: "orange"  },
+  { id: "sewerage-internal",category: "utilities",href: "/smeta-trainer/drawings-practice/sewerage-internal",icon: "🚽", title: "Внутренняя канализация",            subtitle: "ПВХ, стояки, унитазы по ЭСН Сб.17",                            level: "L3", exercises: 4,  color: "slate"   },
+  { id: "water-internal", category: "utilities",href: "/smeta-trainer/drawings-practice/water-internal", icon: "💧", title: "Внутренний водопровод",             subtitle: "ХВС/ГВС, металлопластик/PPR, узлы учёта по ЭСН Сб.16",        level: "L3", exercises: 4,  color: "sky"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

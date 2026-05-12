@@ -159,7 +159,7 @@ export default function SkillTestsPage() {
       <BuildShell>
         <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between mb-2">
-            <button onClick={() => setActive(null)} className="text-slate-400 hover:text-white text-sm">← Назад</button>
+            <button onClick={() => setActive(null)} className="text-slate-400 hover:text-white text-sm px-2 py-2 -mx-2 min-h-[36px] inline-flex items-center">← Назад</button>
             <span className="text-xs text-slate-500">{answered}/{active.questions.length}</span>
           </div>
           <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-6">
@@ -231,7 +231,7 @@ export default function SkillTestsPage() {
                   <span>{TEST_ICONS[b.testId] ?? "🏅"}</span>
                   <div>
                     <p className="text-xs font-bold text-white">{b.testTitle}</p>
-                    <p className="text-[10px] text-emerald-400">{b.score}%</p>
+                    <p className="text-xs text-emerald-400">{b.score}%</p>
                   </div>
                 </div>
               ))}

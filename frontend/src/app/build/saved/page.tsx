@@ -213,12 +213,12 @@ function SavedRow({ bookmark }: { bookmark: HydratedBookmark }) {
           <div className="flex items-center gap-2">
             <div className="truncate font-semibold text-white">{c.name}</div>
             {c.verifiedAt && (
-              <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-sky-200">
+              <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs font-bold uppercase text-sky-200">
                 ✓
               </span>
             )}
             {c.openToWork && (
-              <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
+              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-bold uppercase text-emerald-200">
                 open
               </span>
             )}

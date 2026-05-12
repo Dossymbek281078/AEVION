@@ -224,7 +224,7 @@ export default async function EmployerPage({
                       </div>
                     )}
                   </div>
-                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
                     {(v.city || v.projectCity) && <span>📍 {v.city || v.projectCity}</span>}
                     <span className="text-slate-500">{v.projectTitle}</span>
                   </div>
@@ -294,7 +294,7 @@ function Stat({
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`mt-0.5 text-xl font-bold ${tone === "emerald" ? "text-emerald-300" : "text-white"}`}>
         {value.toLocaleString()}
       </div>

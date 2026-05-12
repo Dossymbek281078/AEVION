@@ -94,6 +94,11 @@ const MODULES: Module[] = [
   { id: "dashboard",      category: "tools",    href: "/smeta-trainer/drawings-practice/dashboard",      icon: "📊", title: "Дашборд прогресса",                 subtitle: "Статус всех 45 модулей + достижения + рекомендации",          level: "L2", exercises: 0,  color: "indigo"  },
   { id: "cheatsheet",     category: "tools",    href: "/smeta-trainer/drawings-practice/cheatsheet",     icon: "📜", title: "Шпаргалка-плакат",                  subtitle: "Все формулы, коэф-ты, расценки на одной странице — print",    level: "L2", exercises: 0,  color: "amber"   },
   { id: "timeline",       category: "tools",    href: "/smeta-trainer/drawings-practice/timeline",       icon: "📅", title: "Гантт-планировщик",                 subtitle: "График строительства с шаблонами школа/жилой/бассейн",        level: "L3", exercises: 0,  color: "blue"    },
+
+  // ── Управление проектами ──
+  { id: "risk-register",  category: "process",  href: "/smeta-trainer/drawings-practice/risk-register",  icon: "🎲", title: "Реестр рисков",                     subtitle: "25 типовых рисков, матрица вероятность×влияние, резерв",      level: "L4", exercises: 0,  color: "orange"  },
+  { id: "bim-intro",      category: "tools",    href: "/smeta-trainer/drawings-practice/bim-intro",      icon: "🏗", title: "BIM для сметчика",                  subtitle: "LOD, 5D-моделирование, экспорт ВОР из Revit/ArchiCAD",        level: "L4", exercises: 4,  color: "violet"  },
+  { id: "bidding",        category: "process",  href: "/smeta-trainer/drawings-practice/bidding",        icon: "🏆", title: "Тендеры и госзакупки РК",           subtitle: "zakup.sk.kz, конкурсная заявка, демпинг, лицензии СМР",       level: "L4", exercises: 4,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

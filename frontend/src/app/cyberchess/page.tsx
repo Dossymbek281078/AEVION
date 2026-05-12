@@ -92,7 +92,10 @@ type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:
 /* ═══ Stockfish with MultiPV ═══ */
 type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
 class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish.js");this.w.onmessage=e=>{const l=String(e.data||"");
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onmessage=e=>{const l=String(e.data||"");
+    // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
+    // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
+    if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}
     if(l.startsWith("info")&&l.includes("score")){
       const cpM=l.match(/score cp (-?\d+)/);const mM=l.match(/score mate (-?\d+)/);
       const pvM=l.match(/multipv (\d+)/);const depM=l.match(/depth (\d+)/);

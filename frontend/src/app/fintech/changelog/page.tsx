@@ -81,6 +81,16 @@ function TypeBadge({ type }: { type: Entry["type"] }) {
   );
 }
 
+const CHANGELOG_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "@id": "https://aevion.app/fintech/changelog",
+  name: "AEVION Fintech Changelog",
+  description: "Release history for the 5 AEVION fintech modules.",
+  isPartOf: { "@type": "WebSite", url: "https://aevion.app", name: "AEVION" },
+  about: { "@type": "Thing", name: "AEVION Fintech Ecosystem" },
+};
+
 export default function FintechChangelogPage() {
   // Group by date
   const grouped = ENTRIES.reduce<Record<string, Entry[]>>((acc, e) => {
@@ -92,6 +102,7 @@ export default function FintechChangelogPage() {
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(CHANGELOG_JSONLD) }} />
       <div style={{ maxWidth: 800, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>

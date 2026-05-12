@@ -37,9 +37,30 @@ function Code({ children }: { children: React.ReactNode }) {
   return <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 6px", borderRadius: 4, fontFamily: "ui-monospace, monospace", fontSize: 12, color: "#a5f3fc" }}>{children}</code>;
 }
 
+const WHITEPAPER_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "@id": "https://aevion.app/fintech/whitepaper",
+  headline: "AEVION Fintech Architecture",
+  description: "Technical whitepaper for the AEVION fintech ecosystem covering VeilNetX, QMaskCard, QGood, Z-Tide, QChainGov.",
+  datePublished: "2026-05-12",
+  dateModified: "2026-05-12",
+  author: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+  keywords: ["fintech", "blockchain", "ledger", "settlement", "payment masking", "reputation", "governance", "VeilNetX", "QGood", "QMaskCard", "Z-Tide", "QChainGov"],
+  about: [
+    { "@type": "SoftwareApplication", name: "VeilNetX", applicationCategory: "FinanceApplication" },
+    { "@type": "SoftwareApplication", name: "QGood", applicationCategory: "FinanceApplication" },
+    { "@type": "SoftwareApplication", name: "QMaskCard", applicationCategory: "FinanceApplication" },
+    { "@type": "SoftwareApplication", name: "Z-Tide", applicationCategory: "FinanceApplication" },
+    { "@type": "SoftwareApplication", name: "QChainGov", applicationCategory: "FinanceApplication" },
+  ],
+};
+
 export default function FintechWhitepaperPage() {
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(WHITEPAPER_JSONLD) }} />
       <article style={{ maxWidth: 760, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>

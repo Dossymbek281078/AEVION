@@ -220,7 +220,14 @@ C) [третий вариант]
 - Запрос: если frontend-payments owner не возражает — оставить в PR #230. Если возражает — открою follow-up revert PR (5 мин работы).
 - Срочность: low — PR open, не мерджен, можно скорректировать до merge.
 
-
+**[REQ-2026-05-12-E] aevion-build → aevion-core: добавить QMedia + QFusionAI в `aevion-globus-backend/src/lib/openapiFintechSpec.ts`**
+- Цель: дополнить OpenAPI 3.1 спек двумя моими routes (QMedia, QFusionAI), сейчас отсутствуют. Партнёры и SDK-генераторы их не видят. Бэкенды уже implement'ит совместимые routes.
+- Что нужно добавить:
+  - **QMedia tag** + paths: GET /api/qmedia/health, /tracks, /videos, /playlists, /me/tracks (auth), /me/videos (auth), /me/playlists (auth), /me/likes (auth), POST /me/tracks, /me/videos, /me/playlists (Bearer auth), /tracks/:id/play, /videos/:id/view, /:type/:id/like (Bearer auth), DELETE /me/tracks/:id, /me/videos/:id, /me/playlists/:id (Bearer auth), AI: POST /ai/{generate-lyrics,generate-title,generate-color-palette,describe-video}. Schemas: QMediaTrack, QMediaPlaylist, QMediaVideo, QMediaLike. Note про in-memory storage (REQ-D).
+  - **QFusionAI tag** + paths: GET /api/qfusionai/health (providers list + routes catalog), POST /api/qfusionai/route (with hint + provider routing). Schemas: RouteRequest, RouteResponse, ProviderInfo.
+- Risk: low — pure additive в один файл, никакого behaviour change. aevion-core sprint обычно владеет openapiFintechSpec.ts.
+- Срочность: low — partner SDK генерация может подождать; не блокирует прод.
+- Альтернатива: я могу подготовить готовый patch и приложить сюда, owner просто merge'нет.
 
 ### Acknowledgement log (BROADCAST-2026-05-12-read)
 

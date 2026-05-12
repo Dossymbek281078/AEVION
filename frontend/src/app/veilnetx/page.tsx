@@ -24,7 +24,9 @@ function StatusPill() {
         if (cancelled || !data) return;
         setS({ phase: data.phase, eta: data.eta, version: data.version, waitlistCount: data.waitlistCount });
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[veilnetx/page] status probe failed", err instanceof Error ? err.message : err);
+      });
     return () => {
       cancelled = true;
     };

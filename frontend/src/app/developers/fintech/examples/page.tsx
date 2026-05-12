@@ -151,7 +151,7 @@ export default function FintechExamplesPage() {
                 key={e.id}
                 onClick={() => setActive(e.id)}
                 style={{
-                  width: "100%", textAlign: "left", padding: "10px 14px", background: "none",
+                  width: "100%", textAlign: "left", padding: "10px 14px",
                   border: "none", cursor: "pointer", borderBottom: `1px solid ${C.border}`,
                   background: active === e.id ? `${e.color}15` : "transparent",
                   borderLeft: active === e.id ? `3px solid ${e.color}` : "3px solid transparent",

@@ -20,9 +20,48 @@ type HubResponse = {
   timestamp: string;
 };
 
-type HistoryPoint = { t: number; ok: boolean; healthy: number; total: number };
-const HISTORY_KEY = "aevion_status_history_v1";
+type HistoryPoint = {
+  t: number;
+  ok: boolean;
+  healthy: number;
+  total: number;
+  perService?: Record<string, boolean>;
+};
+const HISTORY_KEY = "aevion_status_history_v2";
 const HISTORY_MAX = 60; // last 60 polls
+
+type RegistryStats = {
+  total: number;
+  byStatus: Record<string, number>;
+  byKind: Record<string, number>;
+  byTag: { tag: string; count: number }[];
+  generatedAt: string;
+};
+
+type CatalogItem = {
+  id: string;
+  name: string;
+  status: string;
+  frontend: string;
+  kind: string;
+};
+
+type CatalogResponse = {
+  total: number;
+  items: CatalogItem[];
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  launched: "#10b981",
+  mvp: "#10b981",
+  working: "#10b981",
+  in_progress: "#f59e0b",
+  research: "#8b5cf6",
+  planning: "#3b82f6",
+  idea: "#94a3b8",
+};
+
+const STATUS_ORDER = ["launched", "mvp", "in_progress", "research", "planning", "idea"];
 
 function loadHistory(): HistoryPoint[] {
   try {
@@ -86,6 +125,8 @@ export default function StatusPage() {
     uptimeSec?: number;
     release?: string | null;
   } | null>(null);
+  const [stats, setStats] = useState<RegistryStats | null>(null);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -101,17 +142,39 @@ export default function StatusPage() {
         setData(json);
         setError(null);
         setLastFetched(Date.now());
+        const perService: Record<string, boolean> = {};
+        for (const [k, v] of Object.entries(json.services)) perService[k] = v.ok;
         const point: HistoryPoint = {
           t: Date.now(),
           ok: json.status === "ok",
           healthy: json.healthy,
           total: json.total,
+          perService,
         };
         const next = [...loadHistory(), point].slice(-HISTORY_MAX);
         setHistory(next);
         saveHistory(next);
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      }
+    };
+
+    const tickStats = async () => {
+      try {
+        const [statsRes, catRes] = await Promise.all([
+          fetch(apiUrl("/api/aevion/registry-stats")),
+          fetch(apiUrl("/api/aevion/catalog?fields=id,name,status,frontend,kind")),
+        ]);
+        if (statsRes.ok) {
+          const j = (await statsRes.json()) as RegistryStats;
+          if (!cancelled) setStats(j);
+        }
+        if (catRes.ok) {
+          const j = (await catRes.json()) as CatalogResponse;
+          if (!cancelled) setCatalog(j.items || []);
+        }
+      } catch {
+        /* ignore */
       }
     };
 
@@ -128,11 +191,14 @@ export default function StatusPage() {
 
     tick();
     tickVersion();
+    tickStats();
     timer = setInterval(tick, 30_000);
+    const statsTimer = setInterval(tickStats, 5 * 60_000);
 
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
+      clearInterval(statsTimer);
     };
   }, []);
 
@@ -153,7 +219,7 @@ export default function StatusPage() {
 
   return (
     <main style={{ minHeight: "100vh", background: "#f8fafc", color: "#0f172a" }}>
-      <div style={{ maxWidth: 880, margin: "0 auto", padding: "60px 20px" }}>
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "60px 20px" }}>
         <div style={{ marginBottom: 28 }}>
           <Link href="/" style={{ fontSize: 12, color: "#64748b", textDecoration: "none" }}>
             ← AEVION
@@ -163,9 +229,55 @@ export default function StatusPage() {
           </h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>
             Live health of every product on the planet — polled every 30 seconds.
-            Last 60 polls retained locally.
+            Last 60 polls retained locally. Catalog refreshed every 5 minutes.
           </p>
         </div>
+
+        {/* Catalog overview */}
+        {stats && (
+          <div
+            style={{
+              padding: "18px 22px",
+              borderRadius: 12,
+              background: "#fff",
+              border: "1px solid rgba(15,23,42,0.08)",
+              marginBottom: 18,
+              display: "flex",
+              alignItems: "center",
+              gap: 18,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              Registry
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#0f172a" }}>{stats.total}</div>
+            <div style={{ fontSize: 11, color: "#64748b" }}>modules</div>
+            <div style={{ flex: 1 }} />
+            {STATUS_ORDER.filter((s) => stats.byStatus[s]).map((s) => (
+              <div key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background: STATUS_COLORS[s] || "#94a3b8",
+                  }}
+                  aria-hidden
+                />
+                <span style={{ fontSize: 11, color: "#475569", fontFamily: "monospace" }}>
+                  {s} {stats.byStatus[s]}
+                </span>
+              </div>
+            ))}
+            <Link
+              href="/fintech/catalog"
+              style={{ fontSize: 11, color: "#0d9488", textDecoration: "none", marginLeft: 8 }}
+            >
+              Browse →
+            </Link>
+          </div>
+        )}
 
         {/* Overall banner */}
         <div
@@ -261,6 +373,9 @@ export default function StatusPage() {
               const c = svc.ok ? "#10b981" : "#ef4444";
               const link = SERVICE_LINKS[key];
               const summary = svc.summary || {};
+              const probesWithService = history.filter((p) => p.perService && key in p.perService);
+              const okProbes = probesWithService.filter((p) => p.perService![key]).length;
+              const uptimePct = probesWithService.length ? Math.round((okProbes / probesWithService.length) * 1000) / 10 : null;
               return (
                 <div
                   key={key}
@@ -292,6 +407,14 @@ export default function StatusPage() {
                   <div style={{ fontSize: 11, color: "#64748b", display: "flex", justifyContent: "space-between" }}>
                     <span>HTTP {svc.status || "—"}</span>
                     <span>{svc.durationMs}ms</span>
+                    {uptimePct !== null && (
+                      <span
+                        title={`${okProbes}/${probesWithService.length} probes ok`}
+                        style={{ color: uptimePct >= 99 ? "#10b981" : uptimePct >= 95 ? "#f59e0b" : "#ef4444", fontWeight: 700 }}
+                      >
+                        {uptimePct}% up
+                      </span>
+                    )}
                   </div>
                   {svc.ok && Object.keys(summary).length > 0 && (
                     <div
@@ -316,6 +439,70 @@ export default function StatusPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* All modules in registry */}
+        {catalog.length > 0 && (
+          <div
+            style={{
+              padding: "18px 22px",
+              borderRadius: 12,
+              background: "#fff",
+              border: "1px solid rgba(15,23,42,0.08)",
+              marginBottom: 22,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", marginBottom: 12, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              All {catalog.length} modules in registry
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              }}
+            >
+              {STATUS_ORDER.flatMap((statusKey) =>
+                catalog
+                  .filter((m) => m.status === statusKey)
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((m) => (
+                    <a
+                      key={m.id}
+                      href={m.frontend}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        background: "#f8fafc",
+                        border: "1px solid rgba(15,23,42,0.06)",
+                        textDecoration: "none",
+                        color: "#0f172a",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 999,
+                          background: STATUS_COLORS[m.status] || "#94a3b8",
+                          flexShrink: 0,
+                        }}
+                        aria-hidden
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {m.name.split("—")[0].trim()}
+                      </span>
+                      <span style={{ fontSize: 9, color: "#94a3b8", fontFamily: "monospace", textTransform: "uppercase" }}>
+                        {m.status}
+                      </span>
+                    </a>
+                  )),
+              )}
+            </div>
           </div>
         )}
 

@@ -60,6 +60,34 @@ const memComments = new Map<string, QComment>();
 // key: userId -> QNotification[]
 const memNotifications = new Map<string, QNotification[]>();
 
+// ─── DM types + store ─────────────────────────────────────────────────────────
+interface DMMessage {
+  id: string;
+  fromId: string;
+  toId: string;
+  content: string;
+  read: boolean;
+  createdAt: string;
+}
+// key = sorted [userId1, userId2].join(":")
+const memDMs = new Map<string, DMMessage[]>();
+
+function dmKey(a: string, b: string): string {
+  return [a, b].sort().join(":");
+}
+
+// ─── Story types + store ──────────────────────────────────────────────────────
+interface QStory {
+  id: string;
+  userId: string;
+  content: string;
+  mediaUrl: string | null;
+  expiresAt: string;
+  viewCount: number;
+  createdAt: string;
+}
+const memStories = new Map<string, QStory>();
+
 function addNotification(toUserId: string, notif: Omit<QNotification, "id" | "read" | "createdAt">): void {
   const existing = memNotifications.get(toUserId) ?? [];
   existing.unshift({ ...notif, id: crypto.randomUUID(), read: false, createdAt: nowIso() });
@@ -579,4 +607,120 @@ qsocialRouter.get("/trending-tags", (_req: Request, res: Response) => {
     .slice(0, 10)
     .map(([tag, count]) => ({ tag, count }));
   return res.json({ tags });
+});
+
+// ─── DM endpoints ─────────────────────────────────────────────────────────────
+
+// POST /api/qsocial/dm/:userId — send DM
+qsocialRouter.post("/dm/:userId", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const toId = String(req.params.userId);
+  const { content } = req.body as { content?: string };
+  if (!content || typeof content !== "string" || !content.trim()) {
+    return res.status(400).json({ error: "content required" });
+  }
+  const msg: DMMessage = {
+    id: newId(), fromId: auth.sub, toId,
+    content: content.trim(), read: false, createdAt: nowIso(),
+  };
+  const key = dmKey(auth.sub, toId);
+  const thread = memDMs.get(key) ?? [];
+  thread.push(msg);
+  memDMs.set(key, thread);
+  // Notify recipient
+  addNotification(toId, { type: "mention", fromUserId: auth.sub, resourceId: msg.id });
+  return res.status(201).json({ message: msg });
+});
+
+// GET /api/qsocial/dm/:userId — get conversation
+qsocialRouter.get("/dm/:userId", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const otherId = String(req.params.userId);
+  const key = dmKey(auth.sub, otherId);
+  const messages = (memDMs.get(key) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return res.json({ messages });
+});
+
+// GET /api/qsocial/me/dms — list all DM conversations
+qsocialRouter.get("/me/dms", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const conversations: Array<{ userId: string; lastMessage: DMMessage; unreadCount: number }> = [];
+  for (const [key, msgs] of memDMs.entries()) {
+    const parts = key.split(":");
+    if (!parts.includes(auth.sub)) continue;
+    const otherId = parts.find((p) => p !== auth.sub) ?? parts[0];
+    const sorted = [...msgs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const unreadCount = msgs.filter((m) => m.toId === auth.sub && !m.read).length;
+    conversations.push({ userId: otherId, lastMessage: sorted[0], unreadCount });
+  }
+  conversations.sort((a, b) => b.lastMessage.createdAt.localeCompare(a.lastMessage.createdAt));
+  return res.json({ conversations });
+});
+
+// PATCH /api/qsocial/dm/:userId/read — mark all messages from userId as read
+qsocialRouter.patch("/dm/:userId/read", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const fromId = String(req.params.userId);
+  const key = dmKey(auth.sub, fromId);
+  const msgs = memDMs.get(key) ?? [];
+  let marked = 0;
+  for (const m of msgs) {
+    if (m.toId === auth.sub && !m.read) { m.read = true; marked++; }
+  }
+  return res.json({ ok: true, marked });
+});
+
+// ─── Story endpoints ──────────────────────────────────────────────────────────
+
+// POST /api/qsocial/stories — create story
+qsocialRouter.post("/stories", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const { content, mediaUrl } = req.body as { content?: string; mediaUrl?: string };
+  if (!content || typeof content !== "string" || !content.trim()) {
+    return res.status(400).json({ error: "content required" });
+  }
+  const now = new Date();
+  const story: QStory = {
+    id: newId(),
+    userId: auth.sub,
+    content: content.trim(),
+    mediaUrl: typeof mediaUrl === "string" ? mediaUrl : null,
+    expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    viewCount: 0,
+    createdAt: now.toISOString(),
+  };
+  memStories.set(story.id, story);
+  return res.status(201).json({ story });
+});
+
+// GET /api/qsocial/stories — public non-expired stories
+qsocialRouter.get("/stories", (_req: Request, res: Response) => {
+  const now = new Date().toISOString();
+  const stories = Array.from(memStories.values())
+    .filter((s) => s.expiresAt > now)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return res.json({ stories });
+});
+
+// GET /api/qsocial/me/stories — my stories including expired
+qsocialRouter.get("/me/stories", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const stories = Array.from(memStories.values())
+    .filter((s) => s.userId === auth.sub)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return res.json({ stories });
+});
+
+// POST /api/qsocial/stories/:id/view — increment viewCount (no auth)
+qsocialRouter.post("/stories/:id/view", (req: Request, res: Response) => {
+  const story = memStories.get(String(req.params.id));
+  if (!story) return res.status(404).json({ error: "not_found" });
+  story.viewCount++;
+  return res.json({ viewCount: story.viewCount });
 });

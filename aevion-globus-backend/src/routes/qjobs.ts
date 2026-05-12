@@ -452,19 +452,53 @@ qjobsRouter.get("/salary-insights", (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qjobs/saved-jobs ────────────────────────────────────────────────
-qjobsRouter.get("/saved-jobs", (req: Request, res: Response) => {
+qjobsRouter.get("/saved-jobs", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
+
+  try {
+    if (isQJobsDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT j.* FROM "QJobsPosting" j
+         JOIN "QJobsSavedJob" s ON s."jobId" = j."id"
+         WHERE s."userId"=$1 AND j."isActive"=TRUE
+         ORDER BY s."createdAt" DESC`,
+        [auth.sub],
+      );
+      return res.json({ jobs: rows });
+    }
+  } catch (e) { console.error("[QJobs] /saved-jobs DB error", e); }
+
   const saved = memSavedJobs.get(auth.sub) ?? new Set<string>();
   const jobs = Array.from(saved).map((id) => memJobs.get(id)).filter(Boolean) as JobPosting[];
   return res.json({ jobs });
 });
 
 // ─── POST /api/qjobs/jobs/:id/save — toggle ───────────────────────────────────
-qjobsRouter.post("/jobs/:id/save", (req: Request, res: Response) => {
+qjobsRouter.post("/jobs/:id/save", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const jobId = param(req, "id");
+
+  try {
+    if (isQJobsDbReady()) {
+      const existing = await pool.query(
+        `SELECT id FROM "QJobsSavedJob" WHERE "userId"=$1 AND "jobId"=$2`,
+        [auth.sub, jobId],
+      );
+      if ((existing.rowCount ?? 0) > 0) {
+        await pool.query(`DELETE FROM "QJobsSavedJob" WHERE "userId"=$1 AND "jobId"=$2`, [auth.sub, jobId]);
+        return res.json({ saved: false });
+      } else {
+        await pool.query(
+          `INSERT INTO "QJobsSavedJob"("id","userId","jobId") VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+          [crypto.randomUUID(), auth.sub, jobId],
+        );
+        return res.json({ saved: true });
+      }
+    }
+  } catch (e) { console.error("[QJobs] save toggle DB error", e); }
+
   const job = memJobs.get(jobId);
   if (!job) return res.status(404).json({ error: "not_found" });
   const saved = memSavedJobs.get(auth.sub) ?? new Set<string>();

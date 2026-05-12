@@ -62,6 +62,8 @@ export async function ensureQJobsTables(pool: PgPoolInstance): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS "QJobsApp_unique"
         ON "QJobsApplication" ("jobId", "applicantId");
     `);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "QJobsSavedJob" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL, "jobId" TEXT NOT NULL, "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE ("userId","jobId"));`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "QJobsSaved_user_idx" ON "QJobsSavedJob" ("userId","createdAt" DESC);`);
     dbReady = true;
     console.log("[QJobs] Tables ready");
   } catch (e: unknown) {

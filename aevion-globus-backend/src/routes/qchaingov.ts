@@ -249,6 +249,9 @@ qchaingovRouter.post("/proposals/:id/votes", voteLimit, async (req, res) => {
     if (!choice || typeof choice !== "string") return res.status(400).json({ error: "choice required" });
     const w = Number(weight);
     if (!Number.isFinite(w) || w <= 0 || w > 1_000_000) return res.status(400).json({ error: "weight 0..1000000" });
+    if (rationale != null && typeof rationale === "string" && rationale.length > 1000) {
+      return res.status(400).json({ error: "rationale_too_long", maxLength: 1000 });
+    }
     const pool = getPool();
     const p = await pool.query(
       `SELECT "status","options" FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,

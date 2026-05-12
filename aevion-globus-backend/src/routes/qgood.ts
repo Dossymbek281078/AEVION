@@ -258,6 +258,12 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
     if (!Number.isFinite(amount) || amount < 100 || amount > 100_000_000) {
       return res.status(400).json({ error: "amountCents must be 100..100000000 ($1..$1M)" });
     }
+    if (donorEmail != null && donorEmail !== "") {
+      const e = String(donorEmail).trim();
+      if (e.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+        return res.status(400).json({ error: "invalid_email" });
+      }
+    }
     const pool = getPool();
     const c = await pool.query(
       `SELECT "status","currency" FROM "QGoodCampaign" WHERE "id" = $1 LIMIT 1`,

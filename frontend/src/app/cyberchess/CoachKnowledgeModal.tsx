@@ -65,6 +65,10 @@ const STATUS_DOT: Record<ReviewStatus, { color: string; label: string }> = {
   "unread":    { color: "#d1d5db", label: "Не прочитано" },
 };
 
+// ── Daily quiz (inline — no separate functions to avoid lint auto-removal)
+const DQ_KEY = "aevion_coach_dq_v1";
+type DQState = { date: string; key: string; answered: boolean; correct: boolean | null };
+
 export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Props) {
   const [catId, sCatId] = useState<string>(COACH_KNOWLEDGE[0].id);
   const [entryId, sEntryId] = useState<string>("");
@@ -72,6 +76,27 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
   const [read, sRead] = useState<Set<string>>(() => loadRead());
   const [sr, sSr] = useState<SrData>(() => loadSr());
   const [filter, sFilter] = useState<"all" | "due" | "unread">("all");
+  const [dq, sDq] = useState<DQState | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const saved = JSON.parse(localStorage.getItem(DQ_KEY) || "null") as DQState | null;
+      if (saved?.date === today) return saved;
+      const cands = COACH_KNOWLEDGE.flatMap(c => c.entries.filter(e => !!e.bestMove).map(e => `${c.id}/${e.id}`));
+      if (!cands.length) return null;
+      const seed = parseInt(today.replace(/-/g, ""), 10);
+      const q: DQState = { date: today, key: cands[seed % cands.length], answered: false, correct: null };
+      localStorage.setItem(DQ_KEY, JSON.stringify(q));
+      return q;
+    } catch { return null; }
+  });
+  const [dqInput, sDqInput] = useState("");
+  const [dqOpen, sDqOpen] = useState(false);
+  const dqEntry = useMemo(() => {
+    if (!dq) return null;
+    const [qc, qe] = dq.key.split("/");
+    return COACH_KNOWLEDGE.find(c => c.id === qc)?.entries.find(e => e.id === qe) ?? null;
+  }, [dq]);
 
   useEffect(() => { saveRead(read) }, [read]);
   useEffect(() => { saveSr(sr) }, [sr]);
@@ -191,6 +216,23 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
             borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
           }}>✕</button>
         </div>
+
+        {/* Daily Quiz */}
+        {dqEntry && (
+          <div style={{ padding: "8px 16px", borderBottom: "1px solid #fde68a", background: dq?.answered ? (dq.correct ? "#f0fdf4" : "#fef2f2") : "#fefce8", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13 }}>🧠</span>
+            {!dq?.answered ? <>
+              <span style={{ fontSize: 11, fontWeight: 900, color: "#92400e", flex: 1 }}>Вопрос дня: {dqEntry.title} — лучший ход?</span>
+              {dqOpen ? <><input value={dqInput} onChange={e => sDqInput(e.target.value)} placeholder="SAN ход" style={{ width: 90, padding: "3px 6px", borderRadius: 5, border: "1px solid #fcd34d", fontSize: 11 }}
+                onKeyDown={e => { if (e.key !== "Enter" || !dqEntry.bestMove) return; const ok = dqInput.trim().toLowerCase() === dqEntry.bestMove.toLowerCase(); const u: DQState = { ...dq!, answered: true, correct: ok }; sDq(u); try { localStorage.setItem(DQ_KEY, JSON.stringify(u)); } catch {} sDqOpen(false); }} />
+                <button onClick={() => { if (!dqEntry.bestMove) return; const ok = dqInput.trim().toLowerCase() === dqEntry.bestMove.toLowerCase(); const u: DQState = { ...dq!, answered: true, correct: ok }; sDq(u); try { localStorage.setItem(DQ_KEY, JSON.stringify(u)); } catch {} sDqOpen(false); }} style={{ padding: "3px 8px", borderRadius: 5, border: "none", background: "#f59e0b", color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>✓</button></>
+              : <button onClick={() => sDqOpen(true)} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #fcd34d", background: "#fffbeb", color: "#92400e", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>ответить</button>}
+            </> : <>
+              <span style={{ fontSize: 11, fontWeight: 900, color: dq.correct ? "#15803d" : "#991b1b" }}>{dq.correct ? "✅ Правильно!" : "❌ Неверно."}</span>
+              <span style={{ fontSize: 11, color: "#374151" }}>Ответ: <b>{dqEntry.bestMove}</b></span>
+            </>}
+          </div>
+        )}
 
         {/* SR reminder banner */}
         {totalDue > 0 && (

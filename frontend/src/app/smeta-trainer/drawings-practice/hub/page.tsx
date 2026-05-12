@@ -69,6 +69,11 @@ const MODULES: Module[] = [
   { id: "cost-engine",    category: "tools",    href: "/smeta-trainer/drawings-practice/cost-engine",    icon: "💰", title: "Калькулятор стоимости",             subtitle: "ЭСН × Кр × Кз × индекс ССЦ + НР + СП = итог в тг",            level: "L3", exercises: 0,  color: "emerald" },
   { id: "forms-acts",     category: "tools",    href: "/smeta-trainer/drawings-practice/forms-acts",     icon: "📑", title: "Формы КС-2, КС-3, Ф-3",             subtitle: "Заполняемые формы с готовой к печати версией",               level: "L3", exercises: 0,  color: "blue"    },
   { id: "pos-ppr",        category: "process",  href: "/smeta-trainer/drawings-practice/pos-ppr",        icon: "📋", title: "ПОС и ППР",                         subtitle: "Проект организации стр-ва и производства работ — состав",     level: "L4", exercises: 0,  color: "indigo"  },
+
+  // ── Тестирование и справочники ──
+  { id: "quiz",           category: "practice", href: "/smeta-trainer/drawings-practice/quiz",           icon: "🎯", title: "Адаптивный квиз",                   subtitle: "40+ вопросов из всех разделов, тайминг, оценка",              level: "L4", exercises: 40, color: "amber"   },
+  { id: "glossary",       category: "tools",    href: "/smeta-trainer/drawings-practice/glossary",       icon: "📖", title: "Глоссарий терминов",                subtitle: "80+ терминов сметного дела РК с поиском",                     level: "L2", exercises: 0,  color: "slate"   },
+  { id: "materials",      category: "tools",    href: "/smeta-trainer/drawings-practice/materials",      icon: "💼", title: "Цены на материалы",                 subtitle: "60+ позиций ССЦ РК 8.04-08-2025 с калькулятором",            level: "L3", exercises: 0,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

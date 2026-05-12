@@ -142,7 +142,7 @@ export default function MyRequestsPage() {
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${s.chip}`}>{s.label}</span>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${s.chip}`}>{s.label}</span>
                       <span className="text-xs text-slate-500">{fmtDate(r.created_at)}</span>
                       {r.expires_at && <span className="text-xs text-slate-600">истекает {fmtDate(r.expires_at)}</span>}
                     </div>

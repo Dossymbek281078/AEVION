@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -216,7 +216,7 @@ export default function AdminFreezePage() {
                   className="w-full text-left bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg p-2.5 flex items-center gap-3 text-xs"
                 >
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${STATUS_CHIP[h.status]}`}
+                    className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${STATUS_CHIP[h.status]}`}
                   >
                     {h.status}
                   </span>
@@ -349,7 +349,7 @@ export default function AdminFreezePage() {
                   className="flex items-center gap-3 text-xs bg-slate-950 border border-slate-800 rounded-lg px-3 py-2"
                 >
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                    className={`text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 ${
                       r.status === "frozen"
                         ? "bg-cyan-900 text-cyan-300"
                         : "bg-emerald-900 text-emerald-300"

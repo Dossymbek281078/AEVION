@@ -174,7 +174,7 @@ export default function PayoutsPage() {
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${STATUS_CHIP[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[p.status]}`}>{STATUS_LABEL[p.status]}</span>
                       <span className="text-[10px] text-slate-500">{METHOD_LABEL[p.method]}</span>
                       <span className="text-[10px] text-slate-600">{fmtDate(p.created_at)}</span>
                     </div>

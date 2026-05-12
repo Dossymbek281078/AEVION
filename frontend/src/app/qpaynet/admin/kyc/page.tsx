@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -118,7 +118,7 @@ export default function AdminKycPage() {
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${STATUS_CHIP[s.status]}`}>{STATUS_LABEL[s.status]}</span>
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[s.status]}`}>{STATUS_LABEL[s.status]}</span>
                     <span className="text-[10px] text-slate-600">{fmtDate(s.submitted_at)}</span>
                   </div>
                   <div className="text-base font-bold text-white">{s.full_name}</div>

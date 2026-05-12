@@ -107,19 +107,19 @@ export default function QPayNetDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <span className="text-violet-400 font-black text-lg">₸</span>
           <span className="font-bold">QPayNet</span>
-          <span className="text-[10px] bg-violet-900 text-violet-300 px-2 py-0.5 rounded-full">BETA</span>
+          <span className="text-xs bg-violet-900 text-violet-300 px-2 py-1 rounded-full">BETA</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
           {token && <NotificationBell token={token} />}
-          {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white">📥 Запросы</Link>}
-          {token && <Link href="/qpaynet/payouts" className="text-xs text-slate-400 hover:text-white">🏦 Выплаты</Link>}
-          {token && <Link href="/qpaynet/kyc" className="text-xs text-slate-400 hover:text-white">🛡 KYC</Link>}
-          <Link href="/qpaynet/merchant" className="text-xs text-slate-400 hover:text-white">Merchant API</Link>
+          {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white hidden sm:inline">📥 Запросы</Link>}
+          {token && <Link href="/qpaynet/payouts" className="text-xs text-slate-400 hover:text-white hidden sm:inline">🏦 Выплаты</Link>}
+          {token && <Link href="/qpaynet/kyc" className="text-xs text-slate-400 hover:text-white hidden sm:inline">🛡 KYC</Link>}
+          <Link href="/qpaynet/merchant" className="text-xs text-slate-400 hover:text-white hidden sm:inline">Merchant API</Link>
           {token && (
             <button onClick={() => setShowCreate(true)}
               className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg">
@@ -131,10 +131,10 @@ export default function QPayNetDashboard() {
 
       {/* Public stats */}
       {stats && (
-        <div className="border-b border-slate-800 px-6 py-3 flex items-center gap-6 text-xs text-slate-500">
+        <div className="border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-slate-500">
           <span>💳 {stats.activeWallets} кошельков</span>
           <span>⚡ {stats.totalTransactions} транзакций</span>
-          <span>₸ {fmt(stats.totalDepositedKzt)} тнг. депозитов</span>
+          <span className="hidden sm:inline">₸ {fmt(stats.totalDepositedKzt)} тнг. депозитов</span>
         </div>
       )}
 
@@ -242,7 +242,7 @@ export default function QPayNetDashboard() {
                       <button
                         onClick={() => { navigator.clipboard.writeText(activeW.id); }}
                         title="Скопировать ID кошелька"
-                        className="shrink-0 text-[10px] text-slate-500 hover:text-slate-300 px-1.5 py-0.5 bg-slate-800 rounded"
+                        className="shrink-0 text-xs text-slate-500 hover:text-slate-300 px-1.5 py-1 bg-slate-800 rounded"
                       >
                         📋
                       </button>

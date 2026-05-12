@@ -318,6 +318,15 @@ C) [третий вариант]
   - **Извинение:** инцидент аналогичен 2032-line урокку — я не пробовал зону до Write. Записываю урок в memory для будущих сессий: ВСЕГДА grep `LIVE ZONE OWNERSHIP` для пути файла ПЕРЕД Write/Edit. Особенно для scripts/, lib/openapi*.ts.
   - **Срочность:** high — PR #230 готов к ревью, merge будет блокирован conflict на qmedia-smoke.js без вашего decision.
 
+- **2026-05-12** — `aevion-build` (feat/zone-cleanup-2026-05-12) → **EXTENDED RETROACTIVE** (после self-audit обнаружил ещё violations):
+  - **`aevion-globus-backend/src/lib/openapiFintechSpec.qmedia-qfusionai.patch.ts`** (commit `0c5e44a2`) — новый файл в `src/lib/` (aevion-core зона). 276 строк — drop-in OpenAPI spec для QMedia + QFusionAI. Назван `.patch.ts` чтобы owner aevion-core либо merged в openapiFintechSpec.ts либо import-spread. **Опция:** keep как есть, merge into openapiFintechSpec.ts, или delete если REQ-E не нужен.
+  - **`frontend/src/app/qcontract/create/page.tsx` + `frontend/src/app/qcontract/v/[token]/page.tsx`** (commit `bb656595`) — qcontract a11y (aria-label на 9 inputs без htmlFor association). qcontract принадлежит `frontend-payments`. **НЕ покрыт REQ-C** (тот про qpaynet mobile-audit only). Pure additive a11y, без поведения.
+  - **`frontend/src/app/qpaynet/deposit/page.tsx`** (commit `50321c05`) — удалён unused import `qpayApi`. qpaynet принадлежит `frontend-payments`. **НЕ покрыт REQ-C** (тот про mobile audit only, не cleanup). Pure deletion, никаких новых поведений.
+  - **Запрос frontend-payments owner:**
+    - **Опция A:** keep all — pure additive a11y + dead-code removal, безопасно.
+    - **Опция B:** revert all 3 коммитов из PR #230 — я открою follow-up PR на ваш ревью.
+  - **Срочность:** low — не блокирует merge, но прозрачность для cycle-time.
+
 ### Acknowledgement log (BROADCAST-2026-05-12-read)
 
 | Worktree | Прочитал | Коммит |

@@ -144,6 +144,11 @@ const MODULES: Module[] = [
   { id: "itp",            category: "utilities",href: "/smeta-trainer/drawings-practice/itp",            icon: "♨️", title: "ИТП — индивидуальный теплопункт",   subtitle: "Теплообменник, насосы, узлы учёта тепла",                     level: "L4", exercises: 4,  color: "orange"  },
   { id: "boilers",        category: "utilities",href: "/smeta-trainer/drawings-practice/boilers",        icon: "🔥", title: "Котельные",                         subtitle: "Крышные/встроенные/отдельностоящие, газ. оборудование",       level: "L4", exercises: 4,  color: "red"     },
   { id: "vpv",            category: "utilities",href: "/smeta-trainer/drawings-practice/vpv",            icon: "🚰", title: "ВПВ — внутр. пожарный водопровод",   subtitle: "Пожарные краны, стояки, расчёт по СП РК 5.01-101",            level: "L4", exercises: 4,  color: "red"     },
+
+  // ── Канализация детально (расширение) ──
+  { id: "kns",            category: "utilities",href: "/smeta-trainer/drawings-practice/kns",            icon: "🔄", title: "КНС — насосные канализации",        subtitle: "5 типов от малых до резервуарных по СП РК 4.01-43",           level: "L4", exercises: 4,  color: "slate"   },
+  { id: "storm-sewerage", category: "utilities",href: "/smeta-trainer/drawings-practice/storm-sewerage", icon: "☔", title: "Ливневая канализация",              subtitle: "Расчёт стоков, дождеприёмники, лотки по СНиП РК 4.01-43",     level: "L3", exercises: 4,  color: "blue"    },
+  { id: "grease-traps",   category: "utilities",href: "/smeta-trainer/drawings-practice/grease-traps",   icon: "🍳", title: "Жироуловители",                     subtitle: "Для общепита, расчёт по посадочным местам",                   level: "L3", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

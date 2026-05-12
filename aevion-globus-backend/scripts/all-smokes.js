@@ -62,6 +62,8 @@ const SMOKES = [
   { name: "qmaskcard", script: "qmaskcard-smoke.js", readOnly: false },
   // VeilNetX Ledger — chain integrity + entry write.
   { name: "veilnetx-ledger", script: "veilnetx-ledger-smoke.js", readOnly: false },
+  // VeilNetX chaos — bursty parallel writes + chain integrity check. Catches race-condition regressions.
+  { name: "veilnetx-chaos", script: "veilnetx-chaos-smoke.js", readOnly: false },
   // Z-Tide — leaderboard read + me lookup (no admin events fired in smoke).
   { name: "ztide", script: "ztide-smoke.js", readOnly: false },
   // QChainGov — proposal create + auth/validation gates.

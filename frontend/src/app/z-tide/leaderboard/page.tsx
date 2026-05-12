@@ -38,7 +38,10 @@ async function loadLeaderboard(): Promise<Row[]> {
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data?.leaderboard) ? data.leaderboard : [];
-  } catch { return []; }
+  } catch (err) {
+    console.warn("[z-tide/leaderboard] loadLeaderboard failed", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 async function loadStats(): Promise<Stats | null> {
@@ -49,7 +52,10 @@ async function loadStats(): Promise<Stats | null> {
     });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn("[z-tide/leaderboard] loadStats failed", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 const RANK_COLORS: Record<string, string> = {

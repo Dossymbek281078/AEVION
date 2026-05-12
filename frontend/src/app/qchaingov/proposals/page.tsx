@@ -44,7 +44,10 @@ async function loadProposals(): Promise<Proposal[]> {
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data?.proposals) ? data.proposals : [];
-  } catch { return []; }
+  } catch (err) {
+    console.warn("[qchaingov/proposals] loadProposals failed", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 async function loadStats(): Promise<Stats | null> {
@@ -55,7 +58,10 @@ async function loadStats(): Promise<Stats | null> {
     });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn("[qchaingov/proposals] loadStats failed", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 const STATUS_COLORS: Record<string, string> = {

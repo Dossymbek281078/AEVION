@@ -41,7 +41,10 @@ async function loadHead(): Promise<Head | null> {
     });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn("[veilnetx/ledger] loadHead failed", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 async function loadEntries(): Promise<Entry[]> {
@@ -53,7 +56,10 @@ async function loadEntries(): Promise<Entry[]> {
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data?.entries) ? data.entries : [];
-  } catch { return []; }
+  } catch (err) {
+    console.warn("[veilnetx/ledger] loadEntries failed", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 async function loadStats(): Promise<Stats | null> {
@@ -64,7 +70,10 @@ async function loadStats(): Promise<Stats | null> {
     });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn("[veilnetx/ledger] loadStats failed", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 function fmt(cents: string | number): string {

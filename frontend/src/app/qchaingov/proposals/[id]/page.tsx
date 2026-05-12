@@ -43,7 +43,10 @@ async function loadProposal(id: string): Promise<{ proposal: Proposal; tally: Ta
     });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn("[qchaingov/proposals/[id]] loadProposal failed", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 const STATUS_COLORS: Record<string, string> = {

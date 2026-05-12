@@ -9,10 +9,65 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { sendWaitlistConfirmation } from "../lib/planningEmail";
+
+const UNSUB_SECRET = process.env.WAITLIST_UNSUB_SECRET || "aevion-waitlist-unsub-dev-only-key";
+
+/** token = base64url(moduleId).base64url(emailHash).hmac
+ *  Tamper-evident; user can only unsubscribe themselves. */
+function makeUnsubToken(moduleId: string, emailHash: string): string {
+  const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64url");
+  const payload = `${b64(moduleId)}.${b64(emailHash)}`;
+  const sig = createHmac("sha256", UNSUB_SECRET).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+function verifyUnsubToken(token: string): { moduleId: string; emailHash: string } | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [b64Mod, b64Hash, sig] = parts;
+  const payload = `${b64Mod}.${b64Hash}`;
+  const expected = createHmac("sha256", UNSUB_SECRET).update(payload).digest("base64url");
+  try {
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  } catch {
+    return null;
+  }
+  try {
+    return {
+      moduleId: Buffer.from(b64Mod, "base64url").toString("utf8"),
+      emailHash: Buffer.from(b64Hash, "base64url").toString("utf8"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function removeFromWaitlist(moduleId: string, emailHash: string): Promise<boolean> {
+  await ensureTables();
+  if (dbAvailable) {
+    try {
+      const pool = getPool();
+      const r = await pool.query(
+        `DELETE FROM planning_waitlist WHERE module_id = $1 AND email_hash = $2 RETURNING id`,
+        [moduleId, emailHash],
+      );
+      return (r.rowCount ?? 0) > 0;
+    } catch {
+      // fall through to memory
+    }
+  }
+  const mod = memoryWaitlist.get(moduleId);
+  if (!mod) return false;
+  return mod.delete(emailHash);
+}
+
+export { makeUnsubToken };
 
 export type PlanningStubConfig = {
   id: string;               // "qgood"
@@ -116,6 +171,16 @@ async function addToWaitlist(
   return { created: true, id };
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
+}
+
+function htmlPage(title: string, body: string): string {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · AEVION</title><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#020617;color:#e2e8f0;margin:0;padding:24px;display:flex;align-items:center;justify-content:center;min-height:90vh}.card{max-width:520px;background:#0f172a;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.08)}h2{margin:0 0 12px;font-size:22px;color:#f8fafc}p{margin:0 0 12px;line-height:1.6;color:#cbd5e1;font-size:14px}a{color:#22d3ee;font-weight:600}.logo{font-size:13px;font-weight:800;color:#22d3ee;letter-spacing:.08em;margin-bottom:20px;text-transform:uppercase}</style></head><body><div class="card"><div class="logo">AEVION</div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p><p><a href="https://aevion.app/">← на главную</a></p></div></body></html>`;
+}
+
 export function createPlanningStubRouter(config: PlanningStubConfig): Router {
   const router = Router();
 
@@ -154,6 +219,8 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
       const { created, id } = await addToWaitlist(config.id, email);
       const count = await getWaitlistCount(config.id);
       if (created) {
+        const emailHash = hashEmail(email);
+        const unsubToken = makeUnsubToken(config.id, emailHash);
         // Fire-and-forget confirmation. Silently skips if SMTP isn't configured.
         sendWaitlistConfirmation({
           toEmail: email,
@@ -162,12 +229,35 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
           modulePhase: config.phase,
           moduleEta: config.eta,
           moduleDescription: config.description,
+          unsubToken,
         });
       }
       res.status(created ? 201 : 200).json({ ok: true, id, alreadyJoined: !created, waitlistCount: count });
     } catch {
       res.status(500).json({ error: "waitlist-failed" });
     }
+  });
+
+  router.get("/unsubscribe", async (req: Request, res: Response) => {
+    const token = String(req.query.token ?? "").trim();
+    if (!token) {
+      return res.status(400).send(htmlPage("Bad request", "Параметр token отсутствует."));
+    }
+    const decoded = verifyUnsubToken(token);
+    if (!decoded || decoded.moduleId !== config.id) {
+      return res.status(400).send(htmlPage("Invalid token", "Ссылка повреждена или относится к другому модулю."));
+    }
+    const removed = await removeFromWaitlist(decoded.moduleId, decoded.emailHash);
+    if (!removed) {
+      return res.status(200).send(htmlPage(
+        "Уже отписаны",
+        `Вы уже не в списке ${config.title}. Это окончательно.`,
+      ));
+    }
+    res.status(200).send(htmlPage(
+      "Отписка подтверждена",
+      `Вы удалены из списка ${config.title}. Мы больше не отправим вам уведомления о запуске.`,
+    ));
   });
 
   router.options("/openapi.json", (_req, res) => {

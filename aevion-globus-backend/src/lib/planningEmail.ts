@@ -63,6 +63,7 @@ export type WaitlistEmailContext = {
   modulePhase: string;
   moduleEta: string;
   moduleDescription: string;
+  unsubToken?: string;
 };
 
 /** Fire-and-forget. Never throws. */
@@ -71,8 +72,12 @@ export function sendWaitlistConfirmation(ctx: WaitlistEmailContext): void {
     try {
       const transport = getTransport();
       if (!transport) return; // SMTP not configured — skip silently
+      const apiBase = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
       const moduleUrl = `${BASE}/${ctx.moduleId}`;
-      const statusUrl = `https://api.aevion.app/api/${ctx.moduleId}/status`;
+      const statusUrl = `${apiBase}/api/${ctx.moduleId}/status`;
+      const unsubUrl = ctx.unsubToken
+        ? `${apiBase}/api/${ctx.moduleId}/unsubscribe?token=${encodeURIComponent(ctx.unsubToken)}`
+        : null;
       const body = `
         <span class="pill">${escapeHtml(ctx.modulePhase)}</span>
         <h2 style="margin-top:14px">You're on the ${escapeHtml(ctx.moduleTitle)} waitlist.</h2>
@@ -82,9 +87,9 @@ export function sendWaitlistConfirmation(ctx: WaitlistEmailContext): void {
         <p style="margin-top:24px;font-size:12px;color:#64748b">
           Live status JSON: <a href="${escapeHtml(statusUrl)}" style="color:#22d3ee">${escapeHtml(statusUrl)}</a>
         </p>
-        <p style="font-size:12px;color:#64748b">
-          Don't want updates? Just reply with "unsubscribe" and we'll remove you. No spam, ever.
-        </p>
+        ${unsubUrl
+          ? `<p style="font-size:12px;color:#64748b">Don't want updates? <a href="${escapeHtml(unsubUrl)}" style="color:#22d3ee">One-click unsubscribe</a>.</p>`
+          : `<p style="font-size:12px;color:#64748b">Don't want updates? Just reply with "unsubscribe" and we'll remove you.</p>`}
       `;
       await transport.sendMail({
         from: FROM,

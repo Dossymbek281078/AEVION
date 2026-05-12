@@ -164,6 +164,11 @@ const MODULES: Module[] = [
   { id: "water-wells",              category: "utilities",href: "/smeta-trainer/drawings-practice/water-wells",              icon: "🚰", title: "Скважины и водозаборы",          subtitle: "Песок/известняк/артезианская, насосы Grundfos/Wilo",          level: "L4", exercises: 4,  color: "blue"    },
   { id: "pressure-stations",        category: "utilities",href: "/smeta-trainer/drawings-practice/pressure-stations",        icon: "💧", title: "ГНС повышения давления",         subtitle: "Дублирование N+1, противопож. ВКА, ЧРП по СП РК 4.01-101",   level: "L4", exercises: 4,  color: "cyan"    },
   { id: "water-treatment-detailed", category: "utilities",href: "/smeta-trainer/drawings-practice/water-treatment-detailed", icon: "🧪", title: "Водоподготовка детально",         subtitle: "Умягчение, обезжелезивание, осмос, УФ-стерилизация",          level: "L3", exercises: 4,  color: "teal"    },
+
+  // ── Связь, газ ВД/СД, пневматика ──
+  { id: "comm-fiber",             category: "utilities",href: "/smeta-trainer/drawings-practice/comm-fiber",             icon: "📡", title: "Связь и СКС",                     subtitle: "UTP cat.6/6A, ВОЛС, Wi-Fi, IP-камеры по ISO/IEC 11801",       level: "L3", exercises: 4,  color: "fuchsia" },
+  { id: "gas-medium-pressure",    category: "utilities",href: "/smeta-trainer/drawings-practice/gas-medium-pressure",    icon: "🔥", title: "ГРП газовое ВД/СД",               subtitle: "ГРПШ-100/200, ГРПБ, ШРП по СНиП РК 4.03-01-2011",            level: "L4", exercises: 4,  color: "yellow"  },
+  { id: "compressed-air",         category: "utilities",href: "/smeta-trainer/drawings-practice/compressed-air",         icon: "🌬", title: "Сжатый воздух — компрессорные",   subtitle: "Винтовые ATLAS COPCO, осушители, ресиверы",                   level: "L3", exercises: 4,  color: "slate"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

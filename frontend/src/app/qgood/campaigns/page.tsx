@@ -50,7 +50,10 @@ async function loadCampaigns(): Promise<Campaign[]> {
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data?.campaigns) ? data.campaigns : [];
-  } catch { return []; }
+  } catch (err) {
+    console.warn("[qgood/campaigns] loadCampaigns failed", err instanceof Error ? err.message : err);
+    return [];
+  }
 }
 
 async function loadStats(): Promise<Stats | null> {
@@ -61,7 +64,10 @@ async function loadStats(): Promise<Stats | null> {
     });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; }
+  } catch (err) {
+    console.warn("[qgood/campaigns] loadStats failed", err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 function fmtMoney(cents: string | number, currency = "USD"): string {

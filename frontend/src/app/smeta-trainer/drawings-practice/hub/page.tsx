@@ -96,6 +96,11 @@ const MODULES: Module[] = [
   { id: "customer-negotiations", category: "process",  href: "/smeta-trainer/drawings-practice/customer-negotiations", icon: "🤝", title: "Переговоры с заказчиком",          subtitle: "Защита сметы, 6 возражений, скрипты, ДОЦ",                    level: "L4", exercises: 4,  color: "violet"  },
   { id: "contractor-claims",     category: "process",  href: "/smeta-trainer/drawings-practice/contractor-claims",     icon: "🔍", title: "Проверка КС-2/КС-3",                subtitle: "8 нарушений подрядчика, контр. обмер, претензии",             level: "L4", exercises: 4,  color: "red"     },
   { id: "government-tender",     category: "process",  href: "/smeta-trainer/drawings-practice/government-tender",     icon: "🏛️", title: "Госзакупки и тендеры",              subtitle: "ZRK о госзакуп., обеспечение, аукцион, 12 документов",         level: "L4", exercises: 4,  color: "blue"    },
+
+  // ── Дизайн и ландшафт ──
+  { id: "landscape-detailed",    category: "special",  href: "/smeta-trainer/drawings-practice/landscape-detailed",    icon: "🌳", title: "Ландшафт детально",                subtitle: "Газоны, деревья, ирригация Hunter, LED-освещение",            level: "L3", exercises: 4,  color: "emerald" },
+  { id: "interior-design",       category: "special",  href: "/smeta-trainer/drawings-practice/interior-design",       icon: "🎨", title: "Дизайн интерьера",                 subtitle: "Этапы, наценки, спецификация, авторский надзор",              level: "L3", exercises: 4,  color: "purple"  },
+  { id: "winter-garden",         category: "special",  href: "/smeta-trainer/drawings-practice/winter-garden",         icon: "🌿", title: "Зимний сад и фитодизайн",          subtitle: "Алюминий+стеклопакеты, климат, фитолампы, уход",              level: "L3", exercises: 4,  color: "lime"    },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──

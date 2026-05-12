@@ -242,6 +242,40 @@ veilnetxLedgerRouter.get("/entries/:id", readLimit, async (req, res) => {
   }
 });
 
+veilnetxLedgerRouter.get("/search", readLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const rawHash = String(req.query.hash ?? "").trim().toLowerCase();
+    if (!rawHash) {
+      return res.status(400).json({ error: "hash prefix must be >= 4 hex chars" });
+    }
+    if (rawHash.length < 4) {
+      return res.status(400).json({ error: "hash prefix must be >= 4 hex chars" });
+    }
+    if (!/^[a-f0-9]{4,64}$/.test(rawHash)) {
+      return res.status(400).json({ error: "hash prefix must be >= 4 hex chars" });
+    }
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 50);
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT "id","sequenceNumber","module","kind","blindedFrom","blindedTo","amountCents","currency","prevHash","entryHash","createdAt"
+       FROM "VeilNetXLedger"
+       WHERE "entryHash" LIKE $1 || '%' OR "prevHash" LIKE $1 || '%'
+       ORDER BY "sequenceNumber" DESC
+       LIMIT $2`,
+      [rawHash, limit],
+    );
+    res.json({
+      query: { hash: rawHash, limit },
+      matches: r.rows,
+      total: r.rowCount,
+    });
+  } catch (err: unknown) {
+    console.error("[veilnetx-ledger] search_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "search_failed" });
+  }
+});
+
 veilnetxLedgerRouter.get("/chain/head", readLimit, async (_req, res) => {
   try {
     await ensureTables();

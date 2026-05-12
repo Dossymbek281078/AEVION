@@ -228,6 +228,91 @@ export class AevionCatalog {
     const s = await this.stats();
     return s.byTag.slice(0, n);
   }
+
+  // ── Hub aggregates (v0.3) ──────────────────────────────────────────────────
+
+  /** GET /api/aevion/openapi.json — aggregate API index (AEVION-shaped). */
+  async openapi(): Promise<OpenApiIndex> {
+    const url = `${this.baseUrl}/api/aevion/openapi.json`;
+    const r = await this._fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`AevionCatalog.openapi HTTP ${r.status} on ${url}`);
+    const j = (await r.json()) as { aevion?: Partial<OpenApiIndex> };
+    const a = j.aevion ?? {};
+    return {
+      name: a.name ?? "AEVION API Index",
+      version: a.version ?? "0.0.0",
+      description: a.description,
+      modules: Array.isArray(a.modules) ? (a.modules as OpenApiModuleRef[]) : [],
+      services: Array.isArray(a.services) ? (a.services as OpenApiServiceRef[]) : [],
+      sdk: a.sdk as OpenApiSdkManifest | undefined,
+      generatedAt: a.generatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  /** GET /api/aevion/sitemap.xml — parsed to SitemapEntry[] via zero-dep regex. */
+  async sitemap(): Promise<SitemapEntry[]> {
+    const url = `${this.baseUrl}/api/aevion/sitemap.xml`;
+    const r = await this._fetch(url, { headers: { Accept: "application/xml,text/xml" } });
+    if (!r.ok) throw new Error(`AevionCatalog.sitemap HTTP ${r.status} on ${url}`);
+    const text = await r.text();
+    return parseSitemap(text);
+  }
+}
+
+// ── Hub aggregate types (v0.3) ───────────────────────────────────────────────
+
+export interface OpenApiModuleRef {
+  name: string;
+  title?: string;
+  spec: string;
+}
+
+export interface OpenApiServiceRef {
+  name: string;
+  health: string;
+}
+
+export interface OpenApiSdkManifest {
+  npm: string[];
+  docs?: string;
+}
+
+export interface OpenApiIndex {
+  name: string;
+  version: string;
+  description?: string;
+  modules: OpenApiModuleRef[];
+  services: OpenApiServiceRef[];
+  sdk?: OpenApiSdkManifest;
+  generatedAt: string;
+}
+
+export interface SitemapEntry {
+  loc: string;
+  lastmod: string | null;
+  changefreq: string | null;
+  priority: number | null;
+}
+
+function parseSitemap(xml: string): SitemapEntry[] {
+  const entries: SitemapEntry[] = [];
+  const urlBlocks = xml.match(/<url\b[^>]*>[\s\S]*?<\/url>/g) ?? [];
+  const pick = (block: string, tag: string): string | null => {
+    const m = block.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+    return m ? m[1].trim() : null;
+  };
+  for (const block of urlBlocks) {
+    const loc = pick(block, "loc");
+    if (!loc) continue;
+    const priorityStr = pick(block, "priority");
+    entries.push({
+      loc,
+      lastmod: pick(block, "lastmod"),
+      changefreq: pick(block, "changefreq"),
+      priority: priorityStr !== null && priorityStr !== "" ? Number(priorityStr) : null,
+    });
+  }
+  return entries;
 }
 
 // ── Convenience function exports ────────────────────────────────────────────
@@ -260,5 +345,11 @@ export const mvpsAndLaunched = () => _default.mvpsAndLaunched();
 
 /** Convenience: top-N tags using default client. */
 export const topTags = (n?: number) => _default.topTags(n);
+
+/** Convenience: openapi aggregate index using default client. */
+export const getOpenApi = () => _default.openapi();
+
+/** Convenience: sitemap entries using default client. */
+export const getSitemap = () => _default.sitemap();
 
 export default AevionCatalog;

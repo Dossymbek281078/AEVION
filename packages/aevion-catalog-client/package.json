@@ -1,6 +1,6 @@
 {
   "name": "@aevion/catalog-client",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges. Zero deps.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,7 +10,9 @@
   ],
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "keywords": [
     "aevion",
@@ -31,6 +33,7 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
   }
 }

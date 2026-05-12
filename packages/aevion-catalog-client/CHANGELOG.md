@@ -2,6 +2,16 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.3.0] — 2026-05-12
+
+### Added
+
+- `openapi()` — returns the AEVION aggregate API index (modules, services, SDK manifest)
+- `sitemap()` — fetches and parses /api/aevion/sitemap.xml, returns SitemapEntry[] (zero-dep regex parser)
+- `getOpenApi`, `getSitemap` — convenience function exports
+- Types `OpenApiIndex`, `OpenApiModuleRef`, `OpenApiServiceRef`, `OpenApiSdkManifest`, `SitemapEntry`
+- New example `examples/openapi-sitemap.mjs`
+
 ## [0.2.0] — 2026-05-12
 
 ### Added

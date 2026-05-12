@@ -37,14 +37,15 @@ console.log(`${status}: ${healthy}/${t} services up`);
 
 ## Examples
 
-Five runnable scripts under `examples/`:
+Six runnable scripts under `examples/`:
 
 ```bash
-node examples/list-all.mjs          # registry dump grouped by status
-node examples/get-module.mjs qsign  # single-module deep lookup
-node examples/stats.mjs             # by-status / by-kind / top tags
-node examples/urls.mjs              # CSV/MD/badge URLs (no network)
-node examples/helpers.mjs           # v0.2 helpers: searchByTag/byStatus/...
+node examples/list-all.mjs              # registry dump grouped by status
+node examples/get-module.mjs qsign      # single-module deep lookup
+node examples/stats.mjs                 # by-status / by-kind / top tags
+node examples/urls.mjs                  # CSV/MD/badge URLs (no network)
+node examples/helpers.mjs               # v0.2 helpers: searchByTag/byStatus/...
+node examples/openapi-sitemap.mjs       # v0.3 Hub aggregates: openapi() + sitemap()
 ```
 
 See [`examples/README.md`](./examples/README.md).
@@ -62,6 +63,18 @@ const top    = await cat.topTags(5);                           // [{tag,count}]
 ```
 
 Same names are exported as standalone functions against the default backend.
+
+## Hub aggregates (v0.3)
+
+Two endpoints that aggregate across all AEVION modules:
+
+```ts
+const idx = await cat.openapi();   // AEVION aggregate API index
+console.log(idx.modules, idx.services, idx.sdk);
+
+const urls = await cat.sitemap();  // sitemap.xml parsed to SitemapEntry[]
+console.log(urls[0].loc, urls[0].priority);
+```
 
 ## Convenience functions
 

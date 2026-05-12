@@ -6498,6 +6498,16 @@ export default function CyberChessPage(){
                 <input value={game.fen()} readOnly onClick={e=>(e.target as HTMLInputElement).select()} style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,fontFamily:"monospace",color:T.dim,background:"#f9fafb"}}/>
                 <button onClick={()=>{navigator.clipboard.writeText(game.fen());showToast("FEN скопирован","success")}} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,color:T.dim,cursor:"pointer"}}>📋 Copy</button>
               </div>
+              {/* Position Notes — user annotations for current analysis session */}
+              {(()=>{
+                const PN_KEY=`aevion_pos_note_${game.fen().split(" ")[0]}`;
+                const[note,sNote]=typeof window!=="undefined"?[localStorage.getItem(PN_KEY)||"",(v:string)=>{try{localStorage.setItem(PN_KEY,v)}catch{}}]:["",()=>{}];
+                return<div style={{marginTop:8}}>
+                  <div style={{fontSize:10,fontWeight:800,color:T.dim,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:4}}>📝 Заметки к позиции</div>
+                  <textarea defaultValue={note} onChange={e=>{sNote(e.target.value)}} placeholder="Запиши идею, план или комментарий к этой позиции…" rows={2}
+                    style={{width:"100%",padding:"6px 8px",borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,color:T.text,resize:"vertical",background:"#fafafa",boxSizing:"border-box"}}/>
+                </div>;
+              })()}
 
               {/* Guess Mode Panel */}
               {guessMode&&<div style={{marginTop:8,padding:"12px",borderRadius:8,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fde68a"}}>

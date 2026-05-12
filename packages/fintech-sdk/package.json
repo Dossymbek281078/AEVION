@@ -1,0 +1,35 @@
+{
+  "name": "@aevion/fintech-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript client for the AEVION fintech ecosystem — QGood charity, QMaskCard virtual cards, VeilNetX settlement ledger, Z-Tide reputation, QChainGov governance.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "aevion",
+    "fintech",
+    "charity",
+    "virtual-cards",
+    "ledger",
+    "governance"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION",
+    "directory": "packages/fintech-sdk"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

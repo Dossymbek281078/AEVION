@@ -114,62 +114,89 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/qai/chat/stream — SSE streaming chat
+// POST /api/qai/chat/stream — SSE streaming chat (word-by-word, 40ms cadence)
 qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
-  const { message, sessionId } = req.body as { message?: string; sessionId?: string };
+  const { message, sessionId, personaId } = req.body as {
+    message?: string;
+    sessionId?: string;
+    personaId?: string;
+  };
 
   if (!message || typeof message !== "string" || !message.trim()) {
-    res.status(400).json({ error: "message is required" });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.flushHeaders();
+    res.write(`data: ${JSON.stringify({ type: "error", message: "message required" })}\n\n`);
+    res.end();
     return;
   }
-
-  const ip = getIp(req);
-  const session = getOrCreateSession(sessionId, ip);
-
-  const userMsg: ChatMessage = { role: "user", content: message.trim() };
-  session.messages.push(userMsg);
 
   // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.flushHeaders();
+
+  const ip = getIp(req);
+  const session = getOrCreateSession(sessionId, ip);
+
+  // Apply persona to session if provided
+  if (personaId) session.personaId = personaId;
+  const effectivePersonaId = personaId ?? session.personaId;
+
+  const userMsg: ChatMessage = { role: "user", content: message.trim() };
+  session.messages.push(userMsg);
 
   let closed = false;
   req.on("close", () => { closed = true; });
 
-  try {
-    res.write(`data: ${JSON.stringify({ type: "start" })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: "start", sessionId: session.id })}\n\n`);
 
-    const contextMessages: ChatMessage[] = session.messages.slice(-20);
-    const providerId = resolveProvider();
+  try {
+    // Build context with optional system persona prompt
+    let contextMessages: ChatMessage[] = session.messages.slice(-10);
+    if (effectivePersonaId) {
+      const persona = PERSONAS.find((p) => p.id === effectivePersonaId);
+      if (persona) {
+        contextMessages = [
+          { role: "system", content: persona.systemPrompt },
+          ...contextMessages,
+        ];
+      }
+    }
+
     const providers = getProviders();
+    const providerId = resolveProvider();
     const provider = providers.find((p) => p.id === providerId) ?? providers[0];
     const model = provider?.defaultModel ?? "gpt-4o-mini";
 
-    const result = await callProvider(providerId, contextMessages, model, 0.7);
-    const reply = result.reply;
+    let fullReply = "";
+    if (!provider || !provider.configured) {
+      fullReply = `[AEVION QAI — stub mode] You asked: "${message.trim().slice(0, 100)}"`;
+    } else {
+      const result = await callProvider(providerId, contextMessages, model, 0.7);
+      fullReply = result.reply;
+    }
 
-    // Split into ~20-char chunks and stream with 30ms delay
-    const chunkSize = 20;
-    for (let i = 0; i < reply.length; i += chunkSize) {
+    // Stream word-by-word with 40ms delay
+    const words = fullReply.split(/(\s+)/);
+    for (const word of words) {
       if (closed) break;
-      const chunk = reply.slice(i, i + chunkSize);
-      res.write(`data: ${JSON.stringify({ type: "chunk", text: chunk })}\n\n`);
-      await delay(30);
+      res.write(`data: ${JSON.stringify({ type: "chunk", text: word })}\n\n`);
+      await delay(40);
     }
 
     if (!closed) {
-      const assistantMsg: ChatMessage = { role: "assistant", content: reply };
+      const assistantMsg: ChatMessage = { role: "assistant", content: fullReply };
       session.messages.push(assistantMsg);
-      res.write(`data: ${JSON.stringify({ type: "done", sessionId: session.id, reply })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "done", sessionId: session.id, reply: fullReply })}\n\n`);
     }
   } catch (err) {
     session.messages.pop(); // remove user message on error
     if (!closed) {
-      const msg = err instanceof Error ? err.message : "AI provider unavailable";
-      res.write(`data: ${JSON.stringify({ type: "error", error: msg })}\n\n`);
+      const msg = err instanceof Error ? err.message : "stream failed";
+      res.write(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`);
     }
   } finally {
     res.end();

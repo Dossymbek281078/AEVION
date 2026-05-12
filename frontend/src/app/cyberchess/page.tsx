@@ -52,6 +52,8 @@ import BoardArtOverlay, { BOARD_ART_OPTIONS, type BoardArt as BoardArtId } from 
 import { useP2P, genRoomId, type P2PMessage } from "./P2P";
 import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
+import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
+import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 
 const FILES = "abcdefgh";
@@ -793,6 +795,8 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("aevion_live_commentary_v1",liveCommentary?"1":"0")}catch{}},[liveCommentary]);
   const[dailyState,sDailyState]=useState<DailyState|null>(null);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
+  const[showOnboarding,sShowOnboarding]=useState<boolean>(false);
+  const[dueReminders,sDueReminders]=useState<Array<{entryId:string;milestone:1|3|7;daysSinceStudy:number}>>([]);
   const[hotseat,sHotseat]=useState(false);
   const[showEndgames,sShowEndgames]=useState(false);
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
@@ -1162,6 +1166,8 @@ export default function CyberChessPage(){
     // Chessy welcome + daily bonus + first-time tour
     const c=ldChessy();const tk=todayKey();
     let tourSeen=false;try{tourSeen=localStorage.getItem("aevion_tour_seen_v1")==="1"}catch{}
+    // First-time onboarding overlay (3-step color/AI/time choice) — runs BEFORE tour.
+    if(!hasCompletedOnboarding())setTimeout(()=>sShowOnboarding(true),400);
     if(!c.welcome){
       sChessy(x=>({...x,balance:x.balance+50,lifetime:x.lifetime+50,welcome:true,lastDaily:tk,streak:1}));
       setTimeout(()=>sDailyReward({bonus:50,streak:1,isWelcome:true}),800);
@@ -1174,6 +1180,8 @@ export default function CyberChessPage(){
       sChessy(x=>({...x,balance:x.balance+bonus,lifetime:x.lifetime+bonus,lastDaily:tk,streak:newStreak}));
       setTimeout(()=>sDailyReward({bonus,streak:newStreak,isWelcome:false}),800);
     }
+    // Coach SR — surface due review reminders (1/3/7-day milestones).
+    try{const due=getDueReminders();if(due.length>0)sDueReminders(due)}catch{}
     // Load bundled puzzles first (instant), then try to expand from cloud API.
     // Cloud API (/api-backend/puzzles) is Railway-hosted with the full Lichess CC0 DB.
     // Falls back gracefully if offline or DB not seeded.
@@ -7829,6 +7837,36 @@ ${question.trim()}`;
           fontSize:16,fontWeight:900,cursor:"pointer",letterSpacing:0.5,
           boxShadow:"0 4px 14px rgba(124,58,237,0.4)",
         }}>▶ Начать</button>
+      </div>
+    </div>}
+
+    {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
+    {showOnboarding&&<OnboardingOverlay
+      onComplete={(choice:OnboardingChoice)=>{
+        try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
+        markOnboardingDone();
+        sShowOnboarding(false);
+      }}
+      onSkip={()=>{markOnboardingDone();sShowOnboarding(false)}}
+    />}
+
+    {/* Coach SR reminders — surfaced as a single toast-card if any 1/3/7-day milestones are due */}
+    {dueReminders.length>0&&<div style={{
+      position:"fixed",bottom:20,right:20,zIndex:9000,
+      background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
+      padding:"12px 16px",borderRadius:12,boxShadow:"0 6px 24px rgba(124,58,237,0.4)",
+      maxWidth:340,fontSize:13,lineHeight:1.5,
+    }}>
+      <div style={{fontWeight:900,marginBottom:4}}>🎓 Coach reminder</div>
+      <div style={{fontSize:12,opacity:0.92,marginBottom:8}}>
+        У тебя {dueReminders.length} тема{dueReminders.length===1?"":dueReminders.length<5?"ы":""} для повторения по spaced-repetition (1/3/7 дней). Открой Coach Knowledge.
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={()=>{
+          // Dismiss all current due reminders
+          for(const r of dueReminders)dismissReminder(r.entryId,r.milestone);
+          sDueReminders([]);
+        }} style={{background:"rgba(255,255,255,0.18)",border:"none",color:"#fff",fontSize:11,fontWeight:700,padding:"5px 10px",borderRadius:6,cursor:"pointer"}}>Скрыть</button>
       </div>
     </div>}
 

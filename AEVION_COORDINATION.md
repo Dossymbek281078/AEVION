@@ -205,6 +205,14 @@ C) [третий вариант]
 - Цель: формализовать owner'а. /loop input явно указывает multichat-engine в моей зоне; в LIVE ZONE OWNERSHIP не присвоен (qcoreai owned by frontend-qcore, но multichat-engine — отдельная страница).
 - Запрос: добавить `frontend/src/app/multichat-engine/**` в aevion-build zone. Если frontend-qcore хочет — пусть берёт; ждать 30 мин.
 
+**[REQ-2026-05-12-D] aevion-build → in-zone follow-up: QMedia Postgres migration (NOT cross-zone — own initiative tracker)**
+- Что: `aevion-globus-backend/src/routes/qmedia.ts` использует in-process `Map<>` (memTracks/memPlaylists/memVideos/memLikes) для хранения. `ensureQMediaTables(pool)` вызывается middleware'ом но pool никогда не используется в хэндлерах.
+- Симптомы: данные теряются на каждый рестарт. Multi-replica = drift (один replica знает один track, другой не знает).
+- Прецедент: HealthAI имел тот же баг — починен раньше (см. predecessor commit). Паттерн готов.
+- Объём работы: ~3-4 часа. Маппинг 10+ хэндлеров (CRUD tracks/playlists/videos/likes) с in-memory operations на pool.query INSERT/SELECT/UPDATE/DELETE.
+- Статус: добавлен startup warning + in-file note (commit 7e77508d). Сама миграция — отложена до явного OK пользователя (major rewrite, не безопасный additive fix).
+- Это NOT cross-zone — QMedia принадлежит aevion-build. Запись здесь как in-zone backlog tracker.
+
 **[REQ-2026-05-12-C] aevion-build → frontend-payments (retroactive notice, low risk)**
 - Что: PR #230 (branch `feat/prod-readiness-2026-05-12`, 5 commits, 88 files) включает 17 файлов в `frontend/src/app/qpaynet/**` (admin/audit, admin/freeze, admin/kyc, admin/page, admin/payouts, admin/refund, admin/webhook-deliveries, kyc, merchant, notifications, notifications/preferences, page, payouts, request, send, transactions, widget/[walletId]).
 - Характер правок: mobile audit only — `text-[9/10/11]px` → `text-xs` swaps. Verified на send/page.tsx — pure className swaps, без поведения, без структуры.

@@ -62,6 +62,31 @@ async function loadBureauCert(qrightObjectId: string): Promise<BureauCertView | 
   }
 }
 
+type PolicyView = {
+  id: string;
+  type: "license" | "restriction" | "attribution";
+  scope: string;
+  termsText: string;
+  spdxId?: string | null;
+  url?: string | null;
+  validUntil?: string | null;
+  createdAt: string;
+};
+
+async function loadPolicies(objectId: string): Promise<PolicyView[]> {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/qright/objects/${encodeURIComponent(objectId)}/policies`,
+      { cache: "no-store", signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return [];
+    const j = await res.json();
+    return Array.isArray(j.policies) ? j.policies : [];
+  } catch {
+    return [];
+  }
+}
+
 async function getOrigin(): Promise<string> {
   try {
     const h = await headers();
@@ -158,9 +183,12 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
   const lang = pickLang(sp, h);
   const t = (key: string, vars?: Record<string, string | number>) =>
     tString("object", lang, key, vars);
-  const data = await loadEmbed(id);
-  const bureauCert = await loadBureauCert(id);
-  const origin = await getOrigin();
+  const [data, bureauCert, policies, origin] = await Promise.all([
+    loadEmbed(id),
+    loadBureauCert(id),
+    loadPolicies(id),
+    getOrigin(),
+  ]);
 
   const badgeUrl = `${getApiBase()}/api/qright/badge/${encodeURIComponent(id)}.svg`;
   const verifyUrl = origin ? `${origin}/qright/object/${id}` : `/qright/object/${id}`;
@@ -555,6 +583,46 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
               )}
             </div>
           </div>
+        </div>
+
+        {/* ── Usage Policies ── */}
+        <div style={{ ...card, marginBottom: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0 }}>
+              Usage policies
+            </h2>
+            <Link
+              href={`/qright/object/${id}/policies`}
+              style={{ fontSize: 11, fontWeight: 800, color: "#7c3aed", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 6 }}
+            >
+              Manage →
+            </Link>
+          </div>
+          {policies.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>
+              No usage policies attached to this work.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {policies.map((p) => {
+                const typeColor: Record<string, string> = { license: "#0d9488", restriction: "#dc2626", attribution: "#7c3aed" };
+                return (
+                  <div key={p.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, padding: "12px 14px", background: "#f8fafc" }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+                      <span style={{ background: typeColor[p.type] ?? "#475569", color: "#fff", fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase" as const }}>
+                        {p.type}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase" as const }}>{p.scope}</span>
+                      {p.spdxId && <span style={{ fontSize: 11, color: "#0d9488", fontFamily: "ui-monospace,monospace" }}>{p.spdxId}</span>}
+                      {p.validUntil && <span style={{ fontSize: 11, color: "#94a3b8" }}>until {new Date(p.validUntil).toLocaleDateString()}</span>}
+                    </div>
+                    <p style={{ fontSize: 13, color: "#334155", margin: 0, lineHeight: 1.5 }}>{p.termsText}</p>
+                    {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 4 }}>{p.url}</a>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div style={{ ...card, marginBottom: 18 }}>

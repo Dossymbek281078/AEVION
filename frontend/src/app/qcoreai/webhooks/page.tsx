@@ -98,7 +98,7 @@ const EVENT_ICONS: Record<string, string> = {
 
 /* ─── Styles ─────────────────────────────────────────────────────────── */
 
-const S: Record<string, React.CSSProperties> = {
+const S = {
   page: {
     background: "#0b0f1a",
     minHeight: "100vh",

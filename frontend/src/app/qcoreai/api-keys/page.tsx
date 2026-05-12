@@ -72,7 +72,7 @@ const EXPIRY_OPTIONS = [
   { label: "365 days", value: 365 },
 ];
 
-const S: Record<string, React.CSSProperties> = {
+const S = {
   page: {
     background: "#0b0f1a",
     minHeight: "100vh",

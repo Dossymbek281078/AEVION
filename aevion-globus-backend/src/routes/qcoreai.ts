@@ -227,6 +227,14 @@ import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
 
 export const qcoreaiRouter = Router();
 
+// ── Collab session sharing (in-memory) ───────────────────────────────────────
+const memCollabSessions = new Map<string, {
+  sessionId: string;
+  ownerId: string;
+  createdAt: string;
+  viewers: number;
+}>();
+
 /* ═══════════════════════════════════════════════════════════════════════
    Legacy single-shot chat (kept for backwards compatibility)
    POST /api/qcoreai/chat
@@ -6218,6 +6226,83 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
     return res.json({ branches });
   } catch (err: any) {
     return res.status(500).json({ error: "list branches failed" });
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Collaboration — live session viewer
+   ═══════════════════════════════════════════════════════════════════════ */
+
+// POST /api/qcoreai/sessions/:id/collab — create shareable collab link
+qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const sessionId = req.params.id;
+  try {
+    const session = await getSession(sessionId);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    if (session.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    const crypto = await import("crypto");
+    const token = crypto.randomBytes(16).toString("hex");
+    memCollabSessions.set(token, {
+      sessionId,
+      ownerId: auth.sub,
+      createdAt: new Date().toISOString(),
+      viewers: 0,
+    });
+    const url = `https://aevion.app/qcoreai/collab/${token}`;
+    return res.status(201).json({ token, url });
+  } catch {
+    return res.status(500).json({ error: "collab create failed" });
+  }
+});
+
+// GET /api/qcoreai/collab/:token — public snapshot viewer
+qcoreaiRouter.get("/collab/:token", async (req, res) => {
+  const token = req.params.token;
+  const collab = memCollabSessions.get(token);
+  if (!collab) return res.status(404).json({ error: "collab link not found or expired" });
+  try {
+    collab.viewers += 1;
+    const session = await getSession(collab.sessionId);
+    const runs = await listRuns(collab.sessionId);
+    return res.json({
+      session: session ? { id: session.id, name: session.name, createdAt: session.createdAt } : null,
+      runs: (runs || []).slice(-5).map((r: any) => ({
+        id: r.id,
+        userInput: r.userInput?.slice(0, 200),
+        status: r.status,
+        createdAt: r.createdAt,
+      })),
+      viewers: collab.viewers,
+    });
+  } catch {
+    return res.status(500).json({ error: "collab fetch failed" });
+  }
+});
+
+// GET /api/qcoreai/sessions/:id/collab/stats — owner stats
+qcoreaiRouter.get("/sessions/:id/collab/stats", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const sessionId = req.params.id;
+  try {
+    const session = await getSession(sessionId);
+    if (!session) return res.status(404).json({ error: "session not found" });
+    if (session.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+    let totalViews = 0;
+    let activeViewers = 0;
+    let tokenCreatedAt: string | null = null;
+    for (const [, c] of memCollabSessions) {
+      if (c.sessionId === sessionId) {
+        totalViews += c.viewers;
+        activeViewers = c.viewers;
+        tokenCreatedAt = c.createdAt;
+      }
+    }
+    return res.json({ totalViews, activeViewers, tokenCreatedAt });
+  } catch {
+    return res.status(500).json({ error: "collab stats failed" });
   }
 });
 

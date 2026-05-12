@@ -98,8 +98,17 @@ async function ensureTables(): Promise<void> {
   tablesReady = true;
 }
 
-qchaingovRouter.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "qchaingov", timestamp: new Date().toISOString() });
+qchaingovRouter.get("/health", async (_req, res) => {
+  let db: "ok" | "down" = "ok";
+  try {
+    const pool = getPool();
+    await pool.query("SELECT 1");
+  } catch (err) {
+    db = "down";
+    console.warn("[qchaingov] /health db probe failed", err instanceof Error ? err.message : err);
+  }
+  const status = db === "ok" ? "ok" : "degraded";
+  res.status(db === "ok" ? 200 : 503).json({ status, service: "qchaingov", db, timestamp: new Date().toISOString() });
 });
 
 // ── POST /proposals — create draft proposal

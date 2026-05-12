@@ -114,8 +114,17 @@ function computeRiskScore(input: {
   return Math.min(100, s);
 }
 
-qmaskcardRouter.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "qmaskcard", timestamp: new Date().toISOString() });
+qmaskcardRouter.get("/health", async (_req, res) => {
+  let db: "ok" | "down" = "ok";
+  try {
+    const pool = getPool();
+    await pool.query("SELECT 1");
+  } catch (err) {
+    db = "down";
+    console.warn("[qmaskcard] /health db probe failed", err instanceof Error ? err.message : err);
+  }
+  const status = db === "ok" ? "ok" : "degraded";
+  res.status(db === "ok" ? 200 : 503).json({ status, service: "qmaskcard", db, timestamp: new Date().toISOString() });
 });
 
 // ── POST /masks — issue a new virtual card

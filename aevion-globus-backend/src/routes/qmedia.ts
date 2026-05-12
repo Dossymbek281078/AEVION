@@ -336,6 +336,22 @@ qmediaRouter.post("/ai/describe-video", aiLimit, async (req, res) => {
 
 /* ── Health ── */
 
-qmediaRouter.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "qmedia", tables: ["QMediaTrack", "QMediaPlaylist", "QMediaVideo", "QMediaLike"] });
+qmediaRouter.get("/health", async (_req, res) => {
+  let db: "ok" | "down" = "ok";
+  try {
+    await pool.query("SELECT 1");
+  } catch (err) {
+    db = "down";
+    console.warn("[qmedia] /health db probe failed", err instanceof Error ? err.message : err);
+  }
+  res.status(db === "ok" ? 200 : 503).json({
+    ok: db === "ok",
+    service: "qmedia",
+    db,
+    storage: "in-memory",
+    storageNote: "data not persistent across restarts/replicas — see REQ-D",
+    tables: ["QMediaTrack", "QMediaPlaylist", "QMediaVideo", "QMediaLike"],
+    counts: { tracks: memTracks.size, playlists: memPlaylists.size, videos: memVideos.size, likes: memLikes.size },
+    timestamp: new Date().toISOString(),
+  });
 });

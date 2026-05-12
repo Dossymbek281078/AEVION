@@ -134,8 +134,17 @@ async function ensureTables(): Promise<void> {
   tablesReady = true;
 }
 
-ztideRouter.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "ztide", timestamp: new Date().toISOString() });
+ztideRouter.get("/health", async (_req, res) => {
+  let db: "ok" | "down" = "ok";
+  try {
+    const pool = getPool();
+    await pool.query("SELECT 1");
+  } catch (err) {
+    db = "down";
+    console.warn("[ztide] /health db probe failed", err instanceof Error ? err.message : err);
+  }
+  const status = db === "ok" ? "ok" : "degraded";
+  res.status(db === "ok" ? 200 : 503).json({ status, service: "ztide", db, timestamp: new Date().toISOString() });
 });
 
 // ── POST /events — server-side event ingestion

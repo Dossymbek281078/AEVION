@@ -112,8 +112,17 @@ async function ensureTables(): Promise<void> {
   tablesReady = true;
 }
 
-veilnetxLedgerRouter.get("/health", (_req, res) => {
-  res.json({ status: "ok", service: "veilnetx-ledger", timestamp: new Date().toISOString() });
+veilnetxLedgerRouter.get("/health", async (_req, res) => {
+  let db: "ok" | "down" = "ok";
+  try {
+    const pool = getPool();
+    await pool.query("SELECT 1");
+  } catch (err) {
+    db = "down";
+    console.warn("[veilnetx-ledger] /health db probe failed", err instanceof Error ? err.message : err);
+  }
+  const status = db === "ok" ? "ok" : "degraded";
+  res.status(db === "ok" ? 200 : 503).json({ status, service: "veilnetx-ledger", db, timestamp: new Date().toISOString() });
 });
 
 veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {

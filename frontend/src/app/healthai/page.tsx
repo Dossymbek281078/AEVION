@@ -558,6 +558,22 @@ export default function HealthAIPage() {
   const [lang, setLang] = useState<Lang>("en");
   const [notifPerm, setNotifPerm] = useState<"unsupported" | "default" | "granted" | "denied">("default");
   const [notifOptIn, setNotifOptIn] = useState(false);
+
+  // ── BMI Calculator widget ───────────────────────────────────────────────────
+  const LS_BMI = "aevion_health_bmi_v1";
+  const [bmiH, setBmiH] = useState("");
+  const [bmiW, setBmiW] = useState("");
+
+  // ── Visit streak widget ─────────────────────────────────────────────────────
+  const LS_STREAK = "aevion_health_streak_v1";
+  const [streakCount, setStreakCount] = useState(0);
+
+  // ── Daily mood widget ───────────────────────────────────────────────────────
+  const LS_MOOD = "aevion_health_mood_v1";
+  type MoodEntry = { date: string; rating: number };
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
+  const [moodPick, setMoodPick] = useState<number>(3);
+
   type Referral = {
     id: string;
     name: string;
@@ -655,6 +671,85 @@ export default function HealthAIPage() {
     try {
       window.localStorage.setItem(LS_LOCALE, next);
     } catch {}
+  };
+
+  // ── BMI: restore from localStorage on mount ─────────────────────────────────
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LS_BMI);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { h?: string; w?: string };
+        if (parsed.h) setBmiH(parsed.h);
+        if (parsed.w) setBmiW(parsed.w);
+      }
+    } catch {}
+  }, []);
+
+  const saveBmi = (h: string, w: string) => {
+    try {
+      window.localStorage.setItem(LS_BMI, JSON.stringify({ h, w }));
+    } catch {}
+  };
+
+  const bmiCalcValue = (() => {
+    const hN = parseFloat(bmiH);
+    const wN = parseFloat(bmiW);
+    if (!hN || !wN || hN <= 0) return null;
+    const m = hN / 100;
+    return Math.round((wN / (m * m)) * 10) / 10;
+  })();
+
+  const bmiCalcLabel = (() => {
+    if (bmiCalcValue === null) return null;
+    if (bmiCalcValue < 18.5) return { text: "Недостаток", color: "#7dd3fc" };
+    if (bmiCalcValue < 25) return { text: "Норма", color: "#5eead4" };
+    if (bmiCalcValue < 30) return { text: "Избыток", color: "#fbbf24" };
+    return { text: "Ожирение", color: "#f87171" };
+  })();
+
+  // ── Streak: calculate on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const raw = window.localStorage.getItem(LS_STREAK);
+      let count = 1;
+      if (raw) {
+        const stored = JSON.parse(raw) as { lastDate?: string; count?: number };
+        if (stored.lastDate === today) {
+          count = stored.count ?? 1;
+        } else if (stored.lastDate === yesterday) {
+          count = (stored.count ?? 0) + 1;
+        } else {
+          count = 1;
+        }
+      }
+      window.localStorage.setItem(LS_STREAK, JSON.stringify({ lastDate: today, count }));
+      setStreakCount(count);
+    } catch {}
+  }, []);
+
+  // ── Mood: restore from localStorage on mount ────────────────────────────────
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LS_MOOD);
+      if (raw) {
+        const arr = JSON.parse(raw) as MoodEntry[];
+        setMoodEntries(arr.slice(-7));
+      }
+    } catch {}
+  }, []);
+
+  const saveMoodEntry = (rating: number) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setMoodEntries((prev) => {
+      const filtered = prev.filter((e) => e.date !== today);
+      const next = [...filtered, { date: today, rating }].slice(-7);
+      try {
+        window.localStorage.setItem(LS_MOOD, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   // Profile draft
@@ -1586,6 +1681,258 @@ export default function HealthAIPage() {
             );
           })}
         </div>
+
+        {/* ── Quick-widget strip: BMI · Streak · Mood ─────────────────────── */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 12,
+            marginBottom: 18,
+          }}
+        >
+          {/* BMI Calculator */}
+          <div
+            style={{
+              background: "rgba(20,28,46,0.72)",
+              border: "1px solid rgba(120,160,220,0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              maxHeight: 150,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: "#7dd3fc",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              ИМТ калькулятор
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <input
+                type="number"
+                min={100}
+                max={250}
+                placeholder="Рост см"
+                value={bmiH}
+                onChange={(e) => {
+                  setBmiH(e.target.value);
+                  saveBmi(e.target.value, bmiW);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "5px 8px",
+                  background: "rgba(14,22,38,0.8)",
+                  border: "1px solid rgba(120,160,220,0.25)",
+                  borderRadius: 6,
+                  color: "#e2e8f8",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  minWidth: 0,
+                }}
+              />
+              <input
+                type="number"
+                min={20}
+                max={300}
+                placeholder="Вес кг"
+                value={bmiW}
+                onChange={(e) => {
+                  setBmiW(e.target.value);
+                  saveBmi(bmiH, e.target.value);
+                }}
+                style={{
+                  flex: 1,
+                  padding: "5px 8px",
+                  background: "rgba(14,22,38,0.8)",
+                  border: "1px solid rgba(120,160,220,0.25)",
+                  borderRadius: 6,
+                  color: "#e2e8f8",
+                  fontSize: 12,
+                  fontFamily: "inherit",
+                  outline: "none",
+                  minWidth: 0,
+                }}
+              />
+            </div>
+            {bmiCalcValue !== null && bmiCalcLabel !== null ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{ fontSize: 22, fontWeight: 900, color: bmiCalcLabel.color }}
+                >
+                  {bmiCalcValue}
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: bmiCalcLabel.color,
+                    background: `${bmiCalcLabel.color}22`,
+                    borderRadius: 6,
+                    padding: "2px 7px",
+                  }}
+                >
+                  {bmiCalcLabel.text}
+                </span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "#64748b" }}>
+                Введите рост и вес
+              </div>
+            )}
+          </div>
+
+          {/* Visit Streak */}
+          <div
+            style={{
+              background: "rgba(20,28,46,0.72)",
+              border: "1px solid rgba(120,160,220,0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              maxHeight: 150,
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: "#7dd3fc",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Посещаемость
+            </div>
+            <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
+              {streakCount >= 3 ? (
+                <div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "#fb923c" }}>
+                    🔥 {streakCount} дней
+                  </div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    Отличный стрик — не прерывай!
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>
+                    ☀ Заходи каждый день
+                  </div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                    Стрик начнётся с 3 дней подряд
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Daily Mood */}
+          <div
+            style={{
+              background: "rgba(20,28,46,0.72)",
+              border: "1px solid rgba(120,160,220,0.22)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              maxHeight: 150,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: "#7dd3fc",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                marginBottom: 6,
+              }}
+            >
+              Настроение сегодня
+            </div>
+            <select
+              value={moodPick}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setMoodPick(v);
+                saveMoodEntry(v);
+              }}
+              style={{
+                width: "100%",
+                padding: "5px 8px",
+                background: "rgba(14,22,38,0.8)",
+                border: "1px solid rgba(120,160,220,0.25)",
+                borderRadius: 6,
+                color: "#e2e8f8",
+                fontSize: 12,
+                fontFamily: "inherit",
+                outline: "none",
+                marginBottom: 6,
+              }}
+            >
+              <option value={5}>Отлично 😄</option>
+              <option value={4}>Хорошо 🙂</option>
+              <option value={3}>Нормально 😐</option>
+              <option value={2}>Плохо 😔</option>
+              <option value={1}>Ужасно 😣</option>
+            </select>
+            {/* 7-bar mini chart */}
+            {moodEntries.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: 3,
+                  height: 36,
+                }}
+              >
+                {(() => {
+                  const slots: Array<number | null> = Array(7).fill(null);
+                  const today = new Date();
+                  moodEntries.forEach((e) => {
+                    const diff = Math.round(
+                      (today.getTime() - new Date(e.date).getTime()) / 86400000,
+                    );
+                    if (diff >= 0 && diff < 7) slots[6 - diff] = e.rating;
+                  });
+                  return slots.map((r, i) => (
+                    <div
+                      key={i}
+                      title={r !== null ? `${r}/5` : "нет"}
+                      style={{
+                        flex: 1,
+                        height: r !== null ? `${(r / 5) * 100}%` : "10%",
+                        background:
+                          r === null
+                            ? "rgba(100,116,139,0.25)"
+                            : r >= 4
+                              ? "#5eead4"
+                              : r === 3
+                                ? "#fbbf24"
+                                : "#f87171",
+                        borderRadius: 3,
+                        minHeight: 4,
+                        transition: "height 0.3s",
+                      }}
+                    />
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* ── end quick-widget strip ──────────────────────────────────────── */}
 
         {tab === "profile" ? (
           <Card>

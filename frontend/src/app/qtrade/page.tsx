@@ -90,6 +90,24 @@ export default function QTradePage() {
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>("default");
   const [soundOn, setSoundOn] = useState(true);
 
+  // Quick-alert modal (bell button in top bar — no pair selection needed)
+  const [quickAlertOpen, setQuickAlertOpen] = useState(false);
+  const [quickAlertPair, setQuickAlertPair] = useState<PairId>("BTC/USD");
+  const [quickAlertDir, setQuickAlertDir] = useState<"above" | "below">("above");
+  const [quickAlertPrice, setQuickAlertPrice] = useState("");
+  const [quickAlertNote, setQuickAlertNote] = useState("");
+
+  // Copy-to-clipboard toast
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const copyId = (id: string) => {
+    try {
+      navigator.clipboard.writeText(id).then(() => {
+        setCopyToast(id.slice(0, 16) + "…");
+        setTimeout(() => setCopyToast(null), 1800);
+      }).catch(() => {});
+    } catch {}
+  };
+
   // Beep sound для price alerts через Web Audio API (no asset, генерируем sine)
   const playBeep = useCallback(() => {
     if (!soundOn) return;
@@ -505,6 +523,41 @@ export default function QTradePage() {
     return sum;
   }, [positions, pairById]);
 
+  // 30-day portfolio sparkline: use equity points from closed positions if available,
+  // otherwise generate a seeded random walk for visual interest.
+  const portfolioSparkline30 = useMemo((): number[] => {
+    const N = 30;
+    if (closedPositions.length >= 3) {
+      // Build daily buckets from closed positions (last 30 days)
+      const now = Date.now();
+      const MS_DAY = 86_400_000;
+      const buckets = Array<number>(N).fill(0);
+      for (const c of closedPositions) {
+        const daysAgo = Math.floor((now - c.exitTs) / MS_DAY);
+        if (daysAgo >= 0 && daysAgo < N) {
+          buckets[N - 1 - daysAgo] += c.realizedPnl;
+        }
+      }
+      // Turn daily deltas into cumulative equity
+      const cum: number[] = [];
+      let acc = 0;
+      for (const d of buckets) { acc += d; cum.push(acc); }
+      return cum;
+    }
+    // Seeded random walk based on pair count (deterministic across renders)
+    const seed = pairs.length * 17 + 42;
+    const pts: number[] = [];
+    let val = 0;
+    let rng = seed;
+    for (let i = 0; i < N; i++) {
+      rng = (rng * 1664525 + 1013904223) & 0xffffffff;
+      const delta = ((rng >>> 0) / 0xffffffff - 0.45) * 120;
+      val += delta;
+      pts.push(val);
+    }
+    return pts;
+  }, [closedPositions, pairs.length]);
+
   const submitOrder = (pid: PairId, side: "long" | "short") => {
     const cur = pairById.get(pid);
     if (!cur) return;
@@ -674,6 +727,24 @@ export default function QTradePage() {
 
   const removeAlert = (id: string) => {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const addQuickAlert = () => {
+    const px = Number(quickAlertPrice);
+    if (!Number.isFinite(px) || px <= 0) { setTradeMsg("Введи цену для алерта"); return; }
+    const a: PriceAlert = {
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      pair: quickAlertPair,
+      direction: quickAlertDir,
+      price: px,
+      createdTs: Date.now(),
+      note: quickAlertNote.trim() || undefined,
+    };
+    setAlerts((prev) => [a, ...prev]);
+    setQuickAlertPrice(""); setQuickAlertNote("");
+    setQuickAlertOpen(false);
+    setTradeMsg(`🔔 Alert ${quickAlertDir === "above" ? "↑" : "↓"} ${fmtUsd(px)} on ${quickAlertPair}`);
+    setTimeout(() => setTradeMsg(null), 2400);
   };
 
   const closePosition = (posId: string) => {

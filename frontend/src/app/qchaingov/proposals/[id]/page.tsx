@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import VoteForm from "./VoteForm";
 
 export const dynamic = "force-dynamic";
 
@@ -115,24 +116,7 @@ export default async function ProposalPage({ params }: Props) {
           })}
         </div>
 
-        <div style={{ padding: 16, background: "#1e293b", border: "1px solid #334155", borderRadius: 12, marginBottom: 18 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 800, margin: 0, marginBottom: 10 }}>Cast your vote</h2>
-          {p.status !== "open" ? (
-            <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>Voting is not currently open ({p.status}).</p>
-          ) : (
-            <>
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, marginBottom: 10 }}>
-                Send a Bearer-authenticated POST to <code style={{ color: "#a78bfa" }}>/api/qchaingov/proposals/{p.id}/votes</code> with
-                <code style={{ color: "#e5e7eb" }}>{` { "choice": "<one-of-options>", "weight": 1, "rationale": "..." }`}</code>
-              </p>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {p.options.map((opt) => (
-                  <code key={opt} style={{ padding: "4px 10px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12, color: "#34d399" }}>{opt}</code>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        <VoteForm proposalId={p.id} options={Array.isArray(p.options) ? p.options : []} voteMode={p.voteMode} status={p.status} />
 
         <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", marginTop: 24 }}>
           Proposal id: <code style={{ color: "#94a3b8" }}>{p.id}</code> · Created {new Date(p.createdAt).toLocaleString()}

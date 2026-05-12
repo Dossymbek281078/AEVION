@@ -245,6 +245,36 @@ const MODULES = [
     exercises: 3,
     color: "blue",
   },
+  {
+    id: "roads",
+    href: "/smeta-trainer/drawings-practice/roads",
+    icon: "🛣",
+    title: "Дороги и благоустройство",
+    subtitle: "А/б покрытие, бордюры, тротуары, дорожная одежда",
+    level: "L3",
+    exercises: 4,
+    color: "slate",
+  },
+  {
+    id: "demolition",
+    href: "/smeta-trainer/drawings-practice/demolition",
+    icon: "🔨",
+    title: "Демонтаж",
+    subtitle: "ЭСН Сб.46, утилизация, вторсырьё, экология",
+    level: "L3",
+    exercises: 3,
+    color: "amber",
+  },
+  {
+    id: "facade-svtk",
+    href: "/smeta-trainer/drawings-practice/facade-svtk",
+    icon: "🏢",
+    title: "Фасады — СФТК и НВФ",
+    subtitle: "Композитные системы и навесные вентилируемые фасады",
+    level: "L4",
+    exercises: 4,
+    color: "violet",
+  },
 ];
 
 const LEVEL_COLORS: Record<string, string> = {

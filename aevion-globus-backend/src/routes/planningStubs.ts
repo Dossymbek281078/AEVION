@@ -14,14 +14,15 @@ import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { sendWaitlistConfirmation } from "../lib/planningEmail";
 
-const UNSUB_SECRET = process.env.WAITLIST_UNSUB_SECRET || "aevion-waitlist-unsub-dev-only-key";
+import { requireProdSecret as _reqPS } from "../lib/qsignSecret";
+const getUnsubSecret = () => _reqPS("WAITLIST_UNSUB_SECRET", "aevion-waitlist-unsub-dev-only-key");
 
 /** token = base64url(moduleId).base64url(emailHash).hmac
  *  Tamper-evident; user can only unsubscribe themselves. */
 function makeUnsubToken(moduleId: string, emailHash: string): string {
   const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64url");
   const payload = `${b64(moduleId)}.${b64(emailHash)}`;
-  const sig = createHmac("sha256", UNSUB_SECRET).update(payload).digest("base64url");
+  const sig = createHmac("sha256", getUnsubSecret()).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
 
@@ -30,7 +31,7 @@ function verifyUnsubToken(token: string): { moduleId: string; emailHash: string 
   if (parts.length !== 3) return null;
   const [b64Mod, b64Hash, sig] = parts;
   const payload = `${b64Mod}.${b64Hash}`;
-  const expected = createHmac("sha256", UNSUB_SECRET).update(payload).digest("base64url");
+  const expected = createHmac("sha256", getUnsubSecret()).update(payload).digest("base64url");
   try {
     const a = Buffer.from(sig);
     const b = Buffer.from(expected);

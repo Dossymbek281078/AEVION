@@ -3,6 +3,7 @@ import FintechLiveStats from "@/components/fintech/FintechLiveStats";
 import FintechHealthBadge from "@/components/fintech/FintechHealthBadge";
 import FintechModuleCard from "@/components/fintech/FintechModuleCard";
 import FintechFooter from "@/components/fintech/FintechFooter";
+import FintechMetric from "@/components/fintech/FintechMetric";
 import Link from "next/link";
 
 // Zone: aevion-core/main owns frontend/src/app/fintech/**
@@ -100,6 +101,19 @@ export default function FintechDashboardPage() {
             Real-time metrics
           </div>
           <FintechLiveStats />
+        </section>
+
+        {/* Per-module metric tiles with sparklines */}
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 12 }}>
+            Module pulse (1 min poll · sparklines)
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <FintechMetric label="VeilNetX chain"     icon="🌀" accent="#a78bfa" apiPath="/api/veilnetx-ledger/head"  valuePath="length"             pollSeconds={60} />
+            <FintechMetric label="QGood raised (¢)"   icon="💚" accent="#34d399" apiPath="/api/qgood/stats"           valuePath="total_raised_cents" pollSeconds={60} />
+            <FintechMetric label="Z-Tide users"       icon="🌊" accent="#fbbf24" apiPath="/api/ztide/stats"           valuePath="active_users"       pollSeconds={60} />
+            <FintechMetric label="QChain proposals"   icon="🗳" accent="#f472b6" apiPath="/api/qchaingov/stats"       valuePath="open_proposals"     pollSeconds={60} />
+          </div>
         </section>
 
         {/* Modules grid */}

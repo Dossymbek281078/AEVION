@@ -88,6 +88,9 @@ const MODULES: Module[] = [
   // ── Финальная подборка — лучшие практики и проверка ──
   { id: "best-practices", category: "process",  href: "/smeta-trainer/drawings-practice/best-practices", icon: "⚡", title: "Лучшие практики и ошибки",          subtitle: "22 типовые ошибки сметчиков из реальной практики РК",         level: "L4", exercises: 0,  color: "red"     },
   { id: "case-pool",      category: "practice", href: "/smeta-trainer/drawings-practice/case-pool",      icon: "🏊", title: "КЕЙС: Крытый бассейн",              subtitle: "Капстоун №3 — 25×12 м, гидроизоляция, спец. отделка",         level: "L5", exercises: 8,  color: "sky"     },
+  { id: "case-cottage",   category: "practice", href: "/smeta-trainer/drawings-practice/case-cottage",   icon: "🏡", title: "КЕЙС: Коттедж 240 м²",              subtitle: "Капстоун №4 — 2 эт., газоблок Ytong, 31.4 млн тг",            level: "L5", exercises: 4,  color: "amber"   },
+  { id: "case-cafe",      category: "practice", href: "/smeta-trainer/drawings-practice/case-cafe",      icon: "☕", title: "КЕЙС: Кафе 50 мест",                subtitle: "Капстоун №5 — 140 м², кухня+вытяжка+АПС, 21.3 млн тг",        level: "L5", exercises: 4,  color: "rose"    },
+  { id: "case-carwash",   category: "practice", href: "/smeta-trainer/drawings-practice/case-carwash",   icon: "🚗", title: "КЕЙС: Автомойка 4 поста",           subtitle: "Капстоун №6 — самообсл., очистные KESSEL, 32.4 млн тг",       level: "L5", exercises: 4,  color: "cyan"    },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──

@@ -233,7 +233,7 @@ export default async function PublicProjectPage({ params }: Props) {
             </span>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))", gap: 12, marginBottom: 14 }}>
             <div>
               <div style={dt}>Budget</div>
               <p style={dd}>{fmtBudget(project.budget)}</p>

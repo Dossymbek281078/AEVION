@@ -112,15 +112,6 @@ async function ensureTables(): Promise<void> {
   tablesReady = true;
 }
 
-async function getChainHead(): Promise<string> {
-  const pool = getPool();
-  const r = await pool.query(
-    `SELECT "entryHash" FROM "VeilNetXLedger" ORDER BY "sequenceNumber" DESC LIMIT 1`,
-  );
-  if (r.rowCount === 0) return GENESIS_HASH;
-  return (r.rows[0] as { entryHash: string }).entryHash;
-}
-
 veilnetxLedgerRouter.get("/health", (_req, res) => {
   res.json({ status: "ok", service: "veilnetx-ledger", timestamp: new Date().toISOString() });
 });

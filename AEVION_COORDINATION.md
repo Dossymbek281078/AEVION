@@ -72,6 +72,7 @@ _(пусто — добавляй сюда entries перед нарушение
 | Дата | Кто | Что снёс | Где было | Урок |
 |---|---|---|---|---|
 | 2026-05-12 | aevion-build (`f83fcaaf` "QMedia+Stripe+DevHub") | `frontend/src/app/fintech/page.tsx` (913 lines), `frontend/src/app/developers/fintech/page.tsx` (1119) | shipped `735ee294`, `1d4fb690` from `aevion-core` 6 часов ранее | 2032 строки потеряны. Урок: `git commit --only -- FILE` всегда; не использовать `git add .` |
+| 2026-05-12 | aevion-build (`f83fcaaf` тот же commit) | `frontend/src/app/smeta-trainer/drawings-practice/hub/page.tsx` категоризация (Category type + 9 секций + 36+ модулей) | shipped в PR #218 (smeta-trainer) ~30 мин ранее | hub откатан к плоской 27-модульной версии. Восстановлено в PR #222 через `git checkout --theirs` при rebase. Урок: один git commit может задеть много файлов — проверять `git diff --name-only` ПЕРЕД commit. |
 
 ### Edit-style правила для всех
 
@@ -158,7 +159,7 @@ _(пусто — добавляй сюда entries перед нарушение
 
 | Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
 |------|---------|-----------------|----------------------|----------------|
-| *пример* | ☐ | — | — | — |
+| `frontend/src/app/smeta-trainer/drawings-practice/**` | ☑ | aevion-smeta-trainer (4ч автоном. сессия 05:42-09:42 UTC) | Достройка drawings-practice — батчи 1-11 уже мерджены (48 модулей в 9 категориях), продолжаю до 09:42 | self |
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 

@@ -159,7 +159,7 @@ export default function NewMaskPage() {
       <p style={{ color: C.muted, fontSize: 13, marginBottom: 20 }}>Виртуальный PAN с лимитом и сроком жизни. Реальная карта остаётся скрытой.</p>
 
       <form onSubmit={onSubmit} style={S.card}>
-        <Row label="Label">
+        <Row label="Label" hint={`${label.trim().length} / 80`}>
           <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} aria-label="Label (название маски)" placeholder="Netflix subscription" style={S.input} required />
         </Row>
 
@@ -191,7 +191,7 @@ export default function NewMaskPage() {
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
-          <Row label={`Spend limit (${currency})`}>
+          <Row label={`Spend limit (${currency})`} hint="$1 – $1,000,000">
             <input type="number" min={1} max={1_000_000} step="0.01" value={spendLimitUsd} onChange={(e) => setSpendLimitUsd(e.target.value)} aria-label={`Лимит расходов в ${currency}`} style={S.input} required />
           </Row>
           <Row label="Currency">
@@ -199,7 +199,7 @@ export default function NewMaskPage() {
               {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Row>
-          <Row label="TTL (часов)">
+          <Row label="TTL (часов)" hint="1 – 8760">
             <input type="number" min={1} max={8760} value={ttlHours} onChange={(e) => setTtlHours(e.target.value)} aria-label="Время жизни маски в часах" style={S.input} required />
           </Row>
         </div>
@@ -221,10 +221,13 @@ function BackLink() {
   return <Link href="/qmaskcard" style={{ fontSize: 12, color: C.muted, textDecoration: "none" }}>← QMaskCard</Link>;
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: C.muted, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</div>
+        {hint && <div style={{ fontSize: 10, color: C.muted }}>{hint}</div>}
+      </div>
       {children}
     </div>
   );

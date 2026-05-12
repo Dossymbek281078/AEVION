@@ -95,8 +95,18 @@ export default function QMediaUploadPage() {
             <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} maxLength={1000} aria-label="Описание видео" placeholder="Описание видео" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500 resize-none" />
           </>
         )}
-        <input type="url" inputMode="url" value={url} onChange={e => setUrl(e.target.value)} maxLength={2048} aria-label="URL медиа-файла" placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-        <input type="url" inputMode="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} maxLength={2048} aria-label="URL обложки" placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <div>
+          <input type="url" inputMode="url" value={url} onChange={e => setUrl(e.target.value)} maxLength={2048} aria-label="URL медиа-файла" aria-invalid={url.trim().length > 0 && !isValidUrl(url.trim())} placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+          {url.trim().length > 0 && !isValidUrl(url.trim()) && (
+            <p className="text-[11px] text-amber-400 mt-1">⚠ URL должен начинаться с https:// или http://</p>
+          )}
+        </div>
+        <div>
+          <input type="url" inputMode="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} maxLength={2048} aria-label="URL обложки" aria-invalid={coverUrl.trim().length > 0 && !isValidUrl(coverUrl.trim())} placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+          {coverUrl.trim().length > 0 && !isValidUrl(coverUrl.trim()) && (
+            <p className="text-[11px] text-amber-400 mt-1">⚠ URL обложки невалиден</p>
+          )}
+        </div>
         <input value={tags} onChange={e => setTags(e.target.value)} maxLength={500} aria-label="Теги через запятую" placeholder="Теги через запятую: jazz, piano, acoustic" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
         <label className="flex items-center gap-3 cursor-pointer">
           <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="w-4 h-4 accent-violet-500" />

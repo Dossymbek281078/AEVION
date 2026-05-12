@@ -33,6 +33,7 @@ const RESOURCES = [
   { href: "/developers/fintech",                 label: "API Docs" },
   { href: "/developers/fintech/quickstart",      label: "Quickstart" },
   { href: "/developers/fintech/troubleshooting", label: "Troubleshooting" },
+  { href: "/developers/fintech/rate-limits",     label: "Rate limits" },
 ];
 
 export default function FintechFooter({ hideHealthBadge = false }: Props) {

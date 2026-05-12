@@ -462,6 +462,10 @@ export default function FintechDevPage() {
             <a href="/developers/fintech/troubleshooting" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
               Troubleshooting →
             </a>
+            {" · "}
+            <a href="/developers/fintech/rate-limits" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              Rate limits →
+            </a>
           </P>
           <P>
             Every fintech module gates writes behind the platform JWT. Bootstrap a

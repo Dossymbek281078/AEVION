@@ -91,6 +91,11 @@ const MODULES: Module[] = [
   { id: "case-cottage",   category: "practice", href: "/smeta-trainer/drawings-practice/case-cottage",   icon: "🏡", title: "КЕЙС: Коттедж 240 м²",              subtitle: "Капстоун №4 — 2 эт., газоблок Ytong, 31.4 млн тг",            level: "L5", exercises: 4,  color: "amber"   },
   { id: "case-cafe",      category: "practice", href: "/smeta-trainer/drawings-practice/case-cafe",      icon: "☕", title: "КЕЙС: Кафе 50 мест",                subtitle: "Капстоун №5 — 140 м², кухня+вытяжка+АПС, 21.3 млн тг",        level: "L5", exercises: 4,  color: "rose"    },
   { id: "case-carwash",   category: "practice", href: "/smeta-trainer/drawings-practice/case-carwash",   icon: "🚗", title: "КЕЙС: Автомойка 4 поста",           subtitle: "Капстоун №6 — самообсл., очистные KESSEL, 32.4 млн тг",       level: "L5", exercises: 4,  color: "cyan"    },
+
+  // ── Бизнес-процессы сметчика ──
+  { id: "customer-negotiations", category: "process",  href: "/smeta-trainer/drawings-practice/customer-negotiations", icon: "🤝", title: "Переговоры с заказчиком",          subtitle: "Защита сметы, 6 возражений, скрипты, ДОЦ",                    level: "L4", exercises: 4,  color: "violet"  },
+  { id: "contractor-claims",     category: "process",  href: "/smeta-trainer/drawings-practice/contractor-claims",     icon: "🔍", title: "Проверка КС-2/КС-3",                subtitle: "8 нарушений подрядчика, контр. обмер, претензии",             level: "L4", exercises: 4,  color: "red"     },
+  { id: "government-tender",     category: "process",  href: "/smeta-trainer/drawings-practice/government-tender",     icon: "🏛️", title: "Госзакупки и тендеры",              subtitle: "ZRK о госзакуп., обеспечение, аукцион, 12 документов",         level: "L4", exercises: 4,  color: "blue"    },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──

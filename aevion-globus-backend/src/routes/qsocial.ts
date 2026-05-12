@@ -535,9 +535,20 @@ qsocialRouter.get("/me/following", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qsocial/me/notifications ───────────────────────────────────────
-qsocialRouter.get("/me/notifications", (req: Request, res: Response) => {
+qsocialRouter.get("/me/notifications", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
+
+  try {
+    if (isQSocialDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QSocialNotification" WHERE "userId"=$1 ORDER BY "read" ASC, "createdAt" DESC LIMIT 50`,
+        [auth.sub],
+      );
+      const unread = rows.filter((r: { read: boolean }) => !r.read).length;
+      return res.json({ notifications: rows, total: rows.length, unread });
+    }
+  } catch (e) { console.error("[QSocial] /me/notifications DB error", e); }
 
   const all = memNotifications.get(auth.sub) ?? [];
   const sorted = [...all.filter((n) => !n.read), ...all.filter((n) => n.read)].slice(0, 50);
@@ -545,11 +556,22 @@ qsocialRouter.get("/me/notifications", (req: Request, res: Response) => {
 });
 
 // ─── PATCH /api/qsocial/me/notifications/:id/read ────────────────────────────
-qsocialRouter.patch("/me/notifications/:id/read", (req: Request, res: Response) => {
+qsocialRouter.patch("/me/notifications/:id/read", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
-
   const notifId = String(req.params.id);
+
+  try {
+    if (isQSocialDbReady()) {
+      const r = await pool.query(
+        `UPDATE "QSocialNotification" SET "read"=TRUE WHERE "id"=$1 AND "userId"=$2`,
+        [notifId, auth.sub],
+      );
+      if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "not_found" });
+      return res.json({ ok: true });
+    }
+  } catch (e) { console.error("[QSocial] mark-read DB error", e); }
+
   const all = memNotifications.get(auth.sub) ?? [];
   const notif = all.find((n) => n.id === notifId);
   if (!notif) return res.status(404).json({ error: "not_found" });
@@ -558,9 +580,16 @@ qsocialRouter.patch("/me/notifications/:id/read", (req: Request, res: Response) 
 });
 
 // ─── DELETE /api/qsocial/me/notifications — mark all read ────────────────────
-qsocialRouter.delete("/me/notifications", (req: Request, res: Response) => {
+qsocialRouter.delete("/me/notifications", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
+
+  try {
+    if (isQSocialDbReady()) {
+      await pool.query(`UPDATE "QSocialNotification" SET "read"=TRUE WHERE "userId"=$1`, [auth.sub]);
+      return res.json({ ok: true });
+    }
+  } catch (e) { console.error("[QSocial] mark-all-read DB error", e); }
 
   const all = memNotifications.get(auth.sub) ?? [];
   all.forEach((n) => { n.read = true; });

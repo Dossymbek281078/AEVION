@@ -87,6 +87,34 @@ async function ensureTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodDonation_campaign_idx" ON "QGoodDonation" ("campaignId", "createdAt");`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QGoodMatchingPool" (
+      "id"               TEXT PRIMARY KEY,
+      "label"            TEXT NOT NULL,
+      "currency"         TEXT NOT NULL DEFAULT 'USD',
+      "totalCents"       BIGINT NOT NULL,
+      "remainingCents"   BIGINT NOT NULL,
+      "matchRatio"       DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+      "maxMatchPerDonationCents" BIGINT NOT NULL DEFAULT 10000,
+      "status"           TEXT NOT NULL DEFAULT 'active',
+      "createdBy"        TEXT,
+      "createdAt"        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodMatchingPool_status_idx" ON "QGoodMatchingPool" ("status");`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QGoodMatch" (
+      "id"             TEXT PRIMARY KEY,
+      "poolId"         TEXT NOT NULL,
+      "campaignId"     TEXT NOT NULL,
+      "donationId"     TEXT NOT NULL,
+      "amountCents"    BIGINT NOT NULL,
+      "currency"       TEXT NOT NULL,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("donationId")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QGoodMatch_pool_idx" ON "QGoodMatch" ("poolId", "createdAt");`);
   tablesReady = true;
 }
 
@@ -255,6 +283,49 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
       [amount, id],
     );
 
+    // Matching fund — best-effort; never blocks the donation.
+    // Try to auto-match from an active pool (oldest first). Atomic: lock + check + decrement.
+    let matchedAmountCents: number | null = null;
+    let matchPoolId: string | null = null;
+    try {
+      const poolR = await pool.query(
+        `SELECT "id","matchRatio","remainingCents","maxMatchPerDonationCents","currency"
+         FROM "QGoodMatchingPool"
+         WHERE "status" = 'active' AND "currency" = $1 AND "remainingCents" > 0
+         ORDER BY "createdAt" ASC LIMIT 1
+         FOR UPDATE SKIP LOCKED`,
+        [String(currency).toUpperCase()],
+      );
+      if ((poolR.rowCount ?? 0) > 0) {
+        const p = poolR.rows[0] as { id: string; matchRatio: number; remainingCents: string | number; maxMatchPerDonationCents: string | number; currency: string };
+        const proposed = Math.floor(amount * Number(p.matchRatio));
+        const capped = Math.min(proposed, Number(p.maxMatchPerDonationCents), Number(p.remainingCents));
+        if (capped > 0) {
+          const matchId = crypto.randomUUID();
+          await pool.query(
+            `INSERT INTO "QGoodMatch" ("id","poolId","campaignId","donationId","amountCents","currency")
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [matchId, p.id, id, donationId, capped, p.currency],
+          );
+          await pool.query(
+            `UPDATE "QGoodMatchingPool"
+             SET "remainingCents" = "remainingCents" - $1,
+                 "status" = CASE WHEN "remainingCents" - $1 <= 0 THEN 'exhausted' ELSE "status" END
+             WHERE "id" = $2 RETURNING "remainingCents"`,
+            [capped, p.id],
+          );
+          await pool.query(
+            `UPDATE "QGoodCampaign" SET "raisedCents" = "raisedCents" + $1 WHERE "id" = $2`,
+            [capped, id],
+          );
+          matchedAmountCents = capped;
+          matchPoolId = p.id;
+        }
+      }
+    } catch (err) {
+      console.warn("[qgood] matching_failed:", err instanceof Error ? err.message : err);
+    }
+
     // Fire-and-forget: record financial trail + reputation boost for donor.
     const donorAuth = verifyBearerOptional(req);
     emitEcosystemEvent({
@@ -272,10 +343,106 @@ qgoodRouter.post("/campaigns/:id/donations", donateLimit, async (req, res) => {
         : undefined,
     });
 
-    res.status(201).json({ id: donationId, campaignId: id, amountCents: amount });
+    res.status(201).json({
+      id: donationId, campaignId: id, amountCents: amount,
+      match: matchedAmountCents !== null
+        ? { amountCents: matchedAmountCents, poolId: matchPoolId }
+        : null,
+    });
   } catch (err: unknown) {
     console.error("[qgood] donation_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "donation_failed" });
+  }
+});
+
+qgoodRouter.post("/matching-pools", createLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!isAdmin(auth)) return res.status(403).json({ error: "admin_only" });
+    const { label, totalCents, currency = "USD", matchRatio = 1, maxMatchPerDonationCents = 10000 } = req.body || {};
+    if (typeof label !== "string" || label.trim().length < 3 || label.length > 120) {
+      return res.status(400).json({ error: "label must be 3..120 chars" });
+    }
+    const total = parseInt(String(totalCents), 10);
+    if (!Number.isFinite(total) || total < 100 || total > 1_000_000_000) {
+      return res.status(400).json({ error: "totalCents must be 100..1000000000" });
+    }
+    const ratio = Number(matchRatio);
+    if (!Number.isFinite(ratio) || ratio < 0 || ratio > 2) {
+      return res.status(400).json({ error: "matchRatio must be 0..2" });
+    }
+    const cap = parseInt(String(maxMatchPerDonationCents), 10);
+    if (!Number.isFinite(cap) || cap < 100 || cap > 100_000_000) {
+      return res.status(400).json({ error: "maxMatchPerDonationCents must be 100..100000000" });
+    }
+    const id = crypto.randomUUID();
+    const pool = getPool();
+    const r = await pool.query(
+      `INSERT INTO "QGoodMatchingPool" ("id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","createdBy")
+       VALUES ($1,$2,$3,$4,$4,$5,$6,$7)
+       RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdBy","createdAt"`,
+      [id, label.trim(), String(currency).slice(0, 8).toUpperCase(), total, ratio, cap, auth?.email || null],
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err: unknown) {
+    console.error("[qgood] matching_pool_create_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "matching_pool_create_failed" });
+  }
+});
+
+qgoodRouter.get("/matching-pools", readLimit, async (_req, res) => {
+  try {
+    await ensureTables();
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdAt"
+       FROM "QGoodMatchingPool" ORDER BY "createdAt" DESC LIMIT 20`,
+    );
+    res.json({ pools: r.rows, total: r.rowCount });
+  } catch (err: unknown) {
+    console.error("[qgood] matching_pools_list_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "matching_pools_list_failed" });
+  }
+});
+
+qgoodRouter.post("/matching-pools/:id/pause", createLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!isAdmin(auth)) return res.status(403).json({ error: "admin_only" });
+    const pool = getPool();
+    const r = await pool.query(
+      `UPDATE "QGoodMatchingPool" SET "status" = 'paused'
+       WHERE "id" = $1 AND "status" = 'active'
+       RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdAt"`,
+      [String(req.params.id || "")],
+    );
+    if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "active_pool_not_found" });
+    res.json(r.rows[0]);
+  } catch (err: unknown) {
+    console.error("[qgood] matching_pool_pause_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "matching_pool_pause_failed" });
+  }
+});
+
+qgoodRouter.post("/matching-pools/:id/resume", createLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!isAdmin(auth)) return res.status(403).json({ error: "admin_only" });
+    const pool = getPool();
+    const r = await pool.query(
+      `UPDATE "QGoodMatchingPool" SET "status" = 'active'
+       WHERE "id" = $1 AND "status" = 'paused' AND "remainingCents" > 0
+       RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdAt"`,
+      [String(req.params.id || "")],
+    );
+    if ((r.rowCount ?? 0) === 0) return res.status(404).json({ error: "paused_pool_not_found_or_empty" });
+    res.json(r.rows[0]);
+  } catch (err: unknown) {
+    console.error("[qgood] matching_pool_resume_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "matching_pool_resume_failed" });
   }
 });
 

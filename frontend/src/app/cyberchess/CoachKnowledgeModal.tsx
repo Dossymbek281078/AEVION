@@ -1,6 +1,75 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
+import Link from "next/link";
 import { COACH_KNOWLEDGE, type KnowledgeCategory, type KnowledgeEntry, type Difficulty } from "./coachKnowledge";
+import { ldCPIState, type CPIState, type CPIBreakdown } from "./cpi";
+
+// ── F5: Coach по CPI — слабый/сильный фактор + рекомендации
+type FactorKey = "E" | "T" | "O" | "B1" | "B2" | "B3" | "M1" | "M2" | "M3" | "H" | "Br";
+
+const FACTOR_RECS: Record<FactorKey, { name: string; emoji: string; rec: string; targetMod: string }> = {
+  E:  { name: "Точность ходов",       emoji: "🎯",   rec: "Замедли темп — играй с большим контролем времени",          targetMod: "rapid" },
+  T:  { name: "Управление временем",  emoji: "⏱",   rec: "Тренируй блиц 3+0 — учись распределять время",                targetMod: "blitz" },
+  O:  { name: "Дебютная теория",      emoji: "📖",   rec: "Coach Knowledge → Дебюты-каталог (14 тем)",                   targetMod: "openings" },
+  B1: { name: "Лучшая линия",         emoji: "①",   rec: "Анализ всех партий — Studio где отклонился от engine #1",     targetMod: "analysis" },
+  B2: { name: "Глубина расчёта",      emoji: "②",   rec: "Решай задачи на 2-3 хода вперёд — пазлы средней сложности",   targetMod: "puzzles-medium" },
+  B3: { name: "Альтернативы",         emoji: "③",   rec: "Рассматривай несколько кандидатов на каждом ходу",            targetMod: "puzzles" },
+  M1: { name: "Мат в 1",              emoji: "💀",   rec: "Пазлы 'mate in 1' — базовая комбинационная зоркость",         targetMod: "mate1" },
+  M2: { name: "Мат в 2",              emoji: "💀💀", rec: "Пазлы 'mate in 2' — найди жертву + завершение",               targetMod: "mate2" },
+  M3: { name: "Мат в 3",              emoji: "💀💀💀", rec: "Пазлы 'mate in 3' — комбинационное зрение",                 targetMod: "mate3" },
+  H:  { name: "Зевки фигур",          emoji: "💥",   rec: "После каждого хода — спроси 'Какая моя фигура под боем?'",    targetMod: "blunders" },
+  Br: { name: "Бриллиантовые ходы",   emoji: "💎",   rec: "Изучай шедевры (Morphy, Tal, Fischer) в Masters tab",         targetMod: "masters" },
+};
+
+const FACTOR_KEYS: FactorKey[] = ["E", "T", "O", "B1", "B2", "B3", "M1", "M2", "M3", "H", "Br"];
+
+type CpiAnalysis = {
+  history: CPIState["history"];
+  weakest: FactorKey;
+  strongest: FactorKey;
+  weeklyDelta: number;
+};
+
+function analyseCpi(state: CPIState): CpiAnalysis | null {
+  if (state.history.length < 3) return null;
+  const recent = state.history.slice(-10);
+  const sums: Record<FactorKey, number> = { E:0, T:0, O:0, B1:0, B2:0, B3:0, M1:0, M2:0, M3:0, H:0, Br:0 };
+  for (const g of recent) {
+    const b = g.breakdown;
+    for (const k of FACTOR_KEYS) sums[k] += (b[k as keyof CPIBreakdown] as number) || 0;
+  }
+  const n = recent.length;
+  const avg: Record<FactorKey, number> = { ...sums };
+  for (const k of FACTOR_KEYS) avg[k] = sums[k] / n;
+
+  // Weakest = max H penalty if avg.H > threshold, otherwise min contribution among non-penalty factors
+  let weakest: FactorKey = "E";
+  if (avg.H > 5) {
+    weakest = "H";
+  } else {
+    let minVal = Infinity;
+    for (const k of FACTOR_KEYS) {
+      if (k === "H") continue;
+      if (avg[k] < minVal) { minVal = avg[k]; weakest = k; }
+    }
+  }
+  // Strongest = max contribution among non-penalty factors
+  let strongest: FactorKey = "E";
+  let maxVal = -Infinity;
+  for (const k of FACTOR_KEYS) {
+    if (k === "H") continue;
+    if (avg[k] > maxVal) { maxVal = avg[k]; strongest = k; }
+  }
+
+  // Weekly delta — sum of total deltas in games within last 7 days
+  const weekAgo = Date.now() - 7 * 86_400_000;
+  let weeklyDelta = 0;
+  for (const g of state.history) {
+    const t = new Date(g.date).getTime();
+    if (t >= weekAgo) weeklyDelta += g.delta;
+  }
+  return { history: state.history, weakest, strongest, weeklyDelta: Math.round(weeklyDelta) };
+}
 
 type Props = {
   visible: boolean;
@@ -100,6 +169,14 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
 
   useEffect(() => { saveRead(read) }, [read]);
   useEffect(() => { saveSr(sr) }, [sr]);
+
+  // ── F5: CPI analysis (read on mount/visible)
+  const [cpiState, sCpiState] = useState<CPIState | null>(null);
+  useEffect(() => {
+    if (!visible) return;
+    try { sCpiState(ldCPIState()); } catch { sCpiState(null); }
+  }, [visible]);
+  const cpiAnalysis = useMemo<CpiAnalysis | null>(() => cpiState ? analyseCpi(cpiState) : null, [cpiState]);
 
   const cat = useMemo<KnowledgeCategory>(
     () => COACH_KNOWLEDGE.find(c => c.id === catId) || COACH_KNOWLEDGE[0],
@@ -216,6 +293,68 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
             borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
           }}>✕</button>
         </div>
+
+        {/* F5: Coach по CPI — слабый/сильный фактор + рекомендации */}
+        {cpiState && cpiState.history.length < 3 && (
+          <div style={{
+            margin: "10px 14px 0", padding: "14px 18px",
+            background: "linear-gradient(135deg, rgba(167,139,250,0.12), rgba(251,191,36,0.08))",
+            borderLeft: "4px solid #a78bfa", borderRadius: 10,
+            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+          }}>
+            <span style={{ fontSize: 22 }}>🧭</span>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "#5b21b6", marginBottom: 2 }}>Coach по CPI</div>
+              <div style={{ fontSize: 11, color: "#4b5563", lineHeight: 1.45 }}>
+                Сыграй 3+ партии чтобы Coach увидел паттерны и предложил тренировки по слабому фактору.
+              </div>
+            </div>
+            <Link href="/cyberchess" style={{
+              padding: "7px 14px", borderRadius: 8, background: "#a78bfa", color: "#fff",
+              fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap",
+            }}>Играть →</Link>
+          </div>
+        )}
+        {cpiAnalysis && (() => {
+          const w = FACTOR_RECS[cpiAnalysis.weakest];
+          const s = FACTOR_RECS[cpiAnalysis.strongest];
+          const cpi = cpiState?.cpi ?? 0;
+          const wd = cpiAnalysis.weeklyDelta;
+          const arrow = wd > 0 ? "▲" : wd < 0 ? "▼" : "▬";
+          const arrowCol = wd > 0 ? "#10b981" : wd < 0 ? "#ef4444" : "#6b7280";
+          return (
+            <div style={{
+              margin: "10px 14px 0", padding: "14px 18px",
+              background: "linear-gradient(135deg, rgba(167,139,250,0.12), rgba(251,191,36,0.08))",
+              borderLeft: "4px solid #a78bfa", borderRadius: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 18 }}>🧭</span>
+                <div style={{ fontSize: 12, fontWeight: 900, color: "#5b21b6" }}>Coach по CPI</div>
+                <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "rgba(167,139,250,0.18)", color: "#5b21b6", fontWeight: 800 }}>
+                  CPI: {Math.round(cpi)} <span style={{ color: arrowCol }}>{arrow} {wd >= 0 ? "+" : ""}{wd}</span> <span style={{ opacity: 0.7 }}>за неделю</span>
+                </span>
+                <span style={{ marginLeft: "auto", fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "rgba(251,191,36,0.18)", color: "#92400e", fontWeight: 800 }}>
+                  🏆 Сильная сторона: {s.emoji} {s.name}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontSize: 28, lineHeight: 1 }}>{w.emoji}</div>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 11, color: "#7c3aed", fontWeight: 800, marginBottom: 2 }}>
+                    Слабейший фактор · {cpiAnalysis.weakest}
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "#111827", lineHeight: 1.2 }}>{w.name}</div>
+                  <div style={{ fontSize: 11, color: "#4b5563", marginTop: 3, lineHeight: 1.45 }}>{w.rec}</div>
+                </div>
+                <Link href={`/cyberchess?coachTrain=${cpiAnalysis.weakest}`} style={{
+                  padding: "8px 14px", borderRadius: 8, background: "#a78bfa", color: "#fff",
+                  fontSize: 11, fontWeight: 800, textDecoration: "none", whiteSpace: "nowrap",
+                }}>Тренировать →</Link>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Daily Quiz */}
         {dqEntry && (

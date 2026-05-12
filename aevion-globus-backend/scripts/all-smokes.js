@@ -76,6 +76,10 @@ const SMOKES = [
   { name: "ztide", script: "ztide-smoke.js", readOnly: false },
   // QChainGov — proposal create + auth/validation gates.
   { name: "qchaingov", script: "qchaingov-smoke.js", readOnly: false },
+  // QMedia — tracks/playlists/videos CRUD + likes + AI stub (in-memory storage; see REQ-D).
+  { name: "qmedia", script: "qmedia-smoke.js", readOnly: false },
+  // QFusionAI — health + validation + routing (provider-agnostic: 200/502/503 all PASS).
+  { name: "qfusionai", script: "qfusionai-smoke.js", readOnly: true },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

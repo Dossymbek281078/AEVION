@@ -4,6 +4,116 @@
 
 ---
 
+## 🔴 ГЛОБАЛЬНЫЕ ПРАВИЛА — действуют для ВСЕХ сессий, всех окон, всех проектов AEVION
+
+> Введены 2026-05-12 пользователем. Обязательны без исключений.
+
+### Правило 1 — Не делать работу, которая уже делается в параллельной сессии
+
+**Что это значит:**
+- Перед началом любой задачи — прочитай секцию **WIP (Текущая работа)** в этом файле
+- Если задача уже занята другой сессией — **не начинай** её, даже если кажется что «быстро допишу»
+- Параллельная работа над одним файлом = конфликты в git = потеря часов работы
+
+**Что делать вместо этого:**
+1. Открой этот файл: `C:\Users\user\aevion-core\AEVION_COORDINATION.md`
+2. Найди секцию **WIP**
+3. Если задача занята — **автоматически предложи пользователю 3 альтернативы** из свободных зон
+4. Пример: *«QMedia занят в aevion-build. Предлагаю: A) QCoreAI новые фичи B) DevHub деплой C) QAI стриминг — что выбрать?»*
+
+---
+
+### Правило 2 — Никогда не переходить с одного проекта на другой без уведомления
+
+**Что это значит:**
+- Каждое окно/сессия открыто для конкретного проекта или модуля
+- Даже если пользователь сказал «вперёд» или «продолжаем» — это НЕ разрешение сменить проект
+
+**Обязательный протокол смены проекта (3 шага):**
+
+```
+ШАГ 1 — ОБЪЯВИ:
+"Этот чат работал над [ТЕКУЩИЙ ПРОЕКТ].
+Вижу что нужно переключиться на [НОВЫЙ ПРОЕКТ].
+Переключаюсь?"
+
+ШАГ 2 — ЖДИ явного ОК:
+✅ Засчитывается: "да", "ок", "переключайся", "давай"
+❌ НЕ засчитывается: "вперёд", "продолжаем", молчание
+
+ШАГ 3 — ПОСЛЕ ОК:
+- Обнови секцию WIP в этом файле
+- Запиши что предыдущий проект оставлен на каком шаге
+- Начинай новый проект
+```
+
+---
+
+### Правило 3 — Показывать шаги подробно на русском языке
+
+**Что это значит:**
+- Перед каждым блоком работы — написать по-русски что именно будет сделано
+- Формат объяснения:
+
+```
+ЧТО ДЕЛАЕМ: [1-2 предложения — суть задачи]
+
+ШАГИ:
+1. [конкретный шаг — что именно создаём/меняем]
+2. [следующий шаг]
+3. ...
+
+ПОЧЕМУ ТАК: [кратко — зачем этот подход, а не другой]
+
+РЕЗУЛЬТАТ: [что получится в итоге]
+```
+
+- После завершения — краткий итог: что сделано, что изменилось, что дальше
+
+---
+
+### Правило 4 — Никогда не использовать `git add -A` или `git add .`
+
+**Что это значит:**
+- Эти команды добавляют ВСЕ изменения, включая чужие файлы которые случайно оказались в worktree
+- 2026-05-12 это уничтожило 2032 строки работы двух параллельных сессий
+
+**Правильный способ коммитить:**
+```bash
+# ✅ ПРАВИЛЬНО — только конкретные файлы
+git add aevion-globus-backend/src/routes/qcoreai.ts
+git add frontend/src/app/qcoreai/multi/page.tsx
+git commit -m "feat(qcoreai): описание изменения"
+
+# ❌ НИКОГДА не делать
+git add -A
+git add .
+git commit -a
+```
+
+---
+
+### Правило 5 — Автоматически предлагать альтернативы
+
+**Когда пользователь просит сделать что-то занятое:**
+Не говори просто «это занято». Сразу предложи конкретные альтернативы:
+
+```
+Формат ответа:
+"[НАЗВАНИЕ] сейчас занят в [СЕССИЯ/ОКНО].
+
+Вместо этого могу:
+A) [конкретная альтернатива — что именно сделаю]
+B) [другой вариант]  
+C) [третий вариант]
+
+Что выбираем?"
+```
+
+---
+
+---
+
 ## 📢 BROADCAST 2026-05-12 — приказ от пользователя ВСЕМ открытым сессиям
 
 > Команда напрямую от пользователя ко всем чатам Claude/Cursor в AEVION worktrees, разосланная через этот файл (увидите на ближайшем `git pull`).
@@ -20,7 +130,92 @@
 
 Это правило ввели после инцидента, когда одна сессия снесла 2032 строки чужой работы.
 
-**Подтверждение прочтения:** в следующем своём коммите упомяни `BROADCAST-2026-05-12-read` в commit body. Этого достаточно — отдельного коммита не нужно.
+**Подтверждение прочтения:** в следующем своём коммите упомяни `BROADCAST-2026-05-12-read` в commit body. Этого достаточно — отдельного коммета не нужно.
+
+---
+
+## 📢 BROADCAST 2026-05-12 #2 — обязательно объявлять смену проекта/зоны
+
+Команда от пользователя ВСЕМ открытым сессиям:
+
+**Если сессия собирается СМЕНИТЬ активный проект/модуль/зону работы** — включая:
+- переключение с одного модуля на другой (например CyberChess → fintech)
+- принятие нового правила зоны из этого файла, которое сужает scope текущего чата
+- следование BROADCAST-инструкции, которая уводит от темы, ради которой чат изначально открыт
+
+**…сессия ОБЯЗАНА:**
+1. **Сначала объявить** пользователю в 1-2 предложениях: «Этот чат был на X. Я вижу [причина] — переключаюсь на Y, окей?»
+2. **Дождаться явного подтверждения** ("да, переключайся на Y" или эквивалент). Молчаливое "продолжаем" / "вперед" **не считается** разрешением сменить зону.
+3. Только после OK — начинать работу в новой зоне, и только тогда обновлять auto-memory.
+
+**Почему ввели:** 2026-05-12 эта `aevion-core/main` сессия исторически была CyberChess-окном (~5 дней, 83+ коммита). После BROADCAST #1 я прочитал новые границы зон, тихо переключился на fintech и проработал часы, ни разу не сказав пользователю «переключаюсь с шахмат». Доверие подорвано. Не повторять.
+
+**Подтверждение прочтения:** упомяни `BROADCAST-2026-05-12-2-read` в commit body.
+
+---
+
+## 📢 BROADCAST 2026-05-12 #3 — не дублируй параллельную работу + автопредложение альтернатив + подробно по-русски
+
+Команда от пользователя ВСЕМ открытым сессиям. Объединяет и расширяет BROADCAST #1 и #2 — применять параллельно с ними.
+
+**Правило AEVION-COORD-001:** во всех 14 worktree-окнах AEVION (aevion-core, aevion-build, aevion-bureau, aevion-healthai, aevion-qsign, aevion-qtradeoffline, aevion-smeta-trainer, aevion-backend-modules, frontend-exchange, frontend-globus, frontend-gtm, frontend-payments, frontend-qcore, frontend-qshield — плюс любые будущие):
+
+### 1. Никогда не делай работу, которую делает параллельная сессия
+
+Перед каждой задачей (даже маленькой):
+
+- **Шаг 1.** `git fetch origin main` — обновить общий контекст
+- **Шаг 2.** Прочитать `AEVION_COORDINATION.md` секции `LIVE ZONE OWNERSHIP` + `Текущая работа (WIP)` + `Pending cross-zone change requests`
+- **Шаг 3.** Посмотреть `git log --since="3 hours ago" --pretty=format:"%h %s" main` — где активны другие окна
+- **Шаг 4.** Сопоставить запрос пользователя с зонами и активностью
+- **Шаг 5.** Если задача дублирует или конфликтует с активной чужой работой — **остановиться и не делать**
+
+### 2. Автоматически предлагай альтернативы, не молчи
+
+Когда задача упирается в чужую зону / занятость / неясную инструкцию — **сразу же** в ответе показать пользователю 3 варианта в формате A/B/C:
+
+- **(A)** Эквивалент в своей зоне — конкретные файлы и цели
+- **(B)** Передать окну-владельцу — сказать «эта задача за окном X, переключитесь туда»
+- **(C)** Перенарезать зоны — добавить Pending request + 30-мин waiting period
+
+Альтернативы должны быть конкретными (имена файлов, цели), не общими фразами.
+
+### 3. Никогда не переключайся между проектами без явного «да»
+
+Полностью дублирует BROADCAST #2 — повторяю здесь для полноты:
+
+- Объявить смену вслух: «Этот чат был на X. Я вижу [причина] — переключиться на Y, окей?»
+- Дождаться явного подтверждения. Вагое «продолжаем», «вперёд», `/loop` авто-фаер — **НЕ авторизация**
+- Применимо в обе стороны: и при переходе ОТ зоны, и при возврате К ней
+
+### 4. Подробно расписывай шаги по-русски
+
+В ответах пользователю на русском перечислять шаги:
+
+- ❌ Плохо: «Запушил.»
+- ✅ Хорошо: «Шаг 1: прочитал X. Шаг 2: нашёл Y. Шаг 3: изменил Z (3 строки в файле F). Шаг 4: закоммитил с сообщением W через `git commit --only -- F`. Шаг 5: запушил `abc1234..def5678`. Параллельные окна увидят при следующем `git pull`.»
+
+Цель — пользователь видит процесс, а не доверяет на слово.
+
+### Запрещено
+
+- ❌ `git add .` / `git commit -a` (см. инцидент f83fcaaf, 2032 строки)
+- ❌ Тихая смена зоны/проекта/модуля при «продолжаем»/`/loop` auto-fire
+- ❌ Дублирование работы активной параллельной сессии
+- ❌ Молчаливое ожидание без альтернатив
+- ❌ `git push --force` без явной просьбы
+
+### Обязательно
+
+- ✅ `git commit --only -- FILE1 FILE2`
+- ✅ Объявление смены зоны + ожидание явного «да»
+- ✅ 3 альтернативы (A/B/C) при любой блокировке
+- ✅ Подробное русское описание шагов
+- ✅ `git pull` + чтение этого файла в начале сессии и после каждого `/loop` авто-фаера
+
+**Почему ввели:** серия инцидентов 2026-05-12 — (а) f83fcaaf снёс 2032 строки чужой работы через `git add .`; (б) параллельные сессии дважды делали один mobile-audit (aevion-healthai + aevion-build); (в) `aevion-core/main` тихо переключилась с CyberChess на fintech без уведомления пользователя. Эти правила — общий иммунитет от рецидивов.
+
+**Подтверждение прочтения:** упомяни `BROADCAST-2026-05-12-3-read` в commit body. Это сигналит другим окнам, что ты прочитал и применяешь правило.
 
 ---
 
@@ -33,7 +228,7 @@
 
 | Worktree | Branch | Owned zones (где edit разрешён без согласования) |
 |---|---|---|
-| `aevion-core` (main) | `main` | `aevion-globus-backend/scripts/**`, `aevion-globus-backend/src/lib/{ecosystemEvents,openapiFintechSpec}.ts`, AIPB chain в `bureau.ts` (только `/cert-for-qright`), QRight policies в `qright.ts`, `frontend/src/app/fintech/**`, `frontend/src/app/developers/fintech/**`, `frontend/src/components/fintech/**`, this file (AEVION_COORDINATION.md) |
+| `aevion-core` (main) | `main` | `aevion-globus-backend/scripts/**`, `aevion-globus-backend/src/lib/{ecosystemEvents,openapiFintechSpec}.ts`, AIPB chain в `bureau.ts` (только `/cert-for-qright`), QRight policies в `qright.ts`, `frontend/src/app/fintech/**`, `frontend/src/app/developers/fintech/**`, `frontend/src/components/fintech/**`, **`cyberchess.ts`**, **`frontend/src/app/cyberchess/**`** (reassigned 2026-05-12 — этот чат исторически CyberChess-окно; см. строку 81-WIP), this file (AEVION_COORDINATION.md) |
 | `aevion-build` | `feat/mobile-audit-v3-*` | **6 fintech модуля сорсы:** `qfusionai/qgood/qmaskcard/qchaingov/veilnetx/z-tide` (backend routes + frontend `app/*/...` под этими путями). QMedia. Mobile audit (touch targets, responsive layout). |
 | `aevion-smeta-trainer` | `feat/smeta-trainer-*` | `frontend/src/app/smeta-trainer/**`, `aevion-globus-backend/src/routes/smeta-trainer.ts`, normatives/drawings/quiz |
 | `aevion-bureau` | `feat/bureau-v2` | широкая часть `bureau.ts` (kroме AIPB endpoint выше), `frontend/src/app/bureau/**` |
@@ -42,8 +237,9 @@
 | `aevion-qtradeoffline` | `qtradeoffline-v1` | `qtrade.ts`, `frontend/src/app/qtrade/**`, `frontend/src/app/qtradeoffline/**`, `aev.ts`, `frontend/src/app/aev/**` |
 | `frontend-qshield` | `feat/aevion-finalize-and-status` | `quantum-shield.ts`, `pipeline.ts`, `qright.ts` (broad), `frontend/src/app/quantum-shield/**`, `frontend/src/app/qright/**` |
 | `aevion-backend-modules` | `feat/platform-tier2-rest` | `modules.ts`, `awards.ts`, `planetCompliance.ts`, `auth.ts`, `frontend/src/app/admin/**` |
-| `frontend-qcore` (under aevion-core) | `feat/devhub-v1-*` | `qcoreai.ts`, `cyberchess.ts`, `frontend/src/app/qcoreai/**`, `frontend/src/app/cyberchess/**`, `frontend/src/app/devhub/**` |
+| `frontend-qcore` (under aevion-core) | `feat/devhub-v1-*` | `qcoreai.ts`, `frontend/src/app/qcoreai/**`, `frontend/src/app/devhub/**` — **CyberChess отозван в aevion-core/main 2026-05-12** (не трогать `cyberchess.ts` / `frontend/src/app/cyberchess/**` до новой реасайн-инструкции) |
 | `frontend-payments` (under aevion-core) | `payments-rail` | `qpaynet.ts`, `qcontract.ts`, `frontend/src/app/qpaynet/**`, `frontend/src/app/qcontract/**` |
+| `aevion-core` (main) **sprint 2** | `main` | **QJobs** (`qjobs.ts`, `lib/ensureQJobsTables.ts`, `frontend/src/app/qjobs/**`, `scripts/qjobs-smoke.js`), **QNews** (`qnews.ts`, `frontend/src/app/qnews/**`), **QSocial** (`qsocial.ts`, `frontend/src/app/qsocial/**`) — prod-ready: rate limits + smoke + search + Postgres indexes |
 
 **Shared/no-owner zones** (договариваемся отдельно перед изменением):
 - `aevion-globus-backend/src/index.ts` (роутер mounts) — touchpoint всех; commit ALWAYS via `git commit --only -- index.ts`
@@ -65,16 +261,19 @@
 
 ### Pending cross-zone change requests
 
-| Дата UTC | Worktree | Зона/файл | Цель | Срочность |
-|---|---|---|---|---|
-| 2026-05-12 ~07:30 | `aevion-build` | `frontend/src/app/qcontract/**`, `frontend/src/app/qpaynet/**` | Retroactive notice: PR #212 (merged), #217 (merged), #224 (open), #230 (open) включают mobile audit + aria-label polish в этих путях. Все правки additive (text-[Npx]→text-xs, aria-label, JSON-LD). NO file deletions or rewrites. Если frontend-payments owner возражает — открываю revert PR в течение часа. | low |
-| 2026-05-12 ~07:30 | `aevion-build` | `frontend/src/app/build/**`, `frontend/src/components/build/**` | Эти пути не указаны в Worktree → зона map. Я работал тут как продолжение QBuild track + mobile audit cross-cutting. Если кто-то claim-ит build/ как свою зону — оставлю и не трогаю дальше. | low |
+_(пусто — добавляй сюда entries перед нарушением чужой зоны)_
+
+### Acknowledgement log (BROADCAST-2026-05-12-read)
+
+| Worktree | Прочитал | Коммит |
+|---|---|---|
+| `frontend-qcore` (feat/devhub+qcore) | 2026-05-12 | следующий коммит в этой зоне |
 
 ### Current active work (aevion-core/main, 2026-05-12)
 
-- Восстановлены `fintech/page.tsx` + `developers/fintech/page.tsx` (commit `45aad61e`)
-- Продолжаем: backend fintech endpoints (`/api/fintech/status` health probes), `openapiFintechSpec.ts`, fintech smoke script
-- НЕ трогаем: bureau frontend, qright frontend, cyberchess, qcoreai, qsign, qtrade — это чужие зоны
+- **CyberChess** — это окно исторически было CyberChess-чатом (~5 дней, 83+ commits). 2026-05-12 PM пользователь подтвердил возврат шахмат сюда (reassign из frontend-qcore). Открытые таски: #67 Variants QA, #71 Coach SR, #72 Setup hero.
+- Fintech surface — ранее в этой сессии (today) выкатано ~9 коммитов: troubleshooting, integrations, rate-limits, FintechMetric, onboarding-guide. Backlog исчерпан.
+- НЕ трогаем: bureau frontend, qright frontend, qcoreai, qsign, qtrade — это чужие зоны
 
 ### Recent destructive incidents (для learning'а)
 
@@ -169,7 +368,7 @@
 | Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
 |------|---------|-----------------|----------------------|----------------|
 | `frontend/src/app/smeta-trainer/drawings-practice/**` | ☑ | aevion-smeta-trainer (4ч автоном. сессия 05:42-09:42 UTC) | Достройка drawings-practice — батчи 1-11 уже мерджены (48 модулей в 9 категориях), продолжаю до 09:42 | self |
-| 6 fintech модуля fronts + cross-cutting mobile audit | ☑ | aevion-build (`feat/prod-readiness-2026-05-12`, `feat/zone-cleanup-2026-05-12`) | Mobile audit pass 1-3 (PR #224, 5 commits, ~140 files) + cleanup/a11y (PR #230, 2 commits, 11 files). Reading new zone map; will narrow scope to listed zones + mobile cross-cutting only. | self |
+| `qcoreai/**`, `devhub/**`, `qai/**`, `qmedia/**`, `qstore/**`, `qlearn/**`, `qsocial/**`, `qnews/**`, `qjobs/**`, `qevents/**` | ☑ | frontend-qcore chat | QCoreAI V31-V70 + DevHub V1-V2 + новые модули (QMedia/QAI/QStore/QLearn/QSocial/QNews/QJobs/QEvents) | self — НЕ трогаем smeta-trainer, fintech, bureau, qright, veilnetx, z-tide |
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 

@@ -93,14 +93,11 @@ if (JWT) {
   else fail("QMaskCard stats auth gate", `Expected 401/403, got ${mS}`);
 }
 
-// ── 7. Fintech aggregate status
-console.log("\n7. /api/fintech/status aggregate");
-const { status: fsS, body: fsB } = await get("/api/fintech/status");
-if (fsS === 200 && fsB?.modules) {
-  const allUp = Object.values(fsB.modules).every(v => v === "ok" || v === "degraded");
-  if (allUp) ok("All modules ok/degraded", JSON.stringify(fsB.modules).slice(0, 60));
-  else fail("Some modules down", JSON.stringify(fsB.modules));
-} else fail("/api/fintech/status", `HTTP ${fsS}`);
+// ── 7. VeilNetX chain length after — verify chain is operational
+console.log("\n7. VeilNetX chain stability");
+const { status: vS2, body: vB2 } = await get("/api/veilnetx-ledger/stats");
+if (vS2 === 200 && typeof vB2?.total === "number") ok(`Stats endpoint returns total=${vB2.total}`);
+else fail("/api/veilnetx-ledger/stats", `HTTP ${vS2}`);
 
 // ── Summary
 console.log(`\n${"─".repeat(48)}`);

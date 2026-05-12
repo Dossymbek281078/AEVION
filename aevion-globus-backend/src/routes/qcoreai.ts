@@ -228,12 +228,23 @@ import { getGuidanceBus } from "../services/qcoreai/guidanceBus";
 export const qcoreaiRouter = Router();
 
 // ── Collab session sharing (in-memory) ───────────────────────────────────────
+const COLLAB_TTL_MS = 24 * 60 * 60 * 1000; // 24-hour TTL
+
 const memCollabSessions = new Map<string, {
   sessionId: string;
   ownerId: string;
   createdAt: string;
   viewers: number;
+  expiresAt: string;
 }>();
+
+/** Remove collab entries that have passed their TTL. Called on every read. */
+function pruneExpiredCollabs(): void {
+  const now = Date.now();
+  for (const [token, c] of memCollabSessions) {
+    if (new Date(c.expiresAt).getTime() < now) memCollabSessions.delete(token);
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════
    Legacy single-shot chat (kept for backwards compatibility)
@@ -6244,14 +6255,17 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
     if (session.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     const cryptoMod = await import("crypto");
     const token = cryptoMod.randomBytes(16).toString("hex");
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + COLLAB_TTL_MS).toISOString();
     memCollabSessions.set(token, {
       sessionId,
       ownerId: auth.sub,
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
       viewers: 0,
+      expiresAt,
     });
     const url = `https://aevion.app/qcoreai/collab/${token}`;
-    return res.status(201).json({ token, url });
+    return res.status(201).json({ token, url, expiresAt });
   } catch {
     return res.status(500).json({ error: "collab create failed" });
   }
@@ -6260,6 +6274,7 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
 // GET /api/qcoreai/collab/:token — public snapshot viewer
 qcoreaiRouter.get("/collab/:token", async (req, res) => {
   const token = req.params.token;
+  pruneExpiredCollabs();
   const collab = memCollabSessions.get(token);
   if (!collab) return res.status(404).json({ error: "collab link not found or expired" });
   try {
@@ -6303,6 +6318,48 @@ qcoreaiRouter.get("/sessions/:id/collab/stats", async (req, res) => {
     return res.json({ totalViews, activeViewers, tokenCreatedAt });
   } catch {
     return res.status(500).json({ error: "collab stats failed" });
+  }
+});
+
+// DELETE /api/qcoreai/sessions/:id/collab — revoke collab link (owner only)
+qcoreaiRouter.delete("/sessions/:id/collab", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const sessionId = req.params.id;
+  try {
+    pruneExpiredCollabs();
+    let revoked = 0;
+    for (const [token, c] of memCollabSessions) {
+      if (c.sessionId === sessionId && c.ownerId === auth.sub) {
+        memCollabSessions.delete(token);
+        revoked++;
+      }
+    }
+    return res.json({ revoked, sessionId });
+  } catch {
+    return res.status(500).json({ error: "collab revoke failed" });
+  }
+});
+
+// GET /api/qcoreai/me/collabs — list all active collab links for current user
+qcoreaiRouter.get("/me/collabs", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  try {
+    pruneExpiredCollabs();
+    const links = Array.from(memCollabSessions.entries())
+      .filter(([, c]) => c.ownerId === auth.sub)
+      .map(([token, c]) => ({
+        token,
+        sessionId: c.sessionId,
+        viewers: c.viewers,
+        createdAt: c.createdAt,
+        expiresAt: c.expiresAt,
+        url: `https://aevion.app/qcoreai/collab/${token}`,
+      }));
+    return res.json({ links });
+  } catch {
+    return res.status(500).json({ error: "list collabs failed" });
   }
 });
 

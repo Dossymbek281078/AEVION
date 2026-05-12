@@ -65,13 +65,13 @@ export default function QMediaCreativePage() {
           <div style={{ padding: 20, borderRadius: 14, border: "1px solid rgba(13,148,136,0.2)", background: "#fff" }}>
             <h2 style={{ fontSize: 16, fontWeight: 800, color: "#0d9488", margin: "0 0 14px" }}>🎵 Generate Lyrics</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, marginBottom: 8 }}>
-              <select value={lyricsForm.genre} onChange={e => setLyricsForm(p => ({ ...p, genre: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
+              <select value={lyricsForm.genre} onChange={e => setLyricsForm(p => ({ ...p, genre: e.target.value }))} aria-label="Жанр текста песни" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["pop", "rock", "electronic", "classical", "jazz", "hip-hop", "r&b", "country"].map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <select value={lyricsForm.mood} onChange={e => setLyricsForm(p => ({ ...p, mood: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
+              <select value={lyricsForm.mood} onChange={e => setLyricsForm(p => ({ ...p, mood: e.target.value }))} aria-label="Настроение текста" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["upbeat", "melancholy", "romantic", "energetic", "calm", "dark", "hopeful"].map(m => <option key={m} value={m}>{m}</option>)}
               </select>
-              <input value={lyricsForm.theme} onChange={e => setLyricsForm(p => ({ ...p, theme: e.target.value }))} placeholder="Theme (love, city, dreams…)" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
+              <input value={lyricsForm.theme} onChange={e => setLyricsForm(p => ({ ...p, theme: e.target.value }))} maxLength={120} aria-label="Тема текста" placeholder="Theme (love, city, dreams…)" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }} />
               <button onClick={genLyrics} disabled={lyricsLoading} style={{ padding: "8px 16px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: lyricsLoading ? "default" : "pointer" }}>
                 {lyricsLoading ? "…" : "Generate"}
               </button>
@@ -88,10 +88,10 @@ export default function QMediaCreativePage() {
           <div style={{ padding: 20, borderRadius: 14, border: "1px solid rgba(217,119,6,0.2)", background: "#fff" }}>
             <h2 style={{ fontSize: 16, fontWeight: 800, color: "#d97706", margin: "0 0 14px" }}>✏️ Song Title Ideas</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: 12 }}>
-              <select value={titlesForm.genre} onChange={e => setTitlesForm(p => ({ ...p, genre: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
+              <select value={titlesForm.genre} onChange={e => setTitlesForm(p => ({ ...p, genre: e.target.value }))} aria-label="Жанр для названия" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["pop", "rock", "electronic", "jazz", "hip-hop", "country"].map(g => <option key={g} value={g}>{g}</option>)}
               </select>
-              <select value={titlesForm.mood} onChange={e => setTitlesForm(p => ({ ...p, mood: e.target.value }))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
+              <select value={titlesForm.mood} onChange={e => setTitlesForm(p => ({ ...p, mood: e.target.value }))} aria-label="Настроение названия" style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 13, fontFamily: "inherit" }}>
                 {["upbeat", "melancholy", "romantic", "energetic", "calm"].map(m => <option key={m} value={m}>{m}</option>)}
               </select>
               <button onClick={genTitles} disabled={titlesLoading} style={{ padding: "8px 16px", borderRadius: 8, background: "#d97706", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: titlesLoading ? "default" : "pointer" }}>

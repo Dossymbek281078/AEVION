@@ -67,6 +67,12 @@
 
 _(пусто — добавляй сюда entries перед нарушением чужой зоны)_
 
+### Acknowledgement log (BROADCAST-2026-05-12-read)
+
+| Worktree | Прочитал | Коммит |
+|---|---|---|
+| `frontend-qcore` (feat/devhub+qcore) | 2026-05-12 | следующий коммит в этой зоне |
+
 ### Current active work (aevion-core/main, 2026-05-12)
 
 - Восстановлены `fintech/page.tsx` + `developers/fintech/page.tsx` (commit `45aad61e`)
@@ -166,6 +172,7 @@ _(пусто — добавляй сюда entries перед нарушение
 | Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
 |------|---------|-----------------|----------------------|----------------|
 | `frontend/src/app/smeta-trainer/drawings-practice/**` | ☑ | aevion-smeta-trainer (4ч автоном. сессия 05:42-09:42 UTC) | Достройка drawings-practice — батчи 1-11 уже мерджены (48 модулей в 9 категориях), продолжаю до 09:42 | self |
+| `qcoreai/**`, `devhub/**`, `qai/**`, `qmedia/**`, `qstore/**`, `qlearn/**`, `qsocial/**`, `qnews/**`, `qjobs/**`, `qevents/**` | ☑ | frontend-qcore chat | QCoreAI V31-V70 + DevHub V1-V2 + новые модули (QMedia/QAI/QStore/QLearn/QSocial/QNews/QJobs/QEvents) | self — НЕ трогаем smeta-trainer, fintech, bureau, qright, veilnetx, z-tide |
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 

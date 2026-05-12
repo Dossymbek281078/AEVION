@@ -236,6 +236,63 @@ ztideRouter.get("/me", readLimit, async (req, res) => {
   }
 });
 
+// ── POST /me/login-streak — user self-claim, 20h cooldown
+ztideRouter.post("/me/login-streak", writeLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const pool = getPool();
+
+    const lastR = await pool.query(
+      `SELECT "createdAt" FROM "ZTideEvent" WHERE "userId" = $1 AND "kind" = 'login-streak' ORDER BY "createdAt" DESC LIMIT 1`,
+      [auth.sub],
+    );
+    if (lastR.rowCount && lastR.rowCount > 0) {
+      const last = (lastR.rows[0] as { createdAt: Date }).createdAt;
+      const elapsedMs = Date.now() - new Date(last).getTime();
+      const cooldownMs = 20 * 3600 * 1000;
+      if (elapsedMs < cooldownMs) {
+        const nextAvailableAt = new Date(new Date(last).getTime() + cooldownMs).toISOString();
+        return res.status(429).json({ error: "streak_cooldown", nextAvailableAt });
+      }
+    }
+
+    const id = crypto.randomUUID();
+    const weight = BASE_WEIGHTS["login-streak"];
+    await pool.query(
+      `INSERT INTO "ZTideEvent" ("id","userId","kind","sourceModule","weight","meta")
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
+      [id, auth.sub, "login-streak", "auth", weight, JSON.stringify({})],
+    );
+
+    const upR = await pool.query(
+      `INSERT INTO "ZTideScore" ("userId","score","eventCount","lastEventAt","rank")
+       VALUES ($1, $2, 1, NOW(), 'seedling')
+       ON CONFLICT ("userId") DO UPDATE SET
+         "score" = "ZTideScore"."score" + EXCLUDED."score",
+         "eventCount" = "ZTideScore"."eventCount" + 1,
+         "lastEventAt" = NOW()
+       RETURNING "score","eventCount"`,
+      [auth.sub, weight],
+    );
+    const newScore = Number((upR.rows[0] as { score: string | number }).score);
+    const newRank = rankFor(newScore);
+    await pool.query(
+      `UPDATE "ZTideScore" SET "rank" = $1 WHERE "userId" = $2 AND "rank" != $1`,
+      [newRank.id, auth.sub],
+    );
+
+    res.status(201).json({
+      ok: true, userId: auth.sub, kind: "login-streak", weight,
+      score: newScore, rank: newRank,
+    });
+  } catch (err: unknown) {
+    console.error("[ztide] login_streak_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "login_streak_failed" });
+  }
+});
+
 ztideRouter.get("/leaderboard", readLimit, async (req, res) => {
   try {
     await ensureTables();

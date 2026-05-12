@@ -1230,7 +1230,7 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
     return res.json({ branches: [], connected: false });
   }
   try {
-    const match = project.repoUrl.match(/github.com/([^/]+)/([^/]+)/);
+    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
     if (!match) return res.json({ branches: [], connected: false });
     const [, owner, repo] = match;
     const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches?per_page=30`, {
@@ -1270,7 +1270,7 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
     return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing" });
   }
   try {
-    const match = project.repoUrl.match(/github.com/([^/]+)/([^/]+)/);
+    const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
     if (!match) return res.json({ ok: false, message: "Invalid repoUrl format" });
     const [, owner, repo] = match;
     const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {

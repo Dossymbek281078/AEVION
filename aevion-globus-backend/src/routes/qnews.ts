@@ -172,7 +172,15 @@ qnewsRouter.get("/categories", (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qnews/trending — top 5 most recently added ────────────────────
-qnewsRouter.get("/trending", (_req: Request, res: Response) => {
+qnewsRouter.get("/trending", async (_req: Request, res: Response) => {
+  try {
+    if (isQNewsDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QNewsArticle" ORDER BY "publishedAt" DESC LIMIT 5`,
+      );
+      return res.json({ articles: rows });
+    }
+  } catch (e) { console.error("[QNews] /trending DB error", e); }
   const articles = Array.from(memNews.values())
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
     .slice(0, 5);
@@ -214,8 +222,15 @@ qnewsRouter.get("/articles", async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/qnews/articles/:id ─────────────────────────────────────────────
-qnewsRouter.get("/articles/:id", (req: Request, res: Response) => {
+qnewsRouter.get("/articles/:id", async (req: Request, res: Response) => {
   const id = param(req, "id");
+  try {
+    if (isQNewsDbReady()) {
+      const { rows } = await pool.query(`SELECT * FROM "QNewsArticle" WHERE "id"=$1`, [id]);
+      if (rows[0]) return res.json({ article: rows[0] });
+      return res.status(404).json({ error: "not_found" });
+    }
+  } catch (e) { console.error("[QNews] GET /articles/:id DB error", e); }
   const article = memNews.get(id);
   if (!article) return res.status(404).json({ error: "not_found" });
   return res.json({ article });

@@ -134,6 +134,11 @@ const MODULES: Module[] = [
   { id: "heating-internal",category: "utilities",href: "/smeta-trainer/drawings-practice/heating-internal",icon: "🔥", title: "Внутреннее отопление",              subtitle: "Радиаторы, тёплый пол, разводка по ЭСН Сб.18",                level: "L3", exercises: 4,  color: "orange"  },
   { id: "sewerage-internal",category: "utilities",href: "/smeta-trainer/drawings-practice/sewerage-internal",icon: "🚽", title: "Внутренняя канализация",            subtitle: "ПВХ, стояки, унитазы по ЭСН Сб.17",                            level: "L3", exercises: 4,  color: "slate"   },
   { id: "water-internal", category: "utilities",href: "/smeta-trainer/drawings-practice/water-internal", icon: "💧", title: "Внутренний водопровод",             subtitle: "ХВС/ГВС, металлопластик/PPR, узлы учёта по ЭСН Сб.16",        level: "L3", exercises: 4,  color: "sky"     },
+
+  // ── Управление проектом и инструменты ──
+  { id: "smeta-programs", category: "tools",    href: "/smeta-trainer/drawings-practice/smeta-programs", icon: "💼", title: "Сметные программы РК",              subtitle: "АВС-4, Смета РК, ИСТ Эталон — обзор и инструкции",            level: "L3", exercises: 4,  color: "sky"     },
+  { id: "budget-management",category: "process",href: "/smeta-trainer/drawings-practice/budget-management",icon: "💰", title: "Управление бюджетом",               subtitle: "Аванс, удержания, cash flow, кассовые разрывы",               level: "L4", exercises: 4,  color: "emerald" },
+  { id: "excel-templates",category: "tools",    href: "/smeta-trainer/drawings-practice/excel-templates",icon: "📋", title: "Excel-шаблоны смет",                subtitle: "8 типовых шаблонов с возможностью скачивания CSV",            level: "L2", exercises: 0,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

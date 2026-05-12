@@ -34,6 +34,21 @@ function blind(identifier: string): string {
   return crypto.createHmac("sha256", getSalt()).update(identifier.toLowerCase().trim()).digest("hex");
 }
 
+/**
+ * Canonical JSON — keys sorted recursively. The chain hash MUST be computed
+ * over this representation, not over JSON.stringify(input), because Postgres
+ * JSONB silently reorders keys on storage. Without canonicalization, the
+ * insert-time hash and the verify-time hash (read from JSONB) disagree even
+ * when content is identical, and /chain/verify reports a false break.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalJson(obj[k])).join(",") + "}";
+}
+
 function entryHash(input: {
   prevHash: string;
   module: string;
@@ -127,7 +142,9 @@ export async function emitVeilNetXEntry(input: {
   let amount: bigint;
   try { amount = BigInt(String(input.amountCents)); } catch { return null; }
   if (amount === BigInt(0)) return null;
-  const metaJson = JSON.stringify(input.meta ?? {});
+  // Canonical (key-sorted) so the verify-time hash, which reads JSONB after
+  // Postgres reorders keys, produces the same bytes as the insert-time hash.
+  const metaJson = canonicalJson(input.meta ?? {});
   const currency = String(input.currency ?? "USD").toUpperCase();
 
   // Serialize the head-read + insert via a Postgres transactional advisory

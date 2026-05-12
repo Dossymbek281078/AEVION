@@ -26,6 +26,7 @@ import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
+import { createTierPaymentRequest, pollPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
 import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
@@ -696,6 +697,8 @@ export default function CyberChessPage(){
   const isPro=!!chessy.owned.pro||!!chessy.owned.ultimate;
   const isUltimate=!!chessy.owned.ultimate;
   const[showShop,sShowShop]=useState(false);
+  // QPayNet payment-request flow for Chessy Pro/Ultimate tiers (see ./billing.ts)
+  const[billingPending,sBillingPending]=useState<null|{tier:ChessyTier;tierName:string;requestId:string;token:string;payUrl:string;busy:boolean}>(null);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
   const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
@@ -7560,12 +7563,41 @@ ${question.trim()}`;
                 </ul>
                 {/* Free tile is always disabled. Pro/Ultimate: if owned → "Активирован" disabled; if other tier owned → "Сменить" allowed; else → primary buy CTA. */}
                 <button disabled={t.disabled||owned}
-                  onClick={()=>{
+                  onClick={async()=>{
                     if(t.id==="free")return;
                     if(owned)return;
+                    const tier=t.id as ChessyTier;
+                    const amountAev=parseInt(t.price,10)||0;
+                    // 1) JWT lookup — mirror keys used elsewhere in the app
+                    const jwt=(typeof window!=="undefined")
+                      ? (window.localStorage.getItem("aevion_auth_token_v1")
+                        ?? window.localStorage.getItem("aevion_token")
+                        ?? window.localStorage.getItem("aevion_jwt")
+                        ?? "")
+                      : "";
+                    if(!jwt){
+                      showToast("Войди в аккаунт чтобы купить","info");
+                      sShowShop(false);
+                      setTimeout(()=>{try{window.location.href="/auth"}catch{}},600);
+                      return;
+                    }
+                    // 2) Create QPayNet payment request
+                    showToast(`💳 Создаю счёт на ${t.name}…`,"info");
+                    const r=await createTierPaymentRequest(tier,amountAev,jwt);
+                    if(!r.ok){
+                      if(r.error==="platform_wallet_not_configured"){
+                        showToast("Биллинг не настроен · используй 🧪 Тест-активацию ниже","error");
+                      }else if(r.error==="auth_required"){
+                        showToast("Сессия истекла — войди заново","error");
+                      }else{
+                        showToast(`Ошибка биллинга: ${r.error}`,"error");
+                      }
+                      return;
+                    }
+                    // 3) Open pay URL + pending modal with "Я оплатил" CTA
+                    try{window.open(r.payUrl,"_blank","noopener,noreferrer")}catch{}
                     sShowShop(false);
-                    showToast(`💳 ${t.name} — оплата через AEVION Bank · открываю…`,"info");
-                    setTimeout(()=>{try{window.open(`/bank?intent=cyberchess-${t.id}&amount=${t.price}`,"_blank")}catch{}},400);
+                    sBillingPending({tier,tierName:t.name,requestId:r.requestId,token:r.token,payUrl:r.payUrl,busy:false});
                   }}
                   style={{
                     width:"100%",padding:"8px 12px",borderRadius:RADIUS.md,
@@ -7670,6 +7702,50 @@ ${question.trim()}`;
             })}
           </div>
         </details>}
+      </Modal>;
+    })()}
+
+    {/* QPayNet billing pending modal (Pro/Ultimate tier purchase) */}
+    {billingPending&&(()=>{
+      const bp=billingPending;
+      return <Modal open={!!billingPending} onClose={()=>{if(!bp.busy)sBillingPending(null)}} size="sm"
+        title={<span>💳 Оплата · {bp.tierName}</span>}>
+        <div style={{fontSize:13,color:CC.text,lineHeight:1.6,marginBottom:SPACE[3]}}>
+          Открыл AEVION Bank в новой вкладке. Заверши оплату и нажми «Я оплатил» — мы проверим
+          статус и активируем {bp.tierName} в течение минуты.
+        </div>
+        <div style={{display:"flex",gap:SPACE[2],flexDirection:"column"}}>
+          <Btn variant="primary" size="md" full disabled={bp.busy}
+            onClick={async()=>{
+              sBillingPending(p=>p?{...p,busy:true}:p);
+              showToast("⏳ Проверяю оплату…","info");
+              const jwt=(typeof window!=="undefined")
+                ? (window.localStorage.getItem("aevion_auth_token_v1")
+                  ?? window.localStorage.getItem("aevion_token")
+                  ?? window.localStorage.getItem("aevion_jwt")
+                  ?? "")
+                : "";
+              const paid=await pollPaymentRequest(bp.token,jwt,{intervalMs:3000,timeoutMs:60000});
+              if(paid){
+                sChessy(c=>({...c,owned:{...c.owned,[bp.tier]:true}}));
+                showToast(`✨ ${bp.tierName} активирован!`,"success");
+                sBillingPending(null);
+              }else{
+                showToast("Оплата не подтверждена за минуту — попробуй обновить страницу","error");
+                sBillingPending(p=>p?{...p,busy:false}:p);
+              }
+            }}>
+            {bp.busy?"⏳ Проверяю…":"✓ Я оплатил"}
+          </Btn>
+          <Btn variant="secondary" size="sm" full disabled={bp.busy}
+            onClick={()=>{try{window.open(bp.payUrl,"_blank","noopener,noreferrer")}catch{}}}>
+            ↗ Открыть страницу оплаты снова
+          </Btn>
+          <Btn variant="ghost" size="sm" full disabled={bp.busy}
+            onClick={()=>sBillingPending(null)}>
+            Отменить
+          </Btn>
+        </div>
       </Modal>;
     })()}
 

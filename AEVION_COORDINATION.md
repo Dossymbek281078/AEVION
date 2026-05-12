@@ -196,7 +196,12 @@ C) [третий вариант]
 
 ### Pending cross-zone change requests
 
-_(пусто — добавляй сюда entries перед нарушением чужой зоны)_
+- **2026-05-12** — `aevion-core/main` → owner of `aevion-build` (`routes/veilnetxLedger.ts`)
+  - **Цель:** применить canonical JSON (sorted keys) в `entryHash` payload — и для POST `/entries`, и для GET `/chain/verify`.
+  - **Почему:** Postgres JSONB переупорядочивает ключи `meta` при storage. Сейчас insert-time хэш считается над `JSON.stringify({txId, walletId, feeKzt})`, а verify-time над JSONB-возвращённым `{txId, feeKzt, walletId}` → SHA расходится → `/chain/verify` ложно репортит `brokenAt`. Подтверждено перебором перестановок ключей (doctor script).
+  - **Что уже сделано в моей зоне (главный коммит `8c93bdc1`):** `lib/ecosystemEvents.ts` экспортирует `canonicalJson()` и использует его для `metaJson` хэша. `scripts/rebuild-veilnetx-chain.js` зеркалит ту же функцию (коммит `6d6e01bc`).
+  - **Что нужно в твоей зоне:** в `routes/veilnetxLedger.ts` импортировать `canonicalJson` из `../lib/ecosystemEvents` и заменить два места `JSON.stringify(meta)` (в POST `/entries` insert + в `/chain/verify` recompute loop) на `canonicalJson(meta)`. После деплоя выполнить `ALLOW_CHAIN_REBUILD=1 ALLOW_CHAIN_REBUILD_PROD=1 node scripts/rebuild-veilnetx-chain.js` чтобы перебить исторические хэши на новый формат.
+  - **Срочность:** med. Chain integrity сейчас false на проде → fintech-flow-smoke и veilnetx-ledger-smoke падают на одной assertion; функционально цепь работает.
 
 ### Acknowledgement log (BROADCAST-2026-05-12-read)
 

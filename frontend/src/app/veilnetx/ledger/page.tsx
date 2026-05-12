@@ -140,8 +140,11 @@ export default async function VeilNetXLedgerPage() {
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>Recent entries</h2>
           {entries.length === 0 ? (
-            <div style={{ padding: 28, background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8", textAlign: "center" }}>
-              Chain is empty. First entries seed via <code style={{ color: "#a78bfa" }}>POST /api/veilnetx-ledger/entries</code>.
+            <div style={{ padding: 32, background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8", textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>⛓️</div>
+              <p style={{ color: "#cbd5e1", fontSize: 14, fontWeight: 600, marginBottom: 6, margin: 0 }}>Цепочка ещё пуста</p>
+              <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4, marginBottom: 12 }}>Первые записи появятся когда модули QPayNet/QGood/QMaskCard начнут писать в audit-ledger.</p>
+              <code style={{ fontSize: 11, color: "#a78bfa", background: "#0f172a", padding: "4px 8px", borderRadius: 4, fontFamily: "ui-monospace, Menlo, monospace" }}>POST /api/veilnetx-ledger/entries</code>
             </div>
           ) : (
             <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, overflow: "hidden", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11 }}>

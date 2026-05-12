@@ -101,8 +101,11 @@ export default async function QChainGovProposalsPage() {
       <section style={{ padding: "16px 24px 64px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto" }}>
           {proposals.length === 0 ? (
-            <div style={{ padding: 28, background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8", textAlign: "center" }}>
-              No proposals yet. Create one via <code style={{ color: "#a78bfa" }}>POST /api/qchaingov/proposals</code>.
+            <div style={{ padding: 32, background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8", textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>🗳️</div>
+              <p style={{ color: "#cbd5e1", fontSize: 14, fontWeight: 600, marginBottom: 6, margin: 0 }}>Открытых предложений пока нет</p>
+              <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 16, marginTop: 4 }}>Создай первое предложение по управлению AEVION-экосистемой.</p>
+              <Link href="/qchaingov/new" style={{ display: "inline-block", padding: "8px 18px", background: "#34d399", color: "#0f172a", fontSize: 13, fontWeight: 800, borderRadius: 8, textDecoration: "none" }}>+ Draft proposal</Link>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

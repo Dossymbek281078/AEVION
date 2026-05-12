@@ -118,8 +118,11 @@ export default async function ZTideLeaderboardPage() {
       <section style={{ padding: "16px 24px 64px" }}>
         <div style={{ maxWidth: 880, margin: "0 auto" }}>
           {rows.length === 0 ? (
-            <div style={{ padding: 28, background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8", textAlign: "center" }}>
-              No tide events yet. Score events stream in from <code style={{ color: "#a78bfa" }}>POST /api/ztide/events</code>.
+            <div style={{ padding: 32, background: "#1e293b", border: "1px dashed #334155", borderRadius: 12, color: "#94a3b8", textAlign: "center" }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>🌊</div>
+              <p style={{ color: "#cbd5e1", fontSize: 14, fontWeight: 600, marginBottom: 6, margin: 0 }}>Лидерборд ещё формируется</p>
+              <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4, marginBottom: 12 }}>Когда другие модули AEVION начнут эмитить tide-события, рейтинг наполнится.</p>
+              <code style={{ fontSize: 11, color: "#a78bfa", background: "#0f172a", padding: "4px 8px", borderRadius: 4, fontFamily: "ui-monospace, Menlo, monospace" }}>POST /api/ztide/events</code>
             </div>
           ) : (
             <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 12, overflow: "hidden" }}>

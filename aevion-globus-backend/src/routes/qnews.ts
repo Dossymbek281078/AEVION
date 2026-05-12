@@ -24,6 +24,8 @@ const CATEGORIES = ["tech", "crypto", "ai", "business", "science", "world"];
 // ─── In-memory store ──────────────────────────────────────────────────────────
 
 const memNews = new Map<string, NewsItem>();
+// key: `${userId}:${articleId}`
+const memBookmarks = new Map<string, boolean>();
 
 // Seed with 10 realistic fake news items on startup
 const SEED: Omit<NewsItem, "id">[] = [
@@ -232,6 +234,95 @@ qnewsRouter.post("/articles", (req: Request, res: Response) => {
   };
   memNews.set(article.id, article);
   return res.status(201).json({ article });
+});
+
+// ─── POST /api/qnews/articles/:id/bookmark — toggle bookmark ─────────────────
+qnewsRouter.post("/articles/:id/bookmark", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+
+  const id = param(req, "id");
+  if (!memNews.has(id)) return res.status(404).json({ error: "not_found" });
+
+  const key = `${auth.sub}:${id}`;
+  const current = memBookmarks.get(key) ?? false;
+  const bookmarked = !current;
+  if (bookmarked) {
+    memBookmarks.set(key, true);
+  } else {
+    memBookmarks.delete(key);
+  }
+  return res.json({ bookmarked });
+});
+
+// ─── GET /api/qnews/me/bookmarks — my bookmarked articles ────────────────────
+qnewsRouter.get("/me/bookmarks", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+
+  const prefix = `${auth.sub}:`;
+  const articles: NewsItem[] = [];
+  for (const [key] of memBookmarks) {
+    if (key.startsWith(prefix)) {
+      const articleId = key.slice(prefix.length);
+      const article = memNews.get(articleId);
+      if (article) articles.push(article);
+    }
+  }
+  articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  return res.json({ articles, total: articles.length });
+});
+
+// ─── GET /api/qnews/rss — RSS 2.0 feed of latest 20 articles ─────────────────
+qnewsRouter.get("/rss", (_req: Request, res: Response) => {
+  const articles = Array.from(memNews.values())
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+    .slice(0, 20);
+
+  const escXml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const items = articles.map((a) =>
+    `    <item>\n      <title>${escXml(a.title)}</title>\n      <link>${escXml(a.url)}</link>\n      <description>${escXml(a.summary)}</description>\n      <pubDate>${new Date(a.publishedAt).toUTCString()}</pubDate>\n      <category>${escXml(a.category)}</category>\n      <guid>${escXml(a.id)}</guid>\n    </item>`,
+  ).join("\n");
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>AEVION QNews</title>\n    <link>https://aevion.app/qnews</link>\n    <description>Latest news from AEVION QNews</description>\n    <language>en</language>\n    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>\n${items}\n  </channel>\n</rss>`;
+
+  res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+  res.send(xml);
+});
+
+// ─── POST /api/qnews/ai/digest — AI daily digest ─────────────────────────────
+qnewsRouter.post("/ai/digest", async (_req: Request, res: Response) => {
+  // Take last 5 articles from each category
+  const byCategory: Record<string, NewsItem[]> = {};
+  for (const cat of CATEGORIES) byCategory[cat] = [];
+  for (const article of memNews.values()) {
+    if (byCategory[article.category]) byCategory[article.category].push(article);
+  }
+  const selectedArticles: NewsItem[] = [];
+  for (const cat of CATEGORIES) {
+    const sorted = byCategory[cat].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, 5);
+    selectedArticles.push(...sorted);
+  }
+
+  const articlesText = selectedArticles
+    .map((a) => `[${a.category.toUpperCase()}] ${a.title}: ${a.summary}`)
+    .join("\n");
+
+  try {
+    const { callProvider: cp } = await import("../services/qcoreai/providers");
+    const result = await cp(
+      "openai",
+      [{ role: "user", content: `Generate a concise daily news digest from these articles:\n\n${articlesText}\n\nWrite 2-3 sentences summarizing the most important trends.` }],
+      "gpt-4o-mini",
+      0.4,
+    );
+    return res.json({ digest: result.reply, articlesUsed: selectedArticles.length });
+  } catch {
+    const stub = `Today's highlights: ${selectedArticles.slice(0, 3).map((a) => a.title).join("; ")}. Configure an AI provider for a full digest.`;
+    return res.json({ digest: stub, articlesUsed: selectedArticles.length });
+  }
 });
 
 // ─── POST /api/qnews/ai/summarize ────────────────────────────────────────────

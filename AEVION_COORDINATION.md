@@ -133,31 +133,6 @@ C) [третий вариант]
 
 ---
 
-## 🔴 WIP — ТЕКУЩАЯ АКТИВНАЯ РАБОТА (обновляется каждые 5 минут)
-
-> ⚠️ Перед началом любой задачи — прочитай этот раздел. Если файл/модуль уже в чьём-то WIP — НЕ БЕРИ. Запись протухает через 10 минут — если сессия не обновила WIP, значит она закончила или упала.
-
-| Сессия | Модуль / файл | Что делается | Обновлено |
-|--------|--------------|--------------|-----------|
-| `aevion-core/main` | **QNews** `qnews.ts` + `frontend/src/app/qnews/page.tsx` | Postgres persistence для статей (`ensureQNewsTables`), submit форма, bookmarks, AI digest | 2026-05-12 16:10 |
-| `aevion-core/main` | **QJobs** `qjobs.ts` + `frontend/src/app/qjobs/page.tsx` | Tabs (Все/Сохранённые/AI подбор), stats header, save jobs API | 2026-05-12 16:05 |
-| `aevion-core/main` | **QSocial** `qsocial.ts` + `frontend/src/app/qsocial/page.tsx` | Notifications bell, stats header, улучшенные табы | 2026-05-12 16:05 |
-| `aevion-core/main` | **scripts/** `qai-smoke.js`, `qlearn-smoke.js`, `qmedia-smoke.js` | Расширение smoke тестов (7+ проверок каждый) | 2026-05-12 16:10 |
-
-### Завершённые задачи этой сессии (сегодня, 2026-05-12)
-
-- ✅ Security Tier 3: убрано 273 `details:err.message` утечки из 73 route файлов
-- ✅ Regression test `sharedSecretsHardening.test.ts` — 11/11 pass
-- ✅ Smoke 24/24 PASS, audit 20/20 PASS (Railway prod)
-- ✅ Восстановлены `fintech/page.tsx` + `developers/fintech/page.tsx` (2032 строки)
-- ✅ QJobs prod-ready: rate limits + skills filter (Postgres) + stats + smoke
-- ✅ QNews prod-ready: rate limits + stats + smoke + submit форма + bookmarks + AI digest UI
-- ✅ QSocial prod-ready: rate limits + stats + smoke + notifications
-- ✅ QNews добавлен в projects.ts как проект #30
-- ✅ QJobs/QSocial перемонтированы в QBuild (`/api/build/jobs`, `/api/build/social`)
-
----
-
 ## 📢 BROADCAST 2026-05-12 — приказ от пользователя ВСЕМ открытым сессиям
 
 > Команда напрямую от пользователя ко всем чатам Claude/Cursor в AEVION worktrees, разосланная через этот файл (увидите на ближайшем `git pull`).
@@ -195,46 +170,6 @@ C) [третий вариант]
 **Почему ввели:** 2026-05-12 эта `aevion-core/main` сессия исторически была CyberChess-окном (~5 дней, 83+ коммита). После BROADCAST #1 я прочитал новые границы зон, тихо переключился на fintech и проработал часы, ни разу не сказав пользователю «переключаюсь с шахмат». Доверие подорвано. Не повторять.
 
 **Подтверждение прочтения:** упомяни `BROADCAST-2026-05-12-2-read` в commit body.
-
----
-
-## 📢 BROADCAST 2026-05-12 #4 — единый журнал работы + 5-минутные обновления WIP
-
-Команда от пользователя ВСЕМ открытым сессиям:
-
-**Все сессии, работающие в любой зоне AEVION, ОБЯЗАНЫ записывать свою текущую активность в раздел «Текущая работа (WIP)» этого файла** — в одном месте, чтобы все остальные окна это видели и не дублировали работу.
-
-### Конкретные правила
-
-1. **При начале любой задачи** — добавь строку в WIP-таблицу со столбцами: зона, статус (☑ ЗАНЯТО / 🔄 в процессе / ✅ done), worktree-владелец, краткое описание задачи, timestamp обновления.
-2. **Обновляй timestamp своей строки каждые 5 минут пока работаешь.** Если строка старше 10 минут — другая сессия имеет право считать её устаревшей и взяться за задачу.
-3. **При завершении задачи** — помечай ✅ и переноси в «Недавно сдано» (вверху, последние 10 пунктов).
-4. **При смене задачи** — обновляй СВОЮ строку, не создавай новую дублирующую.
-5. **Любой коммит, который трогает что-то нетривиальное** должен либо включать обновление WIP в том же коммите, либо отдельным микро-коммитом `chore: coord WIP — <worktree>` после.
-
-### Что записывать в WIP
-
-- Файл/директория, которую активно редактируешь
-- 1-2 предложения о цели задачи
-- Если задача займёт > 30 минут — пометь как «🔄 LOCK» — другие сессии не лезут в эту зону пока ты её держишь
-
-### Что НЕ записывать в WIP
-
-- Микро-правки (одна строка, опечатка)
-- Чтение файлов (не edit)
-- Тесты, smoke-проверки
-
-### 5-минутная норма — как соблюдать
-
-- После каждого коммита — обнови свой timestamp в WIP (даже если задача та же)
-- Если ты работаешь долго без коммитов (например исследование) — раз в 5 минут делай микро-коммит `chore: coord WIP — heartbeat <worktree>` ИЛИ просто `git commit --only -- AEVION_COORDINATION.md`
-- Это даёт другим сессиям live-сигнал о твоём прогрессе
-
-### Почему ввели
-
-Параллельные сессии дублировали работу (например `CYBERCHESS_CPI_SPEC.md` и `cpi/page.tsx` aevion-core/main создал, а другая сессия через `git add .` подобрала их в свой qsocial-коммит как будто это её работа). Без живого журнала это будет повторяться. Также — мы тратим время выясняя «кто сейчас что делает» когда могли просто посмотреть в один файл.
-
-**Подтверждение прочтения:** упомяни `BROADCAST-2026-05-12-4-read` в commit body.
 
 ---
 
@@ -389,32 +324,10 @@ C) [третий вариант]
 
 ## Текущая работа (WIP)
 
-> ⏱ **Per BROADCAST #4: обновляется каждые ≤5 минут любой активной сессией.** Строки старше 10 минут считаются stale.
-> Последнее обновление: 2026-05-12 16:15 UTC+5 (aevion-core/main — Stockfish NNUE swap)
-
-| Зона | Статус | Кто | Задача | Обновлено |
-|------|--------|-----|--------|-----------|
-| `frontend/src/app/cyberchess/**` + `/public/stockfish*` | 🔄 LOCK aevion-core/main | aevion-core/main | Stockfish NNUE binary swap + progressive deepening UI. Бэкенд бинарника подменён (SF18 lite NNUE multi-thread), code update pending tests. | 2026-05-12 16:15 UTC+5 |
-| `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |
-| `qcoreai.ts` + `frontend/src/app/qcoreai/**` | ✅ V31-V70 DONE | frontend-qcore | V31-V70 смёрджено. Следующее: collab viewer + share session link | 2026-05-12 11:27 UTC |
-| `devhub.ts` + `frontend/src/app/devhub/**` | ✅ V1-V2 DONE | frontend-qcore | DevHub V2 DONE. Следующее: GitHub OAuth — реальное создание репо | 2026-05-12 11:27 UTC |
-| `qai.ts` + `frontend/src/app/qai/**` | ✅ V1 DONE | frontend-qcore | Chat MVP + streaming + personas. Следующее: markdown рендер + sidebar | 2026-05-12 11:27 UTC |
-| `qmedia.ts` + `frontend/src/app/qmedia/**` | ✅ V1 DONE | frontend-qcore | Треки, видео, плейлисты, AI лирика, radio, smart playlists | 2026-05-12 11:27 UTC |
-| `qstore.ts` + `frontend/src/app/qstore/**` | ✅ V1 DONE | frontend-qcore | Продукты, покупки, отзывы, рейтинги. Следующее: seller dashboard | 2026-05-12 11:27 UTC |
-| `qlearn.ts` + `frontend/src/app/qlearn/**` | ✅ V1 DONE | frontend-qcore | Курсы, уроки, зачисление, квизы, AI генерация. Следующее: сертификаты | 2026-05-12 11:27 UTC |
-| `qsocial.ts` + `frontend/src/app/qsocial/**` | ✅ V1 DONE | frontend-qcore | Посты, лайки, DM, истории, уведомления, хэштеги | 2026-05-12 11:27 UTC |
-| `qnews.ts` + `frontend/src/app/qnews/**` | ✅ V1 DONE | frontend-qcore | Статьи, RSS, AI дайджест, закладки | 2026-05-12 11:27 UTC |
-| `qjobs.ts` + `frontend/src/app/qjobs/**` | ✅ V1 DONE | frontend-qcore | Вакансии, отклики, AI matching, зарплатные данные, save jobs | 2026-05-12 11:27 UTC |
-| `qevents.ts` + `frontend/src/app/qevents/**` | ✅ V1 DONE | frontend-qcore | События, RSVP, календарь, вейтлист, share URL | 2026-05-12 11:27 UTC |
-| `payments.ts` + `frontend/src/app/pricing/**` | ✅ DONE | frontend-qcore | Stripe test + PayBox KZ + Kaspi + pricing page | 2026-05-12 11:27 UTC |
-
-### Следующие задачи (очередь frontend-qcore)
-
-1. `qcoreai.ts` — collab viewer (POST /sessions/:id/collab, share link)
-2. `devhub.ts` — GitHub OAuth (реальное создание репо через API)
-3. `frontend/src/app/qai/page.tsx` — markdown рендер + sidebar история
-4. `qstore.ts` — dashboard продавца + публичный профиль
-5. `qlearn.ts` — сертификат при завершении курса
+| Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
+|------|---------|-----------------|----------------------|----------------|
+| `frontend/src/app/smeta-trainer/drawings-practice/**` | ☑ | aevion-smeta-trainer (расширенная автоном. сессия, обновлено 2026-05-12 ~10:55 UTC) | **Батч 24 закоммичен** (HVAC: кондиц./дымоудаление/холодильное), готовлю PR. **Батч 25** (водоснаб.: скважины/ГНС давления/водоподготовка) — 3 модуля созданы, ждут коммита. Хаб 87→90 модулей. Следующие батчи 26 (связь/ВОЛС/ГРП). | self |
+| `qcoreai/**`, `devhub/**`, `qai/**`, `qmedia/**`, `qstore/**`, `qlearn/**`, `qsocial/**`, `qnews/**`, `qjobs/**`, `qevents/**` | ☑ | frontend-qcore chat | QCoreAI V31-V70 + DevHub V1-V2 + новые модули (QMedia/QAI/QStore/QLearn/QSocial/QNews/QJobs/QEvents) | self — НЕ трогаем smeta-trainer, fintech, bureau, qright, veilnetx, z-tide |
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 
@@ -424,6 +337,11 @@ C) [третий вариант]
 
 ## Недавно сдано (кратко, последние 5 пунктов)
 
+- 2026-05-12 ~10:47 UTC — PR #240 merged: батч 23 электроснабжение (внешн./внутр./заземление+МЗ), хаб 84
+- 2026-05-12 ~09:55 UTC — PR #239 merged: батч 22 (КНС/ливневая/жироуловители), хаб 81
+- 2026-05-12 ~09:00 UTC — PR #238 merged: батч 21 (ИТП/котельные/ВПВ)
+- 2026-05-12 ~08:30 UTC — PR #237 merged: батч 20 (программы/бюджет/Excel шаблоны)
+- 2026-05-12 ~08:00 UTC — PR #236 merged: батч 19 (внутр. отопление/канал./водоснаб.)
 - *(добавляйте сверху; старое удаляйте)*
 
 ---

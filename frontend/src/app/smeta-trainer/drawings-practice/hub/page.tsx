@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { loadDrawingsProgress } from "../../lib/useDrawingsProgress";
 
-type Category = "theory" | "earth" | "structure" | "finishing" | "utilities" | "special" | "process" | "practice";
+type Category = "theory" | "earth" | "structure" | "finishing" | "utilities" | "special" | "process" | "practice" | "tools";
 
 interface Module {
   id: string;
@@ -64,6 +64,11 @@ const MODULES: Module[] = [
   { id: "advanced",       category: "practice", href: "/smeta-trainer/drawings-practice/advanced",       icon: "📐", title: "Сложные объёмы",                    subtitle: "Кровля с уклоном, фасад, лестничный марш",                   level: "L4", exercises: 3,  color: "indigo"  },
   { id: "errors",         category: "practice", href: "/smeta-trainer/drawings-practice/errors",         icon: "🔍", title: "Найди ошибку в ВОР",                subtitle: "3 сценария с неверными расчётами",                            level: "L5", exercises: 3,  color: "red"     },
   { id: "case-school47",  category: "practice", href: "/smeta-trainer/drawings-practice/case-school47",  icon: "🎓", title: "КЕЙС: Школа №47",                   subtitle: "Сквозной кейс — пристройка 600 м², 8 этапов от котлована",   level: "L5", exercises: 8,  color: "amber"   },
+
+  // ── Инструменты (применяются после подсчёта объёмов) ──
+  { id: "cost-engine",    category: "tools",    href: "/smeta-trainer/drawings-practice/cost-engine",    icon: "💰", title: "Калькулятор стоимости",             subtitle: "ЭСН × Кр × Кз × индекс ССЦ + НР + СП = итог в тг",            level: "L3", exercises: 0,  color: "emerald" },
+  { id: "forms-acts",     category: "tools",    href: "/smeta-trainer/drawings-practice/forms-acts",     icon: "📑", title: "Формы КС-2, КС-3, Ф-3",             subtitle: "Заполняемые формы с готовой к печати версией",               level: "L3", exercises: 0,  color: "blue"    },
+  { id: "pos-ppr",        category: "process",  href: "/smeta-trainer/drawings-practice/pos-ppr",        icon: "📋", title: "ПОС и ППР",                         subtitle: "Проект организации стр-ва и производства работ — состав",     level: "L4", exercises: 0,  color: "indigo"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [
@@ -73,8 +78,9 @@ const CATEGORIES: { id: Category; icon: string; title: string; description: stri
   { id: "finishing", icon: "🖌", title: "Отделка и фасады",     description: "Внутренняя и фасадные системы" },
   { id: "utilities", icon: "🔌", title: "Инженерные сети",      description: "Канализация, вода, тепло, газ, кабель, вентиляция" },
   { id: "special",   icon: "🛠", title: "Специальные работы",   description: "Дороги, благоустройство, демонтаж, реконструкция" },
-  { id: "process",   icon: "📋", title: "Производство работ",   description: "Приёмка, охрана труда, зимние удорожания" },
+  { id: "process",   icon: "📋", title: "Производство работ",   description: "Приёмка, охрана труда, зимние удорожания, ПОС/ППР" },
   { id: "practice",  icon: "🎯", title: "Практика и кейсы",     description: "Самостоятельные задания и капстоун-проекты" },
+  { id: "tools",     icon: "🧰", title: "Инструменты сметчика", description: "Калькуляторы и генераторы форм" },
 ];
 
 const LEVEL_COLORS: Record<string, string> = {

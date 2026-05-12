@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import FintechLiveStats from "@/components/fintech/FintechLiveStats";
 import FintechHealthBadge from "@/components/fintech/FintechHealthBadge";
 import FintechModuleCard from "@/components/fintech/FintechModuleCard";
+import FintechFooter from "@/components/fintech/FintechFooter";
 import Link from "next/link";
 
 // Zone: aevion-core/main owns frontend/src/app/fintech/**
@@ -126,16 +127,7 @@ export default function FintechDashboardPage() {
           </div>
         </section>
 
-        {/* Footer links */}
-        <section style={{ marginTop: 40, padding: "20px 24px", background: "#1e293b", borderRadius: 12, border: "1px solid #334155" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", marginBottom: 10 }}>Developer resources</div>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <Link href="/developers/fintech" style={{ color: "#a78bfa", fontSize: 13, textDecoration: "none" }}>📘 API Reference</Link>
-            <Link href="/developers/fintech/quickstart" style={{ color: "#a78bfa", fontSize: 13, textDecoration: "none" }}>⚡ Quickstart (6 curl)</Link>
-            <Link href="/fintech/status" style={{ color: "#a78bfa", fontSize: 13, textDecoration: "none" }}>📊 Status Page</Link>
-            <Link href="/fintech" style={{ color: "#a78bfa", fontSize: 13, textDecoration: "none" }}>🌐 Ecosystem Overview</Link>
-          </div>
-        </section>
+        <FintechFooter hideHealthBadge />
       </div>
     </main>
   );

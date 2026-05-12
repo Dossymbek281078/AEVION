@@ -137,6 +137,24 @@ async function get(path, expectJson = true) {
     assert(r.status === 404, `expected 404, got ${r.status}`);
   });
 
+  await step("GET /api/aevion/badges/:id.svg returns SVG badge", async () => {
+    const r = await fetch(`${BASE}/api/aevion/badges/qpersona.svg`);
+    assert(r.ok, `HTTP ${r.status}`);
+    const ct = r.headers.get("content-type") || "";
+    assert(ct.includes("image/svg+xml"), `content-type wrong: '${ct}'`);
+    const text = await r.text();
+    assert(text.includes("<svg"), "body not SVG");
+    assert(text.includes("AEVION"), "label missing");
+    assert(text.toLowerCase().includes("qpersona") || text.toLowerCase().includes("QPERSONA".toLowerCase()), "module ref missing");
+  });
+
+  await step("GET /api/aevion/badges/:id.svg returns 404 SVG for unknown", async () => {
+    const r = await fetch(`${BASE}/api/aevion/badges/not-a-real-module.svg`);
+    assert(r.status === 404, `expected 404, got ${r.status}`);
+    const text = await r.text();
+    assert(text.includes("<svg"), "404 response must still be SVG");
+  });
+
   await step("GET /api/aevion/registry-stats returns byStatus/byKind/byTag", async () => {
     const j = await get("/api/aevion/registry-stats");
     assert(typeof j.total === "number" && j.total >= 10, `total=${j.total}, expected ≥10`);

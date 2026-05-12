@@ -29,6 +29,65 @@ type Catalog = {
   generatedAt: string;
 };
 
+type RegistryStats = {
+  total: number;
+  byStatus: Record<string, number>;
+  byKind: Record<string, number>;
+  byTag: { tag: string; count: number }[];
+};
+
+function TaxonomyBar({ onTagClick }: { onTagClick: (t: string) => void }) {
+  const [stats, setStats] = useState<RegistryStats | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/aevion/registry-stats"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: RegistryStats | null) => !cancelled && d && setStats(d))
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (!stats) return null;
+  const statusEntries = Object.entries(stats.byStatus).sort((a, b) => b[1] - a[1]);
+  const kindEntries = Object.entries(stats.byKind).sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-xs uppercase tracking-wider text-slate-500">All modules:</span>
+        <span className="text-2xl font-black text-white">{stats.total}</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-slate-500 self-center mr-1">By status:</span>
+        {statusEntries.map(([k, n]) => (
+          <span key={k} className="text-[11px] bg-slate-950 border border-slate-800 px-2 py-0.5 rounded font-mono text-slate-300">
+            {k}: <span className="text-white font-semibold">{n}</span>
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-slate-500 self-center mr-1">By kind:</span>
+        {kindEntries.map(([k, n]) => (
+          <span key={k} className="text-[11px] bg-slate-950 border border-slate-800 px-2 py-0.5 rounded font-mono text-slate-300">
+            {k}: <span className="text-white font-semibold">{n}</span>
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-slate-500 self-center mr-1">Top tags:</span>
+        {stats.byTag.slice(0, 12).map((t) => (
+          <button
+            key={t.tag}
+            type="button"
+            onClick={() => onTagClick(t.tag)}
+            className="text-[11px] bg-slate-950 border border-slate-800 hover:border-cyan-700 px-2 py-0.5 rounded font-mono text-slate-300 hover:text-cyan-300"
+          >
+            {t.tag} <span className="text-slate-600">·{t.count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const STATUS_FILTERS = ["", "mvp", "working", "in_progress", "planning", "research", "idea"];
 const KIND_FILTERS = ["", "product", "service", "experiment", "infrastructure"];
 
@@ -215,6 +274,8 @@ export default function FintechCatalogPage() {
             модуль — со ссылкой на frontend, OpenAPI spec, health-probe, status URL и связанными модулями (по tag overlap).
           </p>
         </div>
+
+        <TaxonomyBar onTagClick={(t) => setFilterTag(t)} />
 
         <div className="flex flex-wrap gap-3 items-end bg-slate-900 border border-slate-800 rounded-xl p-4">
           <label className="block text-sm flex-1 min-w-[180px]">

@@ -495,6 +495,72 @@ aevionHubRouter.get("/registry-stats", (_req, res) => {
   });
 });
 
+/**
+ * GET /api/aevion/badges/:moduleId.svg — shields.io-style status badge.
+ *
+ * Drop into README/docs:
+ *   ![AEVION QPersona](https://api.aevion.app/api/aevion/badges/qpersona.svg)
+ *
+ * Status-aware colors: mvp/launched=green, in_progress=amber, planning=blue,
+ * research=violet, idea=gray.
+ */
+aevionHubRouter.get("/badges/:moduleId.svg", (req, res) => {
+  const id = String(req.params.moduleId || "").trim().toLowerCase();
+  const p = projects.find((proj) => String(proj.id).toLowerCase() === id);
+
+  const STATUS_COLORS: Record<string, string> = {
+    mvp: "#10b981",
+    launched: "#10b981",
+    working: "#10b981",
+    in_progress: "#f59e0b",
+    planning: "#3b82f6",
+    research: "#8b5cf6",
+    idea: "#64748b",
+    unknown: "#64748b",
+  };
+
+  const label = "AEVION";
+  const status = p ? String(p.status || "unknown") : "not-found";
+  const value = p ? `${p.code || p.id} · ${status}` : "module not found";
+  const color = STATUS_COLORS[status] ?? "#64748b";
+
+  // ~6.5px per char heuristic for shields.io look-alike width
+  const charW = 6.5;
+  const padX = 8;
+  const labelW = Math.ceil(label.length * charW + padX * 2);
+  const valueW = Math.ceil(value.length * charW + padX * 2);
+  const totalW = labelW + valueW;
+  const h = 20;
+
+  function esc(s: string): string {
+    return s.replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!,
+    );
+  }
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${h}" role="img" aria-label="${esc(label)}: ${esc(value)}">
+  <linearGradient id="g" x2="0" y2="100%">
+    <stop offset="0" stop-color="#fff" stop-opacity=".15"/>
+    <stop offset="1" stop-opacity=".15"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="${totalW}" height="${h}" rx="3"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="${labelW}" height="${h}" fill="#0f172a"/>
+    <rect x="${labelW}" width="${valueW}" height="${h}" fill="${color}"/>
+    <rect width="${totalW}" height="${h}" fill="url(#g)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,sans-serif" font-size="11">
+    <text x="${labelW / 2}" y="14">${esc(label)}</text>
+    <text x="${labelW + valueW / 2}" y="14">${esc(value)}</text>
+  </g>
+</svg>`;
+
+  res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.status(p ? 200 : 404).send(svg);
+});
+
 aevionHubRouter.get("/version", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({

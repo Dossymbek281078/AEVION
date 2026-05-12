@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * fintech-all-smoke.js — consolidated smoke test for all 6 AEVION fintech modules.
  * Usage: BASE=https://api.aevion.app node scripts/fintech-all-smoke.js

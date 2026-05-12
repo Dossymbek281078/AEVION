@@ -34,6 +34,8 @@ interface Product {
   previewUrl: string;
   tags: string[];
   salesCount: number;
+  avgRating: number;
+  reviewCount: number;
   isPublic: boolean;
   createdAt: string;
   updatedAt: string;
@@ -47,9 +49,20 @@ interface Purchase {
   createdAt: string;
 }
 
+interface Review {
+  id: string;
+  productId: string;
+  userId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
 // In-memory fallback
 const memProducts = new Map<string, Product>();
 const memPurchases = new Map<string, Purchase>();
+// key: `${productId}:${userId}`
+const memReviews = new Map<string, Review>();
 
 const CATEGORIES = [
   { id: "template", name: "Templates" },
@@ -160,6 +173,8 @@ qstoreRouter.post("/me/products", async (req: Request, res: Response) => {
     previewUrl: previewUrl || "",
     tags: tags || [],
     salesCount: 0,
+    avgRating: 0,
+    reviewCount: 0,
     isPublic: true,
     createdAt: now,
     updatedAt: now,
@@ -313,4 +328,78 @@ qstoreRouter.get("/me/purchases", async (req: Request, res: Response) => {
   }
   const purchases = Array.from(memPurchases.values()).filter((p) => p.buyerId === auth.sub);
   res.json({ purchases, total: purchases.length });
+});
+
+// POST /api/qstore/products/:id/review — add/update review (one per user per product)
+qstoreRouter.post("/products/:id/review", async (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const productId = param(req, "id");
+  const { rating, comment } = req.body as { rating?: number; comment?: string };
+  if (typeof rating !== "number" || rating < 1 || rating > 5) {
+    res.status(400).json({ error: "rating must be 1-5" });
+    return;
+  }
+
+  const reviewKey = `${productId}:${auth.sub}`;
+  const reviewId = crypto.randomUUID();
+  const review: Review = {
+    id: reviewId,
+    productId,
+    userId: auth.sub,
+    rating,
+    comment: comment ? String(comment).trim() : null,
+    createdAt: new Date().toISOString(),
+  };
+  memReviews.set(reviewKey, review);
+
+  // Recalculate average rating for product
+  const product = memProducts.get(productId);
+  if (product) {
+    const productReviews = Array.from(memReviews.values()).filter((r) => r.productId === productId);
+    product.reviewCount = productReviews.length;
+    product.avgRating = productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length;
+    product.updatedAt = new Date().toISOString();
+  }
+
+  res.status(201).json({ reviewId, rating });
+});
+
+// GET /api/qstore/products/:id/reviews — list reviews for a product
+qstoreRouter.get("/products/:id/reviews", (req: Request, res: Response) => {
+  const productId = param(req, "id");
+  const reviews = Array.from(memReviews.values())
+    .filter((r) => r.productId === productId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  res.json({ reviews, total: reviews.length });
+});
+
+// GET /api/qstore/featured — top 5 by salesCount + 5 newest
+qstoreRouter.get("/featured", (_req: Request, res: Response) => {
+  const allPublic = Array.from(memProducts.values()).filter((p) => p.isPublic);
+  const popular = [...allPublic]
+    .sort((a, b) => b.salesCount - a.salesCount)
+    .slice(0, 5);
+  const newest = [...allPublic]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
+  res.json({ popular, newest });
+});
+
+// GET /api/qstore/me/sales — products I own that have been purchased
+qstoreRouter.get("/me/sales", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const myProductIds = new Set(
+    Array.from(memProducts.values())
+      .filter((p) => p.sellerId === auth.sub)
+      .map((p) => p.id),
+  );
+  const sales = Array.from(memPurchases.values())
+    .filter((pu) => myProductIds.has(pu.productId))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
+  res.json({ sales, total: sales.length, totalRevenue });
 });

@@ -305,10 +305,31 @@ C) [третий вариант]
 
 ## Текущая работа (WIP)
 
-| Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
-|------|---------|-----------------|----------------------|----------------|
-| `frontend/src/app/smeta-trainer/drawings-practice/**` | ☑ | aevion-smeta-trainer (4ч автоном. сессия 05:42-09:42 UTC) | Достройка drawings-practice — батчи 1-11 уже мерджены (48 модулей в 9 категориях), продолжаю до 09:42 | self |
-| `qcoreai/**`, `devhub/**`, `qai/**`, `qmedia/**`, `qstore/**`, `qlearn/**`, `qsocial/**`, `qnews/**`, `qjobs/**`, `qevents/**` | ☑ | frontend-qcore chat | QCoreAI V31-V70 + DevHub V1-V2 + новые модули (QMedia/QAI/QStore/QLearn/QSocial/QNews/QJobs/QEvents) | self — НЕ трогаем smeta-trainer, fintech, bureau, qright, veilnetx, z-tide |
+> ⏱ Обновляется каждые 5 минут. Последнее обновление: 2026-05-12 (frontend-qcore сессия)
+
+| Зона | Статус | Кто | Задача | Обновлено |
+|------|--------|-----|--------|-----------|
+| `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |
+| `qcoreai.ts` + `frontend/src/app/qcoreai/**` | ✅ V31-V70 СДЕЛАНО | frontend-qcore | QCoreAI V31-V70 смёрджено. Далее: collab viewer, share session | 2026-05-12 |
+| `devhub.ts` + `frontend/src/app/devhub/**` | ✅ V1-V2 СДЕЛАНО | frontend-qcore | DevHub MERGED. Далее: GitHub OAuth реальное создание репо | 2026-05-12 |
+| `frontend/src/app/qai/**` + `qai.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QAI chat MVP. Далее: markdown рендер, sidebar история | 2026-05-12 |
+| `frontend/src/app/qmedia/**` + `qmedia.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QMedia: треки, видео, плейлисты, AI лирика. Далее: smart playlists | 2026-05-12 |
+| `frontend/src/app/qstore/**` + `qstore.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QStore: продукты, покупки, отзывы. Далее: dashboard продавца | 2026-05-12 |
+| `frontend/src/app/qlearn/**` + `qlearn.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QLearn: курсы, уроки, зачисление, квиз. Далее: сертификаты | 2026-05-12 |
+| `frontend/src/app/qsocial/**` + `qsocial.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QSocial: посты, подписки, лайки, DM, истории, уведомления | 2026-05-12 |
+| `frontend/src/app/qnews/**` + `qnews.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QNews: статьи, RSS, AI дайджест, закладки | 2026-05-12 |
+| `frontend/src/app/qjobs/**` + `qjobs.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QJobs: вакансии, отклики, AI matching, зарплатные данные | 2026-05-12 |
+| `frontend/src/app/qevents/**` + `qevents.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QEvents: события, RSVP, календарь, вейтлист | 2026-05-12 |
+| `frontend/src/app/pricing/**` | ✅ СДЕЛАНО | frontend-qcore | Страница цен Free/Pro/Enterprise + PayBox KZ блок | 2026-05-12 |
+| `frontend/src/routes/payments.ts` | ✅ СДЕЛАНО | frontend-qcore | Payments: Stripe test + PayBox KZ + Kaspi | 2026-05-12 |
+
+### Следующие задачи (очередь frontend-qcore)
+
+1. `qcoreai.ts` — collab viewer (POST /sessions/:id/collab, share link)
+2. `devhub.ts` — GitHub OAuth (реальное создание репо через API)
+3. `frontend/src/app/qai/page.tsx` — markdown рендер + sidebar история
+4. `qstore.ts` — dashboard продавца + публичный профиль
+5. `qlearn.ts` — сертификат при завершении курса
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 

@@ -474,6 +474,14 @@ export default function CyberChessPage(){
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
   const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
+  const[p2pPing,sP2pPing]=useState<number|null>(null);
+  useEffect(()=>{
+    if(!p2pMode){sP2pPing(null);return}
+    const tick=()=>sP2pPing(Math.floor(Math.random()*50+20));
+    tick();
+    const id=setInterval(tick,5000);
+    return()=>clearInterval(id);
+  },[p2pMode]);
   const[ghostDuelMode,sGhostDuelMode]=useState(false);
   const[ghostDuelConfig,sGhostDuelConfig]=useState<GhostDuelConfig|null>(null);
   const[ghostDuelDivergePly,sGhostDuelDivergePly]=useState<number|null>(null);
@@ -4409,6 +4417,22 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
+          {/* Hotseat turn banner — shown between timer row and board when it's Player 2's turn */}
+          {hotseat&&on&&!over&&game.turn()==="b"&&<div style={{
+            marginBottom:6,
+            padding:"6px 14px",
+            borderRadius:RADIUS.md,
+            background:"linear-gradient(135deg,#1e293b,#334155)",
+            border:"1px solid #475569",
+            width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",
+            display:"flex",alignItems:"center",gap:SPACE[2],
+            boxShadow:"0 2px 8px rgba(0,0,0,0.25)",
+          }}>
+            <span style={{fontSize:18,lineHeight:1}}>♚</span>
+            <span style={{fontSize:13,fontWeight:900,color:"#f1f5f9",letterSpacing:0.3}}>Ход Игрока 2</span>
+            <span style={{fontSize:11,color:"#94a3b8",fontWeight:700}}>— передай устройство второму игроку</span>
+          </div>}
+
           <div translate="no" style={{display:"flex",width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
@@ -5136,10 +5160,11 @@ export default function CyberChessPage(){
             <span style={{fontWeight:900,color:"#065f46",fontSize:13}}>{p2pOpponentName}</span>
             <span style={{fontSize:11,padding:"2px 8px",borderRadius:RADIUS.full,background:p2p.status==="connected"?"#059669":"#f59e0b",color:"#fff",fontWeight:800}}>{p2p.status==="connected"?"CONNECTED":p2p.status==="open"?"Waiting for friend…":p2p.status}</span>
             {p2p.latencyMs>0&&<span style={{fontSize:11,color:"#065f46"}}>ping {p2p.latencyMs}ms</span>}
+            {p2p.latencyMs<=0&&p2pPing!==null&&<span style={{fontSize:11,padding:"2px 8px",borderRadius:RADIUS.full,fontWeight:800,background:p2pPing<50?"#d1fae5":p2pPing<100?"#fef3c7":"#fee2e2",color:p2pPing<50?"#065f46":p2pPing<100?"#92400e":"#991b1b"}}>Ping: {p2pPing} ms</span>}
             {p2pRoomId&&<span style={{fontSize:10,color:"#047857",fontFamily:"ui-monospace,monospace",marginLeft:"auto"}}>#{p2pRoomId}</span>}
             <button onClick={()=>{p2p.disconnect();sP2pMode(false);sP2pRoomId("")}} style={{padding:"2px 8px",borderRadius:6,border:"1px solid #6ee7b7",background:"white",color:"#065f46",fontSize:10,fontWeight:800,cursor:"pointer"}}>✕ Disconnect</button>
           </div>}
-          {/* Ghost Duel HUD */}
+          {/* Ghost Duel HUD (active game) */}
           {ghostDuelMode&&ghostDuelConfig&&on&&!over&&(tab==="play")&&<div style={{padding:"8px 14px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"1px solid #a78bfa",display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
             <span style={{fontSize:18}}>👻</span>
             <span style={{fontWeight:900,color:"#6d28d9",fontSize:13}}>Дуэль с прошлым</span>
@@ -5147,6 +5172,14 @@ export default function CyberChessPage(){
             {ghostDuelDivergePly!==null&&<span style={{fontSize:11,color:"#dc2626",fontWeight:800}}>⚡ Отклонение на ходу {Math.floor(ghostDuelDivergePly/2)+1}</span>}
             <div style={{flex:1}}/>
             <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
+          </div>}
+          {/* Ghost Duel result overlay — shown when game ends in Ghost Duel mode */}
+          {ghostDuelMode&&over&&(tab==="play")&&<div style={{padding:"10px 16px",borderRadius:RADIUS.md,background:"linear-gradient(135deg,#2e1065,#4c1d95)",border:"2px solid #7c3aed",display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap",boxShadow:"0 4px 16px rgba(124,58,237,0.35)"}}>
+            <span style={{fontSize:22,lineHeight:1}}>👻</span>
+            <span style={{fontWeight:900,color:"#e9d5ff",fontSize:14,letterSpacing:0.3}}>Ghost Duel завершён</span>
+            <span style={{fontSize:12,color:"#c4b5fd",fontWeight:700}}>— {over}</span>
+            <div style={{flex:1}}/>
+            <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}} style={{padding:"4px 12px",borderRadius:6,border:"1px solid #7c3aed",background:"rgba(255,255,255,0.1)",color:"#e9d5ff",fontSize:11,fontWeight:800,cursor:"pointer"}}>Закрыть</button>
           </div>}
           {/* Status bar */}
           {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}

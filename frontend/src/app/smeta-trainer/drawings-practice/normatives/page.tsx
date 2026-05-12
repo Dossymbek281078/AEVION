@@ -14,7 +14,7 @@ import { useState } from "react";
  */
 
 type Section = "soils" | "slopes" | "loosen" | "trenches" | "workspace" | "rates"
-             | "concrete" | "masonry" | "roofing" | "finishing-norms";
+             | "concrete" | "masonry" | "roofing" | "finishing-norms" | "engineering";
 
 const SECTIONS: { id: Section; icon: string; title: string; normRef: string }[] = [
   { id: "soils",          icon: "🪨", title: "Грунты I-IV кат.",             normRef: "ЭСН РК Сб.1, ГОСТ 25100" },
@@ -27,6 +27,7 @@ const SECTIONS: { id: Section; icon: string; title: string; normRef: string }[] 
   { id: "masonry",        icon: "🧱", title: "Каменные работы",              normRef: "ЭСН РК Сб.8; ГОСТ 530" },
   { id: "roofing",        icon: "🏠", title: "Кровельные работы",            normRef: "ЭСН РК Сб.12; СНиП РК 2.04-01" },
   { id: "finishing-norms",icon: "🎨", title: "Отделка — нормы расхода",     normRef: "ЭСН РК Сб.15; ССЦ РК 8.04-08-2025" },
+  { id: "engineering",    icon: "🔧", title: "Инженерные сети",              normRef: "СНиП РК 4.01-41 · СП РК 4.02-42 · ПУЭ 7" },
 ];
 
 // ── Данные нормативов ────────────────────────────────────────────────────────
@@ -789,6 +790,180 @@ export default function NormativesPage() {
               <div className="font-mono bg-slate-50 dark:bg-slate-800 rounded p-2 text-[11px]">
                 Расход плитки 300×300: 1/0.09 = 11.11 шт/м² × 1.10 (отходы) = <span className="font-bold">12.2 шт/м²</span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Инженерные сети — детальные нормативы ──────────────────────── */}
+        {activeSection === "engineering" && (
+          <div className="space-y-4">
+            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg p-3 text-xs text-purple-800 dark:text-purple-300">
+              🔧 <strong>Три типа наружных сетей</strong> с разными нормативными требованиями:
+              канализация (СНиП РК 4.01-41), теплосети (СП РК 4.02-42), кабельные трассы (ПУЭ 7-е изд.).
+              Каждый тип — своя глубина, своя ширина траншеи, свой набор расценок.
+            </div>
+
+            {/* Канализация */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-blue-200 dark:border-blue-700 pb-2">
+                <span className="text-2xl">🚰</span>
+                <h2 className="text-sm font-bold text-blue-900 dark:text-blue-300">Канализация — наружные сети</h2>
+                <span className="text-[10px] text-slate-500 ml-auto font-mono">СНиП РК 4.01-41-2006</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-blue-50 dark:bg-blue-900/30">
+                  <th className="border border-blue-200 dark:border-blue-700 px-2 py-1.5 text-left">Параметр</th>
+                  <th className="border border-blue-200 dark:border-blue-700 px-2 py-1.5 text-center">Значение</th>
+                  <th className="border border-blue-200 dark:border-blue-700 px-2 py-1.5 text-left">Норматив</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Минимальный уклон Ø150", "i = 0.008 (8‰)", "СНиП РК 4.01-41 п. 4.18"],
+                    ["Минимальный уклон Ø200", "i = 0.005 (5‰)", "СНиП РК 4.01-41 п. 4.18"],
+                    ["Минимальный уклон Ø300", "i = 0.003 (3‰)", "СНиП РК 4.01-41 п. 4.18"],
+                    ["Глубина заложения", "≥ hпром + 0.3 м", "СНиП РК 4.01-41 п. 4.8"],
+                    ["Колодцы — расстояние Ø150", "≤ 35 м", "СНиП РК 4.01-41 п. 4.30"],
+                    ["Колодцы — расстояние Ø200-450", "≤ 50 м", "СНиП РК 4.01-41 п. 4.30"],
+                    ["Колодец стандартный КК", "Ø1000 (серия 3.900.1-14)", "ГОСТ 8020-90"],
+                    ["Песчаное основание", "100-150 мм", "СНиП РК 3.05.04-2002 п. 5.7"],
+                    ["Засыпка пазух — материал", "Песок, выше трубы +300 мм", "СНиП РК 3.05.04 п. 5.16"],
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10">
+                      <td className="border border-blue-100 dark:border-blue-800 px-2 py-1.5 font-medium">{row[0]}</td>
+                      <td className="border border-blue-100 dark:border-blue-800 px-2 py-1.5 text-center font-mono text-blue-700 dark:text-blue-300 font-bold">{row[1]}</td>
+                      <td className="border border-blue-100 dark:border-blue-800 px-2 py-1.5 text-[10px] text-slate-500">{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] bg-blue-50 dark:bg-blue-900/20 rounded p-2 font-mono text-blue-800 dark:text-blue-300">
+                <strong>Расценки ЭСН:</strong> Сб.22-01-001 (укладка ПВХ), Сб.22-03-002 (колодец КК-1000),
+                Сб.1-01-013 (разработка экскаватором), Сб.1-02-005 (засыпка вручную)
+              </div>
+              <Link href="/smeta-trainer/drawings-practice/sewage"
+                className="inline-block text-[11px] px-3 py-1.5 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-700">
+                🚰 К чертежу и упражнениям →
+              </Link>
+            </div>
+
+            {/* Теплосети */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-orange-200 dark:border-orange-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-orange-200 dark:border-orange-700 pb-2">
+                <span className="text-2xl">♨️</span>
+                <h2 className="text-sm font-bold text-orange-900 dark:text-orange-300">Тепловые сети — двухтрубная прокладка</h2>
+                <span className="text-[10px] text-slate-500 ml-auto font-mono">СП РК 4.02-42-2006</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-orange-50 dark:bg-orange-900/30">
+                  <th className="border border-orange-200 dark:border-orange-700 px-2 py-1.5 text-left">Параметр</th>
+                  <th className="border border-orange-200 dark:border-orange-700 px-2 py-1.5 text-center">Значение</th>
+                  <th className="border border-orange-200 dark:border-orange-700 px-2 py-1.5 text-left">Норматив</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Глубина заложения (бесканальная)", "≥ 0.7 м до верха изоляции", "СП РК 4.02-42 п. 9.4"],
+                    ["Глубина заложения (канальная)", "≥ 0.5 м до верха канала", "СП РК 4.02-42 п. 9.4"],
+                    ["Расстояние между трубами в свету", "≥ 100 мм (по изоляции)", "СП РК 4.02-42 п. 9.7"],
+                    ["Изоляция Ø108 (Т=95°C)", "Минвата 60 мм + покровный слой", "СП РК 2.04-104-2012"],
+                    ["Изоляция Ø159 (Т=95°C)", "Минвата 70 мм + покровный слой", "СП РК 2.04-104-2012"],
+                    ["Опоры скользящие Ø108", "Через 6 м", "Серия 4.903-10"],
+                    ["Опоры скользящие Ø159", "Через 7 м", "Серия 4.903-10"],
+                    ["Компенсаторы П-образные", "При L > 50 м", "СП РК 4.02-42 п. 8.16"],
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-orange-50/50 dark:hover:bg-orange-900/10">
+                      <td className="border border-orange-100 dark:border-orange-800 px-2 py-1.5 font-medium">{row[0]}</td>
+                      <td className="border border-orange-100 dark:border-orange-800 px-2 py-1.5 text-center font-mono text-orange-700 dark:text-orange-300 font-bold">{row[1]}</td>
+                      <td className="border border-orange-100 dark:border-orange-800 px-2 py-1.5 text-[10px] text-slate-500">{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] bg-orange-50 dark:bg-orange-900/20 rounded p-2 font-mono text-orange-800 dark:text-orange-300">
+                <strong>Расценки ЭСН:</strong> Сб.24-02-001 (прокладка стальных труб),
+                Сб.26-01-027 (изоляция минватой 60 мм), Сб.26-02-005 (покровный слой ПЭ)
+              </div>
+              <div className="text-[10px] bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded p-2 text-amber-800 dark:text-amber-300">
+                ⚡ Площадь изоляции = π·(D + 2t)·L, где D — Ø трубы, t — толщина изоляции, L — длина.
+                Для Ø108 + 60 мм: π·(0.108 + 0.12) = π·0.228 = 0.716 м²/м.п.
+              </div>
+              <Link href="/smeta-trainer/drawings-practice/heating"
+                className="inline-block text-[11px] px-3 py-1.5 bg-orange-600 text-white rounded-full font-semibold hover:bg-orange-700">
+                ♨️ К чертежу и упражнениям →
+              </Link>
+            </div>
+
+            {/* Кабельные трассы */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-violet-200 dark:border-violet-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-violet-200 dark:border-violet-700 pb-2">
+                <span className="text-2xl">⚡</span>
+                <h2 className="text-sm font-bold text-violet-900 dark:text-violet-300">Кабельные трассы — силовые и слаботочные</h2>
+                <span className="text-[10px] text-slate-500 ml-auto font-mono">ПУЭ 7-е изд., гл. 2.3</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-violet-50 dark:bg-violet-900/30">
+                  <th className="border border-violet-200 dark:border-violet-700 px-2 py-1.5 text-left">Параметр</th>
+                  <th className="border border-violet-200 dark:border-violet-700 px-2 py-1.5 text-center">Значение</th>
+                  <th className="border border-violet-200 dark:border-violet-700 px-2 py-1.5 text-left">Норматив</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Глубина для U ≤ 35 кВ", "≥ 0.7 м", "ПУЭ п. 2.3.84"],
+                    ["Глубина для U ≤ 1 кВ (без проезда)", "≥ 0.5 м", "ПУЭ п. 2.3.84"],
+                    ["Расстояние между силовыми кабелями", "≥ 100 мм", "ПУЭ п. 2.3.86"],
+                    ["Песчаная постель снизу", "100 мм", "ПУЭ п. 2.3.83"],
+                    ["Песчаная подсыпка над кабелем", "100 мм", "ПУЭ п. 2.3.83"],
+                    ["Защита (для U > 1 кВ)", "Кирпич глиняный (НЕ силикатный)", "ПУЭ п. 2.3.83"],
+                    ["Защита (для U ≤ 1 кВ)", "Сигнальная лента ЛСО-450", "ПУЭ п. 2.3.83"],
+                    ["Сигнальная лента — глубина", "На 250 мм выше кабеля", "ПУЭ п. 2.3.83"],
+                    ["Запас на «змейку»", "1-3% к длине трассы", "ПУЭ п. 2.3.83"],
+                    ["Соединительные муфты — расстояние", "≥ 250 мм друг от друга", "ПУЭ п. 2.3.51"],
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-violet-50/50 dark:hover:bg-violet-900/10">
+                      <td className="border border-violet-100 dark:border-violet-800 px-2 py-1.5 font-medium">{row[0]}</td>
+                      <td className="border border-violet-100 dark:border-violet-800 px-2 py-1.5 text-center font-mono text-violet-700 dark:text-violet-300 font-bold">{row[1]}</td>
+                      <td className="border border-violet-100 dark:border-violet-800 px-2 py-1.5 text-[10px] text-slate-500">{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] bg-violet-50 dark:bg-violet-900/20 rounded p-2 font-mono text-violet-800 dark:text-violet-300">
+                <strong>Расценки ЭСН:</strong> Сб.8-02-148 (прокладка кабеля до 95 мм²),
+                Сб.8-02-435 (концевая муфта до 1 кВ), Сб.1-02-005 (засыпка вручную)
+              </div>
+              <Link href="/smeta-trainer/drawings-practice/cables"
+                className="inline-block text-[11px] px-3 py-1.5 bg-violet-600 text-white rounded-full font-semibold hover:bg-violet-700">
+                ⚡ К чертежу и упражнениям →
+              </Link>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
+              <div className="font-bold text-slate-700 dark:text-slate-300">📌 Сравнительная таблица — что общего</div>
+              <table className="w-full text-[11px] border-collapse">
+                <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-left">Этап</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">🚰 Канализация</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">♨️ Теплосеть</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">⚡ Кабель</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Глубина, м", "≥ 1.5 (южные регионы)", "≥ 0.7", "≥ 0.7"],
+                    ["Ширина по низу, мм", "Ø + 500", "800-1000", "400"],
+                    ["Песчаное основание, мм", "100", "100", "100"],
+                    ["Засыпка над сетью, мм", "+300 над верхом трубы", "+200 над изоляцией", "+100 + защита"],
+                    ["Защита сверху", "Песок до проектной", "Песок + грунт", "Кирпич + лента"],
+                    ["Колодцы/опоры", "Через 35-50 м", "Через 6-7 м (опоры)", "Муфты по проекту"],
+                    ["Расценка ЭСН", "Сб.22", "Сб.24, Сб.26", "Сб.8"],
+                  ].map((row, i) => (
+                    <tr key={i}>
+                      <td className="border border-slate-200 dark:border-slate-700 px-2 py-1.5 font-medium">{row[0]}</td>
+                      {[1, 2, 3].map(j => (
+                        <td key={j} className="border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300">{row[j]}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

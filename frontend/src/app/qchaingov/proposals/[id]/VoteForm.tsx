@@ -86,6 +86,8 @@ export default function VoteForm({ proposalId, options, voteMode, status }: Prop
       } else if (r.status === 400 && data.error === "invalid_choice") {
         const allowed = Array.isArray(data.allowed) ? (data.allowed as string[]) : undefined;
         setResult({ ok: false, kind: "invalid", message: "Invalid choice.", allowed });
+      } else if (r.status === 400 && data.error === "rationale_too_long") {
+        setResult({ ok: false, kind: "invalid", message: "Rationale exceeds 1000 characters — please shorten." });
       } else if (r.status === 404) {
         setResult({ ok: false, kind: "notfound", message: "Proposal not found." });
       } else {

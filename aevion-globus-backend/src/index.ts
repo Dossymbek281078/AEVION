@@ -51,6 +51,7 @@ import { qmaskcardRouter } from "./routes/qmaskcard";
 import { veilnetxLedgerRouter } from "./routes/veilnetxLedger";
 import { ztideRouter } from "./routes/ztide";
 import { qchaingovRouter } from "./routes/qchaingov";
+import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
@@ -370,7 +371,10 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/roadmap": {
         get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
+      ...FINTECH_OPENAPI_PATHS,
     },
+    components: { schemas: { ...FINTECH_OPENAPI_SCHEMAS } },
+    tags: FINTECH_OPENAPI_TAGS,
   });
 });
 

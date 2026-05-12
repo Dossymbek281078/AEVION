@@ -641,7 +641,7 @@ qsocialRouter.get("/trending-tags", (_req: Request, res: Response) => {
 // ─── DM endpoints ─────────────────────────────────────────────────────────────
 
 // POST /api/qsocial/dm/:userId — send DM
-qsocialRouter.post("/dm/:userId", (req: Request, res: Response) => {
+qsocialRouter.post("/dm/:userId", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const toId = String(req.params.userId);
@@ -649,33 +649,79 @@ qsocialRouter.post("/dm/:userId", (req: Request, res: Response) => {
   if (!content || typeof content !== "string" || !content.trim()) {
     return res.status(400).json({ error: "content required" });
   }
-  const msg: DMMessage = {
-    id: newId(), fromId: auth.sub, toId,
-    content: content.trim(), read: false, createdAt: nowIso(),
-  };
+  const msg: DMMessage = { id: newId(), fromId: auth.sub, toId, content: content.trim(), read: false, createdAt: nowIso() };
+
+  try {
+    if (isQSocialDbReady()) {
+      await pool.query(
+        `INSERT INTO "QSocialDM"("id","fromId","toId","content") VALUES($1,$2,$3,$4)`,
+        [msg.id, msg.fromId, msg.toId, msg.content],
+      );
+      addNotification(toId, { type: "mention", fromUserId: auth.sub, resourceId: msg.id });
+      return res.status(201).json({ message: msg });
+    }
+  } catch (e) { console.error("[QSocial] DM send DB error", e); }
+
   const key = dmKey(auth.sub, toId);
   const thread = memDMs.get(key) ?? [];
   thread.push(msg);
   memDMs.set(key, thread);
-  // Notify recipient
   addNotification(toId, { type: "mention", fromUserId: auth.sub, resourceId: msg.id });
   return res.status(201).json({ message: msg });
 });
 
 // GET /api/qsocial/dm/:userId — get conversation
-qsocialRouter.get("/dm/:userId", (req: Request, res: Response) => {
+qsocialRouter.get("/dm/:userId", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const otherId = String(req.params.userId);
+
+  try {
+    if (isQSocialDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QSocialDM"
+         WHERE (("fromId"=$1 AND "toId"=$2) OR ("fromId"=$2 AND "toId"=$1))
+         ORDER BY "createdAt" ASC LIMIT 200`,
+        [auth.sub, otherId],
+      );
+      return res.json({ messages: rows });
+    }
+  } catch (e) { console.error("[QSocial] DM get DB error", e); }
+
   const key = dmKey(auth.sub, otherId);
   const messages = (memDMs.get(key) ?? []).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return res.json({ messages });
 });
 
 // GET /api/qsocial/me/dms — list all DM conversations
-qsocialRouter.get("/me/dms", (req: Request, res: Response) => {
+qsocialRouter.get("/me/dms", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
+
+  try {
+    if (isQSocialDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT ON (LEAST("fromId","toId"), GREATEST("fromId","toId"))
+           LEAST("fromId","toId") AS uid1, GREATEST("fromId","toId") AS uid2,
+           "id","fromId","toId","content","read","createdAt",
+           (SELECT COUNT(*) FROM "QSocialDM" sub
+            WHERE sub."toId"=$1
+              AND (sub."fromId"=d."fromId" OR sub."fromId"=d."toId")
+              AND sub."read"=FALSE) AS "unreadCount"
+         FROM "QSocialDM" d
+         WHERE "fromId"=$1 OR "toId"=$1
+         ORDER BY LEAST("fromId","toId"), GREATEST("fromId","toId"), "createdAt" DESC`,
+        [auth.sub],
+      );
+      const conversations = rows.map((r: Record<string, unknown>) => ({
+        userId: r.fromId === auth.sub ? r.toId : r.fromId,
+        lastMessage: { fromId: r.fromId, toId: r.toId, content: r.content, createdAt: r.createdAt },
+        unreadCount: Number(r.unreadCount ?? 0),
+      }));
+      return res.json({ conversations });
+    }
+  } catch (e) { console.error("[QSocial] /me/dms DB error", e); }
+
   const conversations: Array<{ userId: string; lastMessage: DMMessage; unreadCount: number }> = [];
   for (const [key, msgs] of memDMs.entries()) {
     const parts = key.split(":");
@@ -690,10 +736,21 @@ qsocialRouter.get("/me/dms", (req: Request, res: Response) => {
 });
 
 // PATCH /api/qsocial/dm/:userId/read — mark all messages from userId as read
-qsocialRouter.patch("/dm/:userId/read", (req: Request, res: Response) => {
+qsocialRouter.patch("/dm/:userId/read", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const fromId = String(req.params.userId);
+
+  try {
+    if (isQSocialDbReady()) {
+      await pool.query(
+        `UPDATE "QSocialDM" SET "read"=TRUE WHERE "toId"=$1 AND "fromId"=$2 AND "read"=FALSE`,
+        [auth.sub, fromId],
+      );
+      return res.json({ ok: true });
+    }
+  } catch (e) { console.error("[QSocial] DM read DB error", e); }
+
   const key = dmKey(auth.sub, fromId);
   const msgs = memDMs.get(key) ?? [];
   let marked = 0;

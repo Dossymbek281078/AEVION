@@ -93,6 +93,24 @@ export async function ensureQSocialTables(pool: PgPoolInstance): Promise<void> {
       CREATE INDEX IF NOT EXISTS "QSocialNotif_user_idx"
         ON "QSocialNotification" ("userId", "createdAt" DESC);
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "QSocialDM" (
+        "id"        TEXT PRIMARY KEY,
+        "fromId"    TEXT NOT NULL,
+        "toId"      TEXT NOT NULL,
+        "content"   TEXT NOT NULL,
+        "read"      BOOLEAN NOT NULL DEFAULT FALSE,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QSocialDM_pair_idx"
+        ON "QSocialDM" (LEAST("fromId","toId"), GREATEST("fromId","toId"), "createdAt");
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "QSocialDM_to_unread_idx"
+        ON "QSocialDM" ("toId", "read") WHERE "read"=FALSE;
+    `);
     dbReady = true;
     console.log("[QSocial] Tables ready");
   } catch (e: unknown) {

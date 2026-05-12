@@ -137,6 +137,18 @@ async function get(path, expectJson = true) {
     assert(r.status === 404, `expected 404, got ${r.status}`);
   });
 
+  await step("GET /api/aevion/registry-stats returns byStatus/byKind/byTag", async () => {
+    const j = await get("/api/aevion/registry-stats");
+    assert(typeof j.total === "number" && j.total >= 10, `total=${j.total}, expected ≥10`);
+    assert(j.byStatus && typeof j.byStatus === "object", "byStatus missing");
+    assert(j.byKind && typeof j.byKind === "object", "byKind missing");
+    assert(Array.isArray(j.byTag), "byTag must be array");
+    assert(j.byTag.length <= 20, `byTag must be ≤20, got ${j.byTag.length}`);
+    for (const t of j.byTag) {
+      assert(typeof t.tag === "string" && typeof t.count === "number", "byTag entry malformed");
+    }
+  });
+
   await step("GET /api/aevion/catalog?format=md returns markdown table", async () => {
     const r = await fetch(`${BASE}/api/aevion/catalog?format=md`);
     assert(r.ok, `HTTP ${r.status}`);

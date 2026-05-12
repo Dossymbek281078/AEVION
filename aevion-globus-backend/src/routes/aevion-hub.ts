@@ -450,6 +450,51 @@ aevionHubRouter.get("/catalog/:id", (req, res) => {
   });
 });
 
+/**
+ * GET /api/aevion/registry-stats — taxonomy summary of the module registry.
+ *
+ * Aggregates from projects.ts:
+ *   byStatus  — { mvp: 6, planning: 12, idea: 9, ... }
+ *   byKind    — { product: 23, service: 3, experiment: 4 }
+ *   byTag     — top-20 tags by usage count [{ tag, count }]
+ *   total     — total module count
+ *
+ * Used for dashboard tiles, taxonomy widgets, and pre-flight checks.
+ * Cached 5 minutes.
+ */
+aevionHubRouter.get("/registry-stats", (_req, res) => {
+  const byStatus: Record<string, number> = {};
+  const byKind: Record<string, number> = {};
+  const tagCount = new Map<string, number>();
+
+  for (const p of projects) {
+    const status = String(p.status || "unknown");
+    const kind = String(p.kind || "unknown");
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+    byKind[kind] = (byKind[kind] ?? 0) + 1;
+    if (Array.isArray(p.tags)) {
+      for (const t of p.tags) {
+        const tag = String(t).toLowerCase();
+        tagCount.set(tag, (tagCount.get(tag) ?? 0) + 1);
+      }
+    }
+  }
+
+  const byTag = Array.from(tagCount.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+    .slice(0, 20);
+
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json({
+    total: projects.length,
+    byStatus,
+    byKind,
+    byTag,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
 aevionHubRouter.get("/version", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({

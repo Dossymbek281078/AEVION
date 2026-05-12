@@ -418,7 +418,11 @@ export default function DevelopersPage() {
             </a>
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.65, color: "#475569", marginBottom: 12 }}>
-            Single GET returns every AEVION module enriched with frontend URL, OpenGraph image, health probe, OpenAPI spec, waitlist endpoint, status URL, tags, kind, priority. Filters: <code>?status=mvp,working</code>, <code>?tag=ai,privacy</code>, <code>?kind=product</code>. Cached 120s.
+            Single GET returns every AEVION module enriched with frontend URL, OpenGraph image, health probe, OpenAPI spec, waitlist endpoint, status URL, tags, kind, priority, related modules (auto-derived from tag overlap). Cached 120s.
+            <br /><strong>Filters:</strong> <code>?status=mvp,working</code> · <code>?tag=ai,privacy</code> · <code>?kind=product</code>
+            <br /><strong>Projection:</strong> <code>?fields=id,name,frontend</code> (lean response, ~10× smaller)
+            <br /><strong>Format:</strong> <code>?format=csv</code> (RFC 4180, 15 stable columns) · <code>?format=md</code> (GitHub table)
+            <br /><strong>Single lookup:</strong> <code>GET /api/aevion/catalog/&lt;id&gt;</code> → enriched item or 404
           </div>
           <pre style={{ background: "#0f172a", color: "#e2e8f0", padding: 12, borderRadius: 8, fontSize: 12, overflow: "auto", margin: 0 }}>
 {`{

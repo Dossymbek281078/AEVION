@@ -810,3 +810,20 @@ qsocialRouter.post("/stories/:id/view", (req: Request, res: Response) => {
   story.viewCount++;
   return res.json({ viewCount: story.viewCount });
 });
+
+// GET /api/qsocial/stats — platform aggregate stats (public)
+qsocialRouter.get("/stats", async (_req: Request, res: Response) => {
+  try {
+    if (isQSocialDbReady()) {
+      const [p, u, l, c] = await Promise.all([
+        pool.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER(WHERE "isPublic")::int AS pub FROM "QSocialPost"`),
+        pool.query(`SELECT COUNT(DISTINCT "userId")::int AS total FROM "QSocialPost"`),
+        pool.query(`SELECT COUNT(*)::int AS total FROM "QSocialLike"`),
+        pool.query(`SELECT COUNT(*)::int AS total FROM "QSocialComment"`),
+      ]);
+      return res.json({ posts: { total: p.rows[0].total, public: p.rows[0].pub }, users: { active: u.rows[0].total }, likes: l.rows[0].total, comments: c.rows[0].total, backend: "postgres" });
+    }
+  } catch (e) { console.error("[QSocial] /stats error", e); }
+  const all = Array.from(memPosts.values());
+  return res.json({ posts: { total: all.length, public: all.filter((p) => p.isPublic).length }, users: { active: new Set(all.map((p) => p.userId)).size }, likes: memLikes.size, comments: memComments.size, backend: "memory" });
+});

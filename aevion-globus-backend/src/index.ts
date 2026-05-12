@@ -59,6 +59,10 @@ import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
+import { qsocialRouter } from "./routes/qsocial";
+import { qnewsRouter } from "./routes/qnews";
+import { qjobsRouter } from "./routes/qjobs";
+import { qeventsRouter } from "./routes/qevents";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -472,6 +476,14 @@ app.use("/api/qai", qaiRouter);
 app.use("/api/qstore", qstoreRouter);
 // QLearn — learning platform
 app.use("/api/qlearn", qlearnRouter);
+// QSocial — social network (posts, follows, feed)
+app.use("/api/qsocial", qsocialRouter);
+// QNews — news aggregator + AI summaries
+app.use("/api/qnews", qnewsRouter);
+// QJobs — job board (postings, applications)
+app.use("/api/qjobs", qjobsRouter);
+// QEvents — events platform (RSVP, create, attend)
+app.use("/api/qevents", qeventsRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

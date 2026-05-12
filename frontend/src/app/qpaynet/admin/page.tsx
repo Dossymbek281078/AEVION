@@ -438,7 +438,7 @@ export default function AdminIndexPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                <div className="text-xs uppercase font-bold text-slate-500 mb-1">
                   Refunds (count / day)
                 </div>
                 <div className="flex items-center gap-3">
@@ -450,7 +450,7 @@ export default function AdminIndexPage() {
                     <div className="font-bold">
                       {analytics.refundsByDay.reduce((s, r) => s + r.count, 0)}
                     </div>
-                    <div className="text-[10px] text-slate-500">
+                    <div className="text-xs text-slate-500">
                       {analytics.refundsByDay
                         .reduce((s, r) => s + r.totalKzt, 0)
                         .toLocaleString("ru-RU", { maximumFractionDigits: 0 })}{" "}
@@ -460,7 +460,7 @@ export default function AdminIndexPage() {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                <div className="text-xs uppercase font-bold text-slate-500 mb-1">
                   Webhook delivery success
                 </div>
                 <div className="flex items-center gap-3">
@@ -481,7 +481,7 @@ export default function AdminIndexPage() {
                       return (
                         <>
                           <div className="font-bold">{rate.toFixed(1)}%</div>
-                          <div className="text-[10px] text-slate-500">
+                          <div className="text-xs text-slate-500">
                             {delivered}/{total}
                           </div>
                         </>
@@ -491,7 +491,7 @@ export default function AdminIndexPage() {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                <div className="text-xs uppercase font-bold text-slate-500 mb-1">
                   Wallets
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -519,7 +519,7 @@ export default function AdminIndexPage() {
             {live.length > 0 && (
               <button
                 onClick={() => setLive([])}
-                className="text-[10px] text-slate-600 hover:text-slate-400"
+                className="text-xs text-slate-600 hover:text-slate-400"
               >
                 очистить
               </button>
@@ -548,11 +548,11 @@ export default function AdminIndexPage() {
                     </span>
                     <span className="text-slate-400 truncate flex-1">{describeEvent(ev)}</span>
                     {ev.by && (
-                      <span className="text-[10px] font-mono text-slate-600 shrink-0">
+                      <span className="text-xs font-mono text-slate-600 shrink-0">
                         {ev.by}
                       </span>
                     )}
-                    <span className="text-[10px] text-slate-600 shrink-0">
+                    <span className="text-xs text-slate-600 shrink-0">
                       {new Date(ev.at).toLocaleTimeString("ru-RU", {
                         hour: "2-digit",
                         minute: "2-digit",

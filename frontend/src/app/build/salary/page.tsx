@@ -58,9 +58,9 @@ function PercentileBar({ band }: { band: SalaryBand }) {
         style={{ left: pct(p50) }}
       />
       {/* Labels */}
-      <span className="absolute text-[10px] font-mono text-slate-400 top-0.5" style={{ left: pct(p25) }}>P25</span>
-      <span className="absolute text-[10px] font-mono text-violet-300 font-bold top-0.5" style={{ left: `calc(${pct(p50)} - 8px)` }}>P50</span>
-      <span className="absolute text-[10px] font-mono text-slate-400 top-0.5" style={{ left: `calc(${pct(p75)} - 24px)` }}>P75</span>
+      <span className="absolute text-xs font-mono text-slate-400 top-0.5" style={{ left: pct(p25) }}>P25</span>
+      <span className="absolute text-xs font-mono text-violet-300 font-bold top-0.5" style={{ left: `calc(${pct(p50)} - 8px)` }}>P50</span>
+      <span className="absolute text-xs font-mono text-slate-400 top-0.5" style={{ left: `calc(${pct(p75)} - 24px)` }}>P75</span>
     </div>
   );
 }

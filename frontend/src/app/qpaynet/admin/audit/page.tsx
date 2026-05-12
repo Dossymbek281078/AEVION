@@ -142,7 +142,7 @@ export default function AdminAuditPage() {
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+              <label className="block text-xs uppercase font-bold text-slate-500 mb-1">
                 Action
               </label>
               <select
@@ -158,7 +158,7 @@ export default function AdminAuditPage() {
               </select>
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">
+              <label className="block text-xs uppercase font-bold text-slate-500 mb-1">
                 Owner (email / sub — частичное совпадение)
               </label>
               <input
@@ -227,21 +227,21 @@ export default function AdminAuditPage() {
                       </span>
                     )}
                     {e.ip && (
-                      <span className="text-[10px] font-mono text-slate-600">{e.ip}</span>
+                      <span className="text-xs font-mono text-slate-600">{e.ip}</span>
                     )}
                     <span className="ml-auto text-slate-600">{expanded ? "▾" : "▸"}</span>
                   </div>
                 </button>
                 {expanded && (
                   <div className="border-t border-slate-800 p-3 bg-slate-950 rounded-b-lg space-y-2">
-                    <div className="text-[10px] uppercase font-bold text-slate-500">Details</div>
-                    <pre className="text-[11px] font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap break-all">
+                    <div className="text-xs uppercase font-bold text-slate-500">Details</div>
+                    <pre className="text-xs font-mono text-slate-300 overflow-x-auto whitespace-pre-wrap break-all">
                       {JSON.stringify(e.details, null, 2)}
                     </pre>
                     {e.userAgent && (
-                      <div className="text-[10px] text-slate-600">UA: {e.userAgent}</div>
+                      <div className="text-xs text-slate-600">UA: {e.userAgent}</div>
                     )}
-                    <div className="text-[10px] text-slate-600 font-mono">id: {e.id}</div>
+                    <div className="text-xs text-slate-600 font-mono">id: {e.id}</div>
                   </div>
                 )}
               </div>

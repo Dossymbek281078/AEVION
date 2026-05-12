@@ -400,7 +400,7 @@ function TemplatePicker({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="text-[10px] text-fuchsia-300 hover:underline"
+          className="text-xs text-fuchsia-300 hover:underline"
         >
           {open ? "Hide" : `${items.length} saved`}
         </button>
@@ -421,7 +421,7 @@ function TemplatePicker({
                   });
                   setOpen(false);
                 }}
-                className="block w-full rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-fuchsia-500/10"
+                className="block w-full rounded px-2 py-1 text-left text-xs text-slate-200 hover:bg-fuchsia-500/10"
               >
                 <span className="font-semibold">{t.name}</span>
                 <span className="ml-2 text-slate-500">→ {t.title}</span>
@@ -509,7 +509,7 @@ function BulkImportButton({ projectId, onCreated }: { projectId: string; onCreat
               onChange={(e) => setCsv(e.target.value)}
               rows={10}
               placeholder={`title,description,salary,city,skills\n"Senior welder","TIG/MIG, certified, 5+y",800000,Astana,"welding|tig|certified"`}
-              className="w-full rounded-md border border-white/10 bg-black/40 p-2 font-mono text-[11px] text-slate-100 focus:border-emerald-500/40 focus:outline-none"
+              className="w-full rounded-md border border-white/10 bg-black/40 p-2 font-mono text-xs text-slate-100 focus:border-emerald-500/40 focus:outline-none"
             />
             {result && (
               <div className="mt-3 rounded-md border border-white/10 bg-white/[0.03] p-2 text-xs">
@@ -732,7 +732,7 @@ function NewVacancyButton({
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
       {duplicateCandidate && (
-        <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[11px] text-amber-100">
+        <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
           ⚠ Looks similar to an existing vacancy in this project:{" "}
           <span className="font-semibold">“{duplicateCandidate.title}”</span>
           <span className="ml-1 text-amber-200/70">
@@ -750,7 +750,7 @@ function NewVacancyButton({
         rows={4}
         className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500"
       />
-      <div className="text-[10px] text-slate-500">
+      <div className="text-xs text-slate-500">
         Supports Markdown: <code className="text-slate-300">**bold**</code> <code className="text-slate-300">_italic_</code> <code className="text-slate-300">- bullet</code> <code className="text-slate-300">1. numbered</code> <code className="text-slate-300">`code`</code>
       </div>
       <AiImprove
@@ -811,7 +811,7 @@ function NewVacancyButton({
         </div>
         {popularSkills.length > 0 && skills.length < 5 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500">Popular:</span>
+            <span className="text-xs uppercase tracking-wider text-slate-500">Popular:</span>
             {popularSkills
               .filter((s) => !skills.includes(s))
               .slice(0, 12)
@@ -820,7 +820,7 @@ function NewVacancyButton({
                   key={s}
                   type="button"
                   onClick={() => setSkills([...skills, s].slice(0, 30))}
-                  className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] px-1.5 py-0 text-[10px] text-emerald-300 hover:bg-emerald-500/15"
+                  className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.05] px-1.5 py-0 text-xs text-emerald-300 hover:bg-emerald-500/15"
                 >
                   + {s}
                 </button>
@@ -1016,7 +1016,7 @@ function Metric({ label, value, tone }: { label: string; value: number | string;
   return (
     <div className="rounded-lg border border-white/5 bg-white/5 py-2">
       <div className={`text-lg font-bold ${tone === "emerald" ? "text-emerald-300" : "text-white"}`}>{value}</div>
-      <div className="text-[10px] text-slate-500">{label}</div>
+      <div className="text-xs text-slate-500">{label}</div>
     </div>
   );
 }

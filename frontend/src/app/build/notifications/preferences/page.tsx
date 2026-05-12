@@ -188,7 +188,7 @@ function Body() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-white">{label}</span>
                     {justSaved && (
-                      <span className="text-[10px] font-medium text-emerald-400">
+                      <span className="text-xs font-medium text-emerald-400">
                         Saved
                       </span>
                     )}

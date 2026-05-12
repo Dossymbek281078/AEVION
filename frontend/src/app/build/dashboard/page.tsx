@@ -140,7 +140,7 @@ function Body() {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-slate-500">Sort:</span>
+          <span className="text-xs uppercase tracking-wider text-slate-500">Sort:</span>
           {(["recent", "pending", "views", "applies"] as SortKey[]).map((s) => (
             <button
               key={s}
@@ -181,7 +181,7 @@ function Body() {
       {items && filtered.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full sm:min-w-[680px] text-sm">
-            <thead className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400">
+            <thead className="bg-white/5 text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">Vacancy</th>
                 <th className="px-3 py-2 text-right font-semibold">Views</th>
@@ -210,7 +210,7 @@ function Body() {
                       >
                         {r.title}
                       </Link>
-                      <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-500">
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                         <span>{r.projectTitle}</span>
                         <span
                           className={
@@ -223,7 +223,7 @@ function Body() {
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-200">
                       {r.viewCount ?? 0}
-                      <div className="text-[10px] text-slate-500">{conv} conv</div>
+                      <div className="text-xs text-slate-500">{conv} conv</div>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums text-slate-200">{r.appsTotal}</td>
                     <td className="px-3 py-2 text-right tabular-nums">
@@ -339,7 +339,7 @@ function SourceBreakdownChart() {
               key={d}
               type="button"
               onClick={() => setDays(d)}
-              className={`rounded-md px-2 py-1 text-[11px] ${
+              className={`rounded-md px-2 py-1 text-xs ${
                 days === d
                   ? "bg-emerald-500/20 text-emerald-200"
                   : "text-slate-400 hover:bg-white/5"
@@ -491,7 +491,7 @@ function OnboardingNudge() {
         <button
           type="button"
           onClick={dismiss}
-          className="text-[10px] text-emerald-200/60 hover:text-emerald-100"
+          className="text-xs text-emerald-200/60 hover:text-emerald-100"
           title="Скрыть на 2 недели"
         >
           Hide
@@ -577,7 +577,7 @@ function FirstHireCelebrationBanner({ items }: { items: Row[] }) {
         <button
           type="button"
           onClick={dismiss}
-          className="text-[11px] text-slate-300 hover:text-white"
+          className="text-xs text-slate-300 hover:text-white"
           title="Скрыть это сообщение навсегда"
         >
           Hide
@@ -617,7 +617,7 @@ function WeeklyDigestTile() {
     <div className="mb-4 rounded-xl border border-violet-400/30 bg-gradient-to-br from-violet-500/10 via-violet-400/5 to-transparent p-4 text-sm">
       <div className="mb-2 flex items-center justify-between">
         <div className="font-semibold text-violet-100">📅 Past 7 days</div>
-        <div className="text-[11px] text-violet-200/70">
+        <div className="text-xs text-violet-200/70">
           vs. {new Date(data.windowStart).toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",
@@ -645,14 +645,14 @@ function DeltaCell({ label, now, prev }: { label: string; now: number; prev: num
   const arrow = change > 0 ? "▲" : change < 0 ? "▼" : "•";
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className="mt-0.5 flex items-baseline gap-1.5">
         <div className="text-xl font-semibold text-white">{now}</div>
-        <div className={`text-[11px] font-semibold ${tone}`}>
+        <div className={`text-xs font-semibold ${tone}`}>
           {arrow} {Math.abs(change)}
         </div>
       </div>
-      <div className="text-[10px] text-slate-500">prev {prev}</div>
+      <div className="text-xs text-slate-500">prev {prev}</div>
     </div>
   );
 }
@@ -693,19 +693,19 @@ function WhatsNewTile() {
       <div className="mb-2 flex items-start justify-between gap-3">
         <div>
           <div className="font-semibold text-sky-100">✨ What's new</div>
-          <div className="text-[11px] text-sky-200/70">Latest 3 updates on QBuild</div>
+          <div className="text-xs text-sky-200/70">Latest 3 updates on QBuild</div>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/build/changelog"
-            className="rounded-md border border-sky-400/40 bg-sky-400/15 px-2.5 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-400/25"
+            className="rounded-md border border-sky-400/40 bg-sky-400/15 px-2.5 py-1 text-xs font-semibold text-sky-100 hover:bg-sky-400/25"
           >
             See all →
           </Link>
           <button
             type="button"
             onClick={dismiss}
-            className="text-[10px] text-sky-200/60 hover:text-sky-100"
+            className="text-xs text-sky-200/60 hover:text-sky-100"
             title="Hide for 7 days"
           >
             Dismiss
@@ -715,11 +715,11 @@ function WhatsNewTile() {
       <ul className="space-y-1.5">
         {NEW.map((e, i) => (
           <li key={i} className="flex items-baseline gap-2 text-xs">
-            <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-1.5 py-0 text-[9px] uppercase tracking-wider text-sky-200">
+            <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-1.5 py-0 text-xs uppercase tracking-wider text-sky-200">
               {e.tag}
             </span>
             <span className="text-slate-200">{e.title}</span>
-            <span className="ml-auto text-[10px] text-slate-500">
+            <span className="ml-auto text-xs text-slate-500">
               {new Date(e.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
             </span>
           </li>
@@ -843,7 +843,7 @@ function TodayDigestTile({ items }: { items: Row[] }) {
             ))}
           </div>
         </div>
-        <div className="text-[10px] uppercase tracking-wider text-slate-500">
+        <div className="text-xs uppercase tracking-wider text-slate-500">
           {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
         </div>
       </div>
@@ -1032,7 +1032,7 @@ function ClosingSoonBanner({
               <button
                 type="button"
                 onClick={() => extend(r.id)}
-                className="shrink-0 rounded-md border border-emerald-300/40 bg-emerald-300/15 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-300/25"
+                className="shrink-0 rounded-md border border-emerald-300/40 bg-emerald-300/15 px-2 py-1 text-xs font-semibold text-emerald-100 hover:bg-emerald-300/25"
               >
                 +30d
               </button>

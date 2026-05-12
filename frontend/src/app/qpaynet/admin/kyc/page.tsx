@@ -119,13 +119,13 @@ export default function AdminKycPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[s.status]}`}>{STATUS_LABEL[s.status]}</span>
-                    <span className="text-[10px] text-slate-600">{fmtDate(s.submitted_at)}</span>
+                    <span className="text-xs text-slate-600">{fmtDate(s.submitted_at)}</span>
                   </div>
                   <div className="text-base font-bold text-white">{s.full_name}</div>
                   <div className="text-xs text-slate-400 font-mono">ИИН: {s.iin}</div>
                   {s.address && <div className="text-xs text-slate-500 mt-0.5">{s.address}</div>}
-                  <div className="text-[10px] text-slate-600 mt-1">owner: {s.owner_id.slice(0, 16)}...</div>
-                  {s.rejected_reason && <div className="text-[11px] text-red-400 mt-1">⚠ {s.rejected_reason}</div>}
+                  <div className="text-xs text-slate-600 mt-1">owner: {s.owner_id.slice(0, 16)}...</div>
+                  {s.rejected_reason && <div className="text-xs text-red-400 mt-1">⚠ {s.rejected_reason}</div>}
                 </div>
                 {s.status === "pending" && (
                   <div className="flex flex-col gap-1.5 shrink-0">

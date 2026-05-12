@@ -127,7 +127,7 @@ function Column({
         </span>
       </div>
       {items.length === 0 ? (
-        <p className="text-[11px] text-slate-500">—</p>
+        <p className="text-xs text-slate-500">—</p>
       ) : (
         <ul className="space-y-1.5">
           {items.map((it) => (
@@ -150,9 +150,9 @@ function Card({ item }: { item: Item }) {
       <div className="truncate text-xs font-semibold text-slate-100">
         {item.applicantName || "Anonymous"}
       </div>
-      <div className="truncate text-[10px] text-slate-400">{item.vacancyTitle}</div>
+      <div className="truncate text-xs text-slate-400">{item.vacancyTitle}</div>
       {item.matchScore != null && (
-        <div className="mt-0.5 text-[10px] text-cyan-300">
+        <div className="mt-0.5 text-xs text-cyan-300">
           match {Math.round(item.matchScore)}%
         </div>
       )}

@@ -245,9 +245,9 @@ function CurrentStatus({ me, cashback }: { me: LoyaltyMe; cashback: CashbackData
 function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className="mt-0.5 text-xl font-bold text-white">{value}</div>
-      <div className="text-[10px] text-slate-500">{hint}</div>
+      <div className="text-xs text-slate-500">{hint}</div>
     </div>
   );
 }
@@ -304,11 +304,11 @@ function TierCard({
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-center">
         <div className="rounded-md bg-black/30 px-2 py-1.5">
-          <div className="text-[10px] uppercase text-slate-400">Hire-fee</div>
+          <div className="text-xs uppercase text-slate-400">Hire-fee</div>
           <div className="text-base font-bold text-white">{tier.hireFeePct}%</div>
         </div>
         <div className="rounded-md bg-black/30 px-2 py-1.5">
-          <div className="text-[10px] uppercase text-slate-400">Cashback</div>
+          <div className="text-xs uppercase text-slate-400">Cashback</div>
           <div className="text-base font-bold text-emerald-300">
             {(tier.cashbackBps / 100).toFixed(1)}%
           </div>

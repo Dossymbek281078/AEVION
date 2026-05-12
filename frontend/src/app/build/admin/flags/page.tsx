@@ -115,7 +115,7 @@ function Body() {
                   {f.vacancyId && f.applicationId && (
                     <Link
                       href={`/build/vacancy/${encodeURIComponent(f.vacancyId)}/review/${encodeURIComponent(f.applicationId)}`}
-                      className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+                      className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10"
                     >
                       Review →
                     </Link>
@@ -125,14 +125,14 @@ function Body() {
                       <button
                         type="button"
                         onClick={() => resolve(f.id, "dismissed")}
-                        className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+                        className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10"
                       >
                         Dismiss
                       </button>
                       <button
                         type="button"
                         onClick={() => resolve(f.id, "actioned")}
-                        className="rounded-md border border-rose-500/30 bg-rose-500/15 px-2.5 py-1 text-[11px] font-semibold text-rose-100 hover:bg-rose-500/25"
+                        className="rounded-md border border-rose-500/30 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-100 hover:bg-rose-500/25"
                       >
                         Action
                       </button>

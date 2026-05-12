@@ -70,10 +70,10 @@ function SendForm() {
           <input type="text" value={toWalletId} onChange={e => setToWalletId(e.target.value)}
             placeholder="UUID кошелька..."
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-violet-500" />
-          {recipient === "loading" && <p className="text-[11px] text-slate-500 mt-1">Проверка получателя...</p>}
-          {recipient === "notfound" && <p className="text-[11px] text-red-400 mt-1">⚠ Кошелёк не найден</p>}
+          {recipient === "loading" && <p className="text-xs text-slate-500 mt-1">Проверка получателя...</p>}
+          {recipient === "notfound" && <p className="text-xs text-red-400 mt-1">⚠ Кошелёк не найден</p>}
           {recipient && typeof recipient === "object" && (
-            <p className={`text-[11px] mt-1 ${recipient.active ? "text-emerald-400" : "text-amber-400"}`}>
+            <p className={`text-xs mt-1 ${recipient.active ? "text-emerald-400" : "text-amber-400"}`}>
               {recipient.active ? "✓" : "⚠"} {recipient.name}{!recipient.active && " (неактивен)"}
             </p>
           )}
@@ -84,7 +84,7 @@ function SendForm() {
             placeholder="0.00"
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500" />
           {amount && parseFloat(amount) > 0 && (
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Комиссия 0.1%: {(parseFloat(amount) * 0.001).toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₸
             </p>
           )}

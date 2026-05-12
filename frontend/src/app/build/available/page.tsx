@@ -170,7 +170,7 @@ export default function AvailablePage() {
                       </span>
                     ))}
                     {(w.skills ?? []).length > 4 && (
-                      <span className="text-[10px] text-slate-500">+{(w.skills ?? []).length - 4}</span>
+                      <span className="text-xs text-slate-500">+{(w.skills ?? []).length - 4}</span>
                     )}
                   </div>
                 )}

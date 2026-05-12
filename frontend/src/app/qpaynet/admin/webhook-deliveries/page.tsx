@@ -195,29 +195,29 @@ export default function AdminWebhookDeliveriesPage() {
                       >
                         {s.label}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">{d.event}</span>
-                      <span className="text-[10px] text-slate-600">
+                      <span className="text-xs font-mono text-slate-400">{d.event}</span>
+                      <span className="text-xs text-slate-600">
                         attempts: <span className={stuck ? "text-red-400 font-bold" : ""}>{d.attempts}</span>
                       </span>
-                      <span className="text-[10px] text-slate-600">
+                      <span className="text-xs text-slate-600">
                         created: {fmtDate(d.created_at)}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-500 font-mono mb-1">
+                    <div className="text-xs text-slate-500 font-mono mb-1">
                       delivery: {d.id} · sub: {d.sub_id.slice(0, 8)}… · owner: {d.owner_id.slice(0, 12)}…
                     </div>
                     {d.next_retry_at && !d.delivered_at && (
-                      <div className="text-[11px] text-amber-400">
+                      <div className="text-xs text-amber-400">
                         ⏱ Next retry: {fmtDate(d.next_retry_at)}
                       </div>
                     )}
                     {d.delivered_at && (
-                      <div className="text-[11px] text-emerald-400">
+                      <div className="text-xs text-emerald-400">
                         ✓ Delivered: {fmtDate(d.delivered_at)}
                       </div>
                     )}
                     {d.last_error && (
-                      <div className="text-[11px] text-red-400 mt-1 font-mono break-all">
+                      <div className="text-xs text-red-400 mt-1 font-mono break-all">
                         ⚠ {d.last_error}
                       </div>
                     )}
@@ -239,7 +239,7 @@ export default function AdminWebhookDeliveriesPage() {
           })}
         </div>
 
-        <div className="text-[10px] text-slate-600 leading-relaxed">
+        <div className="text-xs text-slate-600 leading-relaxed">
           Backoff: 30s → 2m → 10m → 30m → 2h. После 5 неудач доставка считается{" "}
           <strong className="text-red-400">залипшей</strong> и появляется здесь. Force-retry
           сбрасывает <code className="bg-slate-900 px-1 rounded">attempts=0</code> и планирует

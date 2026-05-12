@@ -242,7 +242,7 @@ function TaskCard({
               ? `${task.paymentAmount.toLocaleString("ru-RU")} ${task.paymentCurrency}`
               : "—"}
           </div>
-          <div className="mt-1 text-[10px] text-slate-500">
+          <div className="mt-1 text-xs text-slate-500">
             {new Date(task.updatedAt).toLocaleDateString("ru-RU")}
           </div>
         </div>

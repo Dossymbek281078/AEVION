@@ -93,7 +93,7 @@ export default function StoriesPage() {
                 className="w-full rounded-xl border border-white/10 bg-black/40 p-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:outline-none"
               />
               <span
-                className={`absolute bottom-2 right-3 text-[11px] ${
+                className={`absolute bottom-2 right-3 text-xs ${
                   charCount > 900 ? "text-amber-300" : "text-slate-600"
                 }`}
               >

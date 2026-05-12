@@ -82,7 +82,7 @@ function Body() {
               <div className="mt-1 text-3xl font-bold text-fuchsia-100">
                 {data.conversionRate.toFixed(1)}%
               </div>
-              <div className="mt-1 text-[11px] text-fuchsia-200/60">
+              <div className="mt-1 text-xs text-fuchsia-200/60">
                 {data.hires.now} hires from {data.newApplications.now} new applications
               </div>
             </div>
@@ -111,7 +111,7 @@ function Body() {
             />
           </div>
 
-          <p className="text-[11px] text-slate-500">
+          <p className="text-xs text-slate-500">
             Window: {new Date(data.windowStart).toLocaleString()} → {new Date(data.windowEnd).toLocaleString()}
           </p>
         </div>
@@ -136,14 +136,14 @@ function DeltaTile({
   const arrow = change > 0 ? "▲" : change < 0 ? "▼" : "•";
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className="mt-0.5 flex items-baseline gap-2">
         <div className="text-2xl font-bold text-white">{now}</div>
         <div className={`text-xs font-semibold ${tone}`}>
           {arrow} {Math.abs(change)}
         </div>
       </div>
-      <div className="text-[10px] text-slate-500">prev week {prev}</div>
+      <div className="text-xs text-slate-500">prev week {prev}</div>
     </div>
   );
 }
@@ -172,7 +172,7 @@ function RankList({
               className="flex items-center justify-between gap-2 rounded-md border border-white/5 bg-black/20 p-2"
             >
               <div className="flex min-w-0 items-center gap-2">
-                <span className="text-[10px] text-slate-500">{i + 1}.</span>
+                <span className="text-xs text-slate-500">{i + 1}.</span>
                 <Link
                   href={r.href}
                   className="truncate text-xs text-slate-200 hover:text-emerald-300"
@@ -180,7 +180,7 @@ function RankList({
                   {r.primary}
                 </Link>
               </div>
-              <span className="shrink-0 text-[11px] font-semibold text-emerald-300">
+              <span className="shrink-0 text-xs font-semibold text-emerald-300">
                 {r.metric}
               </span>
             </li>

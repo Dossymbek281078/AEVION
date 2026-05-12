@@ -81,7 +81,7 @@ export default async function ReferralsPage() {
           </table>
         </div>
 
-        <p className="mt-3 text-[11px] text-slate-500">
+        <p className="mt-3 text-xs text-slate-500">
           Сортировка: количество ACCEPTED-наймов → общее число рефералов.
         </p>
 

@@ -158,7 +158,7 @@ export default async function SuccessStoriesPage() {
               className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-center"
             >
               <div className="text-2xl font-bold text-emerald-300">{s.value}</div>
-              <div className="mt-0.5 text-[11px] uppercase tracking-wider text-slate-500">
+              <div className="mt-0.5 text-xs uppercase tracking-wider text-slate-500">
                 {s.label}
               </div>
             </div>
@@ -183,7 +183,7 @@ export default async function SuccessStoriesPage() {
                     <div className={`text-3xl font-extrabold leading-none ${s.metric}`}>
                       {cs.metric}
                     </div>
-                    <div className="mt-0.5 text-[10px] uppercase leading-tight text-slate-500">
+                    <div className="mt-0.5 text-xs uppercase leading-tight text-slate-500">
                       {cs.metricLabel}
                     </div>
                   </div>
@@ -196,7 +196,7 @@ export default async function SuccessStoriesPage() {
                     <div className="mt-3 flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-semibold text-white">{cs.name}</span>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${s.badge}`}
+                        className={`rounded-full border px-2 py-0.5 text-xs font-medium ${s.badge}`}
                       >
                         {cs.city}
                       </span>
@@ -241,7 +241,7 @@ export default async function SuccessStoriesPage() {
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold text-white text-sm">{h.workerName}</div>
                   <div className="mt-0.5 text-xs text-emerald-200">нанят как {h.vacancyTitle}</div>
-                  <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-400">
+                  <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-400">
                     {h.projectTitle && <span>{h.projectTitle}</span>}
                     {h.projectCity && <span>📍 {h.projectCity}</span>}
                     {h.salary > 0 && (

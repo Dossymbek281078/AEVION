@@ -131,7 +131,7 @@ export default function KycPage() {
                 <div className="text-xs text-emerald-300/80">
                   {data.fullName} · {data.iinMasked} · {data.verifiedAt && new Date(data.verifiedAt).toLocaleDateString("ru-RU")}
                 </div>
-                <p className="text-[11px] text-emerald-400/60 mt-2">Месячный лимит снят. Все суммы доступны.</p>
+                <p className="text-xs text-emerald-400/60 mt-2">Месячный лимит снят. Все суммы доступны.</p>
               </div>
             )}
 
@@ -141,7 +141,7 @@ export default function KycPage() {
                 <div className="text-xs text-amber-300/80">
                   Подано: {data.submittedAt && new Date(data.submittedAt).toLocaleString("ru-RU")}
                 </div>
-                <p className="text-[11px] text-amber-400/60 mt-2">Обычно занимает 1-3 рабочих дня.</p>
+                <p className="text-xs text-amber-400/60 mt-2">Обычно занимает 1-3 рабочих дня.</p>
               </div>
             )}
 
@@ -179,7 +179,7 @@ export default function KycPage() {
                   {submitting ? "Отправка..." : "Подать на верификацию"}
                 </button>
                 {data.autoVerifyEnabled && (
-                  <p className="text-[11px] text-amber-400/70">⚙ Dev: QPAYNET_KYC_AUTO_VERIFY=1 — мгновенная верификация без ручной проверки.</p>
+                  <p className="text-xs text-amber-400/70">⚙ Dev: QPAYNET_KYC_AUTO_VERIFY=1 — мгновенная верификация без ручной проверки.</p>
                 )}
               </div>
             )}

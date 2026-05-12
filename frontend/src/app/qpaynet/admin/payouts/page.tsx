@@ -131,9 +131,9 @@ export default function AdminPayoutsPage() {
                 className={`text-left p-4 rounded-xl border transition-colors ${
                   filter === s ? "border-violet-600 bg-violet-900/20" : "border-slate-800 bg-slate-900 hover:border-slate-700"
                 }`}>
-                <div className={`text-[10px] font-bold uppercase mb-1 ${filter === s ? "text-violet-400" : "text-slate-500"}`}>{STATUS_LABEL[s]}</div>
+                <div className={`text-xs font-bold uppercase mb-1 ${filter === s ? "text-violet-400" : "text-slate-500"}`}>{STATUS_LABEL[s]}</div>
                 <div className="text-2xl font-black">{v.count}</div>
-                <div className="text-[11px] text-slate-500">{fmt(v.totalKzt)} ₸</div>
+                <div className="text-xs text-slate-500">{fmt(v.totalKzt)} ₸</div>
               </button>
             );
           })}
@@ -162,15 +162,15 @@ export default function AdminPayoutsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                    <span className="text-[10px] text-slate-500">{METHOD_LABEL[p.method]}</span>
-                    <span className="text-[10px] text-slate-600">{fmtDate(p.created_at)}</span>
+                    <span className="text-xs text-slate-500">{METHOD_LABEL[p.method]}</span>
+                    <span className="text-xs text-slate-600">{fmtDate(p.created_at)}</span>
                   </div>
                   <div className="text-lg font-bold">{fmt(p.amount)} {p.currency}</div>
-                  <div className="text-[11px] text-slate-500 font-mono mb-1">→ {p.destination}</div>
-                  <div className="text-[10px] text-slate-600">owner: {p.owner_id.slice(0, 12)}... · wallet: {p.wallet_id.slice(0, 8)}...</div>
-                  {p.rejected_reason && <div className="text-[11px] text-red-400 mt-1">⚠ {p.rejected_reason}</div>}
-                  {p.paid_external_ref && p.status === "paid" && <div className="text-[11px] text-emerald-500 mt-1">ref: {p.paid_external_ref}</div>}
-                  {p.approved_by && <div className="text-[10px] text-slate-600 mt-1">by {p.approved_by}</div>}
+                  <div className="text-xs text-slate-500 font-mono mb-1">→ {p.destination}</div>
+                  <div className="text-xs text-slate-600">owner: {p.owner_id.slice(0, 12)}... · wallet: {p.wallet_id.slice(0, 8)}...</div>
+                  {p.rejected_reason && <div className="text-xs text-red-400 mt-1">⚠ {p.rejected_reason}</div>}
+                  {p.paid_external_ref && p.status === "paid" && <div className="text-xs text-emerald-500 mt-1">ref: {p.paid_external_ref}</div>}
+                  {p.approved_by && <div className="text-xs text-slate-600 mt-1">by {p.approved_by}</div>}
                 </div>
                 <div className="flex flex-col gap-1.5 shrink-0">
                   {p.status === "requested" && (

@@ -265,7 +265,7 @@ function LoyaltyBanner() {
               <div className="text-xs text-slate-400">
                 {t.minHires === 0 ? "С первого найма" : `с ${t.minHires} наймов`}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+              <div className="mt-2 flex flex-wrap gap-1 text-xs">
                 <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">
                   +{(t.cashbackBps / 100).toFixed(1)}% cashback
                 </span>

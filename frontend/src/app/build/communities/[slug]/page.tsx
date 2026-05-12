@@ -127,14 +127,14 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
                     </div>
                   )}
                   <div className={`max-w-[70%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
-                    <p className={`text-[10px] ${ROLE_COLOR[m.buildRole ?? ""] ?? "text-slate-400"}`}>
+                    <p className={`text-xs ${ROLE_COLOR[m.buildRole ?? ""] ?? "text-slate-400"}`}>
                       {m.authorName ?? "Пользователь"}
                       {m.buildRole && ` · ${m.buildRole}`}
                     </p>
                     <div className={`rounded-xl px-3 py-2 text-sm ${isMe ? "bg-teal-500/20 text-teal-100" : "bg-white/10 text-slate-100"}`}>
                       {m.content}
                     </div>
-                    <p className="text-[10px] text-slate-600">
+                    <p className="text-xs text-slate-600">
                       {new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>

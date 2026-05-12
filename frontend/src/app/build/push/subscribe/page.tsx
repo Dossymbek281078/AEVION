@@ -108,7 +108,7 @@ function Body() {
           <div className="mb-5 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-2.5">
             <span className="text-xs text-slate-400">Browser permission</span>
             <span
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${badge.classes}`}
+              className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.classes}`}
             >
               {badge.label}
             </span>

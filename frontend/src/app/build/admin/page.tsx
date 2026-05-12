@@ -115,7 +115,7 @@ function Tile({
       }`}>
         {value}
       </div>
-      {sub && <div className="mt-1 text-[11px] text-slate-500">{sub}</div>}
+      {sub && <div className="mt-1 text-xs text-slate-500">{sub}</div>}
     </div>
   );
 }

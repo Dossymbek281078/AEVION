@@ -156,7 +156,7 @@ export default async function StatsPage() {
               </section>
             )}
 
-            <p className="mt-8 text-[11px] text-slate-500">
+            <p className="mt-8 text-xs text-slate-500">
               Обновлено: {new Date(s.timestamp).toLocaleString("ru-RU")}
             </p>
           </>
@@ -210,12 +210,12 @@ function SparkTile({
   const trend = last - prev;
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="text-[11px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-2xl font-bold text-white">{total}</span>
-        <span className="text-[11px] text-slate-500">за 14д</span>
+        <span className="text-xs text-slate-500">за 14д</span>
         {trend !== 0 && (
-          <span className={`text-[11px] font-semibold ${trend > 0 ? "text-emerald-300" : "text-rose-300"}`}>
+          <span className={`text-xs font-semibold ${trend > 0 ? "text-emerald-300" : "text-rose-300"}`}>
             {trend > 0 ? "▲" : "▼"} {Math.abs(trend)} за день
           </span>
         )}

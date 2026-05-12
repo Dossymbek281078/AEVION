@@ -168,7 +168,7 @@ function ReviewCard({ review }: { review: BuildReview }) {
             <p className="mt-2 text-sm text-slate-300 italic">&ldquo;{review.comment}&rdquo;</p>
           )}
         </div>
-        <span className="shrink-0 text-[10px] text-slate-500">
+        <span className="shrink-0 text-xs text-slate-500">
           {new Date(review.createdAt).toLocaleDateString("ru-RU")}
         </span>
       </div>

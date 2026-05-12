@@ -95,9 +95,9 @@ function RequestForm() {
 
         {generated.notifySecret && (
           <div className="bg-amber-950/50 border border-amber-800/60 rounded-xl p-3 mb-4 text-left">
-            <div className="text-[10px] text-amber-400 font-semibold mb-1 uppercase tracking-wide">Секрет webhook (показан 1 раз)</div>
-            <code className="text-[11px] text-amber-200 break-all block">{generated.notifySecret}</code>
-            <div className="text-[10px] text-amber-500/80 mt-1">
+            <div className="text-xs text-amber-400 font-semibold mb-1 uppercase tracking-wide">Секрет webhook (показан 1 раз)</div>
+            <code className="text-xs text-amber-200 break-all block">{generated.notifySecret}</code>
+            <div className="text-xs text-amber-500/80 mt-1">
               Сохраните для верификации HMAC: <code>HMAC-SHA256(secret, ts.body)</code>
             </div>
           </div>

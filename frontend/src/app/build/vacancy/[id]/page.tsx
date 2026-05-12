@@ -227,7 +227,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
     ? ({ children }: { children: React.ReactNode }) => (
         <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100">
           <div className="mx-auto max-w-3xl">{children}</div>
-          <footer className="mx-auto mt-8 max-w-3xl border-t border-white/5 pt-3 text-center text-[10px] text-slate-500">
+          <footer className="mx-auto mt-8 max-w-3xl border-t border-white/5 pt-3 text-center text-xs text-slate-500">
             Powered by{" "}
             <a
               href="https://aevion.tech/build"
@@ -433,7 +433,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                     ).length;
                     if (snoozedCount === 0) return null;
                     return (
-                      <div className="mb-3 flex items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
+                      <div className="mb-3 flex items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
                         <span className="text-slate-300">
                           💤 {snoozedCount} snoozed
                         </span>
@@ -672,7 +672,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
                 {r.keys.map((k) => (
                   <kbd
                     key={k}
-                    className="rounded border border-white/15 bg-white/5 px-1.5 py-1 text-[11px] font-mono text-slate-200"
+                    className="rounded border border-white/15 bg-white/5 px-1.5 py-1 text-xs font-mono text-slate-200"
                   >
                     {k}
                   </kbd>
@@ -682,7 +682,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-[11px] text-slate-500">
+        <p className="mt-3 text-xs text-slate-500">
           Shortcuts only fire when no input or textarea is focused.
         </p>
       </div>
@@ -737,7 +737,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
                   {v.title}
                 </div>
                 {v.projectTitle && (
-                  <div className="mt-0.5 truncate text-[11px] text-slate-400">{v.projectTitle}</div>
+                  <div className="mt-0.5 truncate text-xs text-slate-400">{v.projectTitle}</div>
                 )}
               </div>
               <div className="shrink-0 text-right text-sm font-semibold text-emerald-300">
@@ -756,7 +756,7 @@ function SimilarVacancies({ vacancyId }: { vacancyId: string }) {
                 ))}
               </div>
             )}
-            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
               {v.projectCity && <span>📍 {v.projectCity}</span>}
               {v.overlapCount > 0 && (
                 <span className="text-emerald-300/80">{v.overlapCount} skill match</span>
@@ -858,7 +858,7 @@ function SuggestedCandidates({ vacancyId }: { vacancyId: string }) {
                       {c.matchScore}% match
                     </span>
                     {c.openToWork && (
-                      <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
+                      <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-xs font-bold uppercase text-emerald-200">
                         open
                       </span>
                     )}
@@ -1155,8 +1155,8 @@ function ScoreRangeFilter({
 }) {
   const active = minAi > 0 || minMatch > 0;
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-xs">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
         Min scores:
       </span>
       <label className="flex items-center gap-1.5 text-slate-300">
@@ -1189,7 +1189,7 @@ function ScoreRangeFilter({
         <button
           type="button"
           onClick={() => onChange(0, 0)}
-          className="ml-auto text-[10px] text-slate-400 hover:text-slate-200"
+          className="ml-auto text-xs text-slate-400 hover:text-slate-200"
         >
           Clear
         </button>
@@ -1215,10 +1215,10 @@ function ApplicationLabelFilter({
   if (labelled.length === 0) return null;
   return (
     <div className="mb-3 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] uppercase tracking-wider text-slate-500">Filter by label:</span>
+      <span className="text-xs uppercase tracking-wider text-slate-500">Filter by label:</span>
       <button
         onClick={() => onChange("ALL")}
-        className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+        className={`rounded-md px-2 py-1 text-xs font-medium ${
           value === "ALL" ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"
         }`}
       >
@@ -1232,7 +1232,7 @@ function ApplicationLabelFilter({
           <button
             key={l}
             onClick={() => onChange(l)}
-            className={`rounded-md border px-2 py-1 text-[11px] font-medium ${
+            className={`rounded-md border px-2 py-1 text-xs font-medium ${
               active ? LABEL_TONE[l] : "border-transparent bg-white/5 text-slate-400 hover:bg-white/10"
             }`}
           >
@@ -1305,7 +1305,7 @@ function BulkActionBar({
       </button>
       <button
         onClick={onClear}
-        className="ml-auto text-[11px] text-slate-400 hover:text-slate-200"
+        className="ml-auto text-xs text-slate-400 hover:text-slate-200"
       >
         Clear
       </button>
@@ -1372,7 +1372,7 @@ function ApplicationLabelPicker({
               key={l}
               type="button"
               onClick={() => set(l)}
-              className={`block w-full rounded px-2 py-1 text-left text-[11px] hover:bg-white/5 ${
+              className={`block w-full rounded px-2 py-1 text-left text-xs hover:bg-white/5 ${
                 current === l ? "text-emerald-200" : "text-slate-200"
               }`}
             >
@@ -1383,7 +1383,7 @@ function ApplicationLabelPicker({
             <button
               type="button"
               onClick={() => set(null)}
-              className="mt-0.5 block w-full rounded border-t border-white/5 px-2 py-1 text-left text-[11px] text-slate-500 hover:bg-white/5 hover:text-rose-300"
+              className="mt-0.5 block w-full rounded border-t border-white/5 px-2 py-1 text-left text-xs text-slate-500 hover:bg-white/5 hover:text-rose-300"
             >
               ✕ Clear label
             </button>
@@ -1461,7 +1461,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-[11px] text-slate-400 hover:text-slate-200"
+        className="text-xs text-slate-400 hover:text-slate-200"
       >
         {open ? "▼" : "▶"} Private notes {loaded && items.length > 0 ? `(${items.length})` : ""}
       </button>
@@ -1488,7 +1488,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
           {!loaded ? (
             <p className="text-xs text-slate-500">Loading…</p>
           ) : items.length === 0 ? (
-            <p className="text-[11px] text-slate-500">No notes yet — first one logs the impression you don&apos;t want to forget by next interview.</p>
+            <p className="text-xs text-slate-500">No notes yet — first one logs the impression you don&apos;t want to forget by next interview.</p>
           ) : (
             <ul className="space-y-1.5">
               {items.map((n) => (
@@ -1504,7 +1504,7 @@ function RecruiterNotes({ applicationId }: { applicationId: string }) {
                     {n.isPinned && <span className="mr-1 text-amber-300">📌</span>}
                     {n.body}
                   </div>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+                  <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
                     <span>{new Date(n.createdAt).toLocaleString()}</span>
                     <span className="flex items-center gap-2">
                       <button
@@ -1661,7 +1661,7 @@ function SalaryMarketWidget({ skill }: { skill: string }) {
       <div className="text-xl font-bold text-emerald-300">
         ${data.median.toLocaleString()} <span className="text-xs font-normal text-slate-400">median</span>
       </div>
-      <div className="mt-0.5 text-[10px] text-slate-500">Based on {data.count} vacancies on QBuild</div>
+      <div className="mt-0.5 text-xs text-slate-500">Based on {data.count} vacancies on QBuild</div>
     </div>
   );
 }
@@ -1718,7 +1718,7 @@ function RejectButton({
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-rose-500/30 bg-slate-900 p-3 shadow-2xl">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-rose-200">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-rose-200">
             Reason for rejection
           </div>
           <select
@@ -1743,7 +1743,7 @@ function RejectButton({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
+              className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/5"
             >
               Cancel
             </button>
@@ -1751,7 +1751,7 @@ function RejectButton({
               type="button"
               onClick={submit}
               disabled={busy}
-              className="rounded-md bg-rose-500 px-3 py-1 text-[11px] font-semibold text-rose-50 hover:bg-rose-400 disabled:opacity-50"
+              className="rounded-md bg-rose-500 px-3 py-1 text-xs font-semibold text-rose-50 hover:bg-rose-400 disabled:opacity-50"
             >
               {busy ? "…" : "Confirm reject"}
             </button>
@@ -1809,7 +1809,7 @@ function VacancySourceMiniPanel({ vacancyId }: { vacancyId: string }) {
           );
         })}
       </div>
-      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
+      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
         {order.map(({ key, label, color }) => {
           const n = data.buckets[key].count;
           if (n === 0) return null;
@@ -1868,21 +1868,21 @@ function EmbedSnippetBlock({ vacancyId }: { vacancyId: string }) {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10"
+          className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 hover:bg-white/10"
         >
           {open ? "Hide" : "Show snippet"}
         </button>
       </div>
       {open && (
         <div className="mt-3 space-y-2">
-          <p className="text-[11px] text-slate-400">
+          <p className="text-xs text-slate-400">
             Drop this on any website. Replace <code className="rounded bg-black/40 px-1 text-emerald-200">qb_pk_...</code> with a partner key from{" "}
             <Link href="/build/admin/partner-keys" className="text-emerald-300 underline">
               admin → partner keys
             </Link>
             .
           </p>
-          <pre className="overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 text-[11px] text-slate-200">
+          <pre className="overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 text-xs text-slate-200">
             <code>{snippet}</code>
           </pre>
           <button
@@ -1938,7 +1938,7 @@ function SnoozeApplicationButton({
         onClick={() => setOpen((v) => !v)}
         disabled={busy}
         title={isSnoozed ? `Snoozed ${daysLeft}d more` : "Snooze this application"}
-        className={`rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
+        className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
           isSnoozed
             ? "border-amber-500/30 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25"
             : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
@@ -1948,7 +1948,7 @@ function SnoozeApplicationButton({
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-white/10 bg-slate-900 p-2 shadow-2xl">
-          <div className="mb-1 px-1 text-[10px] uppercase tracking-wider text-slate-500">
+          <div className="mb-1 px-1 text-xs uppercase tracking-wider text-slate-500">
             Snooze for
           </div>
           {[1, 3, 7, 14].map((d) => (
@@ -2005,7 +2005,7 @@ function FlagApplicationButton({ applicationId }: { applicationId: string }) {
       onClick={flag}
       disabled={busy}
       title="Report as spam / abuse / fake — sent to admin moderation queue"
-      className="rounded-md border border-rose-500/20 bg-rose-500/[0.06] px-2.5 py-1.5 text-[11px] font-medium text-rose-200/80 transition hover:bg-rose-500/15 disabled:opacity-50"
+      className="rounded-md border border-rose-500/20 bg-rose-500/[0.06] px-2.5 py-1.5 text-xs font-medium text-rose-200/80 transition hover:bg-rose-500/15 disabled:opacity-50"
     >
       {busy ? "…" : "⚐"}
     </button>
@@ -2120,33 +2120,33 @@ function BoostRoiTile({ vacancyId }: { vacancyId: string }) {
             </span>
           )}
         </div>
-        <div className="text-[11px] text-amber-200/70">
+        <div className="text-xs text-amber-200/70">
           {data.periodDays}d window · {data.source || "boost"}
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400">During</div>
+          <div className="text-xs uppercase tracking-wider text-slate-400">During</div>
           <div className="mt-0.5 text-xl font-semibold text-white">{during}</div>
-          <div className="text-[10px] text-slate-500">applications</div>
+          <div className="text-xs text-slate-500">applications</div>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-          <div className="text-[10px] uppercase tracking-wider text-slate-400">Before</div>
+          <div className="text-xs uppercase tracking-wider text-slate-400">Before</div>
           <div className="mt-0.5 text-xl font-semibold text-white">{before}</div>
-          <div className="text-[10px] text-slate-500">prior {data.periodDays}d</div>
+          <div className="text-xs text-slate-500">prior {data.periodDays}d</div>
         </div>
         <div className={`rounded-lg border p-2.5 ${tone}`}>
-          <div className="text-[10px] uppercase tracking-wider opacity-70">Delta</div>
+          <div className="text-xs uppercase tracking-wider opacity-70">Delta</div>
           <div className="mt-0.5 text-xl font-semibold">
             {positive ? "+" : ""}
             {delta}
           </div>
-          <div className="text-[10px] opacity-80">
+          <div className="text-xs opacity-80">
             {pct !== null ? `${positive ? "+" : ""}${pct}%` : before === 0 ? "n/a baseline" : "—"}
           </div>
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-amber-200/60">
+      <p className="mt-2 text-xs text-amber-200/60">
         Comparing applications during the boost period vs. the same-length window immediately before.
       </p>
     </div>
@@ -2215,7 +2215,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
       </button>
       {open && (
         <>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-xs text-slate-500">
             Private notes about this role — visible to vacancy owner only. Не путать с заметками
             на конкретного кандидата.
           </p>
@@ -2245,7 +2245,7 @@ function VacancyTeamNotes({ vacancyId }: { vacancyId: string }) {
                   className="rounded-md border border-white/5 bg-black/20 p-2.5 text-xs"
                 >
                   <div className="whitespace-pre-wrap text-slate-200">{n.body}</div>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
+                  <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
                     <span>
                       {n.authorName || n.authorUserId.slice(0, 8)} ·{" "}
                       {new Date(n.createdAt).toLocaleString()}
@@ -2329,7 +2329,7 @@ function VacancyTimeline({ vacancyId }: { vacancyId: string }) {
                       <span aria-hidden>{t.emoji}</span>
                     </span>
                     <span className="text-xs text-slate-200">{e.title}</span>
-                    <span className="ml-2 text-[10px] text-slate-500">
+                    <span className="ml-2 text-xs text-slate-500">
                       {new Date(e.ts).toLocaleString()}
                     </span>
                   </li>
@@ -2512,7 +2512,7 @@ function WhyMatchButton({ applicationId }: { applicationId: string }) {
               ))}
             </div>
           )}
-          <div className="mt-2 flex items-center justify-between text-[10px] text-cyan-200/60">
+          <div className="mt-2 flex items-center justify-between text-xs text-cyan-200/60">
             <span>{data.cached ? "Cached — click 🔄 to regenerate" : "Generated just now"}</span>
             <button
               type="button"
@@ -2579,24 +2579,24 @@ function InterviewPrepButton({ applicationId }: { applicationId: string }) {
       {open && data && (
         <div className="absolute right-0 top-full z-30 mt-1 w-[min(440px,calc(100vw-2rem))] rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-200">
+            <span className="text-xs font-semibold uppercase tracking-wider text-fuchsia-200">
               Interview prep · {data.questions.length} questions
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={copyAll}
-                className="text-[10px] text-fuchsia-300 hover:text-fuchsia-200"
+                className="text-xs text-fuchsia-300 hover:text-fuchsia-200"
                 title="Copy all to clipboard"
               >
                 ⎘ copy
               </button>
-              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+              <button onClick={() => setOpen(false)} className="text-xs text-slate-400 hover:text-slate-200">
                 ×
               </button>
             </div>
           </div>
           {data.missingSkills.length > 0 && (
-            <p className="mb-2 rounded border border-amber-500/20 bg-amber-500/[0.06] px-2 py-1 text-[10px] text-amber-200">
+            <p className="mb-2 rounded border border-amber-500/20 bg-amber-500/[0.06] px-2 py-1 text-xs text-amber-200">
               ⚠ Missing skills: {data.missingSkills.slice(0, 5).join(", ")}
             </p>
           )}
@@ -2604,10 +2604,10 @@ function InterviewPrepButton({ applicationId }: { applicationId: string }) {
             {data.questions.map((qq, i) => (
               <li key={i} className="rounded border border-fuchsia-500/20 bg-fuchsia-500/[0.04] p-2">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] font-bold text-fuchsia-200">{i + 1}.</span>
+                  <span className="text-xs font-bold text-fuchsia-200">{i + 1}.</span>
                   <span className="flex-1 text-xs text-slate-200">{qq.q}</span>
                 </div>
-                <div className="mt-1 pl-5 text-[10px] italic text-slate-400">{qq.hint}</div>
+                <div className="mt-1 pl-5 text-xs italic text-slate-400">{qq.hint}</div>
               </li>
             ))}
           </ol>
@@ -2667,7 +2667,7 @@ function AiShortlistButton({
         type="button"
         onClick={() => (result ? setOpen((v) => !v) : run())}
         disabled={busy}
-        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
+        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
         title="Claude reads all pending applications and picks the top 3"
       >
         {busy ? "✨ analysing…" : result ? "✨ AI picks" : `✨ AI shortlist (${pendingCount})`}
@@ -2675,36 +2675,36 @@ function AiShortlistButton({
       {open && result && (
         <div className="absolute right-0 top-full z-20 mt-1 w-96 rounded-lg border border-fuchsia-500/30 bg-slate-900 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-fuchsia-200">
+            <span className="text-xs font-semibold uppercase tracking-wider text-fuchsia-200">
               Claude shortlist
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={run}
                 disabled={busy}
-                className="text-[10px] text-slate-400 hover:text-slate-200"
+                className="text-xs text-slate-400 hover:text-slate-200"
                 title="Re-run"
               >
                 ⟳
               </button>
-              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+              <button onClick={() => setOpen(false)} className="text-xs text-slate-400 hover:text-slate-200">
                 ×
               </button>
             </div>
           </div>
           {result.summary && (
-            <p className="mb-2 rounded border border-white/5 bg-black/20 p-2 text-[11px] italic text-slate-300">
+            <p className="mb-2 rounded border border-white/5 bg-black/20 p-2 text-xs italic text-slate-300">
               {result.summary}
             </p>
           )}
           {result.picks.length === 0 ? (
-            <p className="text-[11px] text-slate-500">Claude couldn&apos;t identify clear top picks.</p>
+            <p className="text-xs text-slate-500">Claude couldn&apos;t identify clear top picks.</p>
           ) : (
             <ul className="space-y-2">
               {result.picks.map((p) => (
                 <li key={p.applicationId} className="rounded border border-fuchsia-500/20 bg-fuchsia-500/[0.04] p-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold uppercase text-fuchsia-200">
+                    <span className="text-xs font-bold uppercase text-fuchsia-200">
                       #{p.rank}
                     </span>
                     <button
@@ -2714,7 +2714,7 @@ function AiShortlistButton({
                       Tag {p.rank === 1 ? "TOP_PICK" : "SHORTLIST"}
                     </button>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-200">{p.reasoning}</p>
+                  <p className="mt-1 text-xs text-slate-200">{p.reasoning}</p>
                 </li>
               ))}
             </ul>
@@ -2797,14 +2797,14 @@ function BulkMessageButton({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-200 transition hover:bg-sky-500/20"
+        className="rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20"
         title="Send the same DM to every PENDING applicant on this vacancy"
       >
         ✉ Message all ({pendingCount})
       </button>
       {open && (
         <div className="absolute right-0 top-full z-20 mt-1 w-96 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-200">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-sky-200">
             Message {pendingCount} pending applicants
           </div>
           {templates && templates.length > 0 && (
@@ -2847,7 +2847,7 @@ function BulkMessageButton({
               type="button"
               onClick={saveAsTemplate}
               disabled={content.trim().length < 5}
-              className="text-[10px] text-slate-400 hover:text-emerald-300 disabled:opacity-40"
+              className="text-xs text-slate-400 hover:text-emerald-300 disabled:opacity-40"
               title="Save current text as a reusable template"
             >
               ★ Save as template
@@ -2856,7 +2856,7 @@ function BulkMessageButton({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md border border-white/10 px-3 py-1 text-[11px] text-slate-300 hover:bg-white/5"
+                className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 hover:bg-white/5"
               >
                 Cancel
               </button>
@@ -2864,7 +2864,7 @@ function BulkMessageButton({
                 type="button"
                 onClick={send}
                 disabled={busy || content.trim().length < 5}
-                className="rounded-md bg-sky-500 px-3 py-1 text-[11px] font-semibold text-sky-950 hover:bg-sky-400 disabled:opacity-50"
+                className="rounded-md bg-sky-500 px-3 py-1 text-xs font-semibold text-sky-950 hover:bg-sky-400 disabled:opacity-50"
               >
                 {busy ? "…" : "Send"}
               </button>
@@ -2913,7 +2913,7 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
         onClick={run}
         disabled={busy}
         title="AI quality review of this vacancy"
-        className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold transition hover:opacity-90 disabled:opacity-50 ${tone}`}
+        className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition hover:opacity-90 disabled:opacity-50 ${tone}`}
       >
         {busy ? "…" : data ? `🤖 ${data.score}/100` : "🤖 AI feedback"}
       </button>
@@ -2934,11 +2934,11 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
             <>
               <div className="mb-2 flex items-baseline gap-2">
                 <div className="text-3xl font-bold text-white">{data.score}</div>
-                <div className="text-[10px] uppercase tracking-wider text-slate-500">/ 100</div>
+                <div className="text-xs uppercase tracking-wider text-slate-500">/ 100</div>
               </div>
               {data.strengths.length > 0 && (
                 <>
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-emerald-300">
                     Strengths
                   </div>
                   <ul className="mb-2 space-y-0.5 pl-4 text-slate-300">
@@ -2950,7 +2950,7 @@ function VacancyFeedbackButton({ vacancyId }: { vacancyId: string }) {
               )}
               {data.suggestions.length > 0 && (
                 <>
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                  <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-amber-300">
                     Suggestions
                   </div>
                   <ul className="space-y-0.5 pl-4 text-slate-300">
@@ -3013,7 +3013,7 @@ function TranslateVacancyButton({
         type="button"
         onClick={() => (data ? setOpen((v) => !v) : run())}
         disabled={busy}
-        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
+        className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-xs font-semibold text-fuchsia-200 transition hover:bg-fuchsia-500/20 disabled:opacity-50"
         title="Claude generates RU/EN/KK variants of this vacancy"
       >
         {busy ? "✨ translating…" : "✨ Translate"}
@@ -3026,7 +3026,7 @@ function TranslateVacancyButton({
                 <button
                   key={loc}
                   onClick={() => setActiveLoc(loc)}
-                  className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ${
                     activeLoc === loc ? "bg-fuchsia-500/20 text-fuchsia-100" : "bg-white/5 text-slate-400 hover:bg-white/10"
                   }`}
                 >
@@ -3035,10 +3035,10 @@ function TranslateVacancyButton({
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={copy} className="text-[10px] text-fuchsia-300 hover:text-fuchsia-200">
+              <button onClick={copy} className="text-xs text-fuchsia-300 hover:text-fuchsia-200">
                 ⎘ copy
               </button>
-              <button onClick={() => setOpen(false)} className="text-[10px] text-slate-400 hover:text-slate-200">
+              <button onClick={() => setOpen(false)} className="text-xs text-slate-400 hover:text-slate-200">
                 ×
               </button>
             </div>
@@ -3140,7 +3140,7 @@ function ExportCsvButton({
       onClick={download}
       disabled={busy}
       title="Download all applications as CSV (includes label, skills, AI score)"
-      className="rounded-md border border-white/10 px-3 py-1 text-[11px] font-medium text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+      className="rounded-md border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
     >
       {busy ? "…" : "↓ CSV"}
     </button>

@@ -332,7 +332,7 @@ function LiveActivityBand() {
     <div className="mb-6 overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04]">
       <div className="flex items-center gap-2 border-b border-emerald-500/15 px-3 py-1.5">
         <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200">
+        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-200">
           Live · last 20 events
         </span>
       </div>
@@ -418,7 +418,7 @@ function FeaturedEmployers() {
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
           Featured employers
         </h2>
-        <Link href="/build/leaderboard" className="text-[11px] text-emerald-300 hover:underline">
+        <Link href="/build/leaderboard" className="text-xs text-emerald-300 hover:underline">
           See all →
         </Link>
       </div>
@@ -451,13 +451,13 @@ function FeaturedEmployers() {
                     {e.name ?? "Anonymous"}
                   </span>
                   {e.verifiedAt && (
-                    <span className="text-[10px] text-sky-300" title="Verified">✓</span>
+                    <span className="text-xs text-sky-300" title="Verified">✓</span>
                   )}
                 </div>
-                {e.city && <div className="truncate text-[10px] text-slate-400">📍 {e.city}</div>}
+                {e.city && <div className="truncate text-xs text-slate-400">📍 {e.city}</div>}
               </div>
             </div>
-            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400">
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
               <span>
                 {e.openVacancies > 0 ? (
                   <span className="text-emerald-300">{e.openVacancies} open</span>
@@ -492,17 +492,17 @@ function FirstProjectCta() {
         <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
           <div className="text-base">📝</div>
           <div className="mt-1 font-semibold text-white">Опишите объект</div>
-          <p className="mt-0.5 text-[11px] text-slate-400">Город, бюджет, сроки</p>
+          <p className="mt-0.5 text-xs text-slate-400">Город, бюджет, сроки</p>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
           <div className="text-base">👥</div>
           <div className="mt-1 font-semibold text-white">Добавьте вакансии</div>
-          <p className="mt-0.5 text-[11px] text-slate-400">С зарплатой и навыками</p>
+          <p className="mt-0.5 text-xs text-slate-400">С зарплатой и навыками</p>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
           <div className="text-base">✓</div>
           <div className="mt-1 font-semibold text-white">Получайте отклики</div>
-          <p className="mt-0.5 text-[11px] text-slate-400">AI-скоринг + bulk-actions</p>
+          <p className="mt-0.5 text-xs text-slate-400">AI-скоринг + bulk-actions</p>
         </div>
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-2">

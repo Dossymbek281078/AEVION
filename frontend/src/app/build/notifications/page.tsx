@@ -132,7 +132,7 @@ function Body() {
                   <span className={`text-sm font-semibold ${n.read ? "text-slate-300" : "text-white"}`}>
                     {n.title}
                   </span>
-                  <span className="shrink-0 text-[10px] text-slate-500">
+                  <span className="shrink-0 text-xs text-slate-500">
                     {new Date(n.at).toLocaleString("ru-RU", {
                       day: "2-digit",
                       month: "short",

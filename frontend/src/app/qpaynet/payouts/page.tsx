@@ -151,7 +151,7 @@ export default function PayoutsPage() {
               placeholder="0"
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500" />
             {amount && parseFloat(amount) > 0 && (
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Комиссия 0.1%: {fmt(parseFloat(amount) * 0.001)} ₸ · к списанию {fmt(parseFloat(amount) * 1.001)} ₸
               </p>
             )}
@@ -175,14 +175,14 @@ export default function PayoutsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${STATUS_CHIP[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                      <span className="text-[10px] text-slate-500">{METHOD_LABEL[p.method]}</span>
-                      <span className="text-[10px] text-slate-600">{fmtDate(p.created_at)}</span>
+                      <span className="text-xs text-slate-500">{METHOD_LABEL[p.method]}</span>
+                      <span className="text-xs text-slate-600">{fmtDate(p.created_at)}</span>
                     </div>
                     <div className="text-base font-bold">{fmt(p.amount)} {p.currency}</div>
-                    <div className="text-[11px] text-slate-500 font-mono">→ {p.destination}</div>
-                    {p.rejected_reason && <div className="text-[11px] text-red-400 mt-1">⚠ {p.rejected_reason}</div>}
+                    <div className="text-xs text-slate-500 font-mono">→ {p.destination}</div>
+                    {p.rejected_reason && <div className="text-xs text-red-400 mt-1">⚠ {p.rejected_reason}</div>}
                     {p.paid_external_ref && p.status === "paid" && (
-                      <div className="text-[11px] text-emerald-500 mt-1">ref: {p.paid_external_ref}</div>
+                      <div className="text-xs text-emerald-500 mt-1">ref: {p.paid_external_ref}</div>
                     )}
                   </div>
                 </div>

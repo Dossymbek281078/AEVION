@@ -172,7 +172,7 @@ export default async function SkillPage({
                     </div>
                   )}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-400">
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-400">
                   {(v.city || v.projectCity) && <span>📍 {v.city || v.projectCity}</span>}
                   {v.projectTitle && <span className="text-slate-500">{v.projectTitle}</span>}
                 </div>
@@ -204,7 +204,7 @@ export default async function SkillPage({
 function Tile({ label, value, tone }: { label: string; value: string; tone?: "emerald" }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-      <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
       <div className={`mt-0.5 text-lg font-bold ${tone === "emerald" ? "text-emerald-300" : "text-white"}`}>
         {value}
       </div>

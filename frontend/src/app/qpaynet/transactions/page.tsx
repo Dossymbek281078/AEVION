@@ -141,10 +141,10 @@ export default function TransactionsPage() {
                 <div key={tx.id} className={`flex items-center justify-between px-4 py-3 rounded-xl border border-slate-800 ${t.bg}`}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[10px] font-semibold ${t.color}`}>{t.label}</span>
+                      <span className={`text-xs font-semibold ${t.color}`}>{t.label}</span>
                       <span className="text-xs text-slate-300 truncate">{tx.description || "—"}</span>
                     </div>
-                    <div className="text-[11px] text-slate-600 mt-0.5">
+                    <div className="text-xs text-slate-600 mt-0.5">
                       {fmtDate(tx.created_at)}
                       {tx.fee > 0 && <span className="ml-2 text-slate-700">комиссия {fmt(tx.fee)} ₸</span>}
                     </div>

@@ -114,7 +114,7 @@ export default function NotificationsPage() {
                   {!n.read_at && <span className="w-2 h-2 bg-amber-400 rounded-full shrink-0" />}
                 </div>
                 {n.body && <div className="text-[12px] text-slate-400 truncate">{n.body}</div>}
-                <div className="text-[10px] text-slate-600 mt-1">{fmtDate(n.created_at)}</div>
+                <div className="text-xs text-slate-600 mt-1">{fmtDate(n.created_at)}</div>
                 {n.amount != null && (
                   <div className="text-[12px] text-emerald-400 font-bold mt-1">+{fmt(n.amount)} ₸</div>
                 )}

@@ -81,11 +81,11 @@ function WidgetInner() {
         </div>
 
         {presetDesc && (
-          <p className="text-[11px] text-slate-500 mt-3 truncate">📝 {presetDesc}</p>
+          <p className="text-xs text-slate-500 mt-3 truncate">📝 {presetDesc}</p>
         )}
 
         <a href="https://aevion.app/qpaynet" target="_blank" rel="noopener noreferrer"
-          className="block text-center mt-4 text-[10px] text-slate-600 hover:text-slate-400">
+          className="block text-center mt-4 text-xs text-slate-600 hover:text-slate-400">
           Безопасно через AEVION QPayNet ↗
         </a>
       </div>

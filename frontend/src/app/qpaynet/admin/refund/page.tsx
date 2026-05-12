@@ -262,7 +262,7 @@ export default function AdminRefundPage() {
                 placeholder="00000000-0000-0000-0000-000000000000"
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono focus:border-violet-600 focus:outline-none"
               />
-              <div className="text-[10px] text-slate-600 mt-1">
+              <div className="text-xs text-slate-600 mt-1">
                 Поддерживаются: deposit, transfer_in, merchant_charge
               </div>
             </div>
@@ -297,7 +297,7 @@ export default function AdminRefundPage() {
                   placeholder="1500.00"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono focus:border-violet-600 focus:outline-none"
                 />
-                <div className="text-[10px] text-slate-600 mt-1">
+                <div className="text-xs text-slate-600 mt-1">
                   Не больше суммы оригинальной транзакции
                 </div>
               </div>
@@ -321,7 +321,7 @@ export default function AdminRefundPage() {
               )}
             </div>
           </form>
-          <div className="text-[10px] text-slate-600 mt-4 leading-relaxed">
+          <div className="text-xs text-slate-600 mt-4 leading-relaxed">
             ⚠ Возврат создаёт <strong>новую</strong> транзакцию (type=&quot;refund&quot;) с
             обратной ссылкой на оригинал. Двойной вызов вернёт 409
             <code className="bg-slate-950 px-1 mx-1 rounded">tx_already_refunded</code>.
@@ -384,14 +384,14 @@ export default function AdminRefundPage() {
                   </div>
                   {bulkResult.failed.length > 0 && (
                     <div>
-                      <div className="text-[10px] uppercase font-bold text-red-400 mb-1">
+                      <div className="text-xs uppercase font-bold text-red-400 mb-1">
                         Failed
                       </div>
                       <ul className="space-y-0.5 max-h-40 overflow-y-auto">
                         {bulkResult.failed.map((f, i) => (
                           <li
                             key={i}
-                            className="flex justify-between gap-2 text-[11px] font-mono"
+                            className="flex justify-between gap-2 text-xs font-mono"
                           >
                             <span className="text-slate-500 truncate">{f.txId}</span>
                             <span className="text-red-400 shrink-0">{f.error}</span>
@@ -449,25 +449,25 @@ export default function AdminRefundPage() {
                       <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-red-900 text-red-300">
                         REFUND
                       </span>
-                      <span className="text-[10px] text-slate-500">{fmtDate(r.createdAt)}</span>
+                      <span className="text-xs text-slate-500">{fmtDate(r.createdAt)}</span>
                     </div>
                     <div className="text-base font-bold text-red-400">−{fmt(r.amountKzt)} ₸</div>
                     <div className="text-xs text-slate-400 mt-1">{r.description}</div>
-                    <div className="text-[10px] text-slate-600 font-mono mt-1">
+                    <div className="text-xs text-slate-600 font-mono mt-1">
                       refund: {r.refundId.slice(0, 8)}… · wallet: {r.walletId.slice(0, 8)}… ·
                       owner: {r.ownerId.slice(0, 12)}…
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-[10px] text-slate-500 uppercase font-bold">Оригинал</div>
+                    <div className="text-xs text-slate-500 uppercase font-bold">Оригинал</div>
                     <div className="text-xs text-slate-400">
                       {r.originalType ? TYPE_LABEL[r.originalType] ?? r.originalType : "—"}
                     </div>
                     <div className="text-xs font-mono">{fmt(r.originalAmountKzt)} ₸</div>
-                    <div className="text-[10px] text-slate-600">
+                    <div className="text-xs text-slate-600">
                       {fmtDate(r.originalCreatedAt)}
                     </div>
-                    <div className="text-[10px] text-slate-700 font-mono mt-1">
+                    <div className="text-xs text-slate-700 font-mono mt-1">
                       {r.originalTxId.slice(0, 8)}…
                     </div>
                   </div>

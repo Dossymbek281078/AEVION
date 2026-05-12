@@ -343,7 +343,7 @@ export default function ApplicationReviewPage() {
               <ol className="space-y-2 text-sm text-slate-200">
                 {current.answers.map((a, i) => (
                   <li key={i} className="rounded-md border border-white/5 bg-black/20 p-3">
-                    <div className="text-[11px] uppercase text-slate-500">Q{i + 1}</div>
+                    <div className="text-xs uppercase text-slate-500">Q{i + 1}</div>
                     <div className="mt-0.5 whitespace-pre-wrap">{a}</div>
                   </li>
                 ))}
@@ -458,7 +458,7 @@ export default function ApplicationReviewPage() {
                 {notes.slice(0, 8).map((n) => (
                   <li key={n.id} className="rounded-md border border-white/5 bg-black/20 p-2 text-xs text-slate-300">
                     <div className="whitespace-pre-wrap">{n.body}</div>
-                    <div className="mt-1 text-[10px] text-slate-500">
+                    <div className="mt-1 text-xs text-slate-500">
                       {new Date(n.createdAt).toLocaleString()}
                       {n.isPinned ? " · 📌 pinned" : ""}
                     </div>
@@ -478,7 +478,7 @@ export default function ApplicationReviewPage() {
                   <button
                     type="button"
                     onClick={() => setBulkSelected(new Set())}
-                    className="text-[10px] text-slate-500 hover:text-slate-300"
+                    className="text-xs text-slate-500 hover:text-slate-300"
                   >
                     Clear
                   </button>
@@ -486,7 +486,7 @@ export default function ApplicationReviewPage() {
                   <button
                     type="button"
                     onClick={() => setBulkSelected(new Set(pendingApps.map((a) => a.id)))}
-                    className="text-[10px] text-slate-500 hover:text-slate-300"
+                    className="text-xs text-slate-500 hover:text-slate-300"
                   >
                     Select all
                   </button>
@@ -508,7 +508,7 @@ export default function ApplicationReviewPage() {
                       {a.applicantName || "Anonymous"}
                     </span>
                     {a.matchScore != null && (
-                      <span className="ml-auto shrink-0 text-[10px] text-cyan-300">
+                      <span className="ml-auto shrink-0 text-xs text-cyan-300">
                         {Math.round(a.matchScore)}%
                       </span>
                     )}
@@ -520,7 +520,7 @@ export default function ApplicationReviewPage() {
                   type="button"
                   onClick={() => bulkApply("REJECTED")}
                   disabled={bulkSelected.size === 0 || bulkBusy}
-                  className="flex-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-40"
+                  className="flex-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-40"
                 >
                   ✗ Reject selected
                 </button>
@@ -528,7 +528,7 @@ export default function ApplicationReviewPage() {
                   type="button"
                   onClick={() => bulkApply("ACCEPTED")}
                   disabled={bulkSelected.size === 0 || bulkBusy}
-                  className="flex-1 rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2 py-1.5 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-40"
+                  className="flex-1 rounded-md border border-emerald-400/40 bg-emerald-400/15 px-2 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25 disabled:opacity-40"
                 >
                   ✓ Accept
                 </button>
@@ -540,7 +540,7 @@ export default function ApplicationReviewPage() {
             <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
               Shortcuts
             </div>
-            <ul className="space-y-1 text-[11px] text-slate-400">
+            <ul className="space-y-1 text-xs text-slate-400">
               <li><kbd className="rounded bg-white/10 px-1">←</kbd> / <kbd className="rounded bg-white/10 px-1">→</kbd> prev/next</li>
               <li><kbd className="rounded bg-white/10 px-1">a</kbd> accept · <kbd className="rounded bg-white/10 px-1">r</kbd> reject</li>
               <li><kbd className="rounded bg-white/10 px-1">1-5</kbd> set label · <kbd className="rounded bg-white/10 px-1">0</kbd> clear</li>

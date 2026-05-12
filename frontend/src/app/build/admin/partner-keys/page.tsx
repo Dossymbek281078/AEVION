@@ -149,7 +149,7 @@ function Body() {
         <summary className="cursor-pointer font-semibold text-emerald-200">
           Drop-in widget (auto-renders feed on a partner site)
         </summary>
-        <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 font-mono text-[11px] text-slate-200">{`<div data-aevion-build
+        <pre className="mt-2 overflow-x-auto rounded bg-black/40 p-2 font-mono text-xs text-slate-200">{`<div data-aevion-build
      data-key="qb_pk_..."
      data-limit="6"
      data-city="Astana"
@@ -189,11 +189,11 @@ function Body() {
         </div>
         {freshKey && (
           <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-200">
+            <div className="text-xs font-semibold uppercase tracking-wider text-amber-200">
               ⚠ Copy now — this is the only time the plaintext is shown.
             </div>
             <div className="mt-1 text-xs text-slate-300">{freshKey.label}</div>
-            <pre className="mt-2 overflow-x-auto rounded bg-black/40 px-2 py-1.5 font-mono text-[11px] text-amber-100">
+            <pre className="mt-2 overflow-x-auto rounded bg-black/40 px-2 py-1.5 font-mono text-xs text-amber-100">
               {freshKey.plaintext}
             </pre>
             <button
@@ -205,7 +205,7 @@ function Body() {
                   toast.error("Clipboard blocked");
                 }
               }}
-              className="mt-2 rounded-md bg-amber-500/20 px-3 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/30"
+              className="mt-2 rounded-md bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200 hover:bg-amber-500/30"
             >
               Copy plaintext
             </button>
@@ -249,7 +249,7 @@ function Body() {
       {items && items.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="bg-white/5 text-[10px] uppercase tracking-wider text-slate-400">
+            <thead className="bg-white/5 text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-2 py-2 text-left">
                   <input
@@ -295,13 +295,13 @@ function Body() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="text-slate-200">{k.label}</div>
-                    <div className="font-mono text-[10px] text-slate-500">id: {k.id.slice(0, 8)}…</div>
+                    <div className="font-mono text-xs text-slate-500">id: {k.id.slice(0, 8)}…</div>
                   </td>
                   <td className="px-3 py-2">
                     <UsageSparkline days={usage?.get(k.id)?.days || []} window={windowDays} />
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{k.usageCount}</td>
-                  <td className="px-3 py-2 text-right text-[11px] text-slate-400">
+                  <td className="px-3 py-2 text-right text-xs text-slate-400">
                     {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("ru-RU") : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -320,14 +320,14 @@ function Body() {
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => rotate(k.id)}
-                          className="text-[11px] text-amber-300 hover:text-amber-200"
+                          className="text-xs text-amber-300 hover:text-amber-200"
                           title="Revoke + mint new key with same label"
                         >
                           ↻ Rotate
                         </button>
                         <button
                           onClick={() => revoke(k.id)}
-                          className="text-[11px] text-rose-300 hover:text-rose-200"
+                          className="text-xs text-rose-300 hover:text-rose-200"
                         >
                           Revoke
                         </button>
@@ -360,7 +360,7 @@ function UsageSparkline({ days, window }: { days: { day: string; hits: number }[
   const total = series.reduce((s, p) => s + p.hits, 0);
 
   if (total === 0) {
-    return <div className="text-[10px] text-slate-600">no traffic</div>;
+    return <div className="text-xs text-slate-600">no traffic</div>;
   }
 
   const W = 110;
@@ -402,7 +402,7 @@ function UsageSparkline({ days, window }: { days: { day: string; hits: number }[
           </circle>
         ))}
       </svg>
-      <span className="tabular-nums text-[10px] text-slate-500">Σ {total}</span>
+      <span className="tabular-nums text-xs text-slate-500">Σ {total}</span>
     </div>
   );
 }

@@ -222,7 +222,7 @@ export default function AdminFreezePage() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-mono text-slate-300 truncate">{h.id}</div>
-                    <div className="text-[10px] text-slate-500 truncate">
+                    <div className="text-xs text-slate-500 truncate">
                       {h.name} · owner: {h.ownerId}
                     </div>
                   </div>
@@ -296,7 +296,7 @@ export default function AdminFreezePage() {
                 }
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:border-violet-600 focus:outline-none"
               />
-              <div className="text-[10px] text-slate-600 mt-1">
+              <div className="text-xs text-slate-600 mt-1">
                 Записывается в аудит-лог; пользователь получит уведомление.
               </div>
             </div>
@@ -318,7 +318,7 @@ export default function AdminFreezePage() {
             </button>
           </form>
 
-          <div className="mt-4 p-3 bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-500 leading-relaxed">
+          <div className="mt-4 p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-500 leading-relaxed">
             <strong className="text-slate-400">Что делает freeze:</strong> блокирует
             depositы / переводы / charges / payouts на этом кошельке. Баланс сохраняется.
             Никаких новых движений до unfreeze.
@@ -337,7 +337,7 @@ export default function AdminFreezePage() {
               </div>
               <button
                 onClick={() => persistRecent([])}
-                className="text-[10px] text-slate-600 hover:text-slate-400"
+                className="text-xs text-slate-600 hover:text-slate-400"
               >
                 очистить
               </button>
@@ -368,7 +368,7 @@ export default function AdminFreezePage() {
                 </div>
               ))}
             </div>
-            <div className="text-[10px] text-slate-600 mt-3">
+            <div className="text-xs text-slate-600 mt-3">
               Источник истины — серверный audit-log. Этот список — лишь локальная подсказка.
             </div>
           </div>

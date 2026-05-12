@@ -149,7 +149,7 @@ X-Api-Key: qpn_live_...
   width="380" height="360" frameborder="0"
   style="border-radius:16px"
 ></iframe>`}</code>
-            <p className="text-[11px] text-slate-500 mt-2">
+            <p className="text-xs text-slate-500 mt-2">
               Параметры: <code className="text-slate-400">amount</code>, <code className="text-slate-400">desc</code>, <code className="text-slate-400">compact=1</code> (прозрачный фон).
             </p>
           </div>
@@ -246,9 +246,9 @@ function WebhookSubs({ token }: { token: string }) {
 
       {createdSecret && (
         <div className="bg-amber-950/40 border border-amber-800 rounded-xl p-3 mb-3">
-          <div className="text-[10px] text-amber-400 font-bold uppercase mb-1">Секрет (показан 1 раз)</div>
+          <div className="text-xs text-amber-400 font-bold uppercase mb-1">Секрет (показан 1 раз)</div>
           <code className="text-xs text-amber-200 break-all block">{createdSecret}</code>
-          <button onClick={() => setCreatedSecret(null)} className="text-[10px] text-amber-400/70 mt-2 hover:text-amber-300">Скрыть</button>
+          <button onClick={() => setCreatedSecret(null)} className="text-xs text-amber-400/70 mt-2 hover:text-amber-300">Скрыть</button>
         </div>
       )}
 
@@ -270,13 +270,13 @@ function WebhookSubs({ token }: { token: string }) {
           <div key={s.id} className={`flex items-center justify-between p-2 rounded-lg border ${s.revoked_at ? "border-slate-800 opacity-50" : "border-slate-700 bg-slate-950"}`}>
             <div className="min-w-0 flex-1 mr-3">
               <div className="text-xs font-mono text-slate-300 truncate">{s.url}</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">{s.events}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{s.events}</div>
             </div>
             {s.revoked_at ? (
               <span className="text-xs bg-slate-800 text-slate-500 px-2 py-1 rounded-full shrink-0">Отозвана</span>
             ) : (
               <button onClick={() => revoke(s.id)}
-                className="text-[10px] px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 rounded shrink-0">
+                className="text-xs px-2 py-1 bg-red-900 hover:bg-red-800 text-red-300 rounded shrink-0">
                 Отозвать
               </button>
             )}

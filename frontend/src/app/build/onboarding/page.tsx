@@ -172,7 +172,7 @@ function Body() {
         ))}
       </ol>
 
-      <p className="mt-8 text-[11px] text-slate-500">
+      <p className="mt-8 text-xs text-slate-500">
         Нужна помощь? Заходите в{" "}
         <Link href="/build/help" className="text-emerald-300 underline">
           /build/help

@@ -149,7 +149,7 @@ function Endpoint({ method, path, desc }: { method: string; path: string; desc: 
 
 function Pre({ children }: { children: string }) {
   return (
-    <pre className="mt-2 overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 text-[11px] text-slate-200">
+    <pre className="mt-2 overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 text-xs text-slate-200">
       <code>{children}</code>
     </pre>
   );

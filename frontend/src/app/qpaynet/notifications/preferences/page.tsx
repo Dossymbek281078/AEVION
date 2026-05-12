@@ -84,7 +84,7 @@ export default function NotificationPrefsPage() {
           <span className="text-slate-600">·</span>
           <h1 className="text-sm font-bold">Настройки</h1>
         </div>
-        {savedAt && <span className="text-[10px] text-emerald-400">✓ Сохранено</span>}
+        {savedAt && <span className="text-xs text-emerald-400">✓ Сохранено</span>}
       </header>
 
       <div className="max-w-md mx-auto px-6 py-8 space-y-5">
@@ -114,7 +114,7 @@ export default function NotificationPrefsPage() {
             {/* Per-event mute */}
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-5 space-y-3">
               <h2 className="font-bold text-sm mb-1">События</h2>
-              <p className="text-[11px] text-slate-500 mb-3">Отключите ненужные типы — пропустят и in-app, и email.</p>
+              <p className="text-xs text-slate-500 mb-3">Отключите ненужные типы — пропустят и in-app, и email.</p>
               {prefs.availableKinds.map(kind => {
                 const muted = prefs.mutedKinds.includes(kind);
                 return (
@@ -148,7 +148,7 @@ function Toggle({ label, hint, checked, onToggle, disabled }: {
       className="w-full flex items-center justify-between gap-3 text-left disabled:opacity-50">
       <div>
         <div className="text-sm font-medium text-slate-200">{label}</div>
-        {hint && <div className="text-[11px] text-slate-500">{hint}</div>}
+        {hint && <div className="text-xs text-slate-500">{hint}</div>}
       </div>
       <div className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${checked ? "bg-violet-600" : "bg-slate-700"}`}>
         <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all ${checked ? "left-[18px]" : "left-0.5"}`} />

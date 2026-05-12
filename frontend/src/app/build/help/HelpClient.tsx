@@ -45,7 +45,7 @@ export function HelpClient({
         )}
       </div>
       {q && (
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-xs text-slate-500">
           {totalShown === 0
             ? "Ничего не найдено. Попробуйте более общий запрос."
             : `${totalShown} match${totalShown === 1 ? "" : "es"}`}

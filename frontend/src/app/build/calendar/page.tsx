@@ -73,7 +73,7 @@ function Body() {
           <h1 className="text-2xl font-bold text-white">Interview calendar</h1>
           <p className="mt-1 text-sm text-slate-400">
             Кандидаты с лейблом{" "}
-            <span className="rounded bg-emerald-400/15 px-1.5 py-1 text-[11px] font-semibold text-emerald-200">
+            <span className="rounded bg-emerald-400/15 px-1.5 py-1 text-xs font-semibold text-emerald-200">
               💬 Interview
             </span>{" "}
             в ваших вакансиях, сгруппированные по дню. Нажмите для перехода в review-режим.
@@ -98,7 +98,7 @@ function Body() {
       {items && upcomingTotal === 0 && pastWeek.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-400">
           <p>Нет кандидатов с лейблом «Interview».</p>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-xs text-slate-500">
             Проставьте лейбл в review-режиме клавишей «3», чтобы они появились здесь.
           </p>
         </div>
@@ -132,7 +132,7 @@ function Body() {
         </>
       )}
 
-      <p className="mt-8 text-[11px] text-slate-500">
+      <p className="mt-8 text-xs text-slate-500">
         Время лейблирования = последнее обновление заявки. Полноценный interview-scheduler
         придёт позже — пока используйте 📅 в чате для отправки слотов.
       </p>
@@ -161,13 +161,13 @@ function DayColumn({ day, items }: { day: Date; items: Item[] }) {
       }`}
     >
       <div className="mb-2">
-        <div className="text-[10px] uppercase tracking-wider text-slate-500">{dow}</div>
+        <div className="text-xs uppercase tracking-wider text-slate-500">{dow}</div>
         <div className={isToday ? "font-semibold text-emerald-200" : "font-semibold text-slate-200"}>
           {dm}
         </div>
       </div>
       {items.length === 0 ? (
-        <p className="text-[10px] text-slate-600">—</p>
+        <p className="text-xs text-slate-600">—</p>
       ) : (
         <ul className="space-y-1.5">
           {items.map((it) => (
@@ -197,14 +197,14 @@ function ItemCard({
         dim ? "opacity-60" : ""
       }`}
     >
-      <div className={`truncate font-semibold ${compact ? "text-[11px]" : "text-sm"} text-slate-100`}>
+      <div className={`truncate font-semibold ${compact ? "text-xs" : "text-sm"} text-slate-100`}>
         {item.applicantName || "Anonymous"}
       </div>
-      <div className={`truncate ${compact ? "text-[10px]" : "text-xs"} text-slate-400`}>
+      <div className={`truncate ${compact ? "text-xs" : "text-xs"} text-slate-400`}>
         {item.vacancyTitle}
       </div>
       {item.matchScore != null && (
-        <div className="mt-0.5 text-[10px] text-cyan-300">
+        <div className="mt-0.5 text-xs text-cyan-300">
           match {Math.round(item.matchScore)}%
         </div>
       )}

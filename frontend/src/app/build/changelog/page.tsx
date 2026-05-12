@@ -162,7 +162,7 @@ export default function ChangelogPage() {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
                 {monthLabel(m)}
               </h2>
-              <span className="text-[11px] text-slate-600">
+              <span className="text-xs text-slate-600">
                 {grouped[m].length} update{grouped[m].length === 1 ? "" : "s"}
               </span>
             </div>
@@ -178,7 +178,7 @@ export default function ChangelogPage() {
                     >
                       {e.tag}
                     </span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-xs text-slate-500">
                       {new Date(e.date).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",

@@ -27,7 +27,7 @@ export default function BuildError({
         known-good place.
       </p>
       {error?.digest && (
-        <p className="font-mono text-[10px] text-slate-500">ref: {error.digest}</p>
+        <p className="font-mono text-xs text-slate-500">ref: {error.digest}</p>
       )}
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         <button

@@ -80,7 +80,7 @@ function Section({ title, items, emptyLabel }: { title: string; items: LeaderRow
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-white truncate">{row.name}</span>
                     {row.verifiedAt && (
-                      <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold text-sky-200">✓</span>
+                      <span className="rounded-full bg-sky-500/20 px-1.5 py-0.5 text-xs font-bold text-sky-200">✓</span>
                     )}
                   </div>
                   <div className="text-xs text-slate-400">
@@ -92,7 +92,7 @@ function Section({ title, items, emptyLabel }: { title: string; items: LeaderRow
                     {"★".repeat(Math.round(row.avgRating))}{" "}
                     <span className="text-white">{row.avgRating.toFixed(1)}</span>
                   </div>
-                  <div className="text-[10px] text-slate-500">{row.reviewCount} review{row.reviewCount !== 1 ? "s" : ""}</div>
+                  <div className="text-xs text-slate-500">{row.reviewCount} review{row.reviewCount !== 1 ? "s" : ""}</div>
                 </div>
               </Link>
             </li>

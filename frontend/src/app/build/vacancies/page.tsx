@@ -365,7 +365,7 @@ function RecentlyViewedRow() {
   return (
     <div className="mb-4">
       <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           Recently viewed
         </span>
         <button
@@ -373,7 +373,7 @@ function RecentlyViewedRow() {
             clearRecentVacancies();
             setItems([]);
           }}
-          className="text-[10px] text-slate-500 hover:text-slate-300"
+          className="text-xs text-slate-500 hover:text-slate-300"
         >
           Clear
         </button>
@@ -389,7 +389,7 @@ function RecentlyViewedRow() {
             <div className="truncate text-xs font-semibold text-white group-hover:text-emerald-200">
               {v.title}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-slate-400">
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
               {v.salary > 0 && <span className="text-emerald-300">${v.salary.toLocaleString()}</span>}
               {v.city && <span>📍 {v.city}</span>}
             </div>
@@ -474,9 +474,9 @@ function SavedSearches({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
       {items.length === 0 && (
-        <span className="text-[11px] text-slate-500">none yet</span>
+        <span className="text-xs text-slate-500">none yet</span>
       )}
       {items.map((s) => (
         <span

@@ -7,6 +7,40 @@ import { apiUrl } from "@/lib/apiBase";
 
 const GENRES = ["All", "Pop", "Rock", "Electronic", "Classical", "Jazz", "Hip-hop", "Other"];
 
+// ─── Waveform visualization ────────────────────────────────────────────────────
+function Waveform({ isPlaying, progress }: { isPlaying: boolean; progress: number }) {
+  const bars = Array.from({ length: 60 }, (_, i) => {
+    const h = 20 + Math.abs(Math.sin(i * 0.5) * 30 + Math.cos(i * 0.3) * 20);
+    return Math.max(4, Math.min(50, h));
+  });
+  const playedBars = Math.floor((progress / 100) * bars.length);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, height: 56, padding: "0 4px", cursor: "pointer", marginBottom: 4 }}>
+      {bars.map((h, i) => (
+        <div
+          key={i}
+          style={{
+            width: 3,
+            height: h,
+            borderRadius: 2,
+            background: i < playedBars
+              ? "#0d9488"
+              : isPlaying
+              ? "rgba(13,148,136,0.3)"
+              : "#e2e8f0",
+            transition: "background 0.1s",
+            animation: isPlaying && i >= playedBars && i < playedBars + 3
+              ? `waveform-pulse 0.${4 + (i % 4)}s ease-in-out infinite alternate`
+              : "none",
+          }}
+        />
+      ))}
+      <style>{`@keyframes waveform-pulse { from { transform: scaleY(0.6); } to { transform: scaleY(1.2); } }`}</style>
+    </div>
+  );
+}
+
 function bearerHeader(): HeadersInit {
   const t = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
   return t ? { Authorization: `Bearer ${t}` } : {};
@@ -77,6 +111,7 @@ export default function QMediaMusicPage() {
             <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", marginBottom: 2 }}>{current.title}</div>
             <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>{current.artist}</div>
             {current.url && <audio ref={audioRef} src={current.url} onTimeUpdate={e => setProgress((e.currentTarget.currentTime / (e.currentTarget.duration || 1)) * 100)} onEnded={next} />}
+            <Waveform isPlaying={isPlaying} progress={progress} />
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <button onClick={prev} style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer" }}>⏮</button>
               <button onClick={() => setIsPlaying(v => !v)} style={{ width: 44, height: 44, borderRadius: "50%", background: "#0d9488", color: "#fff", border: "none", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{isPlaying ? "⏸" : "▶"}</button>
@@ -98,7 +133,15 @@ export default function QMediaMusicPage() {
           {tracks.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>No tracks yet. Be the first to add one!</p>}
           {tracks.map((t, i) => (
             <div key={t.id} onClick={() => play(t)} style={{ padding: "10px 14px", borderRadius: 10, background: current?.id === t.id ? "rgba(13,148,136,0.08)" : "#f8fafc", border: `1px solid ${current?.id === t.id ? "rgba(13,148,136,0.3)" : "rgba(15,23,42,0.08)"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ width: 24, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>{current?.id === t.id && isPlaying ? "▶" : i + 1}</span>
+              <span style={{ width: 24, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
+                {current?.id === t.id && isPlaying ? (
+                  <span style={{ display: "inline-flex", alignItems: "flex-end", gap: 1, height: 14 }}>
+                    {[0, 1, 2].map(bi => (
+                      <span key={bi} style={{ width: 3, background: "#0d9488", borderRadius: 1, display: "inline-block", height: `${8 + bi * 3}px`, animation: `waveform-pulse 0.${5 + bi}s ease-in-out infinite alternate` }} />
+                    ))}
+                  </span>
+                ) : i + 1}
+              </span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{t.title}</div>
                 <div style={{ fontSize: 11, color: "#64748b" }}>{t.artist}</div>

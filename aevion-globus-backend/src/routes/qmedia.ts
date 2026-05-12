@@ -9,7 +9,8 @@ const pool = getPool();
 export const qmediaRouter = Router();
 
 type TrackRow = { id: string; userId: string; title: string; artist: string; genre: string; duration: number; url: string | null; coverUrl: string | null; lyrics: string | null; playCount: number; isPublic: boolean; tags: string[]; createdAt: string; updatedAt: string };
-type PlaylistRow = { id: string; userId: string; name: string; description: string | null; isPublic: boolean; trackIds: string[]; createdAt: string; updatedAt: string };
+type PlaylistCollaborator = { userId: string; canEdit: boolean };
+type PlaylistRow = { id: string; userId: string; name: string; description: string | null; isPublic: boolean; trackIds: string[]; collaborators?: PlaylistCollaborator[]; createdAt: string; updatedAt: string };
 type VideoRow = { id: string; userId: string; title: string; description: string | null; url: string | null; thumbnailUrl: string | null; duration: number; viewCount: number; isPublic: boolean; category: string; tags: string[]; createdAt: string; updatedAt: string };
 
 const memTracks = new Map<string, TrackRow>();
@@ -132,7 +133,11 @@ qmediaRouter.post("/me/playlists/:id/tracks", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const playlist = memPlaylists.get(req.params.id);
-    if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
+    if (!playlist) return res.status(404).json({ error: "not found" });
+    // Allow owner OR collaborator with canEdit=true
+    const isOwner = playlist.userId === auth.sub;
+    const isEditor = (playlist.collaborators ?? []).some((c) => c.userId === auth.sub && c.canEdit);
+    if (!isOwner && !isEditor) return res.status(403).json({ error: "forbidden" });
     const { trackId } = req.body || {};
     if (!trackId) return res.status(400).json({ error: "trackId required" });
     if (!playlist.trackIds.includes(String(trackId))) playlist.trackIds.push(String(trackId));
@@ -318,6 +323,71 @@ qmediaRouter.post("/ai/describe-video", async (req, res) => {
     const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
     res.json({ description: result.reply.trim() });
   } catch { res.status(500).json({ error: "describe video failed" }); }
+});
+
+/* ── Smart Playlists ── */
+
+qmediaRouter.post("/me/playlists/:id/smart", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const playlist = memPlaylists.get(req.params.id);
+    if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
+    const { rules } = req.body || {};
+    const { genre, mood, minDuration, maxDuration } = (rules as { genre?: string; mood?: string; minDuration?: number; maxDuration?: number }) ?? {};
+    let matched = Array.from(memTracks.values()).filter((t) => t.isPublic);
+    if (genre) matched = matched.filter((t) => t.genre === genre);
+    if (minDuration !== undefined) matched = matched.filter((t) => t.duration >= minDuration);
+    if (maxDuration !== undefined) matched = matched.filter((t) => t.duration <= maxDuration);
+    if (mood) matched = matched.filter((t) => t.tags.some((tag) => tag.toLowerCase().includes(mood.toLowerCase())));
+    const ids = matched.slice(0, 50).map((t) => t.id);
+    playlist.trackIds = ids;
+    playlist.updatedAt = nowIso();
+    res.json({ playlist, tracksAdded: ids.length });
+  } catch { res.status(500).json({ error: "smart playlist failed" }); }
+});
+
+qmediaRouter.post("/me/playlists/:id/collaborators", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth?.sub) return res.status(401).json({ error: "auth required" });
+    const playlist = memPlaylists.get(req.params.id);
+    if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
+    const { userId, canEdit } = (req.body || {}) as { userId?: string; canEdit?: boolean };
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    if (!playlist.collaborators) playlist.collaborators = [];
+    const existing = playlist.collaborators.find((c) => c.userId === userId);
+    if (existing) { existing.canEdit = Boolean(canEdit); }
+    else { playlist.collaborators.push({ userId, canEdit: Boolean(canEdit) }); }
+    playlist.updatedAt = nowIso();
+    res.json({ playlist });
+  } catch { res.status(500).json({ error: "add collaborator failed" }); }
+});
+
+/* ── Radio + Similar Tracks ── */
+
+qmediaRouter.get("/radio/:genre", async (req, res) => {
+  try {
+    const genre = String(req.params.genre);
+    let tracks = Array.from(memTracks.values()).filter((t) => t.isPublic && t.genre === genre);
+    // shuffle
+    for (let i = tracks.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+    }
+    res.json({ tracks: tracks.slice(0, 10), genre });
+  } catch { res.status(500).json({ error: "radio failed" }); }
+});
+
+qmediaRouter.get("/tracks/:id/similar", async (req, res) => {
+  try {
+    const track = memTracks.get(req.params.id);
+    if (!track) return res.status(404).json({ error: "not found" });
+    const similar = Array.from(memTracks.values())
+      .filter((t) => t.isPublic && t.genre === track.genre && t.id !== track.id)
+      .slice(0, 5);
+    res.json({ tracks: similar });
+  } catch { res.status(500).json({ error: "similar failed" }); }
 });
 
 /* ── Health ── */

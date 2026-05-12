@@ -114,6 +114,11 @@ const MODULES: Module[] = [
   { id: "pile-foundations",category: "structure",href: "/smeta-trainer/drawings-practice/pile-foundations",icon: "🔩", title: "Свайные фундаменты",                subtitle: "Забивные, буронабивные, винтовые по СП РК 5.04-101",          level: "L4", exercises: 4,  color: "slate"   },
   { id: "scaffolding",    category: "process",  href: "/smeta-trainer/drawings-practice/scaffolding",    icon: "🪜", title: "Строительные леса",                 subtitle: "8 типов, расчёт площади, аренда, ГОСТ Р 52086-2003",         level: "L3", exercises: 4,  color: "amber"   },
   { id: "low-voltage",    category: "utilities",href: "/smeta-trainer/drawings-practice/low-voltage",    icon: "📡", title: "Слаботочные сети",                  subtitle: "СКС, IP-видео, СКУД, домофоны по ЭСН Сб.34",                  level: "L3", exercises: 4,  color: "indigo"  },
+
+  // ── Конструкции и оборудование ──
+  { id: "steel-structures",category: "structure",href: "/smeta-trainer/drawings-practice/steel-structures",icon: "🏗", title: "Стальные конструкции",              subtitle: "Балки, колонны, фермы по СНиП РК 5.04-23, ЭСН Сб.9",          level: "L4", exercises: 4,  color: "slate"   },
+  { id: "thermal-calc",   category: "tools",    href: "/smeta-trainer/drawings-practice/thermal-calc",   icon: "🌡", title: "Теплотехнический расчёт",           subtitle: "R сопротивление, толщина утеплителя по СП РК 2.04-104",       level: "L4", exercises: 4,  color: "blue"    },
+  { id: "equipment-mounting",category: "structure",href: "/smeta-trainer/drawings-practice/equipment-mounting",icon: "🔧", title: "Монтаж оборудования",               subtitle: "Котлы, насосы, вентиляция, ПНР — ЭСН Сб.36-41",                level: "L4", exercises: 4,  color: "orange"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

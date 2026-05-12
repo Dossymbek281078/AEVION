@@ -6239,11 +6239,11 @@ qcoreaiRouter.post("/sessions/:id/collab", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth required" });
   const sessionId = req.params.id;
   try {
-    const session = await getSession(sessionId);
+    const session = await getSession(sessionId, auth.sub);
     if (!session) return res.status(404).json({ error: "session not found" });
     if (session.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
-    const crypto = await import("crypto");
-    const token = crypto.randomBytes(16).toString("hex");
+    const cryptoMod = await import("crypto");
+    const token = cryptoMod.randomBytes(16).toString("hex");
     memCollabSessions.set(token, {
       sessionId,
       ownerId: auth.sub,
@@ -6264,15 +6264,15 @@ qcoreaiRouter.get("/collab/:token", async (req, res) => {
   if (!collab) return res.status(404).json({ error: "collab link not found or expired" });
   try {
     collab.viewers += 1;
-    const session = await getSession(collab.sessionId);
+    const session = await getSession(collab.sessionId, null);
     const runs = await listRuns(collab.sessionId);
     return res.json({
-      session: session ? { id: session.id, name: session.name, createdAt: session.createdAt } : null,
-      runs: (runs || []).slice(-5).map((r: any) => ({
+      session: session ? { id: session.id, title: session.title, createdAt: session.createdAt } : null,
+      runs: (runs || []).slice(-5).map((r) => ({
         id: r.id,
         userInput: r.userInput?.slice(0, 200),
         status: r.status,
-        createdAt: r.createdAt,
+        createdAt: r.startedAt,
       })),
       viewers: collab.viewers,
     });
@@ -6287,7 +6287,7 @@ qcoreaiRouter.get("/sessions/:id/collab/stats", async (req, res) => {
   if (!auth) return res.status(401).json({ error: "auth required" });
   const sessionId = req.params.id;
   try {
-    const session = await getSession(sessionId);
+    const session = await getSession(sessionId, auth.sub);
     if (!session) return res.status(404).json({ error: "session not found" });
     if (session.userId !== auth.sub) return res.status(403).json({ error: "forbidden" });
     let totalViews = 0;

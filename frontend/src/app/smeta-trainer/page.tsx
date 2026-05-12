@@ -3,6 +3,9 @@
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { ProgressBanner } from "./components/ProgressBanner";
+import { QuickCalc } from "./components/QuickCalc";
+import { PageExportButton } from "./components/PageExportButton";
 
 export default function SmetaTrainerPage() {
   return (
@@ -18,6 +21,7 @@ export default function SmetaTrainerPage() {
           <div className="text-[10px] text-slate-400 hidden sm:block">
             НДЦС РК 8.01-08-2022 · 222 расценки ЭСН · 5 уровней · Школа №47, Алматы
           </div>
+          <PageExportButton />
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}
             className="hidden sm:block text-[10px] text-slate-400 hover:text-emerald-400 px-1.5 py-0.5 border border-slate-700 rounded font-mono"
@@ -29,8 +33,10 @@ export default function SmetaTrainerPage() {
           <ThemeToggle />
         </div>
       </header>
+      <ProgressBanner />
       <OnboardingModal />
       <LevelHome />
+      <QuickCalc />
     </main>
   );
 }

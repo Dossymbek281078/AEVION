@@ -86,6 +86,14 @@ const SMOKES = [
   { name: "qjobs", script: "qjobs-smoke.js", readOnly: false },
   // QNews — news aggregator: health, categories, articles, stats, RSS, auth gates.
   { name: "qnews", script: "qnews-smoke.js", readOnly: false },
+  // QMedia — music/video/playlists. Read-only public + auth gates.
+  { name: "qmedia", script: "qmedia-smoke.js", readOnly: true },
+  // QAI — universal AI assistant: chat, sessions, export.
+  { name: "qai", script: "qai-smoke.js", readOnly: false },
+  // QLearn — courses/quizzes/AI lesson gen. Read-only public + 404 gates.
+  { name: "qlearn", script: "qlearn-smoke.js", readOnly: true },
+  // QStore — product catalogue/orders. Read-only public + auth gates.
+  { name: "qstore", script: "qstore-smoke.js", readOnly: true },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

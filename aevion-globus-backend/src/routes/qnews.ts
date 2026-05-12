@@ -2,6 +2,14 @@ import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
+import { getPool } from "../lib/dbPool";
+import { ensureQNewsTables, isQNewsDbReady } from "../lib/ensureQNewsTables";
+
+const pool = getPool();
+(async () => {
+  try { await ensureQNewsTables(pool); }
+  catch { /* silent — in-memory fallback active */ }
+})();
 
 const submitLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qnews:submit", message: "rate_limited" });
 const aiLimiter = rateLimit({ windowMs: 60_000, max: 3, keyPrefix: "qnews:ai", message: "rate_limited" });
@@ -172,29 +180,37 @@ qnewsRouter.get("/trending", (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qnews/articles ─────────────────────────────────────────────────
-qnewsRouter.get("/articles", (req: Request, res: Response) => {
+qnewsRouter.get("/articles", async (req: Request, res: Response) => {
   const { category, q, limit } = req.query as Record<string, string | undefined>;
   const limitN = Math.min(Number(limit) || 20, 100);
-  let articles = Array.from(memNews.values());
 
-  if (category && CATEGORIES.includes(category)) {
-    articles = articles.filter((a) => a.category === category);
-  }
+  try {
+    if (isQNewsDbReady()) {
+      const conditions: string[] = [];
+      const args: unknown[] = [];
+      let idx = 1;
+      if (category && CATEGORIES.includes(category)) { conditions.push(`"category"=$${idx++}`); args.push(category); }
+      if (q) {
+        conditions.push(`("title" ILIKE $${idx} OR "summary" ILIKE $${idx})`);
+        args.push(`%${q}%`); idx++;
+      }
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const [{ rows }, { rows: cnt }] = await Promise.all([
+        pool.query(`SELECT * FROM "QNewsArticle" ${where} ORDER BY "publishedAt" DESC LIMIT $${idx}`, [...args, limitN]),
+        pool.query(`SELECT COUNT(*)::int AS total FROM "QNewsArticle" ${where}`, args),
+      ]);
+      return res.json({ articles: rows, total: cnt[0]?.total ?? rows.length });
+    }
+  } catch (e) { console.error("[QNews] GET /articles DB error", e); }
+
+  let articles = Array.from(memNews.values());
+  if (category && CATEGORIES.includes(category)) articles = articles.filter((a) => a.category === category);
   if (q) {
     const lq = q.toLowerCase();
-    articles = articles.filter(
-      (a) =>
-        a.title.toLowerCase().includes(lq) ||
-        a.summary.toLowerCase().includes(lq) ||
-        a.tags.some((t) => t.toLowerCase().includes(lq)),
-    );
+    articles = articles.filter((a) => a.title.toLowerCase().includes(lq) || a.summary.toLowerCase().includes(lq) || a.tags.some((t) => t.toLowerCase().includes(lq)));
   }
-
-  articles = articles
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
-    .slice(0, limitN);
-
-  res.json({ articles, total: articles.length });
+  articles = articles.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  res.json({ articles: articles.slice(0, limitN), total: articles.length });
 });
 
 // ─── GET /api/qnews/articles/:id ─────────────────────────────────────────────
@@ -206,7 +222,7 @@ qnewsRouter.get("/articles/:id", (req: Request, res: Response) => {
 });
 
 // ─── POST /api/qnews/articles ────────────────────────────────────────────────
-qnewsRouter.post("/articles", submitLimiter, (req: Request, res: Response) => {
+qnewsRouter.post("/articles", submitLimiter, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
@@ -236,6 +252,18 @@ qnewsRouter.post("/articles", submitLimiter, (req: Request, res: Response) => {
     publishedAt: new Date().toISOString(),
     tags: Array.isArray(tags) ? tags.filter((t) => typeof t === "string") : [],
   };
+
+  try {
+    if (isQNewsDbReady()) {
+      await pool.query(
+        `INSERT INTO "QNewsArticle" ("id","title","summary","url","source","category","tags","authorId","publishedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+        [article.id, article.title, article.summary, article.url, article.source, article.category, article.tags, auth.sub],
+      );
+      return res.status(201).json({ article });
+    }
+  } catch (e) { console.error("[QNews] POST /articles DB error", e); }
+
   memNews.set(article.id, article);
   return res.status(201).json({ article });
 });

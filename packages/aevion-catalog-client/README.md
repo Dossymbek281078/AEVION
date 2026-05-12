@@ -35,6 +35,19 @@ const { status, healthy, total: t } = await cat.health();
 console.log(`${status}: ${healthy}/${t} services up`);
 ```
 
+## Examples
+
+Four runnable scripts under `examples/`:
+
+```bash
+node examples/list-all.mjs          # registry dump grouped by status
+node examples/get-module.mjs qsign  # single-module deep lookup
+node examples/stats.mjs             # by-status / by-kind / top tags
+node examples/urls.mjs              # CSV/MD/badge URLs (no network)
+```
+
+See [`examples/README.md`](./examples/README.md).
+
 ## Convenience functions
 
 For one-off calls against `https://api.aevion.app`:

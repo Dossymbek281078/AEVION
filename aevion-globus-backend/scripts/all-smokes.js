@@ -36,6 +36,8 @@ const SMOKES = [
   { name: "tier3", script: "tier3-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
+  // Waitlist unsubscribe: validates HMAC token rejection paths.
+  { name: "waitlist-unsub", script: "waitlist-unsub-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

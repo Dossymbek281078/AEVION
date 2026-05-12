@@ -103,6 +103,17 @@ function assert(cond, msg) {
     assert(/max-age=\d+/.test(cc), `Cache-Control missing or malformed: '${cc}'`);
   });
 
+  await step("each item has relatedModules[] (tag-derived, ≤3 items)", async () => {
+    const sample = (full.items || [])[0];
+    assert(Array.isArray(sample.relatedModules), "relatedModules must be array");
+    assert(sample.relatedModules.length <= 3, `relatedModules > 3 (got ${sample.relatedModules.length})`);
+    for (const rel of sample.relatedModules) {
+      assert(typeof rel.id === "string", "related.id missing");
+      assert(typeof rel.name === "string", "related.name missing");
+      assert(typeof rel.overlap === "number" && rel.overlap > 0, "related.overlap must be positive number");
+    }
+  });
+
   console.log("");
   console.log(`[hub-catalog-smoke] PASS=${pass} FAIL=${fail}`);
   process.exit(fail > 0 ? 1 : 0);

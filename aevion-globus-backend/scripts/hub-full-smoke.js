@@ -100,6 +100,17 @@ async function get(path, expectJson = true) {
     assert(/max-age=\d+/.test(cc), `Cache-Control missing: '${cc}'`);
   });
 
+  await step("GET /api/aevion/catalog?format=csv returns text/csv", async () => {
+    const r = await fetch(`${BASE}/api/aevion/catalog?format=csv`);
+    assert(r.ok, `HTTP ${r.status}`);
+    const ct = r.headers.get("content-type") || "";
+    assert(ct.includes("text/csv"), `content-type wrong: '${ct}'`);
+    const text = await r.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    assert(lines.length >= 11, `expected ≥11 rows (header+10 modules), got ${lines.length}`);
+    assert(lines[0].startsWith("id,code,name,"), `header malformed: ${lines[0]}`);
+  });
+
   console.log("");
   console.log(`[hub-full-smoke] PASS=${pass} FAIL=${fail}`);
   process.exit(fail > 0 ? 1 : 0);

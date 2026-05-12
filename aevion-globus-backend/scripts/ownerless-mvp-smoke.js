@@ -24,6 +24,8 @@ const MVPS = [
   { id: "psyapp-deps", contains: ["PsyApp", "trigger", "anonymous"] },
   { id: "mapreality", contains: ["MapReality", "signals", "QSign"] },
   { id: "lifebox", contains: ["LifeBox", "Shamir"] },
+  // Live catalog browser (separate from MVPs but in same scope)
+  { id: "fintech/catalog", contains: ["catalog", "AEVION"] },
 ];
 
 let pass = 0;

@@ -307,6 +307,35 @@ aevionHubRouter.get("/catalog", (req, res) => {
     });
 
   res.setHeader("Cache-Control", "public, max-age=120");
+
+  const format = String(req.query.format ?? "json").trim().toLowerCase();
+  if (format === "csv") {
+    // RFC 4180 CSV — fields with comma/quote/newline get quoted; embedded
+    // quotes get doubled. Stable column order for spreadsheet import.
+    const esc = (v: unknown): string => {
+      const s = v == null ? "" : Array.isArray(v) ? v.join(";") : String(v);
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const cols = [
+      "id", "code", "name", "kind", "status", "priority", "tags",
+      "frontend", "ogImage", "health", "openapi", "waitlist", "status_url",
+      "relatedModules", "description",
+    ];
+    const lines = [cols.join(",")];
+    for (const it of items) {
+      const related = (it.relatedModules || []).map((r) => `${r.id}(${r.overlap})`).join(";");
+      lines.push([
+        esc(it.id), esc(it.code), esc(it.name), esc(it.kind), esc(it.status),
+        esc(it.priority), esc(it.tags), esc(it.frontend), esc(it.ogImage),
+        esc(it.health), esc(it.openapi), esc(it.waitlist), esc(it.status_url),
+        esc(related), esc(it.description),
+      ].join(","));
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="aevion-catalog.csv"`);
+    return res.send(lines.join("\r\n") + "\r\n");
+  }
+
   res.json({
     total: items.length,
     filters: {

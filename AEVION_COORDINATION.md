@@ -67,6 +67,12 @@
 
 _(пусто — добавляй сюда entries перед нарушением чужой зоны)_
 
+### Current active work (aevion-core/main, 2026-05-12)
+
+- Восстановлены `fintech/page.tsx` + `developers/fintech/page.tsx` (commit `45aad61e`)
+- Продолжаем: backend fintech endpoints (`/api/fintech/status` health probes), `openapiFintechSpec.ts`, fintech smoke script
+- НЕ трогаем: bureau frontend, qright frontend, cyberchess, qcoreai, qsign, qtrade — это чужие зоны
+
 ### Recent destructive incidents (для learning'а)
 
 | Дата | Кто | Что снёс | Где было | Урок |

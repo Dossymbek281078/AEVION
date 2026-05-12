@@ -139,6 +139,11 @@ const MODULES: Module[] = [
   { id: "smeta-programs", category: "tools",    href: "/smeta-trainer/drawings-practice/smeta-programs", icon: "💼", title: "Сметные программы РК",              subtitle: "АВС-4, Смета РК, ИСТ Эталон — обзор и инструкции",            level: "L3", exercises: 4,  color: "sky"     },
   { id: "budget-management",category: "process",href: "/smeta-trainer/drawings-practice/budget-management",icon: "💰", title: "Управление бюджетом",               subtitle: "Аванс, удержания, cash flow, кассовые разрывы",               level: "L4", exercises: 4,  color: "emerald" },
   { id: "excel-templates",category: "tools",    href: "/smeta-trainer/drawings-practice/excel-templates",icon: "📋", title: "Excel-шаблоны смет",                subtitle: "8 типовых шаблонов с возможностью скачивания CSV",            level: "L2", exercises: 0,  color: "emerald" },
+
+  // ── Теплоснабжение детально (расширение инж. сетей) ──
+  { id: "itp",            category: "utilities",href: "/smeta-trainer/drawings-practice/itp",            icon: "♨️", title: "ИТП — индивидуальный теплопункт",   subtitle: "Теплообменник, насосы, узлы учёта тепла",                     level: "L4", exercises: 4,  color: "orange"  },
+  { id: "boilers",        category: "utilities",href: "/smeta-trainer/drawings-practice/boilers",        icon: "🔥", title: "Котельные",                         subtitle: "Крышные/встроенные/отдельностоящие, газ. оборудование",       level: "L4", exercises: 4,  color: "red"     },
+  { id: "vpv",            category: "utilities",href: "/smeta-trainer/drawings-practice/vpv",            icon: "🚰", title: "ВПВ — внутр. пожарный водопровод",   subtitle: "Пожарные краны, стояки, расчёт по СП РК 5.01-101",            level: "L4", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

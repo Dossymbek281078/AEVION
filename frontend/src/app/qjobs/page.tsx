@@ -406,6 +406,13 @@ function PostJobModal({ onClose, onPosted }: { onClose: () => void; onPosted: (j
 
 const JOB_TYPES = ["", "full-time", "part-time", "contract", "freelance", "internship"];
 
+function authHdr(): HeadersInit {
+  try {
+    const t = localStorage.getItem("aevion_auth_token_v1");
+    return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+  } catch { return { "Content-Type": "application/json" }; }
+}
+
 export default function QJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -413,6 +420,11 @@ export default function QJobsPage() {
   const [locationFilter, setLocationFilter] = useState("");
   const [search, setSearch] = useState("");
   const [showPostModal, setShowPostModal] = useState(false);
+  const [tab, setTab] = useState<"all" | "saved" | "match">("all");
+  const [savedJobs, setSavedJobs] = useState<Job[]>([]);
+  const [aiMatches, setAiMatches] = useState<{ job: Job; score: number; reasons: string[] }[]>([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [stats, setStats] = useState<{ postings: { active: number } } | null>(null);
   const currentUserId = getAuthSub();
 
   const fetchJobs = useCallback(async () => {
@@ -424,7 +436,7 @@ export default function QJobsPage() {
       if (search) params.set("q", search);
       const resp = await fetch(`${apiUrl("/api/qjobs/jobs")}${params.toString() ? "?" + params.toString() : ""}`);
       if (resp.ok) {
-        const data = await resp.json() as { jobs: Job[] };
+        const data = await resp.json() as { jobs: Job[]; total?: number };
         setJobs(data.jobs ?? []);
       }
     } finally {
@@ -432,9 +444,37 @@ export default function QJobsPage() {
     }
   }, [typeFilter, locationFilter, search]);
 
+  async function fetchStats() {
+    try {
+      const r = await fetch(apiUrl("/api/qjobs/stats"));
+      if (r.ok) setStats(await r.json());
+    } catch { /* ignore */ }
+  }
+
+  async function fetchSaved() {
+    try {
+      const r = await fetch(apiUrl("/api/qjobs/saved-jobs"), { headers: authHdr() });
+      if (r.ok) { const d = await r.json(); setSavedJobs(d.jobs ?? []); }
+    } catch { /* ignore */ }
+  }
+
+  async function fetchAiMatch() {
+    setMatchLoading(true);
+    try {
+      const r = await fetch(apiUrl("/api/qjobs/ai/match"), { method: "POST", headers: authHdr() });
+      if (r.ok) { const d = await r.json(); setAiMatches(d.matches ?? []); }
+    } catch { /* ignore */ } finally { setMatchLoading(false); }
+  }
+
   useEffect(() => {
     fetchJobs();
+    fetchStats();
   }, [fetchJobs]);
+
+  useEffect(() => {
+    if (tab === "saved" && currentUserId) fetchSaved();
+    if (tab === "match" && currentUserId && aiMatches.length === 0) fetchAiMatch();
+  }, [tab]);
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: "7px 14px",
@@ -465,8 +505,9 @@ export default function QJobsPage() {
             <h1 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 800, color: "#0f172a" }}>
               QJobs
             </h1>
-            <p style={{ margin: 0, color: "#64748b", fontSize: 15 }}>
-              Find your next role or hire great talent in the AEVION ecosystem.
+            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>
+              Биржа труда экосистемы AEVION.
+              {stats && <span style={{ marginLeft: 8, fontWeight: 600, color: "#6366f1" }}>{stats.postings.active} активных вакансий</span>}
             </p>
           </div>
           {currentUserId && (
@@ -533,32 +574,72 @@ export default function QJobsPage() {
         </div>
 
         {/* Job list */}
-        {loading && (
-          <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>Loading jobs...</p>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, borderBottom: "1px solid #e2e8f0", paddingBottom: 12 }}>
+          {[
+            { id: "all", label: "💼 Все вакансии" },
+            { id: "saved", label: "🔖 Сохранённые" },
+            { id: "match", label: "🤖 AI подбор" },
+          ].map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id as typeof tab)}
+              style={{ padding: "7px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13,
+                background: tab === t.id ? "#0f172a" : "#f1f5f9", color: tab === t.id ? "#fff" : "#64748b" }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* All jobs tab */}
+        {tab === "all" && (
+          <>
+            {loading && <p style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>Загрузка...</p>}
+            {!loading && jobs.length === 0 && (
+              <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 40, textAlign: "center", color: "#94a3b8" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>💼</div>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Вакансий не найдено</div>
+                <div style={{ fontSize: 14 }}>Будьте первым!</div>
+              </div>
+            )}
+            {jobs.map((job) => <JobCard key={job.id} job={job} onApply={() => fetchJobs()} />)}
+          </>
         )}
-        {!loading && jobs.length === 0 && (
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 14,
-              padding: 40,
-              textAlign: "center",
-              color: "#94a3b8",
-            }}
-          >
-            <div style={{ fontSize: 40, marginBottom: 12 }}>💼</div>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>No jobs found</div>
-            <div style={{ fontSize: 14 }}>Be the first to post a job!</div>
+
+        {/* Saved jobs tab */}
+        {tab === "saved" && (
+          <>
+            {!currentUserId && <div style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>Войдите чтобы видеть сохранённые вакансии.</div>}
+            {currentUserId && savedJobs.length === 0 && <div style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>Нет сохранённых вакансий. Нажмите 🔖 на вакансии чтобы сохранить.</div>}
+            {savedJobs.map((job) => <JobCard key={job.id} job={job} onApply={() => fetchJobs()} />)}
+          </>
+        )}
+
+        {/* AI Match tab */}
+        {tab === "match" && (
+          <div>
+            {!currentUserId && <div style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>Войдите для AI-подбора вакансий под ваш профиль.</div>}
+            {currentUserId && matchLoading && <div style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>🤖 AI анализирует ваш профиль...</div>}
+            {currentUserId && !matchLoading && aiMatches.length === 0 && (
+              <div style={{ textAlign: "center", padding: 40 }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🤖</div>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>AI подберёт вакансии под ваши навыки</div>
+                <button onClick={fetchAiMatch} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: "#6366f1", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                  Подобрать вакансии
+                </button>
+              </div>
+            )}
+            {aiMatches.map(({ job, score, reasons }) => (
+              <div key={job.id} style={{ marginBottom: 12 }}>
+                <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "8px 14px", marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 12, color: "#7c3aed", fontWeight: 700 }}>
+                    🎯 Совпадение: {Math.round(score * 100)}%
+                  </div>
+                  <div style={{ fontSize: 11, color: "#7c3aed" }}>{reasons?.slice(0, 2).join(" · ")}</div>
+                </div>
+                <JobCard job={job} onApply={() => fetchJobs()} />
+              </div>
+            ))}
           </div>
         )}
-        {jobs.map((job) => (
-          <JobCard
-            key={job.id}
-            job={job}
-            onApply={() => fetchJobs()}
-          />
-        ))}
       </ProductPageShell>
     </>
   );

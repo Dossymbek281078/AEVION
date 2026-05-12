@@ -78,6 +78,12 @@ const SMOKES = [
   // right VeilNetX entry + Z-Tide weight. Complements fintech-flow (which is
   // outcome-focused on the happy path).
   { name: "ecosystem-events", script: "ecosystem-events-smoke.js", readOnly: false },
+  // MVP concepts — exercises the 10 ownerless-module concept routers
+  // (startup-exchange/listings, mapreality/claims, kids-ai-content/items,
+  // qlife/prompts, psyapp-deps/assessments, qpersona/personas,
+  // voice-of-earth/feeds, deepsan/runs, shadownet/posts, lifebox/capsules).
+  // Mutates: writes one item per module. Safe for CI ephemeral envs.
+  { name: "mvp-concepts", script: "mvp-concepts-smoke.js", readOnly: false },
   // Z-Tide — leaderboard read + me lookup (no admin events fired in smoke).
   { name: "ztide", script: "ztide-smoke.js", readOnly: false },
   // QChainGov — proposal create + auth/validation gates.

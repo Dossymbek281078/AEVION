@@ -78,6 +78,21 @@ async function run() {
   if (r.body?.length === beforeLength + 1) ok("chain grew by 1");
   else fail("chain growth check", `before=${beforeLength} after=${r.body?.length}`);
 
+  // Validation: invalid currency (not ISO 4217)
+  r = await req("POST", "/api/veilnetx-ledger/entries", {
+    module: "external", kind: "transfer", fromIdentifier: "x", amountCents: 100, currency: "usd-bad",
+  }, token);
+  if (r.status === 400 && r.body?.error === "invalid_currency") ok("POST /entries rejects non-ISO currency");
+  else fail("POST /entries should reject bad currency", `${r.status} ${r.body?.error}`);
+
+  // Validation: meta > 4KB
+  const bigMeta = { blob: "x".repeat(5000) };
+  r = await req("POST", "/api/veilnetx-ledger/entries", {
+    module: "external", kind: "transfer", fromIdentifier: "x", amountCents: 100, currency: "USD", meta: bigMeta,
+  }, token);
+  if (r.status === 400 && r.body?.error === "meta_too_large") ok("POST /entries rejects meta > 4KB");
+  else fail("POST /entries should reject oversized meta", `${r.status} ${r.body?.error}`);
+
   // Cleanup
   r = await req("DELETE", "/api/auth/account", { password: "Vlx123!" }, token);
   if (r.status === 200 || r.status === 204) ok("DELETE /account");

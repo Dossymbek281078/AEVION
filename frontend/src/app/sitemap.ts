@@ -84,6 +84,14 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/z-tide", changeFrequency: "monthly", priority: 0.35 },
   { path: "/lifebox", changeFrequency: "monthly", priority: 0.45 },
   { path: "/qchaingov", changeFrequency: "monthly", priority: 0.4 },
+  // Fintech ecosystem
+  { path: "/fintech", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/fintech/catalog", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/fintech/modules", changeFrequency: "weekly", priority: 0.65 },
+  { path: "/fintech/status", changeFrequency: "hourly", priority: 0.55 },
+  { path: "/fintech/dashboard", changeFrequency: "weekly", priority: 0.5 },
+  { path: "/fintech/whitepaper", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/fintech/compare", changeFrequency: "monthly", priority: 0.45 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];

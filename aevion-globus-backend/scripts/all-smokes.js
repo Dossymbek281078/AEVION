@@ -38,6 +38,8 @@ const SMOKES = [
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.
   { name: "waitlist-unsub", script: "waitlist-unsub-smoke.js", readOnly: true },
+  // Hub full surface: covers health/catalog/version/openapi/sitemap.xml in one shot.
+  { name: "hub-full", script: "hub-full-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

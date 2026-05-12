@@ -43,11 +43,29 @@ interface QComment {
   createdAt: string;
 }
 
+interface QNotification {
+  id: string;
+  type: "like" | "comment" | "follow" | "mention";
+  fromUserId: string;
+  resourceId: string;
+  read: boolean;
+  createdAt: string;
+}
+
 // In-memory fallback maps
 const memPosts = new Map<string, QPost>();
 const memFollows = new Map<string, { followerId: string; followingId: string; createdAt: string }>();
 const memLikes = new Map<string, { userId: string; postId: string; createdAt: string }>();
 const memComments = new Map<string, QComment>();
+// key: userId -> QNotification[]
+const memNotifications = new Map<string, QNotification[]>();
+
+function addNotification(toUserId: string, notif: Omit<QNotification, "id" | "read" | "createdAt">): void {
+  const existing = memNotifications.get(toUserId) ?? [];
+  existing.unshift({ ...notif, id: crypto.randomUUID(), read: false, createdAt: nowIso() });
+  // keep last 100
+  memNotifications.set(toUserId, existing.slice(0, 100));
+}
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -268,6 +286,10 @@ qsocialRouter.post("/posts/:id/like", async (req: Request, res: Response) => {
       memLikes.set(key, { userId: auth.sub, postId, createdAt: nowIso() });
       post.likesCount += 1;
       liked = true;
+      // Notify post owner (not self)
+      if (post.userId !== auth.sub) {
+        addNotification(post.userId, { type: "like", fromUserId: auth.sub, resourceId: postId });
+      }
     }
     return res.json({ liked, likesCount: post.likesCount });
   } catch {
@@ -329,7 +351,13 @@ qsocialRouter.post("/posts/:id/comments", async (req: Request, res: Response) =>
       if (!memPosts.has(postId)) return res.status(404).json({ error: "post not found" });
       memComments.set(comment.id, comment);
       const post = memPosts.get(postId);
-      if (post) post.commentsCount += 1;
+      if (post) {
+        post.commentsCount += 1;
+        // Notify post owner (not self)
+        if (post.userId !== auth.sub) {
+          addNotification(post.userId, { type: "comment", fromUserId: auth.sub, resourceId: postId });
+        }
+      }
     }
     return res.status(201).json({ comment });
   } catch {
@@ -394,6 +422,8 @@ qsocialRouter.post("/follow/:userId", async (req: Request, res: Response) => {
     } else {
       memFollows.set(key, { followerId: auth.sub, followingId, createdAt: nowIso() });
       following = true;
+      // Notify followee
+      addNotification(followingId, { type: "follow", fromUserId: auth.sub, resourceId: auth.sub });
     }
     return res.json({ following });
   } catch {
@@ -474,4 +504,79 @@ qsocialRouter.get("/me/following", async (req: Request, res: Response) => {
   } catch {
     return res.status(500).json({ error: "internal_error" });
   }
+});
+
+// ─── GET /api/qsocial/me/notifications ───────────────────────────────────────
+qsocialRouter.get("/me/notifications", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+
+  const all = memNotifications.get(auth.sub) ?? [];
+  const sorted = [...all.filter((n) => !n.read), ...all.filter((n) => n.read)].slice(0, 50);
+  return res.json({ notifications: sorted, total: sorted.length, unread: all.filter((n) => !n.read).length });
+});
+
+// ─── PATCH /api/qsocial/me/notifications/:id/read ────────────────────────────
+qsocialRouter.patch("/me/notifications/:id/read", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+
+  const notifId = String(req.params.id);
+  const all = memNotifications.get(auth.sub) ?? [];
+  const notif = all.find((n) => n.id === notifId);
+  if (!notif) return res.status(404).json({ error: "not_found" });
+  notif.read = true;
+  return res.json({ ok: true });
+});
+
+// ─── DELETE /api/qsocial/me/notifications — mark all read ────────────────────
+qsocialRouter.delete("/me/notifications", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+
+  const all = memNotifications.get(auth.sub) ?? [];
+  all.forEach((n) => { n.read = true; });
+  return res.json({ ok: true });
+});
+
+// ─── GET /api/qsocial/search — search posts by content + tags ────────────────
+qsocialRouter.get("/search", (req: Request, res: Response) => {
+  const q = String(req.query.q ?? "").toLowerCase().trim();
+  if (!q) return res.status(400).json({ error: "q is required" });
+
+  const posts = Array.from(memPosts.values())
+    .filter((p) => p.isPublic && (
+      p.content.toLowerCase().includes(q) ||
+      p.tags.some((t) => t.toLowerCase().includes(q))
+    ))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 50);
+  return res.json({ posts });
+});
+
+// ─── GET /api/qsocial/hashtag/:tag — posts with this tag ─────────────────────
+qsocialRouter.get("/hashtag/:tag", (req: Request, res: Response) => {
+  const tag = String(req.params.tag ?? "").toLowerCase();
+  const posts = Array.from(memPosts.values())
+    .filter((p) => p.isPublic && p.tags.some((t) => t.toLowerCase() === tag))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 50);
+  return res.json({ tag, posts });
+});
+
+// ─── GET /api/qsocial/trending-tags — top 10 tags by frequency ───────────────
+qsocialRouter.get("/trending-tags", (_req: Request, res: Response) => {
+  const tagCounts = new Map<string, number>();
+  for (const post of memPosts.values()) {
+    if (!post.isPublic) continue;
+    for (const tag of post.tags) {
+      const t = tag.toLowerCase();
+      tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+    }
+  }
+  const tags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([tag, count]) => ({ tag, count }));
+  return res.json({ tags });
 });

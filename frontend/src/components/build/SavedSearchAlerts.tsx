@@ -144,7 +144,7 @@ export function SavedSearchAlerts() {
               <button
                 type="button"
                 onClick={() => dismiss(h.search.id)}
-                className="text-[11px] text-fuchsia-200/70 hover:text-fuchsia-50"
+                className="text-xs text-fuchsia-200/70 hover:text-fuchsia-50 px-2 py-1.5 rounded-md hover:bg-fuchsia-500/10 min-h-[32px]"
                 title="Mark these as seen"
               >
                 Dismiss

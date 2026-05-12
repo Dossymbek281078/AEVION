@@ -106,14 +106,14 @@ export function ChatUI({
                   }`}
                 >
                   <div className="whitespace-pre-wrap break-words">{m.content}</div>
-                  <div className="mt-1 flex items-center gap-1 text-[10px] opacity-60">
+                  <div className="mt-1 flex items-center gap-1 text-xs opacity-60">
                     <span>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                     {mine && m.readAt && <span title={readTooltip}>✓✓</span>}
                     {mine && !m.readAt && <span title="Sent">✓</span>}
                   </div>
                 </div>
                 {showReadLabel && (
-                  <div className="mt-0.5 pr-1 text-right text-[10px] text-emerald-300">
+                  <div className="mt-0.5 pr-1 text-right text-xs text-emerald-300">
                     Read
                   </div>
                 )}
@@ -217,7 +217,7 @@ function ScheduleInterviewButton({ onInsert }: { onInsert: (text: string) => voi
       </button>
       {open && (
         <div className="absolute bottom-full right-0 z-20 mb-2 w-72 rounded-lg border border-white/10 bg-slate-900 p-3 shadow-2xl">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Schedule interview
           </div>
           <input
@@ -265,7 +265,7 @@ function ScheduleInterviewButton({ onInsert }: { onInsert: (text: string) => voi
               type="button"
               onClick={downloadIcs}
               disabled={!buildDraft()}
-              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200 hover:bg-white/10 disabled:opacity-50"
+              className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 hover:bg-white/10 disabled:opacity-50 min-h-[36px]"
             >
               .ics
             </button>
@@ -273,7 +273,7 @@ function ScheduleInterviewButton({ onInsert }: { onInsert: (text: string) => voi
               type="button"
               onClick={insertSnippet}
               disabled={!buildDraft()}
-              className="rounded-md bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50"
+              className="rounded-md bg-emerald-500 px-3 py-2 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-50 min-h-[36px]"
             >
               Insert in message
             </button>
@@ -343,7 +343,7 @@ function ReplySuggestions({
           key={i}
           type="button"
           onClick={() => onPick(s)}
-          className="max-w-full truncate rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] text-cyan-100 hover:bg-cyan-400/20"
+          className="max-w-full truncate rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100 hover:bg-cyan-400/20 min-h-[32px]"
           title={s}
         >
           {s.length > 80 ? s.slice(0, 78) + "…" : s}
@@ -352,7 +352,8 @@ function ReplySuggestions({
       <button
         type="button"
         onClick={() => setCollapsed(true)}
-        className="text-[10px] text-slate-500 hover:text-slate-300"
+        aria-label="Collapse suggestions"
+        className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1 min-h-[28px] min-w-[28px] rounded-md hover:bg-white/5"
       >
         ✕
       </button>
@@ -386,7 +387,7 @@ function QuickTemplates({ onPick }: { onPick: (text: string) => void }) {
           key={t.label}
           type="button"
           onClick={() => onPick(t.body)}
-          className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-slate-300 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-100"
+          className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 transition hover:border-emerald-400/40 hover:bg-emerald-400/10 hover:text-emerald-100 min-h-[32px]"
           title={t.body}
         >
           {t.emoji} {t.label}

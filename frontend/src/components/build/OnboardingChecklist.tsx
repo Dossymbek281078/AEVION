@@ -81,7 +81,7 @@ export function OnboardingChecklist({
               step.done ? "opacity-40 cursor-default" : "hover:bg-white/5"
             }`}
           >
-            <div className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
+            <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs ${
               step.done
                 ? "border-emerald-500 bg-emerald-500 text-emerald-950"
                 : "border-slate-600 text-slate-500"

@@ -106,14 +106,14 @@ export function VacancyCard({
             {vacancy.salary > 0 ? (
               <div className="text-sm font-bold text-emerald-300">
                 {vacancy.salary.toLocaleString("ru-RU")}
-                <span className="ml-1 text-[11px] font-normal text-slate-400">
+                <span className="ml-1 text-xs font-normal text-slate-400">
                   {vacancy.salaryCurrency || "₽"}
                 </span>
               </div>
             ) : (
               <div className="text-xs text-slate-500">по договору</div>
             )}
-            {isClosed && <div className="mt-0.5 text-[10px] uppercase text-slate-500">закрыта</div>}
+            {isClosed && <div className="mt-0.5 text-xs uppercase text-slate-500">закрыта</div>}
           </div>
           <BookmarkButton kind="VACANCY" targetId={vacancy.id} />
         </div>

@@ -133,7 +133,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
                 {user.role === "ADMIN" && (
                   <Link
                     href="/build/admin"
-                    className="rounded-md bg-fuchsia-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-fuchsia-200 hover:bg-fuchsia-500/30"
+                    className="rounded-md bg-fuchsia-500/20 px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-fuchsia-200 hover:bg-fuchsia-500/30 min-h-[32px] inline-flex items-center"
                   >
                     Admin
                   </Link>
@@ -170,7 +170,7 @@ export function BuildShell({ children }: { children: React.ReactNode }) {
       <CompareBar />
       {hydrated && user && pathname !== "/build/coach" && <FloatingCoachLauncher />}
       <footer className="border-t border-white/5 mt-8">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500">
+        <div className="mx-auto max-w-6xl px-4 py-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
           <div className="flex flex-wrap gap-4">
             <Link href="/build/help" className="hover:text-slate-300">Help</Link>
             <Link href="/build/stats" className="hover:text-slate-300">Platform stats</Link>
@@ -214,7 +214,7 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
             <li key={t.href}>
               <Link
                 href={t.href}
-                className={`flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition ${
+                className={`flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium transition min-h-[48px] ${
                   active ? "text-emerald-300" : "text-slate-400 hover:text-slate-200"
                 }`}
                 aria-current={active ? "page" : undefined}
@@ -494,7 +494,7 @@ function NotificationBell() {
       >
         <span aria-hidden>🔔</span>
         {total > 0 && (
-          <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold leading-none text-emerald-950">
+          <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] h-[20px] items-center justify-center rounded-full bg-emerald-500 px-1 text-xs font-bold leading-none text-emerald-950">
             {total > 99 ? "99+" : total}
           </span>
         )}
@@ -506,7 +506,7 @@ function NotificationBell() {
         >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Notifications</span>
-            <Link href="/build/notifications" onClick={() => setOpen(false)} className="text-[10px] text-emerald-300 hover:underline">See all →</Link>
+            <Link href="/build/notifications" onClick={() => setOpen(false)} className="text-xs text-emerald-300 hover:underline">See all →</Link>
           </div>
           {!summary ? (
             <p className="text-xs text-slate-500">Loading…</p>

@@ -97,7 +97,7 @@ export function ReviewsByProjectSection({ projectId }: { projectId: string }) {
         </h2>
         <button
           onClick={() => setReload((n) => n + 1)}
-          className="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+          className="text-xs uppercase tracking-wider text-slate-500 hover:text-slate-300 px-2 py-1.5 rounded-md hover:bg-white/5 min-h-[32px]"
         >
           ↻ refresh
         </button>
@@ -154,7 +154,7 @@ function ReviewCard({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-slate-500">
           {showDirection && (
             <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 uppercase tracking-wider">
               {directionLabel}

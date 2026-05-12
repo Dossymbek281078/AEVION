@@ -259,7 +259,7 @@ function TaskRow({
 
       {/* Escrow badge */}
       {task.paymentAmount > 0 && (
-        <div className="mt-2 flex items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-[11px]">
+        <div className="mt-2 flex items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-xs">
           <span className="text-slate-400">Эскроу:</span>
           <HelpTip>
             <p className="mb-1 font-semibold text-white">Что такое эскроу?</p>

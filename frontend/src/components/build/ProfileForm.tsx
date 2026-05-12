@@ -314,7 +314,7 @@ export function ProfileForm({
                   <span className="font-semibold">{r.label}</span>
                   <span className="opacity-60">— {r.hint}</span>
                 </div>
-                <div className="mt-1 pl-6 text-[11px] opacity-60">{r.detail}</div>
+                <div className="mt-1 pl-6 text-xs opacity-60">{r.detail}</div>
               </button>
             ))}
           </div>
@@ -345,7 +345,7 @@ export function ProfileForm({
                 setSummary((prev) => (prev ? prev.trim() + " " + chunk : chunk))
               }
             />
-            <span className="text-[10px] text-slate-500">
+            <span className="text-xs text-slate-500">
               Voice → finalized speech appends to the field. Lang switcher next to the mic.
             </span>
           </div>

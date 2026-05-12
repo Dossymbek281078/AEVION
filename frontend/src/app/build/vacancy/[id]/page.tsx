@@ -663,7 +663,7 @@ function KeyboardShortcutsHelp({ onClose }: { onClose: () => void }) {
           <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
             ⌨ Keyboard shortcuts
           </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200">×</button>
+          <button onClick={onClose} aria-label="Close shortcuts help" className="text-slate-400 hover:text-slate-200 px-2 py-1 min-h-[32px] min-w-[32px] rounded-md hover:bg-white/5">×</button>
         </div>
         <ul className="space-y-1.5 text-sm">
           {rows.map((r) => (

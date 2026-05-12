@@ -142,7 +142,7 @@ export function VoiceInput({
       >
         {activeLang.split("-")[0]}
       </button>
-      {error && <span className="text-[10px] text-rose-300">{error}</span>}
+      {error && <span className="text-xs text-rose-300">{error}</span>}
     </div>
   );
 }

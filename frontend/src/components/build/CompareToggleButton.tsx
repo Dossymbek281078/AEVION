@@ -40,7 +40,7 @@ export function CompareToggleButton({ entry }: { entry: CompareEntry }) {
       }
       aria-pressed={selected}
       disabled={disabled}
-      className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition disabled:opacity-40 ${
+      className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition disabled:opacity-40 min-h-[32px] ${
         selected
           ? "border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-100"
           : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"

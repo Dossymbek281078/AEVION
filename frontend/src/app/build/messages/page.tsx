@@ -82,14 +82,14 @@ function MessagesBody() {
                     {row.peerName || row.peerEmail || row.peerId.slice(0, 8)}
                   </span>
                   {row.unread > 0 && (
-                    <span className="rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-emerald-950">
+                    <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold text-emerald-950">
                       {row.unread}
                     </span>
                   )}
                 </div>
                 <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{row.lastContent}</p>
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  <p className="text-[10px] text-slate-500">
+                  <p className="text-xs text-slate-500">
                     {new Date(row.lastAt).toLocaleDateString()}
                   </p>
                   <LastActivePill ts={row.lastAt} />
@@ -121,7 +121,7 @@ function LastActivePill({ ts }: { ts: string }) {
   if (min < 5) {
     return (
       <span
-        className="inline-flex items-center gap-0.5 rounded-full border border-emerald-400/40 bg-emerald-400/15 px-1.5 py-0 text-[9px] font-semibold text-emerald-100"
+        className="inline-flex items-center gap-0.5 rounded-full border border-emerald-400/40 bg-emerald-400/15 px-1.5 py-0 text-xs font-semibold text-emerald-100"
         title={`Active ${new Date(ts).toLocaleString()}`}
       >
         <span className="h-1 w-1 rounded-full bg-emerald-300" />
@@ -137,7 +137,7 @@ function LastActivePill({ ts }: { ts: string }) {
 
   return (
     <span
-      className="inline-flex items-center gap-0.5 rounded-full border border-white/10 bg-white/5 px-1.5 py-0 text-[9px] text-slate-400"
+      className="inline-flex items-center gap-0.5 rounded-full border border-white/10 bg-white/5 px-1.5 py-0 text-xs text-slate-400"
       title={`Last message ${new Date(ts).toLocaleString()}`}
     >
       {label}

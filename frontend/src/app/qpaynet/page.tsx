@@ -106,6 +106,33 @@ export default function QPayNetDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QPayNet",
+            applicationCategory: "FinanceApplication",
+            operatingSystem: "Web, iOS, Android",
+            description:
+              "Multi-wallet payment platform: deposit (Stripe), peer-to-peer transfers, payment requests, payouts, KYC, audit log. Built for AEVION ecosystem.",
+            url: "https://aevion.app/qpaynet",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Multi-currency wallets",
+              "Stripe deposit",
+              "Peer-to-peer transfers",
+              "Payment requests with share links",
+              "Payouts to bank account",
+              "KYC tiers",
+              "Full audit log (CSV export)",
+              "Webhook delivery + retry",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
       {/* Header */}
       <header className="border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">

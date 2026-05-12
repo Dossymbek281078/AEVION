@@ -400,6 +400,55 @@ export default function DevelopersPage() {
             marginTop: 24,
             padding: 22,
             borderRadius: 16,
+            background: "#fff",
+            border: "1px solid #cbd5e1",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: "#0f172a" }}>
+              Unified catalog · <code style={{ fontSize: 14, fontFamily: "monospace", background: "#f1f5f9", padding: "2px 8px", borderRadius: 6 }}>GET /api/aevion/catalog</code>
+            </h2>
+            <a
+              href="https://api.aevion.app/api/aevion/catalog"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 13, color: "#0ea5e9", fontWeight: 700, textDecoration: "underline" }}
+            >
+              Try live →
+            </a>
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.65, color: "#475569", marginBottom: 12 }}>
+            Single GET returns every AEVION module enriched with frontend URL, OpenGraph image, health probe, OpenAPI spec, waitlist endpoint, status URL, tags, kind, priority. Filters: <code>?status=mvp,working</code>, <code>?tag=ai,privacy</code>, <code>?kind=product</code>. Cached 120s.
+          </div>
+          <pre style={{ background: "#0f172a", color: "#e2e8f0", padding: 12, borderRadius: 8, fontSize: 12, overflow: "auto", margin: 0 }}>
+{`{
+  "total": 27,
+  "items": [
+    {
+      "id": "qpersona",
+      "code": "QPERSONA",
+      "name": "AEVION QPersona",
+      "kind": "product",
+      "status": "idea",
+      "tags": ["avatar","persona","ai"],
+      "frontend": "https://aevion.app/qpersona",
+      "ogImage": "https://aevion.app/qpersona/opengraph-image",
+      "health": "https://api.aevion.app/api/qpersona/health",
+      "openapi": "https://api.aevion.app/api/qpersona/openapi.json",
+      "waitlist": "https://api.aevion.app/api/qpersona/waitlist",
+      "status_url": "https://api.aevion.app/api/qpersona/status"
+    }
+  ],
+  "generatedAt": "2026-05-12T..."
+}`}
+          </pre>
+        </section>
+
+        <section
+          style={{
+            marginTop: 24,
+            padding: 22,
+            borderRadius: 16,
             background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
             color: "#fff",
           }}

@@ -5006,9 +5006,13 @@ export default function CyberChessPage(){
             <div style={{height:6,borderRadius:RADIUS.full,background:"#ede9fe",overflow:"hidden",marginBottom:SPACE[1]}}>
               <div style={{height:"100%",width:`${Math.round(openingDrill.ply/openingDrill.moves.length*100)}%`,background:`linear-gradient(90deg,${CC.accent},#a78bfa)`,transition:`width ${MOTION.base} ${MOTION.ease}`}}/>
             </div>
-            <div style={{fontSize:11,color:CC.textDim,display:"flex",justifyContent:"space-between"}}>
+            <div style={{fontSize:11,color:CC.textDim,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
               <span>Ход {openingDrill.ply+1} / {openingDrill.moves.length}</span>
-              {openingDrill.mistakes>0&&<span style={{color:CC.danger,fontWeight:800}}>× {openingDrill.mistakes}</span>}
+              {openingDrill.mistakes>0&&<span style={{color:CC.danger,fontWeight:900,padding:"1px 7px",borderRadius:999,background:"rgba(220,38,38,0.10)"}}>✗ {openingDrill.mistakes} {openingDrill.mistakes===1?"ошибка":"ошибки"}</span>}
+              <button onClick={()=>{
+                const next=openingDrill.moves[openingDrill.ply];
+                if(next)showToast(`Следующий ход: ${next}`,"info");
+              }} style={{fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:4,border:`1px solid #c4b5fd`,background:"rgba(124,58,237,0.08)",color:CC.accent,cursor:"pointer"}}>💡 подсказка</button>
             </div>
           </Card>}
 

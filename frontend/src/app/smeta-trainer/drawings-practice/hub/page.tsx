@@ -174,6 +174,10 @@ const MODULES: Module[] = [
   { id: "fire-alarm",             category: "utilities",href: "/smeta-trainer/drawings-practice/fire-alarm",             icon: "🚨", title: "АПС и СОУЭ",                       subtitle: "Дымовые/тепловые/линейные ИП, СОУЭ 1-5 по СП РК 5.01-101",   level: "L4", exercises: 4,  color: "red"     },
   { id: "access-cctv",            category: "utilities",href: "/smeta-trainer/drawings-practice/access-cctv",            icon: "🔒", title: "СКУД и видеонаблюдение",          subtitle: "HID/Suprema, RFID/биометрия, IP-камеры 4МП, NVR 32CH",        level: "L3", exercises: 4,  color: "violet"  },
   { id: "sprinklers",             category: "utilities",href: "/smeta-trainer/drawings-practice/sprinklers",             icon: "💦", title: "Спринклерное пожаротушение",       subtitle: "Спринклеры/дренчеры/газовое/аэрозольное по СП РК 5.01-101",  level: "L4", exercises: 4,  color: "rose"    },
+
+  // ── Smart + спец. демонтаж ──
+  { id: "smart-home",             category: "utilities",href: "/smeta-trainer/drawings-practice/smart-home",             icon: "🏠", title: "Умный дом",                       subtitle: "KNX, Crestron, Wiren Board, MajorDoMo, ZigBee/Tuya",          level: "L3", exercises: 4,  color: "emerald" },
+  { id: "asbestos-removal",       category: "special",   href: "/smeta-trainer/drawings-practice/asbestos-removal",     icon: "☣️", title: "Демонтаж асбеста",                subtitle: "Шифер, плиты, изоляция — лицензия МЭ + СЭС РК",               level: "L4", exercises: 4,  color: "stone"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -541,6 +541,9 @@ export default function CyberChessPage(){
     if(el)el.scrollTop=el.scrollHeight;
   },[coachChat,coachChatLoading]);
   const[showKnowledge,sShowKnowledge]=useState(false);
+  const[showFlashcards,sShowFlashcards]=useState(false);
+  const[flashcardIdx,sFlashcardIdx]=useState(0);
+  const[flashcardFlipped,sFlashcardFlipped]=useState(false);
   const[dailyReward,sDailyReward]=useState<{bonus:number;streak:number;isWelcome:boolean}|null>(null);
   const[showLessons,sShowLessons]=useState(false);
   // Active lesson tracking — when user loads a position from a lesson step, show a sticky

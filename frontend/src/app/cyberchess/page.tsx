@@ -112,13 +112,26 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       if(this.mpvCb){this.mpvCb([...this.mpvLines]);this.mpvCb=null;this.mpvLines=[]}
       const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
     if(l==="uciok"){
-      // Speed-up Stockfish: больше потоков + бOльший hash → analysis ~3-5x быстрее.
-      // Threads = cores-1 (оставляем ядро под UI/render). Hash 256MB.
+      // ── Stockfish performance tuning ────────────────────────────────────
+      // To compete with Lichess (depth 40+) we maximize cores, RAM, and
+      // analysis-mode behavior. Real "Lichess-grade" requires also swapping
+      // the binary to a NNUE+SIMD multi-threaded build — see
+      // CYBERCHESS_STOCKFISH_UPGRADE.md for the Level 2/3 upgrade path.
       try{
+        // Threads: leave 1 core for UI/render. SAB-enabled context required
+        // for >1 thread to actually parallelize; we set COEP=credentialless
+        // globally in next.config.ts so SAB should be available.
         const cores=typeof navigator!=="undefined"&&navigator.hardwareConcurrency?Math.max(1,navigator.hardwareConcurrency-1):4;
         this.w!.postMessage(`setoption name Threads value ${cores}`);
-        this.w!.postMessage("setoption name Hash value 256");
+        // Hash 1024 MB — quadruple vs prior 256. Modern machines (≥8 GB) handle this comfortably,
+        // and transposition-table hits dominate analysis throughput. Worth ~2-3x on long thinks.
+        this.w!.postMessage("setoption name Hash value 1024");
+        // Analysis mode prevents move-time cutoffs (we control via "go depth N").
         this.w!.postMessage("setoption name UCI_AnalyseMode value true");
+        // Contempt 0 = balanced eval (no anti-draw bias). Default is engine-dependent.
+        this.w!.postMessage("setoption name Contempt value 0");
+        // Skill 20 = max strength — no internal handicap.
+        this.w!.postMessage("setoption name Skill Level value 20");
       }catch{}
       this.ok=true;this.w!.postMessage("isready");
     }};this.w.postMessage("uci")}catch{this.w=null}}

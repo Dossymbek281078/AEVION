@@ -154,71 +154,6 @@ C) [третий вариант]
 
 ---
 
-## 📢 BROADCAST 2026-05-12 #3 — не дублируй параллельную работу + автопредложение альтернатив + подробно по-русски
-
-Команда от пользователя ВСЕМ открытым сессиям. Объединяет и расширяет BROADCAST #1 и #2 — применять параллельно с ними.
-
-**Правило AEVION-COORD-001:** во всех 14 worktree-окнах AEVION (aevion-core, aevion-build, aevion-bureau, aevion-healthai, aevion-qsign, aevion-qtradeoffline, aevion-smeta-trainer, aevion-backend-modules, frontend-exchange, frontend-globus, frontend-gtm, frontend-payments, frontend-qcore, frontend-qshield — плюс любые будущие):
-
-### 1. Никогда не делай работу, которую делает параллельная сессия
-
-Перед каждой задачей (даже маленькой):
-
-- **Шаг 1.** `git fetch origin main` — обновить общий контекст
-- **Шаг 2.** Прочитать `AEVION_COORDINATION.md` секции `LIVE ZONE OWNERSHIP` + `Текущая работа (WIP)` + `Pending cross-zone change requests`
-- **Шаг 3.** Посмотреть `git log --since="3 hours ago" --pretty=format:"%h %s" main` — где активны другие окна
-- **Шаг 4.** Сопоставить запрос пользователя с зонами и активностью
-- **Шаг 5.** Если задача дублирует или конфликтует с активной чужой работой — **остановиться и не делать**
-
-### 2. Автоматически предлагай альтернативы, не молчи
-
-Когда задача упирается в чужую зону / занятость / неясную инструкцию — **сразу же** в ответе показать пользователю 3 варианта в формате A/B/C:
-
-- **(A)** Эквивалент в своей зоне — конкретные файлы и цели
-- **(B)** Передать окну-владельцу — сказать «эта задача за окном X, переключитесь туда»
-- **(C)** Перенарезать зоны — добавить Pending request + 30-мин waiting period
-
-Альтернативы должны быть конкретными (имена файлов, цели), не общими фразами.
-
-### 3. Никогда не переключайся между проектами без явного «да»
-
-Полностью дублирует BROADCAST #2 — повторяю здесь для полноты:
-
-- Объявить смену вслух: «Этот чат был на X. Я вижу [причина] — переключиться на Y, окей?»
-- Дождаться явного подтверждения. Вагое «продолжаем», «вперёд», `/loop` авто-фаер — **НЕ авторизация**
-- Применимо в обе стороны: и при переходе ОТ зоны, и при возврате К ней
-
-### 4. Подробно расписывай шаги по-русски
-
-В ответах пользователю на русском перечислять шаги:
-
-- ❌ Плохо: «Запушил.»
-- ✅ Хорошо: «Шаг 1: прочитал X. Шаг 2: нашёл Y. Шаг 3: изменил Z (3 строки в файле F). Шаг 4: закоммитил с сообщением W через `git commit --only -- F`. Шаг 5: запушил `abc1234..def5678`. Параллельные окна увидят при следующем `git pull`.»
-
-Цель — пользователь видит процесс, а не доверяет на слово.
-
-### Запрещено
-
-- ❌ `git add .` / `git commit -a` (см. инцидент f83fcaaf, 2032 строки)
-- ❌ Тихая смена зоны/проекта/модуля при «продолжаем»/`/loop` auto-fire
-- ❌ Дублирование работы активной параллельной сессии
-- ❌ Молчаливое ожидание без альтернатив
-- ❌ `git push --force` без явной просьбы
-
-### Обязательно
-
-- ✅ `git commit --only -- FILE1 FILE2`
-- ✅ Объявление смены зоны + ожидание явного «да»
-- ✅ 3 альтернативы (A/B/C) при любой блокировке
-- ✅ Подробное русское описание шагов
-- ✅ `git pull` + чтение этого файла в начале сессии и после каждого `/loop` авто-фаера
-
-**Почему ввели:** серия инцидентов 2026-05-12 — (а) f83fcaaf снёс 2032 строки чужой работы через `git add .`; (б) параллельные сессии дважды делали один mobile-audit (aevion-healthai + aevion-build); (в) `aevion-core/main` тихо переключилась с CyberChess на fintech без уведомления пользователя. Эти правила — общий иммунитет от рецидивов.
-
-**Подтверждение прочтения:** упомяни `BROADCAST-2026-05-12-3-read` в commit body. Это сигналит другим окнам, что ты прочитал и применяешь правило.
-
----
-
 ## ⚠️ LIVE ZONE OWNERSHIP — read first, edit before crossing zones
 
 > **Обновлено 2026-05-12. ЭТОТ БЛОК ОБЯЗАТЕЛЕН К ПРОЧТЕНИЮ ПЕРЕД ЛЮБЫМ EDIT.**
@@ -261,7 +196,16 @@ C) [третий вариант]
 
 ### Pending cross-zone change requests
 
-_(пусто — добавляй сюда entries перед нарушением чужой зоны)_
+**[REQ-2026-05-12-A] aevion-build → orphan zone `frontend/src/app/build/**` + `frontend/src/components/build/**`**
+- Цель: формализовать owner'а для QBuild surface (vacancies/applications/profiles/employer/u/[id]/vacancy/[id]/company). Сейчас not assigned в LIVE ZONE OWNERSHIP, но aevion-build исторически шипит туда (b05bacc, 6901120 и др.).
+- Запрос: добавить строку в zone map — `aevion-build` owns `frontend/src/app/build/**`, `frontend/src/components/build/**`, `aevion-globus-backend/src/routes/build/**`, `aevion-globus-backend/src/lib/build/**`, `aevion-globus-backend/src/routes/qjobs.ts` shared с aevion-core sprint 2 only on schema additions.
+- Risk: low — orphan zone, никто не редактирует параллельно. Ждать 30 мин с момента commit.
+
+**[REQ-2026-05-12-B] aevion-build → orphan zone `frontend/src/app/multichat-engine/**`**
+- Цель: формализовать owner'а. /loop input явно указывает multichat-engine в моей зоне; в LIVE ZONE OWNERSHIP не присвоен (qcoreai owned by frontend-qcore, но multichat-engine — отдельная страница).
+- Запрос: добавить `frontend/src/app/multichat-engine/**` в aevion-build zone. Если frontend-qcore хочет — пусть берёт; ждать 30 мин.
+
+
 
 ### Acknowledgement log (BROADCAST-2026-05-12-read)
 

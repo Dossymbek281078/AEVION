@@ -154,6 +154,11 @@ const MODULES: Module[] = [
   { id: "power-supply-external", category: "utilities",href: "/smeta-trainer/drawings-practice/power-supply-external", icon: "⚡", title: "Внешнее электроснабжение",         subtitle: "ЛЭП, КТП, ВЛ, КЛ — от подстанции до ВРУ",                      level: "L4", exercises: 4,  color: "violet"  },
   { id: "power-supply-internal", category: "utilities",href: "/smeta-trainer/drawings-practice/power-supply-internal", icon: "🔌", title: "Внутреннее электроснабжение",      subtitle: "ВРУ, щитовая, разводка по этажам, автоматы и УЗО",            level: "L3", exercises: 4,  color: "yellow"  },
   { id: "grounding-lightning",   category: "utilities",href: "/smeta-trainer/drawings-practice/grounding-lightning",   icon: "🌩",  title: "Заземление и молниезащита",        subtitle: "TN-S, контур, категории МЗ по СП РК 3.04-01",                 level: "L3", exercises: 4,  color: "amber"   },
+
+  // ── Кондиционирование и холод ──
+  { id: "air-conditioning",      category: "utilities",href: "/smeta-trainer/drawings-practice/air-conditioning",      icon: "❄️", title: "Кондиционирование",               subtitle: "Сплит, мульти-сплит, VRF, чиллер с фанкойлами",                level: "L3", exercises: 4,  color: "cyan"    },
+  { id: "smoke-removal",         category: "utilities",href: "/smeta-trainer/drawings-practice/smoke-removal",         icon: "🚒", title: "Дымоудаление и противопож. вент.", subtitle: "ВД, ПД, огнезадерж. клапаны, EI 60/120 по СП РК 4.02-103",   level: "L4", exercises: 4,  color: "red"     },
+  { id: "refrigeration",         category: "utilities",href: "/smeta-trainer/drawings-practice/refrigeration",         icon: "🧊", title: "Холодильные системы",             subtitle: "Камеры, витрины, серверная prec. cooling, чиллеры",            level: "L3", exercises: 4,  color: "sky"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

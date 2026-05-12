@@ -21,6 +21,32 @@ function generateId(): string {
   return Math.random().toString(36).slice(2);
 }
 
+function exportChatAsMarkdown(messages: Message[], sessionTitle?: string): void {
+  const lines: string[] = [];
+  lines.push(`# QAI Chat — ${sessionTitle || "Exported Session"}`);
+  lines.push(`
+Exported: ${new Date().toLocaleString()}
+`);
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      lines.push(`
+**You:** ${msg.content}`);
+    } else {
+      lines.push(`
+**QAI:**
+${msg.content}`);
+    }
+  }
+  const blob = new Blob([lines.join('
+')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `qai-chat-${Date.now()}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
@@ -487,6 +513,30 @@ export default function QAIPage() {
                 <div style={{ fontSize: 12, color: "#94a3b8" }}>Multi-provider AI · No account needed</div>
               </div>
             </div>
+            {messages.length > 0 && (
+              <button
+                onClick={() => {
+                  const sess = sessions.find((s) => s.id === sessionId);
+                  exportChatAsMarkdown(messages, sess?.title);
+                }}
+                title="Export chat as Markdown"
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #e2e8f0",
+                  background: "#fff",
+                  color: "#374151",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
+                ↓ Export .md
+              </button>
+            )}
           </div>
 
           {/* Messages */}

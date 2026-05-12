@@ -24,12 +24,15 @@ const MODULES = [
 ];
 
 const RESOURCES = [
-  { href: "/fintech",                          label: "Overview" },
-  { href: "/fintech/dashboard",                label: "Dashboard" },
-  { href: "/fintech/status",                   label: "Status" },
-  { href: "/fintech/whitepaper",               label: "Whitepaper" },
-  { href: "/developers/fintech",               label: "API Docs" },
-  { href: "/developers/fintech/quickstart",    label: "Quickstart" },
+  { href: "/fintech",                            label: "Overview" },
+  { href: "/fintech/dashboard",                  label: "Dashboard" },
+  { href: "/fintech/status",                     label: "Status" },
+  { href: "/fintech/whitepaper",                 label: "Whitepaper" },
+  { href: "/fintech/integrations",               label: "Integrations" },
+  { href: "/fintech/changelog",                  label: "Changelog" },
+  { href: "/developers/fintech",                 label: "API Docs" },
+  { href: "/developers/fintech/quickstart",      label: "Quickstart" },
+  { href: "/developers/fintech/troubleshooting", label: "Troubleshooting" },
 ];
 
 export default function FintechFooter({ hideHealthBadge = false }: Props) {

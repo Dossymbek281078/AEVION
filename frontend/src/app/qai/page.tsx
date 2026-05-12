@@ -207,6 +207,13 @@ function TypingDots() {
   );
 }
 
+interface Persona {
+  id: string;
+  name: string;
+  emoji: string;
+  systemPrompt: string;
+}
+
 export default function QAIPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -214,6 +221,8 @@ export default function QAIPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [selectedPersona, setSelectedPersona] = useState<string>("assistant");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -241,6 +250,14 @@ export default function QAIPage() {
     } catch {
       // ignore
     }
+  }, []);
+
+  // Fetch personas on mount
+  useEffect(() => {
+    fetch(apiUrl("/api/qai/personas"))
+      .then((r) => r.json())
+      .then((d) => { if (d.personas) setPersonas(d.personas); })
+      .catch(() => {});
   }, []);
 
   // Auto-scroll to bottom
@@ -284,34 +301,77 @@ export default function QAIPage() {
     setLoading(true);
     setError(null);
 
+    // Add empty AI message that will be filled by stream chunks
+    const aiMsgId = generateId();
+    setMessages((prev) => [...prev, { role: "assistant", content: "", id: aiMsgId }]);
+
     try {
-      const res = await fetch(apiUrl("/api/qai/chat"), {
+      const response = await fetch(apiUrl("/api/qai/chat/stream"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId }),
+        body: JSON.stringify({ message: text, sessionId, personaId: selectedPersona }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to get response");
-      } else {
-        const aiMsg: Message = {
-          role: "assistant",
-          content: data.reply,
-          id: generateId(),
-        };
-        if (data.sessionId && data.sessionId !== sessionId) {
-          setSessionId(data.sessionId);
-          localStorage.setItem("qai_session_id", data.sessionId);
+
+      if (!response.ok || !response.body) {
+        setMessages((prev) =>
+          prev.map((m) => m.id === aiMsgId ? { ...m, content: "Error: could not connect to AI" } : m)
+        );
+        setLoading(false);
+        textareaRef.current?.focus();
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "chunk") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === aiMsgId ? { ...m, content: m.content + event.text } : m
+                )
+              );
+            }
+            if (event.type === "done") {
+              if (event.sessionId && event.sessionId !== sessionId) {
+                setSessionId(event.sessionId);
+                localStorage.setItem("qai_session_id", event.sessionId);
+              }
+            }
+            if (event.type === "error") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === aiMsgId ? { ...m, content: `Error: ${event.message ?? "stream failed"}` } : m
+                )
+              );
+            }
+          } catch {
+            // ignore parse errors
+          }
         }
-        setMessages((prev) => [...prev, aiMsg]);
       }
     } catch {
-      setError("Network error — check your connection");
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === aiMsgId ? { ...m, content: "Error: network error — check your connection" } : m
+        )
+      );
     } finally {
       setLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, loading, sessionId]);
+  }, [input, loading, sessionId, selectedPersona]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -671,7 +731,7 @@ export default function QAIPage() {
             style={{
               background: "#fff",
               borderTop: "1px solid #e2e8f0",
-              padding: "16px 24px",
+              padding: "12px 24px 16px",
               flexShrink: 0,
             }}
           >
@@ -679,11 +739,36 @@ export default function QAIPage() {
               style={{
                 maxWidth: 800,
                 margin: "0 auto",
-                display: "flex",
-                gap: 10,
-                alignItems: "flex-end",
               }}
             >
+              {/* Persona selector */}
+              {personas.length > 0 && (
+                <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>Persona:</span>
+                  <select
+                    value={selectedPersona}
+                    onChange={(e) => setSelectedPersona(e.target.value)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 8,
+                      border: "1px solid #e2e8f0",
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      outline: "none",
+                      background: "#f8fafc",
+                      color: "#374151",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {personas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.emoji} {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1, position: "relative" }}>
                 <textarea
                   ref={textareaRef}
@@ -734,6 +819,7 @@ export default function QAIPage() {
               >
                 {loading ? "..." : "Send"}
               </button>
+              </div>
             </div>
           </div>
         </div>

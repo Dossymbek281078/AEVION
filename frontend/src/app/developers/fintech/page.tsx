@@ -443,6 +443,11 @@ export default function FintechDevPage() {
         >
           <SubTitle>Quickstart</SubTitle>
           <P>
+            <a href="/developers/fintech/quickstart" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              → Interactive quickstart: 6 curl examples with copy-buttons →
+            </a>
+          </P>
+          <P>
             Every fintech module gates writes behind the platform JWT. Bootstrap a
             token once, then use it as <Code>Authorization: Bearer &lt;token&gt;</Code>{" "}
             on subsequent calls. Read endpoints are unauthenticated where the resource

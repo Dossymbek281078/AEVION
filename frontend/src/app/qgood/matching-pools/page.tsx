@@ -197,16 +197,17 @@ export default async function QGoodMatchingPoolsPage() {
           {pools.length === 0 ? (
             <div
               style={{
-                padding: 28,
+                padding: 32,
                 textAlign: "center",
                 background: "#1e293b",
                 border: "1px dashed #334155",
                 borderRadius: 12,
                 color: "#94a3b8",
-                fontSize: 14,
               }}
             >
-              No matching pools yet. Admins can fund the first pool below.
+              <div style={{ fontSize: 40, marginBottom: 10 }}>🤝</div>
+              <p style={{ color: "#cbd5e1", fontSize: 14, fontWeight: 600, marginTop: 0, marginBottom: 6 }}>Matching pools пока не созданы</p>
+              <p style={{ fontSize: 12, marginTop: 4, marginBottom: 0 }}>Админы могут фондировать первый пул через панель ниже.</p>
             </div>
           ) : (
             <div

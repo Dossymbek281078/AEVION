@@ -1793,6 +1793,18 @@ export default function CyberChessPage(){
         e.preventDefault();
         try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}catch{}
       }
+      // Annotation shortcuts in analysis mode: 1=!! 2=! 3=!? 4=?! 5=? 6=??
+      if(kbCtxRef.current.tab==="analysis"&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.altKey){
+        const ANNOTS:Record<string,string>={"1":"!!","2":"!","3":"!?","4":"?!","5":"?","6":"??"};
+        if(ANNOTS[e.key]){
+          e.preventDefault();
+          const ply=browseIdx<0?hist.length-1:browseIdx-1;
+          if(ply>=0&&ply<hist.length){
+            sMoveAnnotations(prev=>{const next={...prev};if(next[ply]===ANNOTS[e.key])delete next[ply];else next[ply]=ANNOTS[e.key];return next;});
+            showToast(`Аннотация ${ANNOTS[e.key]} → ход ${hist[ply]||ply+1}`,"info");
+          }
+        }
+      }
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
@@ -6843,6 +6855,60 @@ ${question.trim()}`;
               </div>
               {blunderBook.length>5&&<div style={{fontSize:10,color:"#991b1b",marginTop:4,textAlign:"center"}}>+{blunderBook.length-5} ещё позиций</div>}
             </div>}
+
+            {/* ── Study Plan — weekly recommendation based on weaknesses + themePerf ── */}
+            {savedGames.length>=3&&(()=>{
+              const dna=gameDna;
+              // Build a personalized 7-item weekly plan
+              const plan:{day:string;task:string;icon:string;action:()=>void}[]=[];
+              // Monday: play a game
+              plan.push({day:"Пн",task:"Сыграй партию",icon:"♟",action:()=>{sTab("play");sSetup(true)}});
+              // Tuesday: weak theme puzzles if any
+              const weakThemes=Object.entries(themePerf).filter(([,v])=>v.c+v.w>=3&&v.c/(v.c+v.w)<0.5).sort((a,b)=>(a[1].c/(a[1].c+a[1].w))-(b[1].c/(b[1].c+b[1].w)));
+              if(weakThemes.length>0){
+                const wt=weakThemes[0][0];
+                plan.push({day:"Вт",task:`Пазлы: ${wt}`,icon:"🎯",action:()=>{sTab("puzzles");sPzFilterTheme(wt);sPzI(0);sPzCategory("all")}});
+              }else{
+                plan.push({day:"Вт",task:"Реши 10 пазлов",icon:"🎯",action:()=>{sTab("puzzles");sPzMode("learn" as any)}});
+              }
+              // Wednesday: Coach knowledge reading
+              plan.push({day:"Ср",task:"Читай базу знаний",icon:"📚",action:()=>{sShowKnowledge(true)}});
+              // Thursday: analysis of last game
+              if(savedGames.length>0)plan.push({day:"Чт",task:"Разбери последнюю партию",icon:"🔍",action:()=>{sTab("analysis");const last=savedGames[0];const g=new Chess();const fh=[g.fen()];const mh:string[]=[];for(const s of last.moves){try{const mv=g.move(s);if(mv){mh.push(mv.san);fh.push(g.fen())}}catch{break}}setGame(g);sBk(k=>k+1);sHist(mh);sFenHist(fh);sLm(null);sSel(null);sVm(new Set());sOver(last.result);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(last.playerColor);sFlip(last.playerColor==="b")}});
+              // Friday: blunder book practice
+              if(blunderBook.length>0)plan.push({day:"Пт",task:"Тренируй позиции из блундер-бука",icon:"📕",action:()=>{const b=blunderBook[0];try{const g=new Chess(b.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([b.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");sOn(true);sSetup(false);}catch{}}});
+              else plan.push({day:"Пт",task:"Puzzle Rush 3 мин",icon:"⚡",action:()=>{sTab("puzzles");sPzMode("rush" as any)}});
+              // Saturday: variant game
+              plan.push({day:"Сб",task:"Играй вариант",icon:"🎲",action:()=>{sTab("play");sShowVariants(true)}});
+              // Sunday: rest or openings
+              plan.push({day:"Вс",task:"Изучи дебютный репертуар",icon:"📖",action:()=>{sTab("coach")}});
+              const todayDay=new Date().getDay(); // 0=Sun,1=Mon...
+              const dayMap=[6,0,1,2,3,4,5]; // JS 0=Sun → plan[6]
+              const todayPlanIdx=dayMap[todayDay];
+              return <div style={{borderRadius:10,background:"linear-gradient(135deg,#f0f9ff,#dbeafe)",border:"1px solid #93c5fd",padding:"10px 12px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                  <span style={{fontSize:14}}>📅</span>
+                  <span style={{fontSize:11,fontWeight:900,color:"#1e40af",letterSpacing:0.5,textTransform:"uppercase" as const}}>Недельный план · на основе анализа игры</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+                  {plan.slice(0,7).map((p,i)=>{
+                    const isToday=i===todayPlanIdx;
+                    return <button key={p.day} onClick={p.action} style={{
+                      padding:"5px 3px",borderRadius:6,border:isToday?`2px solid #3b82f6`:"1px solid #bfdbfe",
+                      background:isToday?"linear-gradient(135deg,#dbeafe,#bfdbfe)":"#f0f9ff",
+                      cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:2
+                    }}>
+                      <span style={{fontSize:10,fontWeight:900,color:isToday?"#1e40af":"#93c5fd"}}>{p.day}</span>
+                      <span style={{fontSize:14,lineHeight:1}}>{p.icon}</span>
+                      <span style={{fontSize:9,color:isToday?"#1e3a8a":"#3b82f6",fontWeight:700,lineHeight:1.2}}>{p.task.slice(0,10)}</span>
+                    </button>;
+                  })}
+                </div>
+                {plan[todayPlanIdx]&&<div style={{marginTop:6,fontSize:11,color:"#1e40af",fontWeight:700}}>
+                  📌 Сегодня: <span onClick={plan[todayPlanIdx].action} style={{cursor:"pointer",textDecoration:"underline"}}>{plan[todayPlanIdx].task}</span>
+                </div>}
+              </div>;
+            })()}
 
             {/* Mode selector — 5 ways to start a Coach session */}
             {(()=>{

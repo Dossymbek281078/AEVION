@@ -34,6 +34,8 @@ const SMOKES = [
   // Read-only public endpoints — safe to run anywhere, including prod.
   // Tier 3 amplifier surfaces (OG cards, sitemaps, RSS, badges).
   { name: "tier3", script: "tier3-smoke.js", readOnly: true },
+  // Hub catalog: read-only unified module discovery endpoint.
+  { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
 
   // The rest mutate state — register users, create records — so they only
   // run in ephemeral CI environments (READ_ONLY=0).

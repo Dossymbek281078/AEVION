@@ -77,6 +77,14 @@ async function run() {
   if (r.status === 400) ok("invalid choice → 400");
   else fail("invalid choice should 400", `${r.status}`);
 
+  // Rationale > 1000 chars → 400 rationale_too_long (instead of silent truncate)
+  r = await req("POST", `/api/qchaingov/proposals/${proposalId}/votes`, {
+    choice: "yes", rationale: "x".repeat(1001),
+  }, token);
+  if (r.status === 400 && r.body?.error === "rationale_too_long" && r.body?.maxLength === 1000) {
+    ok("rationale > 1000 → 400 rationale_too_long");
+  } else fail("rationale > 1000 should reject", `${r.status} ${r.body?.error}`);
+
   // Open without admin → 403
   r = await req("POST", `/api/qchaingov/proposals/${proposalId}/open`, {}, token);
   if (r.status === 403) ok("open without admin → 403");

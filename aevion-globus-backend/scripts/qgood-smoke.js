@@ -63,6 +63,19 @@ async function run() {
   if (r.status === 400) ok("POST /campaigns rejects bad title");
   else fail("POST /campaigns should reject bad title", `${r.status}`);
 
+  // Donation: invalid email is rejected BEFORE campaign-lookup
+  r = await req("POST", "/api/qgood/campaigns/any-id-here/donations", {
+    amountCents: 500, currency: "USD", donorEmail: "not-an-email",
+  });
+  if (r.status === 400 && r.body?.error === "invalid_email") ok("POST /donations rejects invalid_email");
+  else fail("POST /donations should reject invalid email", `${r.status} ${r.body?.error}`);
+
+  r = await req("POST", "/api/qgood/campaigns/any-id-here/donations", {
+    amountCents: 500, currency: "USD", donorEmail: "x@",
+  });
+  if (r.status === 400 && r.body?.error === "invalid_email") ok("POST /donations rejects partial email");
+  else fail("POST /donations should reject partial email", `${r.status} ${r.body?.error}`);
+
   // Cleanup
   r = await req("DELETE", "/api/auth/account", { password: "QGoodSmoke123!" }, token);
   if (r.status === 200 || r.status === 204) ok("DELETE /account");

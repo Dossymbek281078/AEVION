@@ -12,6 +12,19 @@ import type { GameMetrics } from "./cpi";
 // Types
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * One line of Stockfish multiPV output — first move + eval (cp or mate).
+ * Used as both the engine response shape AND the "engineTop3" snapshot
+ * persisted on each MoveMetric.
+ */
+export type PVLine = {
+  pv: number;          // 1-based rank (1 = best)
+  cp: number;          // centipawns from side-to-move perspective; 0 if mate
+  mate: number;        // mate-in-N from side-to-move perspective; 0 if cp
+  depth: number;
+  moves: string[];     // UCI principal variation (firstMove at [0])
+};
+
 export type MoveMetric = {
   /** 1-based ply index in the game. */
   ply: number;
@@ -50,14 +63,94 @@ export type MoveMetric = {
 export class MetricsCollector {
   private moves: MoveMetric[] = [];
   private startTime: number = Date.now();
+  // Cache of pending multiPV results keyed by FEN. Filled by a background
+  // eval pass after each ply; consumed by recordMoveWithMultiPV on the
+  // following ply (FEN-before-move). Bounded to ~6 entries to avoid leaks
+  // when the user navigates history without playing.
+  private pendingTop3 = new Map<string, PVLine[]>();
+  private static readonly MAX_PENDING = 6;
 
   recordMove(m: MoveMetric): void {
     this.moves.push(m);
   }
 
+  /**
+   * F2-phase-2 entry point. Combines the heuristic-built MoveMetric base
+   * with the real multiPV=3 result observed BEFORE the move, computing:
+   *   - rank  (1/2/3 if matched against top-3; 4 otherwise)
+   *   - hadMate1/2/3  (any top-3 line is mate-in-N)
+   *   - foundMate1/2/3 (played move was a mate-in-N line)
+   *   - isBrilliancy (played move not top-1 but eval did NOT drop ≥30cp)
+   *
+   * `base` is the heuristic-derived MoveMetric (cpl/timeMs/etc.).
+   * `top3` is the engine snapshot of the position BEFORE the move; may
+   * be empty or null if SF wasn't ready, in which case `base` is recorded
+   * as-is (fallback).
+   */
+  recordMoveWithMultiPV(base: MoveMetric, top3: PVLine[] | null): void {
+    if (!top3 || top3.length === 0) {
+      this.moves.push(base);
+      return;
+    }
+    // Normalize: top3 first-moves are UCI strings (e.g. "e2e4q" with optional promo).
+    const playedUci = base.uci.toLowerCase();
+    const engineTop3 = top3.slice(0, 3).map((l) => ({
+      uci: (l.moves[0] || "").toLowerCase(),
+      eval: l.mate !== 0 ? (l.mate > 0 ? 10000 : -10000) : l.cp,
+      mateIn: l.mate !== 0 ? l.mate : null,
+    }));
+    // Rank: 1/2/3 if uci matches top-N; 4 otherwise.
+    let rank: 1 | 2 | 3 | 4 = 4;
+    for (let i = 0; i < engineTop3.length; i++) {
+      if (engineTop3[i].uci === playedUci) {
+        rank = (i + 1) as 1 | 2 | 3;
+        break;
+      }
+    }
+    const hadMate1 = engineTop3.some((l) => l.mateIn !== null && Math.abs(l.mateIn) === 1 && l.mateIn > 0);
+    const hadMate2 = engineTop3.some((l) => l.mateIn !== null && Math.abs(l.mateIn) <= 2 && l.mateIn > 0);
+    const hadMate3 = engineTop3.some((l) => l.mateIn !== null && Math.abs(l.mateIn) <= 3 && l.mateIn > 0);
+    const playedLine = engineTop3.find((l) => l.uci === playedUci);
+    const foundMate1 = !!playedLine && playedLine.mateIn !== null && Math.abs(playedLine.mateIn) === 1 && playedLine.mateIn > 0;
+    const foundMate2 = !!playedLine && playedLine.mateIn !== null && Math.abs(playedLine.mateIn) <= 2 && playedLine.mateIn > 0;
+    const foundMate3 = !!playedLine && playedLine.mateIn !== null && Math.abs(playedLine.mateIn) <= 3 && playedLine.mateIn > 0;
+    // Brilliancy: played move ≠ engine #1 but CPL is tiny (still a strong move).
+    // Heuristic — we don't have post-move eval here, so use cpl from base.
+    const isBrilliancy = rank >= 2 && base.cpl < 30;
+    this.moves.push({
+      ...base,
+      engineTop3,
+      rank,
+      hadMate1, hadMate2, hadMate3,
+      foundMate1, foundMate2, foundMate3,
+      isBrilliancy,
+    });
+  }
+
+  /** Store top-3 lines for a FEN (called by background multiPV pass). */
+  setPendingTop3(fen: string, lines: PVLine[]): void {
+    if (!fen || !lines || lines.length === 0) return;
+    // LRU-ish bound: drop the oldest entry first if at capacity.
+    if (this.pendingTop3.size >= MetricsCollector.MAX_PENDING) {
+      const firstKey = this.pendingTop3.keys().next().value;
+      if (firstKey) this.pendingTop3.delete(firstKey);
+    }
+    this.pendingTop3.set(fen, lines.slice(0, 3));
+  }
+
+  /** Consume (read + delete) the stored top-3 for a FEN, or null. */
+  consumePendingTop3(fen: string): PVLine[] | null {
+    if (!fen) return null;
+    const v = this.pendingTop3.get(fen);
+    if (!v) return null;
+    this.pendingTop3.delete(fen);
+    return v;
+  }
+
   reset(): void {
     this.moves = [];
     this.startTime = Date.now();
+    this.pendingTop3.clear();
   }
 
   size(): number {

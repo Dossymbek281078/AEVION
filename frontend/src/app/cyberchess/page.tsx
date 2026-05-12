@@ -57,7 +57,7 @@ import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import WorkspacePiP, { useWorkspacePiP, detectMediaSource } from "./WorkspacePiP";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 import Link from "next/link";
-import { MetricsCollector, computeCPL, type MoveMetric } from "./stockfishMetrics";
+import { MetricsCollector, computeCPL, type MoveMetric, type PVLine as MetricsPVLine } from "./stockfishMetrics";
 import { applyGameToCPI } from "./cpi";
 
 const FILES = "abcdefgh";
@@ -92,7 +92,7 @@ type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:
 
 /* ═══ Stockfish with MultiPV ═══ */
 type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
-class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];
+class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];
   init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
@@ -104,7 +104,7 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       const cp=cpM?parseInt(cpM[1]):0;const mate=mM?parseInt(mM[1]):0;
       const pvNum=pvM?parseInt(pvM[1]):1;const depth=depM?parseInt(depM[1]):0;
       const moves=movesM?movesM[1].trim().split(" "):[];
-      if(this.ecb)this.ecb(cp,mate);
+      if(this.ecb)this.ecb(cp,mate,depth);
       if(this.mpvCb){
         const idx=this.mpvLines.findIndex(x=>x.pv===pvNum);
         const line={pv:pvNum,cp,mate,depth,moves:moves.slice(0,10)};
@@ -140,8 +140,8 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       this.ok=true;this.w!.postMessage("isready");
     }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  eval(fen:string,d:number,ecb:(cp:number,mate:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];try{this.w.postMessage("stop")}catch{};this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
   terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[]}}}
@@ -610,6 +610,10 @@ export default function CyberChessPage(){
   const totalGames=sts.w+sts.l+sts.d;
   const[evalCp,sEvalCp]=useState(0);
   const[evalMate,sEvalMate]=useState(0);
+  // F2-phase-2: live Stockfish search depth — pushed by the SF info-parser through
+  // the ecb callback (3rd arg). Displayed as a small "d18/35" badge next to evalCp
+  // so users can see progressive deepening in real time.
+  const[evalDepth,sEvalDepth]=useState(0);
   const[fenHist,sFenHist]=useState<string[]>([new Chess().fen()]);
   const[analyzing,sAnalyzing]=useState(false);
   // MultiPV
@@ -862,6 +866,43 @@ export default function CyberChessPage(){
   // PiP — floating Picture-in-Picture для YouTube/Twitch стримов поверх доски.
   // Hook возвращает: open (bool), source (PiPSource|null), show(), hide(), toggle()
   const pip = useWorkspacePiP();
+  // PiP UX polish: pulsing "variant-of-day stream?" suggestion. Dismissed by user
+  // clicking either the open-stream CTA or the × button; remembered per-day so we
+  // don't nag (key includes ISO date YYYY-MM-DD).
+  const[pipSuggestDismissed,sPipSuggestDismissed]=useState(false);
+  // Auto-restore previous PiP session on mount. WorkspacePiP itself persists the
+  // source to localStorage; we hydrate the same key here and call pip.show() once
+  // so the floating window reappears in the same state as last visit.
+  const pipAutoRestoredRef=useRef(false);
+  useEffect(()=>{
+    if(pipAutoRestoredRef.current)return;
+    pipAutoRestoredRef.current=true;
+    if(typeof window==="undefined")return;
+    try{
+      const raw=localStorage.getItem("aevion_cyberchess_pip_src_v1");
+      if(!raw)return;
+      const j=JSON.parse(raw);
+      if(j&&j.kind&&j.url)pip.show(j as {kind:"youtube"|"twitch"|"url";url:string;title?:string});
+    }catch{/* ignore — first visit or corrupt storage */}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  // Variant-of-day → suggested-stream pulse. Only show when:
+  //   - we have a daily variant info today
+  //   - PiP is currently closed
+  //   - user hasn't dismissed the suggestion today
+  const todayIso=new Date().toISOString().slice(0,10);
+  const pipDismissKey=`aevion_cyberchess_pip_suggest_dismissed_${todayIso}`;
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{if(localStorage.getItem(pipDismissKey)==="1")sPipSuggestDismissed(true)}catch{}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  const showPipSuggest=!pip.open&&!pipSuggestDismissed&&!!dailyVariantInfo&&!dailyVariantInfo.played;
+  const dismissPipSuggest=useCallback(()=>{
+    sPipSuggestDismissed(true);
+    try{localStorage.setItem(pipDismissKey,"1")}catch{}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[pipDismissKey]);
   // Активная "дашборд-плитка" (3 крупные карточки на лендинге).
   // play = варианты/режимы партии · learn = тренажёры · meta = аналитика+стрим.
   const[activeDash,sActiveDash]=useState<"play"|"learn"|"meta"|null>(null);
@@ -1302,16 +1343,18 @@ export default function CyberChessPage(){
     const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
       ?(window as any).requestIdleCallback(()=>{
         if(done||!sfR.current?.ready())return;
-        sfR.current.eval(game.fen(),13,(cp,mate)=>{
+        sfR.current.eval(game.fen(),13,(cp,mate,depth)=>{
           if(done)return;
           sEvalCp(cp*sign);sEvalMate(mate*sign);
+          if(typeof depth==="number"&&depth>0)sEvalDepth(depth);
         },()=>{done=true});
       },{timeout:200})
       :setTimeout(()=>{
         if(done||!sfR.current?.ready())return;
-        sfR.current.eval(game.fen(),13,(cp,mate)=>{
+        sfR.current.eval(game.fen(),13,(cp,mate,depth)=>{
           if(done)return;
           sEvalCp(cp*sign);sEvalMate(mate*sign);
+          if(typeof depth==="number"&&depth>0)sEvalDepth(depth);
         },()=>{done=true});
       },150);
     return()=>{
@@ -1347,6 +1390,49 @@ export default function CyberChessPage(){
     prevBkRef.current=bk;
     prevEvalCpRef.current=evalCp;
   },[bk]);// eslint-disable-line react-hooks/exhaustive-deps
+
+  // F2-phase-2: Background multiPV=3 prefetch for the CURRENT position.
+  // The collector will consume this top-3 snapshot when the NEXT move is played
+  // (via consumePendingTop3 keyed on fenBefore). Non-blocking: we never await
+  // this in exec(). Depth 18 is a balance between accuracy and not stomping on
+  // the live single-pv eval (which uses depth 13 and the same SF worker).
+  //
+  // Note: SF has a single shared worker → multiPV calls cancel the live eval
+  // briefly. To minimise contention we delay this pass to idle, and only run
+  // when the user is actively playing (tab === "play", game on, not in P2P).
+  useEffect(()=>{
+    if(!on||over||tab!=="play"||p2pMode||hotseat||setup)return;
+    if(!sfR.current?.ready())return;
+    if(currentEndgame||pzCurrent)return; // skip in puzzle/endgame loops
+    const fenForTop3=game.fen();
+    let cancelled=false;
+    const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
+      ?(window as any).requestIdleCallback(()=>{
+        if(cancelled||!sfR.current?.ready())return;
+        sfR.current.multiPV(fenForTop3,18,3,(lines)=>{
+          if(cancelled||!lines||lines.length===0)return;
+          try{
+            // Convert in-page PVLine shape to MetricsPVLine (structurally identical).
+            metricsRef.current.setPendingTop3(fenForTop3,lines as unknown as MetricsPVLine[]);
+          }catch{/* never break gameplay on metrics errors */}
+        });
+      },{timeout:600})
+      :setTimeout(()=>{
+        if(cancelled||!sfR.current?.ready())return;
+        sfR.current.multiPV(fenForTop3,18,3,(lines)=>{
+          if(cancelled||!lines||lines.length===0)return;
+          try{metricsRef.current.setPendingTop3(fenForTop3,lines as unknown as MetricsPVLine[])}catch{}
+        });
+      },400);
+    return()=>{
+      cancelled=true;
+      try{
+        if(typeof window!=="undefined"&&"cancelIdleCallback" in window&&typeof idleId==="number")
+          (window as any).cancelIdleCallback(idleId);
+        else if(idleId)clearTimeout(idleId as any);
+      }catch{}
+    };
+  },[bk,on,over,tab,p2pMode,hotseat,setup,sfOk]);// eslint-disable-line react-hooks/exhaustive-deps
 
   // [reverted 2026-04-22] Earlier version of this effect terminated+reinit'd the Stockfish
   // worker on browseIdx/tab changes; deps included `tab` so every tab switch fired
@@ -1666,10 +1752,13 @@ export default function CyberChessPage(){
     sMoveTimes([...moveTimesRef.current]);
     lastMoveStartRef.current=now;
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
-    // F2-phase: record per-move metrics into the CPI collector.
-    // TODO F2-phase-2: feed engineTop3 from Stockfish multiPV=3 result; for now we
-    // use a minimal heuristic where CPL is derived from the live evalCp scalar
-    // and rank defaults to 1 (best) when CPL is small.
+    // F2-phase-2: record per-move metrics into the CPI collector.
+    // We build a base MoveMetric from the heuristic (live evalCp scalar) and then,
+    // if Stockfish has pre-computed multiPV=3 for fenBefore (via the background
+    // useEffect below — non-blocking), upgrade rank / mate-detection / brilliancy
+    // with the real engine data. If no top3 is cached (SF not ready, fast moves
+    // outpaced the engine, etc.), the heuristic record is used as-is — recall is
+    // never blocked on the engine.
     try{
       const playedPly=hist.length+1; // 1-based ply count after this move
       const cpiUci=`${mv.from}${mv.to}${mv.promotion||""}`;
@@ -1678,7 +1767,7 @@ export default function CyberChessPage(){
       const cpiHadMate2=Math.abs(evalMate)<=2&&Math.abs(evalMate)>0;
       const cpiHadMate3=Math.abs(evalMate)<=3&&Math.abs(evalMate)>0;
       const matedForUser=evalMate>0&&mv.color===pCol;
-      const cpiM:MoveMetric={
+      const baseM:MoveMetric={
         ply:playedPly,
         fenBefore:cpiFenBefore,
         san:mv.san,
@@ -1693,10 +1782,12 @@ export default function CyberChessPage(){
         foundMate2:cpiHadMate2&&matedForUser&&cpiCpl===0,
         foundMate3:cpiHadMate3&&matedForUser&&cpiCpl===0,
         isHang:cpiCpl>=300,
-        isBrilliancy:false, // requires multiPV; populated in F2-phase-2
+        isBrilliancy:false, // upgraded below if real top3 is available
         timeMs:cpiTimeMs,
       };
-      metricsRef.current.recordMove(cpiM);
+      const cachedTop3=metricsRef.current.consumePendingTop3(cpiFenBefore);
+      if(cachedTop3&&cachedTop3.length>0)metricsRef.current.recordMoveWithMultiPV(baseM,cachedTop3);
+      else metricsRef.current.recordMove(baseM);
       prevEvalCpForCpiRef.current=evalCp;
     }catch{/* CPI is optional — never break the move flow */}
     if(game.isGameOver()){
@@ -5656,6 +5747,20 @@ export default function CyberChessPage(){
               {sfOk&&!over&&<span style={{fontSize:11,fontWeight:800,fontFamily:"ui-monospace,monospace",color:evalMate!==0?(evalMate>0?T.accent:T.danger):Math.abs(evalCp)<30?T.dim:evalCp>0?T.accent:T.danger}}>
                 {evalMate!==0?`M${Math.abs(evalMate)}`:(evalCp>0?"+":"")+(evalCp/100).toFixed(2)}
               </span>}
+              {/* F2-phase-2: progressive-deepening indicator. The SF info-parser pushes
+                  depth through ecb on every "info" line, so this badge fades & pulses
+                  as the engine deepens its search (typical range 1→25+ in fast eval). */}
+              {sfOk&&!over&&evalDepth>0&&<span
+                key={evalDepth}
+                title={`Stockfish search depth: ${evalDepth} ply`}
+                style={{
+                  fontSize:9,fontWeight:800,fontFamily:"ui-monospace,monospace",
+                  color:T.dim,opacity:0.85,letterSpacing:0.3,
+                  padding:"1px 4px",borderRadius:3,border:`1px solid ${CC.border}`,
+                  background:"rgba(255,255,255,0.5)",
+                  animation:"sf-depth-pulse 0.4s ease-out",
+                }}
+              >d{evalDepth}/35</span>}
             </>}
           </div>}
 
@@ -7426,7 +7531,7 @@ ${question.trim()}`;
           <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>Клик мимо — отмена</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}`}</style>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       // Library v2 — full search/sort/filter/PGN export/delete.
@@ -7992,6 +8097,48 @@ ${question.trim()}`;
       onClose={pip.hide}
       showChatPanel={pip.source.kind==="twitch"}
     />}
+
+    {/* PiP UX polish: variant-of-day pulsing stream suggestion.
+        Appears once per day in the bottom-right corner when PiP is closed AND
+        today's daily variant is unplayed. Two CTAs:
+          1) "Включить" → opens a Twitch stream of a relevant GM (Naroditsky default)
+          2) "×" → dismiss for the rest of the day (localStorage-keyed by date) */}
+    {showPipSuggest&&<div
+      role="alert"
+      style={{
+        position:"fixed",right:20,bottom:20,zIndex:7900,
+        display:"flex",alignItems:"center",gap:10,
+        padding:"10px 14px",borderRadius:999,
+        background:"linear-gradient(135deg,#1e1b4b 0%,#581c87 100%)",color:"#fff",
+        boxShadow:"0 8px 24px -4px rgba(168,85,247,0.45), 0 2px 8px rgba(15,23,42,0.4)",
+        border:"1px solid rgba(168,85,247,0.5)",
+        animation:"pip-suggest-pulse 2s ease-in-out infinite",
+        fontSize:13,fontWeight:700,maxWidth:340,
+      }}>
+      <span style={{fontSize:18,lineHeight:1}}>📺</span>
+      <span style={{flex:1}}>Включи стрим от GM Naroditsky к {dailyVariantInfo?.variant?`варианту дня (${dailyVariantInfo.variant})`:"варианту дня"}?</span>
+      <button
+        type="button"
+        onClick={()=>{
+          pip.show({kind:"twitch",url:"gmnaroditsky",title:"GM Naroditsky · вариант дня"});
+          dismissPipSuggest();
+        }}
+        style={{
+          background:"#a855f7",color:"#fff",border:"none",
+          padding:"5px 11px",borderRadius:999,fontSize:12,fontWeight:800,cursor:"pointer",
+          whiteSpace:"nowrap",
+        }}
+      >Включить</button>
+      <button
+        type="button"
+        aria-label="Скрыть подсказку"
+        onClick={dismissPipSuggest}
+        style={{
+          background:"transparent",color:"rgba(255,255,255,0.6)",border:"none",
+          fontSize:18,lineHeight:1,cursor:"pointer",padding:"0 2px",
+        }}
+      >×</button>
+    </div>}
 
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay

@@ -1,24 +1,24 @@
 # AEVION Ecosystem Overview
 
 > **Auto-generated** from `https://api.aevion.app/api/aevion/catalog` + `/registry-stats`.
-> Snapshot taken: 2026-05-12T09:12:08.969Z
+> Snapshot taken: 2026-05-12T11:05:04.881Z
 > Re-generate: `node scripts/generate-overview.mjs`
 
 ## Summary
 
-- **Total modules:** 29
-- **By status:** ⚪ idea: **12** (41%) · 🟢 mvp: **6** (21%) · 🟢 launched: **5** (17%) · 🔵 planning: **5** (17%) · 🟡 in_progress: **1** (3%)
-- **By kind:** product: **16** · experiment: **7** · core: **4** · service: **2**
+- **Total modules:** 30
+- **By status:** ⚪ idea: **12** (40%) · 🟢 mvp: **6** (20%) · 🟢 launched: **5** (17%) · 🔵 planning: **5** (17%) · 🟡 in_progress: **2** (7%)
+- **By kind:** product: **17** · experiment: **7** · core: **4** · service: **2**
 
 ## Top tags
 
-`ai` (8) · `security` (4) · `core` (3) · `engine` (3) · `fintech` (3) · `ip` (3) · `construction` (2) · `education` (2) · `health` (2) · `marketplace` (2) · `multilang` (2) · `network` (2) · `payments` (2) · `privacy` (2) · `psychology` (2) · `addiction` (1) · `agents` (1) · `anti-aging` (1) · `avatar` (1) · `bureau` (1)
+`ai` (9) · `security` (4) · `core` (3) · `engine` (3) · `fintech` (3) · `ip` (3) · `construction` (2) · `content` (2) · `education` (2) · `health` (2) · `marketplace` (2) · `multilang` (2) · `network` (2) · `payments` (2) · `privacy` (2) · `psychology` (2) · `addiction` (1) · `agents` (1) · `aggregator` (1) · `anti-aging` (1)
 
 ## Contents
 
 - [🟢 launched (5)](#launched)
 - [🟢 mvp (6)](#mvp)
-- [🟡 in_progress (1)](#in-progress)
+- [🟡 in_progress (2)](#in-progress)
 - [🔵 planning (5)](#planning)
 - [⚪ idea (12)](#idea)
 
@@ -49,11 +49,12 @@
 
 ## in_progress
 
-🟡 **1 modules**
+🟡 **2 modules**
 
 | Code | Name | Kind | Tags | Links |
 |------|------|------|------|-------|
 | `QCONTRACT` | QContract — Self-destruct Smart Documents | product | documents, security | [page](https://aevion.app/qcontract) · [api](https://api.aevion.app/api/qcontract/openapi.json) · [status](https://api.aevion.app/api/qcontract/status) |
+| `QNEWS` | QNews — Отраслевой агрегатор новостей | product | news, aggregator, ai, media, content | [page](https://aevion.app/qnews) |
 
 ## planning
 

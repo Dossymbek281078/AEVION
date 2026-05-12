@@ -22,10 +22,32 @@ const OUT_PATH = resolve(REPO_ROOT, "docs/AEVION_OVERVIEW.md");
 const BASE = (process.env.BASE || "https://api.aevion.app").replace(/\/+$/, "");
 const SITE = (process.env.SITE || "https://aevion.app").replace(/\/+$/, "");
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function fetchJson(path) {
-  const r = await fetch(`${BASE}${path}`, { headers: { Accept: "application/json" } });
-  if (!r.ok) throw new Error(`HTTP ${r.status} on ${path}`);
-  return r.json();
+  const url = `${BASE}${path}`;
+  // Exponential backoff between retries: 1s after attempt 1, 3s after attempt 2 (9s reserved if attempts grow).
+  const backoffMs = [1000, 3000, 9000];
+  const MAX_ATTEMPTS = 3;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    console.log(`[generate-overview] attempt ${attempt}/${MAX_ATTEMPTS} → ${url}`);
+    try {
+      const r = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!r.ok) throw new Error(`HTTP ${r.status} on ${path}`);
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+      console.error(`[generate-overview] attempt ${attempt}/${MAX_ATTEMPTS} failed: ${e?.message || e}`);
+      if (attempt < MAX_ATTEMPTS) {
+        const wait = backoffMs[attempt - 1];
+        console.log(`[generate-overview] retrying in ${wait}ms...`);
+        await sleep(wait);
+      }
+    }
+  }
+  console.error(`[generate-overview] FATAL: all ${MAX_ATTEMPTS} attempts failed for ${url}`);
+  throw lastErr;
 }
 
 function pct(n, total) {

@@ -50,7 +50,7 @@ export default function QMediaLikesPage() {
             <div key={`${item.type}-${item.id}`} className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 hover:border-slate-700 transition-colors">
               <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center text-lg shrink-0">
                 {item.coverUrl || item.thumbnailUrl
-                  ? <img src={item.coverUrl ?? item.thumbnailUrl!} alt="" className="w-full h-full object-cover rounded-lg" />
+                  ? <img src={item.coverUrl ?? item.thumbnailUrl!} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover rounded-lg" />
                   : item.type === "track" ? "🎵" : "🎬"
                 }
               </div>

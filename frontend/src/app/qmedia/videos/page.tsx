@@ -79,7 +79,7 @@ export default function QMediaVideosPage() {
               <button onClick={() => setPlaying(null)} style={{ border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 16 }}>×</button>
             </div>
             {playing.url && isYoutube(playing.url)
-              ? <iframe src={embedUrl(playing.url)} style={{ width: "100%", height: 360, border: "none" }} allowFullScreen />
+              ? <iframe src={embedUrl(playing.url)} title={playing.title} loading="lazy" referrerPolicy="strict-origin-when-cross-origin" style={{ width: "100%", height: 360, border: "none" }} allowFullScreen />
               : <video src={playing.url} controls style={{ width: "100%", maxHeight: 360 }} />
             }
           </div>

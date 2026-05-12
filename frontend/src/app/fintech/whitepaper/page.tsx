@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import FintechFooter from "@/components/fintech/FintechFooter";
 
 // Zone: aevion-core/main owns frontend/src/app/fintech/**
 
@@ -156,9 +157,10 @@ export default function FintechWhitepaperPage() {
           </div>
         </div>
 
-        <footer style={{ marginTop: 40, fontSize: 11, color: C.faint, textAlign: "center" }}>
+        <FintechFooter />
+        <p style={{ marginTop: 12, fontSize: 11, color: C.faint, textAlign: "center" }}>
           AEVION Fintech v1.0 · 2026 · Whitepaper subject to revision.
-        </footer>
+        </p>
       </article>
     </main>
   );

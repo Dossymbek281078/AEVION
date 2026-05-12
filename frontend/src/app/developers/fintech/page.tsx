@@ -474,6 +474,14 @@ export default function FintechDevPage() {
             <a href="/developers/fintech/migration" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
               Migration guide →
             </a>
+            {" · "}
+            <a href="/developers/fintech/changelog" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              Changelog →
+            </a>
+            {" · "}
+            <a href="/fintech/playground" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              API Playground →
+            </a>
           </P>
           <P>
             Every fintech module gates writes behind the platform JWT. Bootstrap a

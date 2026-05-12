@@ -25,6 +25,35 @@ export default function FintechPlaygroundPage() {
   const [response, setResponse] = useState<{ status: number; data: unknown; ms: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginMsg, setLoginMsg] = useState("");
+
+  async function getToken() {
+    if (!loginEmail || !loginPassword) { setLoginMsg("Введите email и пароль"); return; }
+    setLoginLoading(true); setLoginMsg("");
+    try {
+      const r = await fetch(apiUrl("/api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      const t = d.token ?? d.accessToken ?? d.jwt;
+      if (t) {
+        setToken(t);
+        if (typeof window !== "undefined") localStorage.setItem("aevion_auth_token_v1", t);
+        setLoginMsg("✓ Токен получен и сохранён");
+        setShowLogin(false);
+      } else throw new Error("No token in response");
+    } catch (e) {
+      setLoginMsg(e instanceof Error ? e.message : "Ошибка");
+    } finally { setLoginLoading(false); }
+  }
 
   async function send() {
     setLoading(true); setError(""); setResponse(null);
@@ -106,7 +135,28 @@ export default function FintechPlaygroundPage() {
 
           {/* Auth token */}
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Bearer token (optional)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Bearer token (optional)</label>
+              <button onClick={() => setShowLogin(v => !v)} className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+                {token ? "↻ Обновить токен" : "+ Получить токен"}
+              </button>
+            </div>
+            {showLogin && (
+              <div className="bg-slate-900 border border-indigo-700/40 rounded-xl p-3 mb-2 space-y-2">
+                <p className="text-[10px] text-slate-500">Войдите в AEVION чтобы получить JWT токен</p>
+                <input value={loginEmail} onChange={e => setLoginEmail(e.target.value)} placeholder="Email" type="email"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500" />
+                <input value={loginPassword} onChange={e => setLoginPassword(e.target.value)} placeholder="Пароль" type="password"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500" />
+                <div className="flex items-center gap-2">
+                  <button onClick={getToken} disabled={loginLoading}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 rounded-lg text-xs font-bold">
+                    {loginLoading ? "…" : "Войти и получить токен"}
+                  </button>
+                  {loginMsg && <span className={`text-[10px] ${loginMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{loginMsg}</span>}
+                </div>
+              </div>
+            )}
             <input value={token} onChange={e => setToken(e.target.value)}
               type="password" placeholder="aevion_auth_token_v1 from localStorage"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-mono text-slate-400 focus:outline-none focus:border-indigo-500" />

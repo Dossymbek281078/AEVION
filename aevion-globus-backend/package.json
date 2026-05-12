@@ -21,6 +21,8 @@
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",
     "veilnetx:rebuild": "node scripts/rebuild-veilnetx-chain.js",
+    "veilnetx:rebuild-dry": "node scripts/rebuild-veilnetx-chain.js --dry-run",
+    "ztide:audit": "node scripts/ztide-audit.js",
     "smoke:ecosystem-events": "node scripts/ecosystem-events-smoke.js",
     "test": "vitest run",
     "test:watch": "vitest"

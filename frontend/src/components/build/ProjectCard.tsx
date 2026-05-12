@@ -37,15 +37,15 @@ export function ProjectCard({ project }: { project: BuildProject }) {
     >
       {/* Status + city */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_TONE[project.status]}`}>
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_TONE[project.status]}`}>
           <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
           {STATUS_LABEL[project.status]}
         </span>
         {project.city && (
-          <span className="text-[11px] text-slate-500">📍 {project.city}</span>
+          <span className="text-xs text-slate-500">📍 {project.city}</span>
         )}
         {openVacancies != null && openVacancies > 0 && (
-          <span className="text-[11px] text-emerald-400 font-medium">
+          <span className="text-xs text-emerald-400 font-medium">
             {openVacancies} {openVacancies === 1 ? "вакансия" : openVacancies < 5 ? "вакансии" : "вакансий"}
           </span>
         )}

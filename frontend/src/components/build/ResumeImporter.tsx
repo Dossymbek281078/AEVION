@@ -270,7 +270,7 @@ export function ResumeImporter({
           <ParsedSummary parsed={parsed} />
           <details className="mt-3">
             <summary className="cursor-pointer text-xs text-slate-400">View raw JSON</summary>
-            <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-white/5 bg-black/30 p-2 text-[10px] text-slate-300">
+            <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-white/5 bg-black/30 p-2 text-xs text-slate-300">
               {JSON.stringify(parsed, null, 2)}
             </pre>
           </details>

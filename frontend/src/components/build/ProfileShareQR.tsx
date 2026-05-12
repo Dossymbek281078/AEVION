@@ -82,7 +82,7 @@ export function ProfileShareQR({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrSrc} alt={`QR code for ${name}'s QBuild profile`} width={240} height={240} />
             </div>
-            <p className="mt-3 break-all text-[11px] text-slate-400">{url}</p>
+            <p className="mt-3 break-all text-xs text-slate-400">{url}</p>
             <div className="mt-4 flex justify-center gap-2">
               <button
                 onClick={nativeShare}

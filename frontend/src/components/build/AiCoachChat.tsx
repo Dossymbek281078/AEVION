@@ -64,7 +64,7 @@ export function AiCoachChat({
           </span>
           <div>
             <div className="text-sm font-bold text-white">AEVION AI Coach</div>
-            <div className="text-[11px] text-slate-400">
+            <div className="text-xs text-slate-400">
               На связи с твоим профилем + текущими вакансиями. Спрашивай что угодно про карьеру и резюме.
             </div>
           </div>

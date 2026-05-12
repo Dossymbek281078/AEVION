@@ -81,7 +81,7 @@ export function ProfileExtras({ userId }: { userId: string }) {
                 <span className="text-lg">{TEST_ICON[b.testId] ?? "🏅"}</span>
                 <div>
                   <p className="text-sm font-bold text-white">{b.testTitle}</p>
-                  <p className="text-[10px] text-emerald-400">{b.score}%</p>
+                  <p className="text-xs text-emerald-400">{b.score}%</p>
                 </div>
               </div>
             ))}
@@ -110,7 +110,7 @@ export function ProfileExtras({ userId }: { userId: string }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <StarRating rating={r.rating} />
                     {r.recommend && (
-                      <span className="text-[10px] bg-emerald-900/40 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700/40">
+                      <span className="text-xs bg-emerald-900/40 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-700/40">
                         Рекомендует
                       </span>
                     )}

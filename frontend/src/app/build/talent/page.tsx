@@ -311,13 +311,13 @@ function TalentCard({ talent }: { talent: TalentRow }) {
             {talent.verifiedAt && (
               <span
                 title={`Verified ${new Date(talent.verifiedAt).toLocaleDateString()}`}
-                className="shrink-0 rounded-full bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-sky-200"
+                className="shrink-0 rounded-full bg-sky-500/20 px-2 py-0.5 text-xs font-bold uppercase text-sky-200"
               >
                 ✓ verified
               </span>
             )}
             {talent.openToWork && (
-              <span className="shrink-0 rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-200">
+              <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-bold uppercase text-emerald-200">
                 open
               </span>
             )}
@@ -366,7 +366,7 @@ function TalentCard({ talent }: { talent: TalentRow }) {
             </span>
           ))}
           {talent.skills.length > 6 && (
-            <span className="text-[10px] text-slate-500">+{talent.skills.length - 6}</span>
+            <span className="text-xs text-slate-500">+{talent.skills.length - 6}</span>
           )}
         </div>
       )}
@@ -447,9 +447,9 @@ function TalentSavedSearches({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Saved:</span>
       {items.length === 0 && (
-        <span className="text-[11px] text-slate-500">none yet</span>
+        <span className="text-xs text-slate-500">none yet</span>
       )}
       {items.map((s) => (
         <span

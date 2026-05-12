@@ -181,7 +181,7 @@ function CreateTeamForm({ onCreated }: { onCreated: () => void }) {
             <input type="number" value={role.count} onChange={(e) => updateRole(i, "count", e.target.value)} min={1} max={99} placeholder="Кол-во" className="w-20 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white" />
             <input value={role.salary} onChange={(e) => updateRole(i, "salary", e.target.value)} placeholder="Зарплата ₽" className="w-28 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-500" />
             {roles.length > 1 && (
-              <button type="button" onClick={() => removeRole(i)} className="px-2 text-rose-400 hover:text-rose-300">×</button>
+              <button type="button" onClick={() => removeRole(i)} aria-label="Remove role" className="px-3 py-2 text-rose-400 hover:text-rose-300 min-h-[36px] min-w-[36px] rounded-md hover:bg-rose-500/10">×</button>
             )}
           </div>
         ))}

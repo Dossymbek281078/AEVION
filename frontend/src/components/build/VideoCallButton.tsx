@@ -32,7 +32,7 @@ export function VideoCallButton({ guestId, guestName }: { guestId: string; guest
         {busy ? "Создаём…" : "🎥 Видеозвонок"}
       </button>
       {roomUrl && (
-        <a href={roomUrl} target="_blank" rel="noreferrer" className="text-[10px] text-sky-400 hover:underline text-center">
+        <a href={roomUrl} target="_blank" rel="noreferrer" className="text-xs text-sky-400 hover:underline text-center py-1.5 min-h-[28px] inline-flex items-center">
           Открыть комнату ↗
         </a>
       )}

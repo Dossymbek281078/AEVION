@@ -2,6 +2,31 @@ import PlanningLanding from "@/components/PlanningLanding";
 
 export default function QGoodLanding() {
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QGood",
+            applicationCategory: "HealthApplication",
+            operatingSystem: "Web, iOS, Android",
+            description:
+              "AI mental health support with clinical-grade protocols, offline mode, PHQ-9/GAD-7 integration with HealthAI, and human-specialist escalation on risk. Also: charity campaigns platform.",
+            url: "https://aevion.app/qgood",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Clinical-grade conversation protocols",
+              "Offline LLM mode (private)",
+              "HealthAI screener integration (PHQ-9, GAD-7)",
+              "Risk escalation to human specialist",
+              "Charity campaigns platform",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
     <PlanningLanding
       id="qgood"
       code="QGOOD"
@@ -24,5 +49,6 @@ export default function QGoodLanding() {
         { id: "qlife", title: "QLife", summary: "Personal OS, где QGood — один из 6 столпов." },
       ]}
     />
+    </>
   );
 }

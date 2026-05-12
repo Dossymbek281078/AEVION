@@ -32,7 +32,7 @@ export function AiVacancyGen({
     <div className="space-y-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wider text-emerald-200">🤖 AI Vacancy Generator</span>
-        <button onClick={() => setOpen(false)} className="text-xs text-slate-400 hover:text-slate-200">×</button>
+        <button onClick={() => setOpen(false)} aria-label="Close AI generator" className="text-sm text-slate-400 hover:text-slate-200 px-2 py-1 min-h-[32px] min-w-[32px] rounded-md hover:bg-white/5">×</button>
       </div>
       <p className="text-xs text-slate-400">
         Опиши вакансию одной строкой — AI вернёт черновик с задачами, навыками и зарплатой.

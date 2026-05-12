@@ -92,7 +92,7 @@ export function ProfileCompletenessMeter({
               <span aria-hidden>◌</span>
               <span>
                 {f.label}
-                {f.priority && <span className="ml-1 rounded bg-current/20 px-1 text-[9px] uppercase opacity-80">priority</span>}
+                {f.priority && <span className="ml-1 rounded bg-current/20 px-1.5 py-0.5 text-xs uppercase opacity-80">priority</span>}
               </span>
             </li>
           ))}

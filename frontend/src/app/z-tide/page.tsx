@@ -2,6 +2,22 @@ import PlanningLanding from "@/components/PlanningLanding";
 
 export default function ZTideLanding() {
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ResearchProject",
+            name: "AEVION Z-Tide",
+            description:
+              "Research project: energy-anchored currency tied to measurable acts (work output, social contribution) instead of trust supply. Non-anonymous, audited via QSign. Parallel layer to AEV.",
+            url: "https://aevion.app/z-tide",
+            keywords: "currency, energy economics, social contribution, audited, parallel layer",
+            funder: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
     <PlanningLanding
       id="z-tide"
       code="Z-TIDE"
@@ -24,5 +40,6 @@ export default function ZTideLanding() {
         { id: "qchaingov", title: "QChainGov", summary: "DAO-governance, где правила Z-Tide-экономики голосуются прозрачно." },
       ]}
     />
+    </>
   );
 }

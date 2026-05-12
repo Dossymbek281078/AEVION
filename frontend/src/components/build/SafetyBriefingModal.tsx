@@ -32,7 +32,7 @@ export function SafetyBriefingModal({
             <div className="text-xs uppercase tracking-wider text-amber-200">⛑️ Pre-shift</div>
             <h3 className="text-base font-bold text-white">Инструктаж по технике безопасности</h3>
           </div>
-          <button onClick={onClose} className="rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300 hover:bg-white/5">×</button>
+          <button onClick={onClose} aria-label="Close safety briefing" className="rounded-md border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5 min-h-[36px] min-w-[36px]">×</button>
         </div>
         <div className="max-h-[60vh] space-y-2 overflow-y-auto p-5">
           {items.map((it, i) => (

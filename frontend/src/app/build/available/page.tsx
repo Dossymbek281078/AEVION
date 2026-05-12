@@ -148,7 +148,7 @@ export default function AvailablePage() {
                 {/* Identity */}
                 <div className="flex items-center gap-3">
                   {w.photoUrl ? (
-                    <img src={w.photoUrl} alt={w.name} className="h-12 w-12 rounded-full object-cover" />
+                    <img src={w.photoUrl} alt={w.name} loading="lazy" decoding="async" className="h-12 w-12 rounded-full object-cover" />
                   ) : (
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 text-lg font-bold text-white">
                       {w.name[0]}

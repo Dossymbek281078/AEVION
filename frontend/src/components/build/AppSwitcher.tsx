@@ -65,7 +65,7 @@ export function AppSwitcher() {
                 <span className="mt-0.5 text-lg leading-none">{app.icon}</span>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-white">{app.label}</div>
-                  <div className="text-[10px] text-slate-500">{app.desc}</div>
+                  <div className="text-xs text-slate-500">{app.desc}</div>
                 </div>
               </button>
             ))}

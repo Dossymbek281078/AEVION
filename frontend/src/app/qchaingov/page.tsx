@@ -2,6 +2,32 @@ import PlanningLanding from "@/components/PlanningLanding";
 
 export default function QChainGovLanding() {
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QChainGov",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web",
+            description:
+              "DAO governance platform: identity-bound voting, quadratic + delegate-trees, QSign-anchored proposals. No anonymous botnet swarms.",
+            url: "https://aevion.app/qchaingov",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Identity-bound votes (AEVION Auth)",
+              "Quadratic voting",
+              "Delegate-trees",
+              "QSign signature per vote",
+              "Open proposal threshold",
+              "Audit log",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
     <PlanningLanding
       id="qchaingov"
       code="QCHAINGOV"
@@ -24,5 +50,6 @@ export default function QChainGovLanding() {
         { id: "qsign", title: "QSign", summary: "Подпись под каждым голосом — откат решений задним числом невозможен." },
       ]}
     />
+    </>
   );
 }

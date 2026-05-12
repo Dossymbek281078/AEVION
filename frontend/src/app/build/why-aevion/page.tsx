@@ -381,7 +381,7 @@ function CountersBlock({
         <Stat label={t.countersB} value={candidates} accent="sky" locale={locale} />
         <Stat label={t.countersC} value={projects} accent="fuchsia" locale={locale} />
       </div>
-      <p className="mx-auto mt-3 max-w-5xl text-center text-[11px] text-slate-500">
+      <p className="mx-auto mt-3 max-w-5xl text-center text-xs text-slate-500">
         {t.countersFooter}
       </p>
     </section>

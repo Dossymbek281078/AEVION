@@ -44,7 +44,7 @@ export function CompareBar() {
   return (
     <div className="fixed bottom-4 left-1/2 z-40 w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 shadow-xl backdrop-blur-md">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-fuchsia-200">
+        <span className="mr-1 text-xs font-semibold uppercase tracking-wider text-fuchsia-200">
           Compare ({items.length}/3)
         </span>
         {items.map((it) => (
@@ -57,7 +57,7 @@ export function CompareBar() {
               type="button"
               onClick={() => remove(it.id)}
               aria-label={`Remove ${it.title}`}
-              className="text-fuchsia-200/70 hover:text-fuchsia-100"
+              className="text-fuchsia-200/70 hover:text-fuchsia-100 min-h-[24px] min-w-[24px] inline-flex items-center justify-center"
             >
               ×
             </button>
@@ -67,7 +67,7 @@ export function CompareBar() {
           <button
             type="button"
             onClick={clear}
-            className="text-[11px] text-slate-400 hover:text-slate-200"
+            className="text-xs text-slate-400 hover:text-slate-200"
           >
             Clear
           </button>
@@ -79,7 +79,7 @@ export function CompareBar() {
               Compare →
             </Link>
           ) : (
-            <span className="text-[11px] text-slate-400">Pick 2-3 to compare</span>
+            <span className="text-xs text-slate-400">Pick 2-3 to compare</span>
           )}
         </div>
       </div>

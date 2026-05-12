@@ -120,7 +120,7 @@ export default function CommunityPage({ params }: { params: Promise<{ slug: stri
               return (
                 <div key={m.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : ""}`}>
                   {m.authorPhoto ? (
-                    <img src={m.authorPhoto} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+                    <img src={m.authorPhoto} alt="" loading="lazy" decoding="async" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
                   ) : (
                     <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-white">
                       {(m.authorName ?? "?")[0]}

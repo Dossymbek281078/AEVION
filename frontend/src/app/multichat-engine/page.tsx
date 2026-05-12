@@ -765,6 +765,32 @@ export default function MultichatEnginePage() {
 
   return (
     <main>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION Multichat Engine",
+            applicationCategory: "BusinessApplication",
+            operatingSystem: "Web, iOS, Android",
+            description:
+              "Parallel agent sessions across 5 LLM providers in one window. Single-chat or multi-agent pipeline mode. Each session inherits AEVION account context.",
+            url: "https://aevion.app/multichat-engine",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "5 LLM providers (Claude, GPT, Gemini, Groq, OpenRouter)",
+              "Parallel agent execution",
+              "Single chat or multi-agent pipeline",
+              "AEVION account context injection",
+              "Public share links",
+              "Library with PGN-style export",
+              "Analytics + cost breakdown",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
       <ProductPageShell maxWidth={860}>
         <Wave1Nav />
 

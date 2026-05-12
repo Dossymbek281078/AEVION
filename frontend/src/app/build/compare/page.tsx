@@ -155,7 +155,7 @@ function CompareCol({ vacancy: v }: { vacancy: BuildVacancy }) {
       </dl>
       {v.skills && v.skills.length > 0 && (
         <div className="mt-3">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Skills</div>
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Skills</div>
           <div className="flex flex-wrap gap-1">
             {v.skills.map((s) => (
               <span key={s} className="rounded-full bg-emerald-500/15 px-2 py-1 text-xs text-emerald-200">

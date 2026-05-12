@@ -1,0 +1,36 @@
+{
+  "name": "@aevion/catalog-client",
+  "version": "0.1.0",
+  "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges. Zero deps.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "aevion",
+    "catalog",
+    "module-registry",
+    "discovery",
+    "typescript",
+    "sdk"
+  ],
+  "author": "AEVION",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "packages/aevion-catalog-client"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

@@ -391,13 +391,17 @@ qgoodRouter.post("/matching-pools", createLimit, async (req, res) => {
     if (!Number.isFinite(cap) || cap < 100 || cap > 100_000_000) {
       return res.status(400).json({ error: "maxMatchPerDonationCents must be 100..100000000" });
     }
+    const currencyStr = String(currency).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currencyStr)) {
+      return res.status(400).json({ error: "invalid_currency", hint: "ISO 4217 3-letter code (e.g., USD, EUR, KZT)" });
+    }
     const id = crypto.randomUUID();
     const pool = getPool();
     const r = await pool.query(
       `INSERT INTO "QGoodMatchingPool" ("id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","createdBy")
        VALUES ($1,$2,$3,$4,$4,$5,$6,$7)
        RETURNING "id","label","currency","totalCents","remainingCents","matchRatio","maxMatchPerDonationCents","status","createdBy","createdAt"`,
-      [id, label.trim(), String(currency).slice(0, 8).toUpperCase(), total, ratio, cap, auth?.email || null],
+      [id, label.trim(), currencyStr, total, ratio, cap, auth?.email || null],
     );
     res.status(201).json(r.rows[0]);
   } catch (err: unknown) {

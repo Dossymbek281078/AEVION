@@ -105,9 +105,13 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
   }
   const model =
     typeof body.model === "string" && body.model.trim()
-      ? body.model.trim()
+      ? body.model.trim().slice(0, 100)
       : providerMeta.defaultModel;
-  const temperature = typeof body.temperature === "number" ? body.temperature : 0.7;
+  const rawTemp = typeof body.temperature === "number" ? body.temperature : 0.7;
+  if (!Number.isFinite(rawTemp) || rawTemp < 0 || rawTemp > 2) {
+    return res.status(400).json({ error: "invalid-temperature", hint: "must be a finite number in [0, 2]" });
+  }
+  const temperature = rawTemp;
 
   const messages: ChatMessage[] =
     sanitizeMessages(body.messages) ?? [

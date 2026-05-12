@@ -147,7 +147,8 @@ function main() {
   const wtMap = worktreeMap();
   const block = render(commits, wtMap);
 
-  let doc = fs.readFileSync(DOC, "utf8");
+  const original = fs.readFileSync(DOC, "utf8");
+  let doc = original;
   if (doc.includes(BEGIN) && doc.includes(END)) {
     const before = doc.split(BEGIN)[0];
     const after = doc.split(END)[1];
@@ -162,8 +163,38 @@ function main() {
     lines.splice(insertAt, 0, "", block, "");
     doc = lines.join("\n");
   }
+
+  const branches = new Set(commits.map((c) => pickBranch(c.refs))).size;
+  if (doc === original) {
+    console.log(`No change — WIP block already current (${commits.length} commits / ${branches} branches / window=${WINDOW_MIN}min)`);
+    return;
+  }
+
   fs.writeFileSync(DOC, doc);
-  console.log(`Wrote WIP section: ${commits.length} commits across ${new Set(commits.map((c) => pickBranch(c.refs))).size} branches (window=${WINDOW_MIN}min)`);
+  console.log(`Wrote WIP section: ${commits.length} commits across ${branches} branches (window=${WINDOW_MIN}min)`);
+
+  // --commit (or COORD_AUTOCOMMIT=1) auto-commits the coord-doc change so
+  // sessions can wire this into a 5-min cron/scheduled task without a
+  // trailing manual `git commit`. Push stays manual — we don't want random
+  // task schedulers force-pushing in a race.
+  const shouldCommit = process.argv.includes("--commit") || process.env.COORD_AUTOCOMMIT === "1";
+  if (!shouldCommit) return;
+
+  try {
+    const docRel = "AEVION_COORDINATION.md";
+    execSync(`git add -- "${docRel}"`, { cwd: REPO, stdio: "ignore" });
+    const staged = execSync(`git diff --cached --name-only -- "${docRel}"`, { cwd: REPO, encoding: "utf8" }).trim();
+    if (!staged) {
+      console.log("Nothing staged — coord-doc not in git index (already up to date?). Skipping commit.");
+      return;
+    }
+    const msg = `chore(coord): WIP heartbeat — ${commits.length} commits / ${branches} branches in ${WINDOW_MIN}min`;
+    execSync(`git commit --only -m ${JSON.stringify(msg)} -- "${docRel}"`, { cwd: REPO, stdio: "inherit" });
+    console.log(`Auto-committed coord-doc heartbeat. Push manually with: git push origin main`);
+  } catch (e) {
+    console.error("Auto-commit failed:", e instanceof Error ? e.message : e);
+    process.exit(1);
+  }
 }
 
 main();

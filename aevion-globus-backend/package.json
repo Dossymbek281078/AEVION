@@ -30,6 +30,8 @@
     "smoke:ecosystem-events": "node scripts/ecosystem-events-smoke.js",
     "smoke:mvp-concepts": "node scripts/mvp-concepts-smoke.js",
     "coord:update": "node scripts/coord-update.js",
+    "coord:update-commit": "node scripts/coord-update.js --commit",
+    "wait-for-deploy": "node scripts/wait-for-deploy.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

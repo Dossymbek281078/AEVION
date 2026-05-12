@@ -114,6 +114,20 @@ function assert(cond, msg) {
     }
   });
 
+  await step("10 mvpConcepts modules present in catalog (regression check)", async () => {
+    // Per docs/MVP_CONCEPTS.md — these 10 modules MUST stay in the catalog
+    // even though their registry status may still read 'idea'/'planning'.
+    // Catches accidental removal from src/data/projects.ts.
+    const required = [
+      "startup-exchange", "mapreality", "kids-ai-content", "qlife",
+      "psyapp-deps", "qpersona", "voice-of-earth", "deepsan",
+      "shadownet", "lifebox",
+    ];
+    const ids = new Set((full.items || []).map((i) => i.id));
+    const missing = required.filter((id) => !ids.has(id));
+    assert(missing.length === 0, `missing from catalog: ${missing.join(", ")}`);
+  });
+
   console.log("");
   console.log(`[hub-catalog-smoke] PASS=${pass} FAIL=${fail}`);
   process.exit(fail > 0 ? 1 : 0);

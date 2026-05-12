@@ -228,11 +228,53 @@ C) [третий вариант]
 |---|---|---|
 | `frontend-qcore` (feat/devhub+qcore) | 2026-05-12 | следующий коммит в этой зоне |
 
-### Current active work (aevion-core/main, 2026-05-12)
+### Current active work (aevion-core/main) — ОБНОВЛЯЕТСЯ КАЖДЫЕ 5 МИН
 
-- **CyberChess** — это окно исторически было CyberChess-чатом (~5 дней, 83+ commits). 2026-05-12 PM пользователь подтвердил возврат шахмат сюда (reassign из frontend-qcore). Открытые таски: #67 Variants QA, #71 Coach SR, #72 Setup hero.
-- Fintech surface — ранее в этой сессии (today) выкатано ~9 коммитов: troubleshooting, integrations, rate-limits, FintechMetric, onboarding-guide. Backlog исчерпан.
-- НЕ трогаем: bureau frontend, qright frontend, qcoreai, qsign, qtrade — это чужие зоны
+> ⏱ Последнее обновление: 2026-05-12 ~14:40 UTC  
+> 📌 Правило: каждая сессия **ОБЯЗАНА** обновить эту секцию перед началом работы и каждые 5 минут в ходе активной работы.
+
+---
+
+#### 🟢 aevion-core/main (ЭТО ОКНО)
+
+**Активная зона:** `fintech/**` · `developers/fintech/**` · `scripts/**` (ТОЛЬКО они)
+
+**Последние коммиты этой сессии:**
+- `59a7c087` — `fintech/analytics` (live metrics: QPayNet+ZTide+QChainGov+QGood)
+- `bf403d83` — `components/fintech/ModuleStatusBadge` + analytics nav
+- `5ef470d8` — `developers/fintech/examples` (5 copy-paste scenarios)
+- `ad3b164e` — `developers/fintech/` nav + sitemap fintech entries
+- `260d061a` — `fintech/integrations` + `fintech/opengraph-image`
+- `399a2a84` — `developers/fintech/rate-limits`
+- `c152999f` — `developers/fintech/migration` (v1→v2 guide)
+- `286b1d11` — `developers/fintech/sdk` + `errors`
+- `469301f4` — `developers/fintech/webhooks`
+- `192ec3db` — `scripts/fintech-all-smoke.js`
+- `18ddd197` — `fintech/modules` + `fintech/compare`
+
+**В работе прямо сейчас:** smoke скрипты для QMedia/QAI/QLearn/QStore в `scripts/`
+
+**✅ Fintech зона ЗАВЕРШЕНА** — все `/fintech/**` и `/developers/fintech/**` построены.
+
+---
+
+#### 🔴 НЕ ТРОГАТЬ (активные параллельные сессии — проверяйте git log):
+
+| Продукт/зона | Чья сессия | Последний коммит |
+|---|---|---|
+| `cyberchess/**` | другое окно CyberChess | < 30 мин назад |
+| `qmedia/**` | aevion-build | активно |
+| `healthai/**` | aevion-healthai | активно |
+| `qcoreai/**`, `devhub/**` | frontend-qcore | активно |
+| `qpaynet/**`, `qcontract/**` | frontend-payments | активно |
+| `smeta-trainer/**` | aevion-smeta-trainer | активно |
+| `qlearn/**`, `qstore/**`, `qai/**` | неизвестно — проверить git log | — |
+
+---
+
+#### ℹ️ Для других сессий — протокол обновления:
+
+Добавь свою строку в таблицу выше когда начинаешь, обнови "в работе прямо сейчас" при смене задачи, закоммить этот файл через `git add AEVION_COORDINATION.md && git commit --only -- AEVION_COORDINATION.md -m "coord: update WIP [session-name]"`
 
 ### Recent destructive incidents (для learning'а)
 

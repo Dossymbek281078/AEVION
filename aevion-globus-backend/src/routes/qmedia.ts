@@ -17,10 +17,16 @@ type TrackRow = { id: string; userId: string; title: string; artist: string; gen
 type PlaylistRow = { id: string; userId: string; name: string; description: string | null; isPublic: boolean; trackIds: string[]; createdAt: string; updatedAt: string };
 type VideoRow = { id: string; userId: string; title: string; description: string | null; url: string | null; thumbnailUrl: string | null; duration: number; viewCount: number; isPublic: boolean; category: string; tags: string[]; createdAt: string; updatedAt: string };
 
+// KNOWN ISSUE — multi-replica data loss
+// Storage is in-process Map<>; ensureQMediaTables() is wired but pool is never used in handlers.
+// All tracks/playlists/videos/likes evaporate on restart and diverge across replicas.
+// Track via Pending cross-zone follow-up; needs Postgres migration mirroring HealthAI fix.
 const memTracks = new Map<string, TrackRow>();
 const memPlaylists = new Map<string, PlaylistRow>();
 const memVideos = new Map<string, VideoRow>();
 const memLikes = new Map<string, boolean>();
+
+console.warn("[qmedia] storage is in-process Map<> — data is NOT persistent across restarts or replicas. See in-file note.");
 
 function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }

@@ -28,6 +28,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { refererHost } from "../lib/qrightHelpers";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 const captureBureauError = makeServiceCapture("bureau");
 
 const bureauEmbedRateLimit = rateLimit({
@@ -701,6 +702,23 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
       verifiedName: v.kycVerifiedName,
       paymentAmountCents: v.paymentAmountCents,
       paymentCurrency: v.paymentCurrency,
+    });
+
+    // Fire-and-forget: VeilNetX settlement trail + Z-Tide bureau-cert (+10) for the upgraded user.
+    const payerIdentifier = v.userId || v.email || `bureau-verification:${verificationId}`;
+    void emitEcosystemEvent({
+      module: "bureau",
+      ledger: {
+        kind: "settlement",
+        fromIdentifier: payerIdentifier,
+        toIdentifier: `bureau-cert:${certId}`,
+        amountCents: v.paymentAmountCents ? String(v.paymentAmountCents) : "1",
+        currency: v.paymentCurrency || "USD",
+        meta: { certId, action: "upgrade-to-verified", verificationId },
+      },
+      reputation: v.userId
+        ? { userId: v.userId, kind: "bureau-cert", meta: { certId } }
+        : undefined,
     });
 
     res.json({

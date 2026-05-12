@@ -144,12 +144,12 @@ function InterviewCard({ interview, userId, onConfirm, onCancel, onComplete }: {
       )}
 
       {/* Actions */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
         {interview.status === "PROPOSED" && isCandidate && selectedSlot && (
           <button
             onClick={handleConfirm}
             disabled={acting}
-            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
+            className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors min-h-[40px]"
           >
             {acting ? "…" : "✓ Подтвердить время"}
           </button>
@@ -158,7 +158,7 @@ function InterviewCard({ interview, userId, onConfirm, onCancel, onComplete }: {
           <button
             onClick={handleComplete}
             disabled={acting}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors"
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors min-h-[40px]"
           >
             {acting ? "…" : "✓ Отметить завершённым"}
           </button>
@@ -167,14 +167,14 @@ function InterviewCard({ interview, userId, onConfirm, onCancel, onComplete }: {
           <button
             onClick={handleCancel}
             disabled={acting}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-400 text-sm font-semibold rounded-xl transition-colors"
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-400 text-sm font-semibold rounded-xl transition-colors min-h-[40px]"
           >
             {acting ? "…" : "Отменить"}
           </button>
         )}
         <Link
           href={`/build/vacancy/${interview.vacancyId}`}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-xl transition-colors"
+          className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-xl transition-colors text-center sm:text-left min-h-[40px] inline-flex items-center justify-center"
         >
           Вакансия →
         </Link>
@@ -259,7 +259,7 @@ function InterviewsContent() {
             }`}
           >
             {label}
-            {counts[t] > 0 && <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${tab === t ? "bg-slate-600" : "bg-slate-800"}`}>{counts[t]}</span>}
+            {counts[t] > 0 && <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${tab === t ? "bg-slate-600" : "bg-slate-800"}`}>{counts[t]}</span>}
           </button>
         ))}
       </div>

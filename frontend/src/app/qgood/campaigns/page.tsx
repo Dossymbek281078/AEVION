@@ -103,7 +103,7 @@ export default async function QGoodCampaignsPage() {
 
       {stats && (
         <section style={{ padding: "0 24px 24px" }}>
-          <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+          <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))", gap: 10 }}>
             <Stat label="Active campaigns" value={String(stats.active_campaigns)} />
             <Stat label="Total raised" value={fmtMoney(stats.total_raised_cents)} />
             <Stat label="Total donors" value={String(stats.total_donors)} />
@@ -120,7 +120,7 @@ export default async function QGoodCampaignsPage() {
               No active campaigns yet. <Link href="/auth?next=/qgood/campaigns/new" style={{ color: "#34d399" }}>Be the first</Link>.
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(280px, 100%), 1fr))", gap: 14 }}>
               {campaigns.map((c) => (
                 <CampaignCard key={c.id} c={c} />
               ))}

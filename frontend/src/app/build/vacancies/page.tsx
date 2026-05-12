@@ -170,12 +170,12 @@ function VacanciesFeedInner() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search title or description…"
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none min-h-[40px]"
           />
           <button
             type="button"
             onClick={() => setFiltersOpen((o) => !o)}
-            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 hover:bg-white/10 sm:hidden"
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-slate-300 hover:bg-white/10 sm:hidden min-h-[40px]"
             aria-label="Toggle filters"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
@@ -231,12 +231,12 @@ function VacanciesFeedInner() {
           <option value="salary">Salary ↓</option>
           <option value="popular">Popular</option>
         </select>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           {STATUS_FILTERS.map((s) => (
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+              className={`rounded-md px-3 py-2 text-xs font-medium transition min-h-[36px] ${
                 status === s
                   ? "bg-emerald-500/20 text-emerald-200"
                   : "bg-white/5 text-slate-400 hover:bg-white/10"
@@ -250,12 +250,12 @@ function VacanciesFeedInner() {
       </div>
 
       {popularSkills.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
+        <div className="mb-4 flex flex-wrap gap-2">
           {popularSkills.map((s) => (
             <button
               key={s}
               onClick={() => setSkill(skill === s ? "" : s)}
-              className={`rounded-full border px-2.5 py-0.5 text-xs transition ${
+              className={`rounded-full border px-3 py-1.5 text-xs transition min-h-[32px] ${
                 skill === s
                   ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-200"
                   : "border-white/10 bg-white/5 text-slate-400 hover:border-white/30 hover:text-slate-200"
@@ -265,7 +265,7 @@ function VacanciesFeedInner() {
             </button>
           ))}
           {skill && (
-            <button onClick={() => setSkill("")} className="rounded-full border border-white/5 px-2.5 py-0.5 text-xs text-slate-500 hover:text-slate-300">
+            <button onClick={() => setSkill("")} className="rounded-full border border-white/5 px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300 min-h-[32px]">
               ✕ clear
             </button>
           )}

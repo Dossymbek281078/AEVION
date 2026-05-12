@@ -101,13 +101,13 @@ export default function BuildHomePage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by title or description…"
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none"
+          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500/40 focus:outline-none min-h-[40px]"
         />
         {token && (
           <button
             onClick={() => setMineOnly((v) => !v)}
             aria-pressed={mineOnly}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            className={`rounded-md px-3 py-2 text-xs font-medium transition min-h-[36px] ${
               mineOnly
                 ? "bg-emerald-500/20 text-emerald-200"
                 : "bg-white/5 text-slate-400 hover:bg-white/10"
@@ -116,12 +116,12 @@ export default function BuildHomePage() {
             {mineOnly ? "✓ Mine only" : "Mine only"}
           </button>
         )}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           {STATUS_FILTERS.map((s) => (
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+              className={`rounded-md px-3 py-2 text-xs font-medium transition min-h-[36px] ${
                 status === s
                   ? "bg-emerald-500/20 text-emerald-200"
                   : "bg-white/5 text-slate-400 hover:bg-white/10"

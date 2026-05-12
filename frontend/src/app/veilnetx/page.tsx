@@ -30,7 +30,7 @@ function StatusPill() {
     };
   }, []);
   return (
-    <div className="flex flex-wrap gap-2 text-[11px] font-mono">
+    <div className="flex flex-wrap gap-2 text-xs font-mono">
       <span className="bg-cyan-950/40 border border-cyan-800 text-cyan-300 px-2.5 py-1 rounded-full">
         phase: {s?.phase ?? "…"}
       </span>
@@ -140,7 +140,7 @@ export default function VeilNetXLanding() {
           <h1 className="text-sm font-bold">
             <span className="text-cyan-400">V</span>eilNetX
           </h1>
-          <span className="text-[10px] bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded-full">PRE-LAUNCH</span>
+          <span className="text-xs bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded-full">PRE-LAUNCH</span>
         </div>
       </header>
 

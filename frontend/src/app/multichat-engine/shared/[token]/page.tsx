@@ -111,20 +111,20 @@ export default function SharedConversationPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm">
+      <header className="border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm whitespace-nowrap">
             AEVION Multichat
           </Link>
-          <span className="text-slate-600">·</span>
-          <h1 className="text-sm font-bold truncate max-w-md">{data.conversation.title}</h1>
+          <span className="text-slate-600 hidden sm:inline">·</span>
+          <h1 className="text-sm font-bold truncate">{data.conversation.title}</h1>
         </div>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 font-semibold">
-          PUBLIC SHARE
+        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 font-semibold whitespace-nowrap shrink-0">
+          PUBLIC
         </span>
       </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="text-xs text-slate-500">
           Чат создан {fmtDate(data.conversation.createdAt)} · только просмотр (read-only)
         </div>
@@ -132,7 +132,7 @@ export default function SharedConversationPage() {
         {userTurns.map((u, idx) => (
           <div key={idx} className="space-y-3">
             <div className="bg-violet-900/30 border border-violet-800 rounded-xl p-4">
-              <div className="text-[10px] uppercase font-bold text-violet-300 mb-1">
+              <div className="text-xs uppercase font-bold text-violet-300 mb-1">
                 User · {fmtDate(u.createdAt)}
               </div>
               <div className="text-sm whitespace-pre-wrap">{u.content}</div>
@@ -147,7 +147,7 @@ export default function SharedConversationPage() {
                     key={a}
                     className="bg-slate-900 border border-slate-800 rounded-xl p-4"
                   >
-                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">
+                    <div className="text-xs uppercase font-bold text-slate-500 mb-1">
                       Agent: {a}
                     </div>
                     <div className="text-sm whitespace-pre-wrap text-slate-200">

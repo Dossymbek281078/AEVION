@@ -202,7 +202,7 @@ function ApplicationCard({
             >
               {app.vacancyTitle || "Vacancy"}
             </Link>
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold uppercase ${statusCls}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold uppercase ${statusCls}`}>
               {icon} {app.status}
             </span>
           </div>
@@ -228,10 +228,10 @@ function ApplicationCard({
               ${app.salary.toLocaleString()}
             </div>
           ) : null}
-          <div className="mt-1 text-[10px] text-slate-500">
+          <div className="mt-1 text-xs text-slate-500">
             Applied {new Date(app.createdAt).toLocaleDateString("ru-RU")}
           </div>
-          <div className="mt-0.5 text-[10px] text-slate-600">
+          <div className="mt-0.5 text-xs text-slate-600">
             Updated {new Date(app.updatedAt).toLocaleDateString("ru-RU")}
           </div>
         </div>
@@ -240,7 +240,7 @@ function ApplicationCard({
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
           href={`/build/vacancy/${encodeURIComponent(app.vacancyId)}`}
-          className="rounded-md border border-white/10 px-3 py-1 text-xs text-slate-300 transition hover:bg-white/10"
+          className="rounded-md border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/10 min-h-[36px] inline-flex items-center"
         >
           View vacancy →
         </Link>
@@ -248,13 +248,13 @@ function ApplicationCard({
           <>
             <Link
               href={`/build/messages?to=${encodeURIComponent(app.userId)}`}
-              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200 transition hover:bg-emerald-500/20"
+              className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 transition hover:bg-emerald-500/20 min-h-[36px] inline-flex items-center"
             >
               Message employer
             </Link>
             <Link
               href="/build/trials"
-              className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-1 text-xs text-fuchsia-200 transition hover:bg-fuchsia-500/20"
+              className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200 transition hover:bg-fuchsia-500/20 min-h-[36px] inline-flex items-center"
             >
               Trial tasks
             </Link>
@@ -264,7 +264,7 @@ function ApplicationCard({
           <button
             type="button"
             onClick={onWithdraw}
-            className="rounded-md border border-rose-500/20 bg-rose-500/5 px-3 py-1 text-xs text-rose-200/80 transition hover:bg-rose-500/10"
+            className="rounded-md border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-xs text-rose-200/80 transition hover:bg-rose-500/10 min-h-[36px]"
           >
             Withdraw
           </button>

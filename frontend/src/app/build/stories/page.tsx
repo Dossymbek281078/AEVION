@@ -249,12 +249,12 @@ function StoryCard({
               {displayName}
             </Link>
             {story.userSpecialty && (
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-300">
                 {story.userSpecialty}
               </span>
             )}
             {story.userTier && story.userTier !== "DEFAULT" && (
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-200">
                 {story.userTier}
               </span>
             )}
@@ -289,7 +289,7 @@ function StoryCard({
           onClick={handleLike}
           disabled={liking}
           aria-label={liked ? "Unlike" : "Like"}
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition ${
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 transition min-h-[36px] ${
             liked
               ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
               : "border-white/10 hover:bg-white/5 hover:text-white"

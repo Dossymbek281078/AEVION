@@ -25,7 +25,7 @@ export default function QMediaLikesPage() {
   }, []);
 
   async function unlike(type: string, id: string) {
-    await fetch(apiUrl(`/api/qmedia/${type}s/${id}/like`), { method: "POST", headers: ah() });
+    await fetch(apiUrl(`/api/qmedia/${type}/${id}/like`), { method: "POST", headers: ah() });
     setLikes(prev => prev.filter(l => !(l.id === id && l.type === type)));
   }
 

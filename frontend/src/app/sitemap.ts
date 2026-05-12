@@ -92,6 +92,17 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/fintech/dashboard", changeFrequency: "weekly", priority: 0.5 },
   { path: "/fintech/whitepaper", changeFrequency: "monthly", priority: 0.5 },
   { path: "/fintech/compare", changeFrequency: "monthly", priority: 0.45 },
+  { path: "/fintech/analytics", changeFrequency: "hourly", priority: 0.6 },
+  { path: "/fintech/integrations", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/fintech/changelog", changeFrequency: "weekly", priority: 0.5 },
+  { path: "/developers/fintech", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/developers/fintech/quickstart", changeFrequency: "monthly", priority: 0.65 },
+  { path: "/developers/fintech/sdk", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/developers/fintech/webhooks", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/developers/fintech/errors", changeFrequency: "monthly", priority: 0.55 },
+  { path: "/developers/fintech/examples", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/developers/fintech/migration", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/developers/fintech/rate-limits", changeFrequency: "monthly", priority: 0.5 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];

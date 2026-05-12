@@ -448,8 +448,36 @@ export function twinKingsFen(): string {
   return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 }
 
-// Check if either side has lost their queen (Twin Kings royal-queen rule).
-// Returns the side that lost (and so the OPPOSITE side wins), or null.
+/**
+ * Check if either side has lost their ORIGINAL royal queen (Twin Kings rule).
+ *
+ * Correct implementation: uses capture history rather than scanning the FEN,
+ * because counting Q/q on the board misses the case where the original royal
+ * queen was captured but a pawn later promoted to queen — that would falsely
+ * "revive" the lost royal piece.
+ *
+ * @param capturedByWhite - black pieces (lowercase) captured by white
+ * @param capturedByBlack - white pieces (uppercase) captured by black
+ * @returns "w" if white lost their royal queen (white loses),
+ *          "b" if black lost their royal queen (black loses), or null.
+ */
+export function twinKingsLossSideByCaptures(
+  capturedByWhite: string[],
+  capturedByBlack: string[]
+): "w" | "b" | null {
+  // White's royal queen ("Q") was captured by black → white loses.
+  if (capturedByBlack.includes("Q")) return "w";
+  // Black's royal queen ("q") was captured by white → black loses.
+  if (capturedByWhite.includes("q")) return "b";
+  return null;
+}
+
+/**
+ * @deprecated Use {@link twinKingsLossSideByCaptures} with capture history instead.
+ * Counting Q/q in the current FEN doesn't account for promoted pawns —
+ * a pawn promotion can "revive" a queen after the original royal queen was
+ * already lost, giving the wrong answer. Kept for legacy call sites in page.tsx.
+ */
 export function twinKingsLossSide(fen: string): "w" | "b" | null {
   // Parse placement
   const placement = fen.split(" ")[0];
@@ -464,6 +492,11 @@ export function twinKingsLossSide(fen: string): "w" | "b" | null {
   if (whiteQ === 0) return "w";
   if (blackQ === 0) return "b";
   return null;
+}
+
+/** @deprecated Alias of {@link twinKingsLossSide}. Prefer {@link twinKingsLossSideByCaptures}. */
+export function twinKingsLossSideByFen(fen: string): "w" | "b" | null {
+  return twinKingsLossSide(fen);
 }
 
 // ── Diceblade ────────────────────────────────────────────
@@ -578,9 +611,9 @@ export function threeCheckFen(): string {
 // ── Knight Riders ────────────────────────────────────────
 // 6 knights instead of standard backrank. King on e1/e8.
 export function knightRidersFen(): string {
-  // White: NNNKNNNN — but we need knight + king + knights. Place king at e (file 4).
-  // 8 slots: NNNNKNNN (king on file 4)
-  return "nnnnknnn/pppppppp/8/8/8/8/PPPPPPPP/NNNNKNNN w - - 0 1";
+  // 8 slots per back rank: 3 knights + king + 1 empty + 3 knights = "NNNK1NNN"
+  // (6 knights + 1 king + 1 empty file, king on e-file).
+  return "nnnk1nnn/pppppppp/8/8/8/8/PPPPPPPP/NNNK1NNN w - - 0 1";
 }
 
 // ── Pawn Apocalypse ──────────────────────────────────────
@@ -593,7 +626,8 @@ export function pawnApocalypseFen(): string {
   // Black back rank (rank 8): "r2qk2r"
   // Rank 7: pppppppp
   // Rank 6: pppppppp
-  return "r2qk2r/pppppppp/pppppppp/8/8/PPPPPPPP/PPPPPPPP/R2QK2R w KQkq - 0 1";
+  // No castling — variant is endgame-from-move-1 (no minor pieces, no useful castle).
+  return "r2qk2r/pppppppp/pppppppp/8/8/PPPPPPPP/PPPPPPPP/R2QK2R w - - 0 1";
 }
 
 // ── Reinforcement ───────────────────────────────────────

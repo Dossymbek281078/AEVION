@@ -159,6 +159,11 @@ const MODULES: Module[] = [
   { id: "air-conditioning",      category: "utilities",href: "/smeta-trainer/drawings-practice/air-conditioning",      icon: "❄️", title: "Кондиционирование",               subtitle: "Сплит, мульти-сплит, VRF, чиллер с фанкойлами",                level: "L3", exercises: 4,  color: "cyan"    },
   { id: "smoke-removal",         category: "utilities",href: "/smeta-trainer/drawings-practice/smoke-removal",         icon: "🚒", title: "Дымоудаление и противопож. вент.", subtitle: "ВД, ПД, огнезадерж. клапаны, EI 60/120 по СП РК 4.02-103",   level: "L4", exercises: 4,  color: "red"     },
   { id: "refrigeration",         category: "utilities",href: "/smeta-trainer/drawings-practice/refrigeration",         icon: "🧊", title: "Холодильные системы",             subtitle: "Камеры, витрины, серверная prec. cooling, чиллеры",            level: "L3", exercises: 4,  color: "sky"     },
+
+  // ── Водоснабжение детально ──
+  { id: "water-wells",              category: "utilities",href: "/smeta-trainer/drawings-practice/water-wells",              icon: "🚰", title: "Скважины и водозаборы",          subtitle: "Песок/известняк/артезианская, насосы Grundfos/Wilo",          level: "L4", exercises: 4,  color: "blue"    },
+  { id: "pressure-stations",        category: "utilities",href: "/smeta-trainer/drawings-practice/pressure-stations",        icon: "💧", title: "ГНС повышения давления",         subtitle: "Дублирование N+1, противопож. ВКА, ЧРП по СП РК 4.01-101",   level: "L4", exercises: 4,  color: "cyan"    },
+  { id: "water-treatment-detailed", category: "utilities",href: "/smeta-trainer/drawings-practice/water-treatment-detailed", icon: "🧪", title: "Водоподготовка детально",         subtitle: "Умягчение, обезжелезивание, осмос, УФ-стерилизация",          level: "L3", exercises: 4,  color: "teal"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

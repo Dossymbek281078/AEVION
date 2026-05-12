@@ -29,8 +29,15 @@ export default function QMediaUploadPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  function isValidUrl(s: string): boolean {
+    try { const u = new URL(s); return u.protocol === "https:" || u.protocol === "http:"; }
+    catch { return false; }
+  }
+
   async function submit() {
     if (!title.trim() || !url.trim()) { setError("Название и URL обязательны"); return; }
+    if (!isValidUrl(url.trim())) { setError("URL должен начинаться с https:// или http://"); return; }
+    if (coverUrl.trim() && !isValidUrl(coverUrl.trim())) { setError("URL обложки невалиден"); return; }
     setSubmitting(true); setError("");
     try {
       const endpoint = type === "track" ? "/api/qmedia/me/tracks" : "/api/qmedia/me/videos";
@@ -72,10 +79,10 @@ export default function QMediaUploadPage() {
             <button key={t} onClick={() => setType(t)} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${type === t ? "bg-slate-700 text-white" : "text-slate-400"}`}>{l}</button>
           ))}
         </div>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder={type === "track" ? "Название трека *" : "Название видео *"} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input value={title} onChange={e => setTitle(e.target.value)} maxLength={200} aria-label={type === "track" ? "Название трека" : "Название видео"} placeholder={type === "track" ? "Название трека *" : "Название видео *"} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
         {type === "track" ? (
           <>
-            <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Исполнитель" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+            <input value={artist} onChange={e => setArtist(e.target.value)} maxLength={200} aria-label="Исполнитель" placeholder="Исполнитель" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
             <select value={genre} onChange={e => setGenre(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500">
               {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -85,12 +92,12 @@ export default function QMediaUploadPage() {
             <select value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500">
               {VIDEO_CATS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Описание видео" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500 resize-none" />
+            <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} maxLength={1000} aria-label="Описание видео" placeholder="Описание видео" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500 resize-none" />
           </>
         )}
-        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-        <input value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-        <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Теги через запятую: jazz, piano, acoustic" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input type="url" inputMode="url" value={url} onChange={e => setUrl(e.target.value)} maxLength={2048} aria-label="URL медиа-файла" placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input type="url" inputMode="url" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} maxLength={2048} aria-label="URL обложки" placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input value={tags} onChange={e => setTags(e.target.value)} maxLength={500} aria-label="Теги через запятую" placeholder="Теги через запятую: jazz, piano, acoustic" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
         <label className="flex items-center gap-3 cursor-pointer">
           <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="w-4 h-4 accent-violet-500" />
           <span className="text-sm text-slate-300">Публичный доступ</span>

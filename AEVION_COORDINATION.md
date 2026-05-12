@@ -65,7 +65,10 @@
 
 ### Pending cross-zone change requests
 
-_(пусто — добавляй сюда entries перед нарушением чужой зоны)_
+| Дата UTC | Worktree | Зона/файл | Цель | Срочность |
+|---|---|---|---|---|
+| 2026-05-12 ~07:30 | `aevion-build` | `frontend/src/app/qcontract/**`, `frontend/src/app/qpaynet/**` | Retroactive notice: PR #212 (merged), #217 (merged), #224 (open), #230 (open) включают mobile audit + aria-label polish в этих путях. Все правки additive (text-[Npx]→text-xs, aria-label, JSON-LD). NO file deletions or rewrites. Если frontend-payments owner возражает — открываю revert PR в течение часа. | low |
+| 2026-05-12 ~07:30 | `aevion-build` | `frontend/src/app/build/**`, `frontend/src/components/build/**` | Эти пути не указаны в Worktree → зона map. Я работал тут как продолжение QBuild track + mobile audit cross-cutting. Если кто-то claim-ит build/ как свою зону — оставлю и не трогаю дальше. | low |
 
 ### Current active work (aevion-core/main, 2026-05-12)
 
@@ -166,6 +169,7 @@ _(пусто — добавляй сюда entries перед нарушение
 | Зона | Занято? | Кто / какой чат | Задача (одна строка) | С согласования |
 |------|---------|-----------------|----------------------|----------------|
 | `frontend/src/app/smeta-trainer/drawings-practice/**` | ☑ | aevion-smeta-trainer (4ч автоном. сессия 05:42-09:42 UTC) | Достройка drawings-practice — батчи 1-11 уже мерджены (48 модулей в 9 категориях), продолжаю до 09:42 | self |
+| 6 fintech модуля fronts + cross-cutting mobile audit | ☑ | aevion-build (`feat/prod-readiness-2026-05-12`, `feat/zone-cleanup-2026-05-12`) | Mobile audit pass 1-3 (PR #224, 5 commits, ~140 files) + cleanup/a11y (PR #230, 2 commits, 11 files). Reading new zone map; will narrow scope to listed zones + mobile cross-cutting only. | self |
 
 **Правило:** на одну **зону** (Planet / QRight / Globus / Auth / CI / …) — **не больше одной активной задачи** без явной пометки «параллельно ок».
 

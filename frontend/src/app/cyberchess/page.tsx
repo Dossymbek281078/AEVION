@@ -55,6 +55,9 @@ import CoachPredictions from "./CoachPredictions";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
+import Link from "next/link";
+import { MetricsCollector, computeCPL, type MoveMetric } from "./stockfishMetrics";
+import { applyGameToCPI } from "./cpi";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -520,6 +523,14 @@ export default function CyberChessPage(){
   const moveTimesRef=useRef<number[]>([]);
   const lastMoveStartRef=useRef<number>(Date.now());
   const[moveTimes,sMoveTimes]=useState<number[]>([]);
+  // F2-phase: AEVION CPI per-move metrics collector. Pure data, no UI.
+  // Filled on each successful exec(), drained on game-end into applyGameToCPI().
+  // engineTop3 currently uses a minimal heuristic (live evalCp scalar); F2-phase-2
+  // will swap in real multiPV=3 output from the Stockfish worker.
+  const metricsRef=useRef(new MetricsCollector());
+  const cpiAppliedRef=useRef<string|null>(null);
+  const prevEvalCpForCpiRef=useRef<number>(0);
+  const gameStartTimeRef=useRef<number>(Date.now());
   // Coach Chat — conversational AI tutor with current position as context.
   // Messages: { role, content }. Sent to /api/coach/chat with a coach system prompt.
   type CoachMsg={role:"user"|"assistant";content:string;ts:number};
@@ -2748,6 +2759,10 @@ export default function CyberChessPage(){
     setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
     // Reset time-per-move tracker and annotations for new game
     moveTimesRef.current=[];sMoveTimes([]);lastMoveStartRef.current=Date.now();
+    // F2-phase: reset CPI collector for the new game (one bucket per game)
+    metricsRef.current.reset();
+    prevEvalCpForCpiRef.current=0;
+    gameStartTimeRef.current=Date.now();
     sMoveAnnotations({});sAnnotPicker(null);
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
@@ -3503,6 +3518,17 @@ export default function CyberChessPage(){
               </svg>;
             })()}
             <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ELO <b style={{color:CC.gold}}>{rat}</b></span>
+            {/* F2-phase: CPI dashboard quick-link */}
+            <Link href="/cyberchess/cpi/dashboard" style={{
+              display:"inline-flex",alignItems:"center",gap:4,
+              padding:"3px 9px",borderRadius:RADIUS.full,
+              background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",
+              border:"1px solid #c4b5fd",
+              fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,
+              textDecoration:"none",cursor:"pointer"
+            }} title="AEVION Chess Performance Index — детальная аналитика всех партий">
+              <span>📊</span><span>CPI</span>
+            </Link>
           </div>}
 
           {/* ─── Daily Goals mini-card ─── */}

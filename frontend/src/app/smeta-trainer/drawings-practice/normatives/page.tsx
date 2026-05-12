@@ -936,34 +936,166 @@ export default function NormativesPage() {
               </Link>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
-              <div className="font-bold text-slate-700 dark:text-slate-300">📌 Сравнительная таблица — что общего</div>
-              <table className="w-full text-[11px] border-collapse">
-                <thead><tr className="bg-slate-100 dark:bg-slate-800">
-                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-left">Этап</th>
-                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">🚰 Канализация</th>
-                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">♨️ Теплосеть</th>
-                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">⚡ Кабель</th>
+            {/* Газоснабжение */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-yellow-400 dark:border-yellow-600 rounded-xl p-4 space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-yellow-400 dark:border-yellow-700 pb-2">
+                <span className="text-2xl">🔥</span>
+                <h2 className="text-sm font-bold text-yellow-900 dark:text-yellow-300">Газоснабжение — наружные сети</h2>
+                <span className="text-[10px] text-slate-500 ml-auto font-mono">СНиП РК 4.03-01-2007</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-yellow-50 dark:bg-yellow-900/20">
+                  <th className="border border-yellow-200 dark:border-yellow-800 px-2 py-1.5 text-left">Параметр</th>
+                  <th className="border border-yellow-200 dark:border-yellow-800 px-2 py-1.5 text-center">Значение</th>
+                  <th className="border border-yellow-200 dark:border-yellow-800 px-2 py-1.5 text-left">Норматив</th>
                 </tr></thead>
                 <tbody>
                   {[
-                    ["Глубина, м", "≥ 1.5 (южные регионы)", "≥ 0.7", "≥ 0.7"],
-                    ["Ширина по низу, мм", "Ø + 500", "800-1000", "400"],
-                    ["Песчаное основание, мм", "100", "100", "100"],
-                    ["Засыпка над сетью, мм", "+300 над верхом трубы", "+200 над изоляцией", "+100 + защита"],
-                    ["Защита сверху", "Песок до проектной", "Песок + грунт", "Кирпич + лента"],
-                    ["Колодцы/опоры", "Через 35-50 м", "Через 6-7 м (опоры)", "Муфты по проекту"],
-                    ["Расценка ЭСН", "Сб.22", "Сб.24, Сб.26", "Сб.8"],
+                    ["Глубина — низкое давление", "≥ 0.8 м (вне проездов), 1.0 м под проездами", "СНиП РК 4.03-01 п. 5.4.1"],
+                    ["Глубина — среднее давление", "≥ 1.0-1.2 м", "СНиП РК 4.03-01 п. 5.4.1"],
+                    ["Глубина — высокое давление", "≥ 1.5 м", "СНиП РК 4.03-01 п. 5.4.1"],
+                    ["Тип трубы (НД, СД)", "ПЭ100 SDR11, жёлтая или с жёлтой полосой", "ГОСТ Р 50838-95"],
+                    ["Сигнальная лента", "ЛСО-450 жёлтая «ОСТОРОЖНО ГАЗ»", "СНиП РК 4.03-01 п. 5.5.4"],
+                    ["Глубина ленты над трубой", "≥ 200 мм", "СНиП РК 4.03-01 п. 5.5.4"],
+                    ["Стальной футляр на пересечениях", "Длина = ширина препятствия + 5 м с каждой стороны", "СНиП РК 4.03-01 п. 5.5.7"],
+                    ["Расстояние до фундаментов", "≥ 2 м (НД), ≥ 4 м (СД)", "СНиП РК 4.03-01 Прил. Б"],
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-yellow-50/50 dark:hover:bg-yellow-900/10">
+                      <td className="border border-yellow-100 dark:border-yellow-900 px-2 py-1.5 font-medium">{row[0]}</td>
+                      <td className="border border-yellow-100 dark:border-yellow-900 px-2 py-1.5 text-center font-mono text-yellow-800 dark:text-yellow-300 font-bold">{row[1]}</td>
+                      <td className="border border-yellow-100 dark:border-yellow-900 px-2 py-1.5 text-[10px] text-slate-500">{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] bg-yellow-50 dark:bg-yellow-900/20 rounded p-2 font-mono text-yellow-800 dark:text-yellow-300">
+                <strong>Расценки ЭСН:</strong> Сб.24-01-001 (укладка ПЭ Ø110), Сб.24-01-015 (футляр Ø159),
+                Сб.24-04-002 (задвижка газовая)
+              </div>
+              <Link href="/smeta-trainer/drawings-practice/gas"
+                className="inline-block text-[11px] px-3 py-1.5 bg-yellow-500 text-white rounded-full font-semibold hover:bg-yellow-600">
+                🔥 К чертежу и упражнениям →
+              </Link>
+            </div>
+
+            {/* Водоснабжение */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-cyan-400 dark:border-cyan-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-cyan-400 dark:border-cyan-700 pb-2">
+                <span className="text-2xl">💧</span>
+                <h2 className="text-sm font-bold text-cyan-900 dark:text-cyan-300">Водоснабжение — наружный водопровод</h2>
+                <span className="text-[10px] text-slate-500 ml-auto font-mono">СНиП РК 4.01-02-2009</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-cyan-50 dark:bg-cyan-900/30">
+                  <th className="border border-cyan-200 dark:border-cyan-700 px-2 py-1.5 text-left">Параметр</th>
+                  <th className="border border-cyan-200 dark:border-cyan-700 px-2 py-1.5 text-center">Значение</th>
+                  <th className="border border-cyan-200 dark:border-cyan-700 px-2 py-1.5 text-left">Норматив</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Глубина заложения", "hпром + 0.5 м (Алматы 1.7-2.0 м)", "СНиП РК 4.01-02 п. 8.42"],
+                    ["Тип трубы (ХВС)", "ПЭ100 SDR17 (PN10) или PN16", "ГОСТ 18599-2001"],
+                    ["Песчаное основание", "100-150 мм", "СНиП РК 3.05.04 п. 5.7"],
+                    ["Подсыпка над трубой", "≥ 300 мм песком", "СНиП РК 3.05.04 п. 5.16"],
+                    ["Колодцы водомерные ВК", "Ø1500 ж/б, серия 3.900.1-14", "ГОСТ 8020-90"],
+                    ["Задвижки", "Фланцевые 30ч6бр Ø равный трубе", "ГОСТ 9698-86"],
+                    ["Гидравлическое испытание", "Двукратное рабочее давление, 30 мин", "СНиП РК 3.05.04 п. 7.5"],
+                    ["Дезинфекция перед сдачей", "Раствор хлора 75-100 мг/л на 5-6 ч", "СНиП РК 3.05.04 п. 7.16"],
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10">
+                      <td className="border border-cyan-100 dark:border-cyan-800 px-2 py-1.5 font-medium">{row[0]}</td>
+                      <td className="border border-cyan-100 dark:border-cyan-800 px-2 py-1.5 text-center font-mono text-cyan-700 dark:text-cyan-300 font-bold">{row[1]}</td>
+                      <td className="border border-cyan-100 dark:border-cyan-800 px-2 py-1.5 text-[10px] text-slate-500">{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] bg-cyan-50 dark:bg-cyan-900/20 rounded p-2 font-mono text-cyan-800 dark:text-cyan-300">
+                <strong>Расценки ЭСН:</strong> Сб.16-01-001 (прокладка ПЭ Ø160), Сб.16-04-002 (задвижка),
+                Сб.16-03-001 (колодец ВК), Сб.16-05-001 (водомер)
+              </div>
+              <Link href="/smeta-trainer/drawings-practice/water"
+                className="inline-block text-[11px] px-3 py-1.5 bg-cyan-600 text-white rounded-full font-semibold hover:bg-cyan-700">
+                💧 К чертежу и упражнениям →
+              </Link>
+            </div>
+
+            {/* Вентиляция */}
+            <div className="bg-white dark:bg-slate-900 border-2 border-teal-400 dark:border-teal-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-baseline gap-2 border-b border-teal-400 dark:border-teal-700 pb-2">
+                <span className="text-2xl">🌬</span>
+                <h2 className="text-sm font-bold text-teal-900 dark:text-teal-300">Вентиляция — воздуховоды и оборудование</h2>
+                <span className="text-[10px] text-slate-500 ml-auto font-mono">СП РК 4.02-101-2012</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="bg-teal-50 dark:bg-teal-900/30">
+                  <th className="border border-teal-200 dark:border-teal-700 px-2 py-1.5 text-left">Параметр</th>
+                  <th className="border border-teal-200 dark:border-teal-700 px-2 py-1.5 text-center">Значение</th>
+                  <th className="border border-teal-200 dark:border-teal-700 px-2 py-1.5 text-left">Норматив</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Класс воздуховодов", "Н — нормальной плотности (общественные)", "СП РК 4.02-101 п. 7.10.5"],
+                    ["Толщина стали (до 1000 мм)", "0.5-0.7 мм оцинковка", "СП РК 4.02-101 п. 7.10.6"],
+                    ["Толщина стали (1000-2000 мм)", "0.7-0.9 мм", "СП РК 4.02-101 п. 7.10.6"],
+                    ["Площадь поверхности", "F = 2·(a+b)·L (прямоугольный)", "Геометрия"],
+                    ["Изоляция магистрали", "Минвата 40-60 мм + покровный слой", "СП РК 2.04-104"],
+                    ["Фланцевое соединение", "Через 1.25-1.5 м (зависит от размера)", "СП РК 4.02-101 п. 7.10.13"],
+                    ["Хомуты крепления", "Через 1.5-3 м (по размеру воздуховода)", "СП РК 4.02-101 п. 7.10.16"],
+                    ["Огнезащита (через противопожарные стены)", "EI 60 / EI 90 минвата + кожух", "СНиП РК 2.02-05-2002"],
+                    ["Кратность воздухообмена — школа класс", "20 м³/ч на ученика, 8-кратная", "СП РК 4.02-101 Прил. К"],
+                    ["Кратность — операционная", "10-15 крат/ч, 100% наружн.", "СН РК 3.02-25"],
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-teal-50/50 dark:hover:bg-teal-900/10">
+                      <td className="border border-teal-100 dark:border-teal-800 px-2 py-1.5 font-medium">{row[0]}</td>
+                      <td className="border border-teal-100 dark:border-teal-800 px-2 py-1.5 text-center font-mono text-teal-700 dark:text-teal-300 font-bold">{row[1]}</td>
+                      <td className="border border-teal-100 dark:border-teal-800 px-2 py-1.5 text-[10px] text-slate-500">{row[2]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-[10px] bg-teal-50 dark:bg-teal-900/20 rounded p-2 font-mono text-teal-800 dark:text-teal-300">
+                <strong>Расценки ЭСН:</strong> Сб.20-01-001 (монтаж воздуховодов), Сб.20-02-005 (АДН),
+                Сб.26-01-027 (изоляция), Сб.20-04-001 (дроссель-клапан)
+              </div>
+              <Link href="/smeta-trainer/drawings-practice/ventilation"
+                className="inline-block text-[11px] px-3 py-1.5 bg-teal-600 text-white rounded-full font-semibold hover:bg-teal-700">
+                🌬 К чертежу и упражнениям →
+              </Link>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-xs space-y-2">
+              <div className="font-bold text-slate-700 dark:text-slate-300">📌 Сравнительная таблица — все 6 типов сетей</div>
+              <div className="overflow-x-auto">
+              <table className="w-full text-[11px] border-collapse">
+                <thead><tr className="bg-slate-100 dark:bg-slate-800">
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-left">Этап</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">🚰 Канал.</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">♨️ Тепло</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">⚡ Кабель</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">🔥 Газ НД</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">💧 Вода</th>
+                  <th className="border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-center">🌬 Венти.</th>
+                </tr></thead>
+                <tbody>
+                  {[
+                    ["Глубина, м",       "≥ 1.5",      "≥ 0.7",  "≥ 0.7",   "≥ 0.8-1.0", "≥ 1.7-2.0", "В подвесном"],
+                    ["Ширина низа, мм",  "Ø + 500",    "800-1000","400",     "600",        "Ø + 500-700", "—"],
+                    ["Песок снизу, мм",  "100",        "100",    "100",     "100",        "100-150",     "—"],
+                    ["Засыпка, мм",      "+300 над",   "+200 над","+100",   "+200 + лента","+300 над",   "—"],
+                    ["Защита",           "—",          "—",      "Кирпич+лента", "Жёлтая лента", "—",      "Огнезащита"],
+                    ["Расценка ЭСН",     "Сб.22",      "Сб.24/26","Сб.8",   "Сб.24",      "Сб.16",       "Сб.20/26"],
                   ].map((row, i) => (
                     <tr key={i}>
                       <td className="border border-slate-200 dark:border-slate-700 px-2 py-1.5 font-medium">{row[0]}</td>
-                      {[1, 2, 3].map(j => (
+                      {[1, 2, 3, 4, 5, 6].map(j => (
                         <td key={j} className="border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300">{row[j]}</td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}

@@ -2,7 +2,7 @@
 /**
  * QMedia smoke — verifies /api/qmedia/* surface.
  *
- * Tests: health → public lists → AI tools (stub mode) → authed CRUD → cleanup
+ * Tests: health → public lists → AI tools (stub mode) → authed CRUD → like validation → cleanup
  *
  * Note: QMedia storage is currently in-process Map<>; data evaporates on
  * restart. This smoke runs within a single process boundary so create/read/
@@ -113,6 +113,16 @@ async function run() {
     if (r.status === 200 && r.body?.liked === false) ok("POST /track/:id/like (toggle off)");
     else fail("POST /track/:id/like (toggle off)", `${r.status}`);
   }
+
+  // ── Like nonexistent → 404
+  r = await req("POST", "/api/qmedia/track/00000000-0000-0000-0000-000000000000/like", null, token);
+  if (r.status === 404) ok("POST /:type/:id/like rejects nonexistent resource");
+  else fail("POST /:type/:id/like should 404 on nonexistent", `${r.status}`);
+
+  // ── Like invalid type → 400
+  r = await req("POST", "/api/qmedia/banana/abc/like", null, token);
+  if (r.status === 400) ok("POST /:type/:id/like rejects invalid type");
+  else fail("POST /:type/:id/like should 400 on invalid type", `${r.status}`);
 
   // ── Create playlist
   r = await req("POST", "/api/qmedia/me/playlists", {

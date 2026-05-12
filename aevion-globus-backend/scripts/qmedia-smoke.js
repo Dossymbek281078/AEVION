@@ -91,6 +91,15 @@ async function run() {
   if (r.status === 400) ok("POST /me/tracks rejects missing title");
   else fail("POST /me/tracks should reject missing title", `${r.status}`);
 
+  // ── Validation: invalid URL (not http/https)
+  r = await req("POST", "/api/qmedia/me/tracks", { title: "bad-url-test", url: "javascript:alert(1)" }, token);
+  if (r.status === 400 && /url/i.test(r.body?.error ?? "")) ok("POST /me/tracks rejects non-http(s) URL");
+  else fail("POST /me/tracks should reject javascript: URL", `${r.status} ${r.body?.error ?? ""}`);
+
+  r = await req("POST", "/api/qmedia/me/videos", { title: "bad-url-test", url: "ftp://example.com/x" }, token);
+  if (r.status === 400 && /url/i.test(r.body?.error ?? "")) ok("POST /me/videos rejects ftp:// URL");
+  else fail("POST /me/videos should reject ftp:// URL", `${r.status}`);
+
   // ── Read my tracks
   r = await req("GET", "/api/qmedia/me/tracks", null, token);
   if (r.status === 200 && Array.isArray(r.body?.items) && r.body.items.length >= 1) ok("GET /me/tracks", `count=${r.body.items.length}`);

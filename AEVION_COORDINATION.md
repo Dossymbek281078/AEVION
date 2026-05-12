@@ -179,6 +179,46 @@ C) [третий вариант]
 
 ---
 
+## 📢 BROADCAST 2026-05-12 #4 — единый журнал работы + 5-минутные обновления WIP
+
+Команда от пользователя ВСЕМ открытым сессиям:
+
+**Все сессии, работающие в любой зоне AEVION, ОБЯЗАНЫ записывать свою текущую активность в раздел «Текущая работа (WIP)» этого файла** — в одном месте, чтобы все остальные окна это видели и не дублировали работу.
+
+### Конкретные правила
+
+1. **При начале любой задачи** — добавь строку в WIP-таблицу со столбцами: зона, статус (☑ ЗАНЯТО / 🔄 в процессе / ✅ done), worktree-владелец, краткое описание задачи, timestamp обновления.
+2. **Обновляй timestamp своей строки каждые 5 минут пока работаешь.** Если строка старше 10 минут — другая сессия имеет право считать её устаревшей и взяться за задачу.
+3. **При завершении задачи** — помечай ✅ и переноси в «Недавно сдано» (вверху, последние 10 пунктов).
+4. **При смене задачи** — обновляй СВОЮ строку, не создавай новую дублирующую.
+5. **Любой коммит, который трогает что-то нетривиальное** должен либо включать обновление WIP в том же коммите, либо отдельным микро-коммитом `chore: coord WIP — <worktree>` после.
+
+### Что записывать в WIP
+
+- Файл/директория, которую активно редактируешь
+- 1-2 предложения о цели задачи
+- Если задача займёт > 30 минут — пометь как «🔄 LOCK» — другие сессии не лезут в эту зону пока ты её держишь
+
+### Что НЕ записывать в WIP
+
+- Микро-правки (одна строка, опечатка)
+- Чтение файлов (не edit)
+- Тесты, smoke-проверки
+
+### 5-минутная норма — как соблюдать
+
+- После каждого коммита — обнови свой timestamp в WIP (даже если задача та же)
+- Если ты работаешь долго без коммитов (например исследование) — раз в 5 минут делай микро-коммит `chore: coord WIP — heartbeat <worktree>` ИЛИ просто `git commit --only -- AEVION_COORDINATION.md`
+- Это даёт другим сессиям live-сигнал о твоём прогрессе
+
+### Почему ввели
+
+Параллельные сессии дублировали работу (например `CYBERCHESS_CPI_SPEC.md` и `cpi/page.tsx` aevion-core/main создал, а другая сессия через `git add .` подобрала их в свой qsocial-коммит как будто это её работа). Без живого журнала это будет повторяться. Также — мы тратим время выясняя «кто сейчас что делает» когда могли просто посмотреть в один файл.
+
+**Подтверждение прочтения:** упомяни `BROADCAST-2026-05-12-4-read` в commit body.
+
+---
+
 ## ⚠️ LIVE ZONE OWNERSHIP — read first, edit before crossing zones
 
 > **Обновлено 2026-05-12. ЭТОТ БЛОК ОБЯЗАТЕЛЕН К ПРОЧТЕНИЮ ПЕРЕД ЛЮБЫМ EDIT.**
@@ -330,23 +370,24 @@ C) [третий вариант]
 
 ## Текущая работа (WIP)
 
-> ⏱ Обновляется каждые 5 минут. Последнее обновление: 2026-05-12 (frontend-qcore сессия)
+> ⏱ **Per BROADCAST #4: обновляется каждые ≤5 минут любой активной сессией.** Строки старше 10 минут считаются stale.
+> Последнее обновление: 2026-05-12 16:15 UTC+5 (aevion-core/main — Stockfish NNUE swap)
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
+| `frontend/src/app/cyberchess/**` + `/public/stockfish*` | 🔄 LOCK aevion-core/main | aevion-core/main | Stockfish NNUE binary swap + progressive deepening UI. Бэкенд бинарника подменён (SF18 lite NNUE multi-thread), code update pending tests. | 2026-05-12 16:15 UTC+5 |
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |
-| `qcoreai.ts` + `frontend/src/app/qcoreai/**` | ✅ V31-V70 СДЕЛАНО | frontend-qcore | QCoreAI V31-V70 смёрджено. Далее: collab viewer, share session | 2026-05-12 |
-| `devhub.ts` + `frontend/src/app/devhub/**` | ✅ V1-V2 СДЕЛАНО | frontend-qcore | DevHub MERGED. Далее: GitHub OAuth реальное создание репо | 2026-05-12 |
-| `frontend/src/app/qai/**` + `qai.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QAI chat MVP. Далее: markdown рендер, sidebar история | 2026-05-12 |
-| `frontend/src/app/qmedia/**` + `qmedia.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QMedia: треки, видео, плейлисты, AI лирика. Далее: smart playlists | 2026-05-12 |
-| `frontend/src/app/qstore/**` + `qstore.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QStore: продукты, покупки, отзывы. Далее: dashboard продавца | 2026-05-12 |
-| `frontend/src/app/qlearn/**` + `qlearn.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QLearn: курсы, уроки, зачисление, квиз. Далее: сертификаты | 2026-05-12 |
-| `frontend/src/app/qsocial/**` + `qsocial.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QSocial: посты, подписки, лайки, DM, истории, уведомления | 2026-05-12 |
-| `frontend/src/app/qnews/**` + `qnews.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QNews: статьи, RSS, AI дайджест, закладки | 2026-05-12 |
-| `frontend/src/app/qjobs/**` + `qjobs.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QJobs: вакансии, отклики, AI matching, зарплатные данные | 2026-05-12 |
-| `frontend/src/app/qevents/**` + `qevents.ts` | ✅ V1 СДЕЛАНО | frontend-qcore | QEvents: события, RSVP, календарь, вейтлист | 2026-05-12 |
-| `frontend/src/app/pricing/**` | ✅ СДЕЛАНО | frontend-qcore | Страница цен Free/Pro/Enterprise + PayBox KZ блок | 2026-05-12 |
-| `frontend/src/routes/payments.ts` | ✅ СДЕЛАНО | frontend-qcore | Payments: Stripe test + PayBox KZ + Kaspi | 2026-05-12 |
+| `qcoreai.ts` + `frontend/src/app/qcoreai/**` | ✅ V31-V70 DONE | frontend-qcore | V31-V70 смёрджено. Следующее: collab viewer + share session link | 2026-05-12 11:27 UTC |
+| `devhub.ts` + `frontend/src/app/devhub/**` | ✅ V1-V2 DONE | frontend-qcore | DevHub V2 DONE. Следующее: GitHub OAuth — реальное создание репо | 2026-05-12 11:27 UTC |
+| `qai.ts` + `frontend/src/app/qai/**` | ✅ V1 DONE | frontend-qcore | Chat MVP + streaming + personas. Следующее: markdown рендер + sidebar | 2026-05-12 11:27 UTC |
+| `qmedia.ts` + `frontend/src/app/qmedia/**` | ✅ V1 DONE | frontend-qcore | Треки, видео, плейлисты, AI лирика, radio, smart playlists | 2026-05-12 11:27 UTC |
+| `qstore.ts` + `frontend/src/app/qstore/**` | ✅ V1 DONE | frontend-qcore | Продукты, покупки, отзывы, рейтинги. Следующее: seller dashboard | 2026-05-12 11:27 UTC |
+| `qlearn.ts` + `frontend/src/app/qlearn/**` | ✅ V1 DONE | frontend-qcore | Курсы, уроки, зачисление, квизы, AI генерация. Следующее: сертификаты | 2026-05-12 11:27 UTC |
+| `qsocial.ts` + `frontend/src/app/qsocial/**` | ✅ V1 DONE | frontend-qcore | Посты, лайки, DM, истории, уведомления, хэштеги | 2026-05-12 11:27 UTC |
+| `qnews.ts` + `frontend/src/app/qnews/**` | ✅ V1 DONE | frontend-qcore | Статьи, RSS, AI дайджест, закладки | 2026-05-12 11:27 UTC |
+| `qjobs.ts` + `frontend/src/app/qjobs/**` | ✅ V1 DONE | frontend-qcore | Вакансии, отклики, AI matching, зарплатные данные, save jobs | 2026-05-12 11:27 UTC |
+| `qevents.ts` + `frontend/src/app/qevents/**` | ✅ V1 DONE | frontend-qcore | События, RSVP, календарь, вейтлист, share URL | 2026-05-12 11:27 UTC |
+| `payments.ts` + `frontend/src/app/pricing/**` | ✅ DONE | frontend-qcore | Stripe test + PayBox KZ + Kaspi + pricing page | 2026-05-12 11:27 UTC |
 
 ### Следующие задачи (очередь frontend-qcore)
 

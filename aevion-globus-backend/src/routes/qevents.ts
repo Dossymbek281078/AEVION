@@ -48,6 +48,7 @@ interface RSVP {
 
 const memEvents = new Map<string, QEvent>();
 const memRSVPs = new Map<string, RSVP>();
+const memWaitlist = new Map<string, string[]>(); // eventId -> userId[]
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -322,11 +323,19 @@ qeventsRouter.post("/events/:id/rsvp", async (req: Request, res: Response) => {
     let status: string;
     if (existingKey) {
       const newStatus = existingKey.status === "going" ? "not-going" : "going";
+      // Capacity check when attempting to RSVP "going"
+      if (newStatus === "going" && event.attendeeCount >= event.capacity) {
+        return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+      }
       existingKey.status = newStatus;
       const delta = newStatus === "going" ? 1 : -1;
       event.attendeeCount = Math.max(0, event.attendeeCount + delta);
       status = newStatus;
     } else {
+      // New RSVP — enforce capacity
+      if (event.attendeeCount >= event.capacity) {
+        return res.status(409).json({ error: "Event is full", waitlistAvailable: true });
+      }
       const rsvp: RSVP = {
         id: crypto.randomUUID(),
         eventId,
@@ -385,4 +394,56 @@ qeventsRouter.get("/me/rsvps", async (req: Request, res: Response) => {
   } catch {
     return res.status(500).json({ error: "internal_error" });
   }
+});
+
+// ─── GET /api/qevents/calendar ────────────────────────────────────────────────
+qeventsRouter.get("/calendar", (_req: Request, res: Response) => {
+  const year = parseInt(String(_req.query.year ?? new Date().getFullYear()), 10);
+  const month = parseInt(String(_req.query.month ?? new Date().getMonth() + 1), 10);
+  const ym = `${year}-${String(month).padStart(2, "0")}`;
+  const days: Record<string, QEvent[]> = {};
+  for (const ev of memEvents.values()) {
+    if (!ev.isPublic) continue;
+    if (!ev.startAt.startsWith(ym)) continue;
+    const day = ev.startAt.slice(0, 10);
+    if (!days[day]) days[day] = [];
+    days[day].push(ev);
+  }
+  return res.json({ year, month, days });
+});
+
+// ─── POST /api/qevents/events/:id/waitlist ────────────────────────────────────
+qeventsRouter.post("/events/:id/waitlist", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const eventId = param(req, "id");
+  const event = memEvents.get(eventId);
+  if (!event) return res.status(404).json({ error: "not_found" });
+  if (event.attendeeCount < event.capacity) {
+    return res.status(400).json({ error: "Event is not full, RSVP directly" });
+  }
+  const list = memWaitlist.get(eventId) ?? [];
+  if (!list.includes(auth.sub)) list.push(auth.sub);
+  memWaitlist.set(eventId, list);
+  return res.json({ position: list.indexOf(auth.sub) + 1 });
+});
+
+// ─── GET /api/qevents/events/:id/waitlist — owner only ────────────────────────
+qeventsRouter.get("/events/:id/waitlist", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required" });
+  const eventId = param(req, "id");
+  const event = memEvents.get(eventId);
+  if (!event) return res.status(404).json({ error: "not_found" });
+  if (event.organizerId !== auth.sub) return res.status(403).json({ error: "forbidden" });
+  const list = memWaitlist.get(eventId) ?? [];
+  return res.json({ waitlist: list, count: list.length });
+});
+
+// ─── POST /api/qevents/events/:id/share ──────────────────────────────────────
+qeventsRouter.post("/events/:id/share", (req: Request, res: Response) => {
+  const id = param(req, "id");
+  const event = memEvents.get(id);
+  if (!event) return res.status(404).json({ error: "not_found" });
+  return res.json({ shareUrl: `https://aevion.app/events/${id}` });
 });

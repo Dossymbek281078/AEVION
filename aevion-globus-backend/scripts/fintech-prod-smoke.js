@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Fintech PROD smoke — 21 read-only health + stats checks for the 5
- * fintech modules: QGood, QMaskCard, VeilNetX Ledger, Z-Tide, QChainGov.
+ * Fintech PROD smoke — 25 read-only health + stats checks across the
+ * aevion-build zone: QGood, QMaskCard, VeilNetX Ledger, Z-Tide, QChainGov,
+ * QMedia, QFusionAI.
  *
  * Safe to run anywhere — every endpoint is GET, anonymous, and read-only.
  * No DB writes, no auth, no test users. Designed for the daily-smoke CI
@@ -241,6 +242,41 @@ async function run() {
     ok("GET /api/qchaingov/proposals?status=executed", `entries=${r.body.proposals.length}`);
   } else {
     fail("GET /api/qchaingov/proposals?status=executed", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // ── QMedia (read-only) ───────────────────────────────────────────────────
+  // 22. QMedia health (accepts 200 with db=ok OR 503 with db=down per upgraded /health)
+  r = await req("GET", "/api/qmedia/health");
+  if ((r.status === 200 || r.status === 503) && r.body?.service === "qmedia") {
+    ok("GET /api/qmedia/health", `status=${r.body.ok ? "ok" : "degraded"} db=${r.body.db ?? "n/a"} storage=${r.body.storage ?? "n/a"}`);
+  } else {
+    fail("GET /api/qmedia/health", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 23. QMedia public tracks (empty OK)
+  r = await req("GET", "/api/qmedia/tracks?limit=3");
+  if (r.status === 200 && Array.isArray(r.body?.items)) {
+    ok("GET /api/qmedia/tracks", `n=${r.body.items.length}`);
+  } else {
+    fail("GET /api/qmedia/tracks", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 24. QMedia public videos (empty OK)
+  r = await req("GET", "/api/qmedia/videos?limit=3");
+  if (r.status === 200 && Array.isArray(r.body?.items)) {
+    ok("GET /api/qmedia/videos", `n=${r.body.items.length}`);
+  } else {
+    fail("GET /api/qmedia/videos", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // ── QFusionAI (read-only) ────────────────────────────────────────────────
+  // 25. QFusionAI health — providers list + routes catalog
+  r = await req("GET", "/api/qfusionai/health");
+  if (r.status === 200 && r.body?.module === "qfusionai" && Array.isArray(r.body?.providers) && Array.isArray(r.body?.routes)) {
+    const configured = r.body.providers.filter((p) => p.configured).length;
+    ok("GET /api/qfusionai/health", `providers=${r.body.providers.length} configured=${configured} routes=${r.body.routes.length}`);
+  } else {
+    fail("GET /api/qfusionai/health", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
   }
 
   console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);

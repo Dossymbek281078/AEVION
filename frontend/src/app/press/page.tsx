@@ -1,6 +1,68 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { getApiBase } from "@/lib/apiBase";
+
+export const revalidate = 3600;
+
+type RegistryStats = {
+  total: number;
+  byStatus: Record<string, number>;
+  byKind: Record<string, number>;
+  byTag: { tag: string; count: number }[];
+};
+
+type CatalogItem = {
+  id: string;
+  name: string;
+  status: string;
+  frontend: string;
+  tags?: string[];
+};
+
+async function fetchStats(): Promise<RegistryStats | null> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/aevion/registry-stats`, { next: { revalidate: 3600 } });
+    if (!r.ok) return null;
+    return (await r.json()) as RegistryStats;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCatalog(): Promise<CatalogItem[]> {
+  try {
+    const r = await fetch(`${getApiBase()}/api/aevion/catalog?fields=id,name,status,frontend,tags`, {
+      next: { revalidate: 3600 },
+    });
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.items || []) as CatalogItem[];
+  } catch {
+    return [];
+  }
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  launched: "#10b981",
+  mvp: "#10b981",
+  working: "#10b981",
+  in_progress: "#f59e0b",
+  research: "#8b5cf6",
+  planning: "#3b82f6",
+  idea: "#94a3b8",
+};
+
+const STATUS_ORDER = ["launched", "mvp", "in_progress", "research", "planning", "idea"];
+
+const STATUS_LABEL: Record<string, string> = {
+  launched: "Launched",
+  mvp: "MVP",
+  in_progress: "In progress",
+  research: "Research",
+  planning: "Planning",
+  idea: "Idea",
+};
 
 export const metadata: Metadata = {
   title: "AEVION Press Kit — brand, boilerplate, contact",
@@ -20,12 +82,21 @@ export const metadata: Metadata = {
   },
 };
 
-const KEY_STATS = [
-  { value: "27",     label: "product nodes",        hint: "12 live MVPs, 15 emerging" },
-  { value: "$340B",  label: "addressable market",   hint: "IP, creator economy, payments" },
-  { value: "3",      label: "languages",            hint: "EN · RU · KK from day 1" },
-  { value: "Ed25519",label: "signature stack",      hint: "+ Shamir SSS · post-quantum-ready" },
-];
+function buildKeyStats(stats: RegistryStats | null): Array<{ value: string; label: string; hint: string }> {
+  const total = stats?.total ?? 29;
+  const liveCount = (stats?.byStatus?.launched ?? 0) + (stats?.byStatus?.mvp ?? 0);
+  const emerging = total - liveCount;
+  return [
+    {
+      value: String(total),
+      label: "product nodes",
+      hint: `${liveCount} live MVPs/launched, ${emerging} emerging`,
+    },
+    { value: "$340B", label: "addressable market", hint: "IP, creator economy, payments" },
+    { value: "3", label: "languages", hint: "EN · RU · KK from day 1" },
+    { value: "Ed25519", label: "signature stack", hint: "+ Shamir SSS · post-quantum-ready" },
+  ];
+}
 
 const ONE_LINERS = [
   "AEVION is the trust operating system for digital creation: registry, signature, bureau, validators, bank — under one identity.",
@@ -47,7 +118,9 @@ const COVERAGE_NOTE =
 
 const BOILERPLATE = `AEVION is a trust infrastructure platform for digital creation. It bundles IP registration (QRight), cryptographic signatures (QSign), a patent bureau, validator-quorum compliance certification (Planet), creator awards, and a digital bank (AEC) under a single identity and a single Trust Graph. Authorship is provable from the first second; payouts settle straight to a wallet that already understands royalties, autopilot rules and savings goals. The crypto floor is Ed25519 + Shamir's Secret Sharing, designed to remain credible after the post-quantum transition. AEVION ships in EN, RU and KK from day one.`;
 
-export default function PressPage() {
+export default async function PressPage() {
+  const [stats, catalog] = await Promise.all([fetchStats(), fetchCatalog()]);
+  const KEY_STATS = buildKeyStats(stats);
   return (
     <main style={{ background: "linear-gradient(180deg, #f8fafc 0%, #fff 200px)", minHeight: "100vh" }}>
       <div style={{ maxWidth: 980, margin: "0 auto", padding: "32px 20px 64px" }}>
@@ -186,6 +259,136 @@ export default function PressPage() {
             <a href="/apple-icon" style={{ color: "#0d9488", fontWeight: 700 }}>/apple-icon</a>.
             For vector or larger renders, email the press contact below.
           </p>
+        </section>
+
+        {catalog.length > 0 && (
+          <section
+            style={{
+              marginTop: 16,
+              padding: 22,
+              borderRadius: 16,
+              background: "#fff",
+              border: "1px solid rgba(15,23,42,0.08)",
+            }}
+          >
+            <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 6px" }}>
+              AEVION at a glance — {catalog.length} modules
+            </h2>
+            <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 14px", lineHeight: 1.6 }}>
+              The full product line, grouped by stage. Auto-generated from{" "}
+              <Link href="/api/aevion/catalog" style={{ color: "#0d9488", fontWeight: 700 }}>
+                /api/aevion/catalog
+              </Link>{" "}
+              · machine-readable in JSON, CSV, Markdown.
+            </p>
+            {STATUS_ORDER.filter((s) => catalog.some((m) => m.status === s)).map((statusKey) => {
+              const modules = catalog
+                .filter((m) => m.status === statusKey)
+                .sort((a, b) => a.name.localeCompare(b.name));
+              const color = STATUS_COLOR[statusKey] || "#94a3b8";
+              return (
+                <div key={statusKey} style={{ marginBottom: 14 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      marginBottom: 6,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "#64748b",
+                    }}
+                  >
+                    <div style={{ width: 8, height: 8, borderRadius: 999, background: color }} aria-hidden />
+                    {STATUS_LABEL[statusKey] || statusKey} · {modules.length}
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 6,
+                      gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                    }}
+                  >
+                    {modules.map((m) => (
+                      <a
+                        key={m.id}
+                        href={m.frontend}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: "rgba(15,23,42,0.04)",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#0f172a",
+                          textDecoration: "none",
+                          borderLeft: `2px solid ${color}`,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {m.name.split("—")[0].trim()}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        )}
+
+        <section
+          style={{
+            marginTop: 16,
+            padding: 22,
+            borderRadius: 16,
+            background: "#fff",
+            border: "1px solid rgba(15,23,42,0.08)",
+          }}
+        >
+          <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 6px" }}>Press downloads</h2>
+          <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 14px", lineHeight: 1.6 }}>
+            Direct links to assets and machine-readable data. Free use for editorial coverage with attribution.
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            }}
+          >
+            {[
+              { href: "/icon", label: "Logo · master SVG 512×512", hint: "Site favicon source" },
+              { href: "/apple-icon", label: "Apple touch icon", hint: "180×180 PNG" },
+              { href: "/opengraph-image", label: "Default OG image", hint: "1200×630 social card" },
+              { href: "/press/opengraph-image", label: "Press OG image", hint: "1200×630 press-kit card" },
+              { href: "/api/aevion/catalog", label: "Catalog JSON", hint: "All modules + tags + status" },
+              { href: "/api/aevion/catalog?format=csv", label: "Catalog CSV", hint: "Spreadsheet-friendly" },
+              { href: "/api/aevion/catalog?format=md", label: "Catalog Markdown", hint: "Drop into a doc" },
+              { href: "/api/aevion/registry-stats", label: "Registry stats JSON", hint: "By-status + by-tag counts" },
+              { href: "/api/aevion/health", label: "Live health JSON", hint: "Per-service probe" },
+              { href: "/status", label: "Public status page", hint: "Live dashboard" },
+            ].map((a) => (
+              <a
+                key={a.href}
+                href={a.href}
+                style={{
+                  display: "block",
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  background: "rgba(13,148,136,0.04)",
+                  border: "1px solid rgba(13,148,136,0.18)",
+                  textDecoration: "none",
+                  color: "#0f172a",
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#0d9488" }}>{a.label} →</div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{a.hint}</div>
+              </a>
+            ))}
+          </div>
         </section>
 
         <section

@@ -153,21 +153,43 @@ veilnetxLedgerRouter.post("/entries", writeLimit, async (req, res) => {
     const createdAt = new Date().toISOString();
     const safeMeta = (meta && typeof meta === "object") ? meta : {};
     const metaJson = JSON.stringify(safeMeta);
-    const prevHash = await getChainHead();
-    const hash = entryHash({
-      prevHash, module, kind,
-      blindedFrom, blindedTo,
-      amountCents: amount.toString(),
-      currency: String(currency).toUpperCase(),
-      metaJson, createdAt,
-    });
 
+    // Serialize head-read + insert via Postgres advisory lock — same key as
+    // lib/ecosystemEvents.ts so HTTP-path and lib-path emits never race.
+    // Without this, bursty concurrent emits read same head → 2+ entries
+    // claim same prevHash → chain integrity breaks. See VEILNETX_CHAIN_LOCK_KEY.
     const pool = getPool();
-    await pool.query(
-      `INSERT INTO "VeilNetXLedger" ("id","module","kind","blindedFrom","blindedTo","amountCents","currency","meta","prevHash","entryHash","createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)`,
-      [id, module, kind, blindedFrom, blindedTo, amount.toString(), String(currency).toUpperCase(), metaJson, prevHash, hash, createdAt],
-    );
+    const client = await pool.connect();
+    let hash: string;
+    let prevHash: string;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock($1)", ["6218442231490103630"]);
+      const headR = await client.query(
+        `SELECT "entryHash" FROM "VeilNetXLedger" ORDER BY "sequenceNumber" DESC LIMIT 1`,
+      );
+      prevHash = headR.rowCount === 0
+        ? GENESIS_HASH
+        : (headR.rows[0] as { entryHash: string }).entryHash;
+      hash = entryHash({
+        prevHash, module, kind,
+        blindedFrom, blindedTo,
+        amountCents: amount.toString(),
+        currency: String(currency).toUpperCase(),
+        metaJson, createdAt,
+      });
+      await client.query(
+        `INSERT INTO "VeilNetXLedger" ("id","module","kind","blindedFrom","blindedTo","amountCents","currency","meta","prevHash","entryHash","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)`,
+        [id, module, kind, blindedFrom, blindedTo, amount.toString(), String(currency).toUpperCase(), metaJson, prevHash, hash, createdAt],
+      );
+      await client.query("COMMIT");
+    } catch (e) {
+      try { await client.query("ROLLBACK"); } catch { /* ignore */ }
+      throw e;
+    } finally {
+      client.release();
+    }
     res.status(201).json({
       id, entryHash: hash, prevHash, module, kind,
       blindedFrom, blindedTo,

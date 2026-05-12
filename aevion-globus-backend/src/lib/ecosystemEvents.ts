@@ -18,6 +18,13 @@ import { getPool } from "./dbPool";
 
 const GENESIS_HASH = "0".repeat(64);
 
+// Stable Postgres advisory-lock key for the VeilNetX chain head. The SAME
+// constant MUST be used in routes/veilnetxLedger.ts so HTTP-path emits and
+// library-path emits serialize on the same lock — without this, bursty
+// concurrent emits race on prevHash and break chain integrity.
+// Value derived from ASCII "VLXCHAIN" packed into a bigint (computed once).
+export const VEILNETX_CHAIN_LOCK_KEY = "6218442231490103630";
+
 function getSalt(): string {
   return process.env.VEILNETX_SALT || process.env.SHARD_HMAC_SECRET || "veilnetx-dev-salt-change-in-prod";
 }
@@ -110,46 +117,57 @@ export async function emitVeilNetXEntry(input: {
   currency?: string;
   meta?: Record<string, unknown>;
 }): Promise<string | null> {
-  try {
-    await ensureLedger();
-    const pool = getPool();
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    const blindedFrom = blind(String(input.fromIdentifier ?? ""));
-    const blindedTo = blind(String(input.toIdentifier ?? ""));
-    if (!blindedFrom && !blindedTo) return null;
-    const amount = BigInt(String(input.amountCents));
-    if (amount === BigInt(0)) return null;
-    const metaJson = JSON.stringify(input.meta ?? {});
-    const currency = String(input.currency ?? "USD").toUpperCase();
+  await ensureLedger();
+  const pool = getPool();
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const blindedFrom = blind(String(input.fromIdentifier ?? ""));
+  const blindedTo = blind(String(input.toIdentifier ?? ""));
+  if (!blindedFrom && !blindedTo) return null;
+  let amount: bigint;
+  try { amount = BigInt(String(input.amountCents)); } catch { return null; }
+  if (amount === BigInt(0)) return null;
+  const metaJson = JSON.stringify(input.meta ?? {});
+  const currency = String(input.currency ?? "USD").toUpperCase();
 
-    // Fetch chain head
-    const headR = await pool.query(
+  // Serialize the head-read + insert via a Postgres transactional advisory
+  // lock — same lock key as veilnetxLedger.ts /entries handler so concurrent
+  // emits from BOTH paths never see the same prevHash. Without this, bursty
+  // fire-and-forget emits race and break chain integrity.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [VEILNETX_CHAIN_LOCK_KEY]);
+    const headR = await client.query(
       `SELECT "entryHash" FROM "VeilNetXLedger" ORDER BY "sequenceNumber" DESC LIMIT 1`,
     );
     const prevHash = headR.rowCount === 0
       ? GENESIS_HASH
       : (headR.rows[0] as { entryHash: string }).entryHash;
-
     const hash = entryHash({
       prevHash, module: input.module, kind: input.kind,
       blindedFrom, blindedTo,
       amountCents: amount.toString(),
       currency, metaJson, createdAt,
     });
-
-    await pool.query(
+    await client.query(
       `INSERT INTO "VeilNetXLedger" ("id","module","kind","blindedFrom","blindedTo","amountCents","currency","meta","prevHash","entryHash","createdAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11)`,
       [id, input.module, input.kind, blindedFrom, blindedTo, amount.toString(), currency, metaJson, prevHash, hash, createdAt],
     );
+    await client.query("COMMIT");
     return id;
   } catch (err) {
-    // Log but don't throw — fire-and-forget by contract.
+    try { await client.query("ROLLBACK"); } catch { /* ignore */ }
+    // Fire-and-forget contract: never throw to caller.
     console.warn("[ecosystemEvents] veilnetx emit failed:", err instanceof Error ? err.message : err);
     return null;
+  } finally {
+    client.release();
   }
 }
+
+// (lock key constant declared at top of file)
 
 // Per-kind weights mirror those in ztide.ts to keep behavior consistent
 // even if a caller bypasses the HTTP layer.

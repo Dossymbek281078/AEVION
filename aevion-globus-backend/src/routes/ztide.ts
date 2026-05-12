@@ -177,13 +177,17 @@ ztideRouter.post("/events", writeLimit, async (req, res) => {
         : BASE_WEIGHTS[kind];
 
     const id = crypto.randomUUID();
-    const safeMeta = (meta && typeof meta === "object") ? meta : {};
+    const safeMeta = (meta && typeof meta === "object" && !Array.isArray(meta)) ? meta : {};
+    const metaJson = JSON.stringify(safeMeta);
+    if (metaJson.length > 4096) {
+      return res.status(400).json({ error: "meta_too_large", maxBytes: 4096 });
+    }
     const pool = getPool();
 
     await pool.query(
       `INSERT INTO "ZTideEvent" ("id","userId","kind","sourceModule","weight","meta")
        VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
-      [id, userId, kind, sourceModule, weight, JSON.stringify(safeMeta)],
+      [id, userId, kind, sourceModule, weight, metaJson],
     );
 
     // Upsert rolling score. Simple sum here; decay applied in /me read path.

@@ -473,7 +473,8 @@ qstoreRouter.get("/sellers/:userId", (req: Request, res: Response) => {
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : 0;
 
-
+  res.json({ userId, products, totalSales, avgRating: Math.round(avgRating * 10) / 10 });
+});
 
 // GET /api/qstore/me/dashboard/chart — daily sales & revenue for last N days (default 7)
 qstoreRouter.get("/me/dashboard/chart", (req: Request, res: Response) => {

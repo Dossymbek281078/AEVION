@@ -43,6 +43,7 @@ const rateLimit = require("express-rate-limit") as typeof import("express-rate-l
 import { getPool, getPoolStats } from "../lib/dbPool";
 import { verifyBearerOptional, verifyBearerToken } from "../lib/authJwt";
 import { captureException } from "../lib/sentry";
+import { emitVeilNetXEntry, emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { validateOr400 } from "../lib/qpaynetValidate";
 import { encryptSecret, decryptSecret, isEncryptionEnabled, needsEncryption } from "../lib/qpaynetCrypto";
 
@@ -949,6 +950,18 @@ qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
       return { txId, newBalance: fromTiin(BigInt(updated.rows[0].balance)) };
     });
     void auditLog(pool, ownerId, "deposit", { walletId, amount, txId: result.txId }, req);
+
+    // Fire-and-forget: cross-product trail on VeilNetX (no Z-Tide for self-deposit).
+    void emitVeilNetXEntry({
+      module: "qpaynet",
+      kind: "deposit",
+      fromIdentifier: `external:funding`,
+      toIdentifier: `qpaynet-wallet:${walletId}`,
+      amountCents: toTiin(amount).toString(),
+      currency: "KZT",
+      meta: { txId: result.txId, walletId },
+    }).catch(() => null);
+
     const body = { txId: result.txId, amount, newBalance: result.newBalance };
     await saveIdempotency(ownerId, idemKey, req.body, 200, body);
     res.json(body);
@@ -1008,6 +1021,21 @@ qpaynetRouter.post("/withdraw", moneyLimiter, async (req, res) => {
       return { txId, fee: fromTiin(fee), newBalance: fromTiin(BigInt(updated.rows[0].balance)) };
     });
     void auditLog(pool, ownerId, "withdraw", { walletId, amount, txId: result.txId }, req);
+
+    // Fire-and-forget: VeilNetX trail. Z-Tide qpaynet-payout (+3 score) for the owner.
+    emitEcosystemEvent({
+      module: "qpaynet",
+      ledger: {
+        kind: "withdrawal",
+        fromIdentifier: `qpaynet-wallet:${walletId}`,
+        toIdentifier: `external:payout`,
+        amountCents: toTiin(amount).toString(),
+        currency: "KZT",
+        meta: { txId: result.txId, walletId, feeKzt: result.fee },
+      },
+      reputation: { userId: ownerId, kind: "qpaynet-payout", meta: { txId: result.txId } },
+    });
+
     const body = { txId: result.txId, amount, fee: result.fee, newBalance: result.newBalance };
     await saveIdempotency(ownerId, idemKey, req.body, 200, body);
     res.json(body);
@@ -1114,6 +1142,19 @@ qpaynetRouter.post("/transfer", moneyLimiter, async (req, res) => {
     });
     void auditLog(pool, ownerId, "transfer", { fromWalletId, toWalletId, amount, txOutId: result.txOutId }, req);
     void notify(pool, result.toOwnerId, "payment_received", `Получено ${amount.toLocaleString("ru-RU")} ₸`, description, result.txInId, toTiin(amount));
+
+    // Fire-and-forget: VeilNetX trail. No Z-Tide on transfer (would double-count
+    // through both legs — savings flag for a separate "p2p-transfer" event).
+    void emitVeilNetXEntry({
+      module: "qpaynet",
+      kind: "transfer",
+      fromIdentifier: `qpaynet-wallet:${fromWalletId}`,
+      toIdentifier: `qpaynet-wallet:${toWalletId}`,
+      amountCents: toTiin(amount).toString(),
+      currency: "KZT",
+      meta: { txOutId: result.txOutId, txInId: result.txInId, feeKzt: result.fee },
+    }).catch(() => null);
+
     const responseBody = { txOutId: result.txOutId, txInId: result.txInId, amount, fee: result.fee, newBalance: result.newBalance };
     await saveIdempotency(ownerId, idemKey, req.body, 200, responseBody);
     res.json(responseBody);

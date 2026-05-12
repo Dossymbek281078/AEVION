@@ -79,6 +79,11 @@ const MODULES: Module[] = [
   { id: "labor-norms",    category: "tools",    href: "/smeta-trainer/drawings-practice/labor-norms",    icon: "👷", title: "Нормы труда",                       subtitle: "ЕНиР РК, выработка по видам работ, тарифы по разрядам",       level: "L3", exercises: 4,  color: "blue"    },
   { id: "equipment",      category: "tools",    href: "/smeta-trainer/drawings-practice/equipment",      icon: "🚜", title: "Эксплуатация машин",                subtitle: "Маш-час 25+ типовых машин, КИВ, расход ГСМ",                  level: "L3", exercises: 4,  color: "orange"  },
   { id: "transport",      category: "tools",    href: "/smeta-trainer/drawings-practice/transport",      icon: "🚛", title: "Транспортные расходы",              subtitle: "8 групп материалов, тарифы ТС, доставка по Алматы",          level: "L3", exercises: 4,  color: "amber"   },
+
+  // ── Расширенная практика и аналитика ──
+  { id: "case-house",     category: "practice", href: "/smeta-trainer/drawings-practice/case-house",     icon: "🏘", title: "КЕЙС: 9-этажный жилой дом",         subtitle: "Капстоун №2 — 2300 м², 8 этапов от паркинга до отделки",      level: "L5", exercises: 8,  color: "purple"  },
+  { id: "individual-rates",category: "tools",   href: "/smeta-trainer/drawings-practice/individual-rates",icon: "📝", title: "Индивидуальные расценки",          subtitle: "Когда ЭСН не подходит — методика составления и согласования", level: "L4", exercises: 3,  color: "sky"     },
+  { id: "index-history",  category: "tools",    href: "/smeta-trainer/drawings-practice/index-history",  icon: "📈", title: "Динамика индексов 2001-2025",       subtitle: "23 года истории, 16 регионов, 15 видов работ",                level: "L3", exercises: 3,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

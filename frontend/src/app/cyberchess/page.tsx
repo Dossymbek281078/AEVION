@@ -54,6 +54,7 @@ import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
 import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
 import { getDueReminders, dismissReminder } from "./coachKnowledge";
+import WorkspacePiP, { useWorkspacePiP, detectMediaSource } from "./WorkspacePiP";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 import Link from "next/link";
 import { MetricsCollector, computeCPL, type MoveMetric } from "./stockfishMetrics";
@@ -858,6 +859,9 @@ export default function CyberChessPage(){
   const[showMasters,sShowMasters]=useState(false);
   const[lbExpanded,sLbExpanded]=useState<LbCategory|null>(null);
   const[showMultiPanel,sShowMultiPanel]=useState(false);
+  // PiP — floating Picture-in-Picture для YouTube/Twitch стримов поверх доски.
+  // Hook возвращает: open (bool), source (PiPSource|null), show(), hide(), toggle()
+  const pip = useWorkspacePiP();
   // Активная "дашборд-плитка" (3 крупные карточки на лендинге).
   // play = варианты/режимы партии · learn = тренажёры · meta = аналитика+стрим.
   const[activeDash,sActiveDash]=useState<"play"|"learn"|"meta"|null>(null);
@@ -3543,6 +3547,26 @@ export default function CyberChessPage(){
             boxShadow:"0 2px 6px rgba(124,58,237,0.18)"
           }}>
             <span>📺</span><span>Multi-panel</span>
+          </button>
+          {/* Floating PiP — выпустить стрим во всплывающее перетаскиваемое окно поверх доски.
+              Если уже открыт — скрываем; если нет — спрашиваем URL и открываем. */}
+          <button onClick={()=>{
+            if(pip.open){pip.hide();return}
+            const url=window.prompt("YouTube или Twitch URL для floating PiP:","https://www.twitch.tv/gmhikaru");
+            if(!url)return;
+            const src=detectMediaSource(url.trim());
+            if(!src){showToast("Не распознал ссылку — нужен YouTube или Twitch URL","error");return}
+            pip.show(src);
+          }} title="Picture-in-Picture: floating stream window over the board" className="cc-focus-ring" style={{
+            display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",marginLeft:6,
+            borderRadius:RADIUS.full,
+            border:`1px solid ${pip.open?"#fb923c":"#c4b5fd"}`,
+            background:pip.open?"linear-gradient(135deg,#fff7ed,#ffedd5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
+            color:pip.open?"#9a3412":CC.accent,
+            fontSize:13,fontWeight:800,cursor:"pointer",
+            boxShadow:pip.open?"0 2px 6px rgba(251,146,60,0.25)":"0 2px 6px rgba(124,58,237,0.18)"
+          }}>
+            <span>{pip.open?"⏏":"📺"}</span><span>{pip.open?"Скрыть PiP":"PiP стрим"}</span>
           </button>
         </div>;
       })()}
@@ -7961,6 +7985,13 @@ ${question.trim()}`;
         }}>▶ Начать</button>
       </div>
     </div>}
+
+    {/* Floating PiP — YouTube/Twitch стрим поверх доски, перетаскиваемый */}
+    {pip.open&&pip.source&&<WorkspacePiP
+      initialSource={pip.source}
+      onClose={pip.hide}
+      showChatPanel={pip.source.kind==="twitch"}
+    />}
 
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay

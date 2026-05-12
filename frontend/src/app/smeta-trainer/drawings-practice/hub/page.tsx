@@ -74,6 +74,11 @@ const MODULES: Module[] = [
   { id: "quiz",           category: "practice", href: "/smeta-trainer/drawings-practice/quiz",           icon: "🎯", title: "Адаптивный квиз",                   subtitle: "40+ вопросов из всех разделов, тайминг, оценка",              level: "L4", exercises: 40, color: "amber"   },
   { id: "glossary",       category: "tools",    href: "/smeta-trainer/drawings-practice/glossary",       icon: "📖", title: "Глоссарий терминов",                subtitle: "80+ терминов сметного дела РК с поиском",                     level: "L2", exercises: 0,  color: "slate"   },
   { id: "materials",      category: "tools",    href: "/smeta-trainer/drawings-practice/materials",      icon: "💼", title: "Цены на материалы",                 subtitle: "60+ позиций ССЦ РК 8.04-08-2025 с калькулятором",            level: "L3", exercises: 0,  color: "emerald" },
+
+  // ── Сметная база — труд, машины, транспорт ──
+  { id: "labor-norms",    category: "tools",    href: "/smeta-trainer/drawings-practice/labor-norms",    icon: "👷", title: "Нормы труда",                       subtitle: "ЕНиР РК, выработка по видам работ, тарифы по разрядам",       level: "L3", exercises: 4,  color: "blue"    },
+  { id: "equipment",      category: "tools",    href: "/smeta-trainer/drawings-practice/equipment",      icon: "🚜", title: "Эксплуатация машин",                subtitle: "Маш-час 25+ типовых машин, КИВ, расход ГСМ",                  level: "L3", exercises: 4,  color: "orange"  },
+  { id: "transport",      category: "tools",    href: "/smeta-trainer/drawings-practice/transport",      icon: "🚛", title: "Транспортные расходы",              subtitle: "8 групп материалов, тарифы ТС, доставка по Алматы",          level: "L3", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

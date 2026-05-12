@@ -63,7 +63,8 @@ async function getWaitlistCount(): Promise<number> {
       const pool = getPool();
       const r = await pool.query("SELECT COUNT(*)::int AS c FROM veilnetx_waitlist");
       return r.rows[0]?.c ?? 0;
-    } catch {
+    } catch (err) {
+      console.warn("[veilnetx] getWaitlistCount db fallback to memory", err instanceof Error ? err.message : err);
       return memoryWaitlist.size;
     }
   }
@@ -85,8 +86,8 @@ async function addToWaitlist(email: string): Promise<{ created: boolean; id: str
         [id, emailHash, email],
       );
       return { created: r.rowCount > 0, id: r.rows[0]?.id ?? id };
-    } catch {
-      // fall through to memory
+    } catch (err) {
+      console.warn("[veilnetx] addToWaitlist db fallback to memory", err instanceof Error ? err.message : err);
     }
   }
   if (memoryWaitlist.has(emailHash)) {

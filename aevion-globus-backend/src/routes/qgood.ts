@@ -291,19 +291,7 @@ qgoodRouter.get("/stats", readLimit, async (_req, res) => {
          COALESCE(SUM("donorCount"),0)::int                         AS total_donors
        FROM "QGoodCampaign"`,
     );
-    const catR = await pool.query(`
-      SELECT
-        "category",
-        COUNT(*)::int                       AS campaign_count,
-        COALESCE(SUM("raisedCents"),0)::bigint AS total_raised_cents,
-        COALESCE(SUM("donorCount"),0)::int  AS donor_count
-      FROM "QGoodCampaign"
-      WHERE "status" = 'active'
-      GROUP BY "category"
-      ORDER BY total_raised_cents DESC
-      LIMIT 5
-    `);
-    res.json({ ...totals.rows[0], topCategories: catR.rows, service: "qgood", currency: "USD" });
+    res.json({ ...totals.rows[0], service: "qgood", currency: "USD" });
   } catch (err: unknown) {
     console.error("[qgood] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });

@@ -86,13 +86,13 @@ export default function DocumentDetailPage() {
         <span className="text-slate-300 text-sm truncate">{doc.title}</span>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-white break-words">{doc.title}</h1>
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-white">{doc.title}</h1>
             <p className="text-xs text-slate-500 mt-1">Created {new Date(doc.createdAt).toLocaleDateString()}</p>
           </div>
-          <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold border whitespace-nowrap ${
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold border ${
             doc.revokedAt ? "bg-rose-500/15 text-rose-300 border-rose-500/30" :
             isLive ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" :
             "bg-slate-500/15 text-slate-400 border-slate-500/30"
@@ -111,7 +111,7 @@ export default function DocumentDetailPage() {
           ].map(({ label, value }) => (
             <div key={label} className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-center">
               <p className="text-lg font-bold text-white">{value}</p>
-              <p className="text-xs text-slate-500">{label}</p>
+              <p className="text-[11px] text-slate-500">{label}</p>
             </div>
           ))}
         </div>
@@ -125,7 +125,7 @@ export default function DocumentDetailPage() {
         {/* Share link */}
         {doc.shareUrl && (
           <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-            <p className="text-xs text-slate-500 mb-1.5">Share link</p>
+            <p className="text-[11px] text-slate-500 mb-1.5">Share link</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs text-emerald-300 truncate">{doc.shareUrl}</code>
               <button
@@ -142,7 +142,7 @@ export default function DocumentDetailPage() {
         <div className="flex flex-wrap gap-2 pt-1">
           <Link
             href={`/qcontract/documents/${id}/log`}
-            className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300 hover:bg-white/10 min-h-[36px] inline-flex items-center"
+            className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
           >
             Audit log →
           </Link>
@@ -150,7 +150,7 @@ export default function DocumentDetailPage() {
             <button
               onClick={revoke}
               disabled={revoking}
-              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 min-h-[36px]"
+              className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
             >
               {revoking ? "Revoking…" : "Revoke access"}
             </button>

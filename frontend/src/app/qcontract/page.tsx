@@ -19,9 +19,9 @@ interface DocItem {
 }
 
 function StatusBadge({ doc }: { doc: DocItem }) {
-  if (doc.revokedAt) return <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Отозван</span>;
-  if (doc.expired) return <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">Истёк</span>;
-  return <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Активен</span>;
+  if (doc.revokedAt) return <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">Отозван</span>;
+  if (doc.expired) return <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-semibold">Истёк</span>;
+  return <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">Активен</span>;
 }
 
 function formatDate(iso: string) {
@@ -108,44 +108,40 @@ export default function QContractHome() {
         }}
       />
       {/* Header */}
-      <header className="border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <span className="text-red-500 font-black text-lg tracking-tight">Q</span>
           <span className="font-bold text-white">Contract</span>
-          <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">BETA</span>
+          <span className="text-[10px] bg-red-900 text-red-300 px-2 py-0.5 rounded-full">BETA</span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <Link href="/" className="text-xs text-slate-400 hover:text-white hidden sm:inline">← AEVION</Link>
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
           <Link
             href="/qcontract/create"
-            className="px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors"
           >
-            <span className="sm:hidden">+ Создать</span>
-            <span className="hidden sm:inline">+ Создать документ</span>
+            + Создать документ
           </Link>
         </div>
       </header>
 
       {/* Hero */}
       {!token && (
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
-          <div className="text-5xl sm:text-6xl mb-6">💣</div>
-          <h1 className="text-2xl sm:text-4xl font-black mb-4 leading-tight">
-            <span className="block sm:inline">Документы, которые </span>
-            <span className="block sm:inline">сами себя уничтожают</span>
-          </h1>
-          <p className="text-slate-400 text-base sm:text-lg mb-8 leading-relaxed">
-            Отправьте секретный документ. Установите лимит просмотров или срок действия.
+        <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+          <div className="text-6xl mb-6">💣</div>
+          <h1 className="text-4xl font-black mb-4">Документы, которые<br />сами себя уничтожают</h1>
+          <p className="text-slate-400 text-lg mb-8 leading-relaxed">
+            Отправьте секретный документ. Установите лимит просмотров или срок действия.<br />
             После — он исчезнет навсегда. Никаких следов.
           </p>
-          <div className="flex items-center justify-center gap-2 sm:gap-4 flex-wrap mb-10">
+          <div className="flex items-center justify-center gap-4 flex-wrap mb-10">
             {[
               ["🔒", "Пароль на доступ"],
               ["👁", "Лимит просмотров"],
               ["⏱", "Срок действия"],
               ["📊", "Лог просмотров"],
             ].map(([icon, label]) => (
-              <div key={label} className="flex items-center gap-2 text-xs sm:text-sm text-slate-300 bg-slate-800 px-3 sm:px-4 py-2 rounded-xl">
+              <div key={label} className="flex items-center gap-2 text-sm text-slate-300 bg-slate-800 px-4 py-2 rounded-xl">
                 <span>{icon}</span>
                 <span>{label}</span>
               </div>
@@ -153,7 +149,7 @@ export default function QContractHome() {
           </div>
           <Link
             href="/qcontract/create"
-            className="inline-block px-6 sm:px-8 py-3 sm:py-4 bg-red-600 hover:bg-red-700 text-white text-sm sm:text-base font-bold rounded-xl transition-colors"
+            className="inline-block px-8 py-4 bg-red-600 hover:bg-red-700 text-white text-base font-bold rounded-xl transition-colors"
           >
             Создать саморазрушающийся документ →
           </Link>
@@ -163,7 +159,7 @@ export default function QContractHome() {
 
       {/* Dashboard */}
       {token && (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+        <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
             <div>
               <h2 className="text-xl font-bold">Мои документы</h2>
@@ -214,32 +210,32 @@ export default function QContractHome() {
                   doc.expired ? "border-slate-800 bg-slate-900/30 opacity-60" : "border-slate-700 bg-slate-900 hover:border-slate-600"
                 }`}
               >
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <StatusBadge doc={doc} />
-                      {doc.hasPassword && <span className="text-xs text-slate-400">🔒 Пароль</span>}
-                      {doc.contentType === "url" && <span className="text-xs text-slate-400">🔗 URL</span>}
+                      {doc.hasPassword && <span className="text-[10px] text-slate-400">🔒 Пароль</span>}
+                      {doc.contentType === "url" && <span className="text-[10px] text-slate-400">🔗 URL</span>}
                     </div>
                     <h3 className="font-semibold text-white truncate">{doc.title}</h3>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 flex-wrap">
                       <span>👁 {doc.viewCount}{doc.maxViews ? `/${doc.maxViews}` : ""} просмотров</span>
                       {doc.expiresAt && <span>⏱ до {formatDate(doc.expiresAt)}</span>}
                       <span>📅 {formatDate(doc.createdAt)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     {!doc.expired && (
                       <>
                         <button
                           onClick={() => copyLink(doc.shareUrl, doc.id)}
-                          className="text-xs px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px]"
+                          className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
                         >
                           {copied === doc.id ? "✓ Скопировано" : "Ссылка"}
                         </button>
                         <Link
                           href={`/qcontract/documents/${doc.id}/log`}
-                          className="text-xs px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px] inline-flex items-center"
+                          className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
                         >
                           Лог
                         </Link>
@@ -247,7 +243,7 @@ export default function QContractHome() {
                           <button
                             onClick={() => extend(doc.id)}
                             title="Продлить срок действия"
-                            className="text-xs px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px]"
+                            className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
                           >
                             ⏱ Продлить
                           </button>
@@ -255,7 +251,7 @@ export default function QContractHome() {
                         <button
                           onClick={() => revoke(doc.id)}
                           disabled={revoking === doc.id}
-                          className="text-xs px-3 py-2 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors disabled:opacity-40 min-h-[36px]"
+                          className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors disabled:opacity-40"
                         >
                           {revoking === doc.id ? "..." : "Отозвать"}
                         </button>
@@ -282,9 +278,9 @@ function QContractStats() {
   }, []);
   if (!stats) return null;
   return (
-    <div className="border-t border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-center gap-3 sm:gap-8 text-xs text-slate-600 flex-wrap">
+    <div className="border-t border-slate-800 px-6 py-4 flex items-center justify-center gap-8 text-xs text-slate-600">
       <span>{stats.totalDocuments} документов создано</span>
-      <span className="hidden sm:inline">·</span>
+      <span>·</span>
       <span>{stats.totalViews} просмотров зафиксировано</span>
     </div>
   );

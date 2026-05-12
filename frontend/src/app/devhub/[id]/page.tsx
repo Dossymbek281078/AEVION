@@ -18,6 +18,7 @@ interface Project {
   repoUrl: string | null;
   customDomain: string | null;
   envVars: Record<string, string>;
+  collaborators: Array<{ userId: string; role: string }>;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,6 +67,15 @@ const LANG_COLORS: Record<string, string> = {
   plaintext: "#94a3b8",
 };
 
+// Subtle syntax background tints per language
+const LANG_BG_TINTS: Record<string, string> = {
+  typescript: "rgba(59,130,246,0.03)",
+  javascript: "rgba(251,191,36,0.03)",
+  css: "rgba(139,92,246,0.03)",
+  html: "rgba(249,115,22,0.03)",
+  python: "rgba(16,185,129,0.03)",
+};
+
 function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info"; onClose: () => void }) {
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : "#dbeafe";
   const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : "#1e40af";
@@ -77,7 +87,40 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
       display: "flex", alignItems: "center", gap: 10,
     }}>
       <span>{message}</span>
-      <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>×</button>
+      <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
+    </div>
+  );
+}
+
+// Context menu for file rename/delete
+function FileContextMenu({
+  x, y, onRename, onDelete, onClose,
+}: { x: number; y: number; onRename: () => void; onDelete: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const handler = () => onClose();
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+  return (
+    <div
+      style={{
+        position: "fixed", left: x, top: y, background: "#fff", border: "1px solid #e2e8f0",
+        borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 300, minWidth: 140, overflow: "hidden",
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <button
+        onClick={() => { onRename(); onClose(); }}
+        style={{ display: "block", width: "100%", padding: "9px 14px", border: "none", background: "none", textAlign: "left", fontSize: 13, cursor: "pointer", color: "#0f172a" }}
+      >
+        Rename
+      </button>
+      <button
+        onClick={() => { onDelete(); onClose(); }}
+        style={{ display: "block", width: "100%", padding: "9px 14px", border: "none", background: "none", textAlign: "left", fontSize: 13, cursor: "pointer", color: "#ef4444" }}
+      >
+        Delete
+      </button>
     </div>
   );
 }
@@ -94,7 +137,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
   // AI Chat state
-  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
@@ -114,6 +157,30 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   // New file
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState("");
+
+  // Build log panel (SSE)
+  const [buildLog, setBuildLog] = useState<string[]>([]);
+  const [buildDone, setBuildDone] = useState(false);
+  const [buildLiveUrl, setBuildLiveUrl] = useState<string | null>(null);
+  const [showBuildLog, setShowBuildLog] = useState(false);
+  const buildLogRef = useRef<HTMLDivElement | null>(null);
+  const currentDeployIdRef = useRef<string | null>(null);
+
+  // File rename/delete context menu
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileItem } | null>(null);
+  const [renamingFile, setRenamingFile] = useState<FileItem | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  // Settings state
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsDesc, setSettingsDesc] = useState("");
+  const [settingsDomain, setSettingsDomain] = useState("");
+  const [settingsCollab, setSettingsCollab] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // Line number gutter
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -150,6 +217,22 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       .then((d) => setTemplates(d.templates || []))
       .catch(() => {});
   }, []);
+
+  // Sync settings form from project
+  useEffect(() => {
+    if (project) {
+      setSettingsName(project.name);
+      setSettingsDesc(project.description ?? "");
+      setSettingsDomain(project.customDomain ?? "");
+    }
+  }, [project]);
+
+  // Auto-scroll build log
+  useEffect(() => {
+    if (buildLogRef.current) {
+      buildLogRef.current.scrollTop = buildLogRef.current.scrollHeight;
+    }
+  }, [buildLog]);
 
   const loadFile = async (file: FileItem) => {
     if (selectedFile?.path !== file.path) {
@@ -195,6 +278,13 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // Sync gutter scroll with textarea scroll
+  const handleTextareaScroll = () => {
+    if (textareaRef.current && gutterRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  };
+
   const createNewFile = async () => {
     if (!newFileName.trim() || !project) return;
     try {
@@ -232,6 +322,39 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  const renameFile = async (oldPath: string, newPath: string) => {
+    if (!project || !newPath.trim() || oldPath === newPath.trim()) {
+      setRenamingFile(null);
+      return;
+    }
+    try {
+      // Get current content
+      const file = files.find((f) => f.path === oldPath);
+      if (!file) return;
+      // Create new file with new path
+      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(newPath.trim())}`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: file.content, language: file.language }),
+      });
+      // Delete old file
+      await fetch(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(oldPath)}`), { method: "DELETE" });
+      // Update state
+      setFiles((fs) => {
+        const updated = fs.map((f) => f.path === oldPath ? { ...f, path: newPath.trim() } : f);
+        return updated.sort((a, b) => a.path.localeCompare(b.path));
+      });
+      if (selectedFile?.path === oldPath) {
+        setSelectedFile((sf) => sf ? { ...sf, path: newPath.trim() } : null);
+      }
+      showToast("File renamed", "success");
+    } catch {
+      showToast("Rename failed", "error");
+    } finally {
+      setRenamingFile(null);
+    }
+  };
+
   const generateCode = async () => {
     if (!aiPrompt.trim() || !project) return;
     setGenerating(true);
@@ -259,6 +382,34 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // Connect to SSE log stream for a given deploymentId
+  const streamBuildLog = useCallback((projectId: string, deploymentId: string) => {
+    setBuildLog([]);
+    setBuildDone(false);
+    setBuildLiveUrl(null);
+    setShowBuildLog(true);
+    currentDeployIdRef.current = deploymentId;
+
+    const es = new EventSource(apiUrl(`/api/devhub/projects/${projectId}/deployments/${deploymentId}/log`));
+    es.onmessage = (evt) => {
+      try {
+        const payload = JSON.parse(evt.data);
+        if (payload.done) {
+          setBuildDone(true);
+          setBuildLiveUrl(payload.deployUrl ?? null);
+          es.close();
+        } else if (payload.line) {
+          setBuildLog((prev) => [...prev, payload.line]);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+    es.onerror = () => {
+      es.close();
+    };
+  }, []);
+
   const deploy = async () => {
     if (!project) return;
     setDeploying(true);
@@ -267,12 +418,14 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Deploy failed");
+      const deploymentId: string = data.deploymentId;
+      // Start streaming build log
+      streamBuildLog(project.id, deploymentId);
+      // After simulation window, refresh project
       setTimeout(async () => {
         const projR = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
         const projData = await projR.json();
         setProject(projData.project);
-        const url = projData.project.deployUrl || `https://${project.id.slice(0, 8)}.aevion.app`;
-        showToast(`Live at ${url}`, "success");
         setDeploying(false);
         if (activeTab === "deployments") fetchDeployments();
       }, 4000);
@@ -352,6 +505,56 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  const saveSettings = async () => {
+    if (!project) return;
+    setSavingSettings(true);
+    try {
+      await fetch(apiUrl(`/api/devhub/projects/${project.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: settingsName,
+          description: settingsDesc || null,
+          customDomain: settingsDomain || null,
+        }),
+      });
+      setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
+      showToast("Settings saved", "success");
+    } catch {
+      showToast("Failed to save settings", "error");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const addCollaborator = async () => {
+    if (!project || !settingsCollab.trim()) return;
+    try {
+      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: settingsCollab.trim(), role: "editor" }),
+      });
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators`), { cache: "no-store" });
+      const data = await r.json();
+      setProject((p) => p ? { ...p, collaborators: data.collaborators || [] } : p);
+      setSettingsCollab("");
+      showToast("Collaborator added", "success");
+    } catch {
+      showToast("Failed to add collaborator", "error");
+    }
+  };
+
+  const removeCollaborator = async (collabUserId: string) => {
+    if (!project) return;
+    try {
+      await fetch(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
+      setProject((p) => p ? { ...p, collaborators: p.collaborators.filter((c) => c.userId !== collabUserId) } : p);
+    } catch {
+      showToast("Failed to remove collaborator", "error");
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
@@ -373,12 +576,17 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   const stackColor = STACK_COLORS[project.stack] ?? "#64748b";
   const statusStyle = STATUS_STYLES[project.status] ?? STATUS_STYLES.draft;
+  const editorLang = selectedFile?.language ?? "plaintext";
+  const editorBgTint = LANG_BG_TINTS[editorLang] ?? "transparent";
+
+  // Compute line count for gutter
+  const lineCount = editorContent.split("\n").length;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
       {/* Top bar */}
       <div style={{ background: "#fff", borderBottom: "1px solid rgba(15,23,42,0.1)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>← DevHub</Link>
+        <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>Back</Link>
         <Wave1Nav />
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 800, fontSize: 16, color: "#0f172a" }}>{project.name}</span>
@@ -391,7 +599,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
           {saving && <span style={{ fontSize: 12, color: "#94a3b8" }}>Saving...</span>}
           {project.deployUrl && (
             <a href={project.deployUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
-              View live &rarr;
+              View live
             </a>
           )}
           <button
@@ -408,8 +616,44 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
         </div>
       </div>
 
+      {/* Build Log Panel */}
+      {showBuildLog && (
+        <div style={{
+          background: "#0f172a", color: "#94a3b8", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+          fontSize: 12, lineHeight: 1.6, padding: "12px 20px", borderBottom: "1px solid #1e293b",
+          maxHeight: 160, overflow: "hidden", display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontWeight: 700, color: "#64748b", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>Build Log</span>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {buildDone && (
+                <span style={{ padding: "2px 10px", borderRadius: 6, background: "#d1fae5", color: "#065f46", fontSize: 12, fontWeight: 700 }}>
+                  Live
+                </span>
+              )}
+              <button
+                onClick={() => setShowBuildLog(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 16, lineHeight: 1 }}
+              >x</button>
+            </div>
+          </div>
+          <div ref={buildLogRef} style={{ flex: 1, overflowY: "auto" }}>
+            {buildLog.map((line, i) => (
+              <div key={i} style={{ color: line.includes("passed") || line.includes("complete") ? "#4ade80" : "#94a3b8" }}>
+                {line}
+              </div>
+            ))}
+            {buildDone && buildLiveUrl && (
+              <div style={{ color: "#4ade80", marginTop: 4 }}>
+                Live at: <a href={buildLiveUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#34d399" }}>{buildLiveUrl}</a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main IDE area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", height: "calc(100vh - 60px)" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", height: showBuildLog ? "calc(100vh - 220px)" : "calc(100vh - 60px)" }}>
         {/* File tree — left sidebar */}
         <div style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -448,10 +692,15 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
               files.map((f) => {
                 const langColor = LANG_COLORS[f.language] ?? "#94a3b8";
                 const isSelected = selectedFile?.path === f.path;
+                const isRenaming = renamingFile?.path === f.path;
                 return (
                   <div
                     key={f.path}
-                    onClick={() => loadFile(f)}
+                    onClick={() => !isRenaming && loadFile(f)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, file: f });
+                    }}
                     style={{
                       display: "flex", alignItems: "center", padding: "7px 12px",
                       cursor: "pointer", background: isSelected ? "#f0fdfa" : "transparent",
@@ -460,14 +709,30 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     }}
                   >
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: langColor, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, color: isSelected ? "#0f172a" : "#374151", flex: 1, wordBreak: "break-all", lineHeight: 1.3 }}>
-                      {f.path}
-                    </span>
+                    {isRenaming ? (
+                      <input
+                        type="text"
+                        value={renameValue}
+                        autoFocus
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => renameFile(f.path, renameValue)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") renameFile(f.path, renameValue);
+                          if (e.key === "Escape") setRenamingFile(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ flex: 1, fontSize: 12, padding: "2px 4px", border: "1px solid #0d9488", borderRadius: 4, outline: "none" }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: 12, color: isSelected ? "#0f172a" : "#374151", flex: 1, wordBreak: "break-all", lineHeight: 1.3 }}>
+                        {f.path}
+                      </span>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 14, padding: 2, flexShrink: 0 }}
                       title="Delete file"
-                    >×</button>
+                    >x</button>
                   </div>
                 );
               })
@@ -487,38 +752,60 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     {selectedFile.language}
                   </span>
                 </div>
-                <textarea
-                  value={editorContent}
-                  onChange={(e) => handleEditorChange(e.target.value)}
-                  onBlur={handleEditorBlur}
-                  style={{
-                    flex: 1, width: "100%", border: "none", outline: "none", resize: "none",
-                    fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace",
-                    fontSize: 13, lineHeight: 1.7, padding: "16px 20px",
-                    background: "#1e293b", color: "#e2e8f0", boxSizing: "border-box",
-                    tabSize: 2,
-                  }}
-                  spellCheck={false}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab") {
-                      e.preventDefault();
-                      const start = e.currentTarget.selectionStart;
-                      const end = e.currentTarget.selectionEnd;
-                      const val = editorContent;
-                      const next = val.substring(0, start) + "  " + val.substring(end);
-                      setEditorContent(next);
-                      requestAnimationFrame(() => {
-                        e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
-                      });
-                    }
-                  }}
-                />
+                {/* Editor with line number gutter */}
+                <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#1e293b", position: "relative" }}>
+                  {/* Line number gutter */}
+                  <div
+                    ref={gutterRef}
+                    style={{
+                      width: 44, background: "#16213a", color: "#475569", fontSize: 12,
+                      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
+                      lineHeight: 1.7, paddingTop: 16, paddingBottom: 16,
+                      textAlign: "right", paddingRight: 8, userSelect: "none",
+                      overflowY: "hidden", flexShrink: 0,
+                    }}
+                  >
+                    {Array.from({ length: lineCount }, (_, i) => (
+                      <div key={i + 1}>{i + 1}</div>
+                    ))}
+                  </div>
+                  <textarea
+                    ref={textareaRef}
+                    value={editorContent}
+                    onChange={(e) => handleEditorChange(e.target.value)}
+                    onBlur={handleEditorBlur}
+                    onScroll={handleTextareaScroll}
+                    style={{
+                      flex: 1, border: "none", outline: "none", resize: "none",
+                      fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace",
+                      fontSize: 13, lineHeight: 1.7, padding: "16px 20px",
+                      background: editorBgTint !== "transparent"
+                        ? `linear-gradient(${editorBgTint}, ${editorBgTint}), #1e293b`
+                        : "#1e293b",
+                      color: "#e2e8f0", boxSizing: "border-box",
+                      tabSize: 2,
+                    }}
+                    spellCheck={false}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab") {
+                        e.preventDefault();
+                        const start = e.currentTarget.selectionStart;
+                        const end = e.currentTarget.selectionEnd;
+                        const val = editorContent;
+                        const next = val.substring(0, start) + "  " + val.substring(end);
+                        setEditorContent(next);
+                        requestAnimationFrame(() => {
+                          e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
+                        });
+                      }
+                    }}
+                  />
+                </div>
               </>
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#64748b" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>📂</div>
-                  <p>Select a file or use AI to generate code</p>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>Select a file or use AI to generate code</div>
                 </div>
               </div>
             )}
@@ -527,20 +814,19 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
           {/* AI Panel — bottom 40% */}
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
-            <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0 }}>
-              {(["chat", "templates", "env", "deployments"] as const).map((tab) => (
+            <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
+              {(["chat", "templates", "env", "deployments", "settings"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   style={{
-                    padding: "10px 16px", border: "none", background: "none", cursor: "pointer",
-                    fontSize: 13, fontWeight: 600,
+                    padding: "10px 14px", border: "none", background: "none", cursor: "pointer",
+                    fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
                     color: activeTab === tab ? "#0d9488" : "#64748b",
                     borderBottom: activeTab === tab ? "2px solid #0d9488" : "2px solid transparent",
-                    textTransform: "capitalize",
                   }}
                 >
-                  {tab === "chat" ? "AI Generate" : tab === "env" ? "Env Vars" : tab}
+                  {tab === "chat" ? "AI Generate" : tab === "env" ? "Env Vars" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
             </div>
@@ -621,7 +907,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     <div key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 8 }}>
                       <span style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#0f172a", flex: 1 }}>{e.key}</span>
                       <span style={{ fontSize: 12, color: "#94a3b8" }}>***</span>
-                      <button onClick={() => removeEnvVar(e.key)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700 }}>×</button>
+                      <button onClick={() => removeEnvVar(e.key)} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700 }}>x</button>
                     </div>
                   ))}
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -667,10 +953,97 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   })}
                 </div>
               )}
+
+              {/* Settings Tab */}
+              {activeTab === "settings" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Project Name</label>
+                    <input
+                      type="text"
+                      value={settingsName}
+                      onChange={(e) => setSettingsName(e.target.value)}
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Description</label>
+                    <input
+                      type="text"
+                      value={settingsDesc}
+                      onChange={(e) => setSettingsDesc(e.target.value)}
+                      placeholder="Short description..."
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Custom Domain</label>
+                    <input
+                      type="text"
+                      value={settingsDomain}
+                      onChange={(e) => setSettingsDomain(e.target.value)}
+                      placeholder="myapp.example.com"
+                      style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <button
+                    onClick={saveSettings}
+                    disabled={savingSettings}
+                    style={{ padding: "9px 18px", background: savingSettings ? "#99f6e4" : "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: savingSettings ? "not-allowed" : "pointer", alignSelf: "flex-start" }}
+                  >
+                    {savingSettings ? "Saving..." : "Save Settings"}
+                  </button>
+
+                  {/* Collaborators */}
+                  <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 10 }}>Collaborators</div>
+                    {(project.collaborators || []).map((c) => (
+                      <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f8fafc" }}>
+                        <span style={{ flex: 1, fontSize: 13, fontFamily: "monospace", color: "#0f172a" }}>{c.userId}</span>
+                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 5, background: "#f1f5f9", color: "#64748b" }}>{c.role}</span>
+                        <button
+                          onClick={() => removeCollaborator(c.userId)}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700 }}
+                        >x</button>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <input
+                        type="text"
+                        value={settingsCollab}
+                        onChange={(e) => setSettingsCollab(e.target.value)}
+                        placeholder="user-id or email"
+                        style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
+                      />
+                      <button
+                        onClick={addCollaborator}
+                        style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* File context menu */}
+      {contextMenu && (
+        <FileContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onRename={() => {
+            setRenamingFile(contextMenu.file);
+            setRenameValue(contextMenu.file.path);
+          }}
+          onDelete={() => deleteFile(contextMenu.file.path)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>

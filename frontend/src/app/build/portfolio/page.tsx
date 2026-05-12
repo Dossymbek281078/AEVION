@@ -114,7 +114,7 @@ function Body() {
             placeholder="Photo URL (https://...)"
             className="w-full rounded-md border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none"
           />
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-3">
             <input
               ref={captionRef}
               type="text"
@@ -166,16 +166,16 @@ function Body() {
                     <p className="text-sm font-medium text-slate-100">{photo.caption}</p>
                   )}
                   {photo.projectType && (
-                    <p className="text-xs text-slate-400">{photo.projectType}</p>
+                    <p className="text-[11px] text-slate-400">{photo.projectType}</p>
                   )}
                   <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xs text-slate-600">
+                    <p className="text-[10px] text-slate-600">
                       {new Date(photo.createdAt).toLocaleDateString()}
                     </p>
                     <button
                       onClick={() => remove(photo.id)}
                       disabled={deleting === photo.id}
-                      className="text-xs text-rose-400 hover:text-rose-300 disabled:opacity-40 px-2 py-1 -mx-2 -my-1 min-h-[32px]"
+                      className="text-[11px] text-rose-400 hover:text-rose-300 disabled:opacity-40"
                     >
                       {deleting === photo.id ? "Removing…" : "Remove"}
                     </button>

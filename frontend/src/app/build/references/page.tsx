@@ -52,7 +52,7 @@ function ReferenceCard({ ref: r, showWorker = false }: { ref: Reference; showWor
             {r.workerTitle && <span className="text-xs text-slate-500">{r.workerTitle}</span>}
             <StarRating rating={r.rating} />
             {r.recommend && (
-              <span className="text-xs bg-emerald-900/40 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-800/40">
+              <span className="text-[10px] bg-emerald-900/40 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-800/40">
                 Рекомендует
               </span>
             )}

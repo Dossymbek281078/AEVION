@@ -38,9 +38,15 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
         "deployUrl"    TEXT,
         "customDomain" TEXT,
         "envVars"      JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "collaborators" JSONB NOT NULL DEFAULT '[]'::jsonb,
         "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         "updatedAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+    `);
+    // V2 migration: add collaborators column if not present (idempotent)
+    await pool.query(`
+      ALTER TABLE "DevHubProject"
+        ADD COLUMN IF NOT EXISTS "collaborators" JSONB NOT NULL DEFAULT '[]'::jsonb;
     `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "DevHubProject_user_idx"

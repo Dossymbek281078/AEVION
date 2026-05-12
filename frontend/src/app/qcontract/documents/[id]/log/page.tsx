@@ -83,18 +83,18 @@ export default function DocumentLog() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center gap-3 sm:gap-4">
-        <Link href="/qcontract" className="text-slate-400 hover:text-white text-sm whitespace-nowrap">← Дашборд</Link>
-        <span className="text-slate-600 hidden sm:inline">·</span>
-        <h1 className="text-sm font-bold truncate flex-1 min-w-0">{data.title}</h1>
-        <div className="flex items-center gap-2 shrink-0">
-          {data.revokedAt && <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">Отозван</span>}
-          {data.expired && !data.revokedAt && <span className="text-xs bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">Истёк</span>}
-          {!data.expired && <span className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">Активен</span>}
+      <header className="border-b border-slate-800 px-6 py-4 flex items-center gap-4">
+        <Link href="/qcontract" className="text-slate-400 hover:text-white text-sm">← Дашборд</Link>
+        <span className="text-slate-600">·</span>
+        <h1 className="text-sm font-bold truncate max-w-xs">{data.title}</h1>
+        <div className="ml-auto flex items-center gap-2">
+          {data.revokedAt && <span className="text-[10px] bg-red-900 text-red-300 px-2 py-0.5 rounded-full">Отозван</span>}
+          {data.expired && !data.revokedAt && <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">Истёк</span>}
+          {!data.expired && <span className="text-[10px] bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">Активен</span>}
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
@@ -106,7 +106,7 @@ export default function DocumentLog() {
             <div key={label} className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-center">
               <div className="text-2xl mb-1">{icon}</div>
               <div className="text-lg font-bold text-white">{value}</div>
-              <div className="text-xs text-slate-500">{label}</div>
+              <div className="text-[11px] text-slate-500">{label}</div>
             </div>
           ))}
         </div>
@@ -146,7 +146,7 @@ export default function DocumentLog() {
                           <span className="text-slate-600 italic">не указан</span>
                         )}
                         {v.signedAt && (
-                          <span className="ml-2 text-xs text-emerald-600">✍️ {new Date(v.signedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="ml-2 text-[10px] text-emerald-600">✍️ {new Date(v.signedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</span>
                         )}
                       </td>
                       <td className="py-2.5 pr-4 font-mono text-slate-400">{v.viewerIp ?? "—"}</td>

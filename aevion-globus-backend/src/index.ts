@@ -52,13 +52,9 @@ import { veilnetxLedgerRouter } from "./routes/veilnetxLedger";
 import { ztideRouter } from "./routes/ztide";
 import { qchaingovRouter } from "./routes/qchaingov";
 import { isSentryEnabled, captureException } from "./lib/sentry";
-import {
-  FINTECH_OPENAPI_PATHS,
-  FINTECH_OPENAPI_SCHEMAS,
-  FINTECH_OPENAPI_TAGS,
-} from "./lib/openapiFintechSpec";
 import { devhubRouter } from "./routes/devhub";
-import { chessRouter } from "./routes/chess";
+import { qmediaRouter } from "./routes/qmedia";
+import { paymentsRouter } from "./routes/payments";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -371,16 +367,7 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/roadmap": {
         get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
-      ...FINTECH_OPENAPI_PATHS,
     },
-    components: {
-      schemas: {
-        ...FINTECH_OPENAPI_SCHEMAS,
-      },
-    },
-    tags: [
-      ...FINTECH_OPENAPI_TAGS,
-    ],
   });
 });
 
@@ -393,7 +380,6 @@ app.use("/api/qright", qrightRouter);
 app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
-app.use("/api/chess", chessRouter);
 
 // ==========================
 // QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)
@@ -469,6 +455,10 @@ for (const cfg of PLANNING_MODULES) {
 
 // DevHub — AI-powered developer platform
 app.use("/api/devhub", devhubRouter);
+// QMedia — music, video and creative tools
+app.use("/api/qmedia", qmediaRouter);
+// Payments — Stripe + PayBox KZ unified gateway
+app.use("/api/payments", paymentsRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

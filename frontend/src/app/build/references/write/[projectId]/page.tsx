@@ -166,7 +166,7 @@ function WriteReferenceForm() {
                 key={s}
                 type="button"
                 onClick={() => toggleSkill(s)}
-                className={`px-3 py-2 rounded-full text-xs font-semibold transition-colors border min-h-[36px] ${
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors border ${
                   skills.includes(s)
                     ? "bg-violet-600 border-violet-500 text-white"
                     : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500"
@@ -179,12 +179,12 @@ function WriteReferenceForm() {
         </div>
 
         {/* Recommend checkbox */}
-        <label className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4 cursor-pointer min-h-[56px]">
+        <label className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4 cursor-pointer">
           <input
             type="checkbox"
             checked={recommend}
             onChange={(e) => setRecommend(e.target.checked)}
-            className="w-5 h-5 accent-emerald-500 shrink-0"
+            className="w-4 h-4 accent-emerald-500"
           />
           <span className="text-sm font-medium text-slate-200">
             Рекомендую этого специалиста другим работодателям

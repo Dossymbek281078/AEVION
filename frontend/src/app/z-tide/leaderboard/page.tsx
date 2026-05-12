@@ -85,7 +85,7 @@ export default async function ZTideLeaderboardPage() {
 
       {stats && (
         <section style={{ padding: "0 24px 24px" }}>
-          <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))", gap: 10 }}>
+          <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             <Stat label="Active users" value={String(stats.active_users)} />
             <Stat label="Total events" value={String(stats.total_events)} />
             <Stat label="Total weight" value={String(stats.total_weight)} />

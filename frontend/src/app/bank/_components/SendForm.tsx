@@ -37,7 +37,6 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
   const [guardEnabled, setGuardEnabled] = useState<boolean>(false);
   const prefillSignature = prefill ? `${prefill.to}|${prefill.amount ?? ""}|${prefill.memo ?? ""}` : "";
   const pickerRef = useRef<HTMLDivElement | null>(null);
-  const amountRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setContacts(contactsLib.listContacts());
@@ -88,19 +87,6 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  // Ctrl+K: focus the send amount input (Quick Transfer shortcut)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        amountRef.current?.focus();
-        amountRef.current?.select();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
   }, []);
 
   const existingContact = useMemo(
@@ -371,7 +357,6 @@ export function SendForm({ myId, balance, prefill, onSend, onError }: Props) {
               {t("send.amount.label")}
             </div>
             <input
-              ref={amountRef}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"

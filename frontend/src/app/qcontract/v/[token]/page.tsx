@@ -60,7 +60,7 @@ function WatermarkOverlay({ email, ip }: { email?: string | null; ip?: string })
       {Array.from({ length: 12 }).map((_, i) => (
         <div
           key={i}
-          className="text-xs text-slate-400 whitespace-nowrap absolute w-full"
+          className="text-[11px] text-slate-400 whitespace-nowrap absolute w-full"
           style={{
             top: `${i * 8}%`,
             opacity: 0.07,
@@ -81,7 +81,7 @@ function QRightBadge({ qrightId }: { qrightId: string }) {
     <Link
       href={`/qright/${qrightId}`}
       target="_blank"
-      className="inline-flex items-center gap-1.5 text-xs bg-emerald-900/40 border border-emerald-700/50 text-emerald-400 px-2.5 py-1 rounded-full hover:bg-emerald-900/70 transition-colors"
+      className="inline-flex items-center gap-1.5 text-[11px] bg-emerald-900/40 border border-emerald-700/50 text-emerald-400 px-2.5 py-1 rounded-full hover:bg-emerald-900/70 transition-colors"
     >
       🛡 IP-защита · QRight #{qrightId.slice(0, 8)}
     </Link>
@@ -206,7 +206,7 @@ export default function ViewDocument() {
                 <input type="email" value={viewerEmail} onChange={(e) => { setViewerEmail(e.target.value); setError(""); }}
                   placeholder="Ваш email (будет виден в документе)" autoFocus={!needPassword}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors" />
-                <p className="text-xs text-slate-600 mt-1">Ваш email будет отображён на документе и в логе просмотра</p>
+                <p className="text-[11px] text-slate-600 mt-1">Ваш email будет отображён на документе и в логе просмотра</p>
               </div>
             )}
             {error && <p className="text-sm text-red-400">{error}</p>}
@@ -242,13 +242,13 @@ export default function ViewDocument() {
                 : "🔒 Просмотр зафиксирован · QContract"}
         </div>
 
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="max-w-3xl mx-auto px-6 py-8">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
             {/* Header */}
-            <div className="px-4 sm:px-6 py-4 border-b border-slate-700">
-              <div className="flex items-start justify-between gap-3 sm:gap-4">
+            <div className="px-6 py-4 border-b border-slate-700">
+              <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h1 className="font-bold text-base sm:text-lg truncate">{content.title}</h1>
+                  <h1 className="font-bold text-lg truncate">{content.title}</h1>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-xs text-slate-500">
                       Просмотр {content.viewCount}{content.maxViews ? `/${content.maxViews}` : ""}
@@ -267,7 +267,7 @@ export default function ViewDocument() {
             </div>
 
             {/* Content with watermark */}
-            <div className="relative px-4 sm:px-6 py-6">
+            <div className="relative px-6 py-6">
               <WatermarkOverlay email={content.viewerEmail} />
               <div className="relative" style={{ zIndex: 1 }}>
                 {content.contentType === "url" ? (
@@ -290,7 +290,7 @@ export default function ViewDocument() {
             </div>
 
             {/* Footer */}
-            <div className="px-4 sm:px-6 py-3 border-t border-slate-800 flex items-center justify-between gap-3 text-xs text-slate-600 flex-wrap">
+            <div className="px-6 py-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-600">
               <span>Доставлено через QContract · AEVION</span>
               <span className="select-none">⚠ Не распространяйте без разрешения</span>
             </div>

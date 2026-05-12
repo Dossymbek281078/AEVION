@@ -83,7 +83,7 @@ export default async function QChainGovProposalsPage() {
 
       {stats && (
         <section style={{ padding: "0 24px 24px" }}>
-          <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))", gap: 10 }}>
+          <div style={{ maxWidth: 880, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
             <Stat label="Open" value={String(stats.open_proposals)} />
             <Stat label="Total proposals" value={String(stats.total_proposals)} />
             <Stat label="Total votes" value={String(stats.total_votes)} />

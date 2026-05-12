@@ -331,8 +331,8 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 order-2 lg:order-1">
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-5">
+        <div className="lg:col-span-2">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
                 Role description
@@ -384,7 +384,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                     <button
                       type="button"
                       onClick={() => setShortcutsHelpOpen(true)}
-                      className="rounded-md border border-white/10 px-2.5 py-1.5 text-xs font-mono text-slate-400 transition hover:bg-white/10 hover:text-slate-200 min-h-[32px]"
+                      className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-mono text-slate-400 transition hover:bg-white/10 hover:text-slate-200"
                       title="Keyboard shortcuts (?)"
                     >
                       ⌨ ?
@@ -553,9 +553,9 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
           )}
         </div>
 
-        <aside className="space-y-4 order-1 lg:order-2">
+        <aside className="space-y-4">
           {!isOwner && (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-5 lg:sticky lg:top-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-5">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-400">
                 Apply
               </h2>
@@ -575,11 +575,11 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <div className="text-xl font-bold text-white">{vacancy.viewCount ?? "—"}</div>
-                  <div className="text-xs text-slate-500">Views</div>
+                  <div className="text-[10px] text-slate-500">Views</div>
                 </div>
                 <div>
                   <div className="text-xl font-bold text-white">{applications?.length ?? "—"}</div>
-                  <div className="text-xs text-slate-500">Applied</div>
+                  <div className="text-[10px] text-slate-500">Applied</div>
                 </div>
                 <div>
                   <div className="text-xl font-bold text-white">
@@ -587,7 +587,7 @@ export default function VacancyPage({ params }: { params: Promise<{ id: string }
                       ? `${Math.round((applications.length / vacancy.viewCount) * 100)}%`
                       : "—"}
                   </div>
-                  <div className="text-xs text-slate-500">Conv.</div>
+                  <div className="text-[10px] text-slate-500">Conv.</div>
                 </div>
               </div>
             </div>

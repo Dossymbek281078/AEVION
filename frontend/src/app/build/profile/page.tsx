@@ -282,7 +282,7 @@ function ExperienceEditor({
 
       {open && (
         <form onSubmit={add} className="mb-4 space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -468,7 +468,7 @@ function ExperienceRow({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1.5 text-xs font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20 min-h-[32px]"
+              className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-1 text-[10px] font-semibold text-fuchsia-200 hover:bg-fuchsia-500/20"
               title="Edit description (with AI improve)"
             >
               ✨ Edit
@@ -476,7 +476,7 @@ function ExperienceRow({
           )}
           <button
             onClick={onDelete}
-            className="rounded-md px-2 py-1.5 text-sm text-rose-300/80 hover:bg-rose-500/10 hover:text-rose-200 min-h-[32px] min-w-[32px]"
+            className="text-xs text-rose-300/80 hover:text-rose-200"
             aria-label="Delete experience"
           >
             ✕
@@ -560,7 +560,7 @@ function EducationEditor({
             required
             className="input-edu"
           />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <input
               value={degree}
               onChange={(e) => setDegree(e.target.value)}
@@ -676,7 +676,7 @@ function OnboardingChecklist() {
             </div>
             <Link
               href={s.href}
-              className="rounded-md bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/30 min-h-[32px] inline-flex items-center"
+              className="rounded-md bg-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/30"
             >
               {s.cta}
             </Link>
@@ -855,13 +855,13 @@ function ShareLinkBlock({ userId }: { userId: string }) {
         и ты видишь это в Application sources на dashboard.
       </p>
       <div className="flex items-center gap-2">
-        <code className="flex-1 truncate rounded border border-white/10 bg-black/30 px-2 py-2 text-xs text-slate-200">
+        <code className="flex-1 truncate rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-slate-200">
           {url}
         </code>
         <button
           type="button"
           onClick={copy}
-          className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/15 px-3 py-2 text-xs font-semibold text-fuchsia-100 hover:bg-fuchsia-500/25 min-h-[36px] whitespace-nowrap"
+          className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/15 px-3 py-1 text-[11px] font-semibold text-fuchsia-100 hover:bg-fuchsia-500/25"
         >
           📋 Copy
         </button>

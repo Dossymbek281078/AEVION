@@ -126,7 +126,7 @@ function Body() {
             {uploading ? "Uploading…" : "Submit"}
           </button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="mt-2 text-[11px] text-slate-500">
           Paste a public URL to your document. Admin reviews within 1-3 business days.
         </p>
       </section>
@@ -153,14 +153,14 @@ function Body() {
                         href={doc.fileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-emerald-400 hover:underline"
+                        className="text-[11px] text-emerald-400 hover:underline"
                       >
                         View document ↗
                       </a>
                     </div>
                   </div>
                   <span
-                    className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[doc.status] ?? "border-white/10 text-slate-400"}`}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${STATUS_STYLE[doc.status] ?? "border-white/10 text-slate-400"}`}
                   >
                     {doc.status}
                   </span>
@@ -168,7 +168,7 @@ function Body() {
                 {doc.rejectReason && (
                   <p className="mt-2 text-xs text-rose-300">Reason: {doc.rejectReason}</p>
                 )}
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-[10px] text-slate-600">
                   Submitted {new Date(doc.createdAt).toLocaleDateString()}
                 </p>
               </li>

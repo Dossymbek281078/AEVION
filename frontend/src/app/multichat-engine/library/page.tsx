@@ -186,24 +186,24 @@ export default function MultichatLibraryPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm whitespace-nowrap">
+      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/multichat-engine" className="text-slate-400 hover:text-white text-sm">
             ← Multichat
           </Link>
-          <span className="text-slate-600 hidden sm:inline">·</span>
-          <h1 className="text-sm font-bold truncate">📚 Library</h1>
+          <span className="text-slate-600">·</span>
+          <h1 className="text-sm font-bold">📚 Library</h1>
         </div>
         <button
           onClick={() => void load(token, q)}
           disabled={loading}
-          className="px-3 py-2 bg-violet-700 hover:bg-violet-600 disabled:opacity-40 rounded-lg text-xs font-semibold min-h-[36px] shrink-0"
+          className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 disabled:opacity-40 rounded-lg text-xs font-semibold"
         >
           {loading ? "..." : "↻"}
         </button>
       </header>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      <div className="max-w-5xl mx-auto px-6 py-6 space-y-4">
         {error && (
           <div className="bg-red-950/40 border border-red-800 rounded-xl p-3 text-sm text-red-300">
             {error}
@@ -266,16 +266,16 @@ export default function MultichatLibraryPage() {
                     >
                       {c.title}
                     </Link>
-                    <div className="text-xs text-slate-500 mt-0.5">
+                    <div className="text-[11px] text-slate-500 mt-0.5">
                       Updated: {fmtDate(c.updatedAt)} · Created: {fmtDate(c.createdAt)}
                     </div>
                     {u && (
-                      <div className="text-xs text-slate-500 mt-1 font-mono">
+                      <div className="text-[11px] text-slate-500 mt-1 font-mono">
                         {u.calls} calls · {u.tokens.total.toLocaleString("ru-RU")} tokens · ${u.costUsd.toFixed(4)}
                       </div>
                     )}
                     {c.shareToken && (
-                      <div className="text-xs text-emerald-400 mt-1">
+                      <div className="text-[11px] text-emerald-400 mt-1">
                         🔗 Public:{" "}
                         <code className="bg-slate-950 px-1 rounded">
                           /multichat-engine/shared/{c.shareToken.slice(0, 12)}…

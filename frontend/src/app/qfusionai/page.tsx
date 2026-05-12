@@ -105,7 +105,7 @@ function TryItWidget() {
       )}
       {result && (
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2 text-xs font-mono">
+          <div className="flex flex-wrap gap-2 text-[11px] font-mono">
             <span className="bg-emerald-950/40 border border-emerald-800 text-emerald-300 px-2 py-1 rounded">
               {result.providerName}
             </span>
@@ -164,7 +164,7 @@ export default function QFusionAILanding() {
           <h1 className="text-sm font-bold">
             <span className="text-purple-400">Q</span>FusionAI
           </h1>
-          <span className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">MVP</span>
+          <span className="text-[10px] bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full">MVP</span>
         </div>
         <Link
           href="https://github.com/Dossymbek281078/AEVION"
@@ -267,7 +267,7 @@ export default function QFusionAILanding() {
             { phase: "Phase 3", title: "Fine-tuning (Q4 2026)", items: ["Custom adapters", "Multi-modal routing", "Streaming SDK"] },
           ].map(p => (
             <div key={p.phase} className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-              <div className="text-xs uppercase font-bold text-purple-400 mb-2">{p.phase}</div>
+              <div className="text-[10px] uppercase font-bold text-purple-400 mb-2">{p.phase}</div>
               <div className="text-base font-bold mb-3">{p.title}</div>
               <ul className="space-y-1.5 text-sm text-slate-400">
                 {p.items.map(i => <li key={i}>· {i}</li>)}

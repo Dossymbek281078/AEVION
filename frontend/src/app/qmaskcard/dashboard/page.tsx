@@ -47,7 +47,7 @@ export default async function QMaskCardDashboardPage() {
         </p>
 
         {stats ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))", gap: 10, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 24 }}>
             <Stat label="Active masks" value={String(stats.active_masks)} />
             <Stat label="Total issued" value={String(stats.total_masks)} />
             <Stat label="Authorized charges" value={String(stats.authorized_charges)} />

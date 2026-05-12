@@ -63,9 +63,7 @@ export function TransactionList({
       const cpMatch = cpId.toLowerCase().includes(q);
       const nick = contactMap.get(cpId) || "";
       const nickMatch = nick.toLowerCase().includes(q);
-      const memoMatch = (op.memo || "").toLowerCase().includes(q);
-      const descMatch = d.description.toLowerCase().includes(q);
-      return idMatch || cpMatch || nickMatch || memoMatch || descMatch;
+      return idMatch || cpMatch || nickMatch;
     });
   }, [sorted, filter, search, myId, contactMap]);
 
@@ -270,7 +268,6 @@ export function TransactionList({
                     ) : null}
                     <KV label={t("tx.kv.timestamp")} value={new Date(op.createdAt).toLocaleString()} />
                     <KV label={t("tx.kv.kind")} value={op.kind} />
-                    {op.memo ? <KV label="Memo" value={op.memo} /> : null}
                     <KV label={t("tx.kv.amount")} value={`${formatCurrency(op.amount, code)} (${op.amount.toFixed(2)} AEC)`} />
                   </div>
                 ) : null}

@@ -124,6 +124,11 @@ const MODULES: Module[] = [
   { id: "sound-insulation",category: "structure",href: "/smeta-trainer/drawings-practice/sound-insulation",icon: "🔇", title: "Звукоизоляция",                     subtitle: "Rw для стен/перекрытий/окон по СН РК 4.04-22",                level: "L3", exercises: 4,  color: "violet"  },
   { id: "wood-structures",category: "structure",href: "/smeta-trainer/drawings-practice/wood-structures",icon: "🪵", title: "Деревянные конструкции",            subtitle: "Балки, стропила, защита по СНиП РК 5.04-23, ЭСН Сб.10",       level: "L3", exercises: 4,  color: "amber"   },
   { id: "esn-catalog",    category: "theory",   href: "/smeta-trainer/drawings-practice/esn-catalog",    icon: "📚", title: "Каталог 47 сборников ЭСН РК",       subtitle: "Полный список с описанием, поиск и связи с модулями",          level: "L2", exercises: 0,  color: "slate"   },
+
+  // ── Финальный батч — детали и справочник ──
+  { id: "asphalt-detailed",category: "special",href: "/smeta-trainer/drawings-practice/asphalt-detailed",icon: "🛣", title: "Асфальтобетон детально",            subtitle: "Типы А/Б/В/ЩМА, расход битума, цены 2025 ГОСТ 9128",          level: "L3", exercises: 4,  color: "slate"   },
+  { id: "water-treatment",category: "utilities",href: "/smeta-trainer/drawings-practice/water-treatment",icon: "🌊", title: "Очистные сооружения",               subtitle: "Септики до 1500 чел, биоочистка, УФ по СНиП РК 4.01-03",      level: "L4", exercises: 4,  color: "sky"     },
+  { id: "faq",            category: "tools",    href: "/smeta-trainer/drawings-practice/faq",            icon: "❓", title: "FAQ — частые вопросы",              subtitle: "50+ вопросов с ответами по 7 категориям",                     level: "L2", exercises: 0,  color: "indigo"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

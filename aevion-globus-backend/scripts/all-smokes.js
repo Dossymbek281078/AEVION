@@ -64,6 +64,10 @@ const SMOKES = [
   { name: "veilnetx-ledger", script: "veilnetx-ledger-smoke.js", readOnly: false },
   // VeilNetX chaos — bursty parallel writes + chain integrity check. Catches race-condition regressions.
   { name: "veilnetx-chaos", script: "veilnetx-chaos-smoke.js", readOnly: false },
+  // Fintech PROD — 21 read-only health + stats checks. Safe to run anywhere incl. prod.
+  { name: "fintech-prod", script: "fintech-prod-smoke.js", readOnly: true },
+  // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.
+  { name: "fintech-flow", script: "fintech-flow-smoke.js", readOnly: false },
   // Z-Tide — leaderboard read + me lookup (no admin events fired in smoke).
   { name: "ztide", script: "ztide-smoke.js", readOnly: false },
   // QChainGov — proposal create + auth/validation gates.

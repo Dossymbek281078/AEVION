@@ -87,6 +87,10 @@ async function ensureTables(): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QMaskCardCharge_mask_idx" ON "QMaskCardCharge" ("maskId", "createdAt");`);
+  // Idempotency: same (maskId, paymentRef) cannot charge twice. Partial unique
+  // index — only enforced when paymentRef is non-null (clients without paymentRef
+  // accept the legacy retry semantics).
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "QMaskCardCharge_mask_paymentRef_uniq" ON "QMaskCardCharge" ("maskId", "paymentRef") WHERE "paymentRef" IS NOT NULL;`);
   tablesReady = true;
 }
 
@@ -290,18 +294,38 @@ qmaskcardRouter.post("/charges", chargeLimit, async (req, res) => {
 
     // For single-use masks: auto-revoke after first successful authorization.
     const chargeId = crypto.randomUUID();
-    await pool.query(
-      `INSERT INTO "QMaskCardCharge" ("id","maskId","userId","amountCents","currency","merchantName","merchantCategory","geoCountry","status","riskScore","paymentRef")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'authorized',$9,$10)`,
-      [
-        chargeId, maskId, auth.sub, amount, String(currency).toUpperCase(),
-        merchantName ? String(merchantName).slice(0, 100) : null,
-        merchantCategory ? String(merchantCategory).slice(0, 50) : null,
-        geoCountry ? String(geoCountry).slice(0, 4) : null,
-        riskScore,
-        paymentRef ? String(paymentRef).slice(0, 100) : null,
-      ],
-    );
+    try {
+      await pool.query(
+        `INSERT INTO "QMaskCardCharge" ("id","maskId","userId","amountCents","currency","merchantName","merchantCategory","geoCountry","status","riskScore","paymentRef")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'authorized',$9,$10)`,
+        [
+          chargeId, maskId, auth.sub, amount, String(currency).toUpperCase(),
+          merchantName ? String(merchantName).slice(0, 100) : null,
+          merchantCategory ? String(merchantCategory).slice(0, 50) : null,
+          geoCountry ? String(geoCountry).slice(0, 4) : null,
+          riskScore,
+          paymentRef ? String(paymentRef).slice(0, 100) : null,
+        ],
+      );
+    } catch (e: unknown) {
+      const dbErr = e as { code?: string };
+      if (dbErr.code === "23505" && paymentRef) {
+        // Idempotent replay — same (maskId, paymentRef) already charged. Return the existing charge.
+        const existing = await pool.query(
+          `SELECT "id","amountCents","status","riskScore","createdAt" FROM "QMaskCardCharge" WHERE "maskId" = $1 AND "paymentRef" = $2 LIMIT 1`,
+          [maskId, String(paymentRef).slice(0, 100)],
+        );
+        if (existing.rowCount > 0) {
+          const row = existing.rows[0] as { id: string; amountCents: string | number; status: string; riskScore: number; createdAt: Date };
+          return res.status(200).json({
+            id: row.id, maskId, status: row.status, amountCents: Number(row.amountCents),
+            riskScore: row.riskScore, autoRevoked: mask.kind === "single-use",
+            idempotent: true, replayedFrom: row.createdAt,
+          });
+        }
+      }
+      throw e;
+    }
     await pool.query(
       `UPDATE "QMaskCardMask" SET "remainingCents" = "remainingCents" - $1 WHERE "id" = $2`,
       [amount, maskId],

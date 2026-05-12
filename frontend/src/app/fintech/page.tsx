@@ -663,6 +663,12 @@ export default async function FintechHubPage() {
             >
               Integrations →
             </Link>
+            <Link
+              href="/fintech/analytics"
+              style={{ padding: "12px 22px", background: "transparent", color: C.text, fontSize: 14, fontWeight: 700, borderRadius: 10, textDecoration: "none", border: `1px solid ${C.border}` }}
+            >
+              📊 Analytics →
+            </Link>
           </div>
         </div>
       </section>

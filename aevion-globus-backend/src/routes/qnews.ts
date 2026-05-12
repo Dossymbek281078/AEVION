@@ -1,6 +1,10 @@
 import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { rateLimit } from "../lib/rateLimit";
+
+const submitLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qnews:submit", message: "rate_limited" });
+const aiLimiter = rateLimit({ windowMs: 60_000, max: 3, keyPrefix: "qnews:ai", message: "rate_limited" });
 
 export const qnewsRouter = Router();
 
@@ -202,7 +206,7 @@ qnewsRouter.get("/articles/:id", (req: Request, res: Response) => {
 });
 
 // ─── POST /api/qnews/articles ────────────────────────────────────────────────
-qnewsRouter.post("/articles", (req: Request, res: Response) => {
+qnewsRouter.post("/articles", submitLimiter, (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
@@ -293,7 +297,7 @@ qnewsRouter.get("/rss", (_req: Request, res: Response) => {
 });
 
 // ─── POST /api/qnews/ai/digest — AI daily digest ─────────────────────────────
-qnewsRouter.post("/ai/digest", async (_req: Request, res: Response) => {
+qnewsRouter.post("/ai/digest", aiLimiter, async (_req: Request, res: Response) => {
   // Take last 5 articles from each category
   const byCategory: Record<string, NewsItem[]> = {};
   for (const cat of CATEGORIES) byCategory[cat] = [];
@@ -326,7 +330,7 @@ qnewsRouter.post("/ai/digest", async (_req: Request, res: Response) => {
 });
 
 // ─── POST /api/qnews/ai/summarize ────────────────────────────────────────────
-qnewsRouter.post("/ai/summarize", async (req: Request, res: Response) => {
+qnewsRouter.post("/ai/summarize", aiLimiter, async (req: Request, res: Response) => {
   const { articleId, text } = req.body as { articleId?: string; text?: string };
 
   let contentToSummarize = text ?? "";
@@ -377,4 +381,24 @@ qnewsRouter.post("/ai/summarize", async (req: Request, res: Response) => {
       ],
     });
   }
+});
+
+// ─── GET /api/qnews/stats ─────────────────────────────────────────────────────
+qnewsRouter.get("/stats", (_req: Request, res: Response) => {
+  const articles = Array.from(memNews.values());
+  const byCategory = CATEGORIES.reduce((acc, c) => {
+    acc[c] = articles.filter((a) => a.category === c).length;
+    return acc;
+  }, {} as Record<string, number>);
+  const bySources = articles.reduce((acc, a) => {
+    acc[a.source] = (acc[a.source] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  res.json({
+    total: articles.length,
+    byCategory,
+    topSources: Object.entries(bySources).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([source, count]) => ({ source, count })),
+    bookmarks: Array.from(memBookmarks.values()).filter(Boolean).length,
+    backend: "memory",
+  });
 });

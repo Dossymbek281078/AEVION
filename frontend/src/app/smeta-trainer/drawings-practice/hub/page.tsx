@@ -109,6 +109,11 @@ const MODULES: Module[] = [
   { id: "survey",         category: "process",  href: "/smeta-trainer/drawings-practice/survey",         icon: "📐", title: "Геодезические работы",              subtitle: "Разбивка, нивелирование, исполнительные схемы по СНиП РК 1.02-08", level: "L3", exercises: 4,  color: "indigo"  },
   { id: "weld-control",   category: "process",  href: "/smeta-trainer/drawings-practice/weld-control",   icon: "🔥", title: "Контроль сварных соединений",       subtitle: "УЗК, рентген, цветной по ГОСТ 14782, СНиП РК 5.04-23",       level: "L4", exercises: 4,  color: "slate"   },
   { id: "environmental",  category: "process",  href: "/smeta-trainer/drawings-practice/environmental",  icon: "🌍", title: "Экология строительства",            subtitle: "Эко-сборы, отходы, лимиты по ЭК РК и ПП РК № 595",            level: "L3", exercises: 4,  color: "emerald" },
+
+  // ── Дополнительные конструктивы и системы ──
+  { id: "pile-foundations",category: "structure",href: "/smeta-trainer/drawings-practice/pile-foundations",icon: "🔩", title: "Свайные фундаменты",                subtitle: "Забивные, буронабивные, винтовые по СП РК 5.04-101",          level: "L4", exercises: 4,  color: "slate"   },
+  { id: "scaffolding",    category: "process",  href: "/smeta-trainer/drawings-practice/scaffolding",    icon: "🪜", title: "Строительные леса",                 subtitle: "8 типов, расчёт площади, аренда, ГОСТ Р 52086-2003",         level: "L3", exercises: 4,  color: "amber"   },
+  { id: "low-voltage",    category: "utilities",href: "/smeta-trainer/drawings-practice/low-voltage",    icon: "📡", title: "Слаботочные сети",                  subtitle: "СКС, IP-видео, СКУД, домофоны по ЭСН Сб.34",                  level: "L3", exercises: 4,  color: "indigo"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

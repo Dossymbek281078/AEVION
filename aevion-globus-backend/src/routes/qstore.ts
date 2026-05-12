@@ -473,7 +473,39 @@ qstoreRouter.get("/sellers/:userId", (req: Request, res: Response) => {
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : 0;
 
-  res.json({ userId, products, totalSales, avgRating: Math.round(avgRating * 10) / 10 });
+
+
+// GET /api/qstore/me/dashboard/chart — daily sales & revenue for last N days (default 7)
+qstoreRouter.get("/me/dashboard/chart", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
+  const myProducts = Array.from(memProducts.values()).filter((p) => p.sellerId === auth.sub);
+  const myProductIds = new Set(myProducts.map((p) => p.id));
+  const allSales = Array.from(memPurchases.values()).filter((pu) => myProductIds.has(pu.productId));
+
+  const now = new Date();
+  const buckets: { date: string; sales: number; revenue: number }[] = [];
+  for (let d = days - 1; d >= 0; d--) {
+    const day = new Date(now);
+    day.setDate(day.getDate() - d);
+    const dateStr = day.toISOString().slice(0, 10);
+    const dayStart = dateStr;
+    const dayEnd = dateStr + "T23:59:59.999Z";
+    const daySales = allSales.filter((s) => s.createdAt >= dayStart && s.createdAt <= dayEnd);
+    buckets.push({
+      date: dateStr,
+      sales: daySales.length,
+      revenue: daySales.reduce((sum, s) => sum + s.amount, 0),
+    });
+  }
+
+  const totalRevenue = buckets.reduce((s, b) => s + b.revenue, 0);
+  const totalSales = buckets.reduce((s, b) => s + b.sales, 0);
+  const peakDay = buckets.reduce((best, b) => (b.revenue > best.revenue ? b : best), buckets[0]);
+
+  res.json({ days, buckets, summary: { totalRevenue, totalSales, peakDay: peakDay?.date ?? null } });
 });
 
 // POST /api/qstore/products/:id/feature — mark product as featured (owner only)

@@ -637,7 +637,7 @@ export default function CyberChessPage(){
   const[pzStreak,sPzStreak]=useState<{cur:number;best:number}>(()=>{try{const v=JSON.parse(localStorage.getItem(PZ_STREAK_KEY)||"{}");return{cur:v.cur??0,best:v.best??0}}catch{return{cur:0,best:0}}});
   const savePzStreak=(s:{cur:number;best:number})=>{try{localStorage.setItem(PZ_STREAK_KEY,JSON.stringify(s))}catch{}};
   const incPzStreak=()=>sPzStreak(s=>{const n=s.cur+1;const nb=Math.max(s.best,n);const ns={cur:n,best:nb};savePzStreak(ns);return ns});
-  const resetPzStreak=()=>sPzStreak(s=>{const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
+  const resetPzStreak=()=>sPzStreak(s=>{if(chessy.owned.streak_shield&&s.cur>=3){sChessy(c=>({...c,owned:{...c.owned,streak_shield:false}}));showToast("🛡 Щит стрика поглотил ошибку!","success");return s;}const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
   // Daily goals tracking — stored by todayKey() in localStorage
   const DG_KEY="aevion_daily_goals_v1";
   const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string}>(()=>{

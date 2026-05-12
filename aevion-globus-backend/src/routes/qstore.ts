@@ -59,7 +59,7 @@ interface Review {
 }
 
 // In-memory fallback
-const memProducts = new Map<string, Product>();
+const memProducts = new Map<string, Product & { featured?: boolean }>();
 const memPurchases = new Map<string, Purchase>();
 // key: `${productId}:${userId}`
 const memReviews = new Map<string, Review>();
@@ -402,4 +402,91 @@ qstoreRouter.get("/me/sales", (req: Request, res: Response) => {
 
   const totalRevenue = sales.reduce((sum, s) => sum + s.amount, 0);
   res.json({ sales, total: sales.length, totalRevenue });
+});
+
+// GET /api/qstore/me/dashboard — seller analytics dashboard
+qstoreRouter.get("/me/dashboard", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const myProducts = Array.from(memProducts.values()).filter((p) => p.sellerId === auth.sub);
+  const myProductIds = new Set(myProducts.map((p) => p.id));
+  const allSales = Array.from(memPurchases.values()).filter((pu) => myProductIds.has(pu.productId));
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const monthlySales = allSales.filter((s) => s.createdAt >= startOfMonth);
+
+  const totalRevenue = allSales.reduce((sum, s) => sum + s.amount, 0);
+  const monthlyRevenue = monthlySales.reduce((sum, s) => sum + s.amount, 0);
+
+  // Top product by salesCount
+  const topProduct = myProducts.sort((a, b) => b.salesCount - a.salesCount)[0] ?? null;
+
+  // Recent sales (last 5)
+  const recentSales = allSales
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5)
+    .map((s) => {
+      const product = memProducts.get(s.productId);
+      return {
+        purchaseId: s.id,
+        productTitle: product?.title ?? "Unknown",
+        amount: s.amount,
+        createdAt: s.createdAt,
+      };
+    });
+
+  res.json({
+    products: {
+      total: myProducts.length,
+      public: myProducts.filter((p) => p.isPublic).length,
+    },
+    sales: {
+      total: allSales.length,
+      thisMonth: monthlySales.length,
+    },
+    revenue: {
+      total: totalRevenue,
+      thisMonth: monthlyRevenue,
+      currency: "usd",
+    },
+    topProduct: topProduct
+      ? { id: topProduct.id, title: topProduct.title, salesCount: topProduct.salesCount }
+      : null,
+    recentSales,
+  });
+});
+
+// GET /api/qstore/sellers/:userId — public seller profile
+qstoreRouter.get("/sellers/:userId", (req: Request, res: Response) => {
+  const userId = req.params.userId;
+  const products = Array.from(memProducts.values())
+    .filter((p) => p.sellerId === userId && p.isPublic)
+    .map(({ id, title, category, price, salesCount }) => ({ id, title, category, price, salesCount }));
+
+  const totalSales = products.reduce((sum, p) => sum + p.salesCount, 0);
+
+  const productIds = new Set(Array.from(memProducts.values()).filter((p) => p.sellerId === userId).map((p) => p.id));
+  const reviews = Array.from(memReviews.values()).filter((r) => productIds.has(r.productId));
+  const avgRating = reviews.length > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : 0;
+
+  res.json({ userId, products, totalSales, avgRating: Math.round(avgRating * 10) / 10 });
+});
+
+// POST /api/qstore/products/:id/feature — mark product as featured (owner only)
+qstoreRouter.post("/products/:id/feature", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const id = param(req, "id");
+
+  const product = memProducts.get(id);
+  if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+  if (product.sellerId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  (product as Product & { featured: boolean }).featured = !(product as any).featured;
+  const featured = (product as any).featured as boolean;
+  res.json({ featured });
 });

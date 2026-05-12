@@ -275,6 +275,23 @@ const ACH_LABELS:Record<string,string>={
   puzzles_50:"🧠 50 пазлов",
   puzzles_100:"🎯 100 пазлов",
   endgame_master:"🏰 Мастер эндшпилей",
+  // New achievements
+  streak_5:"🔥 Серия 5 пазлов подряд",
+  streak_10:"💥 Серия 10 пазлов подряд",
+  streak_20:"⚡ Серия 20 пазлов подряд",
+  rush_20:"🚀 Rush: 20 очков",
+  daily_goals:"✅ Все цели дня",
+  login_7:"☀ 7 дней подряд",
+  login_30:"🌟 30 дней подряд",
+  annotator:"✍ Первая аннотация",
+  analyst:"🔬 Анализ полной партии",
+  variant_explorer:"🎲 Опробовал 5 вариантов",
+  blunder_fixed:"🩹 Исправил блундер из бук-ка",
+  coach_100:"🎓 100 сообщений с Coach",
+  elo_1200:"📈 ELO 1200",
+  elo_1600:"🏅 ELO 1600",
+  elo_2000:"🎖 ELO 2000",
+  puzzle_master:"🧠 1000 пазлов решено",
 };
 
 /* ═══ Resume snapshot — autosave in-progress game ═══ */
@@ -2273,7 +2290,60 @@ export default function CyberChessPage(){
     if(pzSolvedCount===10)unlockAch("puzzles_10",30,"10 пазлов решено");
     if(pzSolvedCount===50)unlockAch("puzzles_50",150,"50 пазлов решено");
     if(pzSolvedCount===100)unlockAch("puzzles_100",400,"100 пазлов решено");
+    if(pzSolvedCount===1000)unlockAch("puzzle_master",1000,"1000 пазлов решено");
   },[pzSolvedCount,unlockAch]);
+
+  /* ── Puzzle streak achievements ── */
+  useEffect(()=>{
+    if(pzStreak.cur===5)unlockAch("streak_5",20,"Серия 5 пазлов");
+    if(pzStreak.cur===10)unlockAch("streak_10",50,"Серия 10 пазлов");
+    if(pzStreak.cur===20)unlockAch("streak_20",150,"Серия 20 пазлов");
+  },[pzStreak.cur,unlockAch]);
+
+  /* ── ELO milestones ── */
+  useEffect(()=>{
+    if(rat>=1200)unlockAch("elo_1200",100,"ELO 1200 достигнут");
+    if(rat>=1600)unlockAch("elo_1600",200,"ELO 1600 достигнут");
+    if(rat>=2000)unlockAch("elo_2000",500,"ELO 2000 достигнут");
+  },[rat,unlockAch]);
+
+  /* ── Daily login streak achievements ── */
+  useEffect(()=>{
+    if(chessy.streak>=7)unlockAch("login_7",50,"7-дневный стрик");
+    if(chessy.streak>=30)unlockAch("login_30",300,"30-дневный стрик");
+  },[chessy.streak,unlockAch]);
+
+  /* ── Annotation achievement ── */
+  useEffect(()=>{
+    if(Object.keys(moveAnnotations).length>0)unlockAch("annotator",20,"Первая аннотация");
+  },[moveAnnotations,unlockAch]);
+
+  /* ── Variant explorer achievement ── */
+  useEffect(()=>{
+    const playedVariants=Object.keys(variantStats).filter(v=>variantStats[v as keyof typeof variantStats]&&((variantStats[v as keyof typeof variantStats]?.w||0)+(variantStats[v as keyof typeof variantStats]?.l||0)+(variantStats[v as keyof typeof variantStats]?.d||0))>0);
+    if(playedVariants.length>=5)unlockAch("variant_explorer",100,"Опробовал 5 вариантов");
+  },[variantStats,unlockAch]);
+
+  /* ── Coach chat volume achievement ── */
+  useEffect(()=>{
+    const total=Object.values(chessy.ach).reduce((s,v)=>s+v,0);// reuse as proxy — track msg count separately
+    if(coachChat.length>=100)unlockAch("coach_100",50,"100 сообщений с Coach");
+  },[coachChat.length,unlockAch]);
+
+  /* ── Analysis achievement (full game analyzed) ── */
+  useEffect(()=>{
+    if(analysis.length>=10&&over)unlockAch("analyst",50,"Полный анализ партии");
+  },[analysis.length,over,unlockAch]);
+
+  /* ── Blunder book practice achievement ── */
+  useEffect(()=>{
+    // Triggered when user loads a blunder book position and makes a correct move
+    // We approximate: if blunder book had entries and now pzAttempt === "correct" after loading from blunder book
+    // Simple version: unlock if blunder book had entries and pzSolvedCount increases
+    if(blunderBook.length>0&&pzSolvedCount>0&&pzAttempt==="correct"&&pzCurrent?.theme==="Твоя ошибка"){
+      unlockAch("blunder_fixed",30,"Исправил блундер из бук-ка");
+    }
+  },[pzAttempt,blunderBook.length,pzSolvedCount,pzCurrent,unlockAch]);
 
   /* ── Move list auto-scroll к browseIdx ── */
   useEffect(()=>{
@@ -2905,6 +2975,7 @@ export default function CyberChessPage(){
     sRushActive(false);
     if(chessy>0)addChessy(chessy,`Puzzle Rush · ${rushScore} решено`);
     if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
+    if(isNewBest&&rushScore>=20)unlockAch("rush_20",100,"Rush: 20 за сессию");
     if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
   },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
 

@@ -35,6 +35,16 @@ export function WalletSummary({
   const delta = useMemo(() => sparklineDelta(sparkline), [sparkline]);
   const { code } = useCurrency();
 
+  // 7-day balance trend: use last 7 points of the 14-day sparkline
+  const week7 = useMemo(() => {
+    if (sparkline.length < 2) return null;
+    const slice = sparkline.slice(-7);
+    const start = slice[0];
+    const end = slice[slice.length - 1];
+    if (start === 0) return end === 0 ? 0 : 100;
+    return ((end - start) / Math.abs(start)) * 100;
+  }, [sparkline]);
+
   return (
     <div
       style={{
@@ -66,6 +76,29 @@ export function WalletSummary({
               delta: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`,
             })}
           </div>
+          {week7 !== null ? (
+            <div
+              title="7-day balance change"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                marginTop: 6,
+                padding: "3px 8px",
+                borderRadius: 20,
+                fontSize: 10,
+                fontWeight: 800,
+                background: week7 >= 0 ? "rgba(5,150,105,0.1)" : "rgba(220,38,38,0.08)",
+                color: week7 >= 0 ? "#059669" : "#dc2626",
+                border: `1px solid ${week7 >= 0 ? "rgba(5,150,105,0.25)" : "rgba(220,38,38,0.2)"}`,
+                letterSpacing: 0.3,
+              }}
+            >
+              <span style={{ fontSize: 9 }}>{week7 >= 0 ? "▲" : "▼"}</span>
+              {week7 >= 0 ? "+" : ""}
+              {week7.toFixed(1)}% this week
+            </div>
+          ) : null}
         </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "2 1 400px" }}>

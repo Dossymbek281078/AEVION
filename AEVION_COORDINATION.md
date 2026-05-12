@@ -53,7 +53,7 @@
 
 | Worktree | Branch | Owned zones (где edit разрешён без согласования) |
 |---|---|---|
-| `aevion-core` (main) | `main` | `aevion-globus-backend/scripts/**`, `aevion-globus-backend/src/lib/{ecosystemEvents,openapiFintechSpec}.ts`, AIPB chain в `bureau.ts` (только `/cert-for-qright`), QRight policies в `qright.ts`, `frontend/src/app/fintech/**`, `frontend/src/app/developers/fintech/**`, `frontend/src/components/fintech/**`, this file (AEVION_COORDINATION.md) |
+| `aevion-core` (main) | `main` | `aevion-globus-backend/scripts/**`, `aevion-globus-backend/src/lib/{ecosystemEvents,openapiFintechSpec}.ts`, AIPB chain в `bureau.ts` (только `/cert-for-qright`), QRight policies в `qright.ts`, `frontend/src/app/fintech/**`, `frontend/src/app/developers/fintech/**`, `frontend/src/components/fintech/**`, **`cyberchess.ts`**, **`frontend/src/app/cyberchess/**`** (reassigned 2026-05-12 — этот чат исторически CyberChess-окно; см. строку 81-WIP), this file (AEVION_COORDINATION.md) |
 | `aevion-build` | `feat/mobile-audit-v3-*` | **6 fintech модуля сорсы:** `qfusionai/qgood/qmaskcard/qchaingov/veilnetx/z-tide` (backend routes + frontend `app/*/...` под этими путями). QMedia. Mobile audit (touch targets, responsive layout). |
 | `aevion-smeta-trainer` | `feat/smeta-trainer-*` | `frontend/src/app/smeta-trainer/**`, `aevion-globus-backend/src/routes/smeta-trainer.ts`, normatives/drawings/quiz |
 | `aevion-bureau` | `feat/bureau-v2` | широкая часть `bureau.ts` (kroме AIPB endpoint выше), `frontend/src/app/bureau/**` |
@@ -62,7 +62,7 @@
 | `aevion-qtradeoffline` | `qtradeoffline-v1` | `qtrade.ts`, `frontend/src/app/qtrade/**`, `frontend/src/app/qtradeoffline/**`, `aev.ts`, `frontend/src/app/aev/**` |
 | `frontend-qshield` | `feat/aevion-finalize-and-status` | `quantum-shield.ts`, `pipeline.ts`, `qright.ts` (broad), `frontend/src/app/quantum-shield/**`, `frontend/src/app/qright/**` |
 | `aevion-backend-modules` | `feat/platform-tier2-rest` | `modules.ts`, `awards.ts`, `planetCompliance.ts`, `auth.ts`, `frontend/src/app/admin/**` |
-| `frontend-qcore` (under aevion-core) | `feat/devhub-v1-*` | `qcoreai.ts`, `cyberchess.ts`, `frontend/src/app/qcoreai/**`, `frontend/src/app/cyberchess/**`, `frontend/src/app/devhub/**` |
+| `frontend-qcore` (under aevion-core) | `feat/devhub-v1-*` | `qcoreai.ts`, `frontend/src/app/qcoreai/**`, `frontend/src/app/devhub/**` — **CyberChess отозван в aevion-core/main 2026-05-12** (не трогать `cyberchess.ts` / `frontend/src/app/cyberchess/**` до новой реасайн-инструкции) |
 | `frontend-payments` (under aevion-core) | `payments-rail` | `qpaynet.ts`, `qcontract.ts`, `frontend/src/app/qpaynet/**`, `frontend/src/app/qcontract/**` |
 | `aevion-core` (main) **sprint 2** | `main` | **QJobs** (`qjobs.ts`, `lib/ensureQJobsTables.ts`, `frontend/src/app/qjobs/**`, `scripts/qjobs-smoke.js`), **QNews** (`qnews.ts`, `frontend/src/app/qnews/**`), **QSocial** (`qsocial.ts`, `frontend/src/app/qsocial/**`) — prod-ready: rate limits + smoke + search + Postgres indexes |
 
@@ -96,9 +96,9 @@ _(пусто — добавляй сюда entries перед нарушение
 
 ### Current active work (aevion-core/main, 2026-05-12)
 
-- Восстановлены `fintech/page.tsx` + `developers/fintech/page.tsx` (commit `45aad61e`)
-- Продолжаем: backend fintech endpoints (`/api/fintech/status` health probes), `openapiFintechSpec.ts`, fintech smoke script
-- НЕ трогаем: bureau frontend, qright frontend, cyberchess, qcoreai, qsign, qtrade — это чужие зоны
+- **CyberChess** — это окно исторически было CyberChess-чатом (~5 дней, 83+ commits). 2026-05-12 PM пользователь подтвердил возврат шахмат сюда (reassign из frontend-qcore). Открытые таски: #67 Variants QA, #71 Coach SR, #72 Setup hero.
+- Fintech surface — ранее в этой сессии (today) выкатано ~9 коммитов: troubleshooting, integrations, rate-limits, FintechMetric, onboarding-guide. Backlog исчерпан.
+- НЕ трогаем: bureau frontend, qright frontend, qcoreai, qsign, qtrade — это чужие зоны
 
 ### Recent destructive incidents (для learning'а)
 

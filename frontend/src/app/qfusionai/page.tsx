@@ -84,6 +84,8 @@ function TryItWidget() {
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         rows={3}
+        maxLength={32000}
+        aria-label="Промпт для AI-роутера"
         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm font-mono resize-y focus:outline-none focus:border-purple-600"
         placeholder="Введите промпт…"
       />

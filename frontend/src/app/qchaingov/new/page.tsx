@@ -199,7 +199,7 @@ export default function NewProposalPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {options.map((opt, i) => (
               <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="text" value={opt} onChange={e => setOptionAt(i, e.target.value)} maxLength={80} placeholder={`Option ${i + 1}`} style={input} />
+                <input type="text" value={opt} onChange={e => setOptionAt(i, e.target.value)} maxLength={80} aria-label={`Option ${i + 1}`} placeholder={`Option ${i + 1}`} style={input} />
                 <button type="button" onClick={() => removeOption(i)} disabled={options.length <= 2} aria-label={`Remove option ${i + 1}`}
                   style={{ background: "transparent", color: options.length <= 2 ? C.border : C.danger, border: `1px solid ${options.length <= 2 ? C.border : C.danger}`, borderRadius: 8, width: 36, height: 36, cursor: options.length <= 2 ? "not-allowed" : "pointer", fontSize: 16, lineHeight: 1, flexShrink: 0 }}>−</button>
               </div>

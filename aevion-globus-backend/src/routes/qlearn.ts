@@ -66,12 +66,24 @@ interface QuizQuestion {
   explanation: string | null;
 }
 
+interface Certificate {
+  id: string;
+  enrollmentId: string;
+  courseId: string;
+  userId: string;
+  courseTitle: string;
+  completedAt: string;
+  certificateNumber: string;
+}
+
 // In-memory fallback maps
 const memCourses = new Map<string, Course>();
 const memLessons = new Map<string, Lesson>();
 const memEnrollments = new Map<string, Enrollment>();
 // key: lessonId -> QuizQuestion[]
 const memQuizzes = new Map<string, QuizQuestion[]>();
+// key: enrollmentId -> Certificate
+const memCertificates = new Map<string, Certificate>();
 
 const CATEGORIES = [
   { id: "tech", name: "Technology" },
@@ -385,7 +397,95 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   if (!enrollment) { res.status(404).json({ error: "Enrollment not found" }); return; }
   if (enrollment.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
   enrollment.progress = progress;
+
+  // Auto-generate certificate at 100%
+  if (progress === 100 && !memCertificates.has(enrollmentId)) {
+    const course = memCourses.get(enrollment.courseId);
+    const cert: Certificate = {
+      id: crypto.randomUUID(),
+      enrollmentId,
+      courseId: enrollment.courseId,
+      userId: auth.sub,
+      courseTitle: course?.title ?? "Unknown Course",
+      completedAt: new Date().toISOString(),
+      certificateNumber: "AEVION-" + Date.now(),
+    };
+    memCertificates.set(enrollmentId, cert);
+  }
+
   res.json({ enrollment });
+});
+
+// POST /api/qlearn/enrollments/:id/complete — manually mark as complete + issue cert
+qlearnRouter.post("/enrollments/:id/complete", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const enrollmentId = param(req, "id");
+
+  const enrollment = memEnrollments.get(enrollmentId);
+  if (!enrollment) { res.status(404).json({ error: "Enrollment not found" }); return; }
+  if (enrollment.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (enrollment.progress !== 100) {
+    res.status(400).json({ error: "progress must be 100 to complete" }); return;
+  }
+
+  if (memCertificates.has(enrollmentId)) {
+    res.json({ certificate: memCertificates.get(enrollmentId) }); return;
+  }
+
+  const course = memCourses.get(enrollment.courseId);
+  const cert: Certificate = {
+    id: crypto.randomUUID(),
+    enrollmentId,
+    courseId: enrollment.courseId,
+    userId: auth.sub,
+    courseTitle: course?.title ?? "Unknown Course",
+    completedAt: new Date().toISOString(),
+    certificateNumber: "AEVION-" + Date.now(),
+  };
+  memCertificates.set(enrollmentId, cert);
+  res.status(201).json({ certificate: cert });
+});
+
+// GET /api/qlearn/enrollments/:id/certificate — get certificate for enrollment
+qlearnRouter.get("/enrollments/:id/certificate", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const enrollmentId = param(req, "id");
+
+  const cert = memCertificates.get(enrollmentId);
+  if (!cert) { res.status(404).json({ error: "Certificate not found" }); return; }
+  if (cert.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
+  res.json({ certificate: cert });
+});
+
+// GET /api/qlearn/me/certificates — all my certificates
+qlearnRouter.get("/me/certificates", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const certs = Array.from(memCertificates.values())
+    .filter((c) => c.userId === auth.sub)
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+  res.json({ certificates: certs, total: certs.length });
+});
+
+// GET /api/qlearn/certificates/:certificateNumber — public certificate verification
+qlearnRouter.get("/certificates/:certificateNumber", (req: Request, res: Response) => {
+  const certNumber = req.params.certificateNumber;
+  const cert = Array.from(memCertificates.values()).find(
+    (c) => c.certificateNumber === certNumber,
+  );
+  if (!cert) {
+    res.json({ valid: false });
+    return;
+  }
+  res.json({
+    valid: true,
+    courseTitle: cert.courseTitle,
+    completedAt: cert.completedAt,
+    userId: cert.userId,
+  });
 });
 
 // POST /api/qlearn/me/courses/:courseId/lessons/:lessonId/quiz — add quiz question (author only)

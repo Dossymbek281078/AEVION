@@ -42,6 +42,7 @@ import { healthaiRouter } from "./routes/healthai";
 import { qfusionaiRouter } from "./routes/qfusionai";
 import { veilnetxRouter } from "./routes/veilnetx";
 import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
+import { mountMvpConcepts } from "./routes/mvpConcepts";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
 import { qtradeOfflineRouter } from "./routes/qtradeoffline";
 import { apiQuotasRouter } from "./routes/apiQuotas";
@@ -458,6 +459,12 @@ app.use("/api/qfusionai", qfusionaiRouter);
 
 // VeilNetX — privacy proxy pre-launch status + waitlist
 app.use("/api/veilnetx", veilnetxRouter);
+
+// MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
+// the generic planning stubs so module-specific paths (e.g.
+// `/api/startup-exchange/listings`) take precedence and unknown paths
+// still fall through to /health, /waitlist on the planning stub.
+mountMvpConcepts(app);
 
 // Planning-stage modules — shared status + waitlist surface
 for (const cfg of PLANNING_MODULES) {

@@ -360,6 +360,28 @@ export default function QSocialPage() {
   const [error, setError] = useState("");
   const currentUserId = getAuthSub();
 
+  // Notifications
+  const [notifications, setNotifications] = useState<{ id: string; type: string; message: string; read: boolean; createdAt: string }[]>([]);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Stats
+  const [stats, setStats] = useState<{ posts: { total: number; public: number }; likes: number } | null>(null);
+
+  useEffect(() => {
+    // Fetch notifications and stats
+    if (currentUserId) {
+      fetch(apiUrl("/api/qsocial/me/notifications"), { headers: bearerHeader() })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (d?.notifications) setNotifications(d.notifications); })
+        .catch(() => {});
+    }
+    fetch(apiUrl("/api/qsocial/stats"))
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setStats(d); })
+      .catch(() => {});
+  }, [currentUserId]);
+
   const fetchFeed = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -443,14 +465,54 @@ export default function QSocialPage() {
         >
           {/* Feed column */}
           <div>
+            {/* Header with stats + notifications */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#0f172a" }}>QSocial</h1>
+                {stats && (
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    {stats.posts.public} постов · {stats.likes} лайков
+                  </div>
+                )}
+              </div>
+              {currentUserId && (
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setShowNotifs(!showNotifs)}
+                    style={{ background: "transparent", border: "1px solid #e2e8f0", borderRadius: 10, padding: "7px 12px", cursor: "pointer", fontSize: 18, position: "relative" }}
+                  >
+                    🔔
+                    {unreadCount > 0 && (
+                      <span style={{ position: "absolute", top: -4, right: -4, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 800, borderRadius: "50%", width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  {showNotifs && (
+                    <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 8, width: 300, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.12)", zIndex: 100, maxHeight: 360, overflowY: "auto" }}>
+                      <div style={{ padding: "12px 16px", fontWeight: 700, fontSize: 13, borderBottom: "1px solid #f1f5f9" }}>Уведомления</div>
+                      {notifications.length === 0 ? (
+                        <div style={{ padding: "20px 16px", fontSize: 13, color: "#94a3b8", textAlign: "center" }}>Нет уведомлений</div>
+                      ) : notifications.slice(0, 10).map((n) => (
+                        <div key={n.id} style={{ padding: "10px 16px", borderBottom: "1px solid #f8fafc", fontSize: 13, color: n.read ? "#94a3b8" : "#0f172a", background: n.read ? "#fff" : "#f0fdf4" }}>
+                          {n.message}
+                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{new Date(n.createdAt).toLocaleTimeString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Tab switcher */}
             <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
               <button style={tabStyle(tab === "global")} onClick={() => setTab("global")}>
-                Global Feed
+                🌐 Global Feed
               </button>
               {currentUserId && (
                 <button style={tabStyle(tab === "mine")} onClick={() => setTab("mine")}>
-                  My Feed
+                  👤 My Feed
                 </button>
               )}
             </div>

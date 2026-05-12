@@ -14,14 +14,20 @@ function bearerHeader(): HeadersInit {
 
 export default function QMediaVideosPage() {
   const [videos, setVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("All");
   const [playing, setPlaying] = useState<any | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", url: "", thumbnailUrl: "", category: "other" });
 
   useEffect(() => {
+    setLoading(true);
     const c = category === "All" ? "" : category.toLowerCase().replace(/ /g, "-");
-    fetch(apiUrl(`/api/qmedia/videos?limit=50${c ? `&category=${c}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch((err) => { console.warn("[qmedia/videos] videos list failed", err instanceof Error ? err.message : err); });
+    fetch(apiUrl(`/api/qmedia/videos?limit=50${c ? `&category=${c}` : ""}`))
+      .then(r => r.json())
+      .then(d => { if (d.items) setVideos(d.items); })
+      .catch((err) => { console.warn("[qmedia/videos] videos list failed", err instanceof Error ? err.message : err); })
+      .finally(() => setLoading(false));
   }, [category]);
 
   const addVideo = async () => {
@@ -79,8 +85,24 @@ export default function QMediaVideosPage() {
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
-          {videos.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13, gridColumn: "1/-1" }}>No videos yet. Be the first to add one!</p>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))", gap: 14 }}>
+          {loading && [0, 1, 2, 3].map(i => (
+            <div key={`sk-${i}`} aria-busy="true" style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.05)", background: "#fff", opacity: 0.6 }}>
+              <div style={{ height: 120, background: "#e2e8f0" }} />
+              <div style={{ padding: "10px 12px" }}>
+                <div style={{ width: "75%", height: 12, background: "#e2e8f0", borderRadius: 4, marginBottom: 6 }} />
+                <div style={{ width: "40%", height: 10, background: "#e2e8f0", borderRadius: 4 }} />
+              </div>
+            </div>
+          ))}
+          {!loading && videos.length === 0 && (
+            <div style={{ gridColumn: "1/-1", textAlign: "center", padding: "32px 16px", background: "#f8fafc", border: "1px dashed rgba(15,23,42,0.15)", borderRadius: 12 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🎬</div>
+              <p style={{ color: "#475569", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Пока нет видео{category !== "All" ? ` в категории "${category}"` : ""}</p>
+              <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 12 }}>Будь первым — поделись видео!</p>
+              <button onClick={() => setAddOpen(true)} style={{ padding: "6px 14px", borderRadius: 8, background: "#7c3aed", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Добавить видео</button>
+            </div>
+          )}
           {videos.map(v => (
             <div key={v.id} onClick={() => { setPlaying(v); fetch(apiUrl(`/api/qmedia/videos/${v.id}/view`), { method: "POST" }).catch((err) => { console.warn("[qmedia/videos] view count failed", err instanceof Error ? err.message : err); }); }} style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(15,23,42,0.08)", background: "#fff", cursor: "pointer" }}>
               <div style={{ height: 120, background: v.thumbnailUrl ? `url(${v.thumbnailUrl}) center/cover` : "linear-gradient(135deg, #7c3aed, #0d9488)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>

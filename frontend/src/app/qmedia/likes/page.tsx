@@ -20,7 +20,7 @@ export default function QMediaLikesPage() {
     fetch(apiUrl("/api/qmedia/me/likes"), { headers: ah() })
       .then(r => r.ok ? r.json() : null)
       .then(d => d && setLikes(d.items ?? []))
-      .catch(() => {})
+      .catch((err) => { console.warn("[qmedia/likes] load failed", err instanceof Error ? err.message : err); })
       .finally(() => setLoading(false));
   }, []);
 

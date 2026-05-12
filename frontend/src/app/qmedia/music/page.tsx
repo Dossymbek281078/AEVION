@@ -14,6 +14,7 @@ function bearerHeader(): HeadersInit {
 
 export default function QMediaMusicPage() {
   const [tracks, setTracks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [genre, setGenre] = useState("All");
   const [current, setCurrent] = useState<any | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -24,8 +25,13 @@ export default function QMediaMusicPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
+    setLoading(true);
     const g = genre === "All" ? "" : genre.toLowerCase();
-    fetch(apiUrl(`/api/qmedia/tracks?limit=50${g ? `&genre=${g}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch((err) => { console.warn("[qmedia/music] tracks list failed", err instanceof Error ? err.message : err); });
+    fetch(apiUrl(`/api/qmedia/tracks?limit=50${g ? `&genre=${g}` : ""}`))
+      .then(r => r.json())
+      .then(d => { if (d.items) setTracks(d.items); })
+      .catch((err) => { console.warn("[qmedia/music] tracks list failed", err instanceof Error ? err.message : err); })
+      .finally(() => setLoading(false));
   }, [genre]);
 
   const play = (track: any) => {
@@ -95,7 +101,27 @@ export default function QMediaMusicPage() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {tracks.length === 0 && <p style={{ color: "#94a3b8", fontSize: 13 }}>No tracks yet. Be the first to add one!</p>}
+          {loading && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }} aria-busy="true" aria-label="Загрузка треков">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} style={{ padding: "10px 14px", borderRadius: 10, background: "#f1f5f9", border: "1px solid rgba(15,23,42,0.05)", display: "flex", alignItems: "center", gap: 12, opacity: 0.6 }}>
+                  <span style={{ width: 24, height: 14, background: "#e2e8f0", borderRadius: 4 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: "55%", height: 12, background: "#e2e8f0", borderRadius: 4, marginBottom: 4 }} />
+                    <div style={{ width: "35%", height: 10, background: "#e2e8f0", borderRadius: 4 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && tracks.length === 0 && (
+            <div style={{ textAlign: "center", padding: "32px 16px", background: "#f8fafc", border: "1px dashed rgba(15,23,42,0.15)", borderRadius: 12 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🎵</div>
+              <p style={{ color: "#475569", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Пока нет треков{genre !== "All" ? ` в жанре "${genre}"` : ""}</p>
+              <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 12 }}>Будь первым — добавь свой трек!</p>
+              <button onClick={() => setAddOpen(true)} style={{ padding: "6px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Добавить трек</button>
+            </div>
+          )}
           {tracks.map((t, i) => (
             <div key={t.id} onClick={() => play(t)} style={{ padding: "10px 14px", borderRadius: 10, background: current?.id === t.id ? "rgba(13,148,136,0.08)" : "#f8fafc", border: `1px solid ${current?.id === t.id ? "rgba(13,148,136,0.3)" : "rgba(15,23,42,0.08)"}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ width: 24, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>{current?.id === t.id && isPlaying ? "▶" : i + 1}</span>

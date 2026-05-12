@@ -8,10 +8,13 @@ import { apiUrl } from "@/lib/apiBase";
 export default function QMediaPage() {
   const [tracks, setTracks] = useState<any[]>([]);
   const [videos, setVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(apiUrl("/api/qmedia/tracks?limit=5")).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch((err) => { console.warn("[qmedia/page] tracks preview failed", err instanceof Error ? err.message : err); });
-    fetch(apiUrl("/api/qmedia/videos?limit=5")).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch((err) => { console.warn("[qmedia/page] videos preview failed", err instanceof Error ? err.message : err); });
+    Promise.all([
+      fetch(apiUrl("/api/qmedia/tracks?limit=5")).then(r => r.json()).then(d => { if (d.items) setTracks(d.items); }).catch((err) => { console.warn("[qmedia/page] tracks preview failed", err instanceof Error ? err.message : err); }),
+      fetch(apiUrl("/api/qmedia/videos?limit=5")).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch((err) => { console.warn("[qmedia/page] videos preview failed", err instanceof Error ? err.message : err); }),
+    ]).finally(() => setLoading(false));
   }, []);
 
   const features = [
@@ -42,6 +45,15 @@ export default function QMediaPage() {
             </Link>
           ))}
         </div>
+
+        {!loading && tracks.length === 0 && videos.length === 0 && (
+          <div style={{ marginBottom: 24, padding: 24, textAlign: "center", background: "#f8fafc", border: "1px dashed rgba(15,23,42,0.15)", borderRadius: 14 }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🚀</div>
+            <p style={{ color: "#475569", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>QMedia только запустился</p>
+            <p style={{ color: "#94a3b8", fontSize: 12, marginBottom: 14 }}>Будь первым кто загрузит трек или видео.</p>
+            <Link href="/qmedia/upload" style={{ display: "inline-block", padding: "8px 16px", background: "#0d9488", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 8, textDecoration: "none" }}>+ Загрузить</Link>
+          </div>
+        )}
 
         {tracks.length > 0 && (
           <div style={{ marginBottom: 24 }}>

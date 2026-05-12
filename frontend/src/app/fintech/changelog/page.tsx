@@ -34,6 +34,16 @@ type Entry = {
 };
 
 const ENTRIES: Entry[] = [
+  { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "docs", title: "Rate-limits cheat sheet",
+    description: "/developers/fintech/rate-limits — 4-tier overview, 15 endpoint buckets, response headers, TS backoff sample." },
+  { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "docs", title: "Troubleshooting guide",
+    description: "/developers/fintech/troubleshooting — 8 common issues with severity, causes, and fix sequence." },
+  { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "feat", title: "Integrations directory + edge OG image",
+    description: "/fintech/integrations — 4-category catalog. New /fintech opengraph-image.tsx with 6 module chips." },
+  { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "feat", title: "Onboarding guide CLI",
+    description: "scripts/fintech-onboarding-guide.mjs — 5-module walk-through with --probe + --json modes." },
+  { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "feat", title: "Module pulse tiles on dashboard",
+    description: "FintechMetric component: 4 sparkline-backed counter tiles for chain length, donations, users, proposals." },
   { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "feat", title: "Cross-module integration smoke + stats aggregator",
     description: "Two new ops scripts: 7-step health audit and live stats CLI. Registered in all-smokes registry." },
   { date: "2026-05-12", module: "Fintech", moduleColor: "#a78bfa", type: "feat", title: "Whitepaper + dashboard + quickstart pages",

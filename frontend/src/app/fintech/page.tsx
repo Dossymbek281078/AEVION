@@ -646,6 +646,12 @@ export default async function FintechHubPage() {
               All 6 modules →
             </Link>
             <Link
+              href="/fintech/catalog"
+              style={{ padding: "12px 22px", background: "transparent", color: C.text, fontSize: 14, fontWeight: 700, borderRadius: 10, textDecoration: "none", border: `1px solid ${C.border}` }}
+            >
+              Live catalog (27+) →
+            </Link>
+            <Link
               href="/fintech/compare"
               style={{ padding: "12px 22px", background: "transparent", color: C.text, fontSize: 14, fontWeight: 700, borderRadius: 10, textDecoration: "none", border: `1px solid ${C.border}` }}
             >

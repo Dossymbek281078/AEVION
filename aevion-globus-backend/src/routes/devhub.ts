@@ -1211,6 +1211,90 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ROUTES — Templates (Commit 3)
+
+// GET /api/devhub/projects/:id/github/branches — list branches of linked repo
+devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
+  const githubToken = process.env.GITHUB_TOKEN;
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!project.repoUrl || !githubToken) {
+    return res.json({ branches: [], connected: false });
+  }
+  try {
+    const match = project.repoUrl.match(/github.com/([^/]+)/([^/]+)/);
+    if (!match) return res.json({ branches: [], connected: false });
+    const [, owner, repo] = match;
+    const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches?per_page=30`, {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        "User-Agent": "AEVION-DevHub",
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!resp.ok) return res.json({ branches: [], connected: true, error: "GitHub API error" });
+    const data = await resp.json() as Array<{ name: string; commit: { sha: string } }>;
+    return res.json({
+      connected: true,
+      repoUrl: project.repoUrl,
+      branches: data.map((b) => ({ name: b.name, sha: b.commit.sha.slice(0, 7) })),
+    });
+  } catch {
+    return res.json({ branches: [], connected: false });
+  }
+});
+
+// POST /api/devhub/projects/:id/github/sync — pull latest commit SHA for default branch
+devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
+  const githubToken = process.env.GITHUB_TOKEN;
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!project.repoUrl || !githubToken) {
+    return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing" });
+  }
+  try {
+    const match = project.repoUrl.match(/github.com/([^/]+)/([^/]+)/);
+    if (!match) return res.json({ ok: false, message: "Invalid repoUrl format" });
+    const [, owner, repo] = match;
+    const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        "User-Agent": "AEVION-DevHub",
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!resp.ok) return res.json({ ok: false, message: "GitHub API error" });
+    const data = await resp.json() as { default_branch: string; pushed_at: string; stargazers_count: number };
+    project.updatedAt = new Date().toISOString();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+    return res.json({
+      ok: true,
+      defaultBranch: data.default_branch,
+      lastPush: data.pushed_at,
+      stars: data.stargazers_count,
+      repoUrl: project.repoUrl,
+    });
+  } catch (e: any) {
+    return res.json({ ok: false, message: e?.message || "sync failed" });
+  }
+});
 // ═════════════════════════════════════════════════════════════════════════════
 
 // GET /api/devhub/templates

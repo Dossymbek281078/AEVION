@@ -639,6 +639,18 @@ export default async function FintechHubPage() {
             >
               Open governance
             </Link>
+            <Link
+              href="/fintech/modules"
+              style={{ padding: "12px 22px", background: "transparent", color: C.text, fontSize: 14, fontWeight: 700, borderRadius: 10, textDecoration: "none", border: `1px solid ${C.border}` }}
+            >
+              All 6 modules →
+            </Link>
+            <Link
+              href="/fintech/compare"
+              style={{ padding: "12px 22px", background: "transparent", color: C.text, fontSize: 14, fontWeight: 700, borderRadius: 10, textDecoration: "none", border: `1px solid ${C.border}` }}
+            >
+              Compare tiers →
+            </Link>
           </div>
         </div>
       </section>

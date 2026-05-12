@@ -446,6 +446,18 @@ export default function FintechDevPage() {
             <a href="/developers/fintech/quickstart" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
               → Interactive quickstart: 6 curl examples with copy-buttons →
             </a>
+            {" · "}
+            <a href="/developers/fintech/sdk" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              SDK reference →
+            </a>
+            {" · "}
+            <a href="/developers/fintech/webhooks" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              Webhooks →
+            </a>
+            {" · "}
+            <a href="/developers/fintech/errors" style={{ color: ACCENT_PURPLE, fontWeight: 700 }}>
+              Error codes →
+            </a>
           </P>
           <P>
             Every fintech module gates writes behind the platform JWT. Bootstrap a

@@ -39,7 +39,7 @@ function ReferenceCard({ ref: r, showWorker = false }: { ref: Reference; showWor
         {showWorker && (
           <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-lg shrink-0 overflow-hidden">
             {r.workerPhoto
-              ? <img src={r.workerPhoto} alt={r.workerName ?? ""} className="w-full h-full object-cover" />
+              ? <img src={r.workerPhoto} alt={r.workerName ?? ""} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : <span className="text-slate-400 text-sm font-bold">{(r.workerName ?? "?")[0]?.toUpperCase()}</span>
             }
           </div>

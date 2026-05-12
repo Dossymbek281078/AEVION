@@ -21,7 +21,9 @@ function nowIso() { return new Date().toISOString(); }
 function uid() { return crypto.randomUUID(); }
 
 qmediaRouter.use(async (_req, _res, next) => {
-  await ensureQMediaTables(pool).catch(() => {});
+  await ensureQMediaTables(pool).catch((err) => {
+    console.error("[qmedia] ensureQMediaTables failed", err instanceof Error ? err.message : err);
+  });
   next();
 });
 
@@ -36,7 +38,7 @@ qmediaRouter.get("/tracks", async (req, res) => {
     if (genre) tracks = tracks.filter(t => t.genre === genre);
     if (q) tracks = tracks.filter(t => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q));
     res.json({ items: tracks.sort((a, b) => b.playCount - a.playCount).slice(0, limit) });
-  } catch { res.status(500).json({ error: "list tracks failed" }); }
+  } catch (err) { console.error("[qmedia] list tracks failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list tracks failed" }); }
 });
 
 qmediaRouter.get("/me/tracks", async (req, res) => {
@@ -44,7 +46,7 @@ qmediaRouter.get("/me/tracks", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     res.json({ items: Array.from(memTracks.values()).filter(t => t.userId === auth.sub).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
-  } catch { res.status(500).json({ error: "list my tracks failed" }); }
+  } catch (err) { console.error("[qmedia] list my tracks failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list my tracks failed" }); }
 });
 
 qmediaRouter.post("/me/tracks", async (req, res) => {
@@ -56,7 +58,7 @@ qmediaRouter.post("/me/tracks", async (req, res) => {
     const track: TrackRow = { id: uid(), userId: auth.sub, title: String(title).slice(0, 200), artist: typeof artist === "string" ? artist.slice(0, 200) : "", genre: typeof genre === "string" ? genre : "other", duration: typeof duration === "number" ? duration : 0, url: typeof url === "string" ? url : null, coverUrl: typeof coverUrl === "string" ? coverUrl : null, lyrics: typeof lyrics === "string" ? lyrics.slice(0, 10000) : null, playCount: 0, isPublic: Boolean(isPublic), tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
     memTracks.set(track.id, track);
     res.status(201).json(track);
-  } catch { res.status(500).json({ error: "create track failed" }); }
+  } catch (err) { console.error("[qmedia] create track failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "create track failed" }); }
 });
 
 qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
@@ -76,7 +78,7 @@ qmediaRouter.patch("/me/tracks/:id", async (req, res) => {
     if (Array.isArray(tags)) track.tags = tags.slice(0, 10).map(String);
     track.updatedAt = nowIso();
     res.json(track);
-  } catch { res.status(500).json({ error: "update track failed" }); }
+  } catch (err) { console.error("[qmedia] update track failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "update track failed" }); }
 });
 
 qmediaRouter.delete("/me/tracks/:id", async (req, res) => {
@@ -87,7 +89,7 @@ qmediaRouter.delete("/me/tracks/:id", async (req, res) => {
     if (!track || track.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     memTracks.delete(req.params.id);
     res.json({ deleted: true });
-  } catch { res.status(500).json({ error: "delete track failed" }); }
+  } catch (err) { console.error("[qmedia] delete track failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "delete track failed" }); }
 });
 
 qmediaRouter.post("/tracks/:id/play", async (req, res) => {
@@ -96,7 +98,7 @@ qmediaRouter.post("/tracks/:id/play", async (req, res) => {
     if (!track) return res.status(404).json({ error: "not found" });
     track.playCount++;
     res.json({ playCount: track.playCount });
-  } catch { res.status(500).json({ error: "play failed" }); }
+  } catch (err) { console.error("[qmedia] play failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "play failed" }); }
 });
 
 /* ── Playlists ── */
@@ -104,7 +106,7 @@ qmediaRouter.post("/tracks/:id/play", async (req, res) => {
 qmediaRouter.get("/playlists", async (_req, res) => {
   try {
     res.json({ items: Array.from(memPlaylists.values()).filter(p => p.isPublic).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 20) });
-  } catch { res.status(500).json({ error: "list playlists failed" }); }
+  } catch (err) { console.error("[qmedia] list playlists failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list playlists failed" }); }
 });
 
 qmediaRouter.get("/me/playlists", async (req, res) => {
@@ -112,7 +114,7 @@ qmediaRouter.get("/me/playlists", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     res.json({ items: Array.from(memPlaylists.values()).filter(p => p.userId === auth.sub).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
-  } catch { res.status(500).json({ error: "list my playlists failed" }); }
+  } catch (err) { console.error("[qmedia] list my playlists failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list my playlists failed" }); }
 });
 
 qmediaRouter.post("/me/playlists", async (req, res) => {
@@ -124,7 +126,7 @@ qmediaRouter.post("/me/playlists", async (req, res) => {
     const playlist: PlaylistRow = { id: uid(), userId: auth.sub, name: name.slice(0, 100), description: description ? String(description).slice(0, 500) : null, isPublic: Boolean(isPublic), trackIds: [], createdAt: nowIso(), updatedAt: nowIso() };
     memPlaylists.set(playlist.id, playlist);
     res.status(201).json(playlist);
-  } catch { res.status(500).json({ error: "create playlist failed" }); }
+  } catch (err) { console.error("[qmedia] create playlist failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "create playlist failed" }); }
 });
 
 qmediaRouter.post("/me/playlists/:id/tracks", async (req, res) => {
@@ -138,7 +140,7 @@ qmediaRouter.post("/me/playlists/:id/tracks", async (req, res) => {
     if (!playlist.trackIds.includes(String(trackId))) playlist.trackIds.push(String(trackId));
     playlist.updatedAt = nowIso();
     res.json(playlist);
-  } catch { res.status(500).json({ error: "add track failed" }); }
+  } catch (err) { console.error("[qmedia] add track failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "add track failed" }); }
 });
 
 qmediaRouter.delete("/me/playlists/:id/tracks/:trackId", async (req, res) => {
@@ -150,7 +152,7 @@ qmediaRouter.delete("/me/playlists/:id/tracks/:trackId", async (req, res) => {
     playlist.trackIds = playlist.trackIds.filter(id => id !== req.params.trackId);
     playlist.updatedAt = nowIso();
     res.json(playlist);
-  } catch { res.status(500).json({ error: "remove track failed" }); }
+  } catch (err) { console.error("[qmedia] remove track failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "remove track failed" }); }
 });
 
 qmediaRouter.delete("/me/playlists/:id", async (req, res) => {
@@ -161,7 +163,7 @@ qmediaRouter.delete("/me/playlists/:id", async (req, res) => {
     if (!playlist || playlist.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     memPlaylists.delete(req.params.id);
     res.json({ deleted: true });
-  } catch { res.status(500).json({ error: "delete playlist failed" }); }
+  } catch (err) { console.error("[qmedia] delete playlist failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "delete playlist failed" }); }
 });
 
 /* ── Videos ── */
@@ -175,7 +177,7 @@ qmediaRouter.get("/videos", async (req, res) => {
     if (category) videos = videos.filter(v => v.category === category);
     if (q) videos = videos.filter(v => v.title.toLowerCase().includes(q));
     res.json({ items: videos.sort((a, b) => b.viewCount - a.viewCount).slice(0, limit) });
-  } catch { res.status(500).json({ error: "list videos failed" }); }
+  } catch (err) { console.error("[qmedia] list videos failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list videos failed" }); }
 });
 
 qmediaRouter.get("/me/videos", async (req, res) => {
@@ -183,7 +185,7 @@ qmediaRouter.get("/me/videos", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     res.json({ items: Array.from(memVideos.values()).filter(v => v.userId === auth.sub).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) });
-  } catch { res.status(500).json({ error: "list my videos failed" }); }
+  } catch (err) { console.error("[qmedia] list my videos failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list my videos failed" }); }
 });
 
 qmediaRouter.post("/me/videos", async (req, res) => {
@@ -195,7 +197,7 @@ qmediaRouter.post("/me/videos", async (req, res) => {
     const video: VideoRow = { id: uid(), userId: auth.sub, title: title.slice(0, 200), description: description ? String(description).slice(0, 1000) : null, url: url ? String(url) : null, thumbnailUrl: thumbnailUrl ? String(thumbnailUrl) : null, duration: typeof duration === "number" ? duration : 0, viewCount: 0, isPublic: Boolean(isPublic), category: typeof category === "string" ? category : "other", tags: Array.isArray(tags) ? tags.slice(0, 10).map(String) : [], createdAt: nowIso(), updatedAt: nowIso() };
     memVideos.set(video.id, video);
     res.status(201).json(video);
-  } catch { res.status(500).json({ error: "create video failed" }); }
+  } catch (err) { console.error("[qmedia] create video failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "create video failed" }); }
 });
 
 qmediaRouter.patch("/me/videos/:id", async (req, res) => {
@@ -213,7 +215,7 @@ qmediaRouter.patch("/me/videos/:id", async (req, res) => {
     if (category) video.category = String(category);
     video.updatedAt = nowIso();
     res.json(video);
-  } catch { res.status(500).json({ error: "update video failed" }); }
+  } catch (err) { console.error("[qmedia] update video failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "update video failed" }); }
 });
 
 qmediaRouter.post("/videos/:id/view", async (req, res) => {
@@ -222,7 +224,7 @@ qmediaRouter.post("/videos/:id/view", async (req, res) => {
     if (!video) return res.status(404).json({ error: "not found" });
     video.viewCount++;
     res.json({ viewCount: video.viewCount });
-  } catch { res.status(500).json({ error: "view failed" }); }
+  } catch (err) { console.error("[qmedia] view failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "view failed" }); }
 });
 
 qmediaRouter.delete("/me/videos/:id", async (req, res) => {
@@ -233,7 +235,7 @@ qmediaRouter.delete("/me/videos/:id", async (req, res) => {
     if (!video || video.userId !== auth.sub) return res.status(404).json({ error: "not found" });
     memVideos.delete(req.params.id);
     res.json({ deleted: true });
-  } catch { res.status(500).json({ error: "delete video failed" }); }
+  } catch (err) { console.error("[qmedia] delete video failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "delete video failed" }); }
 });
 
 /* ── Likes ── */
@@ -248,7 +250,7 @@ qmediaRouter.post("/:type/:id/like", async (req, res) => {
     const liked = !memLikes.get(key);
     if (liked) memLikes.set(key, true); else memLikes.delete(key);
     res.json({ liked });
-  } catch { res.status(500).json({ error: "like failed" }); }
+  } catch (err) { console.error("[qmedia] like failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "like failed" }); }
 });
 
 qmediaRouter.get("/me/likes", async (req, res) => {
@@ -258,7 +260,7 @@ qmediaRouter.get("/me/likes", async (req, res) => {
     const prefix = `${auth.sub}:`;
     const likes = Array.from(memLikes.keys()).filter(k => k.startsWith(prefix)).map(k => { const parts = k.split(":"); return { type: parts[1], resourceId: parts[2] }; });
     res.json({ items: likes });
-  } catch { res.status(500).json({ error: "list likes failed" }); }
+  } catch (err) { console.error("[qmedia] list likes failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "list likes failed" }); }
 });
 
 /* ── AI Tools ── */
@@ -273,7 +275,7 @@ qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
     const numLines = typeof lines === "number" ? lines : 8;
     const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write ${numLines} lines of ${genre || "pop"} song lyrics with a ${mood || "upbeat"} mood about: ${theme || "life"}. Format with [Verse] and [Chorus] labels. Just the lyrics, no explanation.` }], provider.defaultModel, 0.9);
     res.json({ lyrics: result.reply });
-  } catch { res.status(500).json({ error: "generate lyrics failed" }); }
+  } catch (err) { console.error("[qmedia] generate lyrics failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "generate lyrics failed" }); }
 });
 
 qmediaRouter.post("/ai/generate-title", async (req, res) => {
@@ -291,7 +293,7 @@ qmediaRouter.post("/ai/generate-title", async (req, res) => {
     } catch {
       res.json({ titles: result.reply.split("\n").filter((l: string) => l.trim()).slice(0, 5) });
     }
-  } catch { res.status(500).json({ error: "generate title failed" }); }
+  } catch (err) { console.error("[qmedia] generate title failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "generate title failed" }); }
 });
 
 qmediaRouter.post("/ai/generate-color-palette", async (req, res) => {
@@ -307,7 +309,7 @@ qmediaRouter.post("/ai/generate-color-palette", async (req, res) => {
     };
     const colors = palettes[mood as string] || palettes.happy;
     res.json({ colors, mood: mood || "happy" });
-  } catch { res.status(500).json({ error: "generate palette failed" }); }
+  } catch (err) { console.error("[qmedia] generate palette failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "generate palette failed" }); }
 });
 
 qmediaRouter.post("/ai/describe-video", async (req, res) => {
@@ -317,7 +319,7 @@ qmediaRouter.post("/ai/describe-video", async (req, res) => {
     if (!provider) return res.json({ description: `A compelling ${category || "video"} titled "${title || "Untitled"}". Watch as the story unfolds in this captivating piece.`, mode: "stub" });
     const result = await callProvider(provider.id, [{ role: "user" as const, content: `Write a 2-sentence video description for a ${category || "video"} titled "${title}". Make it engaging and concise.` }], provider.defaultModel, 0.7);
     res.json({ description: result.reply.trim() });
-  } catch { res.status(500).json({ error: "describe video failed" }); }
+  } catch (err) { console.error("[qmedia] describe video failed", err instanceof Error ? err.message : err); res.status(500).json({ error: "describe video failed" }); }
 });
 
 /* ── Health ── */

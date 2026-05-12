@@ -309,6 +309,115 @@ qchaingovRouter.post("/proposals/:id/close", writeLimit, async (req, res) => {
   }
 });
 
+// ── POST /proposals/:id/execute — admin tally-based pass/reject flip
+//
+// MVP simplification notes:
+//  - Quorum is treated as a soft signal: if totalVotes >= proposal.quorumPercent
+//    we consider quorum met. There is no canonical user-base counter (a true
+//    quorum requires `eligible voters` denominator). Revisit when AEV-weighted
+//    voting & a registered-voter table exist.
+//  - On "executed" we currently DO NOT emit a Z-Tide event for the author —
+//    the Z-Tide kind whitelist has no "proposal-executed" entry and we don't
+//    want to fake-map onto "helpful-comment". TODO: extend Z-Tide whitelist
+//    with "proposal-executed" then wire emitZTideEvent here.
+qchaingovRouter.post("/proposals/:id/execute", writeLimit, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = verifyBearerOptional(req);
+    if (!isAdmin(auth)) return res.status(403).json({ error: "admin_only" });
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ error: "id required" });
+
+    const pool = getPool();
+    const p = await pool.query(
+      `SELECT "id","voteMode","options","quorumPercent","passThreshold","authorUserId","status"
+       FROM "QChainGovProposal" WHERE "id" = $1 LIMIT 1`,
+      [id],
+    );
+    if (p.rowCount === 0) return res.status(404).json({ error: "proposal_not_found" });
+    const proposal = p.rows[0] as {
+      id: string;
+      voteMode: string;
+      options: string[];
+      quorumPercent: number;
+      passThreshold: number;
+      authorUserId: string;
+      status: string;
+    };
+    if (proposal.status !== "closed") {
+      return res.status(400).json({ error: "proposal_not_closed", status: proposal.status });
+    }
+
+    const tallyR = await pool.query(
+      `SELECT "choice", COUNT(*)::int AS votes, COALESCE(SUM("weight"),0)::float AS weight
+       FROM "QChainGovVote" WHERE "proposalId" = $1 GROUP BY "choice"`,
+      [id],
+    );
+    type TallyRow = { choice: string; votes: number; weight: number };
+    const tally = tallyR.rows as TallyRow[];
+    const totalVotes = tally.reduce((s, r) => s + (r.votes || 0), 0);
+    const totalWeight = tally.reduce((s, r) => s + (r.weight || 0), 0);
+
+    // Soft-quorum: documented MVP-cheat — see header comment.
+    const quorumMet = totalVotes > 0 && totalVotes >= proposal.quorumPercent;
+
+    let passed = false;
+    let achievedPct = 0;
+    let winningChoice: string | null = null;
+
+    if (proposal.voteMode === "yes-no-abstain") {
+      const yesWeight = tally.find(r => r.choice === "yes")?.weight ?? 0;
+      const noWeight = tally.find(r => r.choice === "no")?.weight ?? 0;
+      const denom = yesWeight + noWeight;
+      achievedPct = denom > 0 ? (yesWeight / denom) * 100 : 0;
+      passed = quorumMet && achievedPct >= proposal.passThreshold;
+      winningChoice = passed ? "yes" : (yesWeight > noWeight ? "yes" : (noWeight > 0 ? "no" : null));
+    } else {
+      // weighted or ranked-choice — winner = highest weight bucket
+      let topWeight = -1;
+      for (const row of tally) {
+        if (row.weight > topWeight) {
+          topWeight = row.weight;
+          winningChoice = row.choice;
+        }
+      }
+      achievedPct = totalWeight > 0 ? (Math.max(topWeight, 0) / totalWeight) * 100 : 0;
+      passed = quorumMet && achievedPct >= proposal.passThreshold;
+    }
+
+    const newStatus = passed ? "executed" : "rejected";
+    const upd = await pool.query(
+      `UPDATE "QChainGovProposal" SET "status" = $1, "executedAt" = NOW()
+       WHERE "id" = $2 AND "status" = 'closed' RETURNING "id","status","executedAt"`,
+      [newStatus, id],
+    );
+    if ((upd.rowCount ?? 0) === 0) {
+      return res.status(409).json({ error: "proposal_state_changed" });
+    }
+    const executedAt = (upd.rows[0].executedAt instanceof Date)
+      ? upd.rows[0].executedAt.toISOString()
+      : String(upd.rows[0].executedAt);
+
+    // NOTE: Z-Tide event for proposal.authorUserId intentionally omitted — see
+    // header comment for rationale (no matching kind in whitelist).
+
+    res.json({
+      ok: true,
+      proposalId: id,
+      status: newStatus,
+      quorumMet,
+      threshold: { required: proposal.passThreshold, achieved: Number(achievedPct.toFixed(2)) },
+      winningChoice,
+      totalVotes,
+      totalWeight,
+      executedAt,
+    });
+  } catch (err: unknown) {
+    console.error("[qchaingov] proposal_execute_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "proposal_execute_failed" });
+  }
+});
+
 qchaingovRouter.get("/proposals/:id/votes", readLimit, async (req, res) => {
   try {
     await ensureTables();

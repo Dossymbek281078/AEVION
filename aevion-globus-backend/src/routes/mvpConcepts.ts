@@ -21,6 +21,7 @@ import { Router, type Express, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import {
   createItem, listItems, getItem, statsFor,
+  searchByPayloadField, searchByDistance,
 } from "../lib/moduleMvpStore";
 
 type ConceptConfig = {
@@ -144,6 +145,58 @@ function buildRouter(cfg: ConceptConfig): Router {
 }
 
 /**
+ * Module-specific extensions. The generic CRUD covers 80%; these add the
+ * high-utility queries that make each module actually useful — geo radius
+ * for mapreality, stage filter for startup-exchange, location filter for
+ * voice-of-earth. Mounted on the app at full paths so they share the
+ * `/api/<id>` namespace without colliding with the per-module router.
+ */
+function attachModuleExtensions(app: Express): void {
+  app.get("/api/mapreality/claims/nearby", readLimit, async (req: Request, res: Response) => {
+    try {
+      const lat = Number(req.query.lat);
+      const lng = Number(req.query.lng);
+      const radiusKm = Number(req.query.radiusKm ?? req.query.radius ?? 25);
+      const limit = Number(req.query.limit ?? 20);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: "missing_coords", hint: "pass ?lat=...&lng=...&radiusKm=..." });
+      }
+      if (!(radiusKm > 0) || radiusKm > 5000) {
+        return res.status(400).json({ error: "bad_radius", hint: "0 < radiusKm <= 5000" });
+      }
+      const items = await searchByDistance("mapreality", lat, lng, radiusKm, limit);
+      res.json({ items, total: items.length, moduleId: "mapreality", noun: "claims", query: { lat, lng, radiusKm } });
+    } catch (err) {
+      res.status(500).json({ error: "nearby_failed", detail: err instanceof Error ? err.message : "unknown" });
+    }
+  });
+
+  app.get("/api/startup-exchange/listings/by-stage/:stage", readLimit, async (req: Request, res: Response) => {
+    try {
+      const stage = String(req.params.stage || "").slice(0, 40);
+      if (!stage) return res.status(400).json({ error: "missing_stage" });
+      const limit = Number(req.query.limit ?? 20);
+      const items = await searchByPayloadField("startup-exchange", "stage", stage, limit);
+      res.json({ items, total: items.length, moduleId: "startup-exchange", noun: "listings", query: { stage } });
+    } catch (err) {
+      res.status(500).json({ error: "by_stage_failed", detail: err instanceof Error ? err.message : "unknown" });
+    }
+  });
+
+  app.get("/api/voice-of-earth/feeds/by-location", readLimit, async (req: Request, res: Response) => {
+    try {
+      const location = String(req.query.location || "").slice(0, 80);
+      if (!location) return res.status(400).json({ error: "missing_location", hint: "pass ?location=..." });
+      const limit = Number(req.query.limit ?? 20);
+      const items = await searchByPayloadField("voice-of-earth", "location", location, limit);
+      res.json({ items, total: items.length, moduleId: "voice-of-earth", noun: "feeds", query: { location } });
+    } catch (err) {
+      res.status(500).json({ error: "by_location_failed", detail: err instanceof Error ? err.message : "unknown" });
+    }
+  });
+}
+
+/**
  * Mount all MVP concept routers on the Express app. MUST be called BEFORE
  * the generic planningStubs loop so `/api/<id>/<noun>` paths take
  * precedence over the catch-all stub.
@@ -152,6 +205,7 @@ export function mountMvpConcepts(app: Express): void {
   for (const cfg of CONCEPTS) {
     app.use(`/api/${cfg.id}`, buildRouter(cfg));
   }
+  attachModuleExtensions(app);
 }
 
 export const MVP_CONCEPT_IDS = CONCEPTS.map((c) => c.id);

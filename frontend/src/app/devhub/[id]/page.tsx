@@ -76,6 +76,101 @@ const LANG_BG_TINTS: Record<string, string> = {
   python: "rgba(16,185,129,0.03)",
 };
 
+// ─── Monaco-lite syntax highlighting editor ────────────────────────────────────
+function CodeEditor({ value, onChange, language }: { value: string; onChange: (v: string) => void; language: string }) {
+  const HIGHLIGHTS: Record<string, RegExp> = {
+    typescript: /\b(const|let|var|function|return|import|export|type|interface|async|await|class|extends|implements|new|this|null|undefined|true|false|void|string|number|boolean|any)\b/g,
+    javascript: /\b(const|let|var|function|return|import|export|async|await|class|new|this|null|undefined|true|false)\b/g,
+    css: /([a-z-]+)(?=\s*:)/g,
+    html: /<\/?[a-z][a-z0-9]*\b[^>]*>/gi,
+    python: /\b(def|class|import|from|return|if|elif|else|for|while|with|as|try|except|finally|lambda|yield|pass|break|continue|and|or|not|in|is|None|True|False)\b/g,
+  };
+
+  const highlighted = (text: string): string => {
+    let result = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Apply keyword highlighting (purple/bold)
+    const kwRe = HIGHLIGHTS[language];
+    if (kwRe) {
+      result = result.replace(kwRe, (match) =>
+        `<span style="color:#7c3aed;font-weight:600">${match}</span>`
+      );
+    }
+
+    // String literals (green)
+    result = result.replace(
+      /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
+      (m) => `<span style="color:#059669">${m}</span>`
+    );
+
+    // Single-line comments (gray italic)
+    result = result.replace(
+      /(\/\/[^\n]*)/g,
+      (m) => `<span style="color:#94a3b8;font-style:italic">${m}</span>`
+    );
+
+    // Python / shell comments
+    result = result.replace(
+      /(#[^\n]*)/g,
+      (m) => `<span style="color:#94a3b8;font-style:italic">${m}</span>`
+    );
+
+    return result;
+  };
+
+  return (
+    <div style={{ position: "relative", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 13, lineHeight: 1.7, background: "#fafafa", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
+      <pre
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          margin: 0,
+          padding: "16px 20px",
+          pointerEvents: "none",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          color: "#0f172a",
+          background: "transparent",
+          zIndex: 1,
+          overflow: "hidden",
+        }}
+        dangerouslySetInnerHTML={{ __html: highlighted(value) + " " }}
+      />
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          position: "relative",
+          zIndex: 2,
+          width: "100%",
+          minHeight: 400,
+          padding: "16px 20px",
+          background: "rgba(0,0,0,0)",
+          color: "transparent",
+          caretColor: "#0f172a",
+          border: "none",
+          outline: "none",
+          resize: "vertical",
+          fontFamily: "inherit",
+          fontSize: "inherit",
+          lineHeight: "inherit",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          boxSizing: "border-box",
+        }}
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
 function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info"; onClose: () => void }) {
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : "#dbeafe";
   const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : "#1e40af";
@@ -752,53 +847,12 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     {selectedFile.language}
                   </span>
                 </div>
-                {/* Editor with line number gutter */}
-                <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#1e293b", position: "relative" }}>
-                  {/* Line number gutter */}
-                  <div
-                    ref={gutterRef}
-                    style={{
-                      width: 44, background: "#16213a", color: "#475569", fontSize: 12,
-                      fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace",
-                      lineHeight: 1.7, paddingTop: 16, paddingBottom: 16,
-                      textAlign: "right", paddingRight: 8, userSelect: "none",
-                      overflowY: "hidden", flexShrink: 0,
-                    }}
-                  >
-                    {Array.from({ length: lineCount }, (_, i) => (
-                      <div key={i + 1}>{i + 1}</div>
-                    ))}
-                  </div>
-                  <textarea
-                    ref={textareaRef}
+                {/* Monaco-lite editor with syntax highlighting */}
+                <div style={{ flex: 1, overflow: "auto", padding: "0 4px 4px" }}>
+                  <CodeEditor
                     value={editorContent}
-                    onChange={(e) => handleEditorChange(e.target.value)}
-                    onBlur={handleEditorBlur}
-                    onScroll={handleTextareaScroll}
-                    style={{
-                      flex: 1, border: "none", outline: "none", resize: "none",
-                      fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace",
-                      fontSize: 13, lineHeight: 1.7, padding: "16px 20px",
-                      background: editorBgTint !== "transparent"
-                        ? `linear-gradient(${editorBgTint}, ${editorBgTint}), #1e293b`
-                        : "#1e293b",
-                      color: "#e2e8f0", boxSizing: "border-box",
-                      tabSize: 2,
-                    }}
-                    spellCheck={false}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab") {
-                        e.preventDefault();
-                        const start = e.currentTarget.selectionStart;
-                        const end = e.currentTarget.selectionEnd;
-                        const val = editorContent;
-                        const next = val.substring(0, start) + "  " + val.substring(end);
-                        setEditorContent(next);
-                        requestAnimationFrame(() => {
-                          e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
-                        });
-                      }
-                    }}
+                    onChange={(v) => handleEditorChange(v)}
+                    language={editorLang}
                   />
                 </div>
               </>

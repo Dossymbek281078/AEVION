@@ -657,6 +657,12 @@ export default async function FintechHubPage() {
             >
               Compare tiers →
             </Link>
+            <Link
+              href="/fintech/integrations"
+              style={{ padding: "12px 22px", background: "transparent", color: C.text, fontSize: 14, fontWeight: 700, borderRadius: 10, textDecoration: "none", border: `1px solid ${C.border}` }}
+            >
+              Integrations →
+            </Link>
           </div>
         </div>
       </section>

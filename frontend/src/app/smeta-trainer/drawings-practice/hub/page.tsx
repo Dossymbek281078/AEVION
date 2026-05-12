@@ -89,6 +89,11 @@ const MODULES: Module[] = [
   { id: "best-practices", category: "process",  href: "/smeta-trainer/drawings-practice/best-practices", icon: "⚡", title: "Лучшие практики и ошибки",          subtitle: "22 типовые ошибки сметчиков из реальной практики РК",         level: "L4", exercises: 0,  color: "red"     },
   { id: "case-pool",      category: "practice", href: "/smeta-trainer/drawings-practice/case-pool",      icon: "🏊", title: "КЕЙС: Крытый бассейн",              subtitle: "Капстоун №3 — 25×12 м, гидроизоляция, спец. отделка",         level: "L5", exercises: 8,  color: "sky"     },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
+
+  // ── Сводные инструменты студента ──
+  { id: "dashboard",      category: "tools",    href: "/smeta-trainer/drawings-practice/dashboard",      icon: "📊", title: "Дашборд прогресса",                 subtitle: "Статус всех 45 модулей + достижения + рекомендации",          level: "L2", exercises: 0,  color: "indigo"  },
+  { id: "cheatsheet",     category: "tools",    href: "/smeta-trainer/drawings-practice/cheatsheet",     icon: "📜", title: "Шпаргалка-плакат",                  subtitle: "Все формулы, коэф-ты, расценки на одной странице — print",    level: "L2", exercises: 0,  color: "amber"   },
+  { id: "timeline",       category: "tools",    href: "/smeta-trainer/drawings-practice/timeline",       icon: "📅", title: "Гантт-планировщик",                 subtitle: "График строительства с шаблонами школа/жилой/бассейн",        level: "L3", exercises: 0,  color: "blue"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -256,6 +256,15 @@ export default function EconomyHubPage() {
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          h1 { font-size: 22px !important; }
+          h2 { font-size: 16px !important; }
+          button, a[role="button"] { min-height: 44px; }
+          table { font-size: 11px; }
+          pre { font-size: 11px !important; }
+        }
+      `}</style>
       <article style={{ maxWidth: 980, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
@@ -398,7 +407,7 @@ export default function EconomyHubPage() {
               · виртуальные GM/IM-боты в Coach Chat
             </span>
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 12 }}>
             {COACHES.map((coach) => {
               const isActive = activeCoach?.id === coach.id;
               return (
@@ -463,7 +472,7 @@ export default function EconomyHubPage() {
               · 200 AEV / месяц · уведомления + private chat
             </span>
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))", gap: 12 }}>
             {STREAMERS.map((s) => {
               const expiresAt = streamSubs[s.id];
               const subscribed = mounted && expiresAt && expiresAt > now;

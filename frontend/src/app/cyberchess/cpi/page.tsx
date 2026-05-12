@@ -81,6 +81,15 @@ const RIVALS = [
 export default function CPIPreviewPage() {
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          h1 { font-size: 22px !important; }
+          h2 { font-size: 16px !important; }
+          button, a[role="button"] { min-height: 44px; }
+          table { font-size: 11px; }
+          pre { font-size: 11px !important; }
+        }
+      `}</style>
       <article style={{ maxWidth: 860, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
@@ -121,6 +130,7 @@ export default function CPIPreviewPage() {
         <section style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Сравнение с конкурентами</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "rgba(167,139,250,0.08)" }}>
@@ -139,6 +149,7 @@ export default function CPIPreviewPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </section>
 
@@ -178,7 +189,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
         {/* Factors */}
         <section style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>11 факторов</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 10 }}>
             {FACTORS.map((f) => (
               <div key={f.code} style={{
                 background: C.panel,

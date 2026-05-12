@@ -285,6 +285,15 @@ export default function CPIDashboardPage() {
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          h1 { font-size: 22px !important; }
+          h2 { font-size: 16px !important; }
+          button, a[role="button"] { min-height: 44px; }
+          table { font-size: 11px; }
+          pre { font-size: 11px !important; }
+        }
+      `}</style>
       <article style={{ maxWidth: 980, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
@@ -431,7 +440,7 @@ export default function CPIDashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div>
+                  <div style={{ overflowX: "auto" }}>
                     {FACTOR_META.map((meta) => {
                       const raw = readFactor(lastGame.breakdown, meta.code);
                       const contr = contribution(meta.code, raw);
@@ -455,7 +464,7 @@ export default function CPIDashboardPage() {
             {/* Per-factor sparklines */}
             <section style={{ marginBottom: 20 }}>
               <h2 style={{ fontSize: 16, fontWeight: 800, color: C.text, margin: "0 0 10px" }}>Тренд по факторам · последние 10 партий</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10 }}>
                 {FACTOR_META.map((meta) => {
                   const series = perFactorSeries[meta.code] || [];
                   const last = series[series.length - 1] ?? 0;

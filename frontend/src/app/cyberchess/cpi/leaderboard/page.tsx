@@ -113,6 +113,15 @@ export default function CPILeaderboardPage() {
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          h1 { font-size: 22px !important; }
+          h2 { font-size: 16px !important; }
+          button, a[role="button"] { min-height: 44px; }
+          table { font-size: 11px; }
+          pre { font-size: 11px !important; }
+        }
+      `}</style>
       <article style={{ maxWidth: 980, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
@@ -208,6 +217,8 @@ export default function CPILeaderboardPage() {
 
         {/* Leaderboard table */}
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+        <div style={{ minWidth: 520 }}>
           {/* Header */}
           <div style={{
             display: "grid",
@@ -292,6 +303,8 @@ export default function CPILeaderboardPage() {
               </div>
             );
           })}
+        </div>
+        </div>
         </div>
 
         {/* Per-factor stats note */}

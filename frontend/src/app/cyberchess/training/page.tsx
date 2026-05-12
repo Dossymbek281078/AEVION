@@ -137,6 +137,15 @@ export default function TrainingHubPage() {
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          h1 { font-size: 22px !important; }
+          h2 { font-size: 16px !important; }
+          button, a[role="button"] { min-height: 44px; }
+          table { font-size: 11px; }
+          pre { font-size: 11px !important; }
+        }
+      `}</style>
       <article style={{ maxWidth: 900, margin: "0 auto" }}>
         {/* Breadcrumb */}
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 16 }}>
@@ -156,7 +165,7 @@ export default function TrainingHubPage() {
         </div>
 
         {/* Today's plan */}
-        <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", marginBottom: 28 }}>
+        <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", marginBottom: 28 }}>
           {/* Card 1: Weak factor drill */}
           <div style={{
             background: `linear-gradient(135deg, rgba(167,139,250,0.10), rgba(34,211,238,0.05))`,
@@ -352,7 +361,7 @@ export default function TrainingHubPage() {
           <div style={{ fontSize: 11, fontWeight: 800, color: C.faint, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
             Ресурсы
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 10 }}>
             {[
               { href: "/cyberchess/cpi/leaderboard", emoji: "🏆", label: "CPI Leaderboard", desc: "Топ-15 по композитному рейтингу" },
               { href: "/cyberchess/economy", emoji: "🪙", label: "Economy", desc: "Аукцион, тренеры, стримеры" },

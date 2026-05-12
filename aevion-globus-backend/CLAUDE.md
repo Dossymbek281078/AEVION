@@ -2,6 +2,8 @@
 
 > Создано 2026-04-22 по мотивам `AEVION_HANDOFF_2026-03-24.md`, `AEVION_TIMELINE_2026-03-25.md`, `AEVION_CHAT_ARCHIVE_2026-03-22.md`, `AEVION_27_PROJECTS_ROADMAP.md`, `AEVION_COORDINATION.md`, `AEVION_DEPLOY.md`.
 
+> **⚠️ STOP — ОБЯЗАТЕЛЬНО ПРОЧТИ `../AEVION_COORDINATION.md` ПЕРЕД ЛЮБЫМ EDIT.** Там live zone-ownership map (кто что трогает в каждом worktree) + protocol "прежде чем сносить чужое". 2026-05-12 одна сессия снесла 2032 строки чужой работы из-за нарушения зон — не повтори.
+
 ---
 
 ## 0. Правила этой сессии (важно)

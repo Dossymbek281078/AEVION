@@ -4,6 +4,63 @@
 
 ---
 
+## ⚠️ LIVE ZONE OWNERSHIP — read first, edit before crossing zones
+
+> **Обновлено 2026-05-12. ЭТОТ БЛОК ОБЯЗАТЕЛЕН К ПРОЧТЕНИЮ ПЕРЕД ЛЮБЫМ EDIT.**
+> Все сессии: если планируешь УДАЛИТЬ или существенно ПЕРЕПИСАТЬ файл вне своей зоны — сначала добавь короткую заметку в раздел **"Pending cross-zone change requests"** ниже и подожди подтверждения. Не сноси чужой work молча — теряются часы труда другой сессии.
+
+### Worktree → зона (кто что трогает)
+
+| Worktree | Branch | Owned zones (где edit разрешён без согласования) |
+|---|---|---|
+| `aevion-core` (main) | `main` | `aevion-globus-backend/scripts/**`, `aevion-globus-backend/src/lib/{ecosystemEvents,openapiFintechSpec}.ts`, AIPB chain в `bureau.ts` (только `/cert-for-qright`), QRight policies в `qright.ts`, `frontend/src/app/fintech/**`, `frontend/src/app/developers/fintech/**`, `frontend/src/components/fintech/**`, this file (AEVION_COORDINATION.md) |
+| `aevion-build` | `feat/mobile-audit-v3-*` | **6 fintech модуля сорсы:** `qfusionai/qgood/qmaskcard/qchaingov/veilnetx/z-tide` (backend routes + frontend `app/*/...` под этими путями). QMedia. Mobile audit (touch targets, responsive layout). |
+| `aevion-smeta-trainer` | `feat/smeta-trainer-*` | `frontend/src/app/smeta-trainer/**`, `aevion-globus-backend/src/routes/smeta-trainer.ts`, normatives/drawings/quiz |
+| `aevion-bureau` | `feat/bureau-v2` | широкая часть `bureau.ts` (kroме AIPB endpoint выше), `frontend/src/app/bureau/**` |
+| `aevion-healthai` | `healthai-v1` | `healthai.ts`, `frontend/src/app/healthai/**` |
+| `aevion-qsign` | `feat/qsign-v1.1` | `qsignV2.ts`, `qsign.ts`, `frontend/src/app/qsign/**` |
+| `aevion-qtradeoffline` | `qtradeoffline-v1` | `qtrade.ts`, `frontend/src/app/qtrade/**`, `frontend/src/app/qtradeoffline/**`, `aev.ts`, `frontend/src/app/aev/**` |
+| `frontend-qshield` | `feat/aevion-finalize-and-status` | `quantum-shield.ts`, `pipeline.ts`, `qright.ts` (broad), `frontend/src/app/quantum-shield/**`, `frontend/src/app/qright/**` |
+| `aevion-backend-modules` | `feat/platform-tier2-rest` | `modules.ts`, `awards.ts`, `planetCompliance.ts`, `auth.ts`, `frontend/src/app/admin/**` |
+| `frontend-qcore` (under aevion-core) | `feat/devhub-v1-*` | `qcoreai.ts`, `cyberchess.ts`, `frontend/src/app/qcoreai/**`, `frontend/src/app/cyberchess/**`, `frontend/src/app/devhub/**` |
+| `frontend-payments` (under aevion-core) | `payments-rail` | `qpaynet.ts`, `qcontract.ts`, `frontend/src/app/qpaynet/**`, `frontend/src/app/qcontract/**` |
+
+**Shared/no-owner zones** (договариваемся отдельно перед изменением):
+- `aevion-globus-backend/src/index.ts` (роутер mounts) — touchpoint всех; commit ALWAYS via `git commit --only -- index.ts`
+- `frontend/src/components/Wave1Nav.tsx`, `SiteHeader.tsx`, `ClientProviders.tsx` — глобальный layout
+- `frontend/src/app/sitemap.ts`, `robots.ts`, `layout.tsx` — top-of-tree
+- `frontend/package.json`, `aevion-globus-backend/package.json` — deps; используй Dependabot
+- `.github/workflows/**` — CI; PR-only
+
+### Protocol: «прежде чем сносить чужое»
+
+1. **Open** этот файл, проверь whose zone you're crossing.
+2. **Append** к разделу **Pending cross-zone change requests** ниже:
+   - кто (worktree)
+   - что (filepath + одна строка цели)
+   - дата
+   - срочность (low/med/high)
+3. **Commit + push** этот файл со своей entry. Не делай destructive edit в течение **30 минут** после push — даёшь время другой сессии увидеть и среагировать.
+4. Если urgent (production fire, security) — пиши **high** + всё равно committь notice; не жди.
+
+### Pending cross-zone change requests
+
+_(пусто — добавляй сюда entries перед нарушением чужой зоны)_
+
+### Recent destructive incidents (для learning'а)
+
+| Дата | Кто | Что снёс | Где было | Урок |
+|---|---|---|---|---|
+| 2026-05-12 | aevion-build (`f83fcaaf` "QMedia+Stripe+DevHub") | `frontend/src/app/fintech/page.tsx` (913 lines), `frontend/src/app/developers/fintech/page.tsx` (1119) | shipped `735ee294`, `1d4fb690` from `aevion-core` 6 часов ранее | 2032 строки потеряны. Урок: `git commit --only -- FILE` всегда; не использовать `git add .` |
+
+### Edit-style правила для всех
+
+- `git commit --only -- FILE1 FILE2` ВСЕГДА. Никогда `git add .` или `git commit -a`.
+- Если push rejected: `git pull --rebase` один раз, потом push. Если конфликт в чужой зоне — `git rebase --abort` + добавить запрос в "Pending cross-zone".
+- Сообщения коммитов — `scope(module): action` (англ или ru, но один scope per commit).
+
+---
+
 ## Рекомендуемая стратегия (максимум скорости и эффекта) — **использовать по умолчанию**
 
 Это оптимальный баланс для **одного основного разработчика + ИИ** (и для малой команды).

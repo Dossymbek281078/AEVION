@@ -827,21 +827,55 @@ export default async function FintechHubPage() {
                 Every fintech surface above ships with an OpenAPI spec, a shared event library and a live smoke suite.
                 You can read the chain head, subscribe to events, or push your own entries through partner keys.
               </p>
-              <Link
-                href="/developers/fintech"
-                style={{
-                  display: "inline-block",
-                  padding: "10px 18px",
-                  background: C.veil,
-                  color: "#0b0820",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  borderRadius: 10,
-                  textDecoration: "none",
-                }}
-              >
-                Go to developer hub →
-              </Link>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Link
+                  href="/developers/fintech"
+                  style={{
+                    display: "inline-block",
+                    padding: "10px 18px",
+                    background: C.veil,
+                    color: "#0b0820",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    textDecoration: "none",
+                  }}
+                >
+                  Go to developer hub →
+                </Link>
+                <Link
+                  href="/developers/fintech/quickstart"
+                  style={{
+                    display: "inline-block",
+                    padding: "10px 18px",
+                    background: "transparent",
+                    color: C.veil,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    textDecoration: "none",
+                    border: `1px solid ${C.veil}66`,
+                  }}
+                >
+                  ⚡ Quickstart →
+                </Link>
+                <Link
+                  href="/fintech/dashboard"
+                  style={{
+                    display: "inline-block",
+                    padding: "10px 18px",
+                    background: "transparent",
+                    color: C.text,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    borderRadius: 10,
+                    textDecoration: "none",
+                    border: `1px solid ${C.border}`,
+                  }}
+                >
+                  📊 Live Dashboard
+                </Link>
+              </div>
             </div>
 
             <ul

@@ -99,6 +99,11 @@ const MODULES: Module[] = [
   { id: "risk-register",  category: "process",  href: "/smeta-trainer/drawings-practice/risk-register",  icon: "🎲", title: "Реестр рисков",                     subtitle: "25 типовых рисков, матрица вероятность×влияние, резерв",      level: "L4", exercises: 0,  color: "orange"  },
   { id: "bim-intro",      category: "tools",    href: "/smeta-trainer/drawings-practice/bim-intro",      icon: "🏗", title: "BIM для сметчика",                  subtitle: "LOD, 5D-моделирование, экспорт ВОР из Revit/ArchiCAD",        level: "L4", exercises: 4,  color: "violet"  },
   { id: "bidding",        category: "process",  href: "/smeta-trainer/drawings-practice/bidding",        icon: "🏆", title: "Тендеры и госзакупки РК",           subtitle: "zakup.sk.kz, конкурсная заявка, демпинг, лицензии СМР",       level: "L4", exercises: 4,  color: "emerald" },
+
+  // ── Обязательные разделы общественных зданий ──
+  { id: "accessibility",  category: "structure",href: "/smeta-trainer/drawings-practice/accessibility",  icon: "♿", title: "Доступная среда",                   subtitle: "Пандусы, поручни, тактильные плитки по СНиП РК 3.06-09",     level: "L3", exercises: 4,  color: "sky"     },
+  { id: "elevators",      category: "structure",href: "/smeta-trainer/drawings-practice/elevators",      icon: "🛗", title: "Лифты и подъёмники",                subtitle: "12 типов, монтаж, шахта, эксплуатация — глава 3 Ф-3",         level: "L4", exercises: 4,  color: "slate"   },
+  { id: "fire-safety",    category: "process",  href: "/smeta-trainer/drawings-practice/fire-safety",    icon: "🔥", title: "Пожарная безопасность",             subtitle: "АПС, СОУЭ, ВПВ, огнезащита по СНиП РК 2.02-05",              level: "L4", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

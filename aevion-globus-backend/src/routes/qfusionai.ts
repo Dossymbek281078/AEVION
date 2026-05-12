@@ -129,6 +129,7 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
       usage: result.usage ?? null,
     });
   } catch (err) {
+    console.error("[qfusionai] provider call failed", { provider, model, err: err instanceof Error ? err.message : err });
     res.status(502).json({
       error: "provider-error",
       provider,

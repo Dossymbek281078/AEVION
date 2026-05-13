@@ -111,6 +111,11 @@ const MODULES: Module[] = [
   { id: "bim-modeling",          category: "tools",    href: "/smeta-trainer/drawings-practice/bim-modeling",          icon: "🏗️", title: "BIM — Revit/ArchiCAD",            subtitle: "LOD 100-500, 5 ПО, плагины ЭСН РК, обязат. с 2025",          level: "L4", exercises: 4,  color: "indigo"  },
   { id: "expertise-docs",        category: "process",  href: "/smeta-trainer/drawings-practice/expertise-docs",        icon: "🔬", title: "Экспертиза проекта",              subtitle: "ГосЭкспертиза vs негос., 5 этапов, 30 дней замечания",        level: "L4", exercises: 4,  color: "purple"  },
   { id: "author-supervision",    category: "process",  href: "/smeta-trainer/drawings-practice/author-supervision",    icon: "👁️", title: "Авторский+тех. надзор",           subtitle: "АН раз/нед., ТН ежедн., журналы КС-6, АОСР",                  level: "L3", exercises: 4,  color: "teal"    },
+
+  // ── Международные стандарты ──
+  { id: "fidic-contracts",         category: "process",  href: "/smeta-trainer/drawings-practice/fidic-contracts",         icon: "📜", title: "FIDIC — R/Y/S Book",              subtitle: "Контракты ЕБРР/МБРР/АБР, Engineer, DAB, 21 день",            level: "L5", exercises: 4,  color: "red"     },
+  { id: "evms-earned-value",       category: "process",  href: "/smeta-trainer/drawings-practice/evms-earned-value",       icon: "📈", title: "EVMS — освоенный объём",          subtitle: "PV/EV/AC, CPI/SPI, отчётность ЕБРР+JICA по PMBOK",            level: "L5", exercises: 4,  color: "blue"    },
+  { id: "international-standards", category: "theory",   href: "/smeta-trainer/drawings-practice/international-standards", icon: "🌍", title: "NRM2/RICS/RSMeans/ISO",           subtitle: "AACE Class 1-5, межд. стандарты сметы vs ЭСН РК",            level: "L5", exercises: 4,  color: "violet"  },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──

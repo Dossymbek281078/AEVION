@@ -57,6 +57,7 @@ import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } 
 import { isSentryEnabled, captureException } from "./lib/sentry";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
+import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
 import { qstoreRouter } from "./routes/qstore";
@@ -477,6 +478,8 @@ for (const cfg of PLANNING_MODULES) {
 app.use("/api/devhub", devhubRouter);
 // QMedia — music, video and creative tools
 app.use("/api/qmedia", qmediaRouter);
+// Voice of Earth — international multi-language positive songs catalog
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // Payments — Stripe + PayBox KZ unified gateway
 app.use("/api/payments", paymentsRouter);
 // QAI — universal public AI assistant

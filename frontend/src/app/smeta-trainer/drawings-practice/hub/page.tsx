@@ -226,6 +226,11 @@ const MODULES: Module[] = [
   { id: "smeta-analytics",        category: "tools",     href: "/smeta-trainer/drawings-practice/smeta-analytics",        icon: "📊", title: "Аналитика и KPI сметчика",         subtitle: "Cost/m², CPI/SPI, ABC-анализ, бенчмарки РК 2025",             level: "L4", exercises: 4,  color: "indigo"  },
   { id: "price-database",         category: "tools",     href: "/smeta-trainer/drawings-practice/price-database",         icon: "🗄", title: "База цен и нормативный корпус",   subtitle: "6 источников РК, поля записи, Z-score, парсинг ССЦ",          level: "L4", exercises: 4,  color: "teal"    },
   { id: "export-import-reports",  category: "tools",     href: "/smeta-trainer/drawings-practice/export-import-reports",  icon: "📤", title: "Экспорт, импорт, отчёты",         subtitle: "8 форматов, 8 отчётов, АВС-4 vs Смета РК, ССР 12 глав",       level: "L3", exercises: 4,  color: "pink"    },
+
+  // ── Изменения, безопасность, пост-сдача ──
+  { id: "scope-change-mgmt",      category: "process",   href: "/smeta-trainer/drawings-practice/scope-change-mgmt",      icon: "🔄", title: "Управление изменениями (VO)",     subtitle: "ГК РК 718, FIDIC Sub-Cl.13/20, Claims, EOT, 28-дн. правило",  level: "L5", exercises: 4,  color: "orange"  },
+  { id: "safety-incidents",       category: "process",   href: "/smeta-trainer/drawings-practice/safety-incidents",       icon: "🚑", title: "Несчастные случаи (Н-1)",         subtitle: "ТК РК 322-326, Приказ № 1108, УК РК ст. 152, ОПС 1-3% ФОТ",   level: "L4", exercises: 4,  color: "red"     },
+  { id: "construction-warranty",  category: "process",   href: "/smeta-trainer/drawings-practice/construction-warranty",  icon: "🛠", title: "Гарантийное обслуживание",        subtitle: "ГК РК 723, 2/5/10 лет, журнал дефектов, регрессы цепочкой",    level: "L4", exercises: 4,  color: "blue"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -34,6 +34,9 @@ const SMOKES = [
   // Read-only public endpoints — safe to run anywhere, including prod.
   // Tier 3 amplifier surfaces (OG cards, sitemaps, RSS, badges).
   { name: "tier3", script: "tier3-smoke.js", readOnly: true },
+  // Webhook signing — pure-crypto sign+verify roundtrip + rotation + replay rejection.
+  // No backend needed; deterministic, always safe.
+  { name: "webhook-sig", script: "webhook-sig-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.

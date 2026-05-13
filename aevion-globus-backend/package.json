@@ -17,6 +17,7 @@
     "smoke:auth-replay": "node scripts/auth-replay-smoke.js",
     "smoke:planet": "node scripts/planet-smoke.js",
     "smoke:awards": "node scripts/awards-smoke.js",
+    "smoke:webhook-sig": "node scripts/webhook-sig-smoke.js",
     "check:prod-env": "node scripts/check-prod-env.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",

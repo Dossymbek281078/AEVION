@@ -84,6 +84,54 @@ const memEnrollments = new Map<string, Enrollment>();
 const memQuizzes = new Map<string, QuizQuestion[]>();
 // key: enrollmentId -> Certificate
 const memCertificates = new Map<string, Certificate>();
+// Bookmarks: key = `${userId}::${courseId}` → { courseId, userId, bookmarkedAt }
+const memBookmarks = new Map<string, { courseId: string; userId: string; bookmarkedAt: string }>();
+// Streak/activity tracking: key = userId → { days: Set<YYYY-MM-DD>, lastTouched: ISO }
+const memActivity = new Map<string, { days: Set<string>; lastTouched: string }>();
+// Last activity per enrollment (courseId|userId) → ISO timestamp, for "Continue learning"
+const memEnrollmentActivity = new Map<string, string>();
+
+/** Record a daily activity entry for a user (idempotent per UTC date). */
+function recordActivity(userId: string): void {
+  const today = new Date().toISOString().slice(0, 10);
+  const rec = memActivity.get(userId) ?? { days: new Set<string>(), lastTouched: new Date().toISOString() };
+  rec.days.add(today);
+  rec.lastTouched = new Date().toISOString();
+  memActivity.set(userId, rec);
+}
+
+/** Compute current + longest streak from a set of YYYY-MM-DD strings. */
+function computeStreak(days: Set<string>): { current: number; longest: number; totalDays: number } {
+  if (days.size === 0) return { current: 0, longest: 0, totalDays: 0 };
+  const sorted = Array.from(days).sort();
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+  // Longest run of consecutive days
+  let longest = 1;
+  let run = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1] + "T00:00:00Z").getTime();
+    const cur = new Date(sorted[i] + "T00:00:00Z").getTime();
+    if (cur - prev === 86_400_000) {
+      run++;
+      if (run > longest) longest = run;
+    } else {
+      run = 1;
+    }
+  }
+
+  // Current streak: walk backwards from today (or yesterday if today not present yet)
+  let cursorIso = days.has(today) ? today : (days.has(yesterday) ? yesterday : null);
+  let current = 0;
+  while (cursorIso && days.has(cursorIso)) {
+    current++;
+    const prev = new Date(new Date(cursorIso + "T00:00:00Z").getTime() - 86_400_000);
+    cursorIso = prev.toISOString().slice(0, 10);
+  }
+
+  return { current, longest, totalDays: days.size };
+}
 
 const CATEGORIES = [
   { id: "tech", name: "Technology" },
@@ -338,6 +386,8 @@ qlearnRouter.post("/courses/:id/enroll", async (req: Request, res: Response) => 
     enrolledAt: new Date().toISOString(),
   });
   course.enrollmentCount += 1;
+  recordActivity(auth.sub);
+  memEnrollmentActivity.set(`${courseId}::${auth.sub}`, new Date().toISOString());
   res.status(201).json({ enrollmentId });
 });
 
@@ -397,6 +447,10 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
   if (!enrollment) { res.status(404).json({ error: "Enrollment not found" }); return; }
   if (enrollment.userId !== auth.sub) { res.status(403).json({ error: "Forbidden" }); return; }
   enrollment.progress = progress;
+
+  // Streak + "continue learning" hooks
+  recordActivity(auth.sub);
+  memEnrollmentActivity.set(`${enrollment.courseId}::${auth.sub}`, new Date().toISOString());
 
   // Auto-generate certificate at 100%
   if (progress === 100 && !memCertificates.has(enrollmentId)) {
@@ -586,7 +640,147 @@ qlearnRouter.post("/courses/:courseId/lessons/:lessonId/quiz/submit", (req: Requ
   if (!q) { res.status(404).json({ error: "Question not found" }); return; }
 
   const correct = answerIndex === q.correctIndex;
+  recordActivity(auth.sub);
   res.json({ correct, explanation: q.explanation ?? undefined, correctIndex: q.correctIndex });
+});
+
+// ---------------------------------------------------------------------------
+// Bookmarks — POST/DELETE/GET — save courses for later
+// ---------------------------------------------------------------------------
+
+// POST /api/qlearn/courses/:id/bookmark — bookmark a course
+qlearnRouter.post("/courses/:id/bookmark", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const courseId = param(req, "id");
+  const course = memCourses.get(courseId);
+  // Verify course exists when we have in-memory record; tolerate missing for DB-only case
+  if (!course && memCourses.size > 0) {
+    res.status(404).json({ error: "Course not found" }); return;
+  }
+  const key = `${auth.sub}::${courseId}`;
+  if (memBookmarks.has(key)) {
+    res.status(200).json({ bookmarked: true, alreadyBookmarked: true }); return;
+  }
+  memBookmarks.set(key, { courseId, userId: auth.sub, bookmarkedAt: new Date().toISOString() });
+  res.status(201).json({ bookmarked: true });
+});
+
+// DELETE /api/qlearn/courses/:id/bookmark — remove bookmark
+qlearnRouter.delete("/courses/:id/bookmark", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const courseId = param(req, "id");
+  const key = `${auth.sub}::${courseId}`;
+  const existed = memBookmarks.delete(key);
+  res.json({ bookmarked: false, removed: existed });
+});
+
+// GET /api/qlearn/me/bookmarks — list my bookmarked courses (hydrated)
+qlearnRouter.get("/me/bookmarks", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const items = Array.from(memBookmarks.values())
+    .filter((b) => b.userId === auth.sub)
+    .map((b) => {
+      const course = memCourses.get(b.courseId);
+      return {
+        courseId: b.courseId,
+        bookmarkedAt: b.bookmarkedAt,
+        course: course
+          ? {
+              id: course.id,
+              title: course.title,
+              description: course.description,
+              category: course.category,
+              level: course.level,
+              price: course.price,
+              enrollmentCount: course.enrollmentCount,
+            }
+          : null,
+      };
+    })
+    .sort((a, b) => b.bookmarkedAt.localeCompare(a.bookmarkedAt));
+  res.json({ bookmarks: items, total: items.length });
+});
+
+// ---------------------------------------------------------------------------
+// Streak + progress overview ("Continue learning")
+// ---------------------------------------------------------------------------
+
+// GET /api/qlearn/me/streak — current/longest daily streak + activity history
+qlearnRouter.get("/me/streak", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+  const rec = memActivity.get(auth.sub);
+  if (!rec) {
+    res.json({ current: 0, longest: 0, totalDays: 0, lastActiveAt: null, today: new Date().toISOString().slice(0, 10) });
+    return;
+  }
+  const stats = computeStreak(rec.days);
+  res.json({
+    ...stats,
+    lastActiveAt: rec.lastTouched,
+    today: new Date().toISOString().slice(0, 10),
+    activeToday: rec.days.has(new Date().toISOString().slice(0, 10)),
+  });
+});
+
+// GET /api/qlearn/me/progress — overview of all my courses with continue-learning ordering
+qlearnRouter.get("/me/progress", (req: Request, res: Response) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  const mine = Array.from(memEnrollments.values()).filter((e) => e.userId === auth.sub);
+  const hydrated = mine.map((e) => {
+    const course = memCourses.get(e.courseId);
+    const lastActivityAt = memEnrollmentActivity.get(`${e.courseId}::${auth.sub}`) ?? e.enrolledAt;
+    const hasCertificate = memCertificates.has(e.id);
+    return {
+      enrollmentId: e.id,
+      courseId: e.courseId,
+      progress: e.progress,
+      enrolledAt: e.enrolledAt,
+      lastActivityAt,
+      hasCertificate,
+      course: course
+        ? {
+            id: course.id,
+            title: course.title,
+            category: course.category,
+            level: course.level,
+            description: course.description,
+          }
+        : null,
+    };
+  });
+
+  const inProgress = hydrated
+    .filter((h) => h.progress > 0 && h.progress < 100)
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  const notStarted = hydrated
+    .filter((h) => h.progress === 0)
+    .sort((a, b) => b.enrolledAt.localeCompare(a.enrolledAt));
+  const completed = hydrated
+    .filter((h) => h.progress === 100)
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+
+  const avgProgress = hydrated.length === 0
+    ? 0
+    : Math.round(hydrated.reduce((sum, h) => sum + h.progress, 0) / hydrated.length);
+
+  res.json({
+    summary: {
+      total: hydrated.length,
+      inProgress: inProgress.length,
+      notStarted: notStarted.length,
+      completed: completed.length,
+      avgProgress,
+    },
+    continueLearning: inProgress.slice(0, 6),
+    notStarted: notStarted.slice(0, 6),
+    completed: completed.slice(0, 6),
+  });
 });
 
 // POST /api/qlearn/me/courses/:courseId/ai-generate-lesson — AI lesson generator

@@ -241,6 +241,11 @@ const MODULES: Module[] = [
   { id: "specialty-construction", category: "special",   href: "/smeta-trainer/drawings-practice/specialty-construction", icon: "🏭", title: "Спец. строительство",            subtitle: "6 отраслей (промбу/гидро/агро/энерг/нефтегаз/транспорт)",      level: "L5", exercises: 4,  color: "stone"   },
   { id: "rural-construction",     category: "special",   href: "/smeta-trainer/drawings-practice/rural-construction",     icon: "🏡", title: "Сельское и дачное стр-во",        subtitle: "ИЖС до 500 м², уведомительный порядок, Бакыт, СБП, 6 программ", level: "L3", exercises: 4,  color: "green"   },
   { id: "infrastructure-projects",category: "practice",  href: "/smeta-trainer/drawings-practice/infrastructure-projects",icon: "🌆", title: "Инфраструктурные мегапроекты",    subtitle: "БАКАД/метро/нефтегаз, FIDIC, AACE Class, EVMS, RICS",          level: "L5", exercises: 4,  color: "zinc"    },
+
+  // ── Реставрация, модули, восстановление ──
+  { id: "historical-monuments",   category: "special",   href: "/smeta-trainer/drawings-practice/historical-monuments",   icon: "🏛️", title: "Реставрация памятников",          subtitle: "СНиП РК 1.04-25, ЮНЕСКО, Ясави, Венецианская хартия 1964",     level: "L5", exercises: 4,  color: "amber"   },
+  { id: "modular-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/modular-construction",   icon: "🧩", title: "Модульное и быстровозводимое",    subtitle: "6 типов (контейнер/SIP/3D-печать/LSF), вдвое быстрее монолита",  level: "L4", exercises: 4,  color: "cyan"    },
+  { id: "post-disaster-recon",    category: "practice",  href: "/smeta-trainer/drawings-practice/post-disaster-recon",    icon: "🆘", title: "Послеаварийное восстановление",    subtitle: "Паводки 2024, ЗРК №188-V, Build Back Better, 6 типов ЧС РК",   level: "L5", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

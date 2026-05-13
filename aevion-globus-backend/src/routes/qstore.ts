@@ -90,10 +90,23 @@ qstoreRouter.get("/categories", (_req: Request, res: Response) => {
 });
 
 // GET /api/qstore/products
+//   ?q=...               full-text search
+//   ?category=xxx        filter by category id
+//   ?sort=popular|newest|trending|rating  (default: popular)
+//   ?limit=N             max 50
 qstoreRouter.get("/products", async (req: Request, res: Response) => {
   const q = req.query.q ? String(req.query.q) : undefined;
   const category = req.query.category ? String(req.query.category) : undefined;
+  const sort = req.query.sort ? String(req.query.sort) : "popular";
   const limit = Math.min(Number(req.query.limit) || 20, 50);
+
+  const orderBySql: Record<string, string> = {
+    popular: `"salesCount" DESC`,
+    newest: `"createdAt" DESC`,
+    trending: `"salesCount" DESC, "createdAt" DESC`,
+    rating: `"avgRating" DESC NULLS LAST, "salesCount" DESC`,
+  };
+  const orderClause = orderBySql[sort] ?? orderBySql.popular;
 
   if (isQStoreDbReady()) {
     try {
@@ -104,10 +117,10 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
       params.push(limit);
       const where = `WHERE ${conditions.join(" AND ")}`;
       const rows = await pool.query(
-        `SELECT * FROM "QStoreProduct" ${where} ORDER BY "salesCount" DESC LIMIT $${params.length}`,
+        `SELECT * FROM "QStoreProduct" ${where} ORDER BY ${orderClause} LIMIT $${params.length}`,
         params,
       );
-      res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length });
+      res.json({ products: rows.rows, total: rows.rowCount ?? rows.rows.length, sort });
       return;
     } catch {
       // fall through to in-memory
@@ -120,9 +133,25 @@ qstoreRouter.get("/products", async (req: Request, res: Response) => {
     p.title.toLowerCase().includes(q.toLowerCase()) ||
     p.description.toLowerCase().includes(q.toLowerCase()),
   );
-  products.sort((a, b) => b.salesCount - a.salesCount);
+  // In-memory sort
+  if (sort === "newest") {
+    products.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  } else if (sort === "rating") {
+    products.sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0) || b.salesCount - a.salesCount);
+  } else if (sort === "trending") {
+    // crude trending: sales weighted by recency
+    products.sort((a, b) => {
+      const ageA = Date.now() - new Date(a.createdAt).getTime();
+      const ageB = Date.now() - new Date(b.createdAt).getTime();
+      const scoreA = a.salesCount / Math.max(1, ageA / 86400000);
+      const scoreB = b.salesCount / Math.max(1, ageB / 86400000);
+      return scoreB - scoreA;
+    });
+  } else {
+    products.sort((a, b) => b.salesCount - a.salesCount);
+  }
   products = products.slice(0, limit);
-  res.json({ products, total: products.length });
+  res.json({ products, total: products.length, sort });
 });
 
 // GET /api/qstore/products/:id
@@ -374,16 +403,70 @@ qstoreRouter.get("/products/:id/reviews", (req: Request, res: Response) => {
   res.json({ reviews, total: reviews.length });
 });
 
-// GET /api/qstore/featured — top 5 by salesCount + 5 newest
-qstoreRouter.get("/featured", (_req: Request, res: Response) => {
+// GET /api/qstore/featured — curated buckets: popular, newest, trending, topRated
+//   ?limit=N (default 5, max 12) per bucket
+qstoreRouter.get("/featured", async (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 12);
+
+  // Try DB first
+  if (isQStoreDbReady()) {
+    try {
+      const [popRes, newRes, ratedRes] = await Promise.all([
+        pool.query(
+          `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE ORDER BY "salesCount" DESC LIMIT $1`,
+          [limit],
+        ),
+        pool.query(
+          `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE ORDER BY "createdAt" DESC LIMIT $1`,
+          [limit],
+        ),
+        pool.query(
+          `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE AND "avgRating" > 0 ORDER BY "avgRating" DESC, "salesCount" DESC LIMIT $1`,
+          [limit],
+        ),
+      ]);
+      const popular = popRes.rows;
+      const newest = newRes.rows;
+      const topRated = ratedRes.rows;
+      // Trending: sales weighted by recency
+      const allPublicRes = await pool.query(
+        `SELECT * FROM "QStoreProduct" WHERE "isPublic" = TRUE`,
+      );
+      const trending = [...allPublicRes.rows]
+        .map((p: any) => {
+          const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
+          return { ...p, _score: (p.salesCount || 0) / ageDays };
+        })
+        .sort((a: any, b: any) => b._score - a._score)
+        .slice(0, limit)
+        .map(({ _score, ...rest }: any) => rest);
+      res.json({ popular, newest, trending, topRated });
+      return;
+    } catch {
+      // fall through
+    }
+  }
+
   const allPublic = Array.from(memProducts.values()).filter((p) => p.isPublic);
   const popular = [...allPublic]
     .sort((a, b) => b.salesCount - a.salesCount)
-    .slice(0, 5);
+    .slice(0, limit);
   const newest = [...allPublic]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 5);
-  res.json({ popular, newest });
+    .slice(0, limit);
+  const topRated = [...allPublic]
+    .filter((p) => (p.avgRating || 0) > 0)
+    .sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0) || b.salesCount - a.salesCount)
+    .slice(0, limit);
+  const trending = [...allPublic]
+    .map((p) => {
+      const ageDays = Math.max(1, (Date.now() - new Date(p.createdAt).getTime()) / 86400000);
+      return { ...p, _score: (p.salesCount || 0) / ageDays };
+    })
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit)
+    .map(({ _score, ...rest }) => rest as typeof allPublic[number]);
+  res.json({ popular, newest, trending, topRated });
 });
 
 // GET /api/qstore/me/sales — products I own that have been purchased

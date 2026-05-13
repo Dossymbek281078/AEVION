@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
@@ -16,9 +17,25 @@ interface Product {
   previewUrl: string;
   tags: string[];
   salesCount: number;
+  avgRating?: number;
+  reviewCount?: number;
   isPublic: boolean;
   createdAt: string;
 }
+
+interface FeaturedBuckets {
+  popular: Product[];
+  newest: Product[];
+  trending: Product[];
+  topRated: Product[];
+}
+
+const SORT_OPTIONS: { id: string; name: string }[] = [
+  { id: "popular", name: "Most popular" },
+  { id: "newest", name: "Newest" },
+  { id: "trending", name: "Trending" },
+  { id: "rating", name: "Top rated" },
+];
 
 const CATEGORIES = [
   { id: "", name: "All" },
@@ -66,82 +83,116 @@ function CategoryBadge({ category }: { category: string }) {
   );
 }
 
-function ProductCard({ product, onPurchase }: { product: Product; onPurchase: (id: string) => void }) {
+function ProductCard({
+  product,
+  onPurchase,
+  compact,
+}: {
+  product: Product;
+  onPurchase: (id: string) => void;
+  compact?: boolean;
+}) {
   return (
-    <div
+    <Link
+      href={`/qstore/${product.id}`}
       style={{
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 14,
-        padding: 20,
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        transition: "box-shadow 0.15s",
-        cursor: "default",
+        textDecoration: "none",
+        color: "inherit",
+        display: "block",
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)")}
-      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
     >
-      {product.previewUrl && (
-        <div
-          style={{
-            width: "100%",
-            height: 120,
-            background: "#f8fafc",
-            borderRadius: 8,
-            overflow: "hidden",
-          }}
-        >
-          <img
-            src={product.previewUrl}
-            alt={product.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 14,
+          padding: compact ? 14 : 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: compact ? 8 : 10,
+          transition: "box-shadow 0.15s, transform 0.15s",
+          cursor: "pointer",
+          height: "100%",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)";
+          e.currentTarget.style.transform = "translateY(-2px)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = "none";
+          e.currentTarget.style.transform = "translateY(0)";
+        }}
+      >
+        {product.previewUrl && (
+          <div
+            style={{
+              width: "100%",
+              height: compact ? 90 : 120,
+              background: "#f8fafc",
+              borderRadius: 8,
+              overflow: "hidden",
+            }}
+          >
+            <img
+              src={product.previewUrl}
+              alt={product.title}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <CategoryBadge category={product.category} />
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>{product.salesCount} sales</span>
         </div>
-      )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-        <CategoryBadge category={product.category} />
-        <span style={{ fontSize: 11, color: "#94a3b8" }}>{product.salesCount} sales</span>
-      </div>
-      <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.3 }}>
-        {product.title}
-      </div>
-      {product.description && (
-        <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5, flex: 1 }}>
-          {product.description.slice(0, 100)}{product.description.length > 100 ? "..." : ""}
+        <div style={{ fontWeight: 700, fontSize: compact ? 14 : 15, color: "#0f172a", lineHeight: 1.3 }}>
+          {product.title}
         </div>
-      )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
-        <span
-          style={{
-            fontWeight: 800,
-            fontSize: 16,
-            color: product.price === 0 ? "#0d9488" : "#0f172a",
-          }}
-        >
-          {priceLabel(product.price, product.currency)}
-        </span>
-        <button
-          onClick={() => onPurchase(product.id)}
-          style={{
-            padding: "7px 16px",
-            borderRadius: 8,
-            border: "none",
-            background: product.price === 0
-              ? "linear-gradient(135deg, #0d9488 0%, #0891b2 100%)"
-              : "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
-            color: "#fff",
-            fontWeight: 700,
-            fontSize: 13,
-            cursor: "pointer",
-          }}
-        >
-          {product.price === 0 ? "Get free" : "Buy"}
-        </button>
+        {!compact && product.description && (
+          <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5, flex: 1 }}>
+            {product.description.slice(0, 100)}{product.description.length > 100 ? "..." : ""}
+          </div>
+        )}
+        {!!(product.avgRating && product.avgRating > 0) && (
+          <div style={{ fontSize: 12, color: "#f59e0b", display: "flex", alignItems: "center", gap: 4 }}>
+            <span>★ {product.avgRating.toFixed(1)}</span>
+            <span style={{ color: "#94a3b8" }}>({product.reviewCount ?? 0})</span>
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: compact ? 14 : 16,
+              color: product.price === 0 ? "#0d9488" : "#0f172a",
+            }}
+          >
+            {priceLabel(product.price, product.currency)}
+          </span>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onPurchase(product.id);
+            }}
+            style={{
+              padding: compact ? "5px 12px" : "7px 16px",
+              borderRadius: 8,
+              border: "none",
+              background: product.price === 0
+                ? "linear-gradient(135deg, #0d9488 0%, #0891b2 100%)"
+                : "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: compact ? 12 : 13,
+              cursor: "pointer",
+            }}
+          >
+            {product.price === 0 ? "Get free" : "Buy"}
+          </button>
+        </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -157,6 +208,9 @@ export default function QStorePage() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [searchQ, setSearchQ] = useState("");
+  const [sortBy, setSortBy] = useState<string>("popular");
+  const [featured, setFeatured] = useState<FeaturedBuckets | null>(null);
+  const [featuredTab, setFeaturedTab] = useState<keyof FeaturedBuckets>("popular");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<CreateForm>({ title: "", description: "", category: "template", price: "0" });
   const [creating, setCreating] = useState(false);
@@ -169,6 +223,7 @@ export default function QStorePage() {
       const params = new URLSearchParams();
       if (selectedCategory) params.set("category", selectedCategory);
       if (searchQ) params.set("q", searchQ);
+      if (sortBy) params.set("sort", sortBy);
       const res = await fetch(apiUrl(`/api/qstore/products?${params}`));
       const data = await res.json();
       setProducts(data.products || []);
@@ -177,11 +232,31 @@ export default function QStorePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory, searchQ]);
+  }, [selectedCategory, searchQ, sortBy]);
+
+  const fetchFeatured = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl("/api/qstore/featured?limit=6"));
+      if (!res.ok) return;
+      const data = await res.json();
+      setFeatured({
+        popular: data.popular || [],
+        newest: data.newest || [],
+        trending: data.trending || [],
+        topRated: data.topRated || [],
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  useEffect(() => {
+    fetchFeatured();
+  }, [fetchFeatured]);
 
   const handlePurchase = async (productId: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token") : null;
@@ -197,6 +272,7 @@ export default function QStorePage() {
       if (res.ok) {
         setNotice("Purchase successful!");
         fetchProducts();
+        fetchFeatured();
       } else {
         const d = await res.json();
         setNotice(d.error || "Purchase failed");
@@ -229,6 +305,7 @@ export default function QStorePage() {
       setShowForm(false);
       setForm({ title: "", description: "", category: "template", price: "0" });
       fetchProducts();
+      fetchFeatured();
     } catch {
       setFormError("Network error");
     } finally {
@@ -366,8 +443,73 @@ export default function QStorePage() {
             </div>
           )}
 
+          {/* Featured section */}
+          {featured && (featured.popular.length > 0 || featured.newest.length > 0 || featured.trending.length > 0) && (
+            <section style={{ marginBottom: 36 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", margin: 0 }}>
+                  ✨ Featured
+                </h2>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(
+                    [
+                      { id: "popular", label: "🔥 Popular" },
+                      { id: "trending", label: "📈 Trending" },
+                      { id: "newest", label: "🆕 New" },
+                      { id: "topRated", label: "⭐ Top rated" },
+                    ] as { id: keyof FeaturedBuckets; label: string }[]
+                  ).map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setFeaturedTab(t.id)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 18,
+                        border: featuredTab === t.id ? "1.5px solid #7c3aed" : "1.5px solid #e2e8f0",
+                        background: featuredTab === t.id ? "#f5f3ff" : "#fff",
+                        color: featuredTab === t.id ? "#6d28d9" : "#64748b",
+                        fontWeight: featuredTab === t.id ? 700 : 500,
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {featured[featuredTab].length === 0 ? (
+                <div
+                  style={{
+                    background: "#fff",
+                    border: "1px dashed #e2e8f0",
+                    borderRadius: 12,
+                    padding: 24,
+                    textAlign: "center",
+                    color: "#94a3b8",
+                    fontSize: 13,
+                  }}
+                >
+                  Nothing here yet.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                    gap: 14,
+                  }}
+                >
+                  {featured[featuredTab].map((p) => (
+                    <ProductCard key={p.id} product={p} onPurchase={handlePurchase} compact />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Category filter chips */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
             {CATEGORIES.map((c) => (
               <button
                 key={c.id}
@@ -400,6 +542,40 @@ export default function QStorePage() {
                 minWidth: 140,
               }}
             />
+          </div>
+
+          {/* Sort + result heading */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
+            <div style={{ fontSize: 14, color: "#64748b" }}>
+              {loading ? "" : `${products.length} ${products.length === 1 ? "product" : "products"}`}
+              {selectedCategory && (
+                <span style={{ marginLeft: 6, color: "#0d9488", fontWeight: 600 }}>
+                  · {CATEGORIES.find((c) => c.id === selectedCategory)?.name}
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "#94a3b8" }}>Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "1.5px solid #e2e8f0",
+                  background: "#fff",
+                  fontSize: 13,
+                  color: "#374151",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  outline: "none",
+                }}
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Product grid */}

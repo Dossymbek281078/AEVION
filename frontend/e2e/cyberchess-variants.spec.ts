@@ -140,4 +140,96 @@ test.describe("CyberChess — supporting routes", () => {
     await expect(page.getByText("Spring Cup").first()).toBeVisible();
     await expect(page.getByText("ShadowKnight_2400").first()).toBeVisible();
   });
+
+  test("/cyberchess/studio loads (Streamer Studio page)", async ({ page }) => {
+    await page.goto("/cyberchess/studio", { waitUntil: "domcontentloaded" });
+    // Studio page — наличие чего-то связанного со стримом
+    await expect(page.locator("body")).toBeVisible({ timeout: 15_000 });
+    const html = await page.content();
+    expect(html.length).toBeGreaterThan(1000);
+  });
+});
+
+test.describe("CyberChess — UX critical pack (2026-05-13)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.clear();
+        window.localStorage.setItem("aevion_cyberchess_onboarding_done_v1", "1");
+        window.localStorage.setItem("aevion_tour_seen_v1", "1");
+      } catch {}
+    });
+  });
+
+  test("AEVION ecosystem strip удалён (regression guard)", async ({ page }) => {
+    await page.goto("/cyberchess", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toBeVisible({ timeout: 15_000 });
+    // Полоса содержала пары "🧠 QCoreAI", "📈 QTrade", "🪙 AEV", "🛡 QShield".
+    // Подтверждаем, что этих pill-links НЕТ в шапке cyberchess. Они могут
+    // встречаться в Wave1Nav / footer — поэтому ищем именно специфическое
+    // сочетание подсказок ecosystem strip (title="AI-агенты и чат" был в hint).
+    const html = await page.content();
+    expect(html).not.toContain('title="AI-агенты и чат"');
+    expect(html).not.toContain('title="Биржа AEV"');
+  });
+
+  test("In-game дашборд chips виден после Quick Start", async ({ page }) => {
+    await page.goto("/cyberchess", { waitUntil: "domcontentloaded" });
+    // Quick Start кнопка на main setup screen
+    const quickStart = page.getByRole("button", { name: /quick start/i }).first();
+    await quickStart.scrollIntoViewIfNeeded();
+    await quickStart.click({ timeout: 15_000 });
+    // Дашборд chips: "БЫСТРЫЙ ДОСТУП" + список действий
+    await expect(page.getByText("БЫСТРЫЙ ДОСТУП", { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+    // Проверка отдельных chips
+    for (const label of ["Анализ", "Коуч", "Пазлы", "Варианты", "Музыка"]) {
+      await expect(page.getByRole("button", { name: new RegExp(label) }).first()).toBeVisible();
+    }
+  });
+
+  test("Music player открывается через кнопку 🎵", async ({ page }) => {
+    await page.goto("/cyberchess", { waitUntil: "domcontentloaded" });
+    const musicBtn = page.getByRole("button", { name: /music player/i }).first();
+    await musicBtn.scrollIntoViewIfNeeded();
+    await musicBtn.click({ timeout: 10_000 });
+    // Modal: заголовок "Музыкальный плеер"
+    await expect(page.getByText("Музыкальный плеер").first()).toBeVisible({ timeout: 10_000 });
+    // Источники royalty-free
+    await expect(page.getByText("Pixabay Music").first()).toBeVisible();
+  });
+
+  test("Sound presets 40+ доступны в Settings", async ({ page }) => {
+    await page.goto("/cyberchess", { waitUntil: "domcontentloaded" });
+    // Открываем Settings (⚙ в header или в дашборд chip)
+    const settingsBtn = page.getByRole("button", { name: /настройки/i }).first();
+    await settingsBtn.scrollIntoViewIfNeeded();
+    await settingsBtn.click({ timeout: 10_000 });
+    await expect(page.getByText(/Звуки фигур/i).first()).toBeVisible({ timeout: 10_000 });
+    // Проверяем как минимум представителей классики и экзотики
+    for (const sample of ["Дерево классика", "8-bit Blip", "Молчание"]) {
+      await expect(page.getByRole("button", { name: new RegExp(sample) }).first()).toBeVisible();
+    }
+  });
+
+  test("OG image endpoint /cyberchess/opengraph-image отдаёт PNG", async ({ page }) => {
+    const resp = await page.request.get("/cyberchess/opengraph-image");
+    expect(resp.status()).toBe(200);
+    const ct = resp.headers()["content-type"] || "";
+    expect(ct).toMatch(/image\/png|image\//);
+  });
+
+  test("OG image endpoint /cyberchess/studio/opengraph-image отдаёт PNG", async ({ page }) => {
+    const resp = await page.request.get("/cyberchess/studio/opengraph-image");
+    expect(resp.status()).toBe(200);
+    const ct = resp.headers()["content-type"] || "";
+    expect(ct).toMatch(/image\/png|image\//);
+  });
+
+  test("Sitemap содержит /cyberchess/studio (regression guard)", async ({ page }) => {
+    const resp = await page.request.get("/sitemap.xml");
+    expect(resp.status()).toBe(200);
+    const body = await resp.text();
+    expect(body).toContain("/cyberchess/studio");
+    expect(body).toContain("/cyberchess");
+  });
 });

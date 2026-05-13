@@ -14,7 +14,47 @@ import CoachLessonsModal from "./CoachLessonsModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
-import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
+import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
+
+// Dark theme palette — mirrors the keys of COLOR (./theme.ts) so the
+// component can swap CC=CC_LIGHT vs CC=CC_DARK at runtime via theme toggle.
+// Keep keys 1:1 with theme.ts COLOR or TS will narrow CC's type.
+const CC_DARK = {
+  bg: "#0b1220",
+  surface1: "#1e293b",
+  surface2: "#0f172a",
+  surface3: "#020617",
+  surfaceGlass: "rgba(15,23,42,0.7)",
+
+  text: "#f1f5f9",
+  textDim: "#94a3b8",
+  textMute: "#64748b",
+  textInv: "#0f172a",
+
+  border: "#334155",
+  borderStrong: "#475569",
+
+  brand: "#10b981",
+  brandHover: "#34d399",
+  brandSoft: "rgba(16,185,129,0.18)",
+  accent: "#a78bfa",
+  accentSoft: "rgba(167,139,250,0.18)",
+  gold: "#fbbf24",
+  goldSoft: "rgba(251,191,36,0.18)",
+  danger: "#f87171",
+  dangerSoft: "rgba(248,113,113,0.18)",
+  info: "#60a5fa",
+  infoSoft: "rgba(96,165,250,0.18)",
+
+  // Board interactions — slightly more saturated for dark surfaces
+  sqSel: "rgba(16,185,129,0.55)",
+  sqValid: "rgba(16,185,129,0.4)",
+  sqCap: "rgba(248,113,113,0.4)",
+  sqLast: "rgba(251,191,36,0.32)",
+  sqCheck: "rgba(248,113,113,0.6)",
+  sqPremove: "rgba(96,165,250,0.45)",
+  sqPremoveStrong: "rgba(96,165,250,0.6)",
+} as const;
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
@@ -694,6 +734,23 @@ export default function CyberChessPage(){
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
+  // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
+  // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
+  // entire palette at render time; all ~720 CC.* references pick it up automatically.
+  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="dark"?"dark":"light"}catch{return"light"}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_color_theme_v1",themeMode)}catch{}},[themeMode]);
+  // Active palette — shadows the imported CC_LIGHT so every existing CC.* lookup
+  // in this component reads the active theme. Top-level helpers above the
+  // component still see CC_LIGHT via the import alias (kept for backwards compat
+  // of any module-scoped colors, though currently none use CC.* outside the fn).
+  const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
+  // Apply body background so chrome around <main> matches the active theme.
+  useEffect(()=>{
+    if(typeof document==="undefined")return;
+    const prev=document.body.style.background;
+    document.body.style.background=themeMode==="dark"?CC_DARK.bg:CC_LIGHT.bg;
+    return()=>{document.body.style.background=prev};
+  },[themeMode]);
   // Текущий звуковой пресет (40 пресетов + молчание). Сохраняется в localStorage.
   const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
   useEffect(()=>{saveSoundPreset(soundPresetId)},[soundPresetId]);
@@ -701,6 +758,11 @@ export default function CyberChessPage(){
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_autoqueen_v1",autoQueen?"1":"0")}catch{}},[autoQueen]);
+  // F2 phase-3 — Stockfish analysis depth для CPI/metrics recall. 18 = быстро (по умолчанию),
+  // 25 = точнее, 30 = максимум. Влияет только на recordMoveWithMultiPV и top-3 metrics —
+  // не на playing strength AI противника (тот настраивается отдельно через Skill Level).
+  const[sfDepth,sSfDepth]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_sf_depth_v1")||"18");return v>=12&&v<=40?v:18}catch{return 18}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_sf_depth_v1",String(sfDepth))}catch{}},[sfDepth]);
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
@@ -1399,7 +1461,7 @@ export default function CyberChessPage(){
     const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
       ?(window as any).requestIdleCallback(()=>{
         if(cancelled||!sfR.current?.ready())return;
-        sfR.current.multiPV(fenForTop3,18,3,(lines)=>{
+        sfR.current.multiPV(fenForTop3,sfDepth,3,(lines)=>{
           if(cancelled||!lines||lines.length===0)return;
           try{
             // Convert in-page PVLine shape to MetricsPVLine (structurally identical).
@@ -1409,7 +1471,7 @@ export default function CyberChessPage(){
       },{timeout:600})
       :setTimeout(()=>{
         if(cancelled||!sfR.current?.ready())return;
-        sfR.current.multiPV(fenForTop3,18,3,(lines)=>{
+        sfR.current.multiPV(fenForTop3,sfDepth,3,(lines)=>{
           if(cancelled||!lines||lines.length===0)return;
           try{metricsRef.current.setPendingTop3(fenForTop3,lines as unknown as MetricsPVLine[])}catch{}
         });
@@ -3372,7 +3434,7 @@ export default function CyberChessPage(){
     </main>);
   }
 
-  return(<main style={{background:T.bg,minHeight:"100vh"}}>
+  return(<main style={{background:CC.bg,minHeight:"100vh",color:CC.text}}>
     <ProductPageShell fullWidth><Wave1Nav/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
@@ -9917,6 +9979,10 @@ ${question.trim()}`;
         );
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
           <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🌗 Внешний вид</div>
+            <Row label="Тёмная тема" desc="Тёмный фон, светлый текст. Темы доски и набор фигур не меняются." checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?"Светлая тема":"Тёмная тема","info")}}/>
+          </div>
+          <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>
             <Row label="Звук в игре" desc="Хлопки фигур, шах, мат, сигналы." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
             <Row label="Голосовые комментарии" desc="Coach зачитывает важные моменты партии (Chrome)." checked={liveCommentary} onChange={()=>sLiveCommentary(v=>!v)}/>
@@ -9964,6 +10030,28 @@ ${question.trim()}`;
             <Row label="Auto-queen (превращение в ферзя)" desc="Пешка на 8-й сразу становится ферзём — без модалки. Для bullet/blitz и премувов. Выключи если нужны underpromotions (конь, ладья, слон)." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
             <Row label="Threat Heatmap" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
             <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Глубина анализа Stockfish (F2-3)</div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>Для CPI и top-3 metrics. Не влияет на силу противника. <b style={{color:CC.text}}>Сейчас: depth={sfDepth}</b></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {[{d:14,lbl:"⚡ 14 (быстро)"},{d:18,lbl:"🎯 18 (баланс)"},{d:22,lbl:"📈 22 (точнее)"},{d:25,lbl:"🔬 25 (макс)"},{d:30,lbl:"🧠 30 (NNUE deep)"}].map(opt=>{
+                  const selected=sfDepth===opt.d;
+                  return <button key={opt.d}
+                    onClick={()=>{sSfDepth(opt.d);showToast(`Stockfish depth=${opt.d}`,"info")}}
+                    style={{
+                      padding:"5px 10px",borderRadius:RADIUS.full,
+                      border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                      background:selected?CC.brandSoft:CC.surface1,
+                      color:selected?CC.text:CC.textDim,
+                      cursor:"pointer",fontSize:11,fontWeight:selected?800:600,
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                    }}>
+                    {opt.lbl}
+                  </button>;
+                })}
+              </div>
+              <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>Чем выше — тем точнее CPI, но дольше ожидание (depth 25+ может занимать 1-2 сек на ход).</div>
+            </div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📚 Анализ</div>

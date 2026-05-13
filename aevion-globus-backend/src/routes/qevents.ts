@@ -80,16 +80,28 @@ qeventsRouter.get("/categories", (_req: Request, res: Response) => {
 });
 
 // ─── GET /api/qevents/events ─────────────────────────────────────────────────
+// Query: ?category=&location=&limit=&when=upcoming|past|all (default upcoming)
 qeventsRouter.get("/events", async (req: Request, res: Response) => {
-  const { category, location, limit } = req.query as Record<string, string | undefined>;
+  const { category, location, limit, when } = req.query as Record<string, string | undefined>;
   const limitN = Math.min(Number(limit) || 20, 100);
   const now = new Date().toISOString();
+  const whenFilter = (when ?? "upcoming").toLowerCase();
 
   try {
     if (isQEventsDbReady()) {
-      const conditions: string[] = [`"startAt">=$1`, `"isPublic"=TRUE`];
-      const args: unknown[] = [now];
-      let idx = 2;
+      const conditions: string[] = [`"isPublic"=TRUE`];
+      const args: unknown[] = [];
+      let idx = 1;
+
+      if (whenFilter === "upcoming") {
+        conditions.push(`"startAt">=$${idx++}`);
+        args.push(now);
+      } else if (whenFilter === "past") {
+        conditions.push(`"startAt"<$${idx++}`);
+        args.push(now);
+      }
+      // when=all → no time filter
+
       if (category && EVENT_CATEGORIES.includes(category)) {
         conditions.push(`"category"=$${idx++}`);
         args.push(category);
@@ -99,24 +111,34 @@ qeventsRouter.get("/events", async (req: Request, res: Response) => {
         args.push(`%${location}%`);
       }
       const where = conditions.join(" AND ");
+      const orderBy = whenFilter === "past" ? `ORDER BY "startAt" DESC` : `ORDER BY "startAt" ASC`;
       const { rows } = await pool.query(
-        `SELECT * FROM "QEvent" WHERE ${where} ORDER BY "startAt" ASC LIMIT $${idx}`,
+        `SELECT * FROM "QEvent" WHERE ${where} ${orderBy} LIMIT $${idx}`,
         [...args, limitN],
       );
-      return res.json({ events: rows });
+      return res.json({ events: rows, when: whenFilter });
     }
 
-    let events = Array.from(memEvents.values()).filter(
-      (e) => e.isPublic && e.startAt >= now,
-    );
+    let events = Array.from(memEvents.values()).filter((e) => e.isPublic);
+    if (whenFilter === "upcoming") {
+      events = events.filter((e) => e.startAt >= now);
+    } else if (whenFilter === "past") {
+      events = events.filter((e) => e.startAt < now);
+    }
     if (category && EVENT_CATEGORIES.includes(category)) {
       events = events.filter((e) => e.category === category);
     }
     if (location) {
       events = events.filter((e) => e.location.toLowerCase().includes(location.toLowerCase()));
     }
-    events = events.sort((a, b) => a.startAt.localeCompare(b.startAt)).slice(0, limitN);
-    return res.json({ events });
+    events = events
+      .sort((a, b) =>
+        whenFilter === "past"
+          ? b.startAt.localeCompare(a.startAt)
+          : a.startAt.localeCompare(b.startAt),
+      )
+      .slice(0, limitN);
+    return res.json({ events, when: whenFilter });
   } catch {
     return res.status(500).json({ error: "internal_error" });
   }
@@ -446,4 +468,90 @@ qeventsRouter.post("/events/:id/share", (req: Request, res: Response) => {
   const event = memEvents.get(id);
   if (!event) return res.status(404).json({ error: "not_found" });
   return res.json({ shareUrl: `https://aevion.app/events/${id}` });
+});
+
+// ─── GET /api/qevents/events/:id/ics — iCal export ───────────────────────────
+function icsEscape(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
+function toIcsDate(iso: string): string {
+  // 2026-05-13T15:30:00.000Z → 20260513T153000Z
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`
+  );
+}
+
+function buildIcs(event: QEvent): string {
+  const dtStamp = toIcsDate(new Date().toISOString());
+  const dtStart = toIcsDate(event.startAt);
+  // Fallback: end = start + 1 hour if not provided
+  const endIso =
+    event.endAt ?? new Date(new Date(event.startAt).getTime() + 60 * 60 * 1000).toISOString();
+  const dtEnd = toIcsDate(endIso);
+  const summary = icsEscape(event.title || "QEvent");
+  const description = icsEscape(event.description ?? "");
+  const location = icsEscape(event.location ?? "");
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//AEVION//QEvents//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${event.id}@qevents.aevion.app`,
+    `DTSTAMP:${dtStamp}`,
+    `DTSTART:${dtStart}`,
+    `DTEND:${dtEnd}`,
+    `SUMMARY:${summary}`,
+    description ? `DESCRIPTION:${description}` : "",
+    location ? `LOCATION:${location}` : "",
+    `CATEGORIES:${icsEscape(event.category || "other").toUpperCase()}`,
+    `URL:https://aevion.app/qevents/${event.id}`,
+    "STATUS:CONFIRMED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ]
+    .filter(Boolean)
+    .join("\r\n");
+}
+
+qeventsRouter.get("/events/:id/ics", async (req: Request, res: Response) => {
+  const id = param(req, "id");
+  try {
+    let event: QEvent | undefined;
+    if (isQEventsDbReady()) {
+      const { rows } = await pool.query(`SELECT * FROM "QEvent" WHERE "id"=$1`, [id]);
+      if (!rows[0]) return res.status(404).json({ error: "not_found" });
+      event = rows[0] as QEvent;
+    } else {
+      event = memEvents.get(id);
+      if (!event) return res.status(404).json({ error: "not_found" });
+    }
+
+    const ics = buildIcs(event);
+    const safeTitle = (event.title || "event")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "event";
+
+    res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="qevents-${safeTitle}-${event.id.slice(0, 8)}.ics"`,
+    );
+    return res.send(ics);
+  } catch {
+    return res.status(500).json({ error: "internal_error" });
+  }
 });

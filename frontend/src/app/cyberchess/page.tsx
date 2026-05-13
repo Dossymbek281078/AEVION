@@ -32,6 +32,8 @@ import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
+import MusicPlayer from "./MusicPlayer";
+import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
@@ -172,28 +174,12 @@ function getAudioCtx():AudioContext|null{
   if(_audioCtx&&_audioCtx.state==="suspended"){_audioCtx.resume().catch(()=>{})}
   return _audioCtx;
 }
+// snd проксирует в playChessSound с текущим preset из localStorage. Сам preset
+// меняется через Settings → "Звуки фигур". Если "silent" — функция просто выходит.
 function snd(t:string){if(isMuted())return;try{
-  const x=getAudioCtx();if(!x)return;const n=x.currentTime;
-  const makeBurst=(at:number,dur:number,lpFreq:number,vol:number)=>{
-    const bufSize=Math.floor(x.sampleRate*dur);
-    const buf=x.createBuffer(1,bufSize,x.sampleRate);
-    const d=buf.getChannelData(0);
-    for(let i=0;i<bufSize;i++){d[i]=(Math.random()*2-1)*Math.exp(-i/(bufSize*0.18));}
-    const src=x.createBufferSource();src.buffer=buf;
-    const lp=x.createBiquadFilter();lp.type="lowpass";lp.frequency.value=lpFreq;lp.Q.value=0.8;
-    const hp=x.createBiquadFilter();hp.type="highpass";hp.frequency.value=180;
-    const g=x.createGain();g.gain.setValueAtTime(vol,at);g.gain.exponentialRampToValueAtTime(0.001,at+dur);
-    src.connect(hp);hp.connect(lp);lp.connect(g);g.connect(x.destination);src.start(at);
-  };
-  if(t==="move")   makeBurst(n,0.06,1400,0.22);
-  else if(t==="capture")  {makeBurst(n,0.10,700,0.35);makeBurst(n+0.03,0.07,1000,0.15);}
-  else if(t==="check")    makeBurst(n,0.07,2400,0.28);
-  else if(t==="castle")   {makeBurst(n,0.05,1200,0.2);makeBurst(n+0.08,0.05,1200,0.18);}
-  else if(t==="premove")  makeBurst(n,0.04,1800,0.12);
-  // Distinct premove-cancel sound: short downward tone — clearly different from "premove confirm".
-  else if(t==="cancel")   {makeBurst(n,0.05,900,0.18);makeBurst(n+0.05,0.05,500,0.13);}
-  else if(t==="x")        {for(let i=0;i<4;i++)makeBurst(n+i*0.08,0.07,600-i*60,0.15);}
-  else                    makeBurst(n,0.05,1200,0.20);
+  const preset=loadSoundPreset();
+  const evt=(t==="move"||t==="capture"||t==="check"||t==="castle"||t==="premove"||t==="cancel"||t==="x")?t:"move";
+  playChessSound(preset,evt);
 }catch{}}
 
 /* ═══ Rating ═══ */
@@ -707,6 +693,10 @@ export default function CyberChessPage(){
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
+  const[showMusicPlayer,sShowMusicPlayer]=useState(false);
+  // Текущий звуковой пресет (40 пресетов + молчание). Сохраняется в localStorage.
+  const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
+  useEffect(()=>{saveSoundPreset(soundPresetId)},[soundPresetId]);
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
@@ -2516,9 +2506,25 @@ export default function CyberChessPage(){
   // Premove cancel flash: красный pulse на FROM-клетке отменённого премува (~600ms).
   const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
   useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
-  // Animation effect removed — pieces snap to new positions instantly via
-  // React render. User wanted no "flying" pieces.
-  useEffect(()=>{ skipNextAnimRef.current=false; },[bk]);
+  // ── Move slide animation trigger ──
+  // На каждое обновление last-move (lm): если skipNextAnimRef=true (пользователь сам
+  // только что сделал ход через exec — анимация лишь добавит лаг), просто сбрасываем
+  // флаг и пропускаем. Иначе — запускаем floating piece от FROM к TO, фигура читается
+  // из game на позиции TO (после хода). Эффект очищается через 220ms.
+  const prevLmRef=useRef<{from:string;to:string}|null>(null);
+  useEffect(()=>{
+    if(!lm){prevLmRef.current=null;return}
+    const prev=prevLmRef.current;
+    if(prev&&prev.from===lm.from&&prev.to===lm.to)return;
+    prevLmRef.current={from:lm.from,to:lm.to};
+    if(skipNextAnimRef.current){skipNextAnimRef.current=false;return}
+    const pc=game.get(lm.to as Square);
+    if(!pc)return;
+    sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:{type:pc.type,color:pc.color},key:Date.now()});
+    const id=window.setTimeout(()=>sMoveAnim(null),220);
+    return()=>clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[lm?.from,lm?.to,bk]);
   // После mount floating piece — trigger transition через рефлоу, чтобы
   // initial transform (from→to negative offset) уехал в 0,0.
   useEffect(()=>{
@@ -3355,7 +3361,7 @@ export default function CyberChessPage(){
   // regenerate the tree on hydration, and event handlers attach immediately.
   if(!mounted){
     return(<main style={{background:T.bg,minHeight:"100vh"}}>
-      <ProductPageShell maxWidth={2000}><Wave1Nav/>
+      <ProductPageShell fullWidth><Wave1Nav/>
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${T.dim}`,borderTopColor:T.accent,animation:"cc-spin 0.8s linear infinite"}}/>
@@ -3367,7 +3373,7 @@ export default function CyberChessPage(){
   }
 
   return(<main style={{background:T.bg,minHeight:"100vh"}}>
-    <ProductPageShell maxWidth={2000}><Wave1Nav/>
+    <ProductPageShell fullWidth><Wave1Nav/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
@@ -3550,41 +3556,16 @@ export default function CyberChessPage(){
           ariaLabel={muted?"Unmute":"Mute"}
           style={{padding:"6px 10px",minHeight:36,minWidth:36}}
         />
+        <button
+          onClick={()=>sShowMusicPlayer(true)}
+          title="Музыкальный плеер"
+          aria-label="Music player"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
+        >🎵</button>
       </div>}
 
-      {/* ─── AEVION ecosystem strip ─── compact pill-bar with cross-product links so users can
-          discover what else AEVION offers without leaving CyberChess. Hidden in streamer mode. */}
-      {!streamerMode&&<div style={{
-        display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:10,
-        background:"linear-gradient(135deg,rgba(15,23,42,0.04),rgba(124,58,237,0.06))",
-        border:`1px solid ${CC.border}`,borderRadius:RADIUS.lg,
-        flexWrap:"wrap",fontSize:11
-      }}>
-        <span style={{fontWeight:900,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,fontSize:10,marginRight:4}}>🌐 AEVION</span>
-        {[
-          {href:"/qcoreai",label:"🧠 QCoreAI",hint:"AI-агенты и чат"},
-          {href:"/qtrade",label:"📈 QTrade",hint:"Биржа AEV"},
-          {href:"/aev",label:"🪙 AEV",hint:"Токеномика"},
-          {href:"/qpaynet",label:"💸 QPayNet",hint:"Платежи P2P"},
-          {href:"/qright",label:"©  QRight",hint:"Авторские права"},
-          {href:"/qsign",label:"✍ QSign v2",hint:"PQ-подпись"},
-          {href:"/quantum-shield",label:"🛡 QShield",hint:"Threshold-секреты"},
-          {href:"/qbuild",label:"💼 QBuild",hint:"HR-платформа"},
-          {href:"/healthai",label:"🩺 HealthAI",hint:"Здоровье"},
-          {href:"/smeta-trainer",label:"📐 Smeta",hint:"Тренажёр сметчика"},
-        ].map(p=><a key={p.href} href={p.href} title={p.hint}
-          style={{
-            display:"inline-flex",alignItems:"center",padding:"4px 10px",
-            borderRadius:RADIUS.full,background:CC.surface1,
-            border:`1px solid ${CC.border}`,color:CC.text,
-            fontSize:11,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",
-            transition:`all ${MOTION.fast} ${MOTION.ease}`
-          }}
-          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.borderStrong;(e.currentTarget as HTMLElement).style.background="#fff"}}
-          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
-          {p.label}
-        </a>)}
-      </div>}
+      {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.
+          Кросс-продуктовая навигация остаётся в Wave1Nav (футер/нав) и через прямые ссылки. */}
 
       {/* Resume offer banner */}
       {resumeOffer&&(()=>{
@@ -4561,8 +4542,42 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
+      {/* In-game dashboard chips — quick access во время игры, не уходя в модалки.
+          Скрыт в setup (там есть hero-карточки) и в streamer mode. */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&<div style={{
+        display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,
+        padding:"6px 10px",marginBottom:10,
+        background:"linear-gradient(135deg,rgba(5,150,105,0.04),rgba(124,58,237,0.05))",
+        border:`1px solid ${CC.border}`,borderRadius:RADIUS.lg,
+      }}>
+        <span style={{fontWeight:900,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,fontSize:10,marginRight:6}}>⚡ Быстрый доступ</span>
+        {[
+          {label:"📊 Анализ",hint:"Открыть анализ позиции",onClick:()=>{sTab("analysis");showToast("Анализ","info")}},
+          {label:"🧠 Коуч",hint:"Спросить коуча",onClick:()=>{sTab("coach");showToast("Коуч","info")}},
+          {label:"🧩 Пазлы",hint:"Решить тактику",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+          {label:"⚡ Puzzle Rush",hint:"Скоростной режим",onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
+          {label:"🎲 Варианты",hint:"12 вариантов шахмат",onClick:()=>sShowVariants(true)},
+          {label:"📅 Daily",hint:"Дневной пазл",onClick:()=>{sTab("puzzles");if(dailyState&&PUZZLES[dailyState.idx])ldPz(dailyState.idx)}},
+          {label:"📚 Репертуар",hint:"Свои дебюты",onClick:()=>sRepertoireOpen(true)},
+          {label:"🏆 Турниры",hint:"Bracket + leaderboard",onClick:()=>sShowTournament(true)},
+          {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
+          {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
+          {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
+        ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
+          style={{
+            padding:"4px 10px",borderRadius:RADIUS.full,
+            background:CC.surface1,border:`1px solid ${CC.border}`,color:CC.text,
+            fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,
+            transition:`all ${MOTION.fast} ${MOTION.ease}`,
+          }}
+          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.borderStrong;(e.currentTarget as HTMLElement).style.background="#fff"}}
+          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
+          {c.label}
+        </button>)}
+      </div>}
+
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch",justifyContent:"center"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
@@ -9909,6 +9924,40 @@ ${question.trim()}`;
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
               sMasterVoice(v=>!v);
             }}/>
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Звуки фигур — 40 пресетов + молчание</div>
+              <div style={{fontSize:12,color:CC.textDim,lineHeight:1.4,marginBottom:SPACE[2]}}>
+                Сейчас: <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.name}</b>
+              </div>
+              {(["classic","exotic","silent"] as const).map(cat=>{
+                const items=CHESS_SOUND_PRESETS.filter(p=>p.category===cat);
+                if(items.length===0)return null;
+                const catLabel=cat==="classic"?"Классические":cat==="exotic"?"Нетиповые":"Тишина";
+                return <div key={cat} style={{marginBottom:SPACE[2]}}>
+                  <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>{catLabel}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {items.map(p=>{
+                      const selected=soundPresetId===p.id;
+                      return <button key={p.id}
+                        onClick={()=>{sSoundPresetId(p.id);playChessSound(p.id,"move");showToast(`${p.emoji} ${p.name}`,"info")}}
+                        title={p.desc}
+                        style={{
+                          padding:"4px 8px",borderRadius:RADIUS.full,
+                          border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                          background:selected?CC.brandSoft:CC.surface1,
+                          color:selected?CC.text:CC.textDim,
+                          cursor:"pointer",fontSize:11,fontWeight:selected?800:600,
+                          transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                          whiteSpace:"nowrap" as const,
+                        }}>
+                        {p.emoji} {p.name}
+                      </button>;
+                    })}
+                  </div>
+                </div>;
+              })}
+              <div style={{fontSize:11,color:CC.textMute,marginTop:4}}>Клик по пресету — мгновенный preview хода.</div>
+            </div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
@@ -10329,6 +10378,7 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
+    <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

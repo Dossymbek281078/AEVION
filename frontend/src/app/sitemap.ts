@@ -35,6 +35,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/cyberchess/economy", changeFrequency: "weekly", priority: 0.6 },
   { path: "/cyberchess/training", changeFrequency: "daily", priority: 0.7 },
   { path: "/cyberchess/tournament", changeFrequency: "daily", priority: 0.75 },
+  { path: "/cyberchess/studio", changeFrequency: "weekly", priority: 0.6 },
   // QBuild static routes
   { path: "/build", changeFrequency: "daily", priority: 1.0 },
   { path: "/build/vacancies", changeFrequency: "hourly", priority: 0.9 },

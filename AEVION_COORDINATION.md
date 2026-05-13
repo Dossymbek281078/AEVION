@@ -168,12 +168,16 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| `aevion-core/main` (agent-1) | **DevHub UI** `frontend/src/app/devhub/page.tsx` + `scripts/devhub-smoke.js` | snippet shelf consumer + copy-button + smoke | 2026-05-13 block-3 start |
-| `aevion-core/main` (agent-2) | **MOTD widget** `frontend/src/app/developers/page.tsx` или `/page.tsx` | Module-of-the-day секция через SDK getModuleOfTheDay() | 2026-05-13 block-3 start |
-| `aevion-core/main` (agent-3) | **QStore** `qstore.ts` + `/qstore` | marketplace polish (categories/filters/new endpoint) | 2026-05-13 block-3 start |
-| `aevion-core/main` (agent-4) | **QLearn** `qlearn.ts` + `/qlearn` | courses/progress polish, learner features | 2026-05-13 block-3 start |
-| `aevion-core/main` (agent-5) | **QEvents** `qevents.ts` + `/qevents` | feed + RSVP/реакции | 2026-05-13 block-3 start |
-| `aevion-core/main` (agent-6) | **Planet activity UI** `frontend/src/app/planet/**` | consumer для /api/planet/activity | 2026-05-13 block-3 start |
+| _free_ | — | блок 3 завершён, см. ниже | 2026-05-13 block-3 done |
+
+### Завершено 2026-05-13 (parallel block 3 — 6 agents)
+
+- ✅ **DevHub UI** — snippet shelf (list/star/copy/submit) + smoke 9 assertions. SHA: `ed11b255`.
+- ✅ **MOTD widget** — `ModuleOfTheDayCard` component + интеграция в `/developers` с hourly refresh. SHA: `43c435fe`.
+- ✅ **QStore polish** — item detail `/qstore/[id]` + Featured (popular/trending/new/top-rated) + sort dropdown. SHA: `866d7be8`.
+- ✅ **QLearn polish** — bookmarks + streak/continue-learning (5 endpoints + StreakBadge/ContinueCard + smoke +13 assertions). SHA: `15e62317`.
+- ✅ **QEvents polish** — upcoming/past filter + iCal export (`/events/:id/ics`) + Add-to-calendar button. SHA: `0cd8908a`.
+- ✅ **Planet activity UI** — `PlanetActivityFeed` component + `/planet/activity` page + teaser в `/planet`. SHA: `becd1ed9`.
 
 ### Завершено 2026-05-13 (parallel block 2)
 

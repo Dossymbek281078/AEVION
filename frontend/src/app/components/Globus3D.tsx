@@ -996,105 +996,89 @@ export default function Globus3D({
     return markerCountryStats.get(aliased) ?? markerCountryStats.get(hoveredCountry) ?? null;
   }, [hoveredCountry, markerCountryStats]);
 
+  /**
+   * Debounced query — чтобы matches-effect не дёргался на каждый символ при наборе.
+   * Обновляется через 120ms после последнего keystroke. visibleMatchCount всё ещё
+   * читает свежий `query` для мгновенного индикатора, но heavy-work идёт по debounced.
+   */
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query), 120);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  /**
+   * Единый memo для search+filter+country — переиспользуется matches-effect,
+   * auto-focus и visibleMatchCount. До этого каждый из трёх делал свой O(N) проход
+   * по markers с одинаковой логикой. matchSet — Set<key> для быстрого lookup,
+   * matchedList — для auto-focus single-detection.
+   */
+  const markerMatch = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const sel = selectedCountry;
+    const matchSet = new Set<string>();
+    const matchedList: Marker[] = [];
+    const inField = (s: string | undefined, qq: string) =>
+      !!s && s.toLowerCase().includes(qq);
+    for (const m of markers) {
+      if (filter !== "all" && m.category !== filter) continue;
+      if (sel && m.country !== sel) continue;
+      let pass = !q;
+      if (!pass) {
+        pass =
+          inField(m.title, q) ||
+          inField(m.label, q) ||
+          inField(m.country, q) ||
+          inField(m.city, q) ||
+          (m.tags?.some((t) => inField(t, q)) ?? false);
+      }
+      if (pass) {
+        matchSet.add(m.key);
+        matchedList.push(m);
+      }
+    }
+    return { matchSet, matchedList };
+  }, [markers, debouncedQuery, filter, selectedCountry]);
+
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
-    const q = query.trim().toLowerCase();
-    const sel = selectedCountry;
-    const matches = (m: Marker) => {
-      if (filter !== "all" && m.category !== filter) return false;
-      if (sel && m.country !== sel) return false;
-      if (!q) return true;
-      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
-      return (
-        inField(m.title) ||
-        inField(m.label) ||
-        inField(m.country) ||
-        inField(m.city) ||
-        (m.tags?.some((t) => inField(t)) ?? false)
-      );
-    };
-    const visibleByKey = new Map<string, boolean>();
+    const matchSet = markerMatch.matchSet;
     for (const item of markerMeshesRef.current) {
-      const v = matches(item.marker);
+      const v = matchSet.has(item.marker.key);
       item.group.visible = v;
       // Также на head — иначе raycaster найдёт скрытый маркер (он проверяет only-self).
       item.mesh.visible = v;
-      visibleByKey.set(item.marker.key, v);
     }
     // Pulse уже внутри group → автоматически скрыт; просто синхронизируем.
     for (const [key, pulseMesh] of pulseMeshByKeyRef.current) {
-      pulseMesh.visible = visibleByKey.get(key) === true;
+      pulseMesh.visible = matchSet.has(key);
     }
     for (const a of arcsRef.current) {
       a.line.visible =
-        layers.arcs &&
-        visibleByKey.get(a.fromKey) === true &&
-        visibleByKey.get(a.toKey) === true;
+        layers.arcs && matchSet.has(a.fromKey) && matchSet.has(a.toKey);
     }
-  }, [query, filter, selectedCountry, markers, layers.arcs]);
+  }, [markerMatch, layers.arcs]);
 
   /** Auto-focus при единственном совпадении поиска. */
   useEffect(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q && filter === "all") return;
-    // Считаем матчи и собираем единственный.
-    const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
-    let count = 0;
-    let single: Marker | null = null;
-    for (const m of markers) {
-      if (filter !== "all" && m.category !== filter) continue;
-      if (q) {
-        if (
-          !(
-            inField(m.title) ||
-            inField(m.label) ||
-            inField(m.country) ||
-            inField(m.city) ||
-            (m.tags?.some((t) => inField(t)) ?? false)
-          )
-        ) {
-          continue;
-        }
-      }
-      count++;
-      if (count > 1) {
-        single = null;
-        break;
-      }
-      single = m;
-    }
-    if (count !== 1 || !single) return;
+    const { matchedList } = markerMatch;
+    if (matchedList.length !== 1) return;
+    const single = matchedList[0];
     if (focusedRef.current?.key === single.key) return;
-    const target = single;
     const tm = window.setTimeout(() => {
-      focusMarkerRef.current(target);
+      focusMarkerRef.current(single);
     }, 700);
     return () => window.clearTimeout(tm);
-  }, [query, filter, markers]);
+  }, [debouncedQuery, filter, markerMatch]);
 
-  const visibleMatchCount = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (filter === "all" && !q) return markers.length;
-    let n = 0;
-    for (const m of markers) {
-      if (filter !== "all" && m.category !== filter) continue;
-      if (!q) {
-        n++;
-        continue;
-      }
-      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
-      if (
-        inField(m.title) ||
-        inField(m.label) ||
-        inField(m.country) ||
-        inField(m.city) ||
-        (m.tags?.some((t) => inField(t)) ?? false)
-      ) {
-        n++;
-      }
-    }
-    return n;
-  }, [markers, query, filter]);
+  /**
+   * Сколько маркеров матчится сейчас — read instantly from markerMatch (debounced).
+   * Trade-off: UI-счётчик обновляется через 120ms, но это та же задержка что у matches-effect,
+   * так что глобус и счётчик движутся в такт.
+   */
+  const visibleMatchCount = markerMatch.matchSet.size;
 
   const counts = useMemo(() => {
     let live = 0;

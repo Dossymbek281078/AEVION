@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type StyleProfile = {
   avgMsgLength?: number | string;
@@ -332,6 +333,21 @@ export default function QPersonaMvpPage() {
           )}
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="qpersona"
+        noun="personas"
+        titleField="name"
+        summaryField="blueprint"
+        accent="violet"
+        sectionTitle="Community persona blueprints"
+        sectionHint="Шаблоны личностей от сообщества — берите/комбинируйте/делитесь своими."
+        fields={[
+          { key: "name", label: "Имя персоны", required: true, placeholder: "Strategist v1" },
+          { key: "traits", label: "Черты (через запятую)", required: true, placeholder: "analytical, calm, blunt" },
+          { key: "blueprint", label: "Стиль решений", type: "textarea", required: false, placeholder: "Краткие ответы, факты прежде эмоций, контр-аргументы в первом абзаце." },
+        ]}
+      />
 
       <section className="max-w-5xl mx-auto px-5 pb-20">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Связано в AEVION</h3>

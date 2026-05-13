@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type RiskPoint = { day: number; score: number; label?: string; action?: string };
 
@@ -258,6 +259,21 @@ export default function PsyAppDepsPage() {
           </Link>
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="psyapp-deps"
+        noun="assessments"
+        titleField="title"
+        summaryField="category"
+        accent="rose"
+        sectionTitle="Public assessment templates"
+        sectionHint="Анонимные шаблоны самопроверок от сообщества (без диагнозов). Для исследований и образовательных целей."
+        fields={[
+          { key: "title", label: "Название шаблона", required: true, placeholder: "Burnout self-check (workplace)" },
+          { key: "category", label: "Категория", required: true, placeholder: "burnout · anxiety · dependency · sleep" },
+          { key: "description", label: "Описание", type: "textarea", required: false, placeholder: "Когда применять, какие вопросы. Без клинических утверждений." },
+        ]}
+      />
 
       <footer className="border-t border-rose-900/30 py-6 text-center text-[11px] text-zinc-500">
         AEVION · PsyApp · RESEARCH · демо · mock data · 18+

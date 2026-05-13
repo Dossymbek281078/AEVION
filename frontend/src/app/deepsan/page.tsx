@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Priority = "high" | "medium" | "low";
 type TaskState = "next-action" | "waiting" | "done";
@@ -419,6 +420,21 @@ export default function DeepSanPage() {
           </div>
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="deepsan"
+        noun="runs"
+        titleField="facility"
+        summaryField="method"
+        accent="rose"
+        sectionTitle="Community sanitation runs"
+        sectionHint="Зарегистрированные операции глубокой санитации — методы, объекты, результаты."
+        fields={[
+          { key: "facility", label: "Объект", required: true, placeholder: "Склад BC-3, секция #4" },
+          { key: "method", label: "Метод", required: true, placeholder: "O₃ + UV-C 30 мин · 250 м³" },
+          { key: "notes", label: "Заметки", type: "textarea", required: false, placeholder: "Что сработало, что нет." },
+        ]}
+      />
 
       {/* Cross-links footer */}
       <section className="mx-auto max-w-6xl px-4 pb-16">

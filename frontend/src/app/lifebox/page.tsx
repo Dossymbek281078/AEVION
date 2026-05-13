@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Trustee = { id: number; name: string; relation: string; issued: boolean };
 type Vault = {
@@ -442,6 +443,21 @@ export default function LifeBoxPage() {
           ))}
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="lifebox"
+        noun="capsules"
+        titleField="label"
+        summaryField="occasion"
+        accent="amber"
+        sectionTitle="Community time-capsules"
+        sectionHint="Манифесты капсул (только метаданные — содержимое всегда у владельца)."
+        fields={[
+          { key: "label", label: "Метка капсулы", required: true, placeholder: "Дочери, на 18-летие" },
+          { key: "year", label: "Год открытия", type: "number", required: true, placeholder: "2042" },
+          { key: "occasion", label: "Повод", type: "textarea", required: false, placeholder: "Контекст: что хотите передать, к какому событию приурочить." },
+        ]}
+      />
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border border-amber-500/40 bg-zinc-900/95 p-4 shadow-2xl backdrop-blur">

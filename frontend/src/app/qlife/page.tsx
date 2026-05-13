@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type PillarStatus = "loading" | "ok" | "down" | "unknown";
 
@@ -294,6 +295,20 @@ export default function QLifePage() {
           ))}
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="qlife"
+        noun="prompts"
+        titleField="prompt"
+        summaryField="rationale"
+        accent="emerald"
+        sectionTitle="Community life-prompts"
+        sectionHint="Утренние/вечерние триггеры от других пользователей AEVION — берите идеи, делитесь своими."
+        fields={[
+          { key: "prompt", label: "Триггер / привычка", required: true, placeholder: "После кофе — 5 минут HRV-замер" },
+          { key: "rationale", label: "Зачем это работает", type: "textarea", required: false, placeholder: "Тело уже проснулось, но кортизол низкий — лучшая точка для калибровки" },
+        ]}
+      />
 
       <section className="mx-auto max-w-6xl px-5 pb-20">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">

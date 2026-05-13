@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Recipient = { id: string; name: string; key: string };
 
@@ -316,6 +317,20 @@ export default function ShadowNetPage() {
           ))}
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="shadownet"
+        noun="posts"
+        titleField="title"
+        summaryField="body"
+        accent="teal"
+        sectionTitle="Anonymous board"
+        sectionHint="Анонимные посты сообщества — ключи генерируются клиентом, серверу известны только теги."
+        fields={[
+          { key: "title", label: "Заголовок", required: true, placeholder: "VPN-кастомизация: личный опыт" },
+          { key: "body", label: "Тело поста", type: "textarea", required: true, placeholder: "Markdown поддерживается. Без PII." },
+        ]}
+      />
 
       <section className="max-w-6xl mx-auto px-4 pb-20">
         <h2 className="text-xl font-semibold text-cyan-200 mb-3">Related modules</h2>

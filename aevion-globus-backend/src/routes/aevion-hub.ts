@@ -575,6 +575,213 @@ aevionHubRouter.get("/version", (_req, res) => {
   });
 });
 
+/**
+ * GET /api/aevion/stats — extended platform-wide statistics snapshot.
+ *
+ * Differs from /registry-stats by adding:
+ *   - byKind grouped counters (kind is the AEVION "category")
+ *   - recentActivity — top-N most recently touched modules (by updatedAt
+ *     when present, falling back to createdAt) with status/kind/priority
+ *   - coverage — share of registry modules with a /health probe and with
+ *     a self-served /openapi.json (so we can spot modules missing wiring)
+ *   - priorityBuckets — counts grouped by priority tier
+ *
+ * Designed for dashboard "platform overview" tiles that need one cheap call.
+ * Cached 5 minutes (matches /registry-stats).
+ *
+ * Query:
+ *   ?recent=10  — how many entries to return in recentActivity (1..50, default 10)
+ */
+aevionHubRouter.get("/stats", (req, res) => {
+  const byStatus: Record<string, number> = {};
+  const byKind: Record<string, number> = {};
+  const byPriority: Record<string, number> = {};
+  const tagCount = new Map<string, number>();
+
+  for (const p of projects) {
+    const status = String(p.status || "unknown");
+    const kind = String(p.kind || "unknown");
+    const prio = p.priority == null ? "unknown" : String(p.priority);
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+    byKind[kind] = (byKind[kind] ?? 0) + 1;
+    byPriority[prio] = (byPriority[prio] ?? 0) + 1;
+    if (Array.isArray(p.tags)) {
+      for (const t of p.tags) {
+        const tag = String(t).toLowerCase();
+        tagCount.set(tag, (tagCount.get(tag) ?? 0) + 1);
+      }
+    }
+  }
+
+  const topTags = Array.from(tagCount.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+    .slice(0, 20);
+
+  // Coverage: how many modules have a /health probe wired in SUB_HEALTH,
+  // and how many have a self-served /openapi.json wired in SUB_OPENAPI.
+  const healthIds = new Set(SUB_HEALTH.map((h) => h.name));
+  const openapiIds = new Set(SUB_OPENAPI.map((o) => o.name));
+  let healthCovered = 0;
+  let openapiCovered = 0;
+  for (const p of projects) {
+    if (healthIds.has(String(p.id))) healthCovered += 1;
+    if (openapiIds.has(String(p.id))) openapiCovered += 1;
+  }
+
+  const total = projects.length;
+  const pct = (n: number): number => (total === 0 ? 0 : Math.round((n / total) * 1000) / 10);
+
+  // Recent activity — pick the most recently touched modules. Falls back to
+  // createdAt when updatedAt is absent, then to module id for deterministic
+  // tie-breaking. Clamp `recent` to [1..50].
+  const recentParam = Number.parseInt(String(req.query.recent ?? "10"), 10);
+  const recentN = Number.isFinite(recentParam) ? Math.max(1, Math.min(50, recentParam)) : 10;
+  const recentActivity = [...projects]
+    .map((p) => {
+      const updated = (p as { updatedAt?: unknown }).updatedAt;
+      const created = (p as { createdAt?: unknown }).createdAt;
+      const ts = typeof updated === "string" && updated
+        ? updated
+        : typeof created === "string" && created
+        ? created
+        : "";
+      return {
+        id: String(p.id),
+        code: p.code,
+        name: p.name,
+        status: p.status,
+        kind: p.kind,
+        priority: p.priority,
+        touchedAt: ts || null,
+      };
+    })
+    .sort((a, b) => {
+      const aT = a.touchedAt ?? "";
+      const bT = b.touchedAt ?? "";
+      if (aT !== bT) return bT.localeCompare(aT);
+      return a.id.localeCompare(b.id);
+    })
+    .slice(0, recentN);
+
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json({
+    total,
+    byStatus,
+    byKind,
+    byPriority,
+    topTags,
+    coverage: {
+      health: { count: healthCovered, total, percent: pct(healthCovered) },
+      openapi: { count: openapiCovered, total, percent: pct(openapiCovered) },
+    },
+    recentActivity,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+/**
+ * GET /api/aevion/module-of-the-day — deterministic daily pick.
+ *
+ * Picks one module per UTC day using day-of-year mod registry-size, so
+ * every consumer hitting this endpoint on the same day gets the same
+ * module. Useful for "featured today" widgets on the landing / dashboard.
+ *
+ * The ordering is stable: projects are sorted by id before indexing,
+ * so adding a new module mid-cycle doesn't reshuffle history.
+ *
+ * Response mirrors /catalog/:id (frontend, health, openapi, related)
+ * plus a `tomorrow` preview pointer so widgets can show a teaser.
+ *
+ * Query:
+ *   ?date=YYYY-MM-DD — override "today" (clamped to a valid date; useful
+ *                       for testing and for back-fill on archived posts).
+ */
+aevionHubRouter.get("/module-of-the-day", (req, res) => {
+  if (projects.length === 0) {
+    return res.status(503).json({ error: "registry-empty" });
+  }
+
+  const dateParam = String(req.query.date ?? "").trim();
+  const now = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+    ? new Date(`${dateParam}T00:00:00Z`)
+    : new Date();
+  // Guard against invalid date strings ("9999-99-99" parses to NaN)
+  const baseDate = Number.isFinite(now.getTime()) ? now : new Date();
+
+  // UTC day-of-year [0..365]
+  const startOfYear = Date.UTC(baseDate.getUTCFullYear(), 0, 1);
+  const today = Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), baseDate.getUTCDate());
+  const dayOfYear = Math.floor((today - startOfYear) / 86_400_000);
+
+  // Stable ordering — sort by id, not by registry order, so a re-order in
+  // projects.ts doesn't reshuffle the daily rotation history.
+  const ordered = [...projects].sort((a, b) =>
+    String(a.id).localeCompare(String(b.id)),
+  );
+
+  const idx = ((dayOfYear % ordered.length) + ordered.length) % ordered.length;
+  const tomorrowIdx = (idx + 1) % ordered.length;
+  const p = ordered[idx]!;
+  const next = ordered[tomorrowIdx]!;
+
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+  const apiBase = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/+$/, "");
+
+  const healthIndex = new Map(SUB_HEALTH.map((h) => [h.name, h.path]));
+  const openapiIndex = new Map(SUB_OPENAPI.map((o) => [o.name, o.path]));
+  const healthPath = healthIndex.get(String(p.id));
+  const openapiPath = openapiIndex.get(String(p.id));
+
+  // Tag-overlap related, capped to 3 — same logic as /catalog item.
+  const selfTags = (Array.isArray(p.tags) ? p.tags : []).map((t) => String(t).toLowerCase());
+  const selfSet = new Set(selfTags);
+  const relatedModules = projects
+    .filter((q) => q.id !== p.id)
+    .map((q) => {
+      const tags = (Array.isArray(q.tags) ? q.tags : []).map((t) => String(t).toLowerCase());
+      const overlap = tags.filter((t) => selfSet.has(t)).length;
+      return { id: String(q.id), name: String(q.name), overlap };
+    })
+    .filter((r) => r.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap)
+    .slice(0, 3);
+
+  // Cache until the next UTC midnight so dashboards rotate cleanly.
+  const msUntilMidnight = 86_400_000 - (Date.now() - Date.UTC(
+    baseDate.getUTCFullYear(),
+    baseDate.getUTCMonth(),
+    baseDate.getUTCDate(),
+  ));
+  const maxAge = Math.max(60, Math.min(86_400, Math.floor(msUntilMidnight / 1000)));
+  res.setHeader("Cache-Control", `public, max-age=${maxAge}`);
+
+  res.json({
+    date: `${baseDate.getUTCFullYear()}-${String(baseDate.getUTCMonth() + 1).padStart(2, "0")}-${String(baseDate.getUTCDate()).padStart(2, "0")}`,
+    dayOfYear,
+    registrySize: ordered.length,
+    module: {
+      id: String(p.id),
+      code: p.code,
+      name: p.name,
+      description: p.description,
+      kind: p.kind,
+      status: p.status,
+      priority: p.priority,
+      tags: p.tags,
+      frontend: `${site}/${p.id}`,
+      ogImage: `${site}/${p.id}/opengraph-image`,
+      health: healthPath ? `${apiBase}${healthPath}` : null,
+      openapi: openapiPath ? `${apiBase}${openapiPath}` : null,
+      waitlist: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/waitlist")}` : null,
+      status_url: healthPath ? `${apiBase}${healthPath.replace(/\/health$/, "/status")}` : null,
+      relatedModules,
+    },
+    tomorrow: { id: String(next.id), code: next.code, name: next.name },
+    generatedAt: new Date().toISOString(),
+  });
+});
+
 function extractSummary(body: Record<string, unknown>): Record<string, unknown> {
   // Pull a few well-known fields if present, ignore the rest. Keeps the
   // composite payload small even when sub-health surfaces are noisy.

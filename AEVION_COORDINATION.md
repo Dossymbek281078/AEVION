@@ -168,10 +168,14 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| `aevion-healthai` | **HealthAI** `healthai.ts` + `frontend/src/app/healthai/page.tsx` | MVP: чеклист симптомов + лог состояния + дисклеймер | 2026-05-13 start |
-| `aevion-core/frontend-globus` | **Globus** `frontend/src/app/globus/**` + components | Polish 3D-карты: маркеры/слои/perf | 2026-05-13 start |
-| `frontend-qshield` | **QShield** `quantum-shield.ts` + `frontend/src/app/quantum-shield/**` | Расширение Shamir-контура: shards UI, audit log, export | 2026-05-13 start |
-| `aevion-core/main` | **MVP-семейка** `mvpConcepts.ts` + 6 страниц (qlife/psyapp-deps/qpersona/deepsan/shadownet/lifebox) | Превратить idea-страницы в работающие MVP с API + интерактив | 2026-05-13 start |
+| _free_ | — | блок 2026-05-13 завершён, см. ниже | 2026-05-13 done |
+
+### Завершено 2026-05-13 (parallel block 1)
+
+- ✅ **HealthAI** (`aevion-healthai`, healthai-v1) — 3 commits + push: wellness score + hydration coach endpoints, end-to-end smoke-test, ScoreCard/HydrationCard widgets. SHA: `de092f7e`, `a4729df8`, `20e1fa67`.
+- ✅ **MVP-семейка** (`aevion-core/main`) — 2 commits + push: shared `MvpConceptBoard.tsx`, wired в 6 idea-страницы (qlife/psyapp-deps/qpersona/deepsan/shadownet/lifebox). SHA: `623ea197`, `affe8f83`.
+- ⚠️ **Globus** (`frontend-globus`, globus-polish) — 3 commits локально, **push blocked OAuth workflow-scope**: country hover preview, perf debounce + markerMatch, keyboard shortcuts + help overlay. SHA: `a8276d4e`, `917badb4`, `c89e9ad5`. Нужен PAT с `workflow` scope для пуша.
+- ⚠️ **QShield** (`frontend-qshield`, feat/aevion-finalize-and-status) — 2 commits локально, **push blocked OAuth workflow-scope**: POST /verify-batch + OpenAPI + smoke-test. SHA: `7dbdccc3`, `7a57dd29`.
 
 ### Завершённые задачи этой сессии (сегодня, 2026-05-12)
 

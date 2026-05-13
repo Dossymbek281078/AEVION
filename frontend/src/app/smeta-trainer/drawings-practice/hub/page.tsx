@@ -251,6 +251,11 @@ const MODULES: Module[] = [
   { id: "adaptive-reuse",         category: "special",   href: "/smeta-trainer/drawings-practice/adaptive-reuse",         icon: "♻️", title: "Адаптивное переиспользование",     subtitle: "Loft Almaty, заводы→лофты, ESG, экономия 20-40%, CO₂ −50-70%",  level: "L5", exercises: 4,  color: "orange"  },
   { id: "smart-city-iot",         category: "utilities", href: "/smeta-trainer/drawings-practice/smart-city-iot",         icon: "🏙", title: "Умный город (Smart City IoT)",    subtitle: "Светофоры, освещение, ЖКХ. LoRaWAN, NB-IoT, ЗРК №94-V",       level: "L4", exercises: 4,  color: "fuchsia" },
   { id: "stadium-arena",          category: "structure", href: "/smeta-trainer/drawings-practice/stadium-arena",          icon: "🏟", title: "Стадионы и арены",                subtitle: "FIFA Cat. 1-4, Astana Arena, эвакуация 8 мин, сейсмика 9 б.",  level: "L5", exercises: 4,  color: "emerald" },
+
+  // ── Виды ремонта (фундаментальные) ──
+  { id: "capital-vs-current-repair", category: "theory",  href: "/smeta-trainer/drawings-practice/capital-vs-current-repair", icon: "🔧", title: "Капремонт vs Текущий ремонт",     subtitle: "СН РК 3.02-01, ПП РК №1162, налог. учёт, гарантии 1 vs 5 лет",  level: "L4", exercises: 4,  color: "teal"    },
+  { id: "reconstruction-vs-modernization", category: "theory", href: "/smeta-trainer/drawings-practice/reconstruction-vs-modernization", icon: "🔄", title: "Реконструкция vs Модернизация",   subtitle: "Изменение параметров, МДС 81-35, К=1.15-1.25, экспертиза",       level: "L5", exercises: 4,  color: "purple"  },
+  { id: "renovation-types",       category: "practice",  href: "/smeta-trainer/drawings-practice/renovation-types",       icon: "🪜", title: "8 видов ремонта помещений",       subtitle: "От ямочного (50 тыс.) до VIP (300+ тыс. тг/м²), сметы по уровням", level: "L4", exercises: 4,  color: "rose"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

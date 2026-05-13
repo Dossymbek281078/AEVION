@@ -231,6 +231,11 @@ const MODULES: Module[] = [
   { id: "scope-change-mgmt",      category: "process",   href: "/smeta-trainer/drawings-practice/scope-change-mgmt",      icon: "🔄", title: "Управление изменениями (VO)",     subtitle: "ГК РК 718, FIDIC Sub-Cl.13/20, Claims, EOT, 28-дн. правило",  level: "L5", exercises: 4,  color: "orange"  },
   { id: "safety-incidents",       category: "process",   href: "/smeta-trainer/drawings-practice/safety-incidents",       icon: "🚑", title: "Несчастные случаи (Н-1)",         subtitle: "ТК РК 322-326, Приказ № 1108, УК РК ст. 152, ОПС 1-3% ФОТ",   level: "L4", exercises: 4,  color: "red"     },
   { id: "construction-warranty",  category: "process",   href: "/smeta-trainer/drawings-practice/construction-warranty",  icon: "🛠", title: "Гарантийное обслуживание",        subtitle: "ГК РК 723, 2/5/10 лет, журнал дефектов, регрессы цепочкой",    level: "L4", exercises: 4,  color: "blue"    },
+
+  // ── Человек, карьера, финал ──
+  { id: "soft-skills",            category: "tools",     href: "/smeta-trainer/drawings-practice/soft-skills",            icon: "🤝", title: "Soft skills сметчика",            subtitle: "8 навыков, Гарвардские переговоры, 6 типов конфликтов, BLUF",  level: "L4", exercises: 4,  color: "purple"  },
+  { id: "career-pathway",         category: "tools",     href: "/smeta-trainer/drawings-practice/career-pathway",         icon: "🎓", title: "Карьерный путь сметчика РК",      subtitle: "6 уровней (Junior→Эксперт), 6 сертификаций, ВУЗы, зарплаты",   level: "L3", exercises: 4,  color: "emerald" },
+  { id: "smeta-checklist",        category: "practice",  href: "/smeta-trainer/drawings-practice/smeta-checklist",        icon: "✅", title: "Финальный чек-лист (44 пункта)",  subtitle: "6 групп проверки, интерактивный, типовые ошибки сметчика РК",  level: "L5", exercises: 4,  color: "lime"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

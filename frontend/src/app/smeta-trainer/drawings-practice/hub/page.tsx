@@ -246,6 +246,11 @@ const MODULES: Module[] = [
   { id: "historical-monuments",   category: "special",   href: "/smeta-trainer/drawings-practice/historical-monuments",   icon: "🏛️", title: "Реставрация памятников",          subtitle: "СНиП РК 1.04-25, ЮНЕСКО, Ясави, Венецианская хартия 1964",     level: "L5", exercises: 4,  color: "amber"   },
   { id: "modular-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/modular-construction",   icon: "🧩", title: "Модульное и быстровозводимое",    subtitle: "6 типов (контейнер/SIP/3D-печать/LSF), вдвое быстрее монолита",  level: "L4", exercises: 4,  color: "cyan"    },
   { id: "post-disaster-recon",    category: "practice",  href: "/smeta-trainer/drawings-practice/post-disaster-recon",    icon: "🆘", title: "Послеаварийное восстановление",    subtitle: "Паводки 2024, ЗРК №188-V, Build Back Better, 6 типов ЧС РК",   level: "L5", exercises: 4,  color: "red"     },
+
+  // ── Адаптация, умный город, спорт ──
+  { id: "adaptive-reuse",         category: "special",   href: "/smeta-trainer/drawings-practice/adaptive-reuse",         icon: "♻️", title: "Адаптивное переиспользование",     subtitle: "Loft Almaty, заводы→лофты, ESG, экономия 20-40%, CO₂ −50-70%",  level: "L5", exercises: 4,  color: "orange"  },
+  { id: "smart-city-iot",         category: "utilities", href: "/smeta-trainer/drawings-practice/smart-city-iot",         icon: "🏙", title: "Умный город (Smart City IoT)",    subtitle: "Светофоры, освещение, ЖКХ. LoRaWAN, NB-IoT, ЗРК №94-V",       level: "L4", exercises: 4,  color: "fuchsia" },
+  { id: "stadium-arena",          category: "structure", href: "/smeta-trainer/drawings-practice/stadium-arena",          icon: "🏟", title: "Стадионы и арены",                subtitle: "FIFA Cat. 1-4, Astana Arena, эвакуация 8 мин, сейсмика 9 б.",  level: "L5", exercises: 4,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

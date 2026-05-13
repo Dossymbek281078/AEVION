@@ -416,4 +416,71 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+
+  // ===== CONTENT / AI / COMMERCE (WAVE 2026-05-12) =====
+  {
+    id: "qmedia",
+    code: "QMEDIA",
+    name: "QMedia — Music, Video & Creative AI",
+    description:
+      "Медиа-платформа: стриминг музыки и видео, AI-creative (тексты, обложки, цветовые палитры). Waveform-визуализация, плеер с мини-эквалайзером, песочница для авторов.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["media", "music", "video", "ai", "creative"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "qai",
+    code: "QAI",
+    name: "QAI — Real-time Streaming AI",
+    description:
+      "Real-time streaming AI с переключаемыми persona и chunk-based UI. Альтернативный фронт к QCoreAI с фокусом на потоковую генерацию word-by-word и быстрый UX.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["ai", "streaming", "chat", "persona"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "qlearn",
+    code: "QLEARN",
+    name: "QLearn — Learning Platform",
+    description:
+      "Платформа обучения AEVION: курсы, уроки, AI-тренер, прогресс студента. Postgres-first: курсы, модули, ответы, аттестация. Связан со Smeta Trainer как канал доставки контента.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["education", "ai", "courses", "learning"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "qstore",
+    code: "QSTORE",
+    name: "QStore — Ecosystem Marketplace",
+    description:
+      "Магазин экосистемы AEVION: товары, цифровые продукты, услуги. Postgres-каталог, корзина, заказы; интеграция с QPayNet для оплат и QRight для защиты авторских позиций.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["commerce", "marketplace", "store", "fintech"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "qevents",
+    code: "QEVENTS",
+    name: "QEvents — Events & Conferences",
+    description:
+      "Платформа событий и конференций: создание мероприятий, регистрация, расписание, рассылки. Postgres-storage; интеграция с QSign для билетов и QPayNet для платежей.",
+    kind: "product",
+    status: "mvp",
+    priority: 3,
+    tags: ["events", "conferences", "scheduling"],
+    createdAt: now,
+    updatedAt: now,
+  },
 ];

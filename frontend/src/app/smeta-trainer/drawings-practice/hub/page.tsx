@@ -206,6 +206,11 @@ const MODULES: Module[] = [
   // ── Smart + спец. демонтаж ──
   { id: "smart-home",             category: "utilities",href: "/smeta-trainer/drawings-practice/smart-home",             icon: "🏠", title: "Умный дом",                       subtitle: "KNX, Crestron, Wiren Board, MajorDoMo, ZigBee/Tuya",          level: "L3", exercises: 4,  color: "emerald" },
   { id: "asbestos-removal",       category: "special",   href: "/smeta-trainer/drawings-practice/asbestos-removal",     icon: "☣️", title: "Демонтаж асбеста",                subtitle: "Шифер, плиты, изоляция — лицензия МЭ + СЭС РК",               level: "L4", exercises: 4,  color: "stone"   },
+
+  // ── Качество и безопасность зданий ──
+  { id: "seismic-design",         category: "structure", href: "/smeta-trainer/drawings-practice/seismic-design",         icon: "🌋", title: "Сейсмостойкость зданий РК",       subtitle: "СП РК 2.03-30, Алматы 9 баллов, антисейсм. пояса, K₀/K₁/K₂",  level: "L5", exercises: 4,  color: "rose"    },
+  { id: "energy-efficiency",      category: "process",   href: "/smeta-trainer/drawings-practice/energy-efficiency",      icon: "🌱", title: "Энергоэффективность",             subtitle: "СН РК 2.04-21, классы A-F, LEED/BREEAM/EDGE, утеплители",     level: "L4", exercises: 4,  color: "emerald" },
+  { id: "lab-control",            category: "process",   href: "/smeta-trainer/drawings-practice/lab-control",            icon: "🧪", title: "Лабораторный контроль",           subtitle: "ГОСТ 10180/18105, кубики бетона, арматура, грунты",            level: "L4", exercises: 4,  color: "orange"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

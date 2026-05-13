@@ -1235,6 +1235,225 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
 });
 
 /**
+ * Hydration coach — норма воды по весу (35 мл/кг для взрослых, +0.5л при
+ * exercise >=30мин/день за 7 дней), сравнение с фактом за последние 7 дней,
+ * подсказки. Безопасно: не диагноз, не подменяет врача.
+ */
+healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) => {
+  const profileId = req.params.profileId;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const lgs = await store.getLogs(profileId);
+  const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last7 = sorted.slice(-7);
+  const last3 = sorted.slice(-3);
+
+  const avg = (rows: DailyLog[], pick: (l: DailyLog) => number | undefined) => {
+    const vals = rows.map(pick).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  };
+
+  // База: 35 мл/кг, минимум 1.5л.
+  const baseMlPerKg = 35;
+  const targetBase = Math.max(1.5, (profile.weightKg * baseMlPerKg) / 1000);
+  const avgExercise = avg(last7, (l) => l.exerciseMin) ?? 0;
+  const exerciseBonus = avgExercise >= 30 ? 0.5 : 0;
+  const targetL = Math.round((targetBase + exerciseBonus) * 100) / 100;
+
+  const avgWater7 = avg(last7, (l) => l.waterL);
+  const avgWater3 = avg(last3, (l) => l.waterL);
+  const todayLog = sorted[sorted.length - 1];
+  const todayWater =
+    todayLog && todayLog.date === todayDate() ? (todayLog.waterL ?? null) : null;
+
+  const deficit7 =
+    avgWater7 != null ? Math.round((targetL - avgWater7) * 100) / 100 : null;
+
+  let status: "on-track" | "below" | "well-below" | "no-data" = "no-data";
+  if (avgWater7 == null) {
+    status = "no-data";
+  } else if (avgWater7 >= targetL * 0.95) {
+    status = "on-track";
+  } else if (avgWater7 >= targetL * 0.7) {
+    status = "below";
+  } else {
+    status = "well-below";
+  }
+
+  const tips: string[] = [];
+  if (status === "well-below") {
+    tips.push(
+      "Дефицит воды более 30% от нормы. Поставьте бутылку 0.5л на стол — допивайте каждые 2 часа.",
+    );
+    tips.push("Симптомы хронической дегидратации: усталость, головные боли, тёмная моча.");
+  } else if (status === "below") {
+    tips.push(
+      `До нормы не хватает ~${deficit7}л/день. Попробуйте стакан воды до каждого приёма пищи.`,
+    );
+  } else if (status === "on-track") {
+    tips.push("Норма соблюдается — поддерживайте ритм. При жаре или активности увеличивайте до +0.5л.");
+  } else {
+    tips.push("Залогируйте waterL за несколько дней, чтобы получить персональные рекомендации.");
+  }
+  if (avgExercise >= 30) {
+    tips.push("Регулярная активность учтена — целевой объём поднят на 0.5л.");
+  }
+
+  res.json({
+    targetL,
+    targetBaseL: Math.round(targetBase * 100) / 100,
+    exerciseBonusL: exerciseBonus,
+    avgWater7d: avgWater7 != null ? Math.round(avgWater7 * 100) / 100 : null,
+    avgWater3d: avgWater3 != null ? Math.round(avgWater3 * 100) / 100 : null,
+    todayWaterL: todayWater,
+    deficit7dL: deficit7,
+    status,
+    tips,
+    disclaimer: DISCLAIMER,
+  });
+});
+
+/**
+ * Wellness Score — агрегированный 0-100 балл по 4 столпам (sleep / mood /
+ * water / exercise) + streak bonus − risk penalty. Чисто rule-based,
+ * мотивационный (НЕ диагноз). Подсвечивает слабое звено для фокуса.
+ */
+healthaiRouter.get("/score/:profileId", async (req: Request, res: Response) => {
+  const profileId = req.params.profileId;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const lgs = await store.getLogs(profileId);
+  const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last7 = sorted.slice(-7);
+
+  const avg = (rows: DailyLog[], pick: (l: DailyLog) => number | undefined) => {
+    const vals = rows.map(pick).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  };
+
+  // Каждый столп: 0-25 баллов.
+  const scoreSleep = (() => {
+    const v = avg(last7, (l) => l.sleepHours);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    // Нормально 7-9ч → 25; <5 или >11 → 0.
+    if (v >= 7 && v <= 9) return { score: 25, label: "optimal" };
+    if (v >= 6 && v < 7) return { score: 18, label: "low" };
+    if (v > 9 && v <= 10) return { score: 18, label: "high" };
+    if (v >= 5 && v < 6) return { score: 10, label: "deficit" };
+    return { score: 4, label: "critical" };
+  })();
+
+  const scoreMood = (() => {
+    const v = avg(last7, (l) => l.moodScore);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    // mood 0-10; >=7.5 → 25; <3 → 0.
+    if (v >= 7.5) return { score: 25, label: "great" };
+    if (v >= 6) return { score: 20, label: "good" };
+    if (v >= 4.5) return { score: 13, label: "neutral" };
+    if (v >= 3) return { score: 6, label: "low" };
+    return { score: 1, label: "very-low" };
+  })();
+
+  const scoreWater = (() => {
+    const v = avg(last7, (l) => l.waterL);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    const target = Math.max(1.5, (profile.weightKg * 35) / 1000);
+    const pct = v / target;
+    if (pct >= 0.95) return { score: 25, label: "on-target" };
+    if (pct >= 0.8) return { score: 19, label: "near" };
+    if (pct >= 0.6) return { score: 12, label: "below" };
+    return { score: 4, label: "well-below" };
+  })();
+
+  const scoreExercise = (() => {
+    const v = avg(last7, (l) => l.exerciseMin);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    // WHO: 150мин/неделю модерат → ~21мин/день.
+    if (v >= 30) return { score: 25, label: "active" };
+    if (v >= 20) return { score: 19, label: "moderate" };
+    if (v >= 10) return { score: 12, label: "light" };
+    if (v >= 5) return { score: 6, label: "minimal" };
+    return { score: 2, label: "sedentary" };
+  })();
+
+  // Streak bonus: 0-10 баллов (1 балл за каждые 3 дня).
+  let cur = 0;
+  let streak = 0;
+  let prevDate: Date | null = null;
+  for (const l of sorted) {
+    const d = new Date(l.date + "T00:00:00Z");
+    if (
+      prevDate &&
+      Math.abs(d.getTime() - prevDate.getTime()) === 24 * 3600 * 1000
+    ) {
+      cur += 1;
+    } else {
+      cur = 1;
+    }
+    if (cur > streak) streak = cur;
+    prevDate = d;
+  }
+  const streakBonus = Math.min(10, Math.floor(streak / 3));
+
+  // Если каких-то pillars нет данных — раскидываем "no-data" доли пропорционально.
+  const pillars = [scoreSleep, scoreMood, scoreWater, scoreExercise];
+  const knownPillars = pillars.filter((p) => p.score != null);
+  const knownSum = knownPillars.reduce((s, p) => s + (p.score ?? 0), 0);
+  // Если 4 столпа известны → max 100 (100 пилларов + streak 10, capped 100).
+  const pillarMax = knownPillars.length * 25;
+  const pillarsNormalized =
+    pillarMax > 0 ? Math.round((knownSum / pillarMax) * 90) : 0;
+  const totalRaw = pillarsNormalized + streakBonus;
+  const total = Math.min(100, Math.max(0, totalRaw));
+
+  // Слабое звено (для фокуса).
+  const weakest = knownPillars
+    .filter((p) => (p.score ?? 100) < 18)
+    .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+
+  let band: "excellent" | "good" | "fair" | "low" | "insufficient" = "insufficient";
+  if (knownPillars.length === 0) band = "insufficient";
+  else if (total >= 80) band = "excellent";
+  else if (total >= 60) band = "good";
+  else if (total >= 40) band = "fair";
+  else band = "low";
+
+  res.json({
+    score: total,
+    band,
+    streak,
+    streakBonus,
+    pillars: {
+      sleep: scoreSleep,
+      mood: scoreMood,
+      water: scoreWater,
+      exercise: scoreExercise,
+    },
+    weakest: weakest
+      ? {
+          pillar:
+            weakest === scoreSleep
+              ? "sleep"
+              : weakest === scoreMood
+                ? "mood"
+                : weakest === scoreWater
+                  ? "water"
+                  : "exercise",
+          label: weakest.label,
+          score: weakest.score,
+        }
+      : null,
+    knownPillarsCount: knownPillars.length,
+    logsCount: lgs.length,
+    disclaimer: DISCLAIMER,
+  });
+});
+
+/**
  * Cycle tracking — period log + predictions (avg cycle length из последних
  * 3 законченных циклов).
  */

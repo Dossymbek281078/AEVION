@@ -1,24 +1,25 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import { getApiBase, getBackendOrigin } from "@/lib/apiBase";
+import LiveStatus from "./LiveStatus";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "AEVION Fintech Status",
+  title: "AEVION Fintech Status — live probes, p50/p99 latency",
   description:
-    "Live health probes of the 5 AEVION fintech modules (QGood, QMaskCard, VeilNetX Ledger, Z-Tide, QChainGov) plus the root backend. Refresh to retry.",
+    "Live health monitor for the 6 AEVION fintech modules (QGood, QMaskCard, VeilNetX Ledger, Z-Tide, QChainGov, QPayNet) plus the root backend. 10s polling with rolling p50/p99 latency, downs counter, and per-service sparklines.",
   robots: { index: true, follow: true },
   openGraph: {
     title: "AEVION Fintech Status",
-    description: "Live health probes of the 5 fintech modules. Refresh to retry.",
+    description: "Live health monitor of 6 fintech modules. Auto-refresh every 10s with latency sparklines.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "AEVION Fintech Status",
-    description: "Live health probes of the 5 fintech modules. Refresh to retry.",
+    description: "Live health monitor of 6 fintech modules. Auto-refresh every 10s with latency sparklines.",
   },
 };
 
@@ -39,6 +40,7 @@ const PROBES: Probe[] = [
   { name: "VeilNetX Ledger", path: "/api/veilnetx-ledger/health", color: "#a78bfa" },
   { name: "Z-Tide",          path: "/api/ztide/health",           color: "#34d399" },
   { name: "QChainGov",       path: "/api/qchaingov/health",       color: "#f472b6" },
+  { name: "QPayNet",         path: "/api/qpaynet/health",         color: "#6366f1" },
 ];
 
 const STATUS_COLOR: Record<ProbeStatus, string> = {
@@ -96,7 +98,7 @@ function overallVerdict(results: ProbeResult[]): { status: ProbeStatus; label: s
     return { status: "degraded", label: "Partial degradation", hint: `${bad} service${bad === 1 ? "" : "s"} not fully OK` };
   }
   if (down === 0 && degraded === 0) {
-    return { status: "ok", label: "All systems operational", hint: "6/6 probes healthy" };
+    return { status: "ok", label: "All systems operational", hint: `${results.length}/${results.length} probes healthy` };
   }
   return { status: "down", label: "Major outage", hint: `${down} down, ${degraded} degraded` };
 }
@@ -200,7 +202,7 @@ export default async function FintechStatusPage() {
         <header style={{ marginBottom: 32 }}>
           <div style={S.kicker}>AEVION / Fintech</div>
           <h1 style={S.h1}>Fintech ecosystem status</h1>
-          <p style={S.sub}>Live health probes of the 5 fintech modules. Refresh to retry.</p>
+          <p style={S.sub}>Live monitor of {PROBES.length} fintech services with rolling p50/p99 latency. Polling every 10s — pause from the panel below to freeze.</p>
         </header>
 
         <section style={{ ...S.card, ...S.verdictRow }}>
@@ -211,9 +213,19 @@ export default async function FintechStatusPage() {
           <div style={{ color: "#cbd5e1", fontSize: 14 }}>{verdict.hint}</div>
           <div style={{ flex: 1 }} />
           <form action="" method="get">
-            <button type="submit" style={S.refreshBtn}>Refresh probes</button>
+            <button type="submit" style={S.refreshBtn}>Hard refresh</button>
           </form>
         </section>
+
+        <LiveStatus
+          apiBase={base}
+          initial={Object.fromEntries(
+            results.map((r) => [
+              r.path,
+              { ms: r.ms, status: r.status, at: Date.now() },
+            ])
+          )}
+        />
 
         <section style={S.table}>
           <div style={S.thead}>

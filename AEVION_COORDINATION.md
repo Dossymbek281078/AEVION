@@ -168,7 +168,12 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | блок 2 завершён, см. ниже | 2026-05-13 block-2 done |
+| `aevion-core/main` (agent-1) | **DevHub UI** `frontend/src/app/devhub/page.tsx` + `scripts/devhub-smoke.js` | snippet shelf consumer + copy-button + smoke | 2026-05-13 block-3 start |
+| `aevion-core/main` (agent-2) | **MOTD widget** `frontend/src/app/developers/page.tsx` или `/page.tsx` | Module-of-the-day секция через SDK getModuleOfTheDay() | 2026-05-13 block-3 start |
+| `aevion-core/main` (agent-3) | **QStore** `qstore.ts` + `/qstore` | marketplace polish (categories/filters/new endpoint) | 2026-05-13 block-3 start |
+| `aevion-core/main` (agent-4) | **QLearn** `qlearn.ts` + `/qlearn` | courses/progress polish, learner features | 2026-05-13 block-3 start |
+| `aevion-core/main` (agent-5) | **QEvents** `qevents.ts` + `/qevents` | feed + RSVP/реакции | 2026-05-13 block-3 start |
+| `aevion-core/main` (agent-6) | **Planet activity UI** `frontend/src/app/planet/**` | consumer для /api/planet/activity | 2026-05-13 block-3 start |
 
 ### Завершено 2026-05-13 (parallel block 2)
 

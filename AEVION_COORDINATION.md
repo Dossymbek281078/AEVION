@@ -168,7 +168,10 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | блок 2026-05-13 завершён, см. ниже | 2026-05-13 done |
+| `aevion-core/main` (agent-A) | **MVP-семейка-2** voice-of-earth/mapreality/startup-exchange/kids-ai-content `frontend/src/app/<id>/page.tsx` | MvpConceptBoard wire — 4 страницы | 2026-05-13 block-2 start |
+| `aevion-core/frontend-qcore` (agent-B) | **DevHub** `aevion-globus-backend/src/routes/devhub.ts` + `frontend/src/app/devhub/**` | snippet shelf / run history / editor улучшения | 2026-05-13 block-2 start |
+| `aevion-core/main` (agent-C) | **Planet Compliance** `aevion-globus-backend/src/routes/planetCompliance.ts` (узкая правка) | новый endpoint (verify-badge / snapshot diff / mod queue) + smoke | 2026-05-13 block-2 start |
+| `aevion-core/main` (agent-D) | **AEVION-hub** `aevion-globus-backend/src/routes/aevion-hub.ts` + drawings-practice hub | расширение каталога + новые modules в registry | 2026-05-13 block-2 start |
 
 ### Завершено 2026-05-13 (parallel block 1)
 

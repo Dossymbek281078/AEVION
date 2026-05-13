@@ -627,3 +627,99 @@ describe("v0.5 search + diff + fingerprint", () => {
     expect(fp1.length).toBe(fp2.length);
   });
 });
+
+// ── v0.6: extendedStats + moduleOfTheDay ───────────────────────────────────
+
+describe("AevionCatalog.extendedStats (v0.6)", () => {
+  it("no opts → /api/aevion/stats with no query string", async () => {
+    const body = {
+      total: 0, byStatus: {}, byKind: {}, byPriority: {},
+      topTags: [], coverage: {
+        health: { count: 0, total: 0, percent: 0 },
+        openapi: { count: 0, total: 0, percent: 0 },
+      },
+      recentActivity: [], generatedAt: "2026-01-01T00:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const s = await cat.extendedStats();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats");
+    expect(s.total).toBe(0);
+  });
+
+  it("recent=5 → ?recent=5", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: {
+        total: 1, byStatus: {}, byKind: {}, byPriority: {}, topTags: [],
+        coverage: { health: { count: 0, total: 1, percent: 0 }, openapi: { count: 0, total: 1, percent: 0 } },
+        recentActivity: [], generatedAt: "x",
+      },
+    });
+    await cat.extendedStats({ recent: 5 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats?recent=5");
+  });
+
+  it("recent clamped to [1..50] client-side before sending", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: {
+        total: 0, byStatus: {}, byKind: {}, byPriority: {}, topTags: [],
+        coverage: { health: { count: 0, total: 0, percent: 0 }, openapi: { count: 0, total: 0, percent: 0 } },
+        recentActivity: [], generatedAt: "x",
+      },
+    });
+    await cat.extendedStats({ recent: 999 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats?recent=50");
+    fetchMock.mockClear();
+    await cat.extendedStats({ recent: 0 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats?recent=1");
+  });
+
+  it("throws on HTTP error", async () => {
+    const { cat } = makeClient({ status: 500, body: { error: "boom" } });
+    await expect(cat.extendedStats()).rejects.toThrow(/HTTP 500/);
+  });
+});
+
+describe("AevionCatalog.moduleOfTheDay (v0.6)", () => {
+  const sampleBody = {
+    date: "2026-05-13", dayOfYear: 132, registrySize: 30,
+    module: {
+      id: "qright", code: "QRIGHT", name: "QRight", description: "",
+      kind: "product", status: "mvp", priority: 1, tags: ["ip"],
+      frontend: "https://aevion.app/qright",
+      ogImage: "https://aevion.app/qright/opengraph-image",
+      health: null, openapi: null, waitlist: null, status_url: null,
+      relatedModules: [],
+    },
+    tomorrow: { id: "qsign", code: "QSIGN", name: "QSign" },
+    generatedAt: "2026-05-13T00:00:00Z",
+  };
+
+  it("no opts → /api/aevion/module-of-the-day with no query string", async () => {
+    const { cat, fetchMock } = makeClient({ body: sampleBody });
+    const m = await cat.moduleOfTheDay();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/module-of-the-day");
+    expect(m.module.id).toBe("qright");
+    expect(m.tomorrow.id).toBe("qsign");
+  });
+
+  it("date='2026-05-13' → ?date=2026-05-13", async () => {
+    const { cat, fetchMock } = makeClient({ body: sampleBody });
+    await cat.moduleOfTheDay({ date: "2026-05-13" });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/aevion/module-of-the-day?date=2026-05-13",
+    );
+  });
+
+  it("rejects invalid date format before sending", async () => {
+    const { cat, fetchMock } = makeClient({ body: sampleBody });
+    await expect(cat.moduleOfTheDay({ date: "yesterday" })).rejects.toThrow(
+      /invalid date 'yesterday'/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws on HTTP 503 (empty registry)", async () => {
+    const { cat } = makeClient({ status: 503, body: { error: "registry-empty" } });
+    await expect(cat.moduleOfTheDay()).rejects.toThrow(/HTTP 503/);
+  });
+});

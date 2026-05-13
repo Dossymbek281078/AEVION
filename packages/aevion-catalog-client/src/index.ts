@@ -128,6 +128,45 @@ export interface RegistryStats {
   generatedAt: string;
 }
 
+export interface CoverageBucket {
+  count: number;
+  total: number;
+  percent: number;
+}
+
+export interface ExtendedStatsRecentItem {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  kind: string;
+  priority: number;
+  touchedAt: string | null;
+}
+
+export interface ExtendedStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byKind: Record<string, number>;
+  byPriority: Record<string, number>;
+  topTags: { tag: string; count: number }[];
+  coverage: {
+    health: CoverageBucket;
+    openapi: CoverageBucket;
+  };
+  recentActivity: ExtendedStatsRecentItem[];
+  generatedAt: string;
+}
+
+export interface ModuleOfTheDay {
+  date: string;        // YYYY-MM-DD
+  dayOfYear: number;   // 0..365
+  registrySize: number;
+  module: CatalogItem;
+  tomorrow: { id: string; code: string; name: string };
+  generatedAt: string;
+}
+
 export interface CatalogListOptions {
   status?: string | string[];
   tag?: string | string[];
@@ -277,6 +316,50 @@ export class AevionCatalog {
   async topTags(n = 10): Promise<{ tag: string; count: number }[]> {
     const s = await this.stats();
     return s.byTag.slice(0, n);
+  }
+
+  /**
+   * GET /api/aevion/stats — extended platform-wide statistics.
+   *
+   * Adds health/openapi coverage matrix, byPriority buckets and a
+   * recentActivity feed on top of /registry-stats. Accepts a `recent`
+   * size (clamped 1..50 server-side, default 10).
+   */
+  async extendedStats(opts: { recent?: number } = {}): Promise<ExtendedStats> {
+    const params = new URLSearchParams();
+    if (opts.recent != null) {
+      const n = Math.max(1, Math.min(50, Math.floor(opts.recent)));
+      params.set("recent", String(n));
+    }
+    const qs = params.toString();
+    const url = `${this.baseUrl}/api/aevion/stats${qs ? `?${qs}` : ""}`;
+    const r = await this._fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`AevionCatalog.extendedStats HTTP ${r.status} on ${url}`);
+    return (await r.json()) as ExtendedStats;
+  }
+
+  /**
+   * GET /api/aevion/module-of-the-day — deterministic daily pick.
+   *
+   * Same module is returned for all consumers hitting the endpoint on the
+   * same UTC day. Pass `date` (YYYY-MM-DD) to query a specific day, e.g.
+   * for back-fill on archived posts.
+   */
+  async moduleOfTheDay(opts: { date?: string } = {}): Promise<ModuleOfTheDay> {
+    const params = new URLSearchParams();
+    if (opts.date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+        throw new Error(
+          `AevionCatalog.moduleOfTheDay invalid date '${opts.date}', expected YYYY-MM-DD`,
+        );
+      }
+      params.set("date", opts.date);
+    }
+    const qs = params.toString();
+    const url = `${this.baseUrl}/api/aevion/module-of-the-day${qs ? `?${qs}` : ""}`;
+    const r = await this._fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`AevionCatalog.moduleOfTheDay HTTP ${r.status} on ${url}`);
+    return (await r.json()) as ModuleOfTheDay;
   }
 
   // ── Graph helpers (v0.4) ───────────────────────────────────────────────────
@@ -573,5 +656,13 @@ export const diff = (idA: string, idB: string) => _default.diff(idA, idB);
 
 /** Convenience: stable content fingerprint using default client (v0.5). */
 export const fingerprintModule = (id: string) => _default.fingerprintModule(id);
+
+/** Convenience: extended /stats snapshot using default client (v0.6). */
+export const getExtendedStats = (opts?: { recent?: number }) =>
+  _default.extendedStats(opts);
+
+/** Convenience: deterministic module-of-the-day using default client (v0.6). */
+export const getModuleOfTheDay = (opts?: { date?: string }) =>
+  _default.moduleOfTheDay(opts);
 
 export default AevionCatalog;

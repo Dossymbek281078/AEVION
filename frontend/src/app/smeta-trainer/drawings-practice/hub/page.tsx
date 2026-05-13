@@ -221,6 +221,11 @@ const MODULES: Module[] = [
   { id: "transport-logistics",    category: "tools",     href: "/smeta-trainer/drawings-practice/transport-logistics",    icon: "🚛", title: "Транспортная логистика",          subtitle: "5 видов ТС, тарифы РК, ж/д vs авто, правило 300 км",          level: "L3", exercises: 4,  color: "amber"   },
   { id: "dust-noise-control",     category: "process",   href: "/smeta-trainer/drawings-practice/dust-noise-control",     icon: "🌫", title: "Пыле-шумозащита",                 subtitle: "СН РК 2.04-03, ПДК, штрафы СЭС, расчёт распр. шума",          level: "L3", exercises: 4,  color: "yellow"  },
   { id: "construction-disputes",  category: "process",   href: "/smeta-trainer/drawings-practice/construction-disputes",  icon: "⚖️", title: "Строительные споры",              subtitle: "ГК РК 706/716/723, СМЭС, МКАС Атамекен, односторонний КС-2",   level: "L5", exercises: 4,  color: "red"     },
+
+  // ── Аналитика, базы цен, экспорт/импорт ──
+  { id: "smeta-analytics",        category: "tools",     href: "/smeta-trainer/drawings-practice/smeta-analytics",        icon: "📊", title: "Аналитика и KPI сметчика",         subtitle: "Cost/m², CPI/SPI, ABC-анализ, бенчмарки РК 2025",             level: "L4", exercises: 4,  color: "indigo"  },
+  { id: "price-database",         category: "tools",     href: "/smeta-trainer/drawings-practice/price-database",         icon: "🗄", title: "База цен и нормативный корпус",   subtitle: "6 источников РК, поля записи, Z-score, парсинг ССЦ",          level: "L4", exercises: 4,  color: "teal"    },
+  { id: "export-import-reports",  category: "tools",     href: "/smeta-trainer/drawings-practice/export-import-reports",  icon: "📤", title: "Экспорт, импорт, отчёты",         subtitle: "8 форматов, 8 отчётов, АВС-4 vs Смета РК, ССР 12 глав",       level: "L3", exercises: 4,  color: "pink"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

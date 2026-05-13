@@ -256,6 +256,11 @@ const MODULES: Module[] = [
   { id: "capital-vs-current-repair", category: "theory",  href: "/smeta-trainer/drawings-practice/capital-vs-current-repair", icon: "🔧", title: "Капремонт vs Текущий ремонт",     subtitle: "СН РК 3.02-01, ПП РК №1162, налог. учёт, гарантии 1 vs 5 лет",  level: "L4", exercises: 4,  color: "teal"    },
   { id: "reconstruction-vs-modernization", category: "theory", href: "/smeta-trainer/drawings-practice/reconstruction-vs-modernization", icon: "🔄", title: "Реконструкция vs Модернизация",   subtitle: "Изменение параметров, МДС 81-35, К=1.15-1.25, экспертиза",       level: "L5", exercises: 4,  color: "purple"  },
   { id: "renovation-types",       category: "practice",  href: "/smeta-trainer/drawings-practice/renovation-types",       icon: "🪜", title: "8 видов ремонта помещений",       subtitle: "От ямочного (50 тыс.) до VIP (300+ тыс. тг/м²), сметы по уровням", level: "L4", exercises: 4,  color: "rose"    },
+
+  // ── Капремонт по объектам ──
+  { id: "mkd-kapremont",          category: "process",   href: "/smeta-trainer/drawings-practice/mkd-kapremont",          icon: "🏢", title: "Капремонт МКД",                   subtitle: "10 видов работ, фонд капремонта, госсубсидии, Жил.код. 2/3",   level: "L4", exercises: 4,  color: "amber"   },
+  { id: "road-repair-types",      category: "special",   href: "/smeta-trainer/drawings-practice/road-repair-types",      icon: "🛣", title: "Виды ремонта дорог",              subtitle: "6 уровней работ, СН РК 3.03-09, ЩМА-15, фрезеровка, бенчм.",   level: "L4", exercises: 4,  color: "slate"   },
+  { id: "bridge-repair",          category: "special",   href: "/smeta-trainer/drawings-practice/bridge-repair",          icon: "🌉", title: "Ремонт мостов",                   subtitle: "СНиП 5.04-01, 8 элементов, водолазн. ЭСН Сб.45, FRP-усиление",  level: "L5", exercises: 4,  color: "cyan"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

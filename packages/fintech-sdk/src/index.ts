@@ -1,204 +1,138 @@
 /**
  * @aevion/fintech-sdk — TypeScript client for the AEVION fintech ecosystem.
  *
- * Modules:
- *   QGood       — charity campaigns + donations
- *   QMaskCard   — virtual payment card masks
- *   VeilNetX    — privacy-blinded settlement ledger
- *   Z-Tide      — reputation / contribution layer
+ * Six modules under one client:
+ *   QGood       — charity campaigns + donations + matching pools
+ *   QMaskCard   — virtual payment masks + idempotent charges
+ *   VeilNetX    — privacy-blinded settlement ledger (hash-chained)
+ *   Z-Tide      — adaptive reputation / contribution layer
  *   QChainGov   — on-chain governance proposals + voting
+ *   QPayNet     — wallets, P2P transfers, payment requests, merchant rail
+ *
+ * Plus stand-alone webhook signing utilities (HMAC-SHA256 + timestamp
+ * replay protection + rolling secret rotation) that mirror AEVION's
+ * server-side verifier exactly.
+ *
+ * Quick start:
+ * ```ts
+ * import { FintechClient } from "@aevion/fintech-sdk";
+ *
+ * const client = new FintechClient({
+ *   baseUrl: "https://aevion-production-a70c.up.railway.app",
+ * });
+ *
+ * // anonymous reads
+ * const { campaigns } = await client.qgood.listCampaigns({ status: "active" });
+ * const head = await client.veilnetxLedger.chainHead();
+ *
+ * // authed actions
+ * const authed = client.withToken(jwt);
+ * const wallets = await authed.qpaynet.listWallets();
+ *
+ * // merchant charges use a separate header, not Bearer
+ * await client.qpaynet.merchantCharge(merchantSecret, {
+ *   payerWalletId, amountCents: 5000, paymentRef: "order_42",
+ * });
+ * ```
+ *
+ * Receiving webhooks:
+ * ```ts
+ * import { verifyWebhook } from "@aevion/fintech-sdk";
+ *
+ * const result = await verifyWebhook({
+ *   signature: req.headers["x-aevion-signature"] as string,
+ *   timestamp: req.headers["x-aevion-timestamp"] as string,
+ *   rawBody: rawBodyStr,
+ *   secret: process.env.AEVION_WEBHOOK_SECRET!,
+ *   previousSecrets: [process.env.AEVION_WEBHOOK_SECRET_OLD ?? ""].filter(Boolean),
+ * });
+ * if (!result.ok) return res.status(401).end();
+ * ```
  */
 
-export interface AevionFintechConfig {
-  baseUrl: string;
-  token?: string;
-}
+// ── Modular client + per-module sub-clients ───────────────────────────────
+export { FintechClient } from "./client";
+export type { FintechClientOptions, HttpMethod } from "./client";
 
-type Fetch = typeof globalThis.fetch;
+export { QGoodModule } from "./qgood";
+export type {
+  ListCampaignsOpts,
+  CreateCampaignBody,
+  DonateBody,
+  DonateResponse,
+  QGoodStatsResponse,
+} from "./qgood";
 
-class AevionBase {
-  protected baseUrl: string;
-  protected token?: string;
-  protected _fetch: Fetch;
+export { QMaskCardModule } from "./qmaskcard";
+export { VeilNetXLedgerModule } from "./veilnetxLedger";
+export { ZTideModule } from "./ztide";
+export { QChainGovModule } from "./qchaingov";
 
-  constructor(config: AevionFintechConfig, fetchImpl?: Fetch) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, "");
-    this.token = config.token;
-    this._fetch = fetchImpl ?? globalThis.fetch;
-  }
+export { QPayNetModule } from "./qpaynet";
+export type {
+  ListWalletsOpts,
+  OpenWalletBody,
+  TransferBody,
+  DepositBody,
+  ListTransactionsOpts,
+  CreatePaymentRequestBody,
+  PayPaymentRequestBody,
+  MintMerchantKeyBody,
+  MintMerchantKeyResponse,
+  MerchantChargeBody,
+  QPayNetStatsResponse,
+} from "./qpaynet";
 
-  protected headers(extra: Record<string, string> = {}): Record<string, string> {
-    const h: Record<string, string> = { "Content-Type": "application/json", ...extra };
-    if (this.token) h["Authorization"] = `Bearer ${this.token}`;
-    return h;
-  }
+// ── Shared response shapes ────────────────────────────────────────────────
+export type {
+  // QGood
+  Campaign,
+  CampaignStatus,
+  Donation,
+  MatchingPool,
+  MatchingPoolStatus,
+  // QMaskCard
+  Mask,
+  MaskKind,
+  Charge,
+  ChargeStatus,
+  // VeilNetX
+  LedgerEntry,
+  // Z-Tide
+  ZTideRank,
+  ZTideRankId,
+  ZTideEvent,
+  ZTideLeaderboardRow,
+  // QChainGov
+  Proposal,
+  ProposalStatus,
+  ProposalVoteMode,
+  Vote,
+  ProposalTallyRow,
+  // QPayNet
+  Wallet,
+  WalletStatus,
+  WalletKycLevel,
+  Transaction,
+  TransactionKind,
+  TransactionStatus,
+  PaymentRequest,
+  PaymentRequestStatus,
+  MerchantApiKey,
+  MerchantChargeResult,
+  // Errors
+  SDKError,
+} from "./types";
 
-  protected async get<T>(path: string): Promise<T> {
-    const r = await this._fetch(`${this.baseUrl}${path}`, { headers: this.headers() });
-    if (!r.ok) throw new AevionError(r.status, await r.json().catch(() => ({})));
-    return r.json() as Promise<T>;
-  }
-
-  protected async post<T>(path: string, body: unknown): Promise<T> {
-    const r = await this._fetch(`${this.baseUrl}${path}`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new AevionError(r.status, await r.json().catch(() => ({})));
-    return r.json() as Promise<T>;
-  }
-}
-
-export class AevionError extends Error {
-  constructor(public status: number, public body: Record<string, unknown>) {
-    super(`AEVION API error ${status}: ${body.error ?? "unknown"}`);
-    this.name = "AevionError";
-  }
-}
-
-// ── QGood ──────────────────────────────────────────────────────────────────
-
-export interface QGoodCampaign {
-  id: string; title: string; description: string; goal: number;
-  raised: number; donorCount: number; endsAt: string | null; status: string;
-}
-
-export class QGoodClient extends AevionBase {
-  async listCampaigns(params?: { status?: string; limit?: number }): Promise<{ campaigns: QGoodCampaign[]; total: number }> {
-    const qs = new URLSearchParams();
-    if (params?.status) qs.set("status", params.status);
-    if (params?.limit) qs.set("limit", String(params.limit));
-    return this.get(`/api/qgood/campaigns?${qs}`);
-  }
-
-  async getCampaign(id: string): Promise<QGoodCampaign> {
-    return this.get(`/api/qgood/campaigns/${encodeURIComponent(id)}`);
-  }
-
-  async donate(campaignId: string, amount: number, message?: string): Promise<{ donationId: string }> {
-    return this.post("/api/qgood/donate", { campaignId, amount, message });
-  }
-
-  async stats(): Promise<{ totalRaised: number; activeCampaigns: number; donors: number }> {
-    return this.get("/api/qgood/stats");
-  }
-}
-
-// ── QMaskCard ──────────────────────────────────────────────────────────────
-
-export interface VirtualCard {
-  id: string; pan: string; expiry: string; cvv: string;
-  spendLimit: number | null; merchantLock: string | null; status: string;
-}
-
-export class QMaskCardClient extends AevionBase {
-  async createMask(opts: { spendLimit?: number; merchantLock?: string; label?: string }): Promise<VirtualCard> {
-    return this.post("/api/qmaskcard/masks", opts);
-  }
-
-  async listMasks(): Promise<{ masks: VirtualCard[] }> {
-    return this.get("/api/qmaskcard/masks");
-  }
-
-  async killMask(id: string): Promise<{ success: boolean }> {
-    return this.post(`/api/qmaskcard/masks/${encodeURIComponent(id)}/kill`, {});
-  }
-
-  async chargeHistory(id: string): Promise<{ charges: Array<{ id: string; amount: number; merchant: string; at: string }> }> {
-    return this.get(`/api/qmaskcard/masks/${encodeURIComponent(id)}/charges`);
-  }
-}
-
-// ── VeilNetX ───────────────────────────────────────────────────────────────
-
-export interface VeilEntry {
-  entryHash: string; prevHash: string; amount: number;
-  currency: string; timestamp: string; note?: string;
-}
-
-export class VeilNetXClient extends AevionBase {
-  async addEntry(data: { amount: number; currency: string; note?: string }): Promise<VeilEntry> {
-    return this.post("/api/veilnetx-ledger/entries", data);
-  }
-
-  async chain(limit = 20): Promise<{ entries: VeilEntry[]; head: string }> {
-    return this.get(`/api/veilnetx-ledger/chain?limit=${limit}`);
-  }
-
-  async verifyIntegrity(): Promise<{ valid: boolean; brokenAt?: string }> {
-    return this.get("/api/veilnetx-ledger/verify");
-  }
-
-  async search(hashPrefix: string): Promise<{ entries: VeilEntry[] }> {
-    return this.get(`/api/veilnetx-ledger/search?q=${encodeURIComponent(hashPrefix)}`);
-  }
-}
-
-// ── Z-Tide ─────────────────────────────────────────────────────────────────
-
-export interface ZTideScore {
-  userId: string; score: number; rank: number; badges: string[];
-}
-
-export class ZTideClient extends AevionBase {
-  async getScore(userId: string): Promise<ZTideScore> {
-    return this.get(`/api/ztide/score/${encodeURIComponent(userId)}`);
-  }
-
-  async addContribution(kind: string, metadata?: Record<string, unknown>): Promise<{ delta: number; newScore: number }> {
-    return this.post("/api/ztide/contribute", { kind, metadata });
-  }
-
-  async leaderboard(limit = 10): Promise<{ entries: ZTideScore[] }> {
-    return this.get(`/api/ztide/leaderboard?limit=${limit}`);
-  }
-}
-
-// ── QChainGov ──────────────────────────────────────────────────────────────
-
-export interface Proposal {
-  id: string; title: string; description: string; status: string;
-  votesFor: number; votesAgainst: number; endsAt: string;
-}
-
-export class QChainGovClient extends AevionBase {
-  async listProposals(params?: { status?: string }): Promise<{ proposals: Proposal[]; total: number }> {
-    const qs = params?.status ? `?status=${params.status}` : "";
-    return this.get(`/api/qchaingov/proposals${qs}`);
-  }
-
-  async getProposal(id: string): Promise<Proposal> {
-    return this.get(`/api/qchaingov/proposals/${encodeURIComponent(id)}`);
-  }
-
-  async vote(proposalId: string, vote: "for" | "against"): Promise<{ success: boolean }> {
-    return this.post(`/api/qchaingov/proposals/${encodeURIComponent(proposalId)}/vote`, { vote });
-  }
-
-  async createProposal(data: { title: string; description: string; endsAt: string }): Promise<Proposal> {
-    return this.post("/api/qchaingov/proposals", data);
-  }
-}
-
-// ── Unified client ─────────────────────────────────────────────────────────
-
-export class AevionFintechClient {
-  readonly qgood: QGoodClient;
-  readonly qmaskcard: QMaskCardClient;
-  readonly veilnetx: VeilNetXClient;
-  readonly ztide: ZTideClient;
-  readonly qchaingov: QChainGovClient;
-
-  constructor(config: AevionFintechConfig, fetchImpl?: Fetch) {
-    this.qgood = new QGoodClient(config, fetchImpl);
-    this.qmaskcard = new QMaskCardClient(config, fetchImpl);
-    this.veilnetx = new VeilNetXClient(config, fetchImpl);
-    this.ztide = new ZTideClient(config, fetchImpl);
-    this.qchaingov = new QChainGovClient(config, fetchImpl);
-  }
-}
-
-export function createClient(config: AevionFintechConfig): AevionFintechClient {
-  return new AevionFintechClient(config);
-}
+// ── Webhook signing utilities ─────────────────────────────────────────────
+export {
+  verifyWebhook,
+  signWebhookPayload,
+  aevionWebhookHeaders,
+} from "./webhookSigning";
+export type {
+  VerifyWebhookOpts,
+  VerifyWebhookResult,
+  SignWebhookOpts,
+  SignWebhookResult,
+} from "./webhookSigning";

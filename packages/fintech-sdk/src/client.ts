@@ -3,6 +3,7 @@ import { QMaskCardModule } from "./qmaskcard";
 import { VeilNetXLedgerModule } from "./veilnetxLedger";
 import { ZTideModule } from "./ztide";
 import { QChainGovModule } from "./qchaingov";
+import { QPayNetModule } from "./qpaynet";
 import type { SDKError } from "./types";
 
 /** Options passed to the {@link FintechClient} constructor. */
@@ -42,6 +43,7 @@ export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
  *  - {@link FintechClient.veilnetxLedger} — append-only privacy-preserving ledger.
  *  - {@link FintechClient.ztide} — reputation/standing scoring.
  *  - {@link FintechClient.qchaingov} — governance proposals and votes.
+ *  - {@link FintechClient.qpaynet} — wallets, transfers, payment requests, merchant rail.
  *
  * The client is immutable. To bind a token, use {@link FintechClient.withToken},
  * which returns a fresh client sharing the same fetch / baseUrl / timeout.
@@ -72,6 +74,8 @@ export class FintechClient {
   readonly ztide: ZTideModule;
   /** QChainGov governance proposals + votes. */
   readonly qchaingov: QChainGovModule;
+  /** QPayNet wallets, transfers, payment requests, merchant rail. */
+  readonly qpaynet: QPayNetModule;
 
   constructor(public readonly opts: FintechClientOptions) {
     this.qgood = new QGoodModule(this);
@@ -79,6 +83,7 @@ export class FintechClient {
     this.veilnetxLedger = new VeilNetXLedgerModule(this);
     this.ztide = new ZTideModule(this);
     this.qchaingov = new QChainGovModule(this);
+    this.qpaynet = new QPayNetModule(this);
   }
 
   /**

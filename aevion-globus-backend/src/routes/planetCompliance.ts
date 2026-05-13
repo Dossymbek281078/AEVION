@@ -3694,3 +3694,97 @@ ${urls.join("\n")}
   }
 });
 
+/**
+ * GET /api/planet/activity
+ *
+ * Recent chronological feed across the 3 main Planet event sources:
+ *   - "submitted"  → PlanetSubmission row
+ *   - "certified"  → PlanetCertificate row (cert issued)
+ *   - "revoked"    → PlanetCertificate row with revokedAt
+ *   - "voted"      → PlanetVote row
+ *
+ * Query: ?limit=20 (default 20, max 100), ?kinds=submitted,certified,voted (default all)
+ *
+ * Response: { items: [{kind, id, at, ownerId?, ref?, title?}], count, kinds }
+ *
+ * Embed-style rate limit (no auth) — feed is public-by-design (matches
+ * /artifacts/recent semantics: anyone can see what's happening on Planet).
+ */
+planetComplianceRouter.get("/activity", planetEmbedRateLimit, async (req, res) => {
+  try {
+    const rawLimit = Number(req.query.limit ?? 20);
+    const limit = Math.max(1, Math.min(100, Number.isFinite(rawLimit) ? rawLimit : 20));
+    const allowedKinds = new Set(["submitted", "certified", "revoked", "voted"]);
+    const requestedKinds = String(req.query.kinds ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => allowedKinds.has(s));
+    const kinds = requestedKinds.length > 0
+      ? requestedKinds
+      : ["submitted", "certified", "revoked", "voted"];
+
+    const queries: Array<Promise<{ rows: any[] }>> = [];
+    if (kinds.includes("submitted")) {
+      queries.push(
+        pool.query(`
+          SELECT 'submitted' AS kind, "id", "createdAt" AS at, "ownerId",
+                 "title", "productKey" AS ref
+          FROM "PlanetSubmission"
+          ORDER BY "createdAt" DESC
+          LIMIT $1
+        `, [limit]),
+      );
+    }
+    if (kinds.includes("certified")) {
+      queries.push(
+        pool.query(`
+          SELECT 'certified' AS kind, "id", "createdAt" AS at, "ownerId",
+                 "artifactVersionId" AS ref, NULL::text AS title
+          FROM "PlanetCertificate"
+          WHERE "revokedAt" IS NULL
+          ORDER BY "createdAt" DESC
+          LIMIT $1
+        `, [limit]),
+      );
+    }
+    if (kinds.includes("revoked")) {
+      queries.push(
+        pool.query(`
+          SELECT 'revoked' AS kind, "id", "revokedAt" AS at, "ownerId",
+                 "artifactVersionId" AS ref, "revokeReason" AS title
+          FROM "PlanetCertificate"
+          WHERE "revokedAt" IS NOT NULL
+          ORDER BY "revokedAt" DESC
+          LIMIT $1
+        `, [limit]),
+      );
+    }
+    if (kinds.includes("voted")) {
+      queries.push(
+        pool.query(`
+          SELECT 'voted' AS kind, "id", "createdAt" AS at, "userId" AS "ownerId",
+                 "artifactVersionId" AS ref, "categoryId" AS title
+          FROM "PlanetVote"
+          ORDER BY "createdAt" DESC
+          LIMIT $1
+        `, [limit]),
+      );
+    }
+
+    const results = await Promise.all(queries);
+    const merged: Array<{
+      kind: string; id: string; at: string; ownerId: string;
+      ref: string | null; title: string | null;
+    }> = [];
+    for (const r of results) {
+      for (const row of r.rows) merged.push(row as any);
+    }
+    merged.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    const items = merged.slice(0, limit);
+    res.json({ items, count: items.length, kinds });
+  } catch (err: any) {
+    capturePlanetError(err, { route: "activity" });
+    res.status(500).json({ error: "activity feed failed" });
+  }
+});
+

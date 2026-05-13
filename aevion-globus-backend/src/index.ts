@@ -61,6 +61,7 @@ import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
+import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
@@ -485,6 +486,8 @@ app.use("/api/qai", qaiRouter);
 app.use("/api/qstore", qstoreRouter);
 // QLearn — learning platform
 app.use("/api/qlearn", qlearnRouter);
+// Kids AI Content — multi-language lessons + AI tutor for children
+app.use("/api/kids-ai", kidsAiContentRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs

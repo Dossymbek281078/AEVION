@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
 
 export const metadata: Metadata = {
   title: "AEVION Developers — APIs, SDKs, webhooks, sandbox",
@@ -270,6 +271,10 @@ export default function DevelopersPage() {
               <div style={{ marginTop: 4, fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>{f.note}</div>
             </div>
           ))}
+        </section>
+
+        <section style={{ marginTop: 28 }}>
+          <ModuleOfTheDayCard theme="light" refreshHourly />
         </section>
 
         <section style={{ marginTop: 28 }}>

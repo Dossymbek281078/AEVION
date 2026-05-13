@@ -236,6 +236,11 @@ const MODULES: Module[] = [
   { id: "soft-skills",            category: "tools",     href: "/smeta-trainer/drawings-practice/soft-skills",            icon: "🤝", title: "Soft skills сметчика",            subtitle: "8 навыков, Гарвардские переговоры, 6 типов конфликтов, BLUF",  level: "L4", exercises: 4,  color: "purple"  },
   { id: "career-pathway",         category: "tools",     href: "/smeta-trainer/drawings-practice/career-pathway",         icon: "🎓", title: "Карьерный путь сметчика РК",      subtitle: "6 уровней (Junior→Эксперт), 6 сертификаций, ВУЗы, зарплаты",   level: "L3", exercises: 4,  color: "emerald" },
   { id: "smeta-checklist",        category: "practice",  href: "/smeta-trainer/drawings-practice/smeta-checklist",        icon: "✅", title: "Финальный чек-лист (44 пункта)",  subtitle: "6 групп проверки, интерактивный, типовые ошибки сметчика РК",  level: "L5", exercises: 4,  color: "lime"    },
+
+  // ── Специализации и масштаб ──
+  { id: "specialty-construction", category: "special",   href: "/smeta-trainer/drawings-practice/specialty-construction", icon: "🏭", title: "Спец. строительство",            subtitle: "6 отраслей (промбу/гидро/агро/энерг/нефтегаз/транспорт)",      level: "L5", exercises: 4,  color: "stone"   },
+  { id: "rural-construction",     category: "special",   href: "/smeta-trainer/drawings-practice/rural-construction",     icon: "🏡", title: "Сельское и дачное стр-во",        subtitle: "ИЖС до 500 м², уведомительный порядок, Бакыт, СБП, 6 программ", level: "L3", exercises: 4,  color: "green"   },
+  { id: "infrastructure-projects",category: "practice",  href: "/smeta-trainer/drawings-practice/infrastructure-projects",icon: "🌆", title: "Инфраструктурные мегапроекты",    subtitle: "БАКАД/метро/нефтегаз, FIDIC, AACE Class, EVMS, RICS",          level: "L5", exercises: 4,  color: "zinc"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

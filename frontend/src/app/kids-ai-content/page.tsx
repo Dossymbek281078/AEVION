@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type AgeTier = {
   id: "3-5" | "6-8" | "9-12" | "13-15";
@@ -298,6 +299,21 @@ export default function KidsAIContentPage() {
           </Link>
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="kids-ai-content"
+        noun="items"
+        titleField="topic"
+        summaryField="summary"
+        accent="violet"
+        sectionTitle="Community items — темы и идеи для детей"
+        sectionHint="Поделитесь темой и возрастной группой. Родители подберут материал быстрее."
+        fields={[
+          { key: "topic", label: "Тема", required: true, placeholder: "Почему меняются времена года?" },
+          { key: "ageRange", label: "Возраст (диапазон)", required: true, placeholder: "6-8" },
+          { key: "summary", label: "Краткий пересказ / идея урока", type: "textarea", required: false, placeholder: "Объяснить наклон оси Земли через игру с фонариком и яблоком." },
+        ]}
+      />
 
       <footer className="border-t border-amber-200 bg-white/60 py-6 text-center text-xs text-stone-500">
         AEVION · Kids AI · MVP · safe-by-default · for ages 3–15

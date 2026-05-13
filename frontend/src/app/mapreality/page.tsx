@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Category = "medical" | "volunteer" | "tools" | "info" | "emergency";
 
@@ -301,6 +302,22 @@ export default function MapRealityPage() {
           </Link>
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="mapreality"
+        noun="claims"
+        titleField="claim"
+        summaryField="evidence"
+        accent="sky"
+        sectionTitle="Community claims — что вы видите своими глазами"
+        sectionHint="Гео-привязанная заявка с QSign-аудитом. Координаты — точка для карты."
+        fields={[
+          { key: "claim", label: "Что происходит", required: true, placeholder: "Сильное задымление у школы №47" },
+          { key: "lat", label: "Широта (lat)", type: "number", required: true, placeholder: "43.238949" },
+          { key: "lng", label: "Долгота (lng)", type: "number", required: true, placeholder: "76.889709" },
+          { key: "evidence", label: "Доказательства / детали", type: "textarea", required: false, placeholder: "Фото, время начала, направление ветра, контакт свидетеля…" },
+        ]}
+      />
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-[#04080d] px-4 py-3 text-sm text-cyan-200 ring-1 ring-cyan-400/40 shadow-xl">

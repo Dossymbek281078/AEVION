@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Pitch = {
   id: string;
@@ -357,6 +358,21 @@ export default function StartupExchangePage() {
           </Link>
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="startup-exchange"
+        noun="listings"
+        titleField="company"
+        summaryField="pitch"
+        accent="violet"
+        sectionTitle="Community listings — early-stage pitches"
+        sectionHint="Поделись своим стартапом до полной публикации. QRight авторство закроем после премодерации."
+        fields={[
+          { key: "company", label: "Название компании", required: true, placeholder: "NeuroSign Onboarding" },
+          { key: "stage", label: "Стадия", required: true, placeholder: "pre-seed / seed / Series A" },
+          { key: "pitch", label: "Pitch (одной фразой)", type: "textarea", required: false, placeholder: "AI-driven KYC за 3 секунды для финтехов — 80% выше конверсия онбординга." },
+        ]}
+      />
 
       {/* Toasts */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm">

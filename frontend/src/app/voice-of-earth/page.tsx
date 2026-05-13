@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Track = {
   id: string;
@@ -225,6 +226,21 @@ export default function VoiceOfEarthPage() {
           </Link>
         </div>
       </section>
+
+      <MvpConceptBoard
+        moduleId="voice-of-earth"
+        noun="feeds"
+        titleField="location"
+        summaryField="observation"
+        accent="teal"
+        sectionTitle="Community feeds — звуки твоего региона"
+        sectionHint="Опиши локацию и метрику звукового ландшафта. Поможем собрать живую карту планеты."
+        fields={[
+          { key: "location", label: "Локация", required: true, placeholder: "Almaty, Park 28 panfilovtsev" },
+          { key: "metric", label: "Метрика (дБ / частота / тип)", required: true, placeholder: "62 dB, 200-2000 Hz, urban hum" },
+          { key: "observation", label: "Наблюдение", type: "textarea", required: false, placeholder: "На рассвете слышно только птиц — машин почти нет. К 8:00 фон вырастает на ~15 dB." },
+        ]}
+      />
 
       <footer className="border-t border-sky-100 bg-white/60">
         <div className="max-w-6xl mx-auto px-6 py-6 text-xs text-slate-500 flex flex-wrap justify-between gap-2">

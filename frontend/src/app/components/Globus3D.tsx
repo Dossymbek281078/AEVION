@@ -776,11 +776,18 @@ export default function Globus3D({
     setLocale(detectLocale());
   }, []);
   const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
+  const topCountriesRef = useRef<Array<[string, number]>>([]);
+  useEffect(() => {
+    topCountriesRef.current = topCountries;
+  }, [topCountries]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const selectedCountryRef = useRef<string | null>(null);
   useEffect(() => {
     selectedCountryRef.current = selectedCountry;
   }, [selectedCountry]);
+
+  /** Help overlay (toggle via "?" keyboard shortcut). */
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     labelRef.current = label;
@@ -2676,6 +2683,45 @@ export default function Globus3D({
           if (item) focusMarkerRef.current(item.marker);
           break;
         }
+        // Layer toggles — одна буква на слой, не требует Tab.
+        case "c":
+        case "C":
+          toggleLayer("clouds");
+          break;
+        case "h":
+        case "H":
+          toggleLayer("heatmap");
+          break;
+        case "a":
+        case "A":
+          toggleLayer("arcs");
+          break;
+        // Country cycling — [ / ] циклически по topCountries списку.
+        case "[":
+        case "]": {
+          if (topCountriesRef.current.length === 0) {
+            handled = false;
+            break;
+          }
+          const list = topCountriesRef.current;
+          const cur = selectedCountryRef.current;
+          const curIdx = list.findIndex(([n]) => n === cur);
+          const len = list.length;
+          const nextIdx =
+            e.key === "]"
+              ? curIdx === -1 || curIdx === len - 1
+                ? 0
+                : curIdx + 1
+              : curIdx <= 0
+                ? len - 1
+                : curIdx - 1;
+          setSelectedCountryRef.current(list[nextIdx][0]);
+          break;
+        }
+        // Help overlay toggle.
+        case "?":
+          setShowHelp((v) => !v);
+          break;
         default:
           handled = false;
       }
@@ -2686,11 +2732,11 @@ export default function Globus3D({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [kbSelectedKey]);
+  }, [kbSelectedKey, toggleLayer]);
 
-  /** ESC закрывает focus-режим и тур. */
+  /** ESC закрывает focus-режим, тур, country-sheet и help. */
   useEffect(() => {
-    if (!focused && !tour && !selectedCountry) return;
+    if (!focused && !tour && !selectedCountry && !showHelp) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         targetYawRef.current = null;
@@ -2699,11 +2745,12 @@ export default function Globus3D({
         setFocused(null);
         setTour(false);
         setSelectedCountry(null);
+        setShowHelp(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focused, tour, selectedCountry]);
+  }, [focused, tour, selectedCountry, showHelp]);
 
   /** Tour mode — последовательный focus по приоритету. */
   const tourQueue = useMemo(() => {
@@ -3745,6 +3792,20 @@ export default function Globus3D({
           >
             📷
           </button>
+          <button
+            type="button"
+            title="Keyboard shortcuts (?)"
+            aria-label="Show keyboard shortcuts"
+            aria-haspopup="dialog"
+            aria-expanded={showHelp}
+            onClick={() => setShowHelp((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: showHelp ? "rgba(108,214,255,0.28)" : ctrlBtn.background,
+            }}
+          >
+            ?
+          </button>
         </div>
       ) : null}
 
@@ -4775,6 +4836,116 @@ export default function Globus3D({
           </div>
         );
       })() : null}
+
+      {/* Keyboard shortcuts help overlay (toggle: "?"). */}
+      {showHelp ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Keyboard shortcuts"
+          onClick={() => setShowHelp(false)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 20,
+            background: "rgba(2,4,10,0.78)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "rgba(12,18,32,0.96)",
+              border: "1px solid rgba(120,160,220,0.32)",
+              borderRadius: 14,
+              padding: "18px 22px",
+              minWidth: 280,
+              maxWidth: 380,
+              cursor: "default",
+              boxShadow: "0 14px 36px rgba(0,0,0,0.55)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#bae6fd",
+                marginBottom: 12,
+              }}
+            >
+              Keyboard shortcuts
+            </div>
+            {[
+              { keys: "↑ ↓ ← →", desc: "Rotate globe" },
+              { keys: "+  −", desc: "Zoom in / out" },
+              { keys: "Tab / ⇧ Tab", desc: "Cycle markers" },
+              { keys: "Enter / Space", desc: "Focus selected marker" },
+              { keys: "[  ]", desc: "Cycle top countries" },
+              { keys: "C", desc: "Toggle clouds layer" },
+              { keys: "H", desc: "Toggle heatmap layer" },
+              { keys: "A", desc: "Toggle ecosystem arcs" },
+              { keys: "Esc", desc: "Close focus / sheet / help" },
+              { keys: "?", desc: "Show / hide this help" },
+            ].map((row) => (
+              <div
+                key={row.keys}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 14,
+                  marginBottom: 6,
+                }}
+              >
+                <kbd
+                  style={{
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#e2e8f8",
+                    background: "rgba(108,214,255,0.12)",
+                    border: "1px solid rgba(108,214,255,0.3)",
+                    borderRadius: 6,
+                    padding: "2px 8px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {row.keys}
+                </kbd>
+                <span style={{ fontSize: 12, color: "#94a3b8", textAlign: "right" }}>
+                  {row.desc}
+                </span>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowHelp(false)}
+              style={{
+                marginTop: 12,
+                width: "100%",
+                height: 28,
+                borderRadius: 8,
+                border: "1px solid rgba(120,160,220,0.32)",
+                background: "rgba(108,214,255,0.12)",
+                color: "#bae6fd",
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                cursor: "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -216,6 +216,11 @@ const MODULES: Module[] = [
   { id: "cadastre-commissioning", category: "process",   href: "/smeta-trainer/drawings-practice/cadastre-commissioning", icon: "🏛️", title: "Ввод в эксплуатацию + кадастр",  subtitle: "ПП РК №353, Акт ввода, ГПК, регистрация НКА, ст.318 КоАП",     level: "L4", exercises: 4,  color: "fuchsia" },
   { id: "subcontractor-mgmt",     category: "process",   href: "/smeta-trainer/drawings-practice/subcontractor-mgmt",     icon: "🔗", title: "Управление субподрядом",          subtitle: "ГК РК 660, цепочка, удержания 10%, наценка ГП 5-15%",          level: "L4", exercises: 4,  color: "cyan"    },
   { id: "digital-twin-iot",       category: "tools",     href: "/smeta-trainer/drawings-practice/digital-twin-iot",       icon: "🧬", title: "Цифровой двойник + IoT",          subtitle: "BIM 3D-7D, ПП МИИР №132 (2025), 8 типов датчиков, ROI 7×",     level: "L5", exercises: 4,  color: "violet"  },
+
+  // ── Логистика + охрана среды + юридич. защита ──
+  { id: "transport-logistics",    category: "tools",     href: "/smeta-trainer/drawings-practice/transport-logistics",    icon: "🚛", title: "Транспортная логистика",          subtitle: "5 видов ТС, тарифы РК, ж/д vs авто, правило 300 км",          level: "L3", exercises: 4,  color: "amber"   },
+  { id: "dust-noise-control",     category: "process",   href: "/smeta-trainer/drawings-practice/dust-noise-control",     icon: "🌫", title: "Пыле-шумозащита",                 subtitle: "СН РК 2.04-03, ПДК, штрафы СЭС, расчёт распр. шума",          level: "L3", exercises: 4,  color: "yellow"  },
+  { id: "construction-disputes",  category: "process",   href: "/smeta-trainer/drawings-practice/construction-disputes",  icon: "⚖️", title: "Строительные споры",              subtitle: "ГК РК 706/716/723, СМЭС, МКАС Атамекен, односторонний КС-2",   level: "L5", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -168,10 +168,14 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| `aevion-core/main` (agent-A) | **MVP-семейка-2** voice-of-earth/mapreality/startup-exchange/kids-ai-content `frontend/src/app/<id>/page.tsx` | MvpConceptBoard wire — 4 страницы | 2026-05-13 block-2 start |
-| `aevion-core/frontend-qcore` (agent-B) | **DevHub** `aevion-globus-backend/src/routes/devhub.ts` + `frontend/src/app/devhub/**` | snippet shelf / run history / editor улучшения | 2026-05-13 block-2 start |
-| `aevion-core/main` (agent-C) | **Planet Compliance** `aevion-globus-backend/src/routes/planetCompliance.ts` (узкая правка) | новый endpoint (verify-badge / snapshot diff / mod queue) + smoke | 2026-05-13 block-2 start |
-| `aevion-core/main` (agent-D) | **AEVION-hub** `aevion-globus-backend/src/routes/aevion-hub.ts` + drawings-practice hub | расширение каталога + новые modules в registry | 2026-05-13 block-2 start |
+| _free_ | — | блок 2 завершён, см. ниже | 2026-05-13 block-2 done |
+
+### Завершено 2026-05-13 (parallel block 2)
+
+- ✅ **MVP-семейка-2** (`aevion-core/main`) — 1 commit + push: MvpConceptBoard wired в voice-of-earth/mapreality/startup-exchange/kids-ai-content (закрыта семейка 10/10). SHA: `119a1ea1`.
+- ✅ **DevHub backend** (`aevion-core/main`) — 1 commit + push: DevHubSnippet table + 4 endpoints (list/create/get/star) + tag/user filters. UI и smoke не сделано (агент остановился на backend из-за sandbox-блока). SHA: `791942a5`.
+- ✅ **Planet Compliance** (`aevion-core/main`) — 1 commit + push: `GET /api/planet/activity` — chronological event feed (submitted/certified/revoked/voted), kinds filter. SHA: `b8fc854c`.
+- ✅ **AEVION-hub** (`aevion-core/main`) — 2 commits + push: `/api/aevion/stats` (extended с coverage matrix + recent activity) + `/api/aevion/module-of-the-day` (deterministic by day-of-year) + SDK поддержка в `@aevion/catalog-client` (+8 vitest = 64/64 passed). SHA: `31e7eb8a`, `16c33eab`.
 
 ### Завершено 2026-05-13 (parallel block 1)
 

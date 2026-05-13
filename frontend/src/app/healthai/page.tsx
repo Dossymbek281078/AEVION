@@ -383,6 +383,29 @@ const STR: Record<string, Record<Lang, string>> = {
     en: "✓ No active risk flags. Keep up the wellness routine.",
     ru: "✓ Активных рисков нет. Поддерживайте режим — отличная работа.",
   },
+  section_score: { en: "Wellness score", ru: "Wellness-оценка" },
+  score_band_excellent: { en: "Excellent", ru: "Отлично" },
+  score_band_good: { en: "Good", ru: "Хорошо" },
+  score_band_fair: { en: "Fair", ru: "Средне" },
+  score_band_low: { en: "Low", ru: "Низко" },
+  score_band_insufficient: { en: "Not enough data", ru: "Мало данных" },
+  score_weakest_label: { en: "Focus area:", ru: "Фокус:" },
+  score_streak_bonus: { en: "Streak bonus", ru: "Бонус за серию" },
+  score_pillar_sleep: { en: "Sleep", ru: "Сон" },
+  score_pillar_mood: { en: "Mood", ru: "Настроение" },
+  score_pillar_water: { en: "Water", ru: "Вода" },
+  score_pillar_exercise: { en: "Exercise", ru: "Активность" },
+  score_help: {
+    en: "Score combines last 7d averages across 4 pillars + tracking streak. Motivational only, not a diagnosis.",
+    ru: "Оценка комбинирует средние за 7 дней по 4 направлениям + серию логов. Мотивационная, не диагноз.",
+  },
+  section_hydration: { en: "Hydration coach", ru: "Гидратация" },
+  hydration_target: { en: "Daily target", ru: "Дневная норма" },
+  hydration_avg7d: { en: "7d avg", ru: "Среднее 7д" },
+  hydration_status_on_track: { en: "On track ✓", ru: "В норме ✓" },
+  hydration_status_below: { en: "Below target", ru: "Ниже нормы" },
+  hydration_status_well_below: { en: "Well below", ru: "Существенно ниже" },
+  hydration_status_no_data: { en: "Need data", ru: "Нужны данные" },
   symptoms: { en: "Symptoms", ru: "Симптомы" },
   severity_short: { en: "severity", ru: "тяжесть" },
   urg_self: { en: "Self-care", ru: "Самопомощь" },
@@ -509,6 +532,39 @@ type RisksResp = {
   avgMood7d: number | null;
 };
 
+type HydrationResp = {
+  targetL: number;
+  targetBaseL: number;
+  exerciseBonusL: number;
+  avgWater7d: number | null;
+  avgWater3d: number | null;
+  todayWaterL: number | null;
+  deficit7dL: number | null;
+  status: "on-track" | "below" | "well-below" | "no-data";
+  tips: string[];
+};
+
+type ScorePillar = { score: number | null; label: string };
+type ScoreResp = {
+  score: number;
+  band: "excellent" | "good" | "fair" | "low" | "insufficient";
+  streak: number;
+  streakBonus: number;
+  pillars: {
+    sleep: ScorePillar;
+    mood: ScorePillar;
+    water: ScorePillar;
+    exercise: ScorePillar;
+  };
+  weakest: {
+    pillar: "sleep" | "mood" | "water" | "exercise";
+    label: string;
+    score: number | null;
+  } | null;
+  knownPillarsCount: number;
+  logsCount: number;
+};
+
 const URGENCY_COLOR: Record<Match["urgency"], string> = {
   "self-care": "#5eead4",
   consult: "#fbbf24",
@@ -546,6 +602,8 @@ export default function HealthAIPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [trends, setTrends] = useState<Trends | null>(null);
   const [risks, setRisks] = useState<RisksResp | null>(null);
+  const [hydration, setHydration] = useState<HydrationResp | null>(null);
+  const [wellnessScore, setWellnessScore] = useState<ScoreResp | null>(null);
   const [population, setPopulation] = useState<{
     sample: number;
     usedBaseline: boolean;
@@ -823,6 +881,24 @@ export default function HealthAIPage() {
     } catch {}
   }, []);
 
+  const loadHydration = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/hydration/${profileId}`);
+      if (!r.ok) return;
+      const j = (await r.json()) as HydrationResp;
+      setHydration(j);
+    } catch {}
+  }, []);
+
+  const loadWellnessScore = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/score/${profileId}`);
+      if (!r.ok) return;
+      const j = (await r.json()) as ScoreResp;
+      setWellnessScore(j);
+    } catch {}
+  }, []);
+
   const loadReferrals = useCallback(
     async (opts?: { country?: string; specialty?: string; emergencyOnly?: boolean }) => {
       setReferralsLoading(true);
@@ -902,6 +978,8 @@ export default function HealthAIPage() {
             loadHistory(stored);
             loadTrends(stored);
             loadRisks(stored);
+            loadHydration(stored);
+            loadWellnessScore(stored);
             loadPopulation(stored);
             loadPhq9Last(stored);
             loadGad7Last(stored);
@@ -924,7 +1002,7 @@ export default function HealthAIPage() {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPopulation, loadPhq9Last, loadGad7Last, loadFamily]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadHydration, loadWellnessScore, loadPopulation, loadPhq9Last, loadGad7Last, loadFamily]);
 
   useEffect(() => {
     try {
@@ -1023,6 +1101,8 @@ export default function HealthAIPage() {
       void loadHistory(id);
       void loadTrends(id);
       void loadRisks(id);
+      void loadHydration(id);
+      void loadWellnessScore(id);
       void loadPopulation(id);
       void loadPhq9Last(id);
       void loadGad7Last(id);
@@ -1331,6 +1411,8 @@ export default function HealthAIPage() {
       void loadHistory(profileIdRef.current);
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
+      void loadHydration(profileIdRef.current);
+      void loadWellnessScore(profileIdRef.current);
       void loadPopulation(profileIdRef.current);
     } finally {
       setBusy(false);
@@ -1371,6 +1453,8 @@ export default function HealthAIPage() {
       // Освежаем тренды и риски.
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
+      void loadHydration(profileIdRef.current);
+      void loadWellnessScore(profileIdRef.current);
       void loadPopulation(profileIdRef.current);
       showToast(t("toast_logged", lang));
       setLogSleep("");
@@ -2222,6 +2306,12 @@ export default function HealthAIPage() {
               >
                 {t("risks_empty", lang)}
               </div>
+            ) : null}
+            {wellnessScore && wellnessScore.knownPillarsCount > 0 ? (
+              <ScoreCard score={wellnessScore} lang={lang} />
+            ) : null}
+            {hydration && hydration.status !== "no-data" ? (
+              <HydrationCard hydration={hydration} lang={lang} />
             ) : null}
             {population ? (
               <div
@@ -3714,6 +3804,219 @@ function RiskCard({ risk, lang }: { risk: Risk; lang: Lang }) {
       <div style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.55 }}>
         {risk.detail}
       </div>
+    </div>
+  );
+}
+
+const SCORE_BAND_COLOR: Record<ScoreResp["band"], string> = {
+  excellent: "#5eead4",
+  good: "#86efac",
+  fair: "#fbbf24",
+  low: "#f87171",
+  insufficient: "#94a3b8",
+};
+
+function ScoreCard({ score, lang }: { score: ScoreResp; lang: Lang }) {
+  const c = SCORE_BAND_COLOR[score.band];
+  const bandKey = `score_band_${score.band}` as const;
+  const pillars: Array<{ key: "sleep" | "mood" | "water" | "exercise"; data: ScorePillar }> = [
+    { key: "sleep", data: score.pillars.sleep },
+    { key: "mood", data: score.pillars.mood },
+    { key: "water", data: score.pillars.water },
+    { key: "exercise", data: score.pillars.exercise },
+  ];
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: 14,
+        background: "rgba(20,28,46,0.55)",
+        border: `1px solid ${c}55`,
+        borderRadius: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10 }}>
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            background: `${c}22`,
+            border: `2px solid ${c}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 22,
+            fontWeight: 800,
+            color: c,
+          }}
+        >
+          {score.score}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {t("section_score", lang)}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#e2e8f8" }}>
+            {t(bandKey, lang)}
+          </div>
+          {score.streakBonus > 0 ? (
+            <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 2 }}>
+              {t("score_streak_bonus", lang)} +{score.streakBonus}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 6,
+          marginBottom: 8,
+        }}
+      >
+        {pillars.map(({ key, data }) => {
+          const pct = data.score != null ? Math.round((data.score / 25) * 100) : 0;
+          const barColor =
+            data.score == null
+              ? "#475569"
+              : data.score >= 20
+                ? "#5eead4"
+                : data.score >= 12
+                  ? "#fbbf24"
+                  : "#f87171";
+          return (
+            <div key={key} style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#94a3b8",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  marginBottom: 4,
+                }}
+              >
+                {t(`score_pillar_${key}`, lang)}
+              </div>
+              <div
+                style={{
+                  height: 6,
+                  borderRadius: 999,
+                  background: "rgba(120,160,220,0.18)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    height: "100%",
+                    background: barColor,
+                    transition: "width 200ms ease",
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 10, color: "#cbd5e1", marginTop: 3 }}>
+                {data.score != null ? `${data.score}/25` : "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {score.weakest ? (
+        <div style={{ fontSize: 12, color: "#cbd5e1", marginTop: 6 }}>
+          <span style={{ color: "#94a3b8" }}>{t("score_weakest_label", lang)} </span>
+          <strong style={{ color: "#fbbf24" }}>
+            {t(`score_pillar_${score.weakest.pillar}`, lang)}
+          </strong>
+        </div>
+      ) : null}
+      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
+        {t("score_help", lang)}
+      </div>
+    </div>
+  );
+}
+
+const HYDRATION_STATUS_COLOR: Record<HydrationResp["status"], string> = {
+  "on-track": "#5eead4",
+  below: "#fbbf24",
+  "well-below": "#f87171",
+  "no-data": "#94a3b8",
+};
+
+function HydrationCard({ hydration, lang }: { hydration: HydrationResp; lang: Lang }) {
+  const c = HYDRATION_STATUS_COLOR[hydration.status];
+  const statusKey = `hydration_status_${hydration.status.replace(/-/g, "_")}` as const;
+  const pct =
+    hydration.avgWater7d != null
+      ? Math.min(120, Math.round((hydration.avgWater7d / hydration.targetL) * 100))
+      : 0;
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: 12,
+        background: "rgba(20,28,46,0.55)",
+        border: `1px solid ${c}55`,
+        borderRadius: 12,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {t("section_hydration", lang)}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: c }}>
+            {t(statusKey, lang)}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>{t("hydration_target", lang)}</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#e2e8f8" }}>
+            {hydration.targetL.toFixed(1)} L
+          </div>
+        </div>
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div
+          style={{
+            height: 8,
+            borderRadius: 999,
+            background: "rgba(120,160,220,0.18)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.min(100, pct)}%`,
+              height: "100%",
+              background: c,
+              transition: "width 200ms ease",
+            }}
+          />
+        </div>
+        <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4 }}>
+          {t("hydration_avg7d", lang)}:{" "}
+          <strong style={{ color: "#e2e8f8" }}>
+            {hydration.avgWater7d != null ? `${hydration.avgWater7d.toFixed(2)} L` : "—"}
+          </strong>{" "}
+          ({pct}%)
+        </div>
+      </div>
+      {hydration.tips.length > 0 ? (
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#cbd5e1", lineHeight: 1.55 }}>
+          {hydration.tips.map((tip, i) => (
+            <li key={i}>{tip}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

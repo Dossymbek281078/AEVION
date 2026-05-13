@@ -221,6 +221,74 @@ export const QSHIELD_OPENAPI = {
         },
       },
     },
+    "/verify-batch": {
+      post: {
+        tags: ["reconstruct"],
+        summary: "Batch verification (up to 50 records in one call)",
+        description:
+          "Parallel HMAC-only verification. Mirrors POST /verify per item " +
+          "but reduces N round-trips to one. Returns per-record valid flag, " +
+          "matched shard count, and threshold. Revoked/missing/reserved IDs " +
+          "surface in `error`.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["items"],
+                properties: {
+                  items: {
+                    type: "array",
+                    maxItems: 50,
+                    items: {
+                      type: "object",
+                      required: ["recordId"],
+                      properties: {
+                        recordId: { type: "string" },
+                        shards: { type: "array", items: {} },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Per-item verification results",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    count: { type: "integer" },
+                    ok: { type: "integer" },
+                    failed: { type: "integer" },
+                    results: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          recordId: { type: "string", nullable: true },
+                          valid: { type: "boolean" },
+                          matched: { type: "integer" },
+                          threshold: { type: "integer" },
+                          error: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "items array missing or > 50" },
+          "429": { description: "Rate-limited" },
+        },
+      },
+    },
     "/{id}/reconstruct": {
       post: {
         tags: ["reconstruct"],

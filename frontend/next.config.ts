@@ -30,22 +30,23 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // CyberChess: COEP unsafe-none so YouTube / Twitch / any third-party iframe
-        // loads without CORP restrictions on ALL browsers (incl. Safari).
-        // Stockfish runs in single-threaded mode (SharedArrayBuffer unavailable),
-        // which still provides solid analysis. For full-speed Stockfish open the
-        // standalone /cyberchess tab while streaming via /cyberchess/studio.
+        // CyberChess: COEP=credentialless даёт SharedArrayBuffer (Stockfish multi-thread)
+        // И при этом разрешает YouTube/Twitch/любые third-party iframe — они грузятся
+        // без credentials (cookies) но без CORP-блокировки. Поддерживается:
+        // Chrome 96+, Firefox 110+, Safari 16.4+. На старом Safari fallback на single-thread.
+        // Меняли с unsafe-none → credentialless 2026-05-13: console показал
+        // "SharedArrayBuffer is not defined", Stockfish работал в degraded mode.
         source: "/cyberchess",
         headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
-          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
         ],
       },
       {
         source: "/cyberchess/:path*",
         headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
-          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
         ],
       },
       {

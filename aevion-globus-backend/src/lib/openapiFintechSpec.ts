@@ -1,11 +1,12 @@
 /**
- * OpenAPI 3.1 path + schema definitions for the 5 AEVION fintech modules.
+ * OpenAPI 3.1 path + schema definitions for the 6 AEVION fintech modules.
  *
  *   1. QGood              — charity campaigns + donations
  *   2. QMaskCard          — virtual payment masks + charge authorization
  *   3. VeilNetX Ledger    — privacy-blinded settlement chain
  *   4. Z-Tide             — reputation / contribution layer
  *   5. QChainGov          — governance proposals + voting
+ *   6. QPayNet            — wallets, transfers, payment requests, merchant charges
  *
  * Spec library only — no runtime side effects. To expose these definitions
  * via /api/openapi.json, an integrator can spread them into the existing
@@ -14,7 +15,7 @@
  * portals, and partner integrations.
  *
  * Schemas mirror the actual route files (qgood.ts, qmaskcard.ts,
- * veilnetxLedger.ts, ztide.ts, qchaingov.ts) for field names + types.
+ * veilnetxLedger.ts, ztide.ts, qchaingov.ts, qpaynet.ts) for field names + types.
  */
 
 /* ─────────────────────────── Reusable response stubs ─────────────────────── */
@@ -60,6 +61,11 @@ export const FINTECH_OPENAPI_TAGS = [
     name: "QChainGov",
     description:
       "Governance + proposal infrastructure. Proposals carry vote mode (yes-no-abstain / ranked-choice / weighted), quorum and pass thresholds, and an admin-gated open/close lifecycle. One vote per user per proposal enforced via UNIQUE constraint.",
+  },
+  {
+    name: "QPayNet",
+    description:
+      "Wallets, transfers, payment requests, deposits and merchant charges — the application-facing rail layer above VeilNetX. P2P balance moves debit/credit atomically with idempotency on (fromWallet, paymentRef); payment requests carry a one-shot token redeemable by anyone with the link; merchant API keys authorize charges against a wallet without exposing user JWTs.",
   },
 ];
 
@@ -389,6 +395,100 @@ export const FINTECH_OPENAPI_SCHEMAS: Record<string, unknown> = {
       weight: { type: "number", format: "double", minimum: 0 },
     },
     required: ["choice", "votes", "weight"],
+  },
+
+  /* ─── QPayNet ─── */
+  Wallet: {
+    type: "object",
+    description:
+      "A QPayNet wallet — owned by a user or merchant, holds a balance in a single currency. balanceCents is the authoritative figure; reservedCents reserves funds for in-flight payouts so balance - reserved = spendable.",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      ownerUserId: { type: "string", nullable: true },
+      ownerEmail: { type: "string", format: "email", nullable: true },
+      label: { type: "string", maxLength: 80 },
+      currency: { type: "string", maxLength: 8, example: "KZT" },
+      balanceCents: { type: "integer", format: "int64", minimum: 0 },
+      reservedCents: { type: "integer", format: "int64", minimum: 0 },
+      status: { type: "string", enum: ["active", "frozen", "closed"] },
+      kycLevel: { type: "string", enum: ["none", "basic", "verified"], description: "KYC tier. Some merchant flows require 'verified'." },
+      isMerchant: { type: "boolean", description: "True if this wallet is registered as a merchant — gates merchant/keys endpoints." },
+      createdAt: { type: "string", format: "date-time" },
+      closedAt: { type: "string", format: "date-time", nullable: true },
+    },
+    required: ["id", "label", "currency", "balanceCents", "reservedCents", "status", "createdAt"],
+  },
+  Transaction: {
+    type: "object",
+    description:
+      "A QPayNet transaction — every deposit, transfer leg, withdrawal, refund and merchant charge produces exactly one row. fromWalletId/toWalletId may be null for external rails (Stripe deposit / payout).",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      kind: {
+        type: "string",
+        enum: ["deposit", "transfer", "withdraw", "merchant_charge", "refund", "payout", "fee"],
+      },
+      fromWalletId: { type: "string", format: "uuid", nullable: true },
+      toWalletId: { type: "string", format: "uuid", nullable: true },
+      amountCents: { type: "integer", format: "int64" },
+      feeCents: { type: "integer", format: "int64", minimum: 0 },
+      currency: { type: "string", maxLength: 8 },
+      paymentRef: { type: "string", maxLength: 100, nullable: true, description: "Idempotency key — replay returns the original transaction with idempotent:true." },
+      description: { type: "string", maxLength: 500, nullable: true },
+      status: { type: "string", enum: ["pending", "completed", "failed", "refunded"] },
+      createdAt: { type: "string", format: "date-time" },
+    },
+    required: ["id", "kind", "amountCents", "currency", "status", "createdAt"],
+  },
+  PaymentRequest: {
+    type: "object",
+    description:
+      "A one-shot payment request. payerToken is shared via link; anyone who has the token can call /requests/:token/pay to settle (subject to max-views and expiry). Auto-expires on first pay or maxViews exhaustion.",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      ownerWalletId: { type: "string", format: "uuid" },
+      payerToken: { type: "string", description: "URL-safe one-shot token used in /requests/:token public endpoints." },
+      amountCents: { type: "integer", format: "int64", minimum: 1 },
+      currency: { type: "string", maxLength: 8 },
+      memo: { type: "string", maxLength: 500, nullable: true },
+      status: { type: "string", enum: ["open", "paid", "expired", "cancelled"] },
+      expiresAt: { type: "string", format: "date-time", nullable: true },
+      maxViews: { type: "integer", minimum: 1, nullable: true },
+      viewCount: { type: "integer", minimum: 0 },
+      paidAt: { type: "string", format: "date-time", nullable: true },
+      paidByWalletId: { type: "string", format: "uuid", nullable: true },
+      createdAt: { type: "string", format: "date-time" },
+    },
+    required: ["id", "payerToken", "amountCents", "currency", "status", "createdAt"],
+  },
+  MerchantApiKey: {
+    type: "object",
+    description: "A merchant API key, used to authorize /merchant/charge without exposing user JWT. Secret is shown only once at creation — store it server-side.",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      walletId: { type: "string", format: "uuid" },
+      keyPrefix: { type: "string", description: "Public identifier — full secret is shown only once at creation." },
+      label: { type: "string", maxLength: 80 },
+      lastUsedAt: { type: "string", format: "date-time", nullable: true },
+      revokedAt: { type: "string", format: "date-time", nullable: true },
+      createdAt: { type: "string", format: "date-time" },
+    },
+    required: ["id", "walletId", "keyPrefix", "label", "createdAt"],
+  },
+  MerchantChargeResult: {
+    type: "object",
+    description: "Result of POST /merchant/charge. idempotent=true means the same paymentRef was already charged successfully and the original transaction is returned unchanged.",
+    properties: {
+      id: { type: "string", format: "uuid" },
+      walletId: { type: "string", format: "uuid" },
+      amountCents: { type: "integer", format: "int64" },
+      currency: { type: "string" },
+      paymentRef: { type: "string" },
+      status: { type: "string", enum: ["completed", "failed"] },
+      idempotent: { type: "boolean", description: "True when this paymentRef was previously charged and we returned the existing transaction without re-debiting." },
+      createdAt: { type: "string", format: "date-time" },
+    },
+    required: ["id", "walletId", "amountCents", "currency", "paymentRef", "status", "idempotent", "createdAt"],
   },
 
   /* ─── Shared ─── */
@@ -1542,6 +1642,245 @@ export const FINTECH_OPENAPI_PATHS: Record<string, unknown> = {
                   total_votes: { type: "integer" },
                   unique_voters: { type: "integer" },
                   service: { type: "string", example: "qchaingov" },
+                },
+              },
+            },
+          },
+        },
+        "500": commonErrorResponses["500"],
+      },
+    },
+  },
+
+  /* ╔══════════════════════════════ QPayNet ════════════════════════════════╗ */
+  "/api/qpaynet/health": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "Health probe",
+      description: "Liveness probe with DB ping. Returns 503 when the underlying Postgres is unreachable.",
+      responses: {
+        "200": { description: "Service is up.", content: { "application/json": { schema: { $ref: "#/components/schemas/HealthResponse" } } } },
+        "503": errorResponse("Database unreachable — depends on connection pool."),
+      },
+    },
+  },
+  "/api/qpaynet/wallets": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "List caller's wallets",
+      description: "Returns wallets owned by the authenticated user. Filterable by status/currency. Closed wallets are included when status=closed is passed.",
+      security: bearer,
+      parameters: [
+        { name: "status", in: "query", schema: { type: "string", enum: ["active", "frozen", "closed"] } },
+        { name: "currency", in: "query", schema: { type: "string", maxLength: 8 } },
+      ],
+      responses: {
+        "200": {
+          description: "Page of wallets.",
+          content: { "application/json": { schema: { type: "object", properties: { wallets: { type: "array", items: { $ref: "#/components/schemas/Wallet" } } } } } },
+        },
+        "401": commonErrorResponses["401"],
+        "500": commonErrorResponses["500"],
+      },
+    },
+    post: {
+      tags: ["QPayNet"],
+      summary: "Open a new wallet",
+      description: "Open a wallet in the requested currency. Each user is rate-limited to a handful of wallet opens per day to deter abuse.",
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", required: ["label", "currency"], properties: { label: { type: "string", minLength: 1, maxLength: 80 }, currency: { type: "string", minLength: 3, maxLength: 8, example: "KZT" } } } } },
+      },
+      responses: {
+        "201": { description: "Wallet created.", content: { "application/json": { schema: { $ref: "#/components/schemas/Wallet" } } } },
+        "400": commonErrorResponses["400"],
+        "401": commonErrorResponses["401"],
+        "429": errorResponse("Rate limited — wallet-open daily cap exceeded."),
+        "500": commonErrorResponses["500"],
+      },
+    },
+  },
+  "/api/qpaynet/wallets/{id}/public": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "Public wallet handle (no auth)",
+      description: "Returns the wallet's display label, currency and merchant flag — no balance or owner identity. Used by payment-request pages and merchant pay-buttons.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: {
+        "200": { description: "Public wallet projection." },
+        "404": errorResponse("Wallet not found or closed."),
+      },
+    },
+  },
+  "/api/qpaynet/transfer": {
+    post: {
+      tags: ["QPayNet"],
+      summary: "P2P transfer between wallets",
+      description: "Debit fromWalletId, credit toWalletId atomically (single SQL transaction). Idempotent on (fromWalletId, paymentRef) — replay returns the original transaction with idempotent:true. Caller must own fromWalletId.",
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", required: ["fromWalletId", "toWalletId", "amountCents"], properties: { fromWalletId: { type: "string", format: "uuid" }, toWalletId: { type: "string", format: "uuid" }, amountCents: { type: "integer", format: "int64", minimum: 1 }, paymentRef: { type: "string", maxLength: 100 }, description: { type: "string", maxLength: 500 } } } } },
+      },
+      responses: {
+        "200": { description: "Transfer settled.", content: { "application/json": { schema: { $ref: "#/components/schemas/Transaction" } } } },
+        "400": errorResponse("Insufficient balance, wrong currency, frozen wallet, or invalid params."),
+        "401": commonErrorResponses["401"],
+        "403": errorResponse("Caller does not own fromWalletId."),
+        "404": errorResponse("One of the wallets was not found."),
+        "429": errorResponse("Rate limited — money endpoints have stricter limits."),
+        "500": commonErrorResponses["500"],
+      },
+    },
+  },
+  "/api/qpaynet/deposit": {
+    post: {
+      tags: ["QPayNet"],
+      summary: "Stub deposit (dev / sandbox)",
+      description: "Credit the caller's wallet via the in-sandbox stub rail. In production the same amount can only land via /deposit/checkout + /deposit/webhook from Stripe.",
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", required: ["walletId", "amountCents"], properties: { walletId: { type: "string", format: "uuid" }, amountCents: { type: "integer", format: "int64", minimum: 1 }, paymentRef: { type: "string", maxLength: 100 } } } } },
+      },
+      responses: {
+        "200": { description: "Deposit settled.", content: { "application/json": { schema: { $ref: "#/components/schemas/Transaction" } } } },
+        "400": commonErrorResponses["400"],
+        "401": commonErrorResponses["401"],
+        "403": errorResponse("Caller does not own walletId."),
+        "404": errorResponse("Wallet not found."),
+        "500": commonErrorResponses["500"],
+      },
+    },
+  },
+  "/api/qpaynet/transactions": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "List caller's transactions",
+      description: "Paginated list across all wallets the caller owns. Filterable by walletId, kind, and date range.",
+      security: bearer,
+      parameters: [
+        { name: "walletId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "kind", in: "query", schema: { type: "string", enum: ["deposit", "transfer", "withdraw", "merchant_charge", "refund", "payout", "fee"] } },
+        { name: "since", in: "query", schema: { type: "string", format: "date-time" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
+      ],
+      responses: {
+        "200": { description: "Page of transactions.", content: { "application/json": { schema: { type: "object", properties: { transactions: { type: "array", items: { $ref: "#/components/schemas/Transaction" } } } } } } },
+        "401": commonErrorResponses["401"],
+      },
+    },
+  },
+  "/api/qpaynet/requests": {
+    post: {
+      tags: ["QPayNet"],
+      summary: "Create payment request",
+      description: "Create a one-shot payment request. payerToken returned in the response is the public token to share via link. Expires on first successful pay, on maxViews exhaustion, or at expiresAt.",
+      security: bearer,
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", required: ["walletId", "amountCents"], properties: { walletId: { type: "string", format: "uuid" }, amountCents: { type: "integer", format: "int64", minimum: 1 }, memo: { type: "string", maxLength: 500 }, expiresAt: { type: "string", format: "date-time" }, maxViews: { type: "integer", minimum: 1 } } } } },
+      },
+      responses: {
+        "201": { description: "Request created.", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentRequest" } } } },
+        "400": commonErrorResponses["400"],
+        "401": commonErrorResponses["401"],
+        "403": errorResponse("Caller does not own walletId."),
+      },
+    },
+  },
+  "/api/qpaynet/requests/{token}": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "Resolve payment request (no auth)",
+      description: "Public lookup for payment-request link pages. Bumps viewCount on success.",
+      parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        "200": { description: "Public projection of the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/PaymentRequest" } } } },
+        "404": errorResponse("Request not found, expired, or paid."),
+        "429": errorResponse("Rate limited — public token lookups."),
+      },
+    },
+  },
+  "/api/qpaynet/requests/{token}/pay": {
+    post: {
+      tags: ["QPayNet"],
+      summary: "Fulfil payment request",
+      description: "Caller pays the request from their own wallet. Settles the corresponding transfer and marks the request paid. Idempotent on (token).",
+      security: bearer,
+      parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["fromWalletId"], properties: { fromWalletId: { type: "string", format: "uuid" } } } } } },
+      responses: {
+        "200": { description: "Request paid.", content: { "application/json": { schema: { $ref: "#/components/schemas/Transaction" } } } },
+        "400": errorResponse("Wrong currency, insufficient balance, expired."),
+        "401": commonErrorResponses["401"],
+        "404": errorResponse("Token not found."),
+        "409": errorResponse("Already paid."),
+      },
+    },
+  },
+  "/api/qpaynet/merchant/keys": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "List merchant API keys for caller's merchant wallet",
+      security: bearer,
+      responses: {
+        "200": { description: "Keys list.", content: { "application/json": { schema: { type: "object", properties: { keys: { type: "array", items: { $ref: "#/components/schemas/MerchantApiKey" } } } } } } },
+        "401": commonErrorResponses["401"],
+        "403": errorResponse("Caller wallet is not a merchant wallet."),
+      },
+    },
+    post: {
+      tags: ["QPayNet"],
+      summary: "Mint a new merchant API key",
+      description: "Returns the full secret EXACTLY ONCE in the response body. Store it server-side immediately — no retrieval afterwards.",
+      security: bearer,
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["walletId", "label"], properties: { walletId: { type: "string", format: "uuid" }, label: { type: "string", minLength: 1, maxLength: 80 } } } } } },
+      responses: {
+        "201": { description: "Key minted. Secret returned ONCE.", content: { "application/json": { schema: { allOf: [{ $ref: "#/components/schemas/MerchantApiKey" }, { type: "object", properties: { secret: { type: "string", description: "Full secret — shown only once." } } }] } } } },
+        "400": commonErrorResponses["400"],
+        "401": commonErrorResponses["401"],
+        "403": errorResponse("Caller wallet is not a merchant wallet, or KYC level insufficient."),
+      },
+    },
+  },
+  "/api/qpaynet/merchant/charge": {
+    post: {
+      tags: ["QPayNet"],
+      summary: "Charge a wallet via merchant API key",
+      description: "Server-side charge initiated by a merchant. Authorized via X-Merchant-Key header (NOT Bearer JWT). Idempotent on paymentRef per merchant.",
+      parameters: [{ name: "X-Merchant-Key", in: "header", required: true, schema: { type: "string" }, description: "Merchant API key secret minted via POST /merchant/keys." }],
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["payerWalletId", "amountCents", "paymentRef"], properties: { payerWalletId: { type: "string", format: "uuid" }, amountCents: { type: "integer", format: "int64", minimum: 1 }, paymentRef: { type: "string", minLength: 1, maxLength: 100 }, description: { type: "string", maxLength: 500 } } } } } },
+      responses: {
+        "200": { description: "Charge result. idempotent:true on replay.", content: { "application/json": { schema: { $ref: "#/components/schemas/MerchantChargeResult" } } } },
+        "400": errorResponse("Insufficient balance, wrong currency, frozen wallet."),
+        "401": errorResponse("Missing or invalid X-Merchant-Key."),
+        "403": errorResponse("Key revoked, or payerWalletId not authorized for this merchant."),
+        "404": errorResponse("Payer wallet not found."),
+        "429": errorResponse("Rate limited — money endpoints."),
+      },
+    },
+  },
+  "/api/qpaynet/stats": {
+    get: {
+      tags: ["QPayNet"],
+      summary: "Aggregate module stats",
+      description: "Active/total wallets, total transactions, settled volume (cents). Cached for ~30 seconds at the route layer.",
+      responses: {
+        "200": {
+          description: "Aggregate statistics.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  totalWallets: { type: "integer" },
+                  activeWallets: { type: "integer" },
+                  totalTransactions: { type: "integer" },
+                  totalVolumeKzt: { type: "integer", format: "int64", description: "Total settled volume in cents (currency hint in field name)." },
+                  totalDepositedKzt: { type: "integer", format: "int64" },
+                  service: { type: "string", example: "qpaynet" },
                 },
               },
             },

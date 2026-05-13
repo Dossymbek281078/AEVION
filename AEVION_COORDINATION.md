@@ -168,10 +168,10 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| `aevion-core/main` | **QNews** `qnews.ts` + `frontend/src/app/qnews/page.tsx` | Postgres persistence для статей (`ensureQNewsTables`), submit форма, bookmarks, AI digest | 2026-05-12 16:10 |
-| `aevion-core/main` | **QJobs** `qjobs.ts` + `frontend/src/app/qjobs/page.tsx` | Tabs (Все/Сохранённые/AI подбор), stats header, save jobs API | 2026-05-12 16:05 |
-| `aevion-core/main` | **QSocial** `qsocial.ts` + `frontend/src/app/qsocial/page.tsx` | Notifications bell, stats header, улучшенные табы | 2026-05-12 16:05 |
-| `aevion-core/main` | **scripts/** `qai-smoke.js`, `qlearn-smoke.js`, `qmedia-smoke.js` | Расширение smoke тестов (7+ проверок каждый) | 2026-05-12 16:10 |
+| `aevion-healthai` | **HealthAI** `healthai.ts` + `frontend/src/app/healthai/page.tsx` | MVP: чеклист симптомов + лог состояния + дисклеймер | 2026-05-13 start |
+| `aevion-core/frontend-globus` | **Globus** `frontend/src/app/globus/**` + components | Polish 3D-карты: маркеры/слои/perf | 2026-05-13 start |
+| `frontend-qshield` | **QShield** `quantum-shield.ts` + `frontend/src/app/quantum-shield/**` | Расширение Shamir-контура: shards UI, audit log, export | 2026-05-13 start |
+| `aevion-core/main` | **MVP-семейка** `mvpConcepts.ts` + 6 страниц (qlife/psyapp-deps/qpersona/deepsan/shadownet/lifebox) | Превратить idea-страницы в работающие MVP с API + интерактив | 2026-05-13 start |
 
 ### Завершённые задачи этой сессии (сегодня, 2026-05-12)
 

@@ -698,6 +698,10 @@ export default function Globus3D({
       color: string;
     }>
   >([]);
+  /** Меши overlay-слоёв — для toggle через panel без пересоздания сцены. */
+  const cloudMeshRef = useRef<THREE.Mesh | null>(null);
+  const heatmapGroupRef = useRef<THREE.Group | null>(null);
+
   /** Tooltip-DOM для дуги; обновляем напрямую в animate. */
   const arcTooltipRef = useRef<HTMLDivElement | null>(null);
   /** Координаты курсора в координатах globe-контейнера (pointer move). */
@@ -718,6 +722,53 @@ export default function Globus3D({
   /** Country name detected by globe-surface point-in-polygon (shown as floating badge). */
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const hoveredCountryRef = useRef<string | null>(null);
+
+  /**
+   * Layer toggles — overlay-слои сцены. Изменение state НЕ пересоздаёт сцену:
+   * effect ниже пробрасывает `.visible` на меши через refs.
+   * Сохраняем в localStorage чтобы пользователь увидел свой выбор при возврате.
+   */
+  type LayerKey = "clouds" | "heatmap" | "arcs";
+  const [layers, setLayers] = useState<Record<LayerKey, boolean>>(() => {
+    if (typeof window === "undefined") {
+      return { clouds: true, heatmap: true, arcs: true };
+    }
+    try {
+      const raw = window.localStorage.getItem("aevion:globus:layers");
+      if (raw) {
+        const v = JSON.parse(raw) as Partial<Record<LayerKey, boolean>>;
+        return {
+          clouds: v.clouds !== false,
+          heatmap: v.heatmap !== false,
+          arcs: v.arcs !== false,
+        };
+      }
+    } catch {}
+    return { clouds: true, heatmap: true, arcs: true };
+  });
+  const toggleLayer = useCallback((k: LayerKey) => {
+    setLayers((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("aevion:globus:layers", JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    // Clouds — родной mesh.visible.
+    if (cloudMeshRef.current) cloudMeshRef.current.visible = layers.clouds;
+    // Heatmap — Group; one place to toggle.
+    if (heatmapGroupRef.current) heatmapGroupRef.current.visible = layers.heatmap;
+    // Arcs — лежат вне Group; гасим каждую линию (учитывая search/filter video в matches-effect).
+    // ВАЖНО: not-arcs-layer ⇒ скрываем все. Иначе оставляем как есть — другой effect управит видимостью.
+    if (!layers.arcs) {
+      for (const a of arcsRef.current) a.line.visible = false;
+    }
+    // При включении arcs обратно — следующий «matches» effect перенастроит видимость.
+  }, [layers]);
 
   /** Локаль для отображения country names. */
   const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
@@ -903,6 +954,48 @@ export default function Globus3D({
     return markers.filter((m) => m.country === selectedCountry);
   }, [selectedCountry, markers]);
 
+  /**
+   * Агрегат по странам — для hover preview / side-sheet stats без повторного скана `markers`.
+   * Считаем как по полю `m.country` (быстро, всегда), так и через aliasCountry для совпадения с
+   * topojson-именами, на которые ссылается hoveredCountry.
+   */
+  type CountryStat = {
+    total: number;
+    products: number;
+    awards: number;
+    qright: number;
+    infra: number;
+    focus: number;
+  };
+  const markerCountryStats = useMemo<Map<string, CountryStat>>(() => {
+    const map = new Map<string, CountryStat>();
+    const bump = (key: string | undefined, cat: MarkerCategory) => {
+      if (!key) return;
+      let s = map.get(key);
+      if (!s) {
+        s = { total: 0, products: 0, awards: 0, qright: 0, infra: 0, focus: 0 };
+        map.set(key, s);
+      }
+      s.total++;
+      if (cat === "product") s.products++;
+      else if (cat === "award") s.awards++;
+      else if (cat === "qright") s.qright++;
+      else if (cat === "infra") s.infra++;
+      else if (cat === "focus") s.focus++;
+    };
+    for (const m of markers) {
+      bump(m.country, m.category);
+    }
+    return map;
+  }, [markers]);
+
+  /** Краткая статистика для hovered country (учитывая alias topojson↔наши данные). */
+  const hoveredCountryStat = useMemo<CountryStat | null>(() => {
+    if (!hoveredCountry) return null;
+    const aliased = aliasCountry(hoveredCountry);
+    return markerCountryStats.get(aliased) ?? markerCountryStats.get(hoveredCountry) ?? null;
+  }, [hoveredCountry, markerCountryStats]);
+
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
     const q = query.trim().toLowerCase();
@@ -934,10 +1027,11 @@ export default function Globus3D({
     }
     for (const a of arcsRef.current) {
       a.line.visible =
+        layers.arcs &&
         visibleByKey.get(a.fromKey) === true &&
         visibleByKey.get(a.toKey) === true;
     }
-  }, [query, filter, selectedCountry, markers]);
+  }, [query, filter, selectedCountry, markers, layers.arcs]);
 
   /** Auto-focus при единственном совпадении поиска. */
   useEffect(() => {
@@ -1254,6 +1348,7 @@ export default function Globus3D({
     });
     const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
     earthGroup.add(cloudMesh);
+    cloudMeshRef.current = cloudMesh;
 
     loadTextureChain(
       loader,
@@ -1452,6 +1547,7 @@ export default function Globus3D({
     // Density heatmap — постоянный нежный контур стран, в которых есть наши маркеры.
     const presenceOutlineGroup = new THREE.Group();
     earthGroup.add(presenceOutlineGroup);
+    heatmapGroupRef.current = presenceOutlineGroup;
 
     // Hovered-country outline — светящийся контур поверх borders, пересоздаётся при смене страны.
     const countryOutlineGroup = new THREE.Group();
@@ -3412,6 +3508,92 @@ export default function Globus3D({
         </div>
       ) : null}
 
+      {/* Layers panel — toggle для overlay-слоёв сцены. Без re-render Three.js. */}
+      {!initError ? (
+        <div
+          role="group"
+          aria-label="Scene layer toggles"
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: isNarrow ? 14 : 86,
+            zIndex: 5,
+            display: "flex",
+            flexDirection: isNarrow ? "row" : "column",
+            gap: 4,
+            background: "rgba(12,18,32,0.78)",
+            border: "1px solid rgba(120,160,220,0.28)",
+            borderRadius: 12,
+            padding: isNarrow ? "4px 6px" : "6px 8px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          {!isNarrow ? (
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#7a8fb0",
+                marginBottom: 2,
+              }}
+            >
+              Layers
+            </div>
+          ) : null}
+          {[
+            { key: "clouds" as LayerKey, icon: "☁", label: "Clouds" },
+            { key: "heatmap" as LayerKey, icon: "▣", label: "Heatmap" },
+            { key: "arcs" as LayerKey, icon: "↝", label: "Arcs" },
+          ].map((row) => {
+            const active = layers[row.key];
+            return (
+              <button
+                key={row.key}
+                type="button"
+                role="switch"
+                aria-checked={active}
+                aria-label={`Toggle ${row.label} layer`}
+                title={`${active ? "Hide" : "Show"} ${row.label}`}
+                onClick={() => toggleLayer(row.key)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 24,
+                  padding: isNarrow ? "0 8px" : "0 10px",
+                  borderRadius: 999,
+                  border: "1px solid transparent",
+                  background: active ? "rgba(108,214,255,0.18)" : "transparent",
+                  color: active ? "#bae6fd" : "#7a8fb0",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                  cursor: "pointer",
+                  touchAction: "manipulation",
+                  textAlign: "left",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    fontSize: 12,
+                    width: 12,
+                    display: "inline-block",
+                    textAlign: "center",
+                  }}
+                >
+                  {row.icon}
+                </span>
+                {!isNarrow ? row.label : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {!initError && !isNarrow ? (
         <div
           aria-label="View compass minimap"
@@ -4167,6 +4349,53 @@ export default function Globus3D({
           >
             {displayCountry(hoveredCountry, locale)}
           </span>
+
+          {/* Mini preview-stats: counts per category when our markers live there. */}
+          {hoveredCountryStat && hoveredCountryStat.total > 0 ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                marginLeft: 4,
+                borderLeft: "1px solid rgba(120,160,220,0.28)",
+                paddingLeft: 8,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  color: "#6cd6ff",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {hoveredCountryStat.total}
+              </span>
+              {hoveredCountryStat.products > 0 ? (
+                <span style={{ fontSize: 10, color: "#7dd3fc", fontWeight: 700 }}>
+                  🚀{hoveredCountryStat.products}
+                </span>
+              ) : null}
+              {hoveredCountryStat.awards > 0 ? (
+                <span style={{ fontSize: 10, color: "#e879f9", fontWeight: 700 }}>
+                  🏆{hoveredCountryStat.awards}
+                </span>
+              ) : null}
+              {hoveredCountryStat.qright > 0 ? (
+                <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700 }}>
+                  💎{hoveredCountryStat.qright}
+                </span>
+              ) : null}
+              {hoveredCountryStat.focus > 0 ? (
+                <span style={{ fontSize: 10, color: "#fbbf24", fontWeight: 700 }}>
+                  ★{hoveredCountryStat.focus}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+
           <span
             style={{
               fontSize: 10,
@@ -4177,7 +4406,9 @@ export default function Globus3D({
               whiteSpace: "nowrap",
             }}
           >
-            click → filter
+            {hoveredCountryStat && hoveredCountryStat.total > 0
+              ? "click → focus"
+              : "click → filter"}
           </span>
         </div>
       ) : null}

@@ -86,6 +86,29 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
         ON "DevHubDeployment" ("projectId", "triggeredAt" DESC);
     `);
 
+    // Snippet shelf — publicly shareable code snippets (DEV.to / gist-style)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "DevHubSnippet" (
+        "id"        TEXT PRIMARY KEY,
+        "userId"    TEXT NOT NULL,
+        "title"     TEXT NOT NULL,
+        "content"   TEXT NOT NULL DEFAULT '',
+        "language"  TEXT NOT NULL DEFAULT 'plaintext',
+        "tags"      JSONB NOT NULL DEFAULT '[]'::jsonb,
+        "stars"     INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "DevHubSnippet_created_idx"
+        ON "DevHubSnippet" ("createdAt" DESC);
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "DevHubSnippet_user_idx"
+        ON "DevHubSnippet" ("userId", "createdAt" DESC);
+    `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

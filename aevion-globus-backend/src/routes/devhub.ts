@@ -65,15 +65,29 @@ interface DevHubDeployment {
   completedAt: string | null;
 }
 
+interface DevHubSnippet {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  language: string;
+  tags: string[];
+  stars: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const memProjects = new Map<string, DevHubProject>();
 const memFiles = new Map<string, DevHubFile>();
 const memDeployments = new Map<string, DevHubDeployment>();
+const memSnippets = new Map<string, DevHubSnippet>();
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();
   memFiles.clear();
   memDeployments.clear();
+  memSnippets.clear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1487,6 +1501,152 @@ devhubRouter.get("/projects/:id/deployments", async (req, res) => {
       .slice(0, 10);
     res.json({ deployments });
   }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Snippet Shelf (publicly shareable code snippets, gist-style)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function rowToSnippet(row: any): DevHubSnippet {
+  return {
+    id: row.id,
+    userId: row.userId,
+    title: row.title,
+    content: row.content,
+    language: row.language,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    stars: typeof row.stars === "number" ? row.stars : Number(row.stars) || 0,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+  };
+}
+
+async function dbListSnippets(opts: { tag?: string; userId?: string; limit?: number }): Promise<DevHubSnippet[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  if (!isDevHubDbReady()) {
+    let arr = [...memSnippets.values()];
+    if (opts.userId) arr = arr.filter((s) => s.userId === opts.userId);
+    if (opts.tag) {
+      const tag = opts.tag.toLowerCase();
+      arr = arr.filter((s) => s.tags.some((t) => t.toLowerCase() === tag));
+    }
+    return arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  }
+  const params: any[] = [];
+  const conds: string[] = [];
+  if (opts.userId) {
+    params.push(opts.userId);
+    conds.push(`"userId" = $${params.length}`);
+  }
+  if (opts.tag) {
+    params.push(JSON.stringify([opts.tag]));
+    conds.push(`"tags" @> $${params.length}::jsonb`);
+  }
+  params.push(limit);
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  const r = await pool.query(
+    `SELECT * FROM "DevHubSnippet" ${where} ORDER BY "createdAt" DESC LIMIT $${params.length}`,
+    params
+  );
+  return r.rows.map(rowToSnippet);
+}
+
+async function dbGetSnippet(id: string): Promise<DevHubSnippet | null> {
+  if (!isDevHubDbReady()) return memSnippets.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "DevHubSnippet" WHERE "id" = $1`, [id]);
+  return r.rows[0] ? rowToSnippet(r.rows[0]) : null;
+}
+
+async function dbSaveSnippet(s: DevHubSnippet): Promise<void> {
+  if (!isDevHubDbReady()) { memSnippets.set(s.id, s); return; }
+  await pool.query(
+    `INSERT INTO "DevHubSnippet" ("id","userId","title","content","language","tags","stars","createdAt","updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)
+     ON CONFLICT ("id") DO UPDATE SET
+       "title"=$3,"content"=$4,"language"=$5,"tags"=$6::jsonb,"stars"=$7,"updatedAt"=$9`,
+    [s.id, s.userId, s.title, s.content, s.language, JSON.stringify(s.tags), s.stars, s.createdAt, s.updatedAt]
+  );
+}
+
+// GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
+devhubRouter.get("/snippets", async (req, res) => {
+  const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
+  const userId = req.query.user ? String(req.query.user).trim() : undefined;
+  const limit = req.query.limit ? Math.min(parseInt(String(req.query.limit), 10) || 50, 200) : 50;
+  try {
+    const snippets = await dbListSnippets({ tag, userId, limit });
+    res.json({ snippets, total: snippets.length });
+  } catch {
+    let arr = [...memSnippets.values()];
+    if (userId) arr = arr.filter((s) => s.userId === userId);
+    if (tag) {
+      const t = tag.toLowerCase();
+      arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
+    }
+    const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+    res.json({ snippets, total: snippets.length });
+  }
+});
+
+// POST /api/devhub/snippets — create a snippet
+devhubRouter.post("/snippets", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const { title, content, language, tags } = req.body || {};
+  if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
+  if (typeof content !== "string") return res.status(400).json({ error: "content must be a string" });
+  const normTags = Array.isArray(tags)
+    ? tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 10)
+    : [];
+  const snippet: DevHubSnippet = {
+    id: crypto.randomUUID(),
+    userId,
+    title: title.trim().slice(0, 200),
+    content: String(content).slice(0, 100_000),
+    language: language ? String(language).trim().slice(0, 40) : "plaintext",
+    tags: normTags,
+    stars: 0,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  try {
+    await dbSaveSnippet(snippet);
+  } catch {
+    memSnippets.set(snippet.id, snippet);
+  }
+  res.status(201).json({ snippet });
+});
+
+// GET /api/devhub/snippets/:id — fetch single snippet
+devhubRouter.get("/snippets/:id", async (req, res) => {
+  try {
+    const snippet = await dbGetSnippet(req.params.id);
+    if (!snippet) return res.status(404).json({ error: "snippet not found" });
+    res.json({ snippet });
+  } catch {
+    const snippet = memSnippets.get(req.params.id);
+    if (!snippet) return res.status(404).json({ error: "snippet not found" });
+    res.json({ snippet });
+  }
+});
+
+// POST /api/devhub/snippets/:id/star — increment star count
+devhubRouter.post("/snippets/:id/star", async (req, res) => {
+  let snippet: DevHubSnippet | null;
+  try {
+    snippet = await dbGetSnippet(req.params.id);
+  } catch {
+    snippet = memSnippets.get(req.params.id) ?? null;
+  }
+  if (!snippet) return res.status(404).json({ error: "snippet not found" });
+  snippet.stars += 1;
+  snippet.updatedAt = now();
+  try {
+    await dbSaveSnippet(snippet);
+  } catch {
+    memSnippets.set(snippet.id, snippet);
+  }
+  res.json({ ok: true, stars: snippet.stars });
 });
 
 // GET /api/devhub/projects/:id/env/validate — check required env vars

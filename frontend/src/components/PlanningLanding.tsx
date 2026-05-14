@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 
 export type RelatedModule = {
   id: string;       // route slug, e.g. "psyapp-deps" or "healthai"
@@ -44,7 +45,7 @@ function StatusPill({ moduleId, color }: { moduleId: string; color: string }) {
   const [s, setS] = useState<Status | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api-backend/api/${moduleId}/status`)
+    fetch(apiUrl(`/api/${moduleId}/status`))
       .then((r) => (r.ok ? r.json() : null))
       .then((data: Status | null) => {
         if (cancelled || !data) return;
@@ -65,6 +66,187 @@ function StatusPill({ moduleId, color }: { moduleId: string; color: string }) {
   );
 }
 
+type EtaInfo = {
+  eta: string;
+  etaDate: string | null;
+  daysUntil: number | null;
+  weeksUntil: number | null;
+  isPast: boolean;
+  tbd: boolean;
+};
+
+function formatLaunchDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("ru-RU", { year: "numeric", month: "long", day: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * Live countdown to launch. Renders nothing for TBD modules. Updates every
+ * 60s so the day-count stays accurate if the user keeps the page open
+ * across midnight.
+ */
+function EtaCountdown({ moduleId, color }: { moduleId: string; color: string }) {
+  const [info, setInfo] = useState<EtaInfo | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl(`/api/${moduleId}/eta`))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: EtaInfo | null) => {
+        if (cancelled || !data) return;
+        setInfo(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [moduleId]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (!info || info.tbd || !info.etaDate) return null;
+
+  const c = COLORS[color] ?? COLORS.emerald;
+  const targetMs = new Date(info.etaDate).getTime();
+  const liveDays = Math.round((targetMs - now) / 86_400_000);
+
+  if (info.isPast || liveDays < 0) {
+    return (
+      <div className="text-xs text-slate-500 font-mono">
+        запуск ожидался: {formatLaunchDate(info.etaDate)} · уточняем дату
+      </div>
+    );
+  }
+
+  const weeks = Math.round(liveDays / 7);
+  const months = Math.round(liveDays / 30);
+  const bigNumber = liveDays >= 90 ? months : liveDays >= 21 ? weeks : liveDays;
+  const unit = liveDays >= 90 ? "мес." : liveDays >= 21 ? "нед." : liveDays === 1 ? "день" : "дн.";
+
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <div className={`text-3xl font-black tabular-nums ${c.accent}`}>{bigNumber}</div>
+      <div className="text-slate-400 leading-tight">
+        <div className="text-xs uppercase tracking-wider text-slate-500">{unit} до запуска</div>
+        <div className="text-xs text-slate-500">
+          цель: {formatLaunchDate(info.etaDate)} ({info.eta})
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type ShareState = "idle" | "shared" | "copied" | "error";
+
+/**
+ * Share button — uses Web Share API when available (mobile), falls back to
+ * a Twitter intent + clipboard copy on desktop.
+ */
+function ShareButton({
+  moduleId,
+  code,
+  heroTitle,
+  color,
+}: {
+  moduleId: string;
+  code: string;
+  heroTitle: string;
+  color: string;
+}) {
+  const c = COLORS[color] ?? COLORS.emerald;
+  const [state, setState] = useState<ShareState>("idle");
+
+  async function onClick() {
+    const shareUrl =
+      typeof window !== "undefined" ? window.location.origin + "/" + moduleId : `https://aevion.app/${moduleId}`;
+    const shareText = `AEVION ${code} — ${heroTitle}. Жду запуск:`;
+
+    // Prefer native share (mobile / supported browsers)
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: `AEVION ${code}`, text: shareText, url: shareUrl });
+        setState("shared");
+        return;
+      } catch (err) {
+        // AbortError (user cancelled) → silently ignore, no state change
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // fall through to fallback
+      }
+    }
+
+    // Fallback: open Twitter intent + copy URL
+    const tweetUrl =
+      "https://twitter.com/intent/tweet?text=" +
+      encodeURIComponent(shareText) +
+      "&url=" +
+      encodeURIComponent(shareUrl);
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+        setState("copied");
+      }
+    } catch {
+      setState("error");
+    }
+
+    if (typeof window !== "undefined") {
+      window.open(tweetUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  // Reset state back to idle after a short delay so the user can share again
+  useEffect(() => {
+    if (state === "idle") return;
+    const t = setTimeout(() => setState("idle"), 2500);
+    return () => clearTimeout(t);
+  }, [state]);
+
+  const label =
+    state === "shared"
+      ? "Спасибо!"
+      : state === "copied"
+        ? "Ссылка скопирована"
+        : state === "error"
+          ? "Не удалось"
+          : "Поделиться";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-5 py-2.5 ${c.btn} ${c.btnHover} text-white rounded-lg text-sm font-semibold inline-flex items-center gap-2`}
+      aria-label="Поделиться этим лендингом"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="w-4 h-4"
+      >
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
 function WaitlistForm({ moduleId, color }: { moduleId: string; color: string }) {
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -76,7 +258,7 @@ function WaitlistForm({ moduleId, color }: { moduleId: string; color: string }) 
     setBusy(true);
     setMsg(null);
     try {
-      const r = await fetch(`/api-backend/api/${moduleId}/waitlist`, {
+      const r = await fetch(apiUrl(`/api/${moduleId}/waitlist`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -130,7 +312,7 @@ function MilestoneList({ moduleId }: { moduleId: string }) {
   const [items, setItems] = useState<Status["milestones"]>([]);
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api-backend/api/${moduleId}/status`)
+    fetch(apiUrl(`/api/${moduleId}/status`))
       .then((r) => (r.ok ? r.json() : null))
       .then((data: Status | null) => {
         if (cancelled || !data?.milestones) return;
@@ -213,11 +395,18 @@ export default function PlanningLanding(props: PlanningLandingProps) {
         </h1>
         <p className="text-lg text-slate-400 max-w-2xl leading-relaxed">{props.heroSubtitle}</p>
         <StatusPill moduleId={props.id} color={props.highlightColor} />
+        <EtaCountdown moduleId={props.id} color={props.highlightColor} />
         <div className="space-y-2 pt-2">
           <div className="text-sm text-slate-400">Уведомим при запуске. Без спама, отписка одним кликом.</div>
           <WaitlistForm moduleId={props.id} color={props.highlightColor} />
         </div>
         <div className="flex flex-wrap gap-3 pt-2">
+          <ShareButton
+            moduleId={props.id}
+            code={props.code}
+            heroTitle={props.heroTitle}
+            color={props.highlightColor}
+          />
           <Link
             href={`https://api.aevion.app/api/${props.id}/status`}
             className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"

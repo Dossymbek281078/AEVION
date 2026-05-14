@@ -6277,18 +6277,40 @@ export default function CyberChessPage(){
                   const annotColor=(s?:string)=>ANNOT_SYMS.find(a=>a.s===s)?.c||T.text;
                   const openAnnot=(ply:number,e:React.MouseEvent)=>{if(tab!=="analysis")return;e.preventDefault();e.stopPropagation();sAnnotPicker({ply,x:Math.min(e.clientX,window.innerWidth-140),y:Math.min(e.clientY,window.innerHeight-120)});};
                   return <React.Fragment key={i}>
-                    <span data-pair-idx={i} data-active={isActivePair?"1":undefined} style={{color:T.dim,fontWeight:700,textAlign:"center",padding:"5px 0",background:isActivePair?"rgba(5,150,105,0.10)":"#fafafa",borderRight:`1px solid ${T.border}`,fontSize:12}}>{i+1}</span>
+                    {/* Move number */}
+                    <span data-pair-idx={i} data-active={isActivePair?"1":undefined}
+                      style={{color:CC.textMute,fontWeight:700,textAlign:"center",padding:"5px 0",
+                        background:isActivePair?CC.brandSoft:CC.surface2,
+                        borderRight:`1px solid ${CC.border}`,fontSize:11,fontFamily:"ui-monospace,monospace"}}>
+                      {i+1}
+                    </span>
+                    {/* White move */}
                     <span onMouseEnter={()=>{if(white)previewMove(wIdx)}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
                       title={tab==="analysis"?"Правый клик — добавить аннотацию":undefined}
-                      style={{color:T.text,fontWeight:600,padding:"5px 10px",background:wIsPreview?"rgba(245,158,11,0.20)":wIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:wIsPreview?`3px solid #f59e0b`:wIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>{white||""}{wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,marginLeft:2,fontSize:12}}>{wAnnot}</span>}{!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3}}>{qIcon(wQ)}</span>}</span>
-                      {wEval&&<span style={{fontSize:10,color:wEval.cp>0?T.accent:wEval.cp<0?T.danger:T.dim,fontWeight:700}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
+                      style={{
+                        color:wIsBrowsed?CC.brand:CC.text,fontWeight:wIsBrowsed?900:600,
+                        padding:"5px 8px",fontSize:13,
+                        background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:"transparent",
+                        borderLeft:wIsPreview?`3px solid ${CC.gold}`:wIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
+                        cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
+                        transition:"background 100ms",
+                      }}>
+                      <span>{white||""}{wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,marginLeft:2,fontSize:11}}>{wAnnot}</span>}{!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3,fontSize:11}}>{qIcon(wQ)}</span>}</span>
+                      {wEval&&<span style={{fontSize:10,color:wEval.cp>0?CC.brand:wEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
                     </span>
+                    {/* Black move */}
                     <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
                       title={tab==="analysis"&&black?"Правый клик — добавить аннотацию":undefined}
-                      style={{color:T.text,fontWeight:600,padding:"5px 10px",background:bIsPreview?"rgba(245,158,11,0.20)":bIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:bIsPreview?`3px solid #f59e0b`:bIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>{black||""}{bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,marginLeft:2,fontSize:12}}>{bAnnot}</span>}{!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3}}>{qIcon(bQ)}</span>}</span>
-                      {bEval&&<span style={{fontSize:10,color:bEval.cp>0?T.accent:bEval.cp<0?T.danger:T.dim,fontWeight:700}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
+                      style={{
+                        color:bIsBrowsed?CC.brand:CC.textDim,fontWeight:bIsBrowsed?900:500,
+                        padding:"5px 8px",fontSize:13,
+                        background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:"transparent",
+                        borderLeft:bIsPreview?`3px solid ${CC.gold}`:bIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
+                        cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",
+                        transition:"background 100ms",
+                      }}>
+                      <span>{black||""}{bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,marginLeft:2,fontSize:11}}>{bAnnot}</span>}{!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3,fontSize:11}}>{qIcon(bQ)}</span>}</span>
+                      {bEval&&<span style={{fontSize:10,color:bEval.cp>0?CC.brand:bEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
                     </span>
                   </React.Fragment>;
                 })}

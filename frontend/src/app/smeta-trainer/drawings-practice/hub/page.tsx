@@ -266,6 +266,11 @@ const MODULES: Module[] = [
   { id: "commissioning-pnr",      category: "process",   href: "/smeta-trainer/drawings-practice/commissioning-pnr",      icon: "🔌", title: "Пуско-наладочные работы (ПНР)",   subtitle: "ЭСН Сб.4 ч.1/2, 8 этапов, 70 ч опробование, АСУТП 20-40%",    level: "L4", exercises: 4,  color: "yellow"  },
   { id: "tech-connection",        category: "process",   href: "/smeta-trainer/drawings-practice/tech-connection",        icon: "⚡", title: "Технологическое присоединение",   subtitle: "ТУ от 6 сетей, Глава 6 ССР, плата ТП электр. 30 тыс. тг/кВт",  level: "L4", exercises: 4,  color: "sky"     },
   { id: "shefmontazh",            category: "process",   href: "/smeta-trainer/drawings-practice/shefmontazh",            icon: "🔩", title: "Шефмонтаж и шефналадка",          subtitle: "Завод-изготовитель 2-10%, гарантия, иностранные спец-ты",       level: "L4", exercises: 4,  color: "lime"    },
+
+  // ── Отделочные и изоляционные работы ──
+  { id: "insulation-works",       category: "structure", href: "/smeta-trainer/drawings-practice/insulation-works",       icon: "🧱", title: "Изоляционные работы",             subtitle: "ЭСН Сб.25-27, тепло/гидро/звук, λ расчёт, 6 материалов",      level: "L3", exercises: 4,  color: "indigo"  },
+  { id: "floor-types",            category: "finishing", href: "/smeta-trainer/drawings-practice/floor-types",            icon: "🪟", title: "Виды напольных покрытий",         subtitle: "8 видов (стяжка/керамогр./ламинат/паркет/наливной), ЭСН Сб.17", level: "L3", exercises: 4,  color: "amber"   },
+  { id: "painting-plastering",    category: "finishing", href: "/smeta-trainer/drawings-practice/painting-plastering",    icon: "🎨", title: "Малярные и штукатурные работы",   subtitle: "ЭСН Сб.14-15, гипс/ЦПС/декор, покраска 4-5 слоёв, обои",      level: "L3", exercises: 4,  color: "fuchsia" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

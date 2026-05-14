@@ -426,12 +426,13 @@ type CellProps={
   cursor:"grab"|"default";
   iS:boolean;iV:boolean;iCk:boolean;iPM:boolean;iPS:boolean;
   iL:boolean;isShadow:boolean;isAnimDest:boolean;isDragOrigin:boolean;
+  iHover?:boolean;iHoverCap?:boolean;
   pmIdx?:number;
   coordFile?:string;
   coordRank?:number;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,pmIdx,coordFile,coordRank}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,pmIdx,coordFile,coordRank}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
   const isLifted=(iS||iPS)&&!isDragOrigin;
@@ -453,7 +454,12 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1}}>
-    {iV&&!hasPiece&&<div style={{width:"24%",height:"24%",borderRadius:"50%",background:"rgba(15,23,42,0.22)",position:"absolute",pointerEvents:"none"}}/>}
+    {/* Lichess-style move dots и кольца захвата */}
+    {(iV&&!hasPiece)||(iHover&&!iHoverCap&&!hasPiece)
+      ?<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"rgba(15,23,42,0.20)",position:"absolute",pointerEvents:"none",transition:"opacity 80ms"}}/>
+      :null}
+    {/* Кольцо захвата: iV&&hasPiece (clicked) или iHoverCap (hover) */}
+    {((iV&&!!hasPiece)||iHoverCap)&&<div style={{position:"absolute",inset:0,borderRadius:"50%",boxShadow:"inset 0 0 0 clamp(3px,9%,9px) rgba(15,23,42,0.28)",pointerEvents:"none"}}/>}
     {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"opacity 100ms ease-out",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
@@ -486,6 +492,9 @@ export default function CyberChessPage(){
   const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
+  // Hover preview — показываем возможные ходы при наведении мыши (без клика, как у lichess).
+  const[hoverSq,sHoverSq]=useState<Square|null>(null);
+  const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
   const[hist,sHist]=useState<string[]>([]);
@@ -3415,7 +3424,7 @@ export default function CyberChessPage(){
     </main>);
   }
 
-  return(<main style={{background:CC.bg,minHeight:"100vh",color:CC.text}}>
+  return(<main style={{background:CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column"}}>
     <ProductPageShell fullWidth><Wave1Nav/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
@@ -4620,7 +4629,7 @@ export default function CyberChessPage(){
       </div>}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch",justifyContent:"center"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
@@ -4629,7 +4638,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",
+            width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -4642,7 +4651,7 @@ export default function CyberChessPage(){
             </button>
             <button onClick={()=>sActiveLesson(null)} style={{padding:"4px 8px",borderRadius:RADIUS.sm,border:"none",background:"transparent",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>✕</button>
           </div>}
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}>
+          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}>
             <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
             <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
           </div>}
@@ -4650,7 +4659,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -4690,6 +4699,21 @@ export default function CyberChessPage(){
               onPointerDown={onBoardDown}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
+              onMouseMove={e=>{
+                // Hover-dots: вычисляем возможные ходы фигуры под курсором синхронно.
+                // Показываем только если нет активного sel (иначе sel-vm приоритетнее).
+                if(sel)return;
+                const sq=sqFromPoint(e.clientX,e.clientY);
+                if(sq===hoverSq)return;
+                sHoverSq(sq);
+                if(!sq||over||!on&&tab==="play"){sHoverVm(new Set());return;}
+                const pc=game.get(sq);
+                // Показываем ходы только для своих фигур (или в анализе — для любых)
+                if(!pc||(tab==="play"&&pc.color!==pCol)){sHoverVm(new Set());return;}
+                const moves=game.moves({verbose:true,square:sq});
+                sHoverVm(new Set(moves.map(m=>m.to)));
+              }}
+              onMouseLeave={()=>{sHoverSq(null);sHoverVm(new Set());}}
               onClick={e=>{
                 // Pointerdown arms the gesture; window-pointerup decides drop vs tap
                 // and delegates taps to click(). onClick here only clears annotations
@@ -4798,6 +4822,9 @@ export default function CyberChessPage(){
                 const isShadow=!scratchOn&&!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
                 const turnRef=scratchOn&&scratchGame?scratchGame.turn():game.turn();
                 const iS=effSel===sq,iV=effVm.has(sq),iCp=iV&&!!p,iL=!!(effLm&&(effLm.from===sq||effLm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===turnRef),iPM=!scratchOn&&pmSet.has(sq),iPS=!scratchOn&&pmSel===sq;
+                // Hover preview — показываем когда нет active sel
+                const iHover=!sel&&hoverVm.has(sq);
+                const iHoverCap=iHover&&!!p;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 const isDragOrigin=ghostFrom===sq;
@@ -4810,6 +4837,7 @@ export default function CyberChessPage(){
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
                   iS={iS} iV={iV} iCk={iCk} iPM={iPM} iPS={iPS} iL={iL}
+                  iHover={iHover} iHoverCap={iHoverCap}
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
                   pmIdx={pmToIdx.get(sq)}
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
@@ -4887,7 +4915,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
@@ -5098,7 +5126,7 @@ export default function CyberChessPage(){
 
         {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
             and media pane get more breathing room. */}
-        {wsShowRight&&<div className="cc-right-panel" style={{flex:"0 1 360px",minWidth:300,maxWidth:420,display:"flex",flexDirection:"column",gap:10}}>
+        {wsShowRight&&<div className="cc-right-panel" style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}

@@ -15,9 +15,10 @@ export function ProductPageShell({ children, maxWidth = 1100, fullWidth = false 
       style={{
         maxWidth: fullWidth ? "none" : maxWidth,
         margin: "0 auto",
-        padding: fullWidth ? "16px 10px 40px" : "24px 20px 56px",
+        padding: fullWidth ? "16px 10px 0" : "24px 20px 56px",
         width: "100%",
         boxSizing: "border-box",
+        ...(fullWidth ? { display: "flex", flexDirection: "column", flex: 1 } : {}),
       }}
     >
       {children}

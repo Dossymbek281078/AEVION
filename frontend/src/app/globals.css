@@ -514,6 +514,16 @@ button:focus:not(:focus-visible) {
   }
 }
 
+/* Desktop: cc-main-row занимает всю высоту viewport чтобы не было пустоты снизу */
+.cc-main-row {
+  min-height: calc(100vh - 110px);
+  align-items: stretch !important;
+}
+/* Sidebar на десктопе тянется на всю высоту строки */
+.cc-right-panel {
+  align-self: stretch !important;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    CyberChess Mobile Layout — responsive overrides for ≤ 768px
    Key changes:
@@ -524,9 +534,9 @@ button:focus:not(:focus-visible) {
    ═══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 768px) {
-  /* Board container — fill viewport width */
-  [style*="min(1040px"] {
-    width: min(100vw - 8px, calc(100vh - 180px)) !important;
+  /* Board container — fill viewport width on mobile */
+  [style*="min(calc(100vh - 160px)"] {
+    width: min(calc(100vw - 8px), calc(100vh - 180px)) !important;
   }
 
   /* Main flex row (board + right panel) — stack vertically */
@@ -671,7 +681,7 @@ button:focus:not(:focus-visible) {
 /* Phone portrait: board takes 100% width, right panel becomes scrollable strip */
 @media (max-width: 600px) {
   /* Board max-width override — match screen exactly */
-  [style*="min(1040px"] {
+  [style*="min(calc(100vh - 160px)"] {
     width: calc(100vw - 8px) !important;
     max-width: calc(100vw - 8px) !important;
   }

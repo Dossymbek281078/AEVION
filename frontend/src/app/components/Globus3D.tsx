@@ -7,6 +7,7 @@ import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { feature as topoFeature } from "topojson-client";
 import countriesData from "world-atlas/countries-110m.json";
 import earcut from "earcut";
+import { apiUrl } from "@/lib/apiBase";
 
 type Project = {
   id: string;
@@ -701,6 +702,11 @@ export default function Globus3D({
   /** Меши overlay-слоёв — для toggle через panel без пересоздания сцены. */
   const cloudMeshRef = useRef<THREE.Mesh | null>(null);
   const heatmapGroupRef = useRef<THREE.Group | null>(null);
+  /** MOTD-highlight group (золотистый pulsing ring вокруг страны module-of-the-day). */
+  const motdGroupRef = useRef<THREE.Group | null>(null);
+  const motdMatRef = useRef<THREE.LineBasicMaterial | null>(null);
+  /** Сеттер MOTD-страны: пересобирает контур внутри Three.js scope. */
+  const motdSetCountryRef = useRef<((name: string | null) => void) | null>(null);
 
   /** Tooltip-DOM для дуги; обновляем напрямую в animate. */
   const arcTooltipRef = useRef<HTMLDivElement | null>(null);
@@ -728,11 +734,16 @@ export default function Globus3D({
    * effect ниже пробрасывает `.visible` на меши через refs.
    * Сохраняем в localStorage чтобы пользователь увидел свой выбор при возврате.
    */
-  type LayerKey = "clouds" | "heatmap" | "arcs";
+  type LayerKey = "clouds" | "heatmap" | "arcs" | "motd";
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>(() => {
     if (typeof window === "undefined") {
-      return { clouds: true, heatmap: true, arcs: true };
+      return { clouds: true, heatmap: true, arcs: true, motd: true };
     }
+    let motd = true;
+    try {
+      const motdRaw = window.localStorage.getItem("aevion:globus:motd-layer");
+      if (motdRaw === "false") motd = false;
+    } catch {}
     try {
       const raw = window.localStorage.getItem("aevion:globus:layers");
       if (raw) {
@@ -741,10 +752,11 @@ export default function Globus3D({
           clouds: v.clouds !== false,
           heatmap: v.heatmap !== false,
           arcs: v.arcs !== false,
+          motd: v.motd !== undefined ? v.motd !== false : motd,
         };
       }
     } catch {}
-    return { clouds: true, heatmap: true, arcs: true };
+    return { clouds: true, heatmap: true, arcs: true, motd };
   });
   const toggleLayer = useCallback((k: LayerKey) => {
     setLayers((prev) => {
@@ -752,6 +764,12 @@ export default function Globus3D({
       if (typeof window !== "undefined") {
         try {
           window.localStorage.setItem("aevion:globus:layers", JSON.stringify(next));
+          if (k === "motd") {
+            window.localStorage.setItem(
+              "aevion:globus:motd-layer",
+              next.motd ? "true" : "false",
+            );
+          }
         } catch {}
       }
       return next;
@@ -768,7 +786,74 @@ export default function Globus3D({
       for (const a of arcsRef.current) a.line.visible = false;
     }
     // При включении arcs обратно — следующий «matches» effect перенастроит видимость.
+    // MOTD — пульсирующее золотистое кольцо вокруг страны MOTD-модуля.
+    if (motdGroupRef.current) motdGroupRef.current.visible = layers.motd;
   }, [layers]);
+
+  /**
+   * Module-of-the-day — cross-product link AEVION-hub → Globus.
+   * Один fetch на маунт; не зависит от user state. Сетевой fail = пустой стейт,
+   * фича additive — остальной globe работает как обычно.
+   */
+  type MotdInfo = {
+    id: string;
+    name: string;
+    code?: string;
+    description?: string;
+    tags?: string[];
+  };
+  const [motd, setMotd] = useState<MotdInfo | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(apiUrl("/api/aevion/module-of-the-day"), {
+          headers: { Accept: "application/json" },
+        });
+        if (!r.ok) return;
+        const json = (await r.json()) as {
+          module?: { id: string; name: string; code?: string; description?: string; tags?: string[] };
+        };
+        if (!alive || !json?.module?.id) return;
+        setMotd({
+          id: String(json.module.id),
+          name: String(json.module.name),
+          code: json.module.code,
+          description: json.module.description,
+          tags: Array.isArray(json.module.tags) ? json.module.tags : [],
+        });
+      } catch {
+        // Network/CORS issue — fail silent, layer just stays empty.
+      }
+    };
+    load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /**
+   * Country для MOTD-модуля. Источник:
+   *  1) marker registry (`markers.find(m => m.key === "project:<id>")`) — для уже отрисованных продуктов
+   *  2) projectGeo(id).country — fallback по детерм. хэшу (тот же что для маркеров)
+   * "World" обнуляется в null — пульсировать нечего (полигона нет).
+   */
+  const motdCountry = useMemo<string | null>(() => {
+    if (!motd?.id) return null;
+    // Попытка 1 — взять country из уже сматченного маркера.
+    // (markers — это useMemo ниже; на первом рендере он уже посчитан перед этим useMemo
+    // потому что React раскрывает useMemo сверху-вниз; чтобы не зависеть от порядка
+    // вычислений, используем projectGeo как источник истины — он и был seed'ом для маркеров.)
+    const g = projectGeo(motd.id);
+    const c = (g.country || "").trim();
+    if (!c || c === "World") return null;
+    return c;
+  }, [motd]);
+
+  /** Прокидываем имя страны в Three.js сеттер, когда меняется motdCountry или scene reset. */
+  useEffect(() => {
+    motdSetCountryRef.current?.(layers.motd ? motdCountry : null);
+  }, [motdCountry, layers.motd]);
 
   /** Локаль для отображения country names. */
   const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
@@ -1681,6 +1766,65 @@ export default function Globus3D({
 
     selectedCountryVizRef.current = setSelectedCountryViz;
 
+    // MOTD-country highlight — золотистое pulsing-кольцо вокруг страны
+    // module-of-the-day (определяется на клиенте через /api/aevion/module-of-the-day).
+    // Дороже чем hover-outline (выше тяга к глазу), но дешевле чем selected-fill
+    // (без triangulated mesh-заливки — только контур).
+    const motdGroup = new THREE.Group();
+    earthGroup.add(motdGroup);
+    motdGroupRef.current = motdGroup;
+
+    const motdMat = new THREE.LineBasicMaterial({
+      color: 0xfacc15, // amber-400 — выделяется среди sky-blue selected/hover контуров
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+      linewidth: 2,
+    });
+    motdMat.blending = THREE.AdditiveBlending;
+    motdMatRef.current = motdMat;
+
+    let lastMotdCountry: string | null = null;
+    const setMotdCountry = (countryName: string | null) => {
+      if (countryName === lastMotdCountry) return;
+      lastMotdCountry = countryName;
+      while (motdGroup.children.length > 0) {
+        const ch = motdGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        motdGroup.remove(ch);
+        ch.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const aliased = aliasCountry(countryName);
+      const entry =
+        countriesCache.find((c) => c.name === countryName) ??
+        countriesCache.find((c) => c.name === aliased) ??
+        countriesCache.find((c) => aliasCountry(c.name) === aliased);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 2) continue;
+        // Контур чуть выше selected — амберовое сияние должно быть на самом верху.
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 1.15);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, motdMat);
+        line.renderOrder = 7; // выше selected (6) и hover (5)
+        motdGroup.add(line);
+      }
+    };
+
+    motdSetCountryRef.current = setMotdCountry;
+    // Если country уже знаем к моменту инициализации сцены — сразу подсветим.
+    if (motdCountry && layers.motd) setMotdCountry(motdCountry);
+
     // Ecosystem arcs — динамические дуги от маркеров выбранной страны к их
     // «сородичам» в других странах (top-3 ближайших одной категории).
     const ecosystemArcsGroup = new THREE.Group();
@@ -2275,6 +2419,13 @@ export default function Globus3D({
         countryOutlineMat.opacity = 0.6 + 0.35 * Math.sin(phase * Math.PI * 2);
       }
 
+      // MOTD-pulse — амберовое кольцо дышит длиннее (2.2с), чтобы не сливаться
+      // с hover-эффектом. Чуть ярче в пике (0.45..0.95 vs 0.25..0.95 у hover).
+      if (motdGroup.children.length > 0) {
+        const phase = (t % 2200) / 2200;
+        motdMat.opacity = 0.45 + 0.5 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2));
+      }
+
       // Прорисовка дуг от 0 до total за ARC_DRAW_MS (только при первом рендере).
       if (arcs.length > 0) {
         const arcElapsed = (t - arcStartTime) / ARC_DRAW_MS;
@@ -2696,6 +2847,10 @@ export default function Globus3D({
         case "A":
           toggleLayer("arcs");
           break;
+        case "m":
+        case "M":
+          toggleLayer("motd");
+          break;
         // Country cycling — [ / ] циклически по topCountries списку.
         case "[":
         case "]": {
@@ -2974,6 +3129,99 @@ export default function Globus3D({
           userSelect: "none",
         }}
       />
+
+      {/*
+        MOTD badge — cross-product link AEVION-hub → Globus.
+        Кликабелен (→ /<moduleId>). Подсвечивается тем же амбером, что и
+        country-ring на globe. Скрыт если layer "MOTD" выключен или country
+        у модуля отсутствует (например, randomized World marker).
+      */}
+      {!initError && motd && layers.motd ? (
+        <button
+          type="button"
+          onClick={() => {
+            onNavigateRef.current(`/${motd.id}`);
+          }}
+          aria-label={`Today's module: ${motd.name}. Open module page.`}
+          title={motdCountry
+            ? `Today's module: ${motd.name} · ${motdCountry} highlighted on globe — click to open`
+            : `Today's module: ${motd.name} — click to open`}
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            zIndex: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            maxWidth: isNarrow ? 220 : 280,
+            background: "rgba(12,18,32,0.82)",
+            border: "1px solid rgba(250,204,21,0.55)",
+            borderRadius: 999,
+            padding: "5px 12px 5px 8px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4), 0 0 18px rgba(250,204,21,0.15)",
+            cursor: "pointer",
+            color: "#fde68a",
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            textAlign: "left",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              borderRadius: 999,
+              background: "rgba(250,204,21,0.18)",
+              border: "1px solid rgba(250,204,21,0.45)",
+              fontSize: 13,
+              color: "#fde68a",
+            }}
+          >
+            ★
+          </span>
+          <span
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              minWidth: 0,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "rgba(250,204,21,0.7)",
+                lineHeight: 1,
+              }}
+            >
+              Today
+            </span>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: "#fde68a",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                lineHeight: 1.2,
+              }}
+            >
+              {motd.name}
+            </span>
+          </span>
+        </button>
+      ) : null}
 
       {!initError ? (
         <div
@@ -3578,6 +3826,7 @@ export default function Globus3D({
             { key: "clouds" as LayerKey, icon: "☁", label: "Clouds" },
             { key: "heatmap" as LayerKey, icon: "▣", label: "Heatmap" },
             { key: "arcs" as LayerKey, icon: "↝", label: "Arcs" },
+            { key: "motd" as LayerKey, icon: "★", label: "MOTD" },
           ].map((row) => {
             const active = layers[row.key];
             return (
@@ -4890,6 +5139,7 @@ export default function Globus3D({
               { keys: "C", desc: "Toggle clouds layer" },
               { keys: "H", desc: "Toggle heatmap layer" },
               { keys: "A", desc: "Toggle ecosystem arcs" },
+              { keys: "M", desc: "Toggle MOTD highlight" },
               { keys: "Esc", desc: "Close focus / sheet / help" },
               { keys: "?", desc: "Show / hide this help" },
             ].map((row) => (

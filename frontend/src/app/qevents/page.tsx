@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,8 +115,9 @@ function EventCard({
   const [showDetails, setShowDetails] = useState(false);
 
   function handleIcsDownload() {
-    // Trigger native browser download via direct navigation
-    window.location.href = apiUrl(`/api/qevents/events/${event.id}/ics`);
+    // Trigger native browser download via direct navigation.
+    // SDK helper returns the absolute URL for the iCal endpoint.
+    window.location.href = catalog.qevents.icsUrl(event.id);
   }
 
   async function handleRSVP() {
@@ -448,15 +450,13 @@ export default function QEventsPage() {
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (category) params.set("category", category);
-      params.set("when", when);
-      const url = `${apiUrl("/api/qevents/events")}?${params.toString()}`;
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const data = await resp.json() as { events: QEvent[] };
-        setEvents(data.events ?? []);
-      }
+      // SDK list() returns time-filtered events; SDK doesn't expose `category`
+      // filter, so we apply it client-side to preserve existing UX.
+      const data = await catalog.qevents.list({ when });
+      const all = (data.events ?? []) as unknown as QEvent[];
+      setEvents(category ? all.filter((e) => e.category === category) : all);
+    } catch {
+      // swallow — preserves prior behavior (no error UI on list failure)
     } finally {
       setLoading(false);
     }

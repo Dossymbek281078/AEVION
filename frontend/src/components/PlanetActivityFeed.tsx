@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 type ActivityKind = "submitted" | "certified" | "revoked" | "voted";
 
@@ -158,15 +158,14 @@ export default function PlanetActivityFeed({
     async (signal?: AbortSignal) => {
       try {
         setError(null);
-        const params = new URLSearchParams();
-        params.set("limit", String(Math.max(1, Math.min(100, limit))));
-        if (filter !== "all") params.set("kinds", filter);
-        const r = await fetch(apiUrl(`/api/planet/activity?${params.toString()}`), {
-          signal,
-          cache: "no-store",
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const data = (await r.json()) as ActivityResponse;
+        const clampedLimit = Math.max(1, Math.min(100, limit));
+        const kinds = filter !== "all" ? [filter] : undefined;
+        const data = (await catalog.planet.activity({
+          limit: clampedLimit,
+          kinds,
+        })) as unknown as ActivityResponse;
+        // SDK doesn't expose AbortSignal, so we guard state updates manually
+        // to preserve the prior abort semantics.
         if (signal?.aborted) return;
         setItems(Array.isArray(data?.items) ? data.items : []);
         setLastUpdated(Date.now());

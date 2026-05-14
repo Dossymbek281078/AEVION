@@ -284,9 +284,11 @@ export interface QEvent {
 }
 
 export interface QEventsListResponse {
-  total: number;
-  when: QEventsWhen;
-  items: QEvent[];
+  total?: number;
+  when?: QEventsWhen;
+  /** Server returns `events` (legacy); SDK aliases to both for forward-compat. */
+  events: QEvent[];
+  items?: QEvent[];
 }
 
 export interface DevHubSnippet {
@@ -334,19 +336,26 @@ export type PlanetActivityKind =
 export interface PlanetActivityItem {
   id: string;
   kind: PlanetActivityKind;
+  /** ISO timestamp — server returns `at` (aliased from createdAt/revokedAt). */
+  at: string;
+  /** Legacy/raw timestamp alias. */
+  createdAt?: string;
+  ownerId?: string | null;
+  ref?: string | null;
+  title?: string | null;
   actor?: string | null;
   subject?: string | null;
   module?: string | null;
-  title?: string;
   url?: string | null;
-  createdAt: string;
   payload?: Record<string, unknown>;
   [key: string]: unknown;
 }
 
 export interface PlanetActivityResponse {
-  total: number;
   items: PlanetActivityItem[];
+  count: number;
+  kinds: string[];
+  total?: number;
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────

@@ -4086,9 +4086,8 @@ export default function CyberChessPage(){
 
           </Card>
 
-          {/* ─── Совет дня из Coach Knowledge ─── */}
-          {(()=>{
-            // Pick a deterministic daily tip from COACH_KNOWLEDGE using date seed
+          {/* Совет дня убран с главного экрана — доступен в разделе Коуч → Knowledge */}
+          {false&&(()=>{
             const now=new Date();const seed=now.getFullYear()*10000+now.getMonth()*100+now.getDate();
             const allEntries=COACH_KNOWLEDGE.flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
             if(allEntries.length===0)return null;
@@ -4479,8 +4478,8 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Лидерборды по категориям ─── */}
-          {(()=>{
+          {/* Лидерборды убраны с главного экрана — открываются через /cyberchess/cpi/leaderboard */}
+          {false&&(()=>{
             const categories:LbCategory[]=["blitz","rapid","bullet","puzzles","rush"];
             const myName="Ты";
             // Подбираем рейтинг под категорию: blitz/rapid/bullet — общий rat,
@@ -4525,7 +4524,8 @@ export default function CyberChessPage(){
 
 
           {/* ─── Game History ─── */}
-          {savedGames.length>0&&<Card padding={0} elevation="sm">
+          {/* Мои партии убраны с главного — открываются через кнопку 📜 в sidebar */}
+          {false&&savedGames.length>0&&<Card padding={0} elevation="sm">
             <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${CC.border}`}}>
               <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Мои партии <span style={{color:CC.textDim,fontWeight:600}}>({savedGames.length})</span></span>
               <UiTabs

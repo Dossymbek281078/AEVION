@@ -282,6 +282,9 @@ const MODULES: Module[] = [
   { id: "museums-galleries",      category: "practice",  href: "/smeta-trainer/drawings-practice/museums-galleries",      icon: "🏛️", title: "Музеи и галереи",                 subtitle: "Климат 18-22°C, 50-200 лк без УФ, NOVEC, сейсмовитрины",       level: "L5", exercises: 4,  color: "amber"   },
   { id: "theaters-opera",         category: "practice",  href: "/smeta-trainer/drawings-practice/theaters-opera",         icon: "🎭", title: "Театры и оперы",                  subtitle: "RT60 1.1-3.0 с, сценическая механика, оркестровая яма",         level: "L5", exercises: 4,  color: "rose"    },
   { id: "aquapark-pool",          category: "special",   href: "/smeta-trainer/drawings-practice/aquapark-pool",          icon: "🏊", title: "Аквапарки и бассейны",            subtitle: "FINA 50×25 м, ПВХ-гидроизоляция, рециркуляция, хлорамины",     level: "L4", exercises: 4,  color: "cyan"    },
+  { id: "military-defense",       category: "special",   href: "/smeta-trainer/drawings-practice/military-defense",       icon: "🪖", title: "Военные объекты",                 subtitle: "Допуск формы №2, секретные ЭСН МО, КП усиленный монолит",       level: "L5", exercises: 4,  color: "stone"   },
+  { id: "prison-corrections",     category: "special",   href: "/smeta-trainer/drawings-practice/prison-corrections",     icon: "🔒", title: "СИЗО и ИК",                       subtitle: "ДТКС периметр, 4 м²/чел, PC-остекление, нормы КУИС",            level: "L5", exercises: 4,  color: "slate"   },
+  { id: "cemetery-crematorium",   category: "special",   href: "/smeta-trainer/drawings-practice/cemetery-crematorium",   icon: "⚱️", title: "Кладбища и крематории",           subtitle: "500 м санразрыв, Qibla ориентация, HEPA дымоочистка кремат.",    level: "L4", exercises: 4,  color: "slate"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

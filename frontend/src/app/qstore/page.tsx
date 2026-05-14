@@ -317,7 +317,7 @@ export default function QStorePage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px 80px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px 80px" }}>
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
             <div>
@@ -537,9 +537,11 @@ export default function QStorePage() {
                 padding: "6px 14px",
                 borderRadius: 20,
                 border: "2px solid #e2e8f0",
-                fontSize: 13,
+                fontSize: 16,
                 outline: "none",
                 minWidth: 140,
+                flex: "1 1 160px",
+                maxWidth: 240,
               }}
             />
           </div>
@@ -595,7 +597,7 @@ export default function QStorePage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))",
                 gap: 20,
               }}
             >

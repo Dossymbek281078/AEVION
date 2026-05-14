@@ -149,7 +149,7 @@ export default function MvpConceptBoard({
   );
 
   return (
-    <section className="mx-auto max-w-6xl px-5 pb-12">
+    <section className="mx-auto max-w-6xl px-4 pb-12 sm:px-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
@@ -195,7 +195,7 @@ export default function MvpConceptBoard({
                     value={draft[f.key] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
-                    className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
+                    className="w-full resize-none rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
                   />
                 ) : (
                   <input
@@ -203,7 +203,7 @@ export default function MvpConceptBoard({
                     value={draft[f.key] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:border-slate-500 focus:outline-none"
                   />
                 )}
               </div>

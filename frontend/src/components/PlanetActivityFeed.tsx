@@ -443,8 +443,10 @@ export default function PlanetActivityFeed({
                       fontWeight: 600,
                       fontSize: 14,
                       overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      wordBreak: "break-word",
                     }}
                     title={desc}
                   >

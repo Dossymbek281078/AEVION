@@ -7,7 +7,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 
 export default function PlanetActivityPage() {
   return (
-    <main>
+    <main style={{ overflowX: "hidden" }}>
       <ProductPageShell>
         <Wave1Nav hidePlanet />
 
@@ -25,7 +25,7 @@ export default function PlanetActivityPage() {
           </Link>
         </div>
 
-        <h1 style={{ fontSize: 30, marginBottom: 6, letterSpacing: "-0.02em" }}>
+        <h1 style={{ fontSize: "clamp(22px, 5vw, 30px)", marginBottom: 6, letterSpacing: "-0.02em" }}>
           Planet activity feed
         </h1>
         <div style={{ color: "#475569", marginBottom: 18, fontSize: 14, maxWidth: 720 }}>

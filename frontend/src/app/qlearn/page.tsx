@@ -254,7 +254,7 @@ function ContinueCard({
         display: "flex",
         flexDirection: "column",
         gap: 8,
-        minWidth: 240,
+        minWidth: 0,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -477,7 +477,7 @@ export default function QLearnPage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px 80px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px 80px" }}>
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
             <div>
@@ -539,7 +539,7 @@ export default function QLearnPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 240px), 1fr))",
                   gap: 12,
                 }}
               >
@@ -667,7 +667,7 @@ export default function QLearnPage() {
                 alignItems: "center",
                 justifyContent: "center",
                 zIndex: 1000,
-                padding: 24,
+                padding: 16,
               }}
               onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
             >
@@ -675,9 +675,11 @@ export default function QLearnPage() {
                 style={{
                   background: "#fff",
                   borderRadius: 16,
-                  padding: 28,
+                  padding: "20px clamp(16px, 4vw, 28px)",
                   width: "100%",
                   maxWidth: 480,
+                  maxHeight: "90vh",
+                  overflowY: "auto",
                   boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
                 }}
               >
@@ -689,20 +691,20 @@ export default function QLearnPage() {
                     placeholder="Course title *"
                     value={form.title}
                     onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                    style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
+                    style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 16, boxSizing: "border-box", width: "100%" }}
                   />
                   <textarea
                     placeholder="Description"
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     rows={3}
-                    style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, resize: "vertical" }}
+                    style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 16, resize: "vertical", boxSizing: "border-box", width: "100%" }}
                   />
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <select
                       value={form.category}
                       onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                      style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
+                      style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 16, minWidth: 0 }}
                     >
                       {CATEGORIES.slice(1).map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
@@ -711,7 +713,7 @@ export default function QLearnPage() {
                     <select
                       value={form.level}
                       onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))}
-                      style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
+                      style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 16, minWidth: 0 }}
                     >
                       {LEVELS.slice(1).map((l) => (
                         <option key={l.id} value={l.id}>{l.name}</option>
@@ -725,7 +727,7 @@ export default function QLearnPage() {
                     min="0"
                     step="0.01"
                     onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                    style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14 }}
+                    style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 16, boxSizing: "border-box", width: "100%" }}
                   />
                   {formError && <div style={{ color: "#dc2626", fontSize: 13 }}>{formError}</div>}
                   <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
@@ -830,7 +832,7 @@ export default function QLearnPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))",
                 gap: 20,
               }}
             >

@@ -328,8 +328,8 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
     width: "100%",
     border: "1px solid #e2e8f0",
     borderRadius: 8,
-    padding: "9px 12px",
-    fontSize: 14,
+    padding: "10px 12px",
+    fontSize: 16,
     outline: "none",
     fontFamily: "inherit",
     boxSizing: "border-box",
@@ -355,7 +355,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
         style={{
           background: "#fff",
           borderRadius: 16,
-          padding: 28,
+          padding: "20px clamp(16px, 4vw, 28px)",
           width: "100%",
           maxWidth: 480,
           maxHeight: "90vh",
@@ -612,7 +612,7 @@ export default function QEventsPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))",
             gap: 20,
           }}
         >

@@ -755,12 +755,13 @@ export default function CyberChessPage(){
   // component still see CC_LIGHT via the import alias (kept for backwards compat
   // of any module-scoped colors, though currently none use CC.* outside the fn).
   const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
-  // Apply body background so chrome around <main> matches the active theme.
+  // Apply theme globally: body background + data-cc-theme attribute (triggers CSS vars in globals.css)
   useEffect(()=>{
     if(typeof document==="undefined")return;
     const prev=document.body.style.background;
     document.body.style.background=themeMode==="dark"?CC_DARK.bg:CC_LIGHT.bg;
-    return()=>{document.body.style.background=prev};
+    document.documentElement.setAttribute("data-cc-theme",themeMode);
+    return()=>{document.body.style.background=prev;document.documentElement.removeAttribute("data-cc-theme")};
   },[themeMode]);
   // Текущий звуковой пресет (40 пресетов + молчание). Сохраняется в localStorage.
   const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
@@ -5282,7 +5283,6 @@ export default function CyberChessPage(){
                   showToast("SVG скачан — открой в браузере чтобы поделиться","success");
                 }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
               </>}
-            </div>
           </div>
           {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
               (it reads as "noise" when user is focused on the board). Shown in puzzles tab

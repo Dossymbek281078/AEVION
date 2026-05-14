@@ -34,27 +34,28 @@ const BTN_SIZE: Record<BtnSize, { pad: string; fs: number; gap: number; h: numbe
   lg: { pad: "12px 20px",fs: 15, gap: 10, h: 46 },
 };
 
+// CSS-variable-driven styles so Btn adapts to dark/light theme (data-cc-theme on <html>)
 const variantStyle = (v: BtnVariant, active: boolean): React.CSSProperties => {
   const base: React.CSSProperties = { border: `1px solid transparent` };
   if (v === "primary") return { ...base,
-    background: active ? COLOR.brandHover : COLOR.brand,
-    color: COLOR.textInv, borderColor: active ? COLOR.brandHover : COLOR.brand,
-    boxShadow: active ? "none" : SHADOW.sm };
+    background: active ? "var(--cc-brand-hover)" : "var(--cc-brand)",
+    color: "var(--cc-text-inv)", borderColor: active ? "var(--cc-brand-hover)" : "var(--cc-brand)",
+    boxShadow: active ? "none" : "var(--cc-shadow-sm)" };
   if (v === "secondary") return { ...base,
-    background: active ? COLOR.surface3 : COLOR.surface1, color: COLOR.text,
-    borderColor: COLOR.border };
+    background: active ? "var(--cc-surface3)" : "var(--cc-surface1)", color: "var(--cc-text)",
+    borderColor: "var(--cc-border)" };
   if (v === "ghost") return { ...base,
-    background: active ? COLOR.surface3 : "transparent", color: COLOR.text,
+    background: active ? "var(--cc-surface3)" : "transparent", color: "var(--cc-text)",
     borderColor: "transparent" };
   if (v === "danger") return { ...base,
-    background: active ? "#b91c1c" : COLOR.danger, color: COLOR.textInv,
-    borderColor: COLOR.danger };
+    background: active ? "#b91c1c" : "var(--cc-danger)", color: "var(--cc-text-inv)",
+    borderColor: "var(--cc-danger)" };
   if (v === "gold") return { ...base,
-    background: active ? "#b45309" : COLOR.gold, color: COLOR.textInv,
-    borderColor: COLOR.gold };
+    background: active ? "#b45309" : "var(--cc-gold)", color: "var(--cc-text-inv)",
+    borderColor: "var(--cc-gold)" };
   if (v === "accent") return { ...base,
-    background: active ? "#6d28d9" : COLOR.accent, color: COLOR.textInv,
-    borderColor: COLOR.accent };
+    background: active ? "#6d28d9" : "var(--cc-accent)", color: "var(--cc-text-inv)",
+    borderColor: "var(--cc-accent)" };
   return base;
 };
 
@@ -110,12 +111,12 @@ export function Card({ children, padding = SPACE[4], radius = RADIUS.lg,
   { children: React.ReactNode; padding?: number; radius?: number;
     elevation?: "none"|"sm"|"md"|"lg"; tone?: "surface1"|"surface2"|"surface3"|"glass";
     style?: React.CSSProperties; onClick?: () => void; className?: string; }) {
-  const bg = tone === "glass" ? COLOR.surfaceGlass :
-             tone === "surface2" ? COLOR.surface2 :
-             tone === "surface3" ? COLOR.surface3 : COLOR.surface1;
+  const bg = tone === "glass" ? "var(--cc-surface-glass,rgba(38,36,33,0.85))" :
+             tone === "surface2" ? "var(--cc-surface2)" :
+             tone === "surface3" ? "var(--cc-surface3)" : "var(--cc-surface1)";
   const sh = elevation === "none" ? "none" :
              elevation === "lg" ? SHADOW.lg :
-             elevation === "md" ? SHADOW.md : SHADOW.sm;
+             elevation === "md" ? SHADOW.md : "var(--cc-shadow-sm)";
   // When className is set (e.g. cc-launch-card), the CSS class owns hover/transition,
   // so we skip the JS mouseenter/mouseleave inline transform handlers — otherwise
   // the inline writes win and the CSS hover is dead.
@@ -135,7 +136,7 @@ export function Card({ children, padding = SPACE[4], radius = RADIUS.lg,
         el.style.boxShadow = sh;
       } : undefined}
       style={{
-        background: bg, border: `1px solid ${COLOR.border}`,
+        background: bg, border: `1px solid var(--cc-border)`,
         borderRadius: radius, padding, boxShadow: sh,
         backdropFilter: tone === "glass" ? "blur(10px)" : undefined,
         WebkitBackdropFilter: tone === "glass" ? "blur(10px)" : undefined,
@@ -158,12 +159,12 @@ export function Badge({ tone = "neutral", size = "sm", children, icon, style }:
   { tone?: BadgeTone; size?: "xs"|"sm"|"md"; children?: React.ReactNode;
     icon?: React.ReactNode; style?: React.CSSProperties }) {
   const pal: Record<BadgeTone, { bg: string; fg: string }> = {
-    neutral: { bg: COLOR.surface3, fg: COLOR.textDim },
-    brand:   { bg: COLOR.brandSoft, fg: COLOR.brand },
-    accent:  { bg: COLOR.accentSoft, fg: COLOR.accent },
-    gold:    { bg: COLOR.goldSoft, fg: COLOR.gold },
-    danger:  { bg: COLOR.dangerSoft, fg: COLOR.danger },
-    info:    { bg: COLOR.infoSoft, fg: COLOR.info },
+    neutral: { bg: "var(--cc-surface3)", fg: "var(--cc-text-dim)" },
+    brand:   { bg: "var(--cc-brand-soft)", fg: "var(--cc-brand)" },
+    accent:  { bg: "var(--cc-accent-soft)", fg: "var(--cc-accent)" },
+    gold:    { bg: "rgba(var(--cc-gold-rgb,217,119,6),0.12)", fg: "var(--cc-gold)" },
+    danger:  { bg: "rgba(var(--cc-danger-rgb,220,38,38),0.1)", fg: "var(--cc-danger)" },
+    info:    { bg: "rgba(var(--cc-info-rgb,37,99,235),0.1)", fg: "var(--cc-info)" },
   };
   const sz = size === "xs" ? { pad: "2px 6px", fs: 11 } :
              size === "md" ? { pad: "4px 10px", fs: 13 } :

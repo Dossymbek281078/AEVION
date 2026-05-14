@@ -11,6 +11,50 @@
   --aevion-accent-hover: #0f766e;
   --aevion-navy: #0f172a;
   --aevion-muted: #64748b;
+
+  /* CyberChess theme vars — light (default) */
+  --cc-bg: #f5f6fa;
+  --cc-surface1: #ffffff;
+  --cc-surface2: #fafbfd;
+  --cc-surface3: #f1f2f7;
+  --cc-text: #0f172a;
+  --cc-text-dim: #5b6474;
+  --cc-text-mute: #8b94a3;
+  --cc-text-inv: #ffffff;
+  --cc-border: #e4e7ee;
+  --cc-border-strong: #cbd0db;
+  --cc-brand: #059669;
+  --cc-brand-hover: #047857;
+  --cc-brand-soft: rgba(5,150,105,0.1);
+  --cc-accent: #7c3aed;
+  --cc-accent-soft: rgba(124,58,237,0.1);
+  --cc-gold: #d97706;
+  --cc-danger: #dc2626;
+  --cc-info: #2563eb;
+  --cc-shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.03);
+}
+
+/* CyberChess dark mode via data-theme attribute */
+:root[data-cc-theme="dark"] {
+  --cc-bg: #161512;
+  --cc-surface1: #262421;
+  --cc-surface2: #1e1c19;
+  --cc-surface3: #100f0d;
+  --cc-text: #bababa;
+  --cc-text-dim: #8b8987;
+  --cc-text-mute: #5d5b59;
+  --cc-text-inv: #161512;
+  --cc-border: #3d3b39;
+  --cc-border-strong: #5d5b59;
+  --cc-brand: #759900;
+  --cc-brand-hover: #88b300;
+  --cc-brand-soft: rgba(117,153,0,0.2);
+  --cc-accent: #d1a227;
+  --cc-accent-soft: rgba(209,162,39,0.2);
+  --cc-gold: #e8a908;
+  --cc-danger: #e04040;
+  --cc-info: #4990a4;
+  --cc-shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
 }
 
 @theme inline {

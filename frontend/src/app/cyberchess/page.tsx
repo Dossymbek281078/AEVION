@@ -5233,28 +5233,29 @@ export default function CyberChessPage(){
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
+          {/* Tools toolbar — compact icon row, без заголовка */}
           <div style={{
-            padding:"10px 12px",borderRadius:RADIUS.lg,
+            display:"flex",gap:4,flexWrap:"wrap",
+            padding:"6px 8px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
-            display:"flex",flexDirection:"column",gap:8
           }}>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const}}>
-              <span style={{fontSize:14}}>🛠</span>Инструменты
-            </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <Btn size="sm" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
-                title="Подсветка контроля доски"
-                style={showThreatMap?{background:"linear-gradient(135deg,#fef2f2,#ecfdf5)",color:"#0f172a",borderColor:"#a7f3d0",fontWeight:900}:undefined}>
-                {showThreatMap?"🌡 Heatmap ON":"🌡 Heatmap"}
-              </Btn>
-              <Btn size="sm" variant="secondary" onClick={async()=>{
-                try{
-                  const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
-                  showToast(`🔊 ${text}`,"info");
-                }catch{showToast("Голос недоступен","error")}
-              }} title="Chessy объяснит позицию голосом"
-                style={{background:"linear-gradient(135deg,#f0fdfa,#ccfbf1)",color:"#115e59",borderColor:"#5eead4"}}>🔊 Whisper</Btn>
-              {savedGames.length>0&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+            <button onClick={()=>sShowThreatMap(v=>!v)} title="Heatmap контроля доски"
+              style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                background:showThreatMap?CC.brandSoft:CC.surface2,
+                color:showThreatMap?CC.brand:CC.textDim}}>
+              🌡 Heatmap
+            </button>
+            <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast("Голос недоступен","error")}}}
+              title="Голосовой анализ позиции"
+              style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                background:CC.surface2,color:CC.textDim}}>
+              🔊 Whisper
+            </button>
+            {savedGames.length>0&&<button onClick={()=>sGamesModalOpen(true)}
+              style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                background:CC.surface2,color:CC.textDim}}>
+              📜 {savedGames.length}
+            </button>}
               {over&&fenHist.length>2&&<>
                 <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);

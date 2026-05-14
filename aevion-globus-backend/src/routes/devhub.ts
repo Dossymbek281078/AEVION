@@ -1675,3 +1675,69 @@ devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
   const missing = required.filter((key) => !(key in project!.envVars));
   res.json({ valid: missing.length === 0, missing });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Media (ElevenLabs TTS)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// POST /api/devhub/media/tts — text-to-speech via ElevenLabs
+devhubRouter.post("/media/tts", async (req, res) => {
+  const { text, voice = "Rachel" } = req.body || {};
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return res.status(400).json({ error: "text is required" });
+  }
+  if (text.trim().length > 5000) {
+    return res.status(400).json({ error: "text too long (max 5000 chars)" });
+  }
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+      setupUrl: "https://elevenlabs.io/api",
+    });
+  }
+
+  // Map voice name → ElevenLabs voice ID (common voices)
+  const VOICE_IDS: Record<string, string> = {
+    Rachel: "21m00Tcm4TlvDq8ikWAM",
+    Adam:   "pNInz6obpgDQGcFmaJgB",
+    Antoni: "ErXwobaYiN019PkySvjV",
+    Arnold: "VR6AewLTigWG4xSOukaG",
+    Bella:  "EXAVITQu4vr4xnSDxMaL",
+    Domi:   "AZnzlk1XvdvUeBnXmlld",
+    Elli:   "MF3mGyEYCl7XYWbV9V6O",
+    Josh:   "TxGEqnHWrfWFTfGW9XjX",
+    Sam:    "yoZ06aMxZJJ28mfd3POQ",
+  };
+  const voiceId = VOICE_IDS[voice as string] ?? VOICE_IDS["Rachel"];
+
+  try {
+    const elResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text: text.trim(),
+        model_id: "eleven_monolingual_v1",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+
+    if (!elResp.ok) {
+      const errText = await elResp.text();
+      return res.status(elResp.status).json({ error: `ElevenLabs error: ${errText.slice(0, 200)}` });
+    }
+
+    const audioBuffer = Buffer.from(await elResp.arrayBuffer());
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", audioBuffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(audioBuffer);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "TTS generation failed" });
+  }
+});

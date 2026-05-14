@@ -274,6 +274,11 @@ const MODULES: Module[] = [
   { id: "glazing-works",          category: "finishing", href: "/smeta-trainer/drawings-practice/glazing-works",          icon: "🪟", title: "Стекольные работы",               subtitle: "6 видов стекла, витражи, стеклопакеты 1/2/3-кам, смарт-стекло", level: "L3", exercises: 4,  color: "sky"     },
   { id: "natural-stone",          category: "finishing", href: "/smeta-trainer/drawings-practice/natural-stone",          icon: "💎", title: "Облицовка натуральным камнем",    subtitle: "Гранит/мрамор/травертин, ЭСН Сб.11, навесные системы",         level: "L4", exercises: 4,  color: "stone"   },
   { id: "special-finishes",       category: "finishing", href: "/smeta-trainer/drawings-practice/special-finishes",       icon: "✨", title: "Специальные виды отделки",        subtitle: "Венецианка, микроцемент, сусальное золото, роспись, резьба",    level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── Специализированные здания ──
+  { id: "high-rise-buildings",    category: "structure", href: "/smeta-trainer/drawings-practice/high-rise-buildings",    icon: "🏢", title: "Высотные здания 30+ этажей",      subtitle: "ТМД, сейсмоизоляция, зонирование лифтов, VRF, бенчмарки",      level: "L5", exercises: 4,  color: "violet"  },
+  { id: "data-centers",           category: "tools",     href: "/smeta-trainer/drawings-practice/data-centers",           icon: "💻", title: "Дата-центры (ЦОД)",               subtitle: "Tier I-IV, PUE, NOVEC-тушение, HEPA, Qazcloud/KT примеры РК",  level: "L5", exercises: 4,  color: "slate"   },
+  { id: "clean-rooms",            category: "special",   href: "/smeta-trainer/drawings-practice/clean-rooms",            icon: "🧪", title: "Чистые комнаты (ISO 1-9)",        subtitle: "Фарм./медиц./нано, HEPA 99.97%, избыточное давление +15 Па",    level: "L5", exercises: 4,  color: "teal"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

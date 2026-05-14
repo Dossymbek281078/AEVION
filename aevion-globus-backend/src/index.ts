@@ -68,6 +68,9 @@ import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
 import { mapRealityRouter } from "./routes/mapReality";
+import { startupExchangeRouter } from "./routes/startupExchange";
+import { kidsAiContentRouter } from "./routes/kidsAiContent";
+import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -508,6 +511,12 @@ app.use("/api/qlearn", qlearnRouter);
 app.use("/api/qnews", qnewsRouter);
 // MapReality — civic signals map (MVP: signals + supports)
 app.use("/api/mapreality", mapRealityRouter);
+// StartupX — startup ideas marketplace + investor interest
+app.use("/api/startupx", startupExchangeRouter);
+// Kids AI Content — multilang lesson catalog + AI tutor
+app.use("/api/kids-ai", kidsAiContentRouter);
+// Voice of Earth — multilang music tracks + voting
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);

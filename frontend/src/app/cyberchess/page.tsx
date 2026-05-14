@@ -73,7 +73,6 @@ import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
 import MusicPlayer from "./MusicPlayer";
-import AevionProjectsBanner from "./AevionProjectsBanner";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
@@ -744,8 +743,6 @@ export default function CyberChessPage(){
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
-  const[showProjectsBanner,sShowProjectsBanner]=useState(()=>{try{return localStorage.getItem("cc_projects_banner_v1")!=="0"}catch{return true}});
-  useEffect(()=>{try{localStorage.setItem("cc_projects_banner_v1",showProjectsBanner?"1":"0")}catch{}},[showProjectsBanner]);
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
   // entire palette at render time; all ~720 CC.* references pick it up automatically.
@@ -4632,10 +4629,9 @@ export default function CyberChessPage(){
       </div>}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?268:0,boxSizing:"border-box" as const}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
-        {/* Левый рекламный баннер (проекты AEVION) — показывается до board на мобайле */}
         <div style={{flexShrink:0}}>
           {/* ─── Active Lesson banner — shown when user loaded a position from a Coach Lesson ─── */}
           {activeLesson&&<div style={{
@@ -5130,7 +5126,7 @@ export default function CyberChessPage(){
 
         {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
             and media pane get more breathing room. */}
-        {wsShowRight&&<div className="cc-right-panel" style={{flex:"1 1 0",minWidth:280,maxWidth:460,display:"flex",flexDirection:"column",gap:10}}>
+        {wsShowRight&&<div className="cc-right-panel" style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
@@ -10480,30 +10476,6 @@ ${question.trim()}`;
 
     </ProductPageShell>
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
-    {/* Проекты АЕВИОН — фиксированная правая панель. В будущем: рекламные баннеры. */}
-    {!streamerMode&&(showProjectsBanner
-      ?<div style={{
-          position:"fixed",right:0,top:58,bottom:0,zIndex:150,
-          width:260,padding:"10px 8px 16px",
-          background:"linear-gradient(180deg,#fafafe 0%,#f8f9ff 100%)",
-          borderLeft:"1px solid #e2e8f0",
-          overflowY:"auto",display:"flex",flexDirection:"column",gap:8,
-          boxShadow:"-2px 0 12px rgba(0,0,0,0.06)",
-        }}>
-          <AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>
-        </div>
-      :<button
-          onClick={()=>sShowProjectsBanner(true)}
-          title="Показать проекты АЕВИОН"
-          style={{position:"fixed",right:0,top:"50%",transform:"translateY(-50%)",zIndex:150,
-            writingMode:"vertical-rl",textOrientation:"mixed",
-            padding:"12px 5px",borderRadius:"8px 0 0 8px",
-            border:"1px solid #e2e8f0",borderRight:"none",
-            background:"#fff",color:"#7c3aed",fontSize:9,fontWeight:900,
-            letterSpacing:0.8,textTransform:"uppercase" as const,cursor:"pointer",
-            boxShadow:"-2px 0 8px rgba(0,0,0,0.06)",
-          }}>Проекты ›</button>
-    )}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

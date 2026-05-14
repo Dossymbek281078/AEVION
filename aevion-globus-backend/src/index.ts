@@ -63,6 +63,7 @@ import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
+import { startupExchangeRouter } from "./routes/startupExchange";
 import { qjobsRouter } from "./routes/qjobs";
 import { qeventsRouter } from "./routes/qevents";
 
@@ -487,6 +488,8 @@ app.use("/api/qstore", qstoreRouter);
 app.use("/api/qlearn", qlearnRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
+// StartupX — startup exchange (idea → IP-mark → investor)
+app.use("/api/startupx", startupExchangeRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);

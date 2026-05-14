@@ -1079,3 +1079,315 @@ describe("AevionCatalog v0.6 shared infra", () => {
     expect(cat.planet).toBeDefined();
   });
 });
+
+// ── v0.7: QCoreAI ──────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qcoreai (v0.7)", () => {
+  it("providers() → GET /api/qcoreai/providers", async () => {
+    const body = {
+      providers: [
+        { id: "openai", name: "OpenAI", enabled: true, models: ["gpt-4o"] },
+        { id: "anthropic", name: "Anthropic", enabled: true, models: ["claude-opus-4.7"] },
+      ],
+      count: 2,
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qcoreai.providers();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qcoreai/providers");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("GET");
+    expect(r.providers).toHaveLength(2);
+    expect(r.providers[0].id).toBe("openai");
+  });
+
+  it("health() → GET /api/qcoreai/health", async () => {
+    const body = {
+      status: "ok",
+      providers: { openai: { ok: true, status: 200, durationMs: 42 } },
+      timestamp: "2026-05-14T00:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qcoreai.health();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qcoreai/health");
+    expect(r.status).toBe("ok");
+  });
+
+  it("chat(...) → POST /api/qcoreai/chat with JSON body", async () => {
+    const reply = {
+      provider: "openai",
+      model: "gpt-4o",
+      message: { role: "assistant", content: "hi" },
+    };
+    const { cat, fetchMock } = makeClient({ body: reply });
+    const r = await cat.qcoreai.chat({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "hello" }],
+      temperature: 0.7,
+    });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qcoreai/chat");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>)?.["Content-Type"]).toBe(
+      "application/json",
+    );
+    const parsed = JSON.parse(String((init as { body?: string })?.body));
+    expect(parsed.provider).toBe("openai");
+    expect(parsed.model).toBe("gpt-4o");
+    expect(parsed.messages).toEqual([{ role: "user", content: "hello" }]);
+    expect(parsed.temperature).toBe(0.7);
+    expect(r).toEqual(reply);
+  });
+
+  it("chat() with empty messages throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() => cat.qcoreai.chat({ messages: [] })).toThrow(/missing messages/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.7: Multichat ────────────────────────────────────────────────────────
+
+describe("AevionCatalog.multichat (v0.7)", () => {
+  it("providerStatus() → GET /api/multichat/provider-status", async () => {
+    const body = {
+      providers: [
+        { id: "openai", name: "OpenAI", status: "online", latencyMs: 120 },
+        { id: "anthropic", name: "Anthropic", status: "online", latencyMs: 200 },
+      ],
+      generatedAt: "2026-05-14T00:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.multichat.providerStatus();
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/multichat/provider-status",
+    );
+    expect(r.providers).toHaveLength(2);
+    expect(r.providers[0].status).toBe("online");
+  });
+
+  it("presets() → GET /api/multichat/presets", async () => {
+    const body = {
+      total: 1,
+      presets: [
+        { id: "brainstorm", name: "Brainstorm", providers: ["openai", "anthropic"] },
+      ],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.multichat.presets();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/multichat/presets");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("GET");
+    expect(r.presets[0].id).toBe("brainstorm");
+  });
+
+  it("launchPreset(id) → POST /api/multichat/presets/:id/launch", async () => {
+    const body = {
+      ok: true,
+      sessionId: "sess-123",
+      presetId: "brainstorm",
+      providers: ["openai", "anthropic"],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.multichat.launchPreset("brainstorm");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/multichat/presets/brainstorm/launch",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.sessionId).toBe("sess-123");
+    expect(r.ok).toBe(true);
+  });
+
+  it("launchPreset('') throws on invalid presetId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.multichat.launchPreset("")).rejects.toThrow(/invalid presetId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.7: QMedia ───────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qmedia (v0.7)", () => {
+  it("recommendations() with no opts → /api/qmedia/recommendations (no query)", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.qmedia.recommendations();
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/recommendations",
+    );
+  });
+
+  it("recommendations({ limit: 10 }) → ?limit=10", async () => {
+    const body = {
+      total: 1,
+      items: [{ id: "t1", title: "Theta Wave", durationSec: 1800 }],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.recommendations({ limit: 10 });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/recommendations?limit=10",
+    );
+    expect(r.items[0].id).toBe("t1");
+  });
+
+  it("recommendations({ limit: 999 }) clamps to ?limit=100", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.qmedia.recommendations({ limit: 999 });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/recommendations?limit=100",
+    );
+  });
+
+  it("trending() → GET /api/qmedia/trending", async () => {
+    const body = {
+      total: 2,
+      items: [
+        { id: "t1", title: "Hot 1" },
+        { id: "t2", title: "Hot 2" },
+      ],
+      window: "24h",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.trending();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qmedia/trending");
+    expect(r.items).toHaveLength(2);
+    expect(r.window).toBe("24h");
+  });
+
+  it("tracks() → GET /api/qmedia/tracks", async () => {
+    const body = { total: 1, items: [{ id: "t1", title: "Solo" }] };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.tracks();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qmedia/tracks");
+    expect(r.items[0].title).toBe("Solo");
+  });
+});
+
+// ── v0.7: Coach ────────────────────────────────────────────────────────────
+
+describe("AevionCatalog.coach (v0.7)", () => {
+  it("sessions() → GET /api/coach/sessions", async () => {
+    const body = {
+      total: 1,
+      items: [{ id: "s1", title: "Week 1 check-in", durationMin: 30 }],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.sessions();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/sessions");
+    expect(r.items[0].id).toBe("s1");
+  });
+
+  it("goals() with no opts → /api/coach/goals (no query)", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.coach.goals();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/goals");
+  });
+
+  it("goals({ completed: true }) → ?completed=true", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.coach.goals({ completed: true });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals?completed=true",
+    );
+  });
+
+  it("goals({ completed: false }) → ?completed=false", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.coach.goals({ completed: false });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals?completed=false",
+    );
+  });
+
+  it("createGoal({ title, description, dueDate }) → POST with JSON body", async () => {
+    const created = {
+      id: "g1",
+      title: "Ship v0.7",
+      description: "Add 4 sub-clients",
+      dueDate: "2026-06-01",
+      completed: false,
+    };
+    const { cat, fetchMock } = makeClient({ body: created });
+    const r = await cat.coach.createGoal({
+      title: "Ship v0.7",
+      description: "Add 4 sub-clients",
+      dueDate: "2026-06-01",
+    });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/goals");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>)?.["Content-Type"]).toBe(
+      "application/json",
+    );
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      title: "Ship v0.7",
+      description: "Add 4 sub-clients",
+      dueDate: "2026-06-01",
+    });
+    expect(r).toEqual(created);
+  });
+
+  it("createGoal without title throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() => cat.coach.createGoal({ title: "" })).toThrow(/missing title/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("createGoal with invalid dueDate throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() =>
+      cat.coach.createGoal({ title: "x", dueDate: "tomorrow" }),
+    ).toThrow(/invalid dueDate/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("completeGoal(id) → POST /api/coach/goals/:id/complete", async () => {
+    const body = {
+      ok: true,
+      goalId: "g1",
+      completed: true,
+      completedAt: "2026-05-14T10:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.completeGoal("g1");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals/g1/complete",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.completed).toBe(true);
+    expect(r.goalId).toBe("g1");
+  });
+
+  it("completeGoal('') throws on invalid goalId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.coach.completeGoal("")).rejects.toThrow(/invalid goalId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.7: sub-clients wired ────────────────────────────────────────────────
+
+describe("AevionCatalog v0.7 shared infra", () => {
+  it("new sub-clients are wired on the root client", () => {
+    const { cat } = makeClient({ body: {} });
+    expect(cat.qcoreai).toBeDefined();
+    expect(cat.multichat).toBeDefined();
+    expect(cat.qmedia).toBeDefined();
+    expect(cat.coach).toBeDefined();
+  });
+
+  it("config.headers is forwarded to v0.7 sub-client requests", async () => {
+    const fetchMock = mockFetch({ body: { providers: [], count: 0 } });
+    const cat = new AevionCatalog({
+      fetch: fetchMock as unknown as typeof fetch,
+      headers: { Authorization: "Bearer v07-token", "X-User-Id": "u7" },
+    });
+    await cat.qcoreai.providers();
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const h = (init?.headers as Record<string, string>) ?? {};
+    expect(h.Authorization).toBe("Bearer v07-token");
+    expect(h["X-User-Id"]).toBe("u7");
+    expect(h.Accept).toBe("application/json");
+  });
+});

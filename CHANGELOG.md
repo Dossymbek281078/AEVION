@@ -6,6 +6,55 @@ SHA references — see `git log` for exact commits.
 
 ---
 
+## [2026-05-14] — @aevion/catalog-client v0.7.0
+
+Extended the SDK with four more typed sub-clients wrapping endpoints
+verified live in production via `curl`.
+
+### Added
+- **QCoreAI sub-client** (`cat.qcoreai`)
+  - `providers()` → `GET /api/qcoreai/providers`
+  - `health()` → `GET /api/qcoreai/health`
+  - `chat(input)` → `POST /api/qcoreai/chat`
+- **Multichat sub-client** (`cat.multichat`)
+  - `providerStatus()` → `GET /api/multichat/provider-status`
+  - `presets()` → `GET /api/multichat/presets`
+  - `launchPreset(id)` → `POST /api/multichat/presets/:id/launch`
+- **QMedia sub-client** (`cat.qmedia`)
+  - `recommendations({ limit })` → `GET /api/qmedia/recommendations`
+  - `trending()` → `GET /api/qmedia/trending`
+  - `tracks()` → `GET /api/qmedia/tracks`
+- **Coach sub-client** (`cat.coach`)
+  - `sessions()` → `GET /api/coach/sessions`
+  - `goals({ completed })` → `GET /api/coach/goals`
+  - `createGoal({ title, description?, dueDate? })` → `POST /api/coach/goals`
+  - `completeGoal(id)` → `POST /api/coach/goals/:id/complete`
+- **13 convenience exports** against the default `api.aevion.app` backend:
+  `getQCoreAIProviders`, `getQCoreAIHealth`, `qcoreaiChat`,
+  `getMultichatPresets`, `getMultichatProviderStatus`,
+  `launchMultichatPreset`, `getQMediaRecommendations`,
+  `getQMediaTrending`, `getQMediaTracks`, `getMyCoachSessions`,
+  `getMyCoachGoals`, `createCoachGoal`, `completeCoachGoal`.
+- **New public types**: `QCoreAIProvider`, `QCoreAIProvidersResponse`,
+  `QCoreAIHealthResponse`, `QCoreAIChatRequest`, `QCoreAIChatResponse`,
+  `QCoreAIChatMessage`, `MultichatProvider`, `MultichatProviderStatus`,
+  `MultichatPreset`, `MultichatPresetsResponse`, `MultichatLaunchResponse`,
+  `QMediaTrack`, `QMediaTracksResponse`, `QMediaRecommendationsResponse`,
+  `QMediaTrendingResponse`, `CoachSession`, `CoachSessionsResponse`,
+  `CoachGoal`, `CoachGoalsResponse`, `CoachGoalCreateInput`,
+  `CoachGoalCompleteResponse`.
+
+### Tests
+- 21 new vitest cases (5 QCoreAI, 4 Multichat, 5 QMedia, 9 Coach, 2 wiring)
+  bringing total endpoints wrapped to 12 fresh endpoints with URL building,
+  HTTP method, body serialisation, query-param shaping and sync-validation
+  coverage.
+
+### Bumped
+- `packages/aevion-catalog-client/package.json` `0.6.0` → `0.7.0`
+
+---
+
 ## [2026-05-13] — Mega Session (5 blocks, 32 agents)
 
 A coordinated multi-agent session that touched HealthAI, MVP family,

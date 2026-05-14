@@ -123,6 +123,54 @@ console.log(fp.hash); // 8-char hex
 All three are single-round-trip (`findByText` + `fingerprintModule`) or two-round-trip
 (`diff`) calls. Zero crypto dependencies — djb2 is implemented inline.
 
+## New sub-clients in v0.7
+
+`v0.7.0` adds four more typed sub-clients on top of the v0.6 set. All four
+share the parent `AevionCatalog` `baseUrl`, `fetch` and `headers` config.
+
+```ts
+const cat = new AevionCatalog();
+
+// QCoreAI — LLM providers + chat
+const provs = await cat.qcoreai.providers();        // GET  /api/qcoreai/providers
+const ai    = await cat.qcoreai.health();           // GET  /api/qcoreai/health
+const reply = await cat.qcoreai.chat({              // POST /api/qcoreai/chat
+  provider: "openai",
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "hello" }],
+});
+
+// Multichat — multi-provider presets
+const status  = await cat.multichat.providerStatus(); // GET  /api/multichat/provider-status
+const presets = await cat.multichat.presets();        // GET  /api/multichat/presets
+const session = await cat.multichat.launchPreset("brainstorm");
+//                                                    // POST /api/multichat/presets/:id/launch
+
+// QMedia — recommendations + library
+const rec   = await cat.qmedia.recommendations({ limit: 10 }); // GET /api/qmedia/recommendations
+const hot   = await cat.qmedia.trending();                     // GET /api/qmedia/trending
+const all   = await cat.qmedia.tracks();                       // GET /api/qmedia/tracks
+
+// Coach — sessions + goals
+const sess  = await cat.coach.sessions();                      // GET  /api/coach/sessions
+const open  = await cat.coach.goals({ completed: false });     // GET  /api/coach/goals
+const done  = await cat.coach.goals({ completed: true });
+const goal  = await cat.coach.createGoal({                     // POST /api/coach/goals
+  title: "Ship SDK v0.7",
+  description: "Wire 4 new sub-clients",
+  dueDate: "2026-06-01",
+});
+await cat.coach.completeGoal(goal.id);                         // POST /api/coach/goals/:id/complete
+```
+
+All methods are also exported as standalone convenience functions against
+the default `https://api.aevion.app` backend: `getQCoreAIProviders`,
+`getQCoreAIHealth`, `qcoreaiChat`, `getMultichatPresets`,
+`getMultichatProviderStatus`, `launchMultichatPreset`,
+`getQMediaRecommendations`, `getQMediaTrending`, `getQMediaTracks`,
+`getMyCoachSessions`, `getMyCoachGoals`, `createCoachGoal`,
+`completeCoachGoal`.
+
 ## Module sub-clients (v0.6)
 
 `AevionCatalog` exposes typed sub-clients for individual module APIs.
@@ -195,6 +243,11 @@ import {
   getEvents, getEventIcs,
   getSnippets, createSnippet, getSnippet, starSnippet,
   getPlanetActivity,
+  // v0.7:
+  getQCoreAIProviders, getQCoreAIHealth, qcoreaiChat,
+  getMultichatPresets, getMultichatProviderStatus, launchMultichatPreset,
+  getQMediaRecommendations, getQMediaTrending, getQMediaTracks,
+  getMyCoachSessions, getMyCoachGoals, createCoachGoal, completeCoachGoal,
 } from "@aevion/catalog-client";
 
 const all   = await listCatalog();

@@ -168,7 +168,22 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | блок 5 (10 агентов) завершён, см. ниже | 2026-05-14 block-5 done |
+| _free_ | — | блок 6 (8 агентов + smoke audit + push attempt) завершён, см. ниже | 2026-05-14 block-6 done |
+
+### Завершено 2026-05-14 (parallel block 6 — 8 agents)
+
+- ✅ **SDK consumers wave 2** — qevents page + PlanetActivityFeed через `catalog.qevents/planet`; SDK types выровнены с backend shape (`events` vs `items`, `at` field)
+- ✅ **OG image generators** — `/api/qstore/og.svg?id=|seller=` + Next.js opengraph-image.tsx для /coach и /ecosystem (1200×630 ImageResponse)
+- ✅ **Documentation** — CHANGELOG.md (5-block release notes) + README "Recent updates" + docs/2026-05-14-session-summary.md
+- ✅ **Events** — CSV filters на /summary + /recent + новый GET /aggregate + админ-страница /admin/events со stacked-bar чартом
+- ✅ **Metrics** — GET /api/metrics/json (sibling of Prometheus) + process info + openapi indexed
+- ✅ **Status** — backend status.ts (incidents + subscribe endpoints) + incident timeline UI + Backend Process metrics card + auto-refresh toggle
+- ✅ **Help** — recently-updated badges + What's new digest + interactive contact form + EN/RU/KK i18n
+- ✅ **Investor/Pitch** — live registry coverage matrix + ModuleOfTheDayCard + 5-step demo stack + press kit
+
+### Smoke audit на prod Railway после block-5 deploy
+- **31/42 passed** (было 21/38 до block-5) — Railway успел задеплоить почти всё
+- Оставшиеся fails — финтех-/excluded модули + qmedia/qstore старые smoke (smoke-test предполагает новые endpoints, prod ещё догоняет)
 
 ### Завершено 2026-05-14 (parallel block 5 — 10 agents)
 

@@ -261,6 +261,11 @@ const MODULES: Module[] = [
   { id: "mkd-kapremont",          category: "process",   href: "/smeta-trainer/drawings-practice/mkd-kapremont",          icon: "🏢", title: "Капремонт МКД",                   subtitle: "10 видов работ, фонд капремонта, госсубсидии, Жил.код. 2/3",   level: "L4", exercises: 4,  color: "amber"   },
   { id: "road-repair-types",      category: "special",   href: "/smeta-trainer/drawings-practice/road-repair-types",      icon: "🛣", title: "Виды ремонта дорог",              subtitle: "6 уровней работ, СН РК 3.03-09, ЩМА-15, фрезеровка, бенчм.",   level: "L4", exercises: 4,  color: "slate"   },
   { id: "bridge-repair",          category: "special",   href: "/smeta-trainer/drawings-practice/bridge-repair",          icon: "🌉", title: "Ремонт мостов",                   subtitle: "СНиП 5.04-01, 8 элементов, водолазн. ЭСН Сб.45, FRP-усиление",  level: "L5", exercises: 4,  color: "cyan"    },
+
+  // ── Ввод в работу ──
+  { id: "commissioning-pnr",      category: "process",   href: "/smeta-trainer/drawings-practice/commissioning-pnr",      icon: "🔌", title: "Пуско-наладочные работы (ПНР)",   subtitle: "ЭСН Сб.4 ч.1/2, 8 этапов, 70 ч опробование, АСУТП 20-40%",    level: "L4", exercises: 4,  color: "yellow"  },
+  { id: "tech-connection",        category: "process",   href: "/smeta-trainer/drawings-practice/tech-connection",        icon: "⚡", title: "Технологическое присоединение",   subtitle: "ТУ от 6 сетей, Глава 6 ССР, плата ТП электр. 30 тыс. тг/кВт",  level: "L4", exercises: 4,  color: "sky"     },
+  { id: "shefmontazh",            category: "process",   href: "/smeta-trainer/drawings-practice/shefmontazh",            icon: "🔩", title: "Шефмонтаж и шефналадка",          subtitle: "Завод-изготовитель 2-10%, гарантия, иностранные спец-ты",       level: "L4", exercises: 4,  color: "lime"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

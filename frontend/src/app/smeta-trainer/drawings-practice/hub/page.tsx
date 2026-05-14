@@ -271,6 +271,9 @@ const MODULES: Module[] = [
   { id: "insulation-works",       category: "structure", href: "/smeta-trainer/drawings-practice/insulation-works",       icon: "🧱", title: "Изоляционные работы",             subtitle: "ЭСН Сб.25-27, тепло/гидро/звук, λ расчёт, 6 материалов",      level: "L3", exercises: 4,  color: "indigo"  },
   { id: "floor-types",            category: "finishing", href: "/smeta-trainer/drawings-practice/floor-types",            icon: "🪟", title: "Виды напольных покрытий",         subtitle: "8 видов (стяжка/керамогр./ламинат/паркет/наливной), ЭСН Сб.17", level: "L3", exercises: 4,  color: "amber"   },
   { id: "painting-plastering",    category: "finishing", href: "/smeta-trainer/drawings-practice/painting-plastering",    icon: "🎨", title: "Малярные и штукатурные работы",   subtitle: "ЭСН Сб.14-15, гипс/ЦПС/декор, покраска 4-5 слоёв, обои",      level: "L3", exercises: 4,  color: "fuchsia" },
+  { id: "glazing-works",          category: "finishing", href: "/smeta-trainer/drawings-practice/glazing-works",          icon: "🪟", title: "Стекольные работы",               subtitle: "6 видов стекла, витражи, стеклопакеты 1/2/3-кам, смарт-стекло", level: "L3", exercises: 4,  color: "sky"     },
+  { id: "natural-stone",          category: "finishing", href: "/smeta-trainer/drawings-practice/natural-stone",          icon: "💎", title: "Облицовка натуральным камнем",    subtitle: "Гранит/мрамор/травертин, ЭСН Сб.11, навесные системы",         level: "L4", exercises: 4,  color: "stone"   },
+  { id: "special-finishes",       category: "finishing", href: "/smeta-trainer/drawings-practice/special-finishes",       icon: "✨", title: "Специальные виды отделки",        subtitle: "Венецианка, микроцемент, сусальное золото, роспись, резьба",    level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

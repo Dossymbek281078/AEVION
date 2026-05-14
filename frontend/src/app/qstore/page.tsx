@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 interface Product {
   id: string;
@@ -220,13 +221,28 @@ export default function QStorePage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (selectedCategory) params.set("category", selectedCategory);
-      if (searchQ) params.set("q", searchQ);
-      if (sortBy) params.set("sort", sortBy);
-      const res = await fetch(apiUrl(`/api/qstore/products?${params}`));
-      const data = await res.json();
-      setProducts(data.products || []);
+      // SDK supports the `sort` parameter only. When the user applies a
+      // category filter or a search query — both server-side params the
+      // SDK doesn't expose yet — fall back to a raw fetch so behaviour
+      // stays identical to before this refactor.
+      if (selectedCategory || searchQ) {
+        const params = new URLSearchParams();
+        if (selectedCategory) params.set("category", selectedCategory);
+        if (searchQ) params.set("q", searchQ);
+        if (sortBy) params.set("sort", sortBy);
+        const res = await fetch(apiUrl(`/api/qstore/products?${params}`));
+        const data = await res.json();
+        setProducts(data.products || []);
+      } else {
+        const data = await catalog.qstore.products({
+          sort: sortBy as "popular" | "newest" | "trending" | "rating",
+        });
+        // SDK response shape: { total, sort, items }. Backend legacy used
+        // `products`. Cast through unknown — backend item shape is a
+        // superset of QStoreProduct.
+        const items = (data as unknown as { items?: Product[]; products?: Product[] });
+        setProducts(items.items || items.products || []);
+      }
     } catch {
       setProducts([]);
     } finally {
@@ -236,14 +252,12 @@ export default function QStorePage() {
 
   const fetchFeatured = useCallback(async () => {
     try {
-      const res = await fetch(apiUrl("/api/qstore/featured?limit=6"));
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await catalog.qstore.featured({ limit: 6 });
       setFeatured({
-        popular: data.popular || [],
-        newest: data.newest || [],
-        trending: data.trending || [],
-        topRated: data.topRated || [],
+        popular: (data.popular as unknown as Product[]) || [],
+        newest: (data.newest as unknown as Product[]) || [],
+        trending: (data.trending as unknown as Product[]) || [],
+        topRated: (data.topRated as unknown as Product[]) || [],
       });
     } catch {
       // ignore

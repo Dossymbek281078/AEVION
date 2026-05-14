@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -137,9 +138,16 @@ export default function DevHubPage() {
   const fetchSnippets = useCallback(async () => {
     setSnippetsLoading(true);
     try {
-      const r = await fetch(apiUrl("/api/devhub/snippets?limit=5"), { cache: "no-store" });
-      const data = await r.json();
-      setSnippets(Array.isArray(data?.snippets) ? data.snippets : []);
+      const data = await catalog.devhub.snippets({ limit: 5 });
+      // SDK returns { total, items }. Backend legacy used `snippets` —
+      // accept either to stay tolerant of mixed deployments.
+      const raw = data as unknown as { items?: Snippet[]; snippets?: Snippet[] };
+      const list = Array.isArray(raw.items)
+        ? raw.items
+        : Array.isArray(raw.snippets)
+          ? raw.snippets
+          : [];
+      setSnippets(list);
     } catch {
       setSnippetError("Failed to load snippets");
     } finally {
@@ -158,18 +166,12 @@ export default function DevHubPage() {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
-      const r = await fetch(apiUrl("/api/devhub/snippets"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: snippetForm.title.trim(),
-          content: snippetForm.content,
-          language: snippetForm.language.trim() || "plaintext",
-          tags,
-        }),
+      await catalog.devhub.createSnippet({
+        title: snippetForm.title.trim(),
+        content: snippetForm.content,
+        language: snippetForm.language.trim() || "plaintext",
+        tags,
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Failed to share snippet");
       setSnippetForm({ title: "", language: "javascript", content: "", tags: "" });
       await fetchSnippets();
     } catch (e: any) {
@@ -195,11 +197,7 @@ export default function DevHubPage() {
       arr.map((x) => (x.id === s.id ? { ...x, stars: x.stars + 1 } : x))
     );
     try {
-      const r = await fetch(apiUrl(`/api/devhub/snippets/${s.id}/star`), {
-        method: "POST",
-      });
-      if (!r.ok) throw new Error("Star failed");
-      const data = await r.json();
+      const data = await catalog.devhub.star(s.id);
       if (typeof data?.stars === "number") {
         setSnippets((arr) =>
           arr.map((x) => (x.id === s.id ? { ...x, stars: data.stars } : x))

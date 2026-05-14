@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { catalogWithToken } from "@/lib/aevionCatalog";
 
 interface Course {
   id: string;
@@ -360,21 +361,24 @@ export default function QLearnPage() {
       setBookmarks([]);
       return;
     }
-    const headers = { Authorization: `Bearer ${token}` };
-    try {
-      const [sRes, pRes, bRes] = await Promise.all([
-        fetch(apiUrl("/api/qlearn/me/streak"), { headers }),
-        fetch(apiUrl("/api/qlearn/me/progress"), { headers }),
-        fetch(apiUrl("/api/qlearn/me/bookmarks"), { headers }),
-      ]);
-      if (sRes.ok) setStreak(await sRes.json());
-      if (pRes.ok) setProgress(await pRes.json());
-      if (bRes.ok) {
-        const data = await bRes.json();
-        setBookmarks(data.bookmarks || []);
-      }
-    } catch {
-      // ignore — keep previous state
+    const client = catalogWithToken(token);
+    // Each call is awaited independently with allSettled so a single
+    // failed sub-endpoint doesn't drop the other two. Behaviour
+    // preserved: state setters only fire on success, errors swallowed.
+    const [sRes, pRes, bRes] = await Promise.allSettled([
+      client.qlearn.streak(),
+      client.qlearn.progress(),
+      client.qlearn.bookmarks(),
+    ]);
+    if (sRes.status === "fulfilled") {
+      setStreak(sRes.value as unknown as StreakInfo);
+    }
+    if (pRes.status === "fulfilled") {
+      setProgress(pRes.value as unknown as ProgressOverview);
+    }
+    if (bRes.status === "fulfilled") {
+      const data = bRes.value as unknown as { bookmarks?: BookmarkItem[]; items?: BookmarkItem[] };
+      setBookmarks(data.bookmarks || data.items || []);
     }
   }, []);
 
@@ -395,19 +399,18 @@ export default function QLearnPage() {
       return;
     }
     const isBookmarked = bookmarkedIds.has(courseId);
+    const client = catalogWithToken(token);
     try {
-      const res = await fetch(apiUrl(`/api/qlearn/courses/${courseId}/bookmark`), {
-        method: isBookmarked ? "DELETE" : "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        fetchPersonal();
+      if (isBookmarked) {
+        await client.qlearn.unbookmark(courseId);
       } else {
-        const d = await res.json().catch(() => ({}));
-        setNotice(d.error || "Bookmark action failed");
+        await client.qlearn.bookmark(courseId);
       }
-    } catch {
-      setNotice("Network error");
+      fetchPersonal();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Bookmark action failed";
+      // SDK throws on non-OK status; reuse same notice copy as before.
+      setNotice(msg.startsWith("AevionCatalog") ? "Bookmark action failed" : msg);
     }
   };
 

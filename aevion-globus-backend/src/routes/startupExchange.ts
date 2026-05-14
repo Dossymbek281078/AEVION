@@ -6,6 +6,12 @@ import {
   ensureStartupExchangeTables,
   isStartupExchangeDbReady,
 } from "../lib/ensureStartupExchangeTables";
+import {
+  callProvider,
+  pickConfiguredProvider,
+  getProviders,
+  type ChatMessage,
+} from "../services/qcoreai/providers";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +23,7 @@ const pool = getPool();
 
 const generalLimiter = rateLimit({ windowMs: 60_000, max: 30, keyPrefix: "startupx:general", message: "rate_limited" });
 const postLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "startupx:post", message: "rate_limited" });
+const aiScoreLimiter = rateLimit({ windowMs: 60_000, max: 3, keyPrefix: "startupx:aiscore", message: "rate_limited" });
 
 export const startupExchangeRouter = Router();
 startupExchangeRouter.use(generalLimiter);
@@ -36,6 +43,15 @@ const MEM_MAX_INTERESTS = 200;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface AiScore {
+  problem: number;
+  market: number;
+  uniqueness: number;
+  stage: number;
+  potential: number;
+  summary: string;
+}
+
 interface IdeaRow {
   id: number;
   title: string;
@@ -47,6 +63,8 @@ interface IdeaRow {
   content_hash: string | null;
   visibility: string;
   created_at: string;
+  ai_score: AiScore | null;
+  ai_scored_at: string | null;
 }
 
 interface InterestRow {
@@ -64,9 +82,9 @@ const memInterests = new Map<number, InterestRow>();
 let memIdeaSeq = 1;
 let memInterestSeq = 1;
 
-function memInsertIdea(row: Omit<IdeaRow, "id" | "created_at">): IdeaRow {
+function memInsertIdea(row: Omit<IdeaRow, "id" | "created_at" | "ai_score" | "ai_scored_at">): IdeaRow {
   const id = memIdeaSeq++;
-  const full: IdeaRow = { ...row, id, created_at: new Date().toISOString() };
+  const full: IdeaRow = { ...row, id, created_at: new Date().toISOString(), ai_score: null, ai_scored_at: null };
   memIdeas.set(id, full);
   // Cap to last MEM_MAX_IDEAS records.
   if (memIdeas.size > MEM_MAX_IDEAS) {
@@ -131,6 +149,8 @@ function publicView(row: IdeaRow, interest_count?: number) {
     qright_protected: Boolean(row.qright_object_id || row.content_hash),
     visibility: row.visibility,
     created_at: row.created_at,
+    ai_score: row.ai_score ?? null,
+    ai_scored_at: row.ai_scored_at ?? null,
     ...(interest_count !== undefined ? { interest_count } : {}),
   };
 }
@@ -331,6 +351,145 @@ startupExchangeRouter.post("/ideas", postLimiter, async (req: Request, res: Resp
     idea: publicView(row),
   }, 201);
 });
+
+// ─── POST /api/startupx/ideas/:id/ai-score ───────────────────────────────────
+// Rate: 3/min (LLM is expensive). Gracefully degrades if AI unavailable.
+// Lazy-bootstraps ai_score column on first call (ADD COLUMN IF NOT EXISTS).
+
+let aiScoreColEnsured = false;
+
+async function ensureAiScoreColumn(): Promise<void> {
+  if (aiScoreColEnsured) return;
+  try {
+    await pool.query(
+      `ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS ai_score JSONB`,
+    );
+    await pool.query(
+      `ALTER TABLE startup_ideas ADD COLUMN IF NOT EXISTS ai_scored_at TIMESTAMPTZ`,
+    );
+    aiScoreColEnsured = true;
+  } catch {
+    // Non-fatal — column may already exist or pool may be unavailable.
+    aiScoreColEnsured = true;
+  }
+}
+
+function parseAiScore(text: string): AiScore | null {
+  try {
+    // Extract JSON object from the reply (model may wrap it in markdown fences).
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]) as Record<string, unknown>;
+    const num = (k: string): number => {
+      const v = Number(parsed[k]);
+      return Number.isFinite(v) ? Math.min(10, Math.max(0, v)) : 0;
+    };
+    const summary = typeof parsed.summary === "string" ? parsed.summary.slice(0, 500) : "";
+    return {
+      problem: num("problem"),
+      market: num("market"),
+      uniqueness: num("uniqueness"),
+      stage: num("stage"),
+      potential: num("potential"),
+      summary,
+    };
+  } catch {
+    return null;
+  }
+}
+
+startupExchangeRouter.post(
+  "/ideas/:id/ai-score",
+  aiScoreLimiter,
+  async (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return fail(res, "invalid_id", 400);
+
+    // ── Fetch the idea ────────────────────────────────────────────────────────
+    let idea: IdeaRow | undefined;
+
+    if (isStartupExchangeDbReady()) {
+      try {
+        await ensureAiScoreColumn();
+        const { rows } = await pool.query(
+          `SELECT * FROM startup_ideas WHERE id=$1 AND visibility='public'`,
+          [id],
+        );
+        idea = (rows as IdeaRow[])[0];
+      } catch (e) {
+        console.error("[StartupX] POST /ideas/:id/ai-score DB fetch error", e);
+      }
+    } else {
+      idea = memIdeas.get(id);
+      if (idea?.visibility !== "public") idea = undefined;
+    }
+
+    if (!idea) return fail(res, "not_found", 404);
+
+    // ── Call QCoreAI ─────────────────────────────────────────────────────────
+    const providerId = pickConfiguredProvider();
+    const configured = getProviders().find((p) => p.id === providerId)?.configured ?? false;
+
+    if (!configured || providerId === "stub") {
+      return res.status(200).json({
+        success: true,
+        data: { id, aiScore: null, error: "ai_unavailable" },
+      });
+    }
+
+    const provider = getProviders().find((p) => p.id === providerId)!;
+    const model = provider.defaultModel;
+
+    const messages: ChatMessage[] = [
+      {
+        role: "system",
+        content:
+          "Ты — эксперт по стартапам и венчурным инвестициям. Оцени стартап-идею по 5 критериям.",
+      },
+      {
+        role: "user",
+        content:
+          `Название: ${idea.title}\nОписание: ${idea.description}\nСтадия: ${idea.stage}\n\n` +
+          `Оцени по шкале 0-10: 1) Проблема 2) Рынок 3) Уникальность 4) Стадия 5) Потенциал. ` +
+          `Ответь ТОЛЬКО JSON: {"problem":N,"market":N,"uniqueness":N,"stage":N,"potential":N,"summary":"1-2 предложения"}`,
+      },
+    ];
+
+    let aiScore: AiScore | null = null;
+    const scoredAt = new Date().toISOString();
+
+    try {
+      const result = await callProvider(providerId, messages, model, 0.3);
+      aiScore = parseAiScore(result.reply);
+    } catch (e) {
+      console.error("[StartupX] QCoreAI call failed", e);
+      return res.status(200).json({
+        success: true,
+        data: { id, aiScore: null, error: "ai_unavailable" },
+      });
+    }
+
+    // ── Persist ───────────────────────────────────────────────────────────────
+    if (isStartupExchangeDbReady()) {
+      try {
+        await pool.query(
+          `UPDATE startup_ideas SET ai_score=$1, ai_scored_at=$2 WHERE id=$3`,
+          [aiScore ? JSON.stringify(aiScore) : null, scoredAt, id],
+        );
+      } catch (e) {
+        console.error("[StartupX] POST /ideas/:id/ai-score DB save error", e);
+      }
+    } else {
+      const existing = memIdeas.get(id);
+      if (existing) {
+        existing.ai_score = aiScore;
+        existing.ai_scored_at = scoredAt;
+      }
+    }
+
+    return ok(res, { id, aiScore, scoredAt });
+  },
+);
 
 // ─── POST /api/startupx/ideas/:id/interest ──────────────────────────────────
 startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Request, res: Response) => {

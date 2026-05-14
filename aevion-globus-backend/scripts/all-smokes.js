@@ -120,6 +120,10 @@ const SMOKES = [
   { name: "kids-ai", script: "kids-ai-smoke.js", readOnly: false },
   { name: "mapreality", script: "mapreality-smoke.js", readOnly: false },
   { name: "voe", script: "voe-smoke.js", readOnly: false },
+  // Wave 3 MVPs (2026-05-14) — deepsan/qpersona/qfusionai.
+  { name: "deepsan", script: "deepsan-smoke.js", readOnly: false },
+  { name: "qpersona", script: "qpersona-smoke.js", readOnly: false },
+  { name: "qfusionai", script: "qfusionai-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

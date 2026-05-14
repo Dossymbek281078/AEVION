@@ -1306,57 +1306,27 @@ export default function CyberChessPage(){
     }
     // Coach SR — surface due review reminders (1/3/7-day milestones).
     try{const due=getDueReminders();if(due.length>0)sDueReminders(due)}catch{}
-    // Load bundled puzzles first (instant), then try to expand from cloud API.
-    // Cloud API (/api-backend/puzzles) is Railway-hosted with the full Lichess CC0 DB.
-    // Falls back gracefully if offline or DB not seeded.
-    fetch("/puzzles.json")
-      .then(r=>r.json())
-      .then((bundled:Puzzle[])=>{
-        sPuzzles(bundled);
-        // Try cloud extension — if backend has more puzzles, fetch a random batch
-        // and merge (dedup by FEN). This runs in background; failure is silent.
-        const backendUrl=typeof window!=="undefined"&&window.location.hostname==="localhost"
-          ?"http://localhost:4001":"/api-backend";
-        fetch(`${backendUrl}/api/puzzles?nb=200&random=1`,{signal:AbortSignal.timeout(8000)})
-          .then(r=>r.ok?r.json():null)
-          .then(data=>{
-            if(!data||!Array.isArray(data.puzzles)||data.puzzles.length===0)return;
-            // Merge with bundled — deduplicate by FEN
-            const fenSet=new Set(bundled.map((p:Puzzle)=>p.fen));
-            const newOnes=data.puzzles.filter((p:Puzzle)=>p.fen&&!fenSet.has(p.fen));
-            if(newOnes.length>0){
-              sPuzzles(prev=>[...prev,...newOnes]);
-              console.log(`[Puzzles] +${newOnes.length} from cloud (total cloud DB: ${data.total})`);
-            }
-          })
-          .catch(()=>{/* cloud offline — bundled puzzles are sufficient */});
-      })
-      .catch(()=>sPuzzles([]));
-    fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
-      // Build FEN-indexed opening database for transposition detection
-      const map=new Map<string,OpeningIndexed>();
-      const indexed:OpeningIndexed[]=[];
-      for(const op of d){
-        try{
-          const g=new Chess();
-          const uciList=op.moves.trim().split(/\s+/);
-          for(const uci of uciList){
-            if(uci.length<4)continue;
-            g.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});
-          }
-          // FEN key: placement + active color + castling (ignore en passant, halfmove, fullmove for transposition match)
-          const parts=g.fen().split(" ");
-          const fenKey=`${parts[0]} ${parts[1]} ${parts[2]}`;
-          const entry:OpeningIndexed={...op,fenKey,plyLen:uciList.length};
-          indexed.push(entry);
-          // Keep the DEEPEST opening for each FEN key (longest move sequence wins)
-          const existing=map.get(fenKey);
-          if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
-        }catch{/* skip malformed */}
-      }
-      openingMapRef.current=map;
-      sOpeningsDb(indexed);
-    }).catch(()=>sOpeningsDb([]))
+    // Bundled puzzles — грузим сразу (нужно для Daily puzzle и Quick Puzzle на главной).
+    // Cloud API extension убрана из mount — зовём lazy только когда пользователь
+    // открывает Puzzle tab (см. отдельный useEffect ниже).
+    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
+    // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
+    const loadOpenings=()=>{
+      fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
+        const map=new Map<string,OpeningIndexed>();const indexed:OpeningIndexed[]=[];
+        for(const op of d){try{
+          const g=new Chess();const uciList=op.moves.trim().split(/\s+/);
+          for(const uci of uciList){if(uci.length<4)continue;g.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});}
+          const parts=g.fen().split(" ");const fenKey=`${parts[0]} ${parts[1]} ${parts[2]}`;
+          const entry:OpeningIndexed={...op,fenKey,plyLen:uciList.length};indexed.push(entry);
+          const existing=map.get(fenKey);if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
+        }catch{}}
+        openingMapRef.current=map;sOpeningsDb(indexed);
+      }).catch(()=>sOpeningsDb([]));
+    };
+    if(typeof window!=="undefined"&&"requestIdleCallback" in window){
+      (window as any).requestIdleCallback(loadOpenings,{timeout:6000});
+    }else{setTimeout(loadOpenings,2000);}
   },[]);
   useEffect(()=>{hR.current?.scrollTo({top:hR.current.scrollHeight,behavior:"smooth"})},[hist]);
 
@@ -1379,8 +1349,19 @@ export default function CyberChessPage(){
     }
     if(bestMatch)sCurrentOpening(bestMatch);
   },[hist,openingsDb]);
-  // Always load Stockfish for eval bar (not just for AI play)
-  useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
+  // Lazy Stockfish init: грузим WASM только когда пользователь начинает играть или
+  // открывает Analysis/Coach. На setup screen Stockfish не нужен.
+  function ensureSF(){
+    if(sfR.current)return;
+    const s=new SF();s.init();sfR.current=s;
+    const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
+    setTimeout(()=>clearInterval(c),15000);
+  }
+  // Триггер: пользователь вошёл в игру или открыл анализ/коуча
+  useEffect(()=>{
+    if(on||tab==="analysis"||tab==="coach")ensureSF();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[on,tab]);
   // Terminate Stockfish worker on unmount so the WASM process doesn't outlive the page.
   useEffect(()=>()=>{try{sfR.current?.terminate()}catch{};sfR.current=null},[]);
   // Live eval on position change.

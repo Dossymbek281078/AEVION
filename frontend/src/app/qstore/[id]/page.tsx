@@ -223,7 +223,7 @@ export default function QStoreItemPage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
-        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 24px 80px" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 16px 80px" }}>
           {/* Breadcrumb */}
           <div style={{ marginBottom: 20, fontSize: 13, color: "#64748b" }}>
             <Link href="/qstore" style={{ color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
@@ -254,14 +254,7 @@ export default function QStoreItemPage() {
           )}
 
           {/* Hero */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) 320px",
-              gap: 32,
-              marginBottom: 32,
-            }}
-          >
+          <div className="qstore-hero-grid" style={{ marginBottom: 32 }}>
             {/* Left: image + description */}
             <div>
               {product.previewUrl ? (
@@ -371,13 +364,12 @@ export default function QStoreItemPage() {
             {/* Right: purchase card */}
             <div>
               <div
+                className="qstore-purchase-card"
                 style={{
                   background: "#fff",
                   border: "1.5px solid #e2e8f0",
                   borderRadius: 14,
                   padding: 24,
-                  position: "sticky",
-                  top: 24,
                 }}
               >
                 <div
@@ -421,16 +413,35 @@ export default function QStoreItemPage() {
                   <div style={{ marginBottom: 6 }}>
                     <span style={{ color: "#94a3b8" }}>Seller:</span>{" "}
                     <Link
-                      href={`/qstore?seller=${encodeURIComponent(product.sellerId)}`}
+                      href={`/qstore/seller/${encodeURIComponent(product.sellerId)}`}
                       style={{ color: "#0d9488", fontWeight: 600, textDecoration: "none" }}
                     >
                       {product.sellerId.slice(0, 12)}…
                     </Link>
                   </div>
-                  <div>
+                  <div style={{ marginBottom: 10 }}>
                     <span style={{ color: "#94a3b8" }}>Sales:</span>{" "}
                     <span style={{ fontWeight: 600, color: "#374151" }}>{product.salesCount}</span>
                   </div>
+                  <Link
+                    href={`/qstore/seller/${encodeURIComponent(product.sellerId)}`}
+                    style={{
+                      display: "inline-block",
+                      width: "100%",
+                      textAlign: "center",
+                      padding: "8px 0",
+                      borderRadius: 8,
+                      border: "1px solid #cbd5e1",
+                      background: "#f8fafc",
+                      color: "#0d9488",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      textDecoration: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    View seller profile →
+                  </Link>
                 </div>
               </div>
             </div>
@@ -564,6 +575,26 @@ export default function QStoreItemPage() {
           </section>
         </div>
       </ProductPageShell>
+      <style jsx>{`
+        .qstore-hero-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 320px;
+          gap: 32px;
+        }
+        .qstore-purchase-card {
+          position: sticky;
+          top: 24px;
+        }
+        @media (max-width: 768px) {
+          .qstore-hero-grid {
+            grid-template-columns: 1fr;
+            gap: 20px;
+          }
+          .qstore-purchase-card {
+            position: static;
+          }
+        }
+      `}</style>
     </>
   );
 }

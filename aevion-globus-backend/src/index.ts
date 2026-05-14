@@ -23,6 +23,7 @@ import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -375,6 +376,15 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/checkout/subscriptions/count": {
         get: { summary: "Total provisioned subscriptions count" },
       },
+      "/api/pricing/provisioning/history": {
+        get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
+      },
+      "/api/pricing/provisioning/stats": {
+        get: { summary: "Aggregate provisioning stats: total, byTier, last7d, trialsActive, recent" },
+      },
+      "/api/pricing/provisioning/healthz": {
+        get: { summary: "Provisioning subsystem health: storage path, email mode" },
+      },
       "/api/pricing/roadmap": {
         get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
@@ -423,6 +433,7 @@ app.use("/api/ztide", ztideRouter);
 app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth

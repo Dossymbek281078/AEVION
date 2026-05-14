@@ -168,7 +168,20 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | блок 4 (8 агентов) завершён, см. ниже | 2026-05-14 block-4 done |
+| _free_ | — | блок 5 (10 агентов) завершён, см. ниже | 2026-05-14 block-5 done |
+
+### Завершено 2026-05-14 (parallel block 5 — 10 agents)
+
+- ✅ **Planning** — `/eta` countdown endpoint + EtaCountdown widget + ShareButton (применяется к 14 planning landings)
+- ✅ **Auth UX** — email validation + password strength meter + JWT session-expiry chip + OAuth providers list + /auth/success
+- ✅ **Provisioning** — `/api/pricing/provisioning/{history,stats,healthz}` + /pricing/provisioning UI
+- ✅ **ApiKeys** — PATCH /:id (rename) + GET /:id/usage (quota meter) + inline rename UI + expandable usage panel
+- ✅ **Modules** — GET /:id/history (sparkline data) + AutoRefreshToggle 30s
+- ✅ **Pricing GTM** — /api/pricing/faq (15Q's, 5 categories) + /social-proof (live counter) + category-filtered FAQ
+- ✅ **SDK consumers** — /qstore + /qlearn + /devhub переключены на @aevion/catalog-client v0.6
+- ✅ **SEO/JSON-LD** — 6 layouts (Product/ProfilePage/CollectionPage/WebApplication) с BreadcrumbList
+- ✅ **E2E Playwright** — 5 spec файлов (qstore/qlearn/qevents/devhub/planet) с 35+ assertions
+- ⚠️ **Globus + QShield** — продолжают висеть локально, OAuth scope не обновлён
 
 ### Завершено 2026-05-14 (parallel block 4 — 8 agents)
 

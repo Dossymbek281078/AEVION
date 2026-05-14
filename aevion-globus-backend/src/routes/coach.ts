@@ -1,4 +1,4 @@
-// AEVION CyberChess — AI Coach proxy + session/goal tracking (v36)
+// AEVION CyberChess — AI Coach proxy + session/goal tracking (v37)
 //
 // v35:
 // - Default model upgraded from Haiku 4.5 → Sonnet 4.6 for stronger chess reasoning.
@@ -16,9 +16,23 @@
 // - Both surfaces accept anonymous traffic (sessionId scoped to an opaque clientId in body)
 //   or Bearer-attributed traffic. Bearer takes precedence when present so multi-device
 //   replay works.
+//
+// v37:
+// - SECURITY: Removed `getOwnerKey` helper which accepted ownerKey from Bearer header
+//   OR `body.clientId` OR `query.clientId`. The clientId fallback let any caller spoof
+//   another student's ownerKey by passing their opaque clientId — anonymous attribution
+//   masquerading as authentication. Migrated every owner-scoped endpoint
+//   (/sessions/*, /goals/*) to the `requireAuth` JWT middleware (aligned with
+//   QSign v2, QRight royalties, planet compliance). `ownerKey` is now always
+//   `req.auth.sub` from a verified JWT.
+// - /chat and /health remain public — /chat is a stateless Anthropic proxy with
+//   no owner-keyed state to protect, and it's consumed by CyberChess board UI
+//   which has its own session lifecycle separate from Coach. Abuse mitigation
+//   for /chat belongs in a rate-limiter layer (TODO), not auth gating.
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "crypto";
+import { requireAuth } from "../lib/authJwt";
 
 export const coachRouter = Router();
 
@@ -47,7 +61,7 @@ const MAX_GOALS = 5000;
 
 type CoachSession = {
   id: string;
-  ownerKey: string;        // Bearer-derived OR clientId (opaque)
+  ownerKey: string;        // JWT.sub — stable per user across devices
   topic: string;
   startingFen?: string;
   startedAt: string;
@@ -73,26 +87,6 @@ type CoachGoal = {
 const sessions = new Map<string, CoachSession>();
 const goals = new Map<string, CoachGoal>();
 
-/** Derive a stable ownerKey from Bearer token, body.clientId, or ?clientId=.
- *  Anonymous traffic still gets scoped data — just not cross-device. */
-function getOwnerKey(req: Request): string {
-  const auth = req.header("authorization") || "";
-  if (auth.toLowerCase().startsWith("bearer ")) {
-    // The full token isn't a user id, but it's stable per session and we never
-    // store anything truly sensitive against it. When QRight-auth lands, swap
-    // this for the decoded JWT.sub.
-    return `bearer:${auth.slice(7).trim().slice(0, 64)}`;
-  }
-  const body = (req.body || {}) as { clientId?: string };
-  const fromBody = typeof body.clientId === "string" ? body.clientId.trim().slice(0, 64) : "";
-  if (fromBody) return `client:${fromBody}`;
-  const fromQuery = typeof req.query.clientId === "string"
-    ? req.query.clientId.trim().slice(0, 64)
-    : "";
-  if (fromQuery) return `client:${fromQuery}`;
-  return "anon";
-}
-
 function trimStore<T>(store: Map<string, T>, max: number) {
   if (store.size <= max) return;
   // Drop oldest keys (insertion order). Map preserves it.
@@ -104,7 +98,10 @@ function trimStore<T>(store: Map<string, T>, max: number) {
   }
 }
 
-// ─── /chat — Anthropic proxy (unchanged from v35) ─────────────────────────────
+// ─── /chat — Anthropic proxy (public; stateless) ─────────────────────────────
+// Not auth-gated: stateless proxy with no owner-keyed state to protect.
+// CyberChess board UI consumes this without a JWT (separate auth surface).
+// Abuse / cost mitigation belongs in a rate-limiter, not here.
 coachRouter.post("/chat", async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -201,10 +198,11 @@ coachRouter.post("/chat", async (req: Request, res: Response) => {
 // ─── /sessions — coaching session lifecycle ───────────────────────────────────
 
 /** POST /sessions/start
- *  Body: { topic: string, startingFen?: string, clientId?: string }
+ *  Auth: Bearer required.
+ *  Body: { topic: string, startingFen?: string }
  *  Returns: { session } */
-coachRouter.post("/sessions/start", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.post("/sessions/start", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const { topic, startingFen } = (req.body || {}) as {
     topic?: string;
     startingFen?: string;
@@ -236,10 +234,11 @@ coachRouter.post("/sessions/start", (req: Request, res: Response) => {
 });
 
 /** POST /sessions/:id/end
+ *  Auth: Bearer required.
  *  Body: { notes?: string, messageCount?: number }
  *  Returns: { session } */
-coachRouter.post("/sessions/:id/end", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.post("/sessions/:id/end", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const session = sessions.get(String(req.params.id));
   if (!session) return res.status(404).json({ error: "Session not found" });
   if (session.ownerKey !== ownerKey) return res.status(403).json({ error: "Forbidden" });
@@ -268,9 +267,9 @@ coachRouter.post("/sessions/:id/end", (req: Request, res: Response) => {
   return res.json({ session });
 });
 
-/** GET /sessions — list current owner's sessions (newest first, max 50). */
-coachRouter.get("/sessions", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+/** GET /sessions — list current user's sessions (newest first, max 50). */
+coachRouter.get("/sessions", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const mine = [...sessions.values()]
     .filter((s) => s.ownerKey === ownerKey)
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
@@ -279,8 +278,8 @@ coachRouter.get("/sessions", (req: Request, res: Response) => {
 });
 
 /** GET /sessions/:id — single session detail. */
-coachRouter.get("/sessions/:id", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.get("/sessions/:id", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const session = sessions.get(String(req.params.id));
   if (!session) return res.status(404).json({ error: "Session not found" });
   if (session.ownerKey !== ownerKey) return res.status(403).json({ error: "Forbidden" });
@@ -290,10 +289,11 @@ coachRouter.get("/sessions/:id", (req: Request, res: Response) => {
 // ─── /goals — coaching goal tracking ─────────────────────────────────────────
 
 /** POST /goals
- *  Body: { title, description?, targetDate?, sessionId?, clientId? }
+ *  Auth: Bearer required.
+ *  Body: { title, description?, targetDate?, sessionId? }
  *  Returns: { goal } */
-coachRouter.post("/goals", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.post("/goals", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const { title, description, targetDate, sessionId } = (req.body || {}) as {
     title?: string;
     description?: string;
@@ -347,8 +347,8 @@ coachRouter.post("/goals", (req: Request, res: Response) => {
 });
 
 /** GET /goals?completed=true|false — filter mine. */
-coachRouter.get("/goals", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.get("/goals", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const completedFilter =
     typeof req.query.completed === "string"
       ? req.query.completed === "true"
@@ -362,8 +362,8 @@ coachRouter.get("/goals", (req: Request, res: Response) => {
 });
 
 /** POST /goals/:id/complete — flip to done. Idempotent. */
-coachRouter.post("/goals/:id/complete", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.post("/goals/:id/complete", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const goal = goals.get(String(req.params.id));
   if (!goal) return res.status(404).json({ error: "Goal not found" });
   if (goal.ownerKey !== ownerKey) return res.status(403).json({ error: "Forbidden" });
@@ -375,8 +375,8 @@ coachRouter.post("/goals/:id/complete", (req: Request, res: Response) => {
 });
 
 /** DELETE /goals/:id — remove. */
-coachRouter.delete("/goals/:id", (req: Request, res: Response) => {
-  const ownerKey = getOwnerKey(req);
+coachRouter.delete("/goals/:id", requireAuth, (req: Request, res: Response) => {
+  const ownerKey = req.auth!.sub;
   const goal = goals.get(String(req.params.id));
   if (!goal) return res.status(404).json({ error: "Goal not found" });
   if (goal.ownerKey !== ownerKey) return res.status(403).json({ error: "Forbidden" });
@@ -384,7 +384,7 @@ coachRouter.delete("/goals/:id", (req: Request, res: Response) => {
   return res.status(204).end();
 });
 
-// ─── Health check ─────────────────────────────────────────────────────────
+// ─── Health check (public) ────────────────────────────────────────────────
 coachRouter.get("/health", (_req: Request, res: Response) => {
   res.json({
     ok: true,

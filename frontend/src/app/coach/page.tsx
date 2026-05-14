@@ -8,12 +8,19 @@
 //   2) Goal tracker — create goals, optionally linked to the active session,
 //      mark complete, delete, filter by status.
 //
-// All requests pass an opaque `clientId` (stored in localStorage) so an
-// anonymous student keeps their data across reloads. When a Bearer token
-// is wired up, the backend prefers it over clientId.
+// v37 auth migration:
+//   - Removed opaque `clientId` cross-device proxy. The previous design let
+//     anyone forge ownership by passing another student's clientId in the
+//     body/query. The backend now requires a JWT Bearer on every owner-scoped
+//     endpoint, so every request here threads `Authorization: Bearer <token>`
+//     read from localStorage `aevion_auth_token` (the AEVION-wide standard).
+//   - If no token is present we render a "Sign in to use Coach" CTA instead
+//     of firing requests that would all 401.
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { catalogWithToken } from "@/lib/aevionCatalog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Session = {
@@ -39,16 +46,13 @@ type Goal = {
   completedAt?: string;
 };
 
-// ─── ClientId helper (stable per browser) ────────────────────────────────────
-function getOrCreateClientId(): string {
-  if (typeof window === "undefined") return "";
-  const KEY = "aevion.coach.clientId";
-  let v = window.localStorage.getItem(KEY);
-  if (!v) {
-    v = `c_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
-    window.localStorage.setItem(KEY, v);
-  }
-  return v;
+// ─── Auth helper ─────────────────────────────────────────────────────────────
+// AEVION-wide standard key (see frontend/src/lib/aevionCatalog.ts:getAuthToken).
+const AUTH_TOKEN_KEY = "aevion_auth_token";
+
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
 }
 
 // ─── Time helpers ────────────────────────────────────────────────────────────
@@ -76,7 +80,8 @@ function shortDate(iso: string): string {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function CoachPage() {
-  const [clientId, setClientId] = useState("");
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -95,54 +100,64 @@ export default function CoachPage() {
   const [goalTargetDate, setGoalTargetDate] = useState("");
   const [goalFilter, setGoalFilter] = useState<"all" | "open" | "done">("open");
 
-  // ── init clientId + load data ───────────────────────────────────────────
+  // ── load auth token once on mount ───────────────────────────────────────
   useEffect(() => {
-    setClientId(getOrCreateClientId());
+    setAuthToken(getAuthToken());
+    setAuthChecked(true);
   }, []);
 
+  // Build auth headers for fetch. Memoized so refresh callbacks stay stable.
+  const authHeaders = useMemo<HeadersInit>(() => {
+    if (!authToken) return {};
+    return { Authorization: `Bearer ${authToken}` };
+  }, [authToken]);
+
+  const authHeadersJson = useMemo<Record<string, string>>(() => {
+    const h: Record<string, string> = { "Content-Type": "application/json" };
+    if (authToken) h.Authorization = `Bearer ${authToken}`;
+    return h;
+  }, [authToken]);
+
+  const refreshAll = useCallback(async () => {
+    if (!authToken) return;
+    setError(null);
+    setLoading(true);
+    // Use the SDK's coach sub-client with the user's Bearer token for the
+    // two GET endpoints. The SDK throws "AevionCatalog GET HTTP <status>"
+    // on non-2xx responses, so we detect a 401 by inspecting the message
+    // and fall back into the sign-in gate.
+    const client = catalogWithToken(authToken).coach;
+    try {
+      const [sData, gData] = await Promise.all([client.sessions(), client.goals()]);
+      // Both endpoints return { items, total }. The SDK declares `items`
+      // but not the page-specific Session/Goal shape — these come through
+      // the open index signature unchanged.
+      const items = (sData?.items ?? []) as unknown as Session[];
+      setSessions(items);
+      setActiveSession(items.find((s) => !s.endedAt) ?? null);
+      const goalItems = (gData?.items ?? []) as unknown as Goal[];
+      setGoals(goalItems);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/HTTP 401/.test(msg)) {
+        // Token expired or invalidated server-side.
+        setAuthToken(null);
+        setError("Session expired — please sign in again.");
+      } else {
+        setError(e instanceof Error ? e.message : "Failed to load");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [authToken]);
+
   useEffect(() => {
-    if (!clientId) return;
+    if (!authToken) return;
     void refreshAll();
     // Tick the live timer once a second while an active session exists.
     const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
-
-  async function refreshAll() {
-    setError(null);
-    setLoading(true);
-    try {
-      const cidQs = encodeURIComponent(clientId);
-      const [sRes, gRes] = await Promise.all([
-        fetch(apiUrl(`/api/coach/sessions?clientId=${cidQs}`)),
-        fetch(apiUrl(`/api/coach/goals?clientId=${cidQs}`)),
-      ]);
-      if (sRes.ok) {
-        const data = await sRes.json();
-        setSessions(Array.isArray(data.items) ? data.items : []);
-        const open = (data.items as Session[] | undefined)?.find((s) => !s.endedAt) ?? null;
-        setActiveSession(open);
-      }
-      if (gRes.ok) {
-        const data = await gRes.json();
-        setGoals(Array.isArray(data.items) ? data.items : []);
-      }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Helper: list sessions/goals scoped via clientId echo. Because GET endpoints
-  // don't read a body, we POST a no-op start that fails validation but
-  // registers the owner — wasteful. Instead, do: when we create anything the
-  // server responds with that single record; we splice it locally. The
-  // page-load GET fetches the "anon" bucket on cold start.
-  //
-  // Practical UX: after the first start/create call, we drop the cold-start
-  // anon list and rebuild from local state.
+  }, [authToken, refreshAll]);
 
   async function startSession() {
     setError(null);
@@ -154,11 +169,10 @@ export default function CoachPage() {
     try {
       const res = await fetch(apiUrl(`/api/coach/sessions/start`), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeadersJson,
         body: JSON.stringify({
           topic: t,
           startingFen: startingFen.trim() || undefined,
-          clientId,
         }),
       });
       const data = await res.json();
@@ -179,10 +193,9 @@ export default function CoachPage() {
     try {
       const res = await fetch(apiUrl(`/api/coach/sessions/${activeSession.id}/end`), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeadersJson,
         body: JSON.stringify({
           notes: endingNotes.trim() || undefined,
-          clientId,
         }),
       });
       const data = await res.json();
@@ -206,13 +219,12 @@ export default function CoachPage() {
     try {
       const res = await fetch(apiUrl(`/api/coach/goals`), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeadersJson,
         body: JSON.stringify({
           title: t,
           description: goalDescription.trim() || undefined,
           targetDate: goalTargetDate || undefined,
           sessionId: activeSession?.id,
-          clientId,
         }),
       });
       const data = await res.json();
@@ -232,8 +244,8 @@ export default function CoachPage() {
     try {
       const res = await fetch(apiUrl(`/api/coach/goals/${id}/complete`), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId }),
+        headers: authHeadersJson,
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to complete goal");
@@ -247,10 +259,10 @@ export default function CoachPage() {
   async function deleteGoal(id: string) {
     setError(null);
     try {
-      const res = await fetch(
-        apiUrl(`/api/coach/goals/${id}?clientId=${encodeURIComponent(clientId)}`),
-        { method: "DELETE" },
-      );
+      const res = await fetch(apiUrl(`/api/coach/goals/${id}`), {
+        method: "DELETE",
+        headers: authHeaders,
+      });
       if (!res.ok && res.status !== 204) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to delete goal");
@@ -275,6 +287,53 @@ export default function CoachPage() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _ = tick; // touch tick so React knows to re-render every second
 
+  // ── Sign-in gate ─────────────────────────────────────────────────────────
+  // We delay the gate until we've actually checked localStorage to avoid a
+  // flash of the CTA for signed-in users during hydration.
+  if (authChecked && !authToken) {
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-100">
+        <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
+          <header className="mb-8">
+            <p className="text-xs uppercase tracking-[0.18em] text-cyan-400/80">
+              AEVION · Coach
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">
+              Sign in to use Coach
+            </h1>
+            <p className="mt-3 text-sm text-slate-400">
+              Your coaching sessions and goals are tied to your AEVION account so
+              they sync across devices and stay private. Sign in to start
+              tracking — it&apos;s free.
+            </p>
+          </header>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-lg">
+            <ul className="mb-6 space-y-2 text-sm text-slate-300">
+              <li className="flex gap-2">
+                <span className="text-cyan-400">·</span>
+                Track live coaching sessions with elapsed time and notes.
+              </li>
+              <li className="flex gap-2">
+                <span className="text-cyan-400">·</span>
+                Set goals and link them to the sessions where you worked on them.
+              </li>
+              <li className="flex gap-2">
+                <span className="text-cyan-400">·</span>
+                Pick up where you left off on any device — encrypted at rest.
+              </li>
+            </ul>
+            <Link
+              href="/auth"
+              className="inline-flex items-center rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow transition hover:bg-cyan-400 active:translate-y-px"
+            >
+              Sign in
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -285,8 +344,8 @@ export default function CoachPage() {
             Your coaching workspace
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Track live coaching sessions and the goals you set during them. All data is
-            scoped to this browser until you sign in.
+            Track live coaching sessions and the goals you set during them. Your
+            data is tied to your AEVION account and syncs across devices.
           </p>
         </header>
 

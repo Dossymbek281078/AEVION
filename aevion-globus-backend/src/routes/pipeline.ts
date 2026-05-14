@@ -2701,7 +2701,7 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
       authorName: string | null; country: string | null; city: string | null;
       contentHash: string; protectedAt: Date; verifiedCount: number;
     };
-    const { rows } = await pool.query<CertRow>(
+    const queryResult = await pool.query(
       `SELECT id, title, kind, description, "authorName", country, city,
               "contentHash", "protectedAt", COALESCE("verifiedCount", 0) AS "verifiedCount"
          FROM "IPCertificate"
@@ -2714,12 +2714,13 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
         LIMIT 200`,
       [slug, "%" + namePattern + "%"],
     );
+    const rows = queryResult.rows as CertRow[];
     if (rows.length === 0) return res.status(404).json({ error: "author not found" });
     const name = rows[0].authorName ?? namePattern;
-    const countries = [...new Set(rows.map(r => r.country).filter((c): c is string => Boolean(c)))];
+    const countries = [...new Set(rows.map((r: CertRow) => r.country).filter((c: string | null): c is string => Boolean(c)))];
     const byKind: Record<string, number> = {};
     for (const r of rows) { byKind[r.kind] = (byKind[r.kind] || 0) + 1; }
-    const totalVerifications = rows.reduce((sum, r) => sum + (Number(r.verifiedCount) || 0), 0);
+    const totalVerifications = rows.reduce((sum: number, r: CertRow) => sum + (Number(r.verifiedCount) || 0), 0);
     return res.json({
       slug, name,
       stats: {
@@ -2728,7 +2729,7 @@ pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
         lastProtectedAt: rows[0]?.protectedAt?.toISOString() ?? null,
         byKind: Object.entries(byKind).map(([kind, count]) => ({ kind, count })),
       },
-      certificates: rows.map(r => ({
+      certificates: rows.map((r: CertRow) => ({
         id: r.id, objectId: r.id, title: r.title, kind: r.kind,
         description: r.description, authorName: r.authorName,
         country: r.country, city: r.city, contentHash: r.contentHash,

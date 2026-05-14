@@ -491,14 +491,6 @@ export default function CyberChessPage(){
   const voiceRecRef=useRef<any>(null);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_theme_v1",String(boardTheme))}catch{}},[boardTheme]);
   const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
-  // T — dynamic alias к текущей теме (CC). Заменяет статичный module-level T={} чтобы
-  // переключение dark/light автоматически применялось к moves list, eval strip и т.д.
-  const T={
-    bg:CC.bg,surface:CC.surface1,border:CC.border,text:CC.text,dim:CC.textDim,
-    accent:CC.brand,gold:CC.gold,danger:CC.danger,blue:CC.info,purple:CC.accent,
-    sel:CC.sqSel,valid:CC.sqValid,cap:CC.sqCap,last:CC.sqLast,
-    chk:CC.sqCheck,pm:CC.sqPremove,pmS:CC.sqPremoveStrong,
-  };
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
   // Hover preview — показываем возможные ходы при наведении мыши (без клика, как у lichess).
@@ -763,6 +755,15 @@ export default function CyberChessPage(){
   // component still see CC_LIGHT via the import alias (kept for backwards compat
   // of any module-scoped colors, though currently none use CC.* outside the fn).
   const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
+  // T — dynamic alias к текущей теме (CC). Заменяет статичный module-level T={} чтобы
+  // переключение dark/light автоматически применялось к moves list, eval strip и т.д.
+  // ВАЖНО: должен быть после объявления CC (TDZ)
+  const T={
+    bg:CC.bg,surface:CC.surface1,border:CC.border,text:CC.text,dim:CC.textDim,
+    accent:CC.brand,gold:CC.gold,danger:CC.danger,blue:CC.info,purple:CC.accent,
+    sel:CC.sqSel,valid:CC.sqValid,cap:CC.sqCap,last:CC.sqLast,
+    chk:CC.sqCheck,pm:CC.sqPremove,pmS:CC.sqPremoveStrong,
+  };
   // Apply theme globally: body background + data-cc-theme attribute (triggers CSS vars in globals.css)
   useEffect(()=>{
     if(typeof document==="undefined")return;
@@ -3435,7 +3436,7 @@ export default function CyberChessPage(){
     </main>);
   }
 
-  return(<main style={{background:CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column"}}>
+  return(<main suppressHydrationWarning style={{background:CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column"}}>
     <ProductPageShell fullWidth><Wave1Nav/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
@@ -5311,7 +5312,9 @@ export default function CyberChessPage(){
           {/* ─── Coach Quick Actions ─── in-game heuristic-driven coach buttons. Each runs a
               deterministic position evaluation + Stockfish suggestion and shows a coach-style
               explanation card. Available in Coach tab + Play tab when game is on. */}
-          {(tab==="play"||tab==="coach")&&on&&!over&&!setup&&sfOk&&<div style={{
+          {/* Coach Quick Actions доступны без SF — "Объясни" и "Слабости" работают на эвристике.
+              "Найди план" и "Тактика" сами проверяют sfR.current?.ready() */}
+          {(tab==="play"||tab==="coach")&&on&&!over&&!setup&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.lg,
             background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
             display:"flex",flexDirection:"column",gap:8

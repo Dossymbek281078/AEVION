@@ -64,7 +64,7 @@ async function dbCreate(fields: {
   skills: string[];
   links: string[];
 }): Promise<PersonaRecord> {
-  const { rows } = await pool.query<PersonaRecord>(
+  const { rows } = await pool.query(
     `INSERT INTO qpersona_profiles
        (alias, display_name, bio, avatar_prompt, skills, links)
      VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
@@ -82,7 +82,7 @@ async function dbCreate(fields: {
 }
 
 async function dbGet(alias: string): Promise<PersonaRecord | null> {
-  const { rows } = await pool.query<PersonaRecord>(
+  const { rows } = await pool.query(
     `SELECT * FROM qpersona_profiles WHERE alias = $1`,
     [alias]
   );
@@ -107,7 +107,7 @@ async function dbUpdate(
   sets.push(`updated_at = NOW()`);
   vals.push(alias);
 
-  const { rows } = await pool.query<PersonaRecord>(
+  const { rows } = await pool.query(
     `UPDATE qpersona_profiles SET ${sets.join(", ")} WHERE alias = $${idx} RETURNING *`,
     vals
   );
@@ -115,7 +115,7 @@ async function dbUpdate(
 }
 
 async function dbList(limit: number, offset: number): Promise<PersonaRecord[]> {
-  const { rows } = await pool.query<PersonaRecord>(
+  const { rows } = await pool.query(
     `SELECT * FROM qpersona_profiles WHERE visibility = 'public'
      ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
     [limit, offset]
@@ -124,15 +124,15 @@ async function dbList(limit: number, offset: number): Promise<PersonaRecord[]> {
 }
 
 async function dbStats(): Promise<{ total: number; latest: string[] }> {
-  const { rows: totRow } = await pool.query<{ count: string }>(
+  const { rows: totRow } = await pool.query(
     `SELECT COUNT(*)::text AS count FROM qpersona_profiles`
   );
-  const { rows: latRow } = await pool.query<{ alias: string }>(
+  const { rows: latRow } = await pool.query(
     `SELECT alias FROM qpersona_profiles ORDER BY created_at DESC LIMIT 5`
   );
   return {
     total: parseInt(totRow[0]?.count ?? "0", 10),
-    latest: latRow.map((r) => r.alias),
+    latest: latRow.map((r: { alias: string }) => r.alias),
   };
 }
 

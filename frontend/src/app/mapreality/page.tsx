@@ -32,6 +32,7 @@ export default function MapRealityPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [nearbySignals, setNearbySignals] = useState<Signal[] | null>(null);
 
   // Restore alias from localStorage on mount
   useEffect(() => {
@@ -180,7 +181,73 @@ export default function MapRealityPage() {
         <SignalForm authorAlias={alias} onSubmitted={handleSubmitted} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <Filters value={filters} onChange={setFilters} countries={countries} />
+          <Filters value={filters} onChange={setFilters} countries={countries} onNearby={setNearbySignals} />
+
+          {nearbySignals !== null && (
+            <div
+              style={{
+                background: "rgba(125, 211, 252, 0.06)",
+                border: "1px solid rgba(125, 211, 252, 0.25)",
+                borderRadius: 12,
+                padding: "12px 14px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#7dd3fc" }}>
+                  Сигналы рядом (50 км) — {nearbySignals.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setNearbySignals(null)}
+                  style={{
+                    fontSize: 11,
+                    color: "#94a3b8",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "2px 6px",
+                  }}
+                >
+                  скрыть
+                </button>
+              </div>
+              {nearbySignals.length === 0 ? (
+                <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>
+                  Нет активных сигналов в радиусе 50 км от вас.
+                </p>
+              ) : (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {nearbySignals.map((s) => (
+                    <SignalCard
+                      key={s.id}
+                      signal={s}
+                      supporterAlias={alias}
+                      onSupported={(updated) =>
+                        setNearbySignals((prev) =>
+                          prev ? prev.map((x) => (x.id === updated.id ? updated : x)) : prev,
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div
             style={{

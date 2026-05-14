@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -50,6 +50,99 @@ type CatalogResponse = {
   total: number;
   items: CatalogItem[];
 };
+
+type IncidentUpdate = {
+  t: string;
+  status: "investigating" | "identified" | "monitoring" | "resolved";
+  message: string;
+};
+
+type Incident = {
+  id: string;
+  title: string;
+  severity: "minor" | "major" | "critical";
+  affected: string[];
+  startedAt: string;
+  resolvedAt: string | null;
+  updates: IncidentUpdate[];
+};
+
+type IncidentsResponse = {
+  total: number;
+  open: number;
+  items: Incident[];
+  generatedAt: string;
+};
+
+const SEVERITY_COLOR: Record<Incident["severity"], string> = {
+  minor: "#f59e0b",
+  major: "#f97316",
+  critical: "#ef4444",
+};
+
+const UPDATE_COLOR: Record<IncidentUpdate["status"], string> = {
+  investigating: "#f59e0b",
+  identified: "#3b82f6",
+  monitoring: "#8b5cf6",
+  resolved: "#10b981",
+};
+
+function relTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const diffMs = Date.now() - t;
+  const abs = Math.abs(diffMs);
+  const mins = Math.round(abs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+type ProcessMetrics = {
+  generatedAt: string;
+  process: {
+    node: string;
+    pid: number;
+    uptimeSec: number;
+    memory: {
+      heapUsedBytes: number;
+      heapTotalBytes: number;
+      rssBytes: number;
+      externalBytes: number;
+    };
+    sentryEnabled: boolean;
+  };
+  summary: Record<string, number>;
+};
+
+const AUTOREFRESH_KEY = "aevion_status_autorefresh_v1";
+
+function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)} ${units[i]}`;
+}
+
+function fmtUptime(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return "0s";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const parts: string[] = [];
+  if (d) parts.push(`${d}d`);
+  if (h || d) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(" ");
+}
 
 const STATUS_COLORS: Record<string, string> = {
   launched: "#10b981",
@@ -127,6 +220,32 @@ export default function StatusPage() {
   } | null>(null);
   const [stats, setStats] = useState<RegistryStats | null>(null);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [metrics, setMetrics] = useState<ProcessMetrics | null>(null);
+  const [incidents, setIncidents] = useState<IncidentsResponse | null>(null);
+  const [subEmail, setSubEmail] = useState<string>("");
+  const [subState, setSubState] = useState<{
+    status: "idle" | "submitting" | "ok" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(() => {
+    // Default ON — match the previous always-on behaviour. Persists across
+    // visits so an oncall who turned it off doesn't get surprised next time.
+    if (typeof window === "undefined") return true;
+    try {
+      const raw = localStorage.getItem(AUTOREFRESH_KEY);
+      return raw === null ? true : raw === "1";
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AUTOREFRESH_KEY, autoRefresh ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [autoRefresh]);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -189,18 +308,86 @@ export default function StatusPage() {
       }
     };
 
+    const tickMetrics = async () => {
+      try {
+        const res = await fetch(apiUrl("/api/metrics/json"));
+        if (!res.ok) return; // 401 if METRICS_TOKEN set — silently degrade
+        const j = (await res.json()) as ProcessMetrics;
+        if (!cancelled) setMetrics(j);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const tickIncidents = async () => {
+      try {
+        const res = await fetch(apiUrl("/api/status/incidents?limit=10"));
+        if (!res.ok) return; // silently degrade — incident surface is best-effort
+        const j = (await res.json()) as IncidentsResponse;
+        if (!cancelled) setIncidents(j);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    // First fetch always runs so the page isn't blank when auto-refresh is off.
     tick();
     tickVersion();
     tickStats();
-    timer = setInterval(tick, 30_000);
-    const statsTimer = setInterval(tickStats, 5 * 60_000);
+    tickMetrics();
+    tickIncidents();
+
+    if (autoRefresh) {
+      timer = setInterval(tick, 30_000);
+      const statsTimer = setInterval(tickStats, 5 * 60_000);
+      const metricsTimer = setInterval(tickMetrics, 30_000);
+      const incidentsTimer = setInterval(tickIncidents, 60_000);
+      return () => {
+        cancelled = true;
+        if (timer) clearInterval(timer);
+        clearInterval(statsTimer);
+        clearInterval(metricsTimer);
+        clearInterval(incidentsTimer);
+      };
+    }
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
-      clearInterval(statsTimer);
     };
-  }, []);
+  }, [autoRefresh]);
+
+  const onSubscribe = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const email = subEmail.trim().toLowerCase();
+    if (!email) return;
+    setSubState({ status: "submitting", message: "" });
+    try {
+      const res = await fetch(apiUrl("/api/status/subscribe"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string };
+      if (!res.ok || j.ok === false) {
+        const msg =
+          j.error === "invalid_email"
+            ? "That doesn't look like a valid email."
+            : j.error || `Subscribe failed (HTTP ${res.status})`;
+        setSubState({ status: "error", message: msg });
+        return;
+      }
+      setSubState({
+        status: "ok",
+        message: j.message || "Subscribed. You'll get email digests on major incidents.",
+      });
+      setSubEmail("");
+    } catch (err) {
+      setSubState({
+        status: "error",
+        message: err instanceof Error ? err.message : "Network error.",
+      });
+    }
+  };
 
   const overallColor =
     data?.status === "ok"
@@ -228,8 +415,8 @@ export default function StatusPage() {
             AEVION Status
           </h1>
           <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>
-            Live health of every product on the planet — polled every 30 seconds.
-            Last 60 polls retained locally. Catalog refreshed every 5 minutes.
+            Live health of every product on the planet — polled every 30 seconds when auto-refresh
+            is on. Last 60 polls retained locally. Catalog refreshed every 5 minutes.
           </p>
         </div>
 
@@ -315,12 +502,163 @@ export default function StatusPage() {
                   : "Connecting to /api/aevion/health…"}
             </div>
           </div>
-          <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
-            {lastFetched
-              ? new Date(lastFetched).toLocaleTimeString()
-              : ""}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace" }}>
+              {lastFetched
+                ? new Date(lastFetched).toLocaleTimeString()
+                : ""}
+            </div>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontSize: 11,
+                color: autoRefresh ? "#0d9488" : "#94a3b8",
+                cursor: "pointer",
+                userSelect: "none",
+                padding: "4px 10px",
+                borderRadius: 999,
+                background: autoRefresh ? "#ecfdf5" : "#f1f5f9",
+                border: `1px solid ${autoRefresh ? "#10b98140" : "#cbd5e1"}`,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+              }}
+              title="Toggle 30s background polling. First fetch always runs."
+            >
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                style={{ margin: 0, cursor: "pointer" }}
+              />
+              Auto-refresh
+            </label>
           </div>
         </div>
+
+        {/* Process metrics (from /api/metrics/json) */}
+        {metrics && (
+          <div
+            style={{
+              padding: "18px 22px",
+              borderRadius: 12,
+              background: "#fff",
+              border: "1px solid rgba(15,23,42,0.08)",
+              marginBottom: 22,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Backend process
+              </div>
+              <Link
+                href="/api/metrics/json"
+                style={{ fontSize: 10, color: "#0d9488", textDecoration: "none", fontFamily: "monospace" }}
+              >
+                /api/metrics/json →
+              </Link>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+              }}
+            >
+              {(() => {
+                const heapPct =
+                  metrics.process.memory.heapTotalBytes > 0
+                    ? Math.round(
+                        (metrics.process.memory.heapUsedBytes / metrics.process.memory.heapTotalBytes) *
+                          1000,
+                      ) / 10
+                    : 0;
+                const heapColor = heapPct >= 90 ? "#ef4444" : heapPct >= 70 ? "#f59e0b" : "#10b981";
+                const tiles: { label: string; value: string; sub?: string; color?: string }[] = [
+                  { label: "Uptime", value: fmtUptime(metrics.process.uptimeSec), sub: `${metrics.process.uptimeSec}s` },
+                  {
+                    label: "Heap used",
+                    value: fmtBytes(metrics.process.memory.heapUsedBytes),
+                    sub: `${heapPct}% of ${fmtBytes(metrics.process.memory.heapTotalBytes)}`,
+                    color: heapColor,
+                  },
+                  { label: "RSS", value: fmtBytes(metrics.process.memory.rssBytes) },
+                  { label: "External", value: fmtBytes(metrics.process.memory.externalBytes) },
+                  { label: "Node", value: metrics.process.node },
+                  {
+                    label: "Sentry",
+                    value: metrics.process.sentryEnabled ? "ON" : "OFF",
+                    color: metrics.process.sentryEnabled ? "#10b981" : "#94a3b8",
+                  },
+                  {
+                    label: "Accounts",
+                    value: String(metrics.summary["aevion_accounts_total"] ?? 0),
+                  },
+                  {
+                    label: "Transfers",
+                    value: String(metrics.summary["aevion_transfers_total"] ?? 0),
+                  },
+                ];
+                return tiles.map((t) => (
+                  <div
+                    key={t.label}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                      border: "1px solid rgba(15,23,42,0.06)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      {t.label}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 18,
+                        fontWeight: 900,
+                        color: t.color || "#0f172a",
+                        marginTop: 2,
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {t.value}
+                    </div>
+                    {t.sub && (
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2, fontFamily: "monospace" }}>
+                        {t.sub}
+                      </div>
+                    )}
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
 
         {/* History sparkline */}
         {history.length > 1 && (
@@ -442,6 +780,272 @@ export default function StatusPage() {
           </div>
         )}
 
+        {/* Incident history */}
+        {incidents && (
+          <div
+            style={{
+              padding: "18px 22px",
+              borderRadius: 12,
+              background: "#fff",
+              border: "1px solid rgba(15,23,42,0.08)",
+              marginBottom: 22,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: "#64748b",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Incident history
+              </div>
+              <div style={{ flex: 1 }} />
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "monospace",
+                  color: incidents.open > 0 ? "#ef4444" : "#10b981",
+                  fontWeight: 700,
+                }}
+              >
+                {incidents.open > 0
+                  ? `${incidents.open} open · ${incidents.total} total`
+                  : `0 open · ${incidents.total} total`}
+              </span>
+            </div>
+
+            {incidents.items.length === 0 ? (
+              <div style={{ fontSize: 13, color: "#64748b", fontStyle: "italic" }}>
+                No incidents reported. All clear.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {incidents.items.map((inc) => {
+                  const sev = SEVERITY_COLOR[inc.severity];
+                  const isOpen = inc.resolvedAt === null;
+                  return (
+                    <div
+                      key={inc.id}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 10,
+                        background: "#f8fafc",
+                        border: `1px solid ${sev}30`,
+                        borderLeft: `4px solid ${sev}`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          marginBottom: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 800,
+                            color: "#fff",
+                            background: sev,
+                            padding: "2px 7px",
+                            borderRadius: 4,
+                            letterSpacing: "0.06em",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {inc.severity}
+                        </span>
+                        <div style={{ fontWeight: 700, fontSize: 13, flex: 1, minWidth: 200 }}>
+                          {inc.title}
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: isOpen ? "#ef4444" : "#10b981",
+                            background: isOpen ? "#fee2e2" : "#dcfce7",
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                          }}
+                        >
+                          {isOpen ? "Open" : "Resolved"}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#64748b",
+                          marginBottom: 8,
+                          display: "flex",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span>Started {relTime(inc.startedAt)}</span>
+                        {inc.resolvedAt && <span>Resolved {relTime(inc.resolvedAt)}</span>}
+                        {inc.affected.length > 0 && (
+                          <span>
+                            Affected:{" "}
+                            <span style={{ fontFamily: "monospace", color: "#475569" }}>
+                              {inc.affected.map((k) => SERVICE_LABELS[k] || k).join(", ")}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      {inc.updates.length > 0 && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                            paddingLeft: 10,
+                            borderLeft: "1px solid rgba(15,23,42,0.08)",
+                          }}
+                        >
+                          {inc.updates.map((u, i) => (
+                            <div key={`${inc.id}-u-${i}`} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                              <div
+                                style={{
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: 999,
+                                  background: UPDATE_COLOR[u.status],
+                                  marginTop: 5,
+                                  flexShrink: 0,
+                                }}
+                                aria-hidden
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    color: UPDATE_COLOR[u.status],
+                                    letterSpacing: "0.06em",
+                                    textTransform: "uppercase",
+                                    marginBottom: 2,
+                                  }}
+                                >
+                                  {u.status} · {relTime(u.t)}
+                                </div>
+                                <div style={{ fontSize: 12, color: "#334155", lineHeight: 1.45 }}>
+                                  {u.message}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Subscribe to status updates */}
+        <div
+          style={{
+            padding: "18px 22px",
+            borderRadius: 12,
+            background: "#fff",
+            border: "1px solid rgba(15,23,42,0.08)",
+            marginBottom: 22,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: "#64748b",
+              marginBottom: 4,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}
+          >
+            Subscribe to status updates
+          </div>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+            Get an email when AEVION opens a major incident, posts an update, or marks one resolved.
+            No marketing — just incident digests.
+          </div>
+          <form
+            onSubmit={onSubscribe}
+            style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "stretch" }}
+          >
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@company.com"
+              value={subEmail}
+              onChange={(e) => {
+                setSubEmail(e.target.value);
+                if (subState.status !== "idle") setSubState({ status: "idle", message: "" });
+              }}
+              style={{
+                flex: "1 1 240px",
+                minWidth: 220,
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid rgba(15,23,42,0.12)",
+                background: "#f8fafc",
+                fontSize: 13,
+                color: "#0f172a",
+                outline: "none",
+              }}
+              disabled={subState.status === "submitting"}
+            />
+            <button
+              type="submit"
+              disabled={subState.status === "submitting" || !subEmail.trim()}
+              style={{
+                padding: "10px 18px",
+                borderRadius: 8,
+                border: "none",
+                background: subState.status === "submitting" ? "#94a3b8" : "#0d9488",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: subState.status === "submitting" || !subEmail.trim() ? "not-allowed" : "pointer",
+                letterSpacing: "0.02em",
+              }}
+            >
+              {subState.status === "submitting" ? "Subscribing…" : "Subscribe"}
+            </button>
+          </form>
+          {subState.message && (
+            <div
+              role={subState.status === "error" ? "alert" : "status"}
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                fontWeight: 600,
+                color: subState.status === "ok" ? "#10b981" : "#ef4444",
+              }}
+            >
+              {subState.message}
+            </div>
+          )}
+        </div>
+
         {/* All modules in registry */}
         {catalog.length > 0 && (
           <div
@@ -530,7 +1134,8 @@ export default function StatusPage() {
         )}
 
         <div style={{ marginTop: 22, fontSize: 11, color: "#94a3b8" }}>
-          Source: <code>GET /api/aevion/health</code> · Cache 10s ·{" "}
+          Source: <code>GET /api/aevion/health</code> ·{" "}
+          <code>GET /api/status/incidents</code> · Cache 10s ·{" "}
           <Link href="/api/aevion/openapi.json" style={{ color: "#0d9488" }}>
             OpenAPI index
           </Link>

@@ -14,6 +14,7 @@ import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { statusRouter } from "./routes/status";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
@@ -186,6 +187,7 @@ app.get("/api/globus/projects/:id", (req, res) => {
 });
 
 app.use("/api/modules", modulesRouter);
+app.use("/api/status", statusRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
@@ -351,7 +353,10 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Aggregated metrics — admin token required" },
       },
       "/api/pricing/events/recent": {
-        get: { summary: "Last N events — admin token required" },
+        get: { summary: "Last N events — admin token required (CSV filters: source,type,tier,industry,sid)" },
+      },
+      "/api/pricing/events/aggregate": {
+        get: { summary: "Time-bucketed counts (period=hour|day, groupBy=source|type|tier|industry) — admin token required" },
       },
       "/api/pricing/leads": {
         get: { summary: "List recent leads — admin token required" },

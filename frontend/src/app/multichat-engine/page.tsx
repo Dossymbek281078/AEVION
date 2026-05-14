@@ -760,6 +760,483 @@ const makeAgent = (overrides: Partial<Agent> = {}): Agent => ({
  * Page
  * ────────────────────────────────────────────────────────────── */
 
+/* ─────────────────────────────────────────────────────────────────
+ * Phase 3 additions wired into the landing:
+ *   A) ProviderHealthStrip — live ping of /api/multichat/provider-status,
+ *      auto-refresh every 30s, badges per provider with latency + status dot.
+ *   B) MissionPresetGrid — server-defined preset catalogue from
+ *      /api/multichat/presets, each card "Launch" button POSTs to
+ *      /api/multichat/presets/:id/launch and routes the user to
+ *      /qcoreai/multi pre-filled.
+ * Both consume apiUrl() so they work in dev (Vercel proxy) and prod.
+ * ────────────────────────────────────────────────────────────── */
+
+type LiveProviderStatus = {
+  id: string;
+  name: string;
+  configured: boolean;
+  reachable: boolean;
+  latencyMs: number | null;
+  defaultModel: string | null;
+};
+
+function ProviderHealthStrip() {
+  const [providers, setProviders] = useState<LiveProviderStatus[] | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(apiUrl("/api/multichat/provider-status"), {
+        credentials: "include",
+      });
+      if (!r.ok) {
+        setErr(`status ${r.status}`);
+        return;
+      }
+      const data = (await r.json()) as {
+        providers?: LiveProviderStatus[];
+        cachedAt?: string;
+      };
+      setProviders(Array.isArray(data.providers) ? data.providers : []);
+      setUpdatedAt(data.cachedAt ?? new Date().toISOString());
+      setErr(null);
+    } catch (e: any) {
+      setErr(e?.message || "fetch failed");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  return (
+    <section
+      style={{
+        marginTop: 16,
+        marginBottom: 16,
+        borderRadius: 14,
+        border: "1px solid rgba(148,163,184,0.25)",
+        background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+        padding: "14px 16px",
+        color: "#e2e8f0",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 10,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "#5eead4",
+          }}
+        >
+          ◉ Provider Health
+        </span>
+        <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          onClick={load}
+          style={{
+            padding: "3px 9px",
+            borderRadius: 7,
+            border: "1px solid rgba(94,234,212,0.4)",
+            background: "rgba(13,148,136,0.18)",
+            color: "#5eead4",
+            cursor: "pointer",
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.05em",
+          }}
+          aria-label="Refresh provider health"
+        >
+          ↻ Refresh
+        </button>
+        <span style={{ fontSize: 10, color: "#64748b" }}>
+          {updatedAt ? `· ${new Date(updatedAt).toLocaleTimeString()}` : "· loading…"}
+        </span>
+      </div>
+
+      {err ? (
+        <div style={{ fontSize: 12, color: "#fca5a5" }}>Health check unavailable: {err}</div>
+      ) : !providers ? (
+        <div style={{ fontSize: 12, color: "#94a3b8" }}>Pinging providers…</div>
+      ) : providers.length === 0 ? (
+        <div style={{ fontSize: 12, color: "#94a3b8" }}>No providers reported.</div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 8,
+          }}
+        >
+          {providers.map((p) => {
+            const dotColor = !p.configured
+              ? "#64748b"
+              : p.reachable
+              ? "#22c55e"
+              : "#f87171";
+            const stateLabel = !p.configured
+              ? "no key"
+              : p.reachable
+              ? "online"
+              : "down";
+            const latencyLabel =
+              p.latencyMs == null
+                ? ""
+                : p.latencyMs < 250
+                ? `${p.latencyMs}ms`
+                : p.latencyMs < 1000
+                ? `${p.latencyMs}ms ⚠`
+                : `${p.latencyMs}ms 🐢`;
+            return (
+              <div
+                key={p.id}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  padding: "9px 11px",
+                  borderRadius: 10,
+                  border: `1px solid ${p.configured ? (p.reachable ? "rgba(34,197,94,0.35)" : "rgba(248,113,113,0.35)") : "rgba(100,116,139,0.35)"}`,
+                  background: "rgba(2,6,23,0.6)",
+                }}
+                title={
+                  p.configured
+                    ? `${p.name} · ${stateLabel}${latencyLabel ? ` · ${latencyLabel}` : ""}${p.defaultModel ? ` · default ${p.defaultModel}` : ""}`
+                    : `${p.name} not configured (missing API key)`
+                }
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      background: dotColor,
+                      boxShadow:
+                        p.configured && p.reachable
+                          ? `0 0 8px ${dotColor}`
+                          : "none",
+                    }}
+                    aria-hidden
+                  />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#f1f5f9" }}>
+                    {p.name}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "center",
+                    fontSize: 10,
+                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                    color: "#94a3b8",
+                  }}
+                >
+                  <span
+                    style={{
+                      color:
+                        !p.configured
+                          ? "#64748b"
+                          : p.reachable
+                          ? "#86efac"
+                          : "#fca5a5",
+                      fontWeight: 700,
+                      letterSpacing: "0.05em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {stateLabel}
+                  </span>
+                  {latencyLabel ? <span>· {latencyLabel}</span> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type MissionPreset = {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  systemPrompt: string;
+  recommendedAgents: Array<{ role: string; provider?: string; temperature?: number }>;
+  defaultProvider: string;
+};
+
+function MissionPresetGrid() {
+  const [presets, setPresets] = useState<MissionPreset[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [launching, setLaunching] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl("/api/multichat/presets"), {
+          credentials: "include",
+        });
+        if (!r.ok) {
+          if (alive) setErr(`status ${r.status}`);
+          return;
+        }
+        const data = (await r.json()) as { presets?: MissionPreset[] };
+        if (alive) setPresets(Array.isArray(data.presets) ? data.presets : []);
+      } catch (e: any) {
+        if (alive) setErr(e?.message || "fetch failed");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const launch = useCallback(async (preset: MissionPreset) => {
+    setLaunching(preset.id);
+    try {
+      const r = await fetch(apiUrl(`/api/multichat/presets/${preset.id}/launch`), {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: `${preset.emoji} ${preset.name}` }),
+      });
+      if (!r.ok) {
+        setLaunching(null);
+        const msg = r.status === 401 ? "Sign in to launch a mission." : `Launch failed (${r.status}).`;
+        // Inline error: surface via an alert + visual via err state
+        if (typeof window !== "undefined") window.alert(msg);
+        return;
+      }
+      const data = (await r.json()) as {
+        conversation?: { id?: string };
+      };
+      const convId = data?.conversation?.id;
+      if (convId && typeof window !== "undefined") {
+        // Route to the multi-agent runner with the new conversation preselected.
+        // The /qcoreai/multi page reads ?conv= + ?preset= to pre-wire roles.
+        window.location.href = `/qcoreai/multi?conv=${encodeURIComponent(convId)}&preset=${encodeURIComponent(preset.id)}`;
+      } else {
+        setLaunching(null);
+      }
+    } catch (e: any) {
+      setLaunching(null);
+      if (typeof window !== "undefined") window.alert(e?.message || "Network error");
+    }
+  }, []);
+
+  if (err) {
+    return (
+      <section
+        style={{
+          marginTop: 16,
+          marginBottom: 16,
+          padding: "12px 14px",
+          borderRadius: 14,
+          border: "1px solid rgba(248,113,113,0.35)",
+          background: "rgba(127,29,29,0.18)",
+          color: "#fca5a5",
+          fontSize: 12,
+        }}
+      >
+        Mission presets unavailable: {err}
+      </section>
+    );
+  }
+
+  if (!presets) {
+    return (
+      <section
+        style={{
+          marginTop: 16,
+          marginBottom: 16,
+          padding: "12px 14px",
+          borderRadius: 14,
+          border: "1px solid rgba(148,163,184,0.25)",
+          background: "rgba(15,23,42,0.7)",
+          color: "#94a3b8",
+          fontSize: 12,
+        }}
+      >
+        Loading missions…
+      </section>
+    );
+  }
+
+  return (
+    <section
+      style={{
+        marginTop: 16,
+        marginBottom: 16,
+        borderRadius: 14,
+        border: "1px solid rgba(124,58,237,0.35)",
+        background:
+          "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(45,29,84,0.45))",
+        padding: "16px 18px",
+        color: "#e2e8f0",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: 10,
+          marginBottom: 12,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "#c4b5fd",
+          }}
+        >
+          ✦ Mission presets
+        </span>
+        <span style={{ fontSize: 11, color: "#94a3b8" }}>
+          One click → preconfigured agent bundle on a curated system prompt.
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 10,
+        }}
+      >
+        {presets.map((preset) => {
+          const isOpen = previewId === preset.id;
+          return (
+            <div
+              key={preset.id}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                padding: 12,
+                borderRadius: 12,
+                border: "1px solid rgba(124,58,237,0.3)",
+                background: "rgba(2,6,23,0.65)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span style={{ fontSize: 18, lineHeight: 1 }}>{preset.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#f1f5f9" }}>
+                    {preset.name}
+                  </div>
+                  <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>
+                    {preset.recommendedAgents.length} agent
+                    {preset.recommendedAgents.length === 1 ? "" : "s"} · default {preset.defaultProvider}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{ margin: 0, fontSize: 12, color: "#cbd5e1", lineHeight: 1.5 }}>
+                {preset.description}
+              </p>
+
+              {isOpen ? (
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(94,234,212,0.25)",
+                    background: "rgba(15,23,42,0.85)",
+                    color: "#cbd5e1",
+                    fontSize: 11,
+                    lineHeight: 1.45,
+                    fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    maxHeight: 180,
+                    overflowY: "auto",
+                  }}
+                >
+                  {preset.systemPrompt}
+                </pre>
+              ) : null}
+
+              <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
+                <button
+                  type="button"
+                  onClick={() => launch(preset)}
+                  disabled={launching !== null}
+                  style={{
+                    flex: 1,
+                    padding: "7px 10px",
+                    borderRadius: 8,
+                    border: "none",
+                    background:
+                      launching === preset.id
+                        ? "rgba(124,58,237,0.4)"
+                        : "linear-gradient(135deg, #7c3aed, #4338ca)",
+                    color: "#fff",
+                    cursor: launching !== null ? "wait" : "pointer",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    letterSpacing: "0.03em",
+                  }}
+                >
+                  {launching === preset.id ? "Launching…" : "Launch →"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewId((cur) => (cur === preset.id ? null : preset.id))
+                  }
+                  aria-expanded={isOpen}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(148,163,184,0.25)",
+                    background: "rgba(15,23,42,0.6)",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: 11,
+                  }}
+                  title={isOpen ? "Hide system prompt" : "Show system prompt"}
+                >
+                  {isOpen ? "▲ Prompt" : "▼ Prompt"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export default function MultichatEnginePage() {
   const origin = getBackendOrigin();
 
@@ -786,6 +1263,9 @@ export default function MultichatEnginePage() {
             or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.
           </p>
         </div>
+
+        <ProviderHealthStrip />
+        <MissionPresetGrid />
 
         <div
           style={{

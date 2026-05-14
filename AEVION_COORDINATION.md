@@ -168,7 +168,20 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | **MEGA SESSION COMPLETE 2026-05-14 — v2026-05-14-mega-session tag** | 2026-05-14 prod-ready |
+| _free_ | — | **block 7+8 (8 agents + cherry-picks + BOM-strip 109 files) done** | 2026-05-14 block-8 done |
+
+### Завершено 2026-05-14 (parallel block 7+8)
+
+- ✅ **Smoke segfault fix** — qstore-smoke BOM strip (4ac6ed2f)
+- ✅ **SDK v0.7.0** — qcoreai+multichat+qmedia+coach sub-clients, 13 endpoints, 24 tests (4e76df15)
+- ✅ **Workspace alias** — @aevion/catalog-client via tsconfig paths (f30ae546)
+- ✅ **Coach Bearer JWT** — migrated 8 owner-scoped endpoints to requireAuth (c630ded5)
+- ✅ **API Explorer multi-spec** — /api-explorer/specs with 21 specs aggregated
+- ✅ **Globus MOTD highlight** — pulsing amber ring on today's module country + M shortcut (f24604ad)
+- ✅ **Auth full flow** — /auth/forgot-password + /reset + /verify-email + /account/sessions
+- ✅ **SDK wave 4** — qmedia/qcoreai/multichat pages on catalog-client v0.7 (50ed300b)
+- ✅ **mapReality TS fix** — pool.query generic dropped (0c780472)
+- ✅ **BOM mass-strip** — 109 source files cleaned (b9065167, d82023e4)
 
 ### 🏁 FINAL — Prod-ready 2026-05-14
 

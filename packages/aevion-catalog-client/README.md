@@ -123,6 +123,61 @@ console.log(fp.hash); // 8-char hex
 All three are single-round-trip (`findByText` + `fingerprintModule`) or two-round-trip
 (`diff`) calls. Zero crypto dependencies — djb2 is implemented inline.
 
+## Module sub-clients (v0.6)
+
+`AevionCatalog` exposes typed sub-clients for individual module APIs.
+They share the parent's `baseUrl`, `fetch`, and `headers` config —
+construct the root client once and reuse every sub-client off it.
+
+```ts
+const cat = new AevionCatalog({
+  headers: { Authorization: `Bearer ${token}` }, // forwarded to every sub-call
+});
+
+// QStore — marketplace
+const top = await cat.qstore.products({ sort: "popular" });
+const grid = await cat.qstore.featured({ limit: 8 });
+//        { popular, trending, newest, topRated }
+
+// QLearn — courses, bookmarks, streak, progress
+await cat.qlearn.bookmark("smeta-101");
+await cat.qlearn.unbookmark("smeta-101");
+const marks = await cat.qlearn.bookmarks();
+const streak = await cat.qlearn.streak();
+//             { current, longest, totalDays, activeToday, lastActiveAt }
+const prog = await cat.qlearn.progress();
+//           { summary, continueLearning, notStarted, completed }
+
+// QEvents — event calendar + ICS export
+const evts = await cat.qevents.list({ when: "upcoming" });
+const ics  = await cat.qevents.ics("aevion-summit-2026"); // text/calendar
+const url  = cat.qevents.icsUrl("aevion-summit-2026");    // direct URL (no fetch)
+
+// DevHub — snippets + stars
+const snips = await cat.devhub.snippets({ limit: 20, tag: "ts" });
+const s = await cat.devhub.createSnippet({
+  title: "djb2 hash",
+  content: "function h(s){...}",
+  language: "ts",
+  tags: ["hash", "util"],
+});
+const one = await cat.devhub.getSnippet(s.id);
+await cat.devhub.star(s.id);
+
+// Planet — cross-module activity feed
+const feed = await cat.planet.activity({
+  limit: 50,
+  kinds: ["release", "post", "module_update"],
+});
+```
+
+All sub-client methods are also exported as standalone convenience
+functions against the default `https://api.aevion.app` backend:
+`getQStoreProducts`, `getQStoreFeatured`, `bookmarkCourse`,
+`unbookmarkCourse`, `getMyBookmarks`, `getMyStreak`, `getMyProgress`,
+`getEvents`, `getEventIcs`, `getSnippets`, `createSnippet`, `getSnippet`,
+`starSnippet`, `getPlanetActivity`.
+
 ## Convenience functions
 
 For one-off calls against `https://api.aevion.app`:
@@ -133,6 +188,13 @@ import {
   searchByTag, byStatus, byKind, mvpsAndLaunched, topTags,
   getRelatedModules, getGraph, getNeighbours,
   findByText, diff, fingerprintModule,
+  // v0.6:
+  getQStoreProducts, getQStoreFeatured,
+  bookmarkCourse, unbookmarkCourse,
+  getMyBookmarks, getMyStreak, getMyProgress,
+  getEvents, getEventIcs,
+  getSnippets, createSnippet, getSnippet, starSnippet,
+  getPlanetActivity,
 } from "@aevion/catalog-client";
 
 const all   = await listCatalog();

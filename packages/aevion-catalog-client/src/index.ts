@@ -177,6 +177,176 @@ export interface CatalogListOptions {
 export interface AevionCatalogConfig {
   baseUrl?: string;
   fetch?: typeof fetch;
+  /**
+   * Optional headers applied to all requests (e.g. `Authorization`, `X-User-Id`).
+   * Per-request headers (Accept) override these on collision.
+   */
+  headers?: Record<string, string>;
+}
+
+// ── v0.6 sub-domain types ───────────────────────────────────────────────────
+
+export type QStoreSort = "popular" | "newest" | "trending" | "rating";
+
+export interface QStoreProduct {
+  id: string;
+  slug?: string;
+  title: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  rating?: number;
+  ratingCount?: number;
+  purchases?: number;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface QStoreProductsResponse {
+  total: number;
+  sort: QStoreSort | string;
+  items: QStoreProduct[];
+}
+
+export interface QStoreFeaturedResponse {
+  popular: QStoreProduct[];
+  trending: QStoreProduct[];
+  newest: QStoreProduct[];
+  topRated: QStoreProduct[];
+  generatedAt?: string;
+}
+
+export interface QLearnCourseRef {
+  id: string;
+  slug?: string;
+  title: string;
+  thumbnail?: string;
+  level?: string;
+  durationMin?: number;
+  [key: string]: unknown;
+}
+
+export interface QLearnBookmarkResult {
+  ok: boolean;
+  bookmarked: boolean;
+  courseId: string;
+}
+
+export interface QLearnBookmarksResponse {
+  total: number;
+  items: QLearnCourseRef[];
+}
+
+export interface QLearnStreak {
+  current: number;
+  longest: number;
+  totalDays: number;
+  activeToday: boolean;
+  lastActiveAt: string | null;
+}
+
+export interface QLearnProgressItem {
+  courseId: string;
+  course?: QLearnCourseRef;
+  progress: number; // 0..1
+  lastViewedAt?: string | null;
+  completedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface QLearnProgress {
+  summary: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    notStarted: number;
+  };
+  continueLearning: QLearnProgressItem[];
+  notStarted: QLearnProgressItem[];
+  completed: QLearnProgressItem[];
+}
+
+export type QEventsWhen = "upcoming" | "past" | "all";
+
+export interface QEvent {
+  id: string;
+  slug?: string;
+  title: string;
+  description?: string;
+  startAt: string;
+  endAt?: string | null;
+  location?: string | null;
+  online?: boolean;
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+export interface QEventsListResponse {
+  total: number;
+  when: QEventsWhen;
+  items: QEvent[];
+}
+
+export interface DevHubSnippet {
+  id: string;
+  title: string;
+  content: string;
+  language: string;
+  tags: string[];
+  user?: string;
+  stars?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface DevHubSnippetsResponse {
+  total: number;
+  items: DevHubSnippet[];
+}
+
+export interface DevHubCreateSnippetInput {
+  title: string;
+  content: string;
+  language: string;
+  tags?: string[];
+}
+
+export interface DevHubStarResult {
+  ok: boolean;
+  starred: boolean;
+  snippetId: string;
+  stars: number;
+}
+
+export type PlanetActivityKind =
+  | "module_update"
+  | "release"
+  | "post"
+  | "comment"
+  | "purchase"
+  | "course_complete"
+  | "event"
+  | string;
+
+export interface PlanetActivityItem {
+  id: string;
+  kind: PlanetActivityKind;
+  actor?: string | null;
+  subject?: string | null;
+  module?: string | null;
+  title?: string;
+  url?: string | null;
+  createdAt: string;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface PlanetActivityResponse {
+  total: number;
+  items: PlanetActivityItem[];
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -205,6 +375,18 @@ function buildQuery(opts: CatalogListOptions, extra: Record<string, string> = {}
 export class AevionCatalog {
   readonly baseUrl: string;
   private readonly _fetch: typeof fetch;
+  private readonly _defaultHeaders: Record<string, string>;
+
+  /** QStore (catalogue / marketplace) sub-client. */
+  readonly qstore: QStoreClient;
+  /** QLearn (courses + progress) sub-client. */
+  readonly qlearn: QLearnClient;
+  /** QEvents (event calendar + ICS) sub-client. */
+  readonly qevents: QEventsClient;
+  /** DevHub (snippets + stars) sub-client. */
+  readonly devhub: DevHubClient;
+  /** Planet (cross-module activity feed) sub-client. */
+  readonly planet: PlanetClient;
 
   constructor(config: AevionCatalogConfig = {}) {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, "");
@@ -217,6 +399,53 @@ export class AevionCatalog {
               "global fetch is not available — pass `fetch` in config (e.g. node-fetch).",
             );
           }) as typeof fetch);
+    this._defaultHeaders = { ...(config.headers ?? {}) };
+
+    this.qstore = new QStoreClient(this);
+    this.qlearn = new QLearnClient(this);
+    this.qevents = new QEventsClient(this);
+    this.devhub = new DevHubClient(this);
+    this.planet = new PlanetClient(this);
+  }
+
+  /** @internal — used by sub-clients. */
+  _request<T>(
+    method: string,
+    path: string,
+    opts: {
+      query?: Record<string, string | number | undefined>;
+      body?: unknown;
+      accept?: string;
+      asText?: boolean;
+    } = {},
+  ): Promise<T> {
+    const params = new URLSearchParams();
+    if (opts.query) {
+      for (const [k, v] of Object.entries(opts.query)) {
+        if (v === undefined || v === null || v === "") continue;
+        params.set(k, String(v));
+      }
+    }
+    const qs = params.toString();
+    const url = `${this.baseUrl}${path.startsWith("/") ? "" : "/"}${path}${qs ? `?${qs}` : ""}`;
+    const headers: Record<string, string> = {
+      ...this._defaultHeaders,
+      Accept: opts.accept ?? "application/json",
+    };
+    const init: RequestInit = { method, headers };
+    if (opts.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      (init as { body?: string }).body = JSON.stringify(opts.body);
+    }
+    return this._fetch(url, init).then(async (r) => {
+      if (!r.ok) {
+        throw new Error(`AevionCatalog ${method} HTTP ${r.status} on ${url}`);
+      }
+      if (opts.asText) return (await r.text()) as unknown as T;
+      // 204 No Content support
+      if (r.status === 204) return undefined as unknown as T;
+      return (await r.json()) as T;
+    });
   }
 
   /** GET /api/aevion/catalog with optional filters + field projection. */
@@ -538,6 +767,187 @@ export class AevionCatalog {
   }
 }
 
+// ── v0.6 sub-clients: QStore / QLearn / QEvents / DevHub / Planet ───────────
+
+/** QStore (marketplace) sub-client. Lazy — constructed by `AevionCatalog`. */
+export class QStoreClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/qstore/products?sort=popular|newest|trending|rating */
+  products(opts: { sort?: QStoreSort } = {}): Promise<QStoreProductsResponse> {
+    const sort = opts.sort;
+    if (sort && !["popular", "newest", "trending", "rating"].includes(sort)) {
+      throw new Error(`QStore.products invalid sort: '${sort}'`);
+    }
+    return this._root._request<QStoreProductsResponse>("GET", "/api/qstore/products", {
+      query: { sort },
+    });
+  }
+
+  /** GET /api/qstore/featured?limit=N — 4 buckets (popular/trending/newest/topRated). */
+  featured(opts: { limit?: number } = {}): Promise<QStoreFeaturedResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(50, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    return this._root._request<QStoreFeaturedResponse>("GET", "/api/qstore/featured", { query });
+  }
+}
+
+/** QLearn (courses, bookmarks, streak, progress) sub-client. */
+export class QLearnClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  private _assertCourseId(id: string): void {
+    if (!id || !/^[a-z0-9-]+$/i.test(id)) {
+      throw new Error(`QLearn invalid courseId: '${id}'`);
+    }
+  }
+
+  /** POST /api/qlearn/courses/:id/bookmark — add bookmark. */
+  bookmark(courseId: string): Promise<QLearnBookmarkResult> {
+    this._assertCourseId(courseId);
+    return this._root._request<QLearnBookmarkResult>(
+      "POST",
+      `/api/qlearn/courses/${courseId}/bookmark`,
+    );
+  }
+
+  /** DELETE /api/qlearn/courses/:id/bookmark — remove bookmark. */
+  unbookmark(courseId: string): Promise<QLearnBookmarkResult> {
+    this._assertCourseId(courseId);
+    return this._root._request<QLearnBookmarkResult>(
+      "DELETE",
+      `/api/qlearn/courses/${courseId}/bookmark`,
+    );
+  }
+
+  /** GET /api/qlearn/me/bookmarks — user's bookmarked courses. */
+  bookmarks(): Promise<QLearnBookmarksResponse> {
+    return this._root._request<QLearnBookmarksResponse>("GET", "/api/qlearn/me/bookmarks");
+  }
+
+  /** GET /api/qlearn/me/streak — learning streak summary. */
+  streak(): Promise<QLearnStreak> {
+    return this._root._request<QLearnStreak>("GET", "/api/qlearn/me/streak");
+  }
+
+  /** GET /api/qlearn/me/progress — full progress breakdown. */
+  progress(): Promise<QLearnProgress> {
+    return this._root._request<QLearnProgress>("GET", "/api/qlearn/me/progress");
+  }
+}
+
+/** QEvents (event listing + ICS export) sub-client. */
+export class QEventsClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/qevents/events?when=upcoming|past|all */
+  list(opts: { when?: QEventsWhen } = {}): Promise<QEventsListResponse> {
+    const when = opts.when;
+    if (when && !["upcoming", "past", "all"].includes(when)) {
+      throw new Error(`QEvents.list invalid when: '${when}'`);
+    }
+    return this._root._request<QEventsListResponse>("GET", "/api/qevents/events", {
+      query: { when },
+    });
+  }
+
+  /** GET /api/qevents/events/:id/ics — returns ICS text/calendar payload. */
+  ics(eventId: string): Promise<string> {
+    if (!eventId || !/^[a-z0-9-]+$/i.test(eventId)) {
+      throw new Error(`QEvents.ics invalid eventId: '${eventId}'`);
+    }
+    return this._root._request<string>("GET", `/api/qevents/events/${eventId}/ics`, {
+      accept: "text/calendar",
+      asText: true,
+    });
+  }
+
+  /** Returns the absolute ICS URL (no fetch). */
+  icsUrl(eventId: string): string {
+    if (!/^[a-z0-9-]+$/i.test(eventId)) {
+      throw new Error(`QEvents.icsUrl invalid eventId: '${eventId}'`);
+    }
+    return `${this._root.baseUrl}/api/qevents/events/${eventId}/ics`;
+  }
+}
+
+/** DevHub (snippets + stars) sub-client. */
+export class DevHubClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/devhub/snippets?limit&tag&user — list snippets. */
+  snippets(opts: { limit?: number; tag?: string; user?: string } = {}): Promise<DevHubSnippetsResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(200, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    if (opts.tag) query.tag = opts.tag;
+    if (opts.user) query.user = opts.user;
+    return this._root._request<DevHubSnippetsResponse>("GET", "/api/devhub/snippets", { query });
+  }
+
+  /** POST /api/devhub/snippets — create a new snippet. */
+  createSnippet(input: DevHubCreateSnippetInput): Promise<DevHubSnippet> {
+    if (!input || typeof input.title !== "string" || input.title.trim().length === 0) {
+      throw new Error(`DevHub.createSnippet missing title`);
+    }
+    if (typeof input.content !== "string" || input.content.length === 0) {
+      throw new Error(`DevHub.createSnippet missing content`);
+    }
+    if (typeof input.language !== "string" || input.language.trim().length === 0) {
+      throw new Error(`DevHub.createSnippet missing language`);
+    }
+    const body: DevHubCreateSnippetInput = {
+      title: input.title,
+      content: input.content,
+      language: input.language,
+      tags: Array.isArray(input.tags) ? input.tags : [],
+    };
+    return this._root._request<DevHubSnippet>("POST", "/api/devhub/snippets", { body });
+  }
+
+  /** GET /api/devhub/snippets/:id — fetch single snippet. */
+  getSnippet(snippetId: string): Promise<DevHubSnippet> {
+    if (!snippetId || !/^[a-z0-9-]+$/i.test(snippetId)) {
+      throw new Error(`DevHub.getSnippet invalid snippetId: '${snippetId}'`);
+    }
+    return this._root._request<DevHubSnippet>("GET", `/api/devhub/snippets/${snippetId}`);
+  }
+
+  /** POST /api/devhub/snippets/:id/star — toggle / increment star. */
+  star(snippetId: string): Promise<DevHubStarResult> {
+    if (!snippetId || !/^[a-z0-9-]+$/i.test(snippetId)) {
+      throw new Error(`DevHub.star invalid snippetId: '${snippetId}'`);
+    }
+    return this._root._request<DevHubStarResult>(
+      "POST",
+      `/api/devhub/snippets/${snippetId}/star`,
+    );
+  }
+}
+
+/** Planet (cross-module activity feed) sub-client. */
+export class PlanetClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/planet/activity?limit&kinds — activity feed across all modules. */
+  activity(opts: { limit?: number; kinds?: PlanetActivityKind | PlanetActivityKind[] } = {}): Promise<PlanetActivityResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(200, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    if (opts.kinds) {
+      query.kinds = Array.isArray(opts.kinds) ? opts.kinds.join(",") : String(opts.kinds);
+    }
+    return this._root._request<PlanetActivityResponse>("GET", "/api/planet/activity", { query });
+  }
+}
+
 // ── Hub aggregate types (v0.3) ───────────────────────────────────────────────
 
 export interface OpenApiModuleRef {
@@ -664,5 +1074,56 @@ export const getExtendedStats = (opts?: { recent?: number }) =>
 /** Convenience: deterministic module-of-the-day using default client (v0.6). */
 export const getModuleOfTheDay = (opts?: { date?: string }) =>
   _default.moduleOfTheDay(opts);
+
+// ── v0.6 convenience: QStore / QLearn / QEvents / DevHub / Planet ──────────
+
+/** Convenience: QStore products listing. */
+export const getQStoreProducts = (opts?: { sort?: QStoreSort }) =>
+  _default.qstore.products(opts);
+
+/** Convenience: QStore featured 4-bucket grid. */
+export const getQStoreFeatured = (opts?: { limit?: number }) =>
+  _default.qstore.featured(opts);
+
+/** Convenience: add a QLearn course bookmark. */
+export const bookmarkCourse = (courseId: string) => _default.qlearn.bookmark(courseId);
+
+/** Convenience: remove a QLearn course bookmark. */
+export const unbookmarkCourse = (courseId: string) => _default.qlearn.unbookmark(courseId);
+
+/** Convenience: list current user's QLearn bookmarks. */
+export const getMyBookmarks = () => _default.qlearn.bookmarks();
+
+/** Convenience: current user's QLearn streak. */
+export const getMyStreak = () => _default.qlearn.streak();
+
+/** Convenience: current user's QLearn progress. */
+export const getMyProgress = () => _default.qlearn.progress();
+
+/** Convenience: QEvents listing. */
+export const getEvents = (opts?: { when?: QEventsWhen }) => _default.qevents.list(opts);
+
+/** Convenience: ICS payload for a single event. */
+export const getEventIcs = (eventId: string) => _default.qevents.ics(eventId);
+
+/** Convenience: DevHub snippets listing. */
+export const getSnippets = (opts?: { limit?: number; tag?: string; user?: string }) =>
+  _default.devhub.snippets(opts);
+
+/** Convenience: create a DevHub snippet. */
+export const createSnippet = (input: DevHubCreateSnippetInput) =>
+  _default.devhub.createSnippet(input);
+
+/** Convenience: fetch a DevHub snippet by id. */
+export const getSnippet = (snippetId: string) => _default.devhub.getSnippet(snippetId);
+
+/** Convenience: star a DevHub snippet. */
+export const starSnippet = (snippetId: string) => _default.devhub.star(snippetId);
+
+/** Convenience: Planet cross-module activity feed. */
+export const getPlanetActivity = (opts?: {
+  limit?: number;
+  kinds?: PlanetActivityKind | PlanetActivityKind[];
+}) => _default.planet.activity(opts);
 
 export default AevionCatalog;

@@ -57,6 +57,9 @@ export async function ensureVoiceOfEarthTables(pool: PgPoolInstance): Promise<vo
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_voe_votes_track ON voe_votes(track_id);`);
 
+    // Lazy migration: add content_hash column if not present (QRight-compatible authorship proof)
+    await pool.query(`ALTER TABLE voe_tracks ADD COLUMN IF NOT EXISTS content_hash TEXT;`);
+
     dbReady = true;
     console.log("[VoiceOfEarth] Tables ready");
 

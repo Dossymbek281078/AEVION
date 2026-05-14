@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
@@ -39,6 +40,7 @@ interface VoeTrack {
   votes: number;
   status: "pending" | "published" | "flagged";
   created_at: string;
+  content_hash: string | null;
 }
 
 // ─── In-memory store ──────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ function seedMemory() {
       votes: 0,
       status: "published",
       created_at: new Date().toISOString(),
+      content_hash: null,
     });
   }
 }
@@ -241,15 +244,20 @@ voiceOfEarthRouter.post(
 
     const titleStored = title.slice(0, 200);
 
+    const contentHash = crypto
+      .createHash("sha256")
+      .update(titleStored + "|" + artistAlias + "|" + lyrics)
+      .digest("hex");
+
     if (isVoiceOfEarthDbReady()) {
       try {
         const { rows } = await pool.query(
-          `INSERT INTO voe_tracks (title, artist_alias, language, lyrics, mood, audio_url, status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'published')
+          `INSERT INTO voe_tracks (title, artist_alias, language, lyrics, mood, audio_url, status, content_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, 'published', $7)
            RETURNING *`,
-          [titleStored, artistAlias, language, lyrics, mood, audioUrl],
+          [titleStored, artistAlias, language, lyrics, mood, audioUrl, contentHash],
         );
-        return res.status(201).json({ track: rows[0] });
+        return res.status(201).json({ track: rows[0], contentHash });
       } catch (e) {
         console.error("[VoiceOfEarth] POST /tracks DB error", e);
       }
@@ -266,11 +274,12 @@ voiceOfEarthRouter.post(
       votes: 0,
       status: "published",
       created_at: new Date().toISOString(),
+      content_hash: contentHash,
     };
     memTracks.push(track);
     // keep last 100 in memory
     if (memTracks.length > 100) memTracks.splice(0, memTracks.length - 100);
-    res.status(201).json({ track });
+    res.status(201).json({ track, contentHash });
   },
 );
 

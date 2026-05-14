@@ -40,7 +40,16 @@ export const LANG_RTL: Partial<Record<Lang, true>> = { ar: true };
 
 export const LANG_COOKIE = "aevion_lang_v1";
 
-export const translations: Record<Lang, Record<string, string>> = {
+// New languages filled in via Object.assign below; cast avoids TS error on missing keys.
+export const translations = {
+  de: {} as Record<string, string>,
+  fr: {} as Record<string, string>,
+  es: {} as Record<string, string>,
+  zh: {} as Record<string, string>,
+  ja: {} as Record<string, string>,
+  ar: {} as Record<string, string>,
+  pt: {} as Record<string, string>,
+  tr: {} as Record<string, string>,
   en: {
     /* Nav & global */
     "nav.demo": "Ecosystem demo",
@@ -11280,6 +11289,123 @@ const MODULE_PAGE_EXTRA_KK: Record<string, string> = {
 Object.assign(translations.en, MODULE_PAGE_EXTRA_EN);
 Object.assign(translations.ru, MODULE_PAGE_EXTRA_RU);
 Object.assign(translations.kk, MODULE_PAGE_EXTRA_KK);
+
+// Новые языки — базовые переводы. Fallback на EN через t() для непереведённых ключей.
+// Постепенно расширяется через DeepL.
+Object.assign(translations, {
+  de: {
+    "nav.demo": "Ökosystem-Demo",
+    "nav.auth": "Anmeldung",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "Büro",
+    "nav.planet": "Planet",
+    "nav.awards": "Preise",
+    "nav.bank": "Bank",
+    "nav.chess": "Schach",
+    "nav.help": "Hilfe",
+    "home.title": "Vertrauensinfrastruktur für digitale Vermögenswerte und geistiges Eigentum",
+    "home.cta.demo": "Vollständige Demo →",
+  },
+  fr: {
+    "nav.demo": "Démo de l'écosystème",
+    "nav.auth": "Connexion",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "Bureau",
+    "nav.planet": "Planète",
+    "nav.awards": "Prix",
+    "nav.bank": "Banque",
+    "nav.chess": "Échecs",
+    "nav.help": "Aide",
+    "home.title": "Infrastructure de confiance pour les actifs numériques et la propriété intellectuelle",
+    "home.cta.demo": "Démo complète →",
+  },
+  es: {
+    "nav.demo": "Demo del ecosistema",
+    "nav.auth": "Acceso",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "Oficina",
+    "nav.planet": "Planeta",
+    "nav.awards": "Premios",
+    "nav.bank": "Banco",
+    "nav.chess": "Ajedrez",
+    "nav.help": "Ayuda",
+    "home.title": "Infraestructura de confianza para activos digitales y propiedad intelectual",
+    "home.cta.demo": "Demo completa →",
+  },
+  zh: {
+    "nav.demo": "生态系统演示",
+    "nav.auth": "登录",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "局",
+    "nav.planet": "星球",
+    "nav.awards": "奖项",
+    "nav.bank": "银行",
+    "nav.chess": "国际象棋",
+    "nav.help": "帮助",
+    "home.title": "数字资产和知识产权的信任基础设施",
+    "home.cta.demo": "完整演示 →",
+  },
+  ja: {
+    "nav.demo": "エコシステムデモ",
+    "nav.auth": "ログイン",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "局",
+    "nav.planet": "プラネット",
+    "nav.awards": "アワード",
+    "nav.bank": "バンク",
+    "nav.chess": "チェス",
+    "nav.help": "ヘルプ",
+    "home.title": "デジタル資産と知的財産のための信頼インフラ",
+    "home.cta.demo": "完全なデモ →",
+  },
+  ar: {
+    "nav.demo": "عرض النظام البيئي",
+    "nav.auth": "تسجيل الدخول",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "المكتب",
+    "nav.planet": "الكوكب",
+    "nav.awards": "الجوائز",
+    "nav.bank": "البنك",
+    "nav.chess": "الشطرنج",
+    "nav.help": "المساعدة",
+    "home.title": "بنية تحتية موثوقة للأصول الرقمية والملكية الفكرية",
+    "home.cta.demo": "العرض الكامل →",
+  },
+  pt: {
+    "nav.demo": "Demo do ecossistema",
+    "nav.auth": "Acesso",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "Escritório",
+    "nav.planet": "Planeta",
+    "nav.awards": "Prêmios",
+    "nav.bank": "Banco",
+    "nav.chess": "Xadrez",
+    "nav.help": "Ajuda",
+    "home.title": "Infraestrutura de confiança para ativos digitais e propriedade intelectual",
+    "home.cta.demo": "Demo completa →",
+  },
+  tr: {
+    "nav.demo": "Ekosistem demosu",
+    "nav.auth": "Giriş",
+    "nav.qright": "QRight",
+    "nav.qsign": "QSign",
+    "nav.bureau": "Büro",
+    "nav.planet": "Gezegen",
+    "nav.awards": "Ödüller",
+    "nav.bank": "Banka",
+    "nav.chess": "Satranç",
+    "nav.help": "Yardım",
+    "home.title": "Dijital varlıklar ve fikri mülkiyet için güven altyapısı",
+    "home.cta.demo": "Tam demo →",
+  },
+} as Record<string, Record<string, string>>);
 
 export function interpolate(s: string, vars?: Record<string, string | number>): string {
   if (!vars) return s;

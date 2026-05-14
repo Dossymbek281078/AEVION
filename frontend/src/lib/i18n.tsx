@@ -11,7 +11,9 @@ import {
 
 import {
   LANG_COOKIE,
+  LANG_FLAG,
   LANG_FULL,
+  LANG_RTL,
   LANG_SHORT,
   LANGS,
   interpolate,
@@ -26,7 +28,9 @@ import {
 // non-component exports into opaque client-reference stubs on the server.
 export {
   LANG_COOKIE,
+  LANG_FLAG,
   LANG_FULL,
+  LANG_RTL,
   LANG_SHORT,
   LANGS,
   interpolate,
@@ -51,7 +55,7 @@ export function useI18n() {
 }
 
 function isLang(x: unknown): x is Lang {
-  return x === "en" || x === "ru" || x === "kk";
+  return typeof x === "string" && (LANGS as string[]).includes(x);
 }
 
 function detectBrowserLang(): Lang {
@@ -93,6 +97,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.documentElement.lang = lang;
+      document.documentElement.dir = LANG_RTL[lang] ? "rtl" : "ltr";
     }
   }, [lang]);
 

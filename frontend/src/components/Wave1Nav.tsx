@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
 import { ldClosed } from "@/app/qtrade/marketSim";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";
@@ -147,6 +148,8 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <AevPill variant={variant} />
       <RiskPill variant={variant} />
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <LanguageSwitcher />
     </nav>
   );
 }

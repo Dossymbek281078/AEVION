@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from "express";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pg = require("pg") as typeof import("pg");
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
@@ -210,8 +212,9 @@ const CPI_FACTORS = [
 ] as const;
 type CpiFactor = (typeof CPI_FACTORS)[number];
 
+// CPI store — raw pg (Prisma 7 requires adapter; raw pool avoids that dependency)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let cpiDb: any = null;
+let cpiPool: any = null;
 let cpiDbReady = false;
 let cpiDbInitTried = false;
 
@@ -223,20 +226,50 @@ async function ensureCpiDb(): Promise<void> {
     return;
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PrismaClient } = require("@prisma/client");
-    const client = new PrismaClient();
-    await client.cyberchessCpiState.count();
-    cpiDb = client;
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    // Create table if not exists (idempotent — mirrors Prisma schema migration)
+    // Ensure updatedAt has a default (table may have been created by prisma db push without one)
+    await pool.query(`ALTER TABLE IF EXISTS "CyberchessCpiState" ALTER COLUMN "updatedAt" SET DEFAULT now()`).catch(() => {});
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberchessCpiState" (
+        "userId"            TEXT PRIMARY KEY,
+        "displayName"       TEXT,
+        "overall"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "accuracy"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "tactics"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "endgame"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "timing"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "aggression"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "timeControl"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "opening"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "defense"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "consistency"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "endgameTechnique"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "psychology"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "gamesPlayed"       INTEGER NOT NULL DEFAULT 0,
+        "updatedAt"         TIMESTAMP NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS "cpi_overall_idx"     ON "CyberchessCpiState" ("overall" DESC);
+      CREATE INDEX IF NOT EXISTS "cpi_tactics_idx"     ON "CyberchessCpiState" ("tactics" DESC);
+      CREATE INDEX IF NOT EXISTS "cpi_accuracy_idx"    ON "CyberchessCpiState" ("accuracy" DESC);
+      CREATE INDEX IF NOT EXISTS "cpi_endgame_idx"     ON "CyberchessCpiState" ("endgame" DESC);
+    `);
+    cpiPool = pool;
     cpiDbReady = true;
-    console.log("[CyberchessCPI] Prisma connected — CPI store ready");
+    console.log("[CyberchessCPI] pg connected — CPI store ready");
   } catch (e) {
-    console.warn(
-      "[CyberchessCPI] Prisma init failed:",
-      e instanceof Error ? e.message : e,
-    );
+    console.warn("[CyberchessCPI] pg init failed:", e instanceof Error ? e.message : e);
   }
 }
+
+// Map Prisma camelCase factor names to quoted PG column names
+const PG_COL: Record<string, string> = {
+  overall: '"overall"', accuracy: '"accuracy"', tactics: '"tactics"',
+  endgame: '"endgame"', timing: '"timing"', aggression: '"aggression"',
+  timeControl: '"timeControl"', opening: '"opening"', defense: '"defense"',
+  consistency: '"consistency"', endgameTechnique: '"endgameTechnique"',
+  psychology: '"psychology"',
+};
 
 function parseFactor(raw: unknown): CpiFactor {
   if (typeof raw === "string" && (CPI_FACTORS as readonly string[]).includes(raw)) {
@@ -268,20 +301,19 @@ cyberchessRouter.get("/cpi/leaderboard", async (req: Request, res: Response) => 
   }
 
   try {
-    const rows = await cpiDb.cyberchessCpiState.findMany({
-      orderBy: { [factor]: "desc" },
-      take: limit,
-    });
-    const items = rows.map(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (r: any, idx: number) => ({
-        userId: r.userId,
-        displayName: r.displayName ?? null,
-        value: r[factor] ?? 0,
-        rank: idx + 1,
-        gamesPlayed: r.gamesPlayed ?? 0,
-      }),
+    const col = PG_COL[factor] ?? '"overall"';
+    const { rows } = await cpiPool!.query(
+      `SELECT "userId","displayName",${col} AS value,"gamesPlayed" FROM "CyberchessCpiState" ORDER BY ${col} DESC LIMIT $1`,
+      [limit],
     );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = rows.map((r: any, idx: number) => ({
+      userId: r.userId,
+      displayName: r.displayName ?? null,
+      value: r.value ?? 0,
+      rank: idx + 1,
+      gamesPlayed: r.gamesPlayed ?? 0,
+    }));
     res.json({ data: { items, factor, limit } });
   } catch (err) {
     console.error("[CyberchessCPI] leaderboard:", err);
@@ -335,12 +367,18 @@ cyberchessRouter.post("/cpi/upsert", async (req: Request, res: Response) => {
   }
 
   try {
-    const row = await cpiDb.cyberchessCpiState.upsert({
-      where: { userId },
-      create: { userId, ...data },
-      update: data,
-    });
-    res.status(200).json({ data: row });
+    const cols = Object.keys(data);
+    const vals = Object.values(data);
+    const setClauses = cols.map((c, i) => `"${c}" = $${i + 2}`).join(", ");
+    const insertCols = ['"userId"', ...cols.map(c => `"${c}"`)].join(", ");
+    const insertVals = ["$1", ...cols.map((_, i) => `$${i + 2}`)].join(", ");
+    const { rows } = await cpiPool!.query(
+      `INSERT INTO "CyberchessCpiState" (${insertCols}) VALUES (${insertVals})
+       ON CONFLICT ("userId") DO UPDATE SET ${setClauses}, "updatedAt" = now()
+       RETURNING *`,
+      [userId, ...vals],
+    );
+    res.status(200).json({ data: rows[0] ?? null });
   } catch (err) {
     console.error("[CyberchessCPI] upsert:", err);
     res.status(500).json({ error: "cpi_upsert_failed" });
@@ -359,8 +397,11 @@ cyberchessRouter.get("/cpi/me", async (req: Request, res: Response) => {
     return res.json({ data: null, offline: true });
   }
   try {
-    const row = await cpiDb.cyberchessCpiState.findUnique({ where: { userId } });
-    res.json({ data: row ?? null });
+    const { rows } = await cpiPool!.query(
+      `SELECT * FROM "CyberchessCpiState" WHERE "userId" = $1 LIMIT 1`,
+      [userId],
+    );
+    res.json({ data: rows[0] ?? null });
   } catch (err) {
     console.error("[CyberchessCPI] me:", err);
     res.status(500).json({ error: "cpi_me_failed" });

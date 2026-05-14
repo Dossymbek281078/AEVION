@@ -30,6 +30,7 @@ import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
+import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
@@ -392,6 +393,7 @@ app.use("/api/qright", qrightRouter);
 app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
+app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================
 // QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)

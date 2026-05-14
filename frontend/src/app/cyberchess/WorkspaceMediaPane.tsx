@@ -169,9 +169,9 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
 
   const showInputBar = p.tab !== "notes" && p.tab !== "lichess";
   const placeholder =
-    p.tab === "youtube" ? "YouTube URL/ID" :
-    p.tab === "twitch"  ? "twitch.tv/channel" :
-    p.tab === "url"     ? "URL" : "";
+    p.tab === "youtube" ? "youtube.com/watch?v=… или 11-значный ID" :
+    p.tab === "twitch"  ? "Имя канала, напр. gmhikaru" :
+    p.tab === "url"     ? "https://…" : "";
 
   return (
     <div onClick={onSelect}
@@ -309,7 +309,14 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
           }}>
             {p.tab === "youtube" && (
               <>
-                <div style={{ fontSize: 9, color: "#94a3b8", padding: "0 2px" }}>Вставь ссылку или ID</div>
+                <div style={{ fontSize: 10, color: "#fbbf24", fontWeight: 700, padding: "2px 2px 0" }}>
+                  📺 Вставь ссылку на видео или live-стрим
+                </div>
+                <div style={{ fontSize: 9, color: "#94a3b8", padding: "0 2px 4px", lineHeight: 1.4 }}>
+                  Формат: youtube.com/watch?v=ID или просто 11-значный ID видео.
+                  URL канала (@name) не работает — нужна ссылка на конкретное видео или live.
+                </div>
+                <div style={{ fontSize: 9, color: "#64748b", padding: "0 2px 2px", fontWeight: 700 }}>Быстрый выбор (откроется в новой вкладке):</div>
                 {YT_CHANNELS.map(([url, label]) => (
                   <a key={url} href={url} target="_blank" rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
@@ -318,14 +325,17 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
                       border: "1px solid #334155", fontSize: 10, fontWeight: 700,
                       textDecoration: "none", display: "block",
                     }}>
-                    {label} <span style={{ float: "right", color: "#64748b", fontSize: 8.5 }}>↗</span>
+                    {label} <span style={{ float: "right", color: "#64748b", fontSize: 8.5 }}>↗ новая вкладка</span>
                   </a>
                 ))}
               </>
             )}
             {p.tab === "twitch" && (
               <>
-                <div style={{ fontSize: 9, color: "#94a3b8", padding: "0 2px" }}>Кликни канал</div>
+                <div style={{ fontSize: 10, color: "#a78bfa", fontWeight: 700, padding: "2px 2px 0" }}>
+                  🎥 Выбери канал или введи имя
+                </div>
+                <div style={{ fontSize: 9, color: "#94a3b8", padding: "0 2px" }}>Клик — загрузить стрим в панель:</div>
                 {TW_CHANNELS.map(([ch, label]) => (
                   <button key={ch} onClick={(e) => { e.stopPropagation(); apply(ch); }}
                     style={{

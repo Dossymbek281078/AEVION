@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { ModuleOfTheDayCard } from "@/components/ModuleOfTheDayCard";
 import { apiUrl } from "@/lib/apiBase";
 
 // metadata must live in a server component — moved to layout or generateMetadata.
@@ -15,6 +16,24 @@ type Stats = {
   dailySmoke: string;
 };
 
+/**
+ * Aggregate AEVION registry stats — shape pulled from `/api/aevion/stats`.
+ * Only the fields the investor page actually renders are typed; the
+ * endpoint is the source of truth for the full schema.
+ */
+type RegistryStats = {
+  totalModules?: number;
+  byStatus?: Record<string, number>;
+  byKind?: Record<string, number>;
+  coverage?: {
+    withFrontend?: number;
+    withOpenapi?: number;
+    withHealth?: number;
+    withOgImage?: number;
+  };
+  lastUpdated?: string;
+};
+
 export default function InvestorPage() {
   const [stats, setStats] = useState<Stats>({
     planetSubmissions: 0,
@@ -22,17 +41,24 @@ export default function InvestorPage() {
     qcoreProviders: 5,
     dailySmoke: "24/24",
   });
+  const [registry, setRegistry] = useState<RegistryStats | null>(null);
+  const [registryLive, setRegistryLive] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([
       fetch(apiUrl("/api/planet/stats")).then(r => r.json()),
       fetch(apiUrl("/api/qright/objects?limit=1")).then(r => r.json()),
-    ]).then(([planet, qright]) => {
+      fetch(apiUrl("/api/aevion/stats")).then(r => r.json()),
+    ]).then(([planet, qright, reg]) => {
       setStats(s => ({
         ...s,
         planetSubmissions: planet.status === "fulfilled" ? (planet.value?.submissions ?? s.planetSubmissions) : s.planetSubmissions,
         qrightObjects: qright.status === "fulfilled" ? (qright.value?.total ?? s.qrightObjects) : s.qrightObjects,
       }));
+      if (reg.status === "fulfilled" && reg.value && typeof reg.value === "object") {
+        setRegistry(reg.value as RegistryStats);
+        setRegistryLive(true);
+      }
     });
   }, []);
 
@@ -89,6 +115,133 @@ export default function InvestorPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Live registry + Module-of-the-day showcase */}
+      <section style={{ maxWidth: 960, margin: "0 auto", padding: "60px 24px 0" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: "#64748b", textTransform: "uppercase", margin: 0 }}>
+            Today on the registry
+          </h2>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: "0.15em",
+              color: registryLive ? "#10b981" : "#fbbf24",
+              background: registryLive ? "rgba(16,185,129,0.12)" : "rgba(251,191,36,0.12)",
+              padding: "4px 10px",
+              borderRadius: 999,
+              textTransform: "uppercase",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: registryLive ? "#10b981" : "#fbbf24" }} aria-hidden />
+            {registryLive ? "Live · /api/aevion/stats" : "Snapshot · backend warming up"}
+          </span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 20, marginBottom: 24 }}>
+          {/* Coverage matrix */}
+          <div style={{ padding: 22, background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#10b981", textTransform: "uppercase", marginBottom: 12 }}>
+              Coverage matrix
+            </div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
+              <div style={{ fontSize: 38, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.03em", lineHeight: 1 }}>
+                {registry?.totalModules ?? 27}
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>modules tracked</div>
+            </div>
+            {[
+              { label: "Frontend live", value: registry?.coverage?.withFrontend, color: "#10b981" },
+              { label: "OpenAPI documented", value: registry?.coverage?.withOpenapi, color: "#3b82f6" },
+              { label: "Health endpoint", value: registry?.coverage?.withHealth, color: "#8b5cf6" },
+              { label: "OG image", value: registry?.coverage?.withOgImage, color: "#fbbf24" },
+            ].map((row) => {
+              const total = registry?.totalModules ?? 27;
+              const v = row.value ?? 0;
+              const pct = total > 0 ? Math.round((v / total) * 100) : 0;
+              return (
+                <div key={row.label} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: "#cbd5e1", fontWeight: 600 }}>{row.label}</span>
+                    <span style={{ color: row.color, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+                      {v}/{total} · {pct}%
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: row.color, transition: "width 400ms ease-out" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Status breakdown */}
+          <div style={{ padding: 22, background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#3b82f6", textTransform: "uppercase", marginBottom: 12 }}>
+              Status mix
+            </div>
+            {(() => {
+              const status = registry?.byStatus ?? {};
+              const entries = Object.entries(status).sort((a, b) => b[1] - a[1]);
+              if (entries.length === 0) {
+                return (
+                  <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
+                    Waiting for the registry endpoint. Each module reports its lifecycle stage:
+                    <span style={{ color: "#10b981" }}> MVP/working</span>,
+                    <span style={{ color: "#3b82f6" }}> in progress</span>,
+                    <span style={{ color: "#a78bfa" }}> planning</span>,
+                    <span style={{ color: "#94a3b8" }}> idea</span>.
+                  </div>
+                );
+              }
+              const total = entries.reduce((s, [, n]) => s + n, 0);
+              const palette: Record<string, string> = {
+                mvp: "#10b981",
+                working: "#10b981",
+                in_progress: "#3b82f6",
+                planning: "#a78bfa",
+                idea: "#94a3b8",
+              };
+              return (
+                <>
+                  <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", marginBottom: 14, background: "rgba(255,255,255,0.06)" }}>
+                    {entries.map(([k, n]) => {
+                      const w = total > 0 ? (n / total) * 100 : 0;
+                      return (
+                        <div
+                          key={k}
+                          style={{ width: `${w}%`, background: palette[k.toLowerCase()] ?? "#64748b", transition: "width 400ms ease-out" }}
+                          title={`${k}: ${n}`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {entries.map(([k, n]) => (
+                      <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 2, background: palette[k.toLowerCase()] ?? "#64748b" }} />
+                          <span style={{ color: "#cbd5e1", fontWeight: 600, textTransform: "capitalize" }}>
+                            {k.replace(/_/g, " ")}
+                          </span>
+                        </span>
+                        <span style={{ color: "#f1f5f9", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{n}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* Module of the day — dark theme for investor surface */}
+        <ModuleOfTheDayCard theme="dark" refreshHourly />
       </section>
 
       {/* 3 Anchor Products */}

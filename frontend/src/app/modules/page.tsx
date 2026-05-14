@@ -4,6 +4,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
 import { pickLang } from "@/lib/qrightServerI18n";
+import AutoRefreshToggle from "./AutoRefreshToggle";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60;
@@ -312,9 +313,14 @@ export default async function ModulesPage({ searchParams }: Props) {
         <h1 style={{ fontSize: 30, fontWeight: 900, color: "#0f172a", margin: 0 }}>
           {t.title}
         </h1>
-        <p style={{ color: "#475569", fontSize: 14, marginTop: 8, marginBottom: 24, lineHeight: 1.6 }}>
+        <p style={{ color: "#475569", fontSize: 14, marginTop: 8, marginBottom: 16, lineHeight: 1.6 }}>
           {t.subtitle}
         </p>
+
+        {/* Auto-refresh toggle — opt-in client-side refresher.
+            The server component re-runs on every router.refresh(), so the
+            toggle is the only client surface that has to exist. */}
+        <AutoRefreshToggle lang={lang as "en" | "ru"} generatedAt={registry.generatedAt} />
 
         {/* Stats */}
         {stats && (

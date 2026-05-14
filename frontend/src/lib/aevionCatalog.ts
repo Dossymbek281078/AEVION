@@ -9,11 +9,11 @@
  * for endpoints requiring a Bearer token (e.g. /me/streak, /star).
  *
  * The SDK lives in the monorepo at `packages/aevion-catalog-client/` and
- * is not (yet) listed in `frontend/package.json` dependencies, so we use
- * a relative import to its source entry. Once wired up via workspaces
- * the import can be swapped for `@aevion/catalog-client`.
+ * is wired into `frontend/package.json` as `file:` dep plus a tsconfig
+ * `paths` alias, so the `@aevion/catalog-client` import below resolves
+ * to the package's TS source.
  */
-import { AevionCatalog } from "../../../packages/aevion-catalog-client/src/index";
+import { AevionCatalog } from "@aevion/catalog-client";
 import { getApiBase } from "@/lib/apiBase";
 
 /** Default unauthenticated client. Cheap to construct; created once. */

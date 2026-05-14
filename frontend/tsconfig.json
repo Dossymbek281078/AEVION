@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@aevion/catalog-client": ["../packages/aevion-catalog-client/src/index"],
+      "@aevion/catalog-client/*": ["../packages/aevion-catalog-client/src/*"]
     }
   },
   "include": [

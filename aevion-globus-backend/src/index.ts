@@ -57,16 +57,14 @@ import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } 
 import { isSentryEnabled, captureException } from "./lib/sentry";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
-import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { paymentsRouter } from "./routes/payments";
 import { qaiRouter } from "./routes/qai";
 import { qstoreRouter } from "./routes/qstore";
 import { qlearnRouter } from "./routes/qlearn";
-import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
-import { startupExchangeRouter } from "./routes/startupExchange";
 import { qjobsRouter } from "./routes/qjobs";
+import { mapRealityRouter } from "./routes/mapReality";
 import { qeventsRouter } from "./routes/qevents";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
@@ -480,8 +478,6 @@ for (const cfg of PLANNING_MODULES) {
 app.use("/api/devhub", devhubRouter);
 // QMedia — music, video and creative tools
 app.use("/api/qmedia", qmediaRouter);
-// Voice of Earth — international multi-language positive songs catalog
-app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // Payments — Stripe + PayBox KZ unified gateway
 app.use("/api/payments", paymentsRouter);
 // QAI — universal public AI assistant
@@ -490,12 +486,10 @@ app.use("/api/qai", qaiRouter);
 app.use("/api/qstore", qstoreRouter);
 // QLearn — learning platform
 app.use("/api/qlearn", qlearnRouter);
-// Kids AI Content — multi-language lessons + AI tutor for children
-app.use("/api/kids-ai", kidsAiContentRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
-// StartupX — startup exchange (idea → IP-mark → investor)
-app.use("/api/startupx", startupExchangeRouter);
+// MapReality — civic signals map (MVP: signals + supports)
+app.use("/api/mapreality", mapRealityRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);

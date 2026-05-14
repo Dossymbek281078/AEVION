@@ -234,6 +234,73 @@ mapRealityRouter.get("/signals", async (req: Request, res: Response) => {
   return res.json({ signals: signals.slice(offsetN, offsetN + limitN), total });
 });
 
+// ─── GET /api/mapreality/signals/nearby ───────────────────────────────────────
+// Query: lat, lng (required), radius (km, default 50, max 500), limit (max 50, default 20)
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
+  const { lat: latQ, lng: lngQ, radius: radiusQ, limit: limitQ } = req.query as Record<string, string | undefined>;
+
+  const lat = parseNumber(latQ);
+  const lng = parseNumber(lngQ);
+  if (lat === null || lng === null) {
+    return res.status(400).json({ error: "lat and lng are required numeric query params" });
+  }
+  if (lat < -90 || lat > 90) return res.status(400).json({ error: "lat must be in [-90, 90]" });
+  if (lng < -180 || lng > 180) return res.status(400).json({ error: "lng must be in [-180, 180]" });
+
+  const radius = Math.min(Math.max(parseNumber(radiusQ) ?? 50, 0), 500);
+  const limit = Math.min(Math.max(Math.floor(parseNumber(limitQ) ?? 20), 1), 50);
+
+  try {
+    if (isMapRealityDbReady()) {
+      const { rows } = await pool.query<Signal & { distance_km: number }>(
+        `SELECT *,
+           (6371 * acos(
+             cos(radians($1)) * cos(radians(lat)) *
+             cos(radians(lng) - radians($2)) +
+             sin(radians($1)) * sin(radians(lat))
+           )) AS distance_km
+         FROM mapreality_signals
+         WHERE lat IS NOT NULL AND lng IS NOT NULL AND status = 'active'
+           AND (6371 * acos(
+             cos(radians($1)) * cos(radians(lat)) *
+             cos(radians(lng) - radians($2)) +
+             sin(radians($1)) * sin(radians(lat))
+           )) < $3
+         ORDER BY distance_km ASC
+         LIMIT $4`,
+        [lat, lng, radius, limit],
+      );
+      return res.json({
+        success: true,
+        data: { signals: rows, center: { lat, lng }, radius, count: rows.length },
+      });
+    }
+  } catch (e) { console.error("[MapReality] GET /signals/nearby DB error", e); }
+
+  // In-memory fallback: Haversine filter
+  const nearby = memSignals
+    .filter((s) => s.status === "active" && s.lat !== null && s.lng !== null)
+    .map((s) => ({ ...s, distance_km: haversineKm(lat, lng, s.lat as number, s.lng as number) }))
+    .filter((s) => s.distance_km < radius)
+    .sort((a, b) => a.distance_km - b.distance_km)
+    .slice(0, limit);
+
+  return res.json({
+    success: true,
+    data: { signals: nearby, center: { lat, lng }, radius, count: nearby.length },
+  });
+});
+
 // ─── GET /api/mapreality/signals/:id ──────────────────────────────────────────
 mapRealityRouter.get("/signals/:id", async (req: Request, res: Response) => {
   const id = Number(param(req, "id"));

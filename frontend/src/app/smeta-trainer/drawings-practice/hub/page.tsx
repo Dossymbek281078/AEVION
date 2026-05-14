@@ -285,6 +285,9 @@ const MODULES: Module[] = [
   { id: "military-defense",       category: "special",   href: "/smeta-trainer/drawings-practice/military-defense",       icon: "🪖", title: "Военные объекты",                 subtitle: "Допуск формы №2, секретные ЭСН МО, КП усиленный монолит",       level: "L5", exercises: 4,  color: "stone"   },
   { id: "prison-corrections",     category: "special",   href: "/smeta-trainer/drawings-practice/prison-corrections",     icon: "🔒", title: "СИЗО и ИК",                       subtitle: "ДТКС периметр, 4 м²/чел, PC-остекление, нормы КУИС",            level: "L5", exercises: 4,  color: "slate"   },
   { id: "cemetery-crematorium",   category: "special",   href: "/smeta-trainer/drawings-practice/cemetery-crematorium",   icon: "⚱️", title: "Кладбища и крематории",           subtitle: "500 м санразрыв, Qibla ориентация, HEPA дымоочистка кремат.",    level: "L4", exercises: 4,  color: "slate"   },
+  { id: "food-production",        category: "special",   href: "/smeta-trainer/drawings-practice/food-production",        icon: "🏭", title: "Пищевые производства",            subtitle: "HACCP, нержавейка AISI 304, EP полы 1-2% уклон, зонирование",   level: "L4", exercises: 4,  color: "lime"    },
+  { id: "anti-corrosion-works",   category: "process",   href: "/smeta-trainer/drawings-practice/anti-corrosion-works",   icon: "🛡", title: "Антикоррозионная защита",          subtitle: "ЭСН Сб.12, ISO 12944 C1-C5-M, горячее цинкование 40-80 лет",    level: "L4", exercises: 4,  color: "orange"  },
+  { id: "drainage-systems",       category: "utilities", href: "/smeta-trainer/drawings-practice/drainage-systems",       icon: "🌊", title: "Дренажные системы",               subtitle: "5 видов, геотекстиль, уклон 1‰, СН РК 4.01-43",                 level: "L3", exercises: 4,  color: "blue"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

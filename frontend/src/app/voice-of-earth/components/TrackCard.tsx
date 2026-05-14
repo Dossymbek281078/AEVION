@@ -12,6 +12,7 @@ export type Track = {
   audio_url: string | null;
   votes: number;
   created_at: string;
+  content_hash?: string | null;
 };
 
 const LANG_FLAG: Record<string, string> = {
@@ -151,6 +152,18 @@ const linkStyle: CSSProperties = {
   fontWeight: 600,
 };
 
+const hashBadgeStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 4,
+  fontSize: 11,
+  color: "#4ade80",
+  fontFamily: "monospace",
+  cursor: "default",
+  userSelect: "none",
+  marginTop: 4,
+};
+
 type Props = {
   track: Track;
   onVote: (id: number) => Promise<{ ok: boolean; message?: string; votes?: number }>;
@@ -192,6 +205,14 @@ export default function TrackCard({ track, onVote, votedLocal }: Props) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={titleStyle}>{track.title}</h3>
           <div style={artistStyle}>{track.artist_alias}</div>
+          {track.content_hash && (
+            <div
+              style={hashBadgeStyle}
+              title="Авторство защищено через SHA-256"
+            >
+              🔐 sha256:{track.content_hash.slice(0, 8)}…
+            </div>
+          )}
         </div>
         <div style={badgesStyle}>
           <span style={badgeStyle}>

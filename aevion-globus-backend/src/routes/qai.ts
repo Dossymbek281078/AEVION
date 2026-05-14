@@ -11,12 +11,19 @@ export const qaiRouter = Router();
 
 // ─── Personas ─────────────────────────────────────────────────────────────────
 const PERSONAS = [
-  { id: "assistant", name: "AEVION Assistant", systemPrompt: "You are AEVION's helpful AI assistant. Be concise and practical.", emoji: "🤖" },
-  { id: "coder", name: "Code Expert", systemPrompt: "You are an expert software engineer. Focus on clean, working code with explanations.", emoji: "💻" },
-  { id: "writer", name: "Creative Writer", systemPrompt: "You are a creative writer. Help with storytelling, copywriting, and creative content.", emoji: "✍️" },
-  { id: "analyst", name: "Data Analyst", systemPrompt: "You are a data analyst. Help with data interpretation, statistics, and insights.", emoji: "📊" },
-  { id: "tutor", name: "Learning Tutor", systemPrompt: "You are a patient tutor. Explain concepts clearly with examples appropriate for the learner's level.", emoji: "📚" },
+  { id: "assistant", name: "AEVION Assistant", systemPrompt: "You are AEVION's helpful AI assistant. Be concise and practical.", emoji: "AI", description: "General-purpose helper" },
+  { id: "coder", name: "Code Expert", systemPrompt: "You are an expert software engineer. Focus on clean, working code with explanations. Use markdown code blocks. Be precise about types, edge cases and performance.", emoji: "{}", description: "Software engineering, debugging" },
+  { id: "mentor", name: "Patient Mentor", systemPrompt: "You are a patient mentor. Explain concepts clearly with examples appropriate for the learner's level. Ask clarifying questions when needed. Encourage curiosity.", emoji: "M", description: "Teaching and explaining" },
+  { id: "critic", name: "Sharp Critic", systemPrompt: "You are a sharp, constructive critic. Identify weaknesses, logical gaps, hidden assumptions. Be direct but fair. Always suggest a concrete improvement.", emoji: "!", description: "Reviewing ideas critically" },
+  { id: "writer", name: "Creative Writer", systemPrompt: "You are a creative writer. Help with storytelling, copywriting, and creative content. Favor vivid imagery and rhythm.", emoji: "W", description: "Storytelling, copy" },
+  { id: "analyst", name: "Data Analyst", systemPrompt: "You are a data analyst. Help with data interpretation, statistics, and insights. Always show how the conclusion was derived.", emoji: "#", description: "Numbers and insights" },
 ] as const;
+
+// Approximate token count: ~4 chars per token (OpenAI rule of thumb)
+function approxTokens(s: string): number {
+  if (!s) return 0;
+  return Math.max(1, Math.ceil(s.length / 4));
+}
 
 interface QaiSession {
   id: string;
@@ -100,11 +107,21 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
     const assistantMsg: ChatMessage = { role: "assistant", content: result.reply };
     session.messages.push(assistantMsg);
 
+    const promptChars = contextMessages.reduce((acc, m) => acc + (m.content?.length ?? 0), 0);
+    const completionChars = result.reply.length;
     res.json({
       reply: result.reply,
       sessionId: session.id,
       model: result.model ?? model,
       personaId: effectivePersonaId ?? undefined,
+      usage: {
+        promptChars,
+        completionChars,
+        totalChars: promptChars + completionChars,
+        approxPromptTokens: approxTokens(contextMessages.map((m) => m.content).join("\n")),
+        approxCompletionTokens: approxTokens(result.reply),
+        approxTotalTokens: approxTokens(contextMessages.map((m) => m.content).join("\n")) + approxTokens(result.reply),
+      },
     });
   } catch (err) {
     // Remove the user message we appended if the call failed
@@ -190,7 +207,17 @@ qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
     if (!closed) {
       const assistantMsg: ChatMessage = { role: "assistant", content: fullReply };
       session.messages.push(assistantMsg);
-      res.write(`data: ${JSON.stringify({ type: "done", sessionId: session.id, reply: fullReply })}\n\n`);
+      const promptChars = contextMessages.reduce((acc, m) => acc + (m.content?.length ?? 0), 0);
+      const completionChars = fullReply.length;
+      const usage = {
+        promptChars,
+        completionChars,
+        totalChars: promptChars + completionChars,
+        approxPromptTokens: approxTokens(contextMessages.map((m) => m.content).join("\n")),
+        approxCompletionTokens: approxTokens(fullReply),
+        approxTotalTokens: approxTokens(contextMessages.map((m) => m.content).join("\n")) + approxTokens(fullReply),
+      };
+      res.write(`data: ${JSON.stringify({ type: "done", sessionId: session.id, reply: fullReply, model, personaId: effectivePersonaId ?? null, usage })}\n\n`);
     }
   } catch (err) {
     session.messages.pop(); // remove user message on error

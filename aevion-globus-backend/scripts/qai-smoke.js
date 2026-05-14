@@ -43,16 +43,27 @@ async function run() {
   assert("array response", Array.isArray(sessions.body?.sessions ?? sessions.body?.items ?? sessions.body));
 
   console.log("\n5. Chat (public)");
-  const chat = await req("POST", "/api/qai/chat", { messages: [{ role: "user", content: "Reply with exactly: PONG" }] });
+  const chat = await req("POST", "/api/qai/chat", { message: "Reply with exactly: PONG" });
   assert("POST /chat → 200", chat.status === 200, String(chat.status));
   const reply = chat.body?.reply ?? chat.body?.content ?? chat.body?.message ?? "";
   assert("reply is string", typeof reply === "string" && reply.length > 0);
+  assert("usage object present", chat.body?.usage && typeof chat.body.usage.approxTotalTokens === "number");
 
   console.log("\n6. Chat with persona");
-  const personaChat = await req("POST", "/api/qai/chat", { messages: [{ role: "user", content: "ping" }], persona: "assistant" });
+  const personaChat = await req("POST", "/api/qai/chat", { message: "ping", personaId: "coder" });
   assert("POST /chat with persona → 200", personaChat.status === 200);
+  assert("personaId echoed", personaChat.body?.personaId === "coder");
 
-  console.log("\n7. Invalid session → 404");
+  console.log("\n7. Persona list contains required ids");
+  const personaIds = Array.isArray(personas.body?.personas)
+    ? personas.body.personas.map((p) => p.id)
+    : [];
+  const required = ["assistant", "coder", "mentor", "critic"];
+  for (const id of required) {
+    assert(`persona '${id}' present`, personaIds.includes(id));
+  }
+
+  console.log("\n8. Invalid session → 404");
   const notFound = await req("GET", "/api/qai/sessions/does_not_exist_xyz_000");
   assert("GET /sessions/:invalid → 404 or 400", [404, 400].includes(notFound.status), String(notFound.status));
 

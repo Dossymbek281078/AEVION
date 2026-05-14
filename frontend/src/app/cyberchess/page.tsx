@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
-import { Wave1Nav } from "@/components/Wave1Nav";
+import AevionTicker from "./AevionTicker";
+import AevionProjectsBanner from "./AevionProjectsBanner";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
@@ -907,6 +908,8 @@ export default function CyberChessPage(){
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  const[showProjectsBanner,sShowProjectsBanner]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("cc_projects_banner_v1")!=="0"}catch{return true}});
+  useEffect(()=>{try{localStorage.setItem("cc_projects_banner_v1",showProjectsBanner?"1":"0")}catch{}},[showProjectsBanner]);
   const streamerToolbarRef=useRef<{showYT:()=>void;showTW:()=>void;ytVisible:boolean;twVisible:boolean}|null>(null);
   const activePieceSet=useActivePieceSet();
   // Threat Heatmap (killer #12) — overlay контроля доски, нет ни у chess.com, ни у lichess
@@ -3425,7 +3428,7 @@ export default function CyberChessPage(){
   // regenerate the tree on hydration, and event handlers attach immediately.
   if(!mounted){
     return(<main style={{background:T.bg,minHeight:"100vh"}}>
-      <ProductPageShell fullWidth><Wave1Nav/>
+      <ProductPageShell fullWidth><AevionTicker/>
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${T.dim}`,borderTopColor:T.accent,animation:"cc-spin 0.8s linear infinite"}}/>
@@ -3437,7 +3440,7 @@ export default function CyberChessPage(){
   }
 
   return(<main suppressHydrationWarning style={{background:CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column"}}>
-    <ProductPageShell fullWidth><Wave1Nav/>
+    <ProductPageShell fullWidth><AevionTicker/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
@@ -4641,7 +4644,7 @@ export default function CyberChessPage(){
       </div>}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
@@ -5314,7 +5317,7 @@ export default function CyberChessPage(){
               explanation card. Available in Coach tab + Play tab when game is on. */}
           {/* Coach Quick Actions доступны без SF — "Объясни" и "Слабости" работают на эвристике.
               "Найди план" и "Тактика" сами проверяют sfR.current?.ready() */}
-          {(tab==="play"||tab==="coach")&&on&&!over&&!setup&&<div style={{
+          {tab==="coach"&&on&&!over&&!setup&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.lg,
             background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
             display:"flex",flexDirection:"column",gap:8
@@ -10613,6 +10616,7 @@ ${question.trim()}`;
 
     </ProductPageShell>
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

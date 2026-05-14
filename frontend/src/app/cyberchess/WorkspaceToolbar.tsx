@@ -9,6 +9,14 @@ import { WORKSPACE_META, type WorkspacePreset } from "./useWorkspace";
 
 const ALL: WorkspacePreset[] = ["focus", "standard", "stream", "study", "coach"];
 
+const PRESET_TOOLTIP: Record<WorkspacePreset, string> = {
+  focus:    "Только доска — никакого шума",
+  standard: "Доска + информационная панель справа",
+  stream:   "Stream режим: доска + медиа-панель слева (YouTube/Twitch)",
+  study:    "Режим учёбы: анализ + коуч рядом",
+  coach:    "Режим коуча: доска + AI Coach справа",
+};
+
 type Props = {
   preset: WorkspacePreset;
   onChange: (p: WorkspacePreset) => void;
@@ -17,7 +25,7 @@ type Props = {
 export default function WorkspaceToolbar({ preset, onChange }: Props) {
   return (
     <div
-      title="Раскладка экрана: Focus / Standard / Stream / Study / Coach. Переключение клавишами 1..5"
+      title="Стандартный layout: доска + все панели"
       style={{
         display: "inline-flex", alignItems: "center", gap: 0,
         padding: 3, borderRadius: 9,
@@ -33,7 +41,7 @@ export default function WorkspaceToolbar({ preset, onChange }: Props) {
         const active = p === preset;
         return (
           <button key={p} onClick={() => onChange(p)}
-            title={`${m.name} · ${m.hint} · клавиша ${m.key}`}
+            title={PRESET_TOOLTIP[p]}
             style={{
               display: "inline-flex", alignItems: "center", gap: 4,
               padding: active ? "4px 10px" : "4px 8px",

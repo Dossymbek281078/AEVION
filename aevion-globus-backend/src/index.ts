@@ -72,7 +72,7 @@ import { startupExchangeRouter } from "./routes/startupExchange";
 import { kidsAiContentRouter } from "./routes/kidsAiContent";
 import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
-import { qpersonaRouter } from "./routes/qpersona";
+import { deepSanRouter } from "./routes/deepsan";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -527,8 +527,8 @@ app.use("/api/qsocial", qsocialRouter);
 // QEvents — events platform (RSVP, create, attend)
 app.use("/api/qevents", qeventsRouter);
 
-// QPersona — Digital Avatar / public profile-substitute
-app.use("/api/qpersona", qpersonaRouter);
+// DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
+app.use("/api/deepsan", deepSanRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

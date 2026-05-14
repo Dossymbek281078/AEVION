@@ -1,322 +1,345 @@
 "use client";
 
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
-import MvpConceptBoard from "@/components/MvpConceptBoard";
+import LanguageSelector, { type KidsLang } from "./components/LanguageSelector";
+import LessonCard, { type LessonSummary } from "./components/LessonCard";
+import LessonDetail from "./components/LessonDetail";
 
-type AgeTier = {
-  id: "3-5" | "6-8" | "9-12" | "13-15";
-  label: string;
-  tone: string;
-  emoji: string;
-  hint: string;
+/**
+ * Kids AI Content — MVP catalogue.
+ *
+ * Flow:
+ *   1. Visitor picks a language (RU / EN / KZ).
+ *   2. Cards are fetched from /api/kids-ai/lessons?lang=... and grouped by
+ *      age tier so a 5-year-old isn't shown a 9-12 chapter on Egypt.
+ *   3. Clicking a card opens LessonDetail (full content_md + AskAi).
+ *   4. "I finished" button POSTs to /api/kids-ai/progress and persists a
+ *      pseudonym (childAlias) + completed lesson IDs in localStorage so
+ *      we can show a "✓ Пройден" badge without re-fetching on reload.
+ */
+
+const PAGE_BG = "linear-gradient(180deg, #fef3c7 0%, #ffffff 40%, #fef3c7 100%)";
+
+const wrapStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  background: PAGE_BG,
+  color: "#1c1917",
+  fontFamily:
+    '"Nunito", "Comfortaa", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
 };
 
-const AGE_TIERS: AgeTier[] = [
-  { id: "3-5", label: "3–5 лет", tone: "очень-простой, как сказка для малыша", emoji: "🧸", hint: "Сказочный тон, короткие предложения, много эмодзи." },
-  { id: "6-8", label: "6–8 лет", tone: "простой и игровой, как добрый учитель", emoji: "🎨", hint: "Игровой тон, объясняем как для первоклассника." },
-  { id: "9-12", label: "9–12 лет", tone: "познавательный, как старший друг-наставник", emoji: "🚀", hint: "Любознательный тон, факты + примеры." },
-  { id: "13-15", label: "13–15 лет", tone: "уважительный, как умный тьютор-подросток", emoji: "🧪", hint: "Тон уважения, без сюсюканья, факты." },
-];
+const headerStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.85)",
+  borderBottom: "1px solid #fde68a",
+  padding: "14px 20px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  position: "sticky",
+  top: 0,
+  zIndex: 10,
+  backdropFilter: "blur(8px)",
+};
 
-const BLOCKLIST = [
-  "убить", "убью", "смерть", "кровь", "оружие", "пистолет", "нож",
-  "секс", "наркотик", "алкоголь", "водка", "пиво", "сигарет",
-  "суицид", "самоубийств", "ненавижу", "взорв", "теракт",
-  "выборы", "путин", "трамп",
-];
+const heroStyle: React.CSSProperties = {
+  maxWidth: 900,
+  margin: "0 auto",
+  padding: "48px 20px 24px",
+  textAlign: "center",
+};
 
-const SAFE_REFUSAL = "Это лучше спросить у мамы или папы 💛";
+const heroTitleStyle: React.CSSProperties = {
+  fontSize: 42,
+  fontWeight: 800,
+  color: "#78350f",
+  margin: 0,
+  lineHeight: 1.15,
+};
 
-function isUnsafe(q: string): boolean {
-  const lower = q.toLowerCase();
-  return BLOCKLIST.some((w) => lower.includes(w));
+const heroSubtitle: React.CSSProperties = {
+  marginTop: 16,
+  fontSize: 18,
+  color: "#92400e",
+  lineHeight: 1.6,
+};
+
+const gridStyle: React.CSSProperties = {
+  maxWidth: 1100,
+  margin: "0 auto",
+  padding: "0 20px 60px",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+  gap: 20,
+};
+
+const tierStyle: React.CSSProperties = {
+  maxWidth: 1100,
+  margin: "0 auto",
+  padding: "12px 20px 0",
+};
+
+const tierTitleStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 1,
+  color: "#a16207",
+  marginBottom: 12,
+};
+
+const aliasBoxStyle: React.CSSProperties = {
+  maxWidth: 900,
+  margin: "0 auto 24px",
+  padding: "0 20px",
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  justifyContent: "center",
+  fontSize: 14,
+  color: "#92400e",
+  flexWrap: "wrap",
+};
+
+const inputStyle: React.CSSProperties = {
+  border: "2px solid #fde68a",
+  background: "#ffffff",
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontSize: 14,
+  fontFamily: "inherit",
+  color: "#78350f",
+};
+
+const emptyStyle: React.CSSProperties = {
+  maxWidth: 600,
+  margin: "20px auto",
+  padding: 30,
+  textAlign: "center",
+  background: "#ffffff",
+  border: "2px dashed #fde68a",
+  borderRadius: 24,
+  color: "#92400e",
+};
+
+const heroEmoji: React.CSSProperties = {
+  fontSize: 60,
+  marginBottom: 12,
+};
+
+const ALIAS_KEY = "kidsai_alias";
+const PROGRESS_KEY = "kidsai_progress_v1";
+
+function readAlias(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(ALIAS_KEY) ?? "";
 }
 
-const LANGS = [
-  { flag: "🇷🇺", code: "RU", name: "Русский" },
-  { flag: "🇬🇧", code: "EN", name: "English" },
-  { flag: "🇰🇿", code: "KK", name: "Қазақша" },
-  { flag: "🇰🇿", code: "KZ-RU", name: "Каз-Рус микс" },
-  { flag: "🇮🇹", code: "IT", name: "Italiano" },
-  { flag: "🇪🇸", code: "ES", name: "Español" },
-];
-
-const TOP_QUESTIONS = [
-  { q: "Почему небо голубое?", count: 3 },
-  { q: "Как растёт дерево?", count: 2 },
-  { q: "Расскажи сказку про лису", count: 2 },
-];
-
-const JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "AEVION Kids AI",
-  applicationCategory: "EducationalApplication",
-  audience: { "@type": "PeopleAudience", suggestedMinAge: 3, suggestedMaxAge: 15 },
-  description: "Safe multi-language AI for children with filters, parent dashboard, speech therapy and age tiers.",
-  inLanguage: ["ru", "en", "kk", "it", "es"],
-};
-
-export default function KidsAIContentPage() {
-  const [age, setAge] = useState<AgeTier>(AGE_TIERS[1]);
-  const [question, setQuestion] = useState("");
-  const [reply, setReply] = useState<string>("");
-  const [provider, setProvider] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [blocked, setBlocked] = useState(false);
-  const [lang, setLang] = useState("RU");
-
-  const systemPrompt = useMemo(
-    () =>
-      `You are SafeKidsAI for age ${age.id}, tone ${age.tone}. Russian only. ` +
-      `No violence/adult/scary/political/medical. ` +
-      `If unsafe → exact reply: '${SAFE_REFUSAL}' + 2 safer alternatives. ` +
-      `End with follow-up question. ≤120 words, 3-6 emojis. Never reveal AI nature.`,
-    [age]
-  );
-
-  async function ask() {
-    const q = question.trim();
-    if (!q || loading) return;
-    setReply("");
-    setBlocked(false);
-    setProvider("");
-
-    if (isUnsafe(q)) {
-      setBlocked(true);
-      setReply(
-        `${SAFE_REFUSAL}\n\nА давай лучше:\n1) Расскажу про животных в лесу 🦊\n2) Придумаем вместе сказку про звёзды ✨\n\nПро что больше хочется?`
-      );
-      return;
+function readProgress(): Set<number> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(PROGRESS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.filter((x) => typeof x === "number"));
     }
+  } catch {
+    // ignore
+  }
+  return new Set();
+}
 
+function suggestAlias(): string {
+  const animals = ["tiger", "fox", "bunny", "panda", "owl", "lion", "dolphin"];
+  const a = animals[Math.floor(Math.random() * animals.length)];
+  const n = Math.floor(Math.random() * 900) + 100;
+  return `${a}${n}`;
+}
+
+export default function KidsAiContentPage() {
+  const [lang, setLang] = useState<KidsLang>("ru");
+  const [lessons, setLessons] = useState<LessonSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [alias, setAlias] = useState("");
+  const [completed, setCompleted] = useState<Set<number>>(new Set());
+
+  // Init alias + progress from localStorage on mount only.
+  useEffect(() => {
+    let a = readAlias();
+    if (!a) {
+      a = suggestAlias();
+      try {
+        localStorage.setItem(ALIAS_KEY, a);
+      } catch {
+        // sandboxed / disabled storage — fine, alias is in memory
+      }
+    }
+    setAlias(a);
+    setCompleted(readProgress());
+  }, []);
+
+  // Load lessons whenever language changes.
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    try {
-      const res = await fetch(apiUrl("/api/qcoreai/chat"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: q },
-          ],
-          temperature: 0.7,
-        }),
+    setLessons([]);
+    fetch(apiUrl(`/api/kids-ai/lessons?lang=${lang}&limit=50`))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = (await r.json()) as { lessons: LessonSummary[] };
+        if (!cancelled) setLessons(data.lessons ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setLessons([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
-      const data = await res.json();
-      setReply(data.reply || data.mode || "Хм, давай попробуем ещё раз 🤔");
-      setProvider(data.provider ? `${data.provider}${data.model ? ` · ${data.model}` : ""}` : data.mode || "");
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
+
+  const onCompleted = useCallback((id: number) => {
+    setCompleted((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
+  const tiers = useMemo(() => {
+    const youngLabel =
+      lang === "en" ? "Ages 5–8" : lang === "kz" ? "5–8 жас" : "5–8 лет";
+    const olderLabel =
+      lang === "en" ? "Ages 9–12" : lang === "kz" ? "9–12 жас" : "9–12 лет";
+    const young = lessons.filter((l) => l.age_max <= 8);
+    const older = lessons.filter((l) => l.age_min >= 9);
+    return [
+      { label: youngLabel, items: young },
+      { label: olderLabel, items: older },
+    ].filter((g) => g.items.length > 0);
+  }, [lessons, lang]);
+
+  function updateAlias(next: string) {
+    const trimmed = next.trim().slice(0, 32);
+    setAlias(trimmed);
+    try {
+      if (trimmed) localStorage.setItem(ALIAS_KEY, trimmed);
     } catch {
-      setReply("Связь пропала. Попроси взрослого помочь 💛");
-    } finally {
-      setLoading(false);
+      // ignore
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-white to-amber-50 text-stone-900">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
-      />
-
-      <header className="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-amber-200">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between text-sm">
-          <Link href="/" className="font-semibold text-amber-700 hover:text-amber-900">
-            ← AEVION · Kids AI · MVP
+  if (activeId !== null) {
+    return (
+      <div style={wrapStyle}>
+        <header style={headerStyle}>
+          <Link href="/" style={{ color: "#92400e", textDecoration: "none", fontWeight: 700 }}>
+            ← AEVION · Kids AI
           </Link>
-          <div className="flex gap-3 text-xs text-stone-600">
-            <Link href="/healthai" className="hover:text-amber-700">HealthAI</Link>
-            <Link href="/qcoreai" className="hover:text-amber-700">QCoreAI</Link>
-            <Link href="/qgood" className="hover:text-amber-700">QGood</Link>
-          </div>
+          <span style={{ fontSize: 13, color: "#a16207" }}>👤 {alias}</span>
+        </header>
+        <div style={{ padding: "30px 0 60px" }}>
+          <LessonDetail
+            lessonId={activeId}
+            childAlias={alias || "anon"}
+            onBack={() => setActiveId(null)}
+            onCompleted={onCompleted}
+            completed={completed.has(activeId)}
+          />
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={wrapStyle}>
+      <header style={headerStyle}>
+        <Link href="/" style={{ color: "#92400e", textDecoration: "none", fontWeight: 700 }}>
+          ← AEVION · Kids AI
+        </Link>
+        <span style={{ fontSize: 13, color: "#a16207" }}>
+          {completed.size > 0
+            ? `🌟 Пройдено: ${completed.size}`
+            : "🛡 Безопасно для детей"}
+        </span>
       </header>
 
-      <section className="max-w-5xl mx-auto px-4 pt-12 pb-8 text-center">
-        <div className="inline-block text-xs uppercase tracking-widest text-amber-700 bg-amber-100 rounded-full px-3 py-1 mb-4">
-          Education · Kids · Multi-language
-        </div>
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-          Curious kids, <span className="text-amber-600">safe AI.</span>
-        </h1>
-        <p className="mt-4 text-stone-600 max-w-2xl mx-auto">
-          Безопасный многоязычный AI для детей 3–15 лет. Жёсткие фильтры, родительский dashboard, логопедия, возрастная шкала.
+      <section style={heroStyle}>
+        <div style={heroEmoji}>🦊📚✨</div>
+        <h1 style={heroTitleStyle}>Учимся весело и безопасно</h1>
+        <p style={heroSubtitle}>
+          Детские уроки на русском, английском и казахском. С AI-помощником,
+          который объяснит непонятное простыми словами.
         </p>
       </section>
 
-      <section className="max-w-5xl mx-auto px-4 pb-8">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-stone-500 mb-3">Возраст ребёнка</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {AGE_TIERS.map((t) => {
-            const active = t.id === age.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setAge(t)}
-                className={`text-left rounded-2xl border p-4 transition ${
-                  active
-                    ? "border-amber-500 bg-amber-100 shadow-md ring-2 ring-amber-300"
-                    : "border-stone-200 bg-white hover:border-amber-300"
-                }`}
-              >
-                <div className="text-2xl">{t.emoji}</div>
-                <div className="mt-2 font-semibold">{t.label}</div>
-                <div className="text-xs text-stone-500 mt-1">{t.hint}</div>
-              </button>
-            );
-          })}
+      <LanguageSelector value={lang} onChange={setLang} />
+
+      <div style={aliasBoxStyle}>
+        <span>👤 Твой ник в приложении:</span>
+        <input
+          type="text"
+          value={alias}
+          onChange={(e) => updateAlias(e.target.value)}
+          maxLength={32}
+          style={inputStyle}
+          aria-label="Псевдоним ребёнка"
+        />
+      </div>
+
+      {loading ? (
+        <div style={emptyStyle}>
+          <p style={{ margin: 0, fontSize: 18 }}>Подбираем уроки… ✨</p>
         </div>
-      </section>
-
-      <section className="max-w-5xl mx-auto px-4 pb-10">
-        <div className="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold">🛡 Safe AI Sandbox</h2>
-            <span className="text-xs text-stone-500">для возраста {age.label}</span>
-          </div>
-
-          <textarea
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Спроси что угодно — например, «почему трава зелёная?»"
-            rows={3}
-            className="w-full rounded-xl border border-stone-200 focus:border-amber-400 focus:ring-2 focus:ring-amber-200 outline-none p-3 text-sm"
-          />
-
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <button
-              onClick={ask}
-              disabled={loading || !question.trim()}
-              className="bg-amber-500 hover:bg-amber-600 disabled:bg-stone-300 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
-            >
-              {loading ? "Думаю…" : "Спросить AI безопасно"}
-            </button>
-            <span className="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">📏 ≤120 слов</span>
-            <span className="text-xs px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">🎯 возраст {age.id}</span>
-            <span className="text-xs px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200">🚫 без 18+</span>
-            <span className="text-xs px-2 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-200">🕊 без насилия</span>
-          </div>
-
-          {reply && (
-            <div
-              className={`mt-4 rounded-2xl p-4 border ${
-                blocked
-                  ? "bg-rose-50 border-rose-200 text-rose-900"
-                  : "bg-amber-50 border-amber-200 text-stone-900"
-              }`}
-            >
-              <div className="text-xs uppercase tracking-widest mb-2 opacity-70">
-                {blocked ? "Фильтр сработал" : `Ответ${provider ? ` · ${provider}` : ""}`}
-              </div>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed">{reply}</div>
-            </div>
-          )}
+      ) : tiers.length === 0 ? (
+        <div style={emptyStyle}>
+          <p style={{ margin: 0, fontSize: 18 }}>
+            На этом языке уроков пока нет. Выбери другой язык выше! 🌈
+          </p>
         </div>
-      </section>
-
-      <section className="max-w-5xl mx-auto px-4 pb-10">
-        <div className="rounded-3xl border border-stone-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">👨‍👩‍👧 Родительский dashboard</h2>
-            <span className="text-xs text-stone-500">mock · live в Phase 2</span>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
-              <div className="text-xs text-stone-500">Сессий сегодня</div>
-              <div className="text-2xl font-bold text-amber-700">7</div>
+      ) : (
+        tiers.map((tier) => (
+          <div key={tier.label}>
+            <div style={tierStyle}>
+              <div style={tierTitleStyle}>{tier.label}</div>
             </div>
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3">
-              <div className="text-xs text-stone-500">Заблокировано</div>
-              <div className="text-2xl font-bold text-emerald-700">0</div>
-            </div>
-            <div className="rounded-xl bg-sky-50 border border-sky-200 p-3">
-              <div className="text-xs text-stone-500">Последний визит</div>
-              <div className="text-2xl font-bold text-sky-700">14:32</div>
-            </div>
-            <div className="rounded-xl bg-violet-50 border border-violet-200 p-3">
-              <div className="text-xs text-stone-500">Минут с AI</div>
-              <div className="text-2xl font-bold text-violet-700">23</div>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="text-xs uppercase tracking-widest text-stone-500 mb-2">Топ-3 вопроса дня</div>
-            <ol className="space-y-1 text-sm">
-              {TOP_QUESTIONS.map((t, i) => (
-                <li key={i} className="flex items-center justify-between rounded-lg bg-stone-50 border border-stone-200 px-3 py-2">
-                  <span>
-                    <span className="text-amber-600 font-semibold mr-2">#{i + 1}</span>
-                    {t.q}
-                  </span>
-                  <span className="text-xs text-stone-500">×{t.count}</span>
-                </li>
+            <div style={gridStyle}>
+              {tier.items.map((lesson) => (
+                <LessonCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  onOpen={(id) => setActiveId(id)}
+                  completed={completed.has(lesson.id)}
+                />
               ))}
-            </ol>
+            </div>
           </div>
-        </div>
-      </section>
+        ))
+      )}
 
-      <section className="max-w-5xl mx-auto px-4 pb-12">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-stone-500 mb-3">🌐 Языки (6)</h2>
-        <div className="flex flex-wrap gap-2">
-          {LANGS.map((l) => {
-            const active = l.code === lang;
-            return (
-              <button
-                key={l.code}
-                onClick={() => setLang(l.code)}
-                className={`text-sm px-3 py-1.5 rounded-full border transition ${
-                  active
-                    ? "bg-amber-500 border-amber-500 text-white"
-                    : "bg-white border-stone-200 text-stone-700 hover:border-amber-300"
-                }`}
-              >
-                <span className="mr-1">{l.flag}</span>
-                {l.name}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="max-w-5xl mx-auto px-4 pb-16">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-stone-500 mb-3">Связанные модули</h2>
-        <div className="grid md:grid-cols-3 gap-3">
-          <Link href="/healthai" className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-amber-400 hover:shadow-sm transition">
-            <div className="font-semibold">HealthAI →</div>
-            <div className="text-xs text-stone-500 mt-1">Здоровье ребёнка: скрининг + план развития.</div>
-          </Link>
-          <Link href="/qcoreai" className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-amber-400 hover:shadow-sm transition">
-            <div className="font-semibold">QCoreAI →</div>
-            <div className="text-xs text-stone-500 mt-1">AI-движок с жёсткими фильтрами под Kids AI.</div>
-          </Link>
-          <Link href="/qgood" className="rounded-2xl border border-stone-200 bg-white p-4 hover:border-amber-400 hover:shadow-sm transition">
-            <div className="font-semibold">QGood →</div>
-            <div className="text-xs text-stone-500 mt-1">Этичный AI и измеримая польза.</div>
-          </Link>
-        </div>
-      </section>
-
-      <MvpConceptBoard
-        moduleId="kids-ai-content"
-        noun="items"
-        titleField="topic"
-        summaryField="summary"
-        accent="violet"
-        sectionTitle="Community items — темы и идеи для детей"
-        sectionHint="Поделитесь темой и возрастной группой. Родители подберут материал быстрее."
-        fields={[
-          { key: "topic", label: "Тема", required: true, placeholder: "Почему меняются времена года?" },
-          { key: "ageRange", label: "Возраст (диапазон)", required: true, placeholder: "6-8" },
-          { key: "summary", label: "Краткий пересказ / идея урока", type: "textarea", required: false, placeholder: "Объяснить наклон оси Земли через игру с фонариком и яблоком." },
-        ]}
-      />
-
-      <footer className="border-t border-amber-200 bg-white/60 py-6 text-center text-xs text-stone-500">
-        AEVION · Kids AI · MVP · safe-by-default · for ages 3–15
+      <footer
+        style={{
+          maxWidth: 900,
+          margin: "0 auto",
+          padding: "30px 20px",
+          textAlign: "center",
+          color: "#a16207",
+          fontSize: 13,
+          borderTop: "1px solid #fde68a",
+        }}
+      >
+        AEVION · Kids AI · MVP · safe-by-default · ages 5–12
       </footer>
     </div>
   );

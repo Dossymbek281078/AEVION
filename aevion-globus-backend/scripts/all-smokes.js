@@ -113,6 +113,13 @@ const SMOKES = [
   { name: "qlearn", script: "qlearn-smoke.js", readOnly: true },
   // QStore — product catalogue/orders. Read-only public + auth gates.
   { name: "qstore", script: "qstore-smoke.js", readOnly: true },
+  // QEvents — events platform: health/categories/list/create/calendar.
+  { name: "qevents", script: "qevents-smoke.js", readOnly: false },
+  // New Wave MVPs (2026-05-13 batch) — startupx/kids-ai/mapreality/voe.
+  { name: "startupx", script: "startupx-smoke.js", readOnly: false },
+  { name: "kids-ai", script: "kids-ai-smoke.js", readOnly: false },
+  { name: "mapreality", script: "mapreality-smoke.js", readOnly: false },
+  { name: "voe", script: "voe-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

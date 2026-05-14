@@ -7,17 +7,36 @@
 // Server code (i18n-server.ts) imports here directly. Client code keeps
 // importing from "@/lib/i18n", which re-exports these names.
 
-export type Lang = "en" | "ru" | "kk";
+export type Lang = "en" | "ru" | "kk" | "de" | "fr" | "es" | "zh" | "ja" | "ar" | "pt" | "tr";
 
-export const LANGS: Lang[] = ["en", "ru", "kk"];
+export const LANGS: Lang[] = ["ru", "en", "kk", "de", "fr", "es", "zh", "ja", "ar", "pt", "tr"];
 
-export const LANG_SHORT: Record<Lang, string> = { en: "EN", ru: "RU", kk: "KZ" };
+export const LANG_FLAG: Record<Lang, string> = {
+  en: "🇺🇸", ru: "🇷🇺", kk: "🇰🇿", de: "🇩🇪", fr: "🇫🇷",
+  es: "🇪🇸", zh: "🇨🇳", ja: "🇯🇵", ar: "🇸🇦", pt: "🇧🇷", tr: "🇹🇷",
+};
+
+export const LANG_SHORT: Record<Lang, string> = {
+  en: "EN", ru: "RU", kk: "KZ", de: "DE", fr: "FR",
+  es: "ES", zh: "ZH", ja: "JA", ar: "AR", pt: "PT", tr: "TR",
+};
 
 export const LANG_FULL: Record<Lang, string> = {
   en: "English",
   ru: "Русский",
   kk: "Қазақша",
+  de: "Deutsch",
+  fr: "Français",
+  es: "Español",
+  zh: "中文",
+  ja: "日本語",
+  ar: "العربية",
+  pt: "Português",
+  tr: "Türkçe",
 };
+
+// RTL languages
+export const LANG_RTL: Partial<Record<Lang, true>> = { ar: true };
 
 export const LANG_COOKIE = "aevion_lang_v1";
 

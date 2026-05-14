@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { VideoEmbed } from "@/components/build/VideoEmbed";

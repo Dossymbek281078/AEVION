@@ -1,4 +1,4 @@
-﻿/**
+/**
  * QBuild References — post-project employer references for workers.
  *
  * After a project is DONE, CLIENT can write a reference for a WORKER

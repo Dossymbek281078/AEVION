@@ -1,4 +1,4 @@
-﻿// /api/auth/oauth/* — OAuth bridge for Google + GitHub.
+// /api/auth/oauth/* — OAuth bridge for Google + GitHub.
 //
 // Implementation is dependency-free (no passport.js): the OAuth 2.0 dance
 // is short enough that wiring it directly with fetch is simpler than a

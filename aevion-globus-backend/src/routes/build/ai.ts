@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
   buildPool as pool,

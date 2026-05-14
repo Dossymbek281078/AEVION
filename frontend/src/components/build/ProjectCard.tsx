@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import type { BuildProject } from "@/lib/build/api";
 
 const STATUS_LABEL: Record<BuildProject["status"], string> = {

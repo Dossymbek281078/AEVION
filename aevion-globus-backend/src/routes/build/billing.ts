@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import crypto from "crypto";
 import Stripe from "stripe";
 import {

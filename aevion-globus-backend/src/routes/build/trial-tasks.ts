@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber, TRIAL_TASK_STATUSES } from "../../lib/build";
 import { sendTrialTaskProposed, sendTrialTaskApproved } from "../../lib/build/email";

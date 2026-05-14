@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { BuildShell, RequireAuth } from "@/components/build/BuildShell";

@@ -1,4 +1,4 @@
-﻿import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";

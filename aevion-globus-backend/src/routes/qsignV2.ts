@@ -1,4 +1,4 @@
-﻿import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { getPool } from "../lib/dbPool";

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { buildApi, type BuildTrialTask, type TrialTaskStatus } from "@/lib/build/api";

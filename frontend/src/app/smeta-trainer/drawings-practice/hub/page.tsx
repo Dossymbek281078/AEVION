@@ -279,6 +279,9 @@ const MODULES: Module[] = [
   { id: "high-rise-buildings",    category: "structure", href: "/smeta-trainer/drawings-practice/high-rise-buildings",    icon: "🏢", title: "Высотные здания 30+ этажей",      subtitle: "ТМД, сейсмоизоляция, зонирование лифтов, VRF, бенчмарки",      level: "L5", exercises: 4,  color: "violet"  },
   { id: "data-centers",           category: "tools",     href: "/smeta-trainer/drawings-practice/data-centers",           icon: "💻", title: "Дата-центры (ЦОД)",               subtitle: "Tier I-IV, PUE, NOVEC-тушение, HEPA, Qazcloud/KT примеры РК",  level: "L5", exercises: 4,  color: "slate"   },
   { id: "clean-rooms",            category: "special",   href: "/smeta-trainer/drawings-practice/clean-rooms",            icon: "🧪", title: "Чистые комнаты (ISO 1-9)",        subtitle: "Фарм./медиц./нано, HEPA 99.97%, избыточное давление +15 Па",    level: "L5", exercises: 4,  color: "teal"    },
+  { id: "museums-galleries",      category: "practice",  href: "/smeta-trainer/drawings-practice/museums-galleries",      icon: "🏛️", title: "Музеи и галереи",                 subtitle: "Климат 18-22°C, 50-200 лк без УФ, NOVEC, сейсмовитрины",       level: "L5", exercises: 4,  color: "amber"   },
+  { id: "theaters-opera",         category: "practice",  href: "/smeta-trainer/drawings-practice/theaters-opera",         icon: "🎭", title: "Театры и оперы",                  subtitle: "RT60 1.1-3.0 с, сценическая механика, оркестровая яма",         level: "L5", exercises: 4,  color: "rose"    },
+  { id: "aquapark-pool",          category: "special",   href: "/smeta-trainer/drawings-practice/aquapark-pool",          icon: "🏊", title: "Аквапарки и бассейны",            subtitle: "FINA 50×25 м, ПВХ-гидроизоляция, рециркуляция, хлорамины",     level: "L4", exercises: 4,  color: "cyan"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

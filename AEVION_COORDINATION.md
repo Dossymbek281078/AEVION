@@ -168,7 +168,24 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | блок 3 завершён, см. ниже | 2026-05-13 block-3 done |
+| _free_ | — | блок 4 (8 агентов) завершён, см. ниже | 2026-05-14 block-4 done |
+
+### Завершено 2026-05-14 (parallel block 4 — 8 agents)
+
+- ✅ **QMedia polish** — recommendations + trending endpoints + sticky audio player (scrubber/speed/volume) + smoke +8 assertions. SHA: `07653a12`.
+- ✅ **QAI polish** — 6 persona templates + SSE streaming с AbortController stop + token usage counter + smoke aligned. SHA: `73cf6d36`.
+- ✅ **Multichat polish** — provider health-strip (live ping 30s) + 5 mission presets (Code/Translate/Summarize/Brainstorm/Debug) + 3 endpoints. SHA: `886bc187`.
+- ✅ **Coach polish** — sessions lifecycle + goals (7 endpoints) + dashboard с live-session timer + goal tracker. SHA: `1c2bd0ba`.
+- ✅ **QStore seller profile** — `/qstore/seller/[id]` page + link из item detail. SHA: `c1aa6300`.
+- ✅ **Ecosystem** — `/api/ecosystem/activity` (cross-module feed) + `/graph` (deps+health-matrix) + `/ecosystem` dashboard. SHA: `c2bce26e`.
+- ✅ **SDK v0.6.0** — `@aevion/catalog-client` 5 namespaced sub-clients (qstore/qlearn/qevents/devhub/planet) + 16 endpoints + 30 vitest tests. SHA: `61721427`.
+- ✅ **Mobile audit** — anti-iOS-zoom, safer grids, modal scroll, sticky breakpoint, MOBILE_AUDIT_2026-05-14.md. SHA: `4120093d`.
+
+### Smoke audit на prod Railway (2026-05-14, до redeploy)
+- 21/38 passed, 17 failed
+- Большинство failures связано с тем что новые endpoints ещё не задеплоены (qmedia/qai/qstore/multichat)
+- Финтех-/cyberchess-/smeta-failures — не в этой сессии (исключены пользователем)
+- После Railway redeploy большинство fixed автоматически
 
 ### Завершено 2026-05-13 (parallel block 3 — 6 agents)
 

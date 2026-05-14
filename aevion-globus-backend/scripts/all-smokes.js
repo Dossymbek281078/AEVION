@@ -75,6 +75,10 @@ const SMOKES = [
   { name: "fintech-prod", script: "fintech-prod-smoke.js", readOnly: true },
   // QTrade PROD — 15 read-only checks for QTrade + QTradeOffline + AEV (trade/exchange/award trio).
   { name: "qtrade-prod", script: "qtrade-prod-smoke.js", readOnly: true },
+  // Bureau PROD — 15 read-only checks for IP Bureau (health, transparency, notaries, auth gates).
+  { name: "bureau-prod", script: "bureau-prod-smoke.js", readOnly: true },
+  // QSign PROD — 15 read-only checks for QSign v2 (ML-DSA/Ed25519/HMAC) + legacy deprecation.
+  { name: "qsign-prod", script: "qsign-prod-smoke.js", readOnly: true },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.

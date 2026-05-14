@@ -596,6 +596,7 @@ export const openapiSpec = {
     "/api/bank/test-webhook/chess": { post: { summary: "Internal: fire synthetic CyberChess tournament webhook (auth)" } },
     "/api/bank/test-webhook/planet": { post: { summary: "Internal: fire synthetic Planet certify webhook (auth)" } },
     "/api/metrics": { get: { summary: "Prometheus exposition (gated by METRICS_TOKEN if set)", security: [] } },
+    "/api/metrics/json": { get: { summary: "Metrics in JSON: process info + summary + typed entries (gated by METRICS_TOKEN if set)", security: [] } },
     "/api/health": { get: { summary: "Liveness probe", security: [] } },
     "/api/health/deep": { get: { summary: "Aggregated health: ledger sizes + memory + env flags", security: [] } },
     "/api/globus/projects": { get: { summary: "All Globus projects + runtime", security: [] } },

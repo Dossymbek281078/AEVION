@@ -19,41 +19,42 @@ import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 // Dark theme palette — mirrors the keys of COLOR (./theme.ts) so the
 // component can swap CC=CC_LIGHT vs CC=CC_DARK at runtime via theme toggle.
 // Keep keys 1:1 with theme.ts COLOR or TS will narrow CC's type.
+// CC_DARK — lichess-inspired palette: коричневато-тёмный фон (не синий), высокий контраст
 const CC_DARK = {
-  bg: "#0b1220",
-  surface1: "#1e293b",
-  surface2: "#0f172a",
-  surface3: "#020617",
-  surfaceGlass: "rgba(15,23,42,0.7)",
+  bg: "#161512",           // lichess background
+  surface1: "#262421",     // lichess sidebar panels
+  surface2: "#1e1c19",     // deeper surfaces
+  surface3: "#100f0d",     // deepest
+  surfaceGlass: "rgba(22,21,18,0.85)",
 
-  text: "#f1f5f9",
-  textDim: "#94a3b8",
-  textMute: "#64748b",
-  textInv: "#0f172a",
+  text: "#bababa",         // lichess text — не ослепительно белый
+  textDim: "#8b8987",
+  textMute: "#5d5b59",
+  textInv: "#161512",
 
-  border: "#334155",
-  borderStrong: "#475569",
+  border: "#3d3b39",
+  borderStrong: "#5d5b59",
 
-  brand: "#10b981",
-  brandHover: "#34d399",
-  brandSoft: "rgba(16,185,129,0.18)",
-  accent: "#a78bfa",
-  accentSoft: "rgba(167,139,250,0.18)",
-  gold: "#fbbf24",
-  goldSoft: "rgba(251,191,36,0.18)",
-  danger: "#f87171",
-  dangerSoft: "rgba(248,113,113,0.18)",
-  info: "#60a5fa",
-  infoSoft: "rgba(96,165,250,0.18)",
+  brand: "#759900",        // lichess зелёный (ходы, кнопки)
+  brandHover: "#88b300",
+  brandSoft: "rgba(117,153,0,0.2)",
+  accent: "#d1a227",       // lichess золотой акцент
+  accentSoft: "rgba(209,162,39,0.2)",
+  gold: "#e8a908",
+  goldSoft: "rgba(232,169,8,0.2)",
+  danger: "#e04040",
+  dangerSoft: "rgba(224,64,64,0.18)",
+  info: "#4990a4",
+  infoSoft: "rgba(73,144,164,0.18)",
 
-  // Board interactions — slightly more saturated for dark surfaces
-  sqSel: "rgba(16,185,129,0.55)",
-  sqValid: "rgba(16,185,129,0.4)",
-  sqCap: "rgba(248,113,113,0.4)",
-  sqLast: "rgba(251,191,36,0.32)",
-  sqCheck: "rgba(248,113,113,0.6)",
-  sqPremove: "rgba(96,165,250,0.45)",
-  sqPremoveStrong: "rgba(96,165,250,0.6)",
+  // Board interaction overlays
+  sqSel: "rgba(20,85,30,0.9)",     // lichess green selection
+  sqValid: "rgba(20,85,30,0.6)",
+  sqCap: "rgba(224,64,64,0.5)",
+  sqLast: "rgba(184,128,40,0.45)", // lichess yellow last move
+  sqCheck: "rgba(224,64,64,0.7)",
+  sqPremove: "rgba(73,144,164,0.5)",
+  sqPremoveStrong: "rgba(73,144,164,0.7)",
 } as const;
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
@@ -746,7 +747,8 @@ export default function CyberChessPage(){
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
   // entire palette at render time; all ~720 CC.* references pick it up automatically.
-  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="dark"?"dark":"light"}catch{return"light"}});
+  // Default: dark (как lichess). Пользователь переключает в Settings.
+  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="light"?"light":"dark"}catch{return"dark"}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_color_theme_v1",themeMode)}catch{}},[themeMode]);
   // Active palette — shadows the imported CC_LIGHT so every existing CC.* lookup
   // in this component reads the active theme. Top-level helpers above the
@@ -4651,10 +4653,67 @@ export default function CyberChessPage(){
             </button>
             <button onClick={()=>sActiveLesson(null)} style={{padding:"4px 8px",borderRadius:RADIUS.sm,border:"none",background:"transparent",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>✕</button>
           </div>}
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}>
-            <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
-            <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
-          </div>}
+          {/* ── Chess.com-style player rows ─────────────────────
+              Показываются всегда в game mode, даже без таймера. */}
+          {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
+            // Material count: unicode → point value
+            const PIECE_VAL:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
+            const pieceVal=(s:string)=>PIECE_VAL[s]||0;
+            const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
+            const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
+            const al=ALS[aiI];
+            const bw="min(calc(100vh - 160px),calc(100vw * 0.6),900px)";
+            const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
+              const name=isAI?al.name+" AI":"Вы";
+              const elo=isAI?al.elo:rat;
+              return <div style={{
+                display:"flex",alignItems:"center",justifyContent:"space-between",
+                width:bw,padding:"5px 0",gap:8,
+                borderLeft:isActive?`3px solid ${CC.brand}`:"3px solid transparent",
+                paddingLeft:isActive?6:6,
+                transition:"border-color 200ms",
+              }}>
+                {/* Avatar + name + rank */}
+                <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                  <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+                    background:isAI?al.color+"22":"rgba(255,255,255,0.08)",
+                    border:`1px solid ${isAI?al.color+"44":CC.border}`,
+                    fontSize:16,flexShrink:0}}>
+                    {isAI?"🤖":"👤"}
+                  </div>
+                  <div style={{minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:13,fontWeight:800,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+                      <span style={{fontSize:10,fontWeight:700,color:isAI?al.color:CC.accent,background:isAI?al.color+"18":CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{elo}</span>
+                    </div>
+                    {/* Захваченные фигуры + advantage */}
+                    <div style={{display:"flex",alignItems:"center",gap:2,marginTop:1,flexWrap:"wrap"}}>
+                      {captures.map((c,i)=><span key={i} style={{fontSize:12,lineHeight:1,color:CC.textDim,opacity:0.9}}>{c}</span>)}
+                      {advantage>0&&<span style={{fontSize:10,fontWeight:800,color:CC.brand,marginLeft:2}}>+{advantage}</span>}
+                    </div>
+                  </div>
+                </div>
+                {/* Clock */}
+                {tc.ini>0&&<div style={{
+                  fontSize:20,fontWeight:900,fontFamily:"ui-monospace,monospace",letterSpacing:-0.5,
+                  color:lowTime?"#e04040":isActive?CC.brand:CC.textMute,
+                  background:isActive?"rgba(255,255,255,0.04)":"transparent",
+                  padding:"4px 10px",borderRadius:6,
+                  animation:lowTime&&isActive?"cc-clock-pulse 1s ease-in-out infinite":undefined,
+                  transition:"color 300ms",
+                }}>{fmt(time)}</div>}
+              </div>;
+            };
+            // Верхняя строка (противник) + нижняя (игрок)
+            const topIsAI=pCol==="w"; // белые играют снизу
+            const aiLow=aT.time<30000&&on&&!over;
+            const myLow=pT.time<30000&&on&&!over;
+            return <div style={{display:"flex",flexDirection:"column",gap:1,marginBottom:4}}>
+              {topIsAI
+                ?<PRow isAI={true} time={aT.time} isActive={game.turn()===aiC&&on&&!over} lowTime={aiLow} captures={capW} advantage={bMat-wMat>0?bMat-wMat:0}/>
+                :<PRow isAI={false} time={pT.time} isActive={myT&&on&&!over} lowTime={myLow} captures={capB} advantage={wMat-bMat>0?wMat-bMat:0}/>}
+            </div>;
+          })()}
 
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
@@ -4753,7 +4812,8 @@ export default function CyberChessPage(){
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
-              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
+              className={`${bk<=2&&on?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
+              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
               {/* Threat Heatmap overlay (killer #12) */}
@@ -4916,6 +4976,49 @@ export default function CyberChessPage(){
             </div>
           </div>
           <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+
+          {/* Нижняя player row (свой игрок) — chess.com style */}
+          {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
+            const PV2:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
+            const pieceVal2=(s:string)=>PV2[s]||0;
+            const wMat2=capB.reduce((s,c)=>s+pieceVal2(c),0);const bMat2=capW.reduce((s,c)=>s+pieceVal2(c),0);
+            const bottomIsMe=pCol==="w";
+            const myCaptures=bottomIsMe?capB:capW;
+            const myAdvantage=bottomIsMe?Math.max(0,wMat2-bMat2):Math.max(0,bMat2-wMat2);
+            const myLow=pT.time<30000&&on&&!over;
+            return <div style={{
+              display:"flex",alignItems:"center",justifyContent:"space-between",
+              width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
+              padding:"5px 0",marginTop:2,gap:8,
+              borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
+              paddingLeft:6,transition:"border-color 200ms",
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+                  background:"rgba(255,255,255,0.08)",border:`1px solid ${CC.border}`,fontSize:16,flexShrink:0}}>
+                  👤
+                </div>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Вы</span>
+                    <span style={{fontSize:10,fontWeight:700,color:CC.accent,background:CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{rat}</span>
+                    <span style={{fontSize:10,color:CC.textDim}}>{gRank(rat).t}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:2,marginTop:1}}>
+                    {myCaptures.map((c,i)=><span key={i} style={{fontSize:12,lineHeight:1,color:CC.textDim}}>{c}</span>)}
+                    {myAdvantage>0&&<span style={{fontSize:10,fontWeight:800,color:CC.brand,marginLeft:2}}>+{myAdvantage}</span>}
+                  </div>
+                </div>
+              </div>
+              {tc.ini>0&&<div style={{
+                fontSize:20,fontWeight:900,fontFamily:"ui-monospace,monospace",letterSpacing:-0.5,
+                color:myLow?"#e04040":myT&&on&&!over?CC.brand:CC.textMute,
+                padding:"4px 10px",borderRadius:6,
+                background:myT&&on&&!over?"rgba(255,255,255,0.04)":"transparent",
+                animation:myLow&&myT&&on&&!over?"cc-clock-pulse 1s ease-in-out infinite":undefined,
+              }}>{fmt(pT.time)}</div>}
+            </div>;
+          })()}
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}

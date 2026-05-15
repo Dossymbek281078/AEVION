@@ -328,6 +328,11 @@ const MODULES: Module[] = [
   { id: "cement-plants",          category: "special",   href: "/smeta-trainer/drawings-practice/cement-plants",          icon: "🏭", title: "Цементные заводы",                subtitle: "Карагандацемент 2.5 млн т, вращающаяся печь Ø5×75 м, клинкер 1450°C", level: "L5", exercises: 4,  color: "stone"   },
   { id: "metallurgy-plants",      category: "special",   href: "/smeta-trainer/drawings-practice/metallurgy-plants",      icon: "🔥", title: "Металлургические заводы",         subtitle: "АО АрселорМиттал Темиртау 5 млн т стали, конвертер LD 250 т, ДП-9", level: "L5", exercises: 4,  color: "red"     },
   { id: "textile-factories",      category: "special",   href: "/smeta-trainer/drawings-practice/textile-factories",      icon: "🧵", title: "Текстильные фабрики",             subtitle: "Шымкент 50 млрд тг, прядение/ткачество, цех 144×72 м, кондиционирование", level: "L5", exercises: 4,  color: "rose"    },
+
+  // ── АПК: зерно, мясо, молоко ──
+  { id: "elevators-granaries",    category: "special",   href: "/smeta-trainer/drawings-practice/elevators-granaries",    icon: "🌾", title: "Элеваторы и зернохранилища",      subtitle: "Силосы Ø6 м H=30 м, 50 тыс. т Костанай, СН РК 3.04-13, аспирация ПБ В-IIa", level: "L5", exercises: 4,  color: "yellow"  },
+  { id: "meat-processing",        category: "special",   href: "/smeta-trainer/drawings-practice/meat-processing",        icon: "🥩", title: "Мясокомбинаты и пищепром",        subtitle: "50 т/смену Караганда, СанПиН 4.01-001-2024, шок -35°C, R717 NH₃ ПБ 09-595", level: "L5", exercises: 4,  color: "red"     },
+  { id: "dairy-plants",           category: "special",   href: "/smeta-trainer/drawings-practice/dairy-plants",           icon: "🥛", title: "Молочные заводы",                 subtitle: "200 т/сутки, HTST 72°C/UHT 135°C, Tetra Pak, CIP-мойка, БПК₅ 3000→6 мг/л", level: "L5", exercises: 4,  color: "sky"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

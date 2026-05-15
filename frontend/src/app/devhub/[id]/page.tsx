@@ -246,6 +246,9 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentResults, setAgentResults] = useState<Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }>>([]);
   const [agentSummary, setAgentSummary] = useState<{ totalSteps: number; successCount: number; failureCount: number } | null>(null);
+  const [agentStreaming, setAgentStreaming] = useState(true);
+  const [agentLiveStep, setAgentLiveStep] = useState<number | null>(null);
+  const [agentTemplates, setAgentTemplates] = useState<Array<{ id: string; name: string; description: string; steps: AgentStep[] }>>([]);
   const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
 
   // Templates
@@ -285,7 +288,25 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "payment">("tts");
+  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "payment" | "sms" | "whatsapp">("tts");
+
+  // SMS state
+  const [smsRecipient, setSmsRecipient] = useState("");
+  const [smsContent, setSmsContent] = useState("");
+  const [smsSender, setSmsSender] = useState("AEVION");
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // WhatsApp state
+  const [waContact, setWaContact] = useState("");
+  const [waTemplateId, setWaTemplateId] = useState("");
+  const [waParams, setWaParams] = useState("");
+  const [waLoading, setWaLoading] = useState(false);
+  const [waMsg, setWaMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Cloudflare Images upload state (per-DALL-E-result)
+  const [cfImgUploading, setCfImgUploading] = useState(false);
+  const [cfImgPermanentUrl, setCfImgPermanentUrl] = useState<string | null>(null);
 
   // DALL-E image state
   const [imgPrompt, setImgPrompt] = useState("");
@@ -909,6 +930,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     setImgLoading(true);
     setImgError(null);
     setImgResult(null);
+    setCfImgPermanentUrl(null);
     try {
       const r = await fetch(apiUrl("/api/devhub/media/image"), {
         method: "POST",
@@ -1012,11 +1034,88 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   // ── Agent workflow ───────────────────────────────────────────────────────────
 
+  const loadAgentTemplates = useCallback(async () => {
+    try {
+      const r = await fetch(apiUrl("/api/devhub/agent/templates"), { cache: "no-store" });
+      const d = await r.json();
+      setAgentTemplates(d.templates || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "agent" && agentTemplates.length === 0) loadAgentTemplates();
+  }, [activeTab, agentTemplates.length, loadAgentTemplates]);
+
+  const applyAgentTemplate = (tplId: string) => {
+    const tpl = agentTemplates.find((t) => t.id === tplId);
+    if (!tpl) return;
+    setAgentSteps(tpl.steps.map((s) => ({ ...s })));
+    setAgentResults([]);
+    setAgentSummary(null);
+    setAgentLiveStep(null);
+  };
+
   const runAgentWorkflow = async () => {
     if (!project || agentRunning || agentSteps.length === 0) return;
     setAgentRunning(true);
     setAgentResults([]);
     setAgentSummary(null);
+    setAgentLiveStep(null);
+
+    if (agentStreaming) {
+      // SSE streaming version
+      try {
+        const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/agent/workflow/stream`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({ steps: agentSteps }),
+        });
+        if (!r.ok || !r.body) throw new Error(`stream failed (${r.status})`);
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const accumulated: typeof agentResults = [];
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const e of events) {
+            if (!e.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(e.slice(6));
+              if (evt.type === "step-start") {
+                setAgentLiveStep(evt.index);
+              } else if (evt.type === "step-done") {
+                const step = agentSteps[evt.index];
+                accumulated.push({
+                  step: evt.index, type: step?.type || "unknown",
+                  ok: !!evt.ok, output: evt.output, error: evt.error, savedAs: evt.savedAs,
+                });
+                setAgentResults([...accumulated]);
+              } else if (evt.type === "complete") {
+                setAgentSummary({
+                  totalSteps: evt.totalSteps, successCount: evt.successCount, failureCount: evt.failureCount,
+                });
+                showToast(`Agent: ${evt.successCount}/${evt.totalSteps} steps ok`, evt.failureCount === 0 ? "success" : "error");
+              }
+            } catch { /* tolerate bad events */ }
+          }
+        }
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json();
+        setFiles(listData.files || []);
+      } catch (e: any) {
+        showToast(e?.message || "Stream failed", "error");
+      } finally {
+        setAgentRunning(false);
+        setAgentLiveStep(null);
+      }
+      return;
+    }
+
+    // Non-streaming fallback (whole response at end)
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/agent/workflow`), {
         method: "POST",
@@ -1027,7 +1126,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       if (!r.ok) throw new Error(d.error || "Workflow failed");
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
-      // Reload file tree
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       setFiles(listData.files || []);
@@ -1036,6 +1134,99 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       showToast(e?.message || "Workflow failed", "error");
     } finally {
       setAgentRunning(false);
+    }
+  };
+
+  // ── Brevo SMS ────────────────────────────────────────────────────────────────
+
+  const sendSms = async () => {
+    if (!smsRecipient.trim() || !smsContent.trim()) return;
+    setSmsLoading(true);
+    setSmsMsg(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/sms"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: smsRecipient.trim(),
+          content: smsContent,
+          sender: smsSender.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setSmsMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setSmsMsg({ ok: true, text: `SMS sent (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
+        setSmsRecipient(""); setSmsContent("");
+      }
+    } catch (e: any) {
+      setSmsMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  // ── Brevo WhatsApp ───────────────────────────────────────────────────────────
+
+  const sendWhatsApp = async () => {
+    if (!waContact.trim() || !waTemplateId.trim()) return;
+    setWaLoading(true);
+    setWaMsg(null);
+    try {
+      let params: any = undefined;
+      if (waParams.trim()) {
+        try { params = JSON.parse(waParams); } catch {
+          setWaMsg({ ok: false, text: "params must be valid JSON object" });
+          setWaLoading(false);
+          return;
+        }
+      }
+      const r = await fetch(apiUrl("/api/devhub/media/whatsapp"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactNumber: waContact.trim(),
+          templateId: isNaN(Number(waTemplateId)) ? waTemplateId.trim() : Number(waTemplateId),
+          params,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setWaMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setWaMsg({ ok: true, text: `WhatsApp sent (msg ${d.messageId})` });
+        setWaContact(""); setWaTemplateId(""); setWaParams("");
+      }
+    } catch (e: any) {
+      setWaMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setWaLoading(false);
+    }
+  };
+
+  // ── Cloudflare Images upload (call from DALL-E result) ───────────────────────
+
+  const uploadImageToCloudflare = async (sourceUrl: string) => {
+    setCfImgUploading(true);
+    setCfImgPermanentUrl(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/upload-image"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        showToast(d.error || "Cloudflare upload failed", "error");
+      } else {
+        setCfImgPermanentUrl(d.url);
+        showToast("Image uploaded to permanent CDN", "success");
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Upload failed", "error");
+    } finally {
+      setCfImgUploading(false);
     }
   };
 
@@ -1225,6 +1416,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       {/* Top bar */}
       <div style={{ background: "#fff", borderBottom: "1px solid rgba(15,23,42,0.1)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>Back</Link>
@@ -1821,16 +2013,36 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       {imgResult && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          <img src={cfImgPermanentUrl || imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
                               Revised prompt: {imgResult.revisedPrompt}
                             </div>
                           )}
-                          <a href={imgResult.url} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
-                            Open full size →
-                          </a>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <a href={cfImgPermanentUrl || imgResult.url} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
+                              Open full size →
+                            </a>
+                            {!cfImgPermanentUrl && (
+                              <button
+                                onClick={() => uploadImageToCloudflare(imgResult.url)}
+                                disabled={cfImgUploading}
+                                title="OpenAI's image URL expires in ~1 hour. Upload to Cloudflare Images for a permanent CDN URL."
+                                style={{
+                                  padding: "4px 10px", background: "#f59e0b", color: "#fff",
+                                  border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                }}
+                              >
+                                {cfImgUploading ? "Uploading..." : "→ Permanent CDN URL"}
+                              </button>
+                            )}
+                            {cfImgPermanentUrl && (
+                              <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>
+                                ✓ Permanent CDN
+                              </span>
+                            )}
+                          </div>
                         </div>
                       )}
                       <button
@@ -2106,6 +2318,97 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     </div>
                   )}
 
+                  {/* Brevo SMS */}
+                  {mediaTab === "sms" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Recipient (E.164, e.g. +14155552671)</label>
+                        <input value={smsRecipient} onChange={(e) => setSmsRecipient(e.target.value)} placeholder="+14155552671"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender (alphanumeric, max 11 chars)</label>
+                        <input value={smsSender} onChange={(e) => setSmsSender(e.target.value)} placeholder="AEVION"
+                          maxLength={11}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+                          Content ({smsContent.length}/612 chars, ~{Math.ceil(smsContent.length / 160)} segments)
+                        </label>
+                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Your verification code is 1234"
+                          rows={4} maxLength={612}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                      </div>
+                      {smsMsg && (
+                        <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
+                          background: smsMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: smsMsg.ok ? "#065f46" : "#991b1b" }}>
+                          {smsMsg.text}
+                        </div>
+                      )}
+                      <button
+                        onClick={sendSms}
+                        disabled={smsLoading || !smsRecipient.trim() || !smsContent.trim()}
+                        style={{
+                          padding: "9px 18px", background: smsLoading ? "#fcd34d" : "#f59e0b",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (smsLoading || !smsRecipient.trim() || !smsContent.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {smsLoading ? "Sending..." : "Send SMS"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SMS_SENDER</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo WhatsApp */}
+                  {mediaTab === "whatsapp" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Contact Number (E.164)</label>
+                        <input value={waContact} onChange={(e) => setWaContact(e.target.value)} placeholder="+14155552671"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template ID (approved WABA template)</label>
+                        <input value={waTemplateId} onChange={(e) => setWaTemplateId(e.target.value)} placeholder="42"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template Params (JSON, optional)</label>
+                        <textarea value={waParams} onChange={(e) => setWaParams(e.target.value)} placeholder='{"name": "Alice", "code": "1234"}'
+                          rows={3}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+                      </div>
+                      {waMsg && (
+                        <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
+                          background: waMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: waMsg.ok ? "#065f46" : "#991b1b" }}>
+                          {waMsg.text}
+                        </div>
+                      )}
+                      <button
+                        onClick={sendWhatsApp}
+                        disabled={waLoading || !waContact.trim() || !waTemplateId.trim()}
+                        style={{
+                          padding: "9px 18px", background: waLoading ? "#86efac" : "#25D366",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (waLoading || !waContact.trim() || !waTemplateId.trim()) ? "not-allowed" : "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                        }}
+                      >
+                        <span style={{ fontSize: 14 }}>💬</span>
+                        {waLoading ? "Sending..." : "Send WhatsApp"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_WHATSAPP_SENDER_ID</code>. Template must be pre-approved by WhatsApp.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Voice Clone */}
                   {mediaTab === "clone" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2244,16 +2547,66 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   <div style={{ padding: "10px 12px", background: "linear-gradient(90deg, #ecfeff 0%, #f0fdfa 100%)", borderRadius: 10, border: "1px solid #99f6e4" }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>🤖 Multi-step Agent</div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Орchestrate code + image + voice in one workflow. One prompt → full app with hero image and voiceover.
+                      Orchestrate code + image + voice in one workflow. One prompt → full app with hero image and voiceover.
                     </div>
                   </div>
+
+                  {/* Templates picker */}
+                  {agentTemplates.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Quick start templates</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {agentTemplates.map((tpl) => (
+                          <button
+                            key={tpl.id}
+                            onClick={() => applyAgentTemplate(tpl.id)}
+                            disabled={agentRunning}
+                            title={tpl.description}
+                            style={{
+                              padding: "6px 12px", background: "#fff", border: "1px solid #99f6e4",
+                              borderRadius: 8, fontSize: 12, fontWeight: 700, color: "#0d9488", cursor: "pointer",
+                              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
+                            }}
+                          >
+                            <span>{tpl.name}</span>
+                            <span style={{ fontSize: 10, color: "#64748b", fontWeight: 500 }}>{tpl.steps.length} steps</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Streaming toggle */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#64748b", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={agentStreaming}
+                      onChange={(e) => setAgentStreaming(e.target.checked)}
+                      disabled={agentRunning}
+                    />
+                    Stream progress live (SSE) — see each step finish as it happens
+                  </label>
 
                   {/* Step list */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {agentSteps.map((step, i) => (
-                      <div key={i} style={{ padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff" }}>
+                      <div key={i} style={{
+                        padding: "10px 12px",
+                        border: `1px solid ${agentLiveStep === i ? "#f59e0b" : "#e2e8f0"}`,
+                        borderRadius: 8,
+                        background: agentLiveStep === i ? "#fffbeb" : "#fff",
+                        boxShadow: agentLiveStep === i ? "0 0 0 3px rgba(245, 158, 11, 0.15)" : "none",
+                        transition: "all 200ms",
+                      }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          <span style={{ width: 20, height: 20, borderRadius: 4, background: "#0d9488", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                          <span style={{
+                            width: 20, height: 20, borderRadius: 4,
+                            background: agentLiveStep === i ? "#f59e0b" : "#0d9488",
+                            color: "#fff", fontSize: 11, fontWeight: 700,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            {agentLiveStep === i ? <span style={{ animation: "spin 1s linear infinite" }}>↻</span> : (i + 1)}
+                          </span>
                           <select value={step.type} onChange={(e) => updateAgentStep(i, { type: e.target.value as AgentStep["type"] })}
                             style={{ padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 12, fontWeight: 700 }}>
                             <option value="code">Code</option>

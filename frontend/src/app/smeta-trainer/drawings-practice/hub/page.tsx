@@ -288,6 +288,11 @@ const MODULES: Module[] = [
   { id: "food-production",        category: "special",   href: "/smeta-trainer/drawings-practice/food-production",        icon: "🏭", title: "Пищевые производства",            subtitle: "HACCP, нержавейка AISI 304, EP полы 1-2% уклон, зонирование",   level: "L4", exercises: 4,  color: "lime"    },
   { id: "anti-corrosion-works",   category: "process",   href: "/smeta-trainer/drawings-practice/anti-corrosion-works",   icon: "🛡", title: "Антикоррозионная защита",          subtitle: "ЭСН Сб.12, ISO 12944 C1-C5-M, горячее цинкование 40-80 лет",    level: "L4", exercises: 4,  color: "orange"  },
   { id: "drainage-systems",       category: "utilities", href: "/smeta-trainer/drawings-practice/drainage-systems",       icon: "🌊", title: "Дренажные системы",               subtitle: "5 видов, геотекстиль, уклон 1‰, СН РК 4.01-43",                 level: "L3", exercises: 4,  color: "blue"    },
+
+  // ── Горное дело, промполы, логистика ──
+  { id: "drilling-blasting",      category: "special",   href: "/smeta-trainer/drawings-practice/drilling-blasting",      icon: "💥", title: "Взрывные и буровые работы",       subtitle: "ЭСН Сб.36, ANFO/эмульсии, паспорт БВР, лицензия МЧС",          level: "L5", exercises: 4,  color: "stone"   },
+  { id: "industrial-floors",      category: "finishing", href: "/smeta-trainer/drawings-practice/industrial-floors",      icon: "🏭", title: "Промышленные полы детально",      subtitle: "Топпинг, эпоксидные, ПУ, ММА — нагрузки 5-50 т/м²",              level: "L4", exercises: 4,  color: "zinc"    },
+  { id: "logistics-terminals",    category: "practice",  href: "/smeta-trainer/drawings-practice/logistics-terminals",    icon: "📦", title: "Логистические центры и терминалы",  subtitle: "Склады A/B/C, стеллажи Mecalux, доки DOK, ESFR, X-dock",          level: "L5", exercises: 4,  color: "orange"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

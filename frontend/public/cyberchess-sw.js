@@ -4,10 +4,12 @@
  *   - cache-first для статики (HTML, JS, CSS, шрифты, изображения, stockfish wasm)
  *   - network-first для /api/* (с fallback на cache)
  *   - offline fallback на /cyberchess/offline
+ *   - push + notificationclick → focus/open /cyberchess/daily
  */
 
 const CACHE_NAME = 'cyberchess-v1';
 const OFFLINE_URL = '/cyberchess/offline';
+const DEFAULT_NOTIFICATION_URL = '/cyberchess/daily';
 
 // Критические ресурсы — пытаемся precache при install.
 // Остальное добавляется лениво через cache-on-fetch.
@@ -16,6 +18,7 @@ const PRECACHE_URLS = [
   '/cyberchess/offline',
   '/cyberchess-manifest.webmanifest',
   '/manifest.webmanifest',
+  '/icons/cyberchess.svg',
 ];
 
 // Расширения, которые считаем "статикой" → cache-first.
@@ -195,4 +198,86 @@ self.addEventListener('message', (event) => {
   if (event.data.type === 'CLEAR_CACHE') {
     event.waitUntil(caches.delete(CACHE_NAME));
   }
+});
+
+/**
+ * Push handler — пока в проекте нет VAPID/бэкенда, но обрабатываем гипотетический
+ * входящий push. Поддерживает payload `{ title, body, tag?, url? }`.
+ */
+self.addEventListener('push', (event) => {
+  if (!event) return;
+  let payload = { title: 'CyberChess', body: 'У тебя новое уведомление.', tag: 'cc-push', url: DEFAULT_NOTIFICATION_URL };
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      payload = { ...payload, ...parsed };
+    }
+  } catch {
+    try {
+      const txt = event.data?.text?.();
+      if (txt) payload.body = txt;
+    } catch {}
+  }
+
+  const { title, body, tag, url } = payload;
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      tag,
+      icon: '/icons/cyberchess.svg',
+      badge: '/icons/cyberchess.svg',
+      data: { url: url || DEFAULT_NOTIFICATION_URL },
+    }),
+  );
+});
+
+/**
+ * Notification click — фокусим уже открытую вкладку CyberChess либо открываем новую.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const target =
+    (event.notification.data && event.notification.data.url) || DEFAULT_NOTIFICATION_URL;
+
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+
+      // Сначала ищем уже открытую вкладку CyberChess
+      for (const client of allClients) {
+        try {
+          const cu = new URL(client.url);
+          if (cu.pathname.startsWith('/cyberchess')) {
+            await client.focus();
+            // Подтолкнём к нужной странице если можем
+            if ('navigate' in client && typeof client.navigate === 'function') {
+              try {
+                await client.navigate(target);
+              } catch {}
+            }
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // Иначе открываем новую
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(target);
+      }
+    })(),
+  );
+});
+
+/**
+ * Notification close — место для аналитики (no-op пока).
+ */
+self.addEventListener('notificationclose', () => {
+  // intentional no-op
 });

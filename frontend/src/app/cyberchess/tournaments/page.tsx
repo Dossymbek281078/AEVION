@@ -2,9 +2,14 @@
 
 // AEVION CyberChess — Tournament Hub (list view)
 // Zone: aevion-core/main owns frontend/src/app/cyberchess/**
-// Mock-data MVP. Replaces tournament v1 with multi-tournament index.
+// Reads from /api/cyberchess-tournaments/list; falls back to mock if offline.
+//
+// New in this iteration:
+//   • Format chips (All / Elim / Swiss / RR)
+//   • Format badge on each card ("Swiss 5 rounds" / "Round-robin" / "Single Elim")
+//   • Standings preview on card hover (mini-table top-5)
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 const T = {
@@ -26,10 +31,12 @@ const T = {
 
 type TimeControl = "blitz" | "rapid" | "classic";
 type Status = "upcoming" | "live" | "finished";
+type Format = "single_elimination" | "swiss" | "round_robin";
 
 interface Tournament {
   id: string;
   title: string;
+  format: Format;
   timeControl: TimeControl;
   eloMin: number;
   eloMax: number;
@@ -38,12 +45,25 @@ interface Tournament {
   prizeChessy: number;
   status: Status;
   startsAt: string;
+  swissRounds?: number;
+  currentRound?: number;
 }
 
-const MOCK_TOURNAMENTS: Tournament[] = [
+interface StandingRow {
+  rank: number;
+  id: string;
+  name: string;
+  rating: number;
+  score: number;
+  buchholz: number;
+  gamesPlayed: number;
+}
+
+const MOCK_FALLBACK: Tournament[] = [
   {
     id: "spring-blitz-01",
     title: "Spring Blitz Open",
+    format: "single_elimination",
     timeControl: "blitz",
     eloMin: 1800,
     eloMax: 2400,
@@ -54,97 +74,84 @@ const MOCK_TOURNAMENTS: Tournament[] = [
     startsAt: "2026-05-18 19:00",
   },
   {
-    id: "weekly-rapid-22",
-    title: "Weekly Rapid #22",
+    id: "swiss-arena-may",
+    title: "Swiss Arena — Май",
+    format: "swiss",
     timeControl: "rapid",
-    eloMin: 1500,
-    eloMax: 2200,
-    players: 64,
-    maxPlayers: 64,
-    prizeChessy: 25_000,
+    eloMin: 1900,
+    eloMax: 2500,
+    players: 8,
+    maxPlayers: 16,
+    prizeChessy: 40_000,
     status: "live",
-    startsAt: "2026-05-15 18:30",
+    startsAt: "2026-05-16 18:00",
+    swissRounds: 5,
+    currentRound: 1,
   },
   {
-    id: "classic-arena-may",
-    title: "Classical Arena — May",
+    id: "classic-rr-may",
+    title: "Classical Round-robin — May",
+    format: "round_robin",
     timeControl: "classic",
     eloMin: 2000,
     eloMax: 2800,
-    players: 32,
-    maxPlayers: 32,
+    players: 8,
+    maxPlayers: 8,
     prizeChessy: 120_000,
     status: "live",
     startsAt: "2026-05-14 12:00",
-  },
-  {
-    id: "bullet-storm-7",
-    title: "Bullet Storm #7",
-    timeControl: "blitz",
-    eloMin: 1200,
-    eloMax: 2600,
-    players: 211,
-    maxPlayers: 256,
-    prizeChessy: 15_000,
-    status: "upcoming",
-    startsAt: "2026-05-16 21:00",
-  },
-  {
-    id: "veterans-cup",
-    title: "Veterans Cup (40+)",
-    timeControl: "rapid",
-    eloMin: 1600,
-    eloMax: 2400,
-    players: 48,
-    maxPlayers: 64,
-    prizeChessy: 35_000,
-    status: "upcoming",
-    startsAt: "2026-05-20 17:00",
-  },
-  {
-    id: "winter-arena-12",
-    title: "Winter Arena #12",
-    timeControl: "classic",
-    eloMin: 1900,
-    eloMax: 2700,
-    players: 16,
-    maxPlayers: 16,
-    prizeChessy: 80_000,
-    status: "finished",
-    startsAt: "2026-04-30 15:00",
-  },
-  {
-    id: "newbies-rapid",
-    title: "Newbies Rapid Friendly",
-    timeControl: "rapid",
-    eloMin: 800,
-    eloMax: 1500,
-    players: 22,
-    maxPlayers: 64,
-    prizeChessy: 5_000,
-    status: "upcoming",
-    startsAt: "2026-05-17 14:00",
   },
 ];
 
 type TcFilter = "all" | TimeControl;
 type StatusFilter = "all" | Status;
+type FormatFilter = "all" | Format;
 
 export default function TournamentsHubPage() {
   const [tcFilter, setTcFilter] = useState<TcFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [formatFilter, setFormatFilter] = useState<FormatFilter>("all");
   const [eloMin, setEloMin] = useState<number>(0);
   const [eloMax, setEloMax] = useState<number>(3000);
 
+  const [tournaments, setTournaments] = useState<Tournament[]>(MOCK_FALLBACK);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchList = async () => {
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const r = await fetch("/api/cyberchess-tournaments/list", { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json();
+        if (!cancelled && data?.ok && Array.isArray(data.tournaments)) {
+          setTournaments(data.tournaments);
+        }
+      } catch (e) {
+        if (!cancelled) setErrorMsg((e as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchList();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const filtered = useMemo(() => {
-    return MOCK_TOURNAMENTS.filter((t) => {
+    return tournaments.filter((t) => {
+      if (formatFilter !== "all" && t.format !== formatFilter) return false;
       if (tcFilter !== "all" && t.timeControl !== tcFilter) return false;
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
       if (t.eloMax < eloMin) return false;
       if (t.eloMin > eloMax) return false;
       return true;
     });
-  }, [tcFilter, statusFilter, eloMin, eloMax]);
+  }, [tournaments, formatFilter, tcFilter, statusFilter, eloMin, eloMax]);
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, color: T.text, padding: "24px 32px" }}>
@@ -175,8 +182,16 @@ export default function TournamentsHubPage() {
           <span>Турниры AEVION</span>
         </h1>
         <p style={{ color: T.dim, marginTop: 8, fontSize: 14 }}>
-          Зарегистрируйся в активном турнире или посмотри live-матчи.
+          Single elimination, Swiss или round-robin — выбирай формат и регистрируйся.
         </p>
+        {loading && (
+          <div style={{ color: T.faint, marginTop: 8, fontSize: 12 }}>Загружаем список...</div>
+        )}
+        {errorMsg && (
+          <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
+            Бэкенд недоступен ({errorMsg}). Показываем sample data.
+          </div>
+        )}
       </header>
 
       {/* Filters */}
@@ -193,6 +208,25 @@ export default function TournamentsHubPage() {
           alignItems: "center",
         }}
       >
+        <FilterGroup label="Формат">
+          {(["all", "single_elimination", "swiss", "round_robin"] as const).map((v) => (
+            <PillButton
+              key={v}
+              active={formatFilter === v}
+              onClick={() => setFormatFilter(v)}
+              label={
+                v === "all"
+                  ? "Все"
+                  : v === "single_elimination"
+                  ? "Elim"
+                  : v === "swiss"
+                  ? "Swiss"
+                  : "RR"
+              }
+            />
+          ))}
+        </FilterGroup>
+
         <FilterGroup label="Контроль времени">
           {(["all", "blitz", "rapid", "classic"] as const).map((v) => (
             <PillButton
@@ -254,7 +288,7 @@ export default function TournamentsHubPage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
           gap: 16,
         }}
       >
@@ -341,7 +375,26 @@ const inputStyle: React.CSSProperties = {
   width: 70,
 };
 
+function formatLabel(f: Format, t: Tournament): string {
+  if (f === "single_elimination") return "Single Elim";
+  if (f === "swiss") {
+    const rounds = t.swissRounds ?? 5;
+    return `Swiss · ${rounds} туров`;
+  }
+  return "Round-robin";
+}
+
+function formatColor(f: Format): string {
+  if (f === "single_elimination") return T.purple;
+  if (f === "swiss") return T.blue;
+  return T.yellow;
+}
+
 function TournamentCard({ t }: { t: Tournament }) {
+  const [hovered, setHovered] = useState(false);
+  const [standings, setStandings] = useState<StandingRow[] | null>(null);
+  const [standingsLoading, setStandingsLoading] = useState(false);
+
   const tcLabel =
     t.timeControl === "blitz" ? "Блиц" : t.timeControl === "rapid" ? "Рапид" : "Классика";
   const tcColor =
@@ -353,16 +406,40 @@ function TournamentCard({ t }: { t: Tournament }) {
 
   const full = t.players >= t.maxPlayers;
 
+  useEffect(() => {
+    if (!hovered || standings) return;
+    let cancelled = false;
+    setStandingsLoading(true);
+    fetch(`/api/cyberchess-tournaments/${t.id}/standings`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data?.ok && Array.isArray(data.standings)) {
+          setStandings(data.standings.slice(0, 5));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setStandingsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hovered, t.id, standings]);
+
   return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         background: T.surface,
-        border: `1px solid ${T.border}`,
+        border: `1px solid ${hovered ? T.accentDim : T.border}`,
         borderRadius: 12,
         padding: 18,
         display: "flex",
         flexDirection: "column",
         gap: 12,
+        position: "relative",
+        transition: "border-color 160ms",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -384,6 +461,7 @@ function TournamentCard({ t }: { t: Tournament }) {
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <Tag color={formatColor(t.format)}>{formatLabel(t.format, t)}</Tag>
         <Tag color={tcColor}>{tcLabel}</Tag>
         <Tag color={T.dim}>
           ELO {t.eloMin}–{t.eloMax}
@@ -392,6 +470,60 @@ function TournamentCard({ t }: { t: Tournament }) {
           {t.players}/{t.maxPlayers} игроков
         </Tag>
       </div>
+
+      {/* Standings preview (hover) */}
+      {hovered && (t.format === "swiss" || t.format === "round_robin") && (
+        <div
+          style={{
+            background: T.surfaceAlt,
+            border: `1px solid ${T.border}`,
+            borderRadius: 8,
+            padding: 10,
+            fontSize: 12,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              color: T.faint,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              marginBottom: 6,
+            }}
+          >
+            Топ-5 · {t.format === "swiss" ? "Buchholz tiebreak" : "Round-robin"}
+          </div>
+          {standingsLoading && <div style={{ color: T.dim }}>Загрузка...</div>}
+          {!standingsLoading && (!standings || standings.length === 0) && (
+            <div style={{ color: T.faint }}>Данных пока нет</div>
+          )}
+          {!standingsLoading && standings && standings.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                {standings.map((row) => (
+                  <tr key={row.id}>
+                    <td style={{ color: T.faint, width: 24, padding: "2px 4px" }}>
+                      {row.rank}.
+                    </td>
+                    <td style={{ color: T.text, padding: "2px 4px" }}>{row.name}</td>
+                    <td
+                      style={{
+                        color: T.yellow,
+                        fontWeight: 700,
+                        textAlign: "right",
+                        padding: "2px 4px",
+                        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      }}
+                    >
+                      {row.score}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div
         style={{
@@ -418,7 +550,7 @@ function TournamentCard({ t }: { t: Tournament }) {
               fontWeight: 600,
             }}
           >
-            Bracket
+            Подробнее
           </Link>
           {t.status === "live" ? (
             <button
@@ -430,7 +562,26 @@ function TournamentCard({ t }: { t: Tournament }) {
           ) : t.status === "upcoming" ? (
             <button
               disabled={full}
-              onClick={() => alert(`[mock] Registered for ${t.title}`)}
+              onClick={async () => {
+                try {
+                  const r = await fetch(
+                    `/api/cyberchess-tournaments/${t.id}/register`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({}),
+                    },
+                  );
+                  const data = await r.json();
+                  if (data?.ok) {
+                    alert(`Registered. Ticket ${data.ticketId}`);
+                  } else {
+                    alert(`Error: ${data?.error || "unknown"}`);
+                  }
+                } catch (e) {
+                  alert(`Registered (offline mock) for ${t.title}`);
+                }
+              }}
               style={btnPrimary(full ? T.faint : T.accent)}
             >
               {full ? "Заполнен" : "Register"}

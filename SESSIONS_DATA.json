@@ -1,0 +1,138 @@
+{
+  "_meta": "Source of truth for tab titles and briefs. Read by START_SESSIONS.ps1.",
+  "ui": {
+    "ready": "Готово. Введите: claude"
+  },
+  "sessions": [
+    {
+      "id": "A1",
+      "title": "BANK · полировка",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-bank",
+      "brief": [
+        "Трек: финальная полировка Bank UI перед мерджем в main.",
+        "Ветка: bank-payment-layer (PR #5 открыт). Worktree: frontend-bank/",
+        "Что уже шипнуто сегодня: 18 фич + 5 правил Autopilot + мультиязычный EN/RU/KZ.",
+        "Цели: bug-fix sweep, mobile responsiveness, axe-accessibility, Lighthouse perf,",
+        "  финальная QA. Не рефакторить — только полировка.",
+        "Старт: cd frontend  затем  claude"
+      ]
+    },
+    {
+      "id": "A2",
+      "title": "PITCH · эволюция",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-bank",
+      "brief": [
+        "Трек: расширение /pitch (live-метрики, competitive, risks, OG, FAQ уже шипнуто).",
+        "Ветка: bank-payment-layer. Файлы: src/app/pitch/, src/data/pitchModel.ts",
+        "Цели: цитаты case-study, лого реальных партнёров (когда разрешат), ссылки на",
+        "  видео-walkthrough, чёткий график 'Year 1 traction', опционально /pitch/print.",
+        "Старт: cd frontend  затем  claude"
+      ]
+    },
+    {
+      "id": "A3",
+      "title": "DEMO · рефреш",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-bank",
+      "brief": [
+        "Трек: переписать /demo и /demo/deep с новым pitchModel-нарративом.",
+        "Ветка: bank-payment-layer. Файлы: src/app/demo/, src/data/demoNarrative.ts",
+        "Цели: согласовать /demo с цифрами /pitch ($340B TAM, 12 live MVP),",
+        "  добавить live-метрики в /demo, заполнить /demo/deep архитектурными",
+        "  диаграммами + threat-моделью + бюджетами производительности.",
+        "Старт: cd frontend  затем  claude"
+      ]
+    },
+    {
+      "id": "A4",
+      "title": "MULTICHAT · beta → live",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-bank",
+      "brief": [
+        "Трек: вывести Multichat Engine из беты в live.",
+        "Ветка: bank-payment-layer. Файлы: src/app/multichat-engine/, /api/qcoreai/chat",
+        "Цели: UI параллельных сессий, изоляция ролей по агенту, persistence,",
+        "  превью white-label B2B, отгрузить как полноценную продуктовую поверхность.",
+        "Старт: cd frontend  затем  claude"
+      ]
+    },
+    {
+      "id": "A5",
+      "title": "AWARDS · реальный UX",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-bank",
+      "brief": [
+        "Трек: реальный flow подачи и голосования для Awards/Music + Awards/Film.",
+        "Ветка: bank-payment-layer. Файлы: src/app/awards/{music,film}/, AwardPortal",
+        "Цели: форма подачи, UI голосования, лидерборд с live-статами Planet,",
+        "  превью AEC-выплат завязанное на Bank, механика жюри.",
+        "Старт: cd frontend  затем  claude"
+      ]
+    },
+    {
+      "id": "B1",
+      "title": "GLOBUS · главная карта",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-globus",
+      "brief": [
+        "НОВЫЙ трек: переписать главную страницу (Globus / карту 27 нод) до wow.",
+        "Ветка: globus-polish (форк от main). Worktree: frontend-globus/",
+        "Цели: интерактивная 3D / SVG карта, клик по ноде → live-status drawer,",
+        "  hero согласован с цифрами /pitch, дёргает /api/globus/projects в реалтайме.",
+        "Первый файл: frontend/src/app/page.tsx (998 строк — внимательно).",
+        "Старт: cd frontend  затем  npm install --include=optional  затем  claude"
+      ]
+    },
+    {
+      "id": "B2",
+      "title": "EXCHANGE · биржа AEC",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-exchange",
+      "brief": [
+        "НОВЫЙ трек: внутренняя биржа AEC / liquidity engine.",
+        "Ветка: aec-exchange. Worktree: frontend-exchange/",
+        "Цели: дизайн маршрута /exchange — стакан для AEC ↔ модульные кредиты",
+        "  (royalty-credit, chess-credit, planet-credit), AMM-ценообразование,",
+        "  treasury-controls. Отгрузка как preview за feature-флагом.",
+        "Backend-контракты для другой сессии: /api/exchange/book, /quote, /trade.",
+        "Старт: cd frontend  затем  npm install --include=optional  затем  claude"
+      ]
+    },
+    {
+      "id": "B3",
+      "title": "PAYMENTS · унификация",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-payments",
+      "brief": [
+        "НОВЫЙ трек: ужесточение cross-module платежей (Bank, QTrade, Awards, Planet).",
+        "Ветка: payments-rail. Worktree: frontend-payments/",
+        "Цели: единый send-money primitive используемый каждым модулем,",
+        "  settlement audit-log, recurring + scheduled + split + gift объединены,",
+        "  отчёт сверки, real-time balance везде.",
+        "Файлы: src/app/bank/_components/SendForm.tsx, _lib/api.ts",
+        "Старт: cd frontend  затем  npm install --include=optional  затем  claude"
+      ]
+    },
+    {
+      "id": "B4",
+      "title": "GTM · pricing + API docs",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-gtm",
+      "brief": [
+        "НОВЫЙ трек: investor-grade /pricing + /api-docs.",
+        "Ветка: gtm-pricing-api. Worktree: frontend-gtm/",
+        "Цели: тариф-страница (Free / Pro / Enterprise) по бандлам модулей,",
+        "  /api-docs читает /api/openapi.json с try-it консолью,",
+        "  партнёрский landing, embeds для iframe-маркетинга.",
+        "Старт: cd frontend  затем  npm install --include=optional  затем  claude"
+      ]
+    },
+    {
+      "id": "B5",
+      "title": "CHESS · турниры",
+      "path": "C:\\Users\\user\\aevion-core\\frontend-chess",
+      "brief": [
+        "НОВЫЙ трек: реальные турниры CyberChess с AEC prize-pool.",
+        "Ветка: chess-tournaments. Worktree: frontend-chess/",
+        "Цели: создание турнира, сетки, live-зрители, AEC entry-fee,",
+        "  Trust-Score-gated сетки (только elite), anti-cheat через Trust Graph,",
+        "  авто-выплата prize-pool в Bank.",
+        "Файлы: src/app/cyberchess/page.tsx (1137 строк — сначала движок)",
+        "Старт: cd frontend  затем  npm install --include=optional  затем  claude"
+      ]
+    }
+  ]
+}

@@ -134,7 +134,7 @@ function seedSettlements(): Map<string, ApiSettlement> {
   return map;
 }
 
-const PREFIX_RE = /^(sk_test_|sk_live_)[a-zA-Z0-9]{8,}$/;
+const PREFIX_RE = /^(sk_test_|sk_live_)[a-zA-Z0-9_]{8,}$/;
 
 export function authError(req: NextRequest):
   | { code: 401; body: { error: { type: string; message: string } } }

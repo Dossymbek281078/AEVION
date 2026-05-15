@@ -1,28 +1,35 @@
 # Быстрый gate: обе части стека собираются без ручных переключений папок.
+# Backend matrix runs tsc *and* the integration suite so a regression in any
+# of the bank-track routes (qtrade / ecosystem / cyberchess / planet payouts /
+# qright royalties / metrics) lights the PR red.
 name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, bank-payment-layer]
   pull_request:
     branches: [main, master, develop]
+  workflow_dispatch:
 
 jobs:
   backend:
-    name: Backend (tsc)
+    name: Backend (tsc + integration tests)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: aevion-globus-backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: aevion-globus-backend/package-lock.json
-      - run: npm ci
+      - run: npm install --ignore-scripts
+      - name: Prod env check (NODE_ENV=production guard)
+        run: NODE_ENV=production node scripts/check-prod-env.js || true
       - run: npm run build
+      - run: npm test
 
   frontend:
     name: Frontend (next build)
@@ -31,13 +38,19 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      - run: npm install --include=optional --no-audit --no-fund
+      # Cheap script — fails the job if anyone adds an EN translation key
+      # without ru/kk siblings. Prevents the silent English fallback that
+      # PR #106 just spent 72 keys cleaning up.
+      - name: i18n parity (en/ru/kk)
+        working-directory: ${{ github.workspace }}
+        run: node scripts/i18n-kk-extract.mjs
       - run: npm run build
 
   payments-smoke:
@@ -48,13 +61,13 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      - run: npm install --include=optional --no-audit --no-fund
       - run: npm run build
       - name: Start next server
         run: |
@@ -92,7 +105,7 @@ jobs:
             "http://127.0.0.1:3000/api/payments/v1/links/$ID" | jq -e '.status == "active"'
       - name: Audit captured the create
         run: |
-          KEY="sk_test_smoke_audit$(date +%s)xyz"
+          KEY="sk_test_smokeaudit$(date +%s)xyz"
           curl -sSf -X POST http://127.0.0.1:3000/api/payments/v1/links \
             -H "Authorization: Bearer $KEY" \
             -H "Content-Type: application/json" \

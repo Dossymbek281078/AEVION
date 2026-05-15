@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 type Status = { phase: string; eta: string; version: string; waitlistCount: number };
 
@@ -192,6 +193,22 @@ export default function VeilNetXLanding() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="border-t border-slate-800 pt-6">
+        <MvpConceptBoard
+          moduleId="veilnetx"
+          noun="concept/messages"
+          accent="teal"
+          sectionTitle="Concept board"
+          sectionHint="Опиши use-case или threat-model — без email, без логина. Анонимный сигнал в roadmap."
+          titleField="useCase"
+          summaryField="threatModel"
+          fields={[
+            { key: "useCase", label: "Use-case", placeholder: "напр.: доступ к Wikipedia из ограниченной сети", required: true },
+            { key: "threatModel", label: "Threat model", type: "textarea", placeholder: "От кого защищаемся: ISP, государство, корпорация, локальная сеть" },
+          ]}
+        />
       </section>
 
       <section className="max-w-5xl mx-auto px-6 py-16 space-y-6 text-center border-t border-slate-800">

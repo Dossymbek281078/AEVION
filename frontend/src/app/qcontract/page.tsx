@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
@@ -108,19 +108,20 @@ export default function QContractHome() {
         }}
       />
       {/* Header */}
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+      <header className="border-b border-slate-800 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3">
           <span className="text-red-500 font-black text-lg tracking-tight">Q</span>
           <span className="font-bold text-white">Contract</span>
           <span className="text-[10px] bg-red-900 text-red-300 px-2 py-0.5 rounded-full">BETA</span>
         </div>
-        <div className="flex items-center gap-3">
-          <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/" className="text-xs text-slate-400 hover:text-white px-2 py-1.5">← AEVION</Link>
           <Link
             href="/qcontract/create"
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors"
+            className="px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-lg transition-colors min-h-[36px] inline-flex items-center"
           >
-            + Создать документ
+            <span className="sm:hidden">+ Документ</span>
+            <span className="hidden sm:inline">+ Создать документ</span>
           </Link>
         </div>
       </header>
@@ -189,7 +190,24 @@ export default function QContractHome() {
           )}
 
           {loading && (
-            <div className="text-slate-500 text-sm py-12 text-center">Загрузка...</div>
+            <div className="space-y-3 animate-pulse" aria-label="Загрузка документов" role="status">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="border border-slate-800 rounded-xl p-4 bg-slate-900/50">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-16 bg-slate-800 rounded" />
+                      <div className="h-5 w-3/4 bg-slate-800 rounded" />
+                      <div className="h-3 w-1/2 bg-slate-800 rounded" />
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <div className="h-7 w-16 bg-slate-800 rounded" />
+                      <div className="h-7 w-12 bg-slate-800 rounded" />
+                      <div className="h-7 w-16 bg-slate-800 rounded" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {!loading && docs.length === 0 && (
@@ -224,18 +242,19 @@ export default function QContractHome() {
                       <span>📅 {formatDate(doc.createdAt)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
                     {!doc.expired && (
                       <>
                         <button
                           onClick={() => copyLink(doc.shareUrl, doc.id)}
-                          className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                          className="text-xs px-3 py-2 sm:py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px]"
+                          aria-label={copied === doc.id ? "Ссылка скопирована" : "Скопировать ссылку"}
                         >
                           {copied === doc.id ? "✓ Скопировано" : "Ссылка"}
                         </button>
                         <Link
                           href={`/qcontract/documents/${doc.id}/log`}
-                          className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                          className="text-xs px-3 py-2 sm:py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px] inline-flex items-center justify-center"
                         >
                           Лог
                         </Link>
@@ -243,7 +262,8 @@ export default function QContractHome() {
                           <button
                             onClick={() => extend(doc.id)}
                             title="Продлить срок действия"
-                            className="text-xs px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                            aria-label="Продлить срок действия документа"
+                            className="text-xs px-3 py-2 sm:py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors min-h-[36px]"
                           >
                             ⏱ Продлить
                           </button>
@@ -251,7 +271,8 @@ export default function QContractHome() {
                         <button
                           onClick={() => revoke(doc.id)}
                           disabled={revoking === doc.id}
-                          className="text-xs px-3 py-1.5 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors disabled:opacity-40"
+                          aria-label="Отозвать документ"
+                          className="text-xs px-3 py-2 sm:py-1.5 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors disabled:opacity-40 min-h-[36px]"
                         >
                           {revoking === doc.id ? "..." : "Отозвать"}
                         </button>

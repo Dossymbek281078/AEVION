@@ -101,6 +101,21 @@ const MODULES: Module[] = [
   { id: "landscape-detailed",    category: "special",  href: "/smeta-trainer/drawings-practice/landscape-detailed",    icon: "🌳", title: "Ландшафт детально",                subtitle: "Газоны, деревья, ирригация Hunter, LED-освещение",            level: "L3", exercises: 4,  color: "emerald" },
   { id: "interior-design",       category: "special",  href: "/smeta-trainer/drawings-practice/interior-design",       icon: "🎨", title: "Дизайн интерьера",                 subtitle: "Этапы, наценки, спецификация, авторский надзор",              level: "L3", exercises: 4,  color: "purple"  },
   { id: "winter-garden",         category: "special",  href: "/smeta-trainer/drawings-practice/winter-garden",         icon: "🌿", title: "Зимний сад и фитодизайн",          subtitle: "Алюминий+стеклопакеты, климат, фитолампы, уход",              level: "L3", exercises: 4,  color: "lime"    },
+
+  // ── Финансы строителя ──
+  { id: "construction-taxes",        category: "process",  href: "/smeta-trainer/drawings-practice/construction-taxes",        icon: "💰", title: "Налоги строителя РК",            subtitle: "КПН/ИПН/НДС/соц., упрощёнка/патент, штрафы",                  level: "L3", exercises: 4,  color: "emerald" },
+  { id: "accounting-projects",       category: "process",  href: "/smeta-trainer/drawings-practice/accounting-projects",       icon: "📊", title: "Бухучёт по объектам",            subtitle: "Поэтапная готовность, счета 8010-8021, СБУ-7 РК",            level: "L4", exercises: 4,  color: "blue"    },
+  { id: "bank-guarantees-insurance", category: "process",  href: "/smeta-trainer/drawings-practice/bank-guarantees-insurance", icon: "🏦", title: "БГ и страхование СМР",            subtitle: "1%/3%/5% БГ, страх.СМР+ответств., тарифы банков РК",         level: "L4", exercises: 4,  color: "amber"   },
+
+  // ── Профессионализм сметчика ──
+  { id: "bim-modeling",          category: "tools",    href: "/smeta-trainer/drawings-practice/bim-modeling",          icon: "🏗️", title: "BIM — Revit/ArchiCAD",            subtitle: "LOD 100-500, 5 ПО, плагины ЭСН РК, обязат. с 2025",          level: "L4", exercises: 4,  color: "indigo"  },
+  { id: "expertise-docs",        category: "process",  href: "/smeta-trainer/drawings-practice/expertise-docs",        icon: "🔬", title: "Экспертиза проекта",              subtitle: "ГосЭкспертиза vs негос., 5 этапов, 30 дней замечания",        level: "L4", exercises: 4,  color: "purple"  },
+  { id: "author-supervision",    category: "process",  href: "/smeta-trainer/drawings-practice/author-supervision",    icon: "👁️", title: "Авторский+тех. надзор",           subtitle: "АН раз/нед., ТН ежедн., журналы КС-6, АОСР",                  level: "L3", exercises: 4,  color: "teal"    },
+
+  // ── Международные стандарты ──
+  { id: "fidic-contracts",         category: "process",  href: "/smeta-trainer/drawings-practice/fidic-contracts",         icon: "📜", title: "FIDIC — R/Y/S Book",              subtitle: "Контракты ЕБРР/МБРР/АБР, Engineer, DAB, 21 день",            level: "L5", exercises: 4,  color: "red"     },
+  { id: "evms-earned-value",       category: "process",  href: "/smeta-trainer/drawings-practice/evms-earned-value",       icon: "📈", title: "EVMS — освоенный объём",          subtitle: "PV/EV/AC, CPI/SPI, отчётность ЕБРР+JICA по PMBOK",            level: "L5", exercises: 4,  color: "blue"    },
+  { id: "international-standards", category: "theory",   href: "/smeta-trainer/drawings-practice/international-standards", icon: "🌍", title: "NRM2/RICS/RSMeans/ISO",           subtitle: "AACE Class 1-5, межд. стандарты сметы vs ЭСН РК",            level: "L5", exercises: 4,  color: "violet"  },
   { id: "checklists",     category: "process",  href: "/smeta-trainer/drawings-practice/checklists",     icon: "📋", title: "Чек-листы приёмки",                 subtitle: "12 чек-листов от котлована до кровли с печатью акта",         level: "L3", exercises: 0,  color: "emerald" },
 
   // ── Сводные инструменты студента ──
@@ -191,6 +206,98 @@ const MODULES: Module[] = [
   // ── Smart + спец. демонтаж ──
   { id: "smart-home",             category: "utilities",href: "/smeta-trainer/drawings-practice/smart-home",             icon: "🏠", title: "Умный дом",                       subtitle: "KNX, Crestron, Wiren Board, MajorDoMo, ZigBee/Tuya",          level: "L3", exercises: 4,  color: "emerald" },
   { id: "asbestos-removal",       category: "special",   href: "/smeta-trainer/drawings-practice/asbestos-removal",     icon: "☣️", title: "Демонтаж асбеста",                subtitle: "Шифер, плиты, изоляция — лицензия МЭ + СЭС РК",               level: "L4", exercises: 4,  color: "stone"   },
+
+  // ── Качество и безопасность зданий ──
+  { id: "seismic-design",         category: "structure", href: "/smeta-trainer/drawings-practice/seismic-design",         icon: "🌋", title: "Сейсмостойкость зданий РК",       subtitle: "СП РК 2.03-30, Алматы 9 баллов, антисейсм. пояса, K₀/K₁/K₂",  level: "L5", exercises: 4,  color: "rose"    },
+  { id: "energy-efficiency",      category: "process",   href: "/smeta-trainer/drawings-practice/energy-efficiency",      icon: "🌱", title: "Энергоэффективность",             subtitle: "СН РК 2.04-21, классы A-F, LEED/BREEAM/EDGE, утеплители",     level: "L4", exercises: 4,  color: "emerald" },
+  { id: "lab-control",            category: "process",   href: "/smeta-trainer/drawings-practice/lab-control",            icon: "🧪", title: "Лабораторный контроль",           subtitle: "ГОСТ 10180/18105, кубики бетона, арматура, грунты",            level: "L4", exercises: 4,  color: "orange"  },
+
+  // ── Цифровая стройка + управление ──
+  { id: "cadastre-commissioning", category: "process",   href: "/smeta-trainer/drawings-practice/cadastre-commissioning", icon: "🏛️", title: "Ввод в эксплуатацию + кадастр",  subtitle: "ПП РК №353, Акт ввода, ГПК, регистрация НКА, ст.318 КоАП",     level: "L4", exercises: 4,  color: "fuchsia" },
+  { id: "subcontractor-mgmt",     category: "process",   href: "/smeta-trainer/drawings-practice/subcontractor-mgmt",     icon: "🔗", title: "Управление субподрядом",          subtitle: "ГК РК 660, цепочка, удержания 10%, наценка ГП 5-15%",          level: "L4", exercises: 4,  color: "cyan"    },
+  { id: "digital-twin-iot",       category: "tools",     href: "/smeta-trainer/drawings-practice/digital-twin-iot",       icon: "🧬", title: "Цифровой двойник + IoT",          subtitle: "BIM 3D-7D, ПП МИИР №132 (2025), 8 типов датчиков, ROI 7×",     level: "L5", exercises: 4,  color: "violet"  },
+
+  // ── Логистика + охрана среды + юридич. защита ──
+  { id: "transport-logistics",    category: "tools",     href: "/smeta-trainer/drawings-practice/transport-logistics",    icon: "🚛", title: "Транспортная логистика",          subtitle: "5 видов ТС, тарифы РК, ж/д vs авто, правило 300 км",          level: "L3", exercises: 4,  color: "amber"   },
+  { id: "dust-noise-control",     category: "process",   href: "/smeta-trainer/drawings-practice/dust-noise-control",     icon: "🌫", title: "Пыле-шумозащита",                 subtitle: "СН РК 2.04-03, ПДК, штрафы СЭС, расчёт распр. шума",          level: "L3", exercises: 4,  color: "yellow"  },
+  { id: "construction-disputes",  category: "process",   href: "/smeta-trainer/drawings-practice/construction-disputes",  icon: "⚖️", title: "Строительные споры",              subtitle: "ГК РК 706/716/723, СМЭС, МКАС Атамекен, односторонний КС-2",   level: "L5", exercises: 4,  color: "red"     },
+
+  // ── Аналитика, базы цен, экспорт/импорт ──
+  { id: "smeta-analytics",        category: "tools",     href: "/smeta-trainer/drawings-practice/smeta-analytics",        icon: "📊", title: "Аналитика и KPI сметчика",         subtitle: "Cost/m², CPI/SPI, ABC-анализ, бенчмарки РК 2025",             level: "L4", exercises: 4,  color: "indigo"  },
+  { id: "price-database",         category: "tools",     href: "/smeta-trainer/drawings-practice/price-database",         icon: "🗄", title: "База цен и нормативный корпус",   subtitle: "6 источников РК, поля записи, Z-score, парсинг ССЦ",          level: "L4", exercises: 4,  color: "teal"    },
+  { id: "export-import-reports",  category: "tools",     href: "/smeta-trainer/drawings-practice/export-import-reports",  icon: "📤", title: "Экспорт, импорт, отчёты",         subtitle: "8 форматов, 8 отчётов, АВС-4 vs Смета РК, ССР 12 глав",       level: "L3", exercises: 4,  color: "pink"    },
+
+  // ── Изменения, безопасность, пост-сдача ──
+  { id: "scope-change-mgmt",      category: "process",   href: "/smeta-trainer/drawings-practice/scope-change-mgmt",      icon: "🔄", title: "Управление изменениями (VO)",     subtitle: "ГК РК 718, FIDIC Sub-Cl.13/20, Claims, EOT, 28-дн. правило",  level: "L5", exercises: 4,  color: "orange"  },
+  { id: "safety-incidents",       category: "process",   href: "/smeta-trainer/drawings-practice/safety-incidents",       icon: "🚑", title: "Несчастные случаи (Н-1)",         subtitle: "ТК РК 322-326, Приказ № 1108, УК РК ст. 152, ОПС 1-3% ФОТ",   level: "L4", exercises: 4,  color: "red"     },
+  { id: "construction-warranty",  category: "process",   href: "/smeta-trainer/drawings-practice/construction-warranty",  icon: "🛠", title: "Гарантийное обслуживание",        subtitle: "ГК РК 723, 2/5/10 лет, журнал дефектов, регрессы цепочкой",    level: "L4", exercises: 4,  color: "blue"    },
+
+  // ── Человек, карьера, финал ──
+  { id: "soft-skills",            category: "tools",     href: "/smeta-trainer/drawings-practice/soft-skills",            icon: "🤝", title: "Soft skills сметчика",            subtitle: "8 навыков, Гарвардские переговоры, 6 типов конфликтов, BLUF",  level: "L4", exercises: 4,  color: "purple"  },
+  { id: "career-pathway",         category: "tools",     href: "/smeta-trainer/drawings-practice/career-pathway",         icon: "🎓", title: "Карьерный путь сметчика РК",      subtitle: "6 уровней (Junior→Эксперт), 6 сертификаций, ВУЗы, зарплаты",   level: "L3", exercises: 4,  color: "emerald" },
+  { id: "smeta-checklist",        category: "practice",  href: "/smeta-trainer/drawings-practice/smeta-checklist",        icon: "✅", title: "Финальный чек-лист (44 пункта)",  subtitle: "6 групп проверки, интерактивный, типовые ошибки сметчика РК",  level: "L5", exercises: 4,  color: "lime"    },
+
+  // ── Специализации и масштаб ──
+  { id: "specialty-construction", category: "special",   href: "/smeta-trainer/drawings-practice/specialty-construction", icon: "🏭", title: "Спец. строительство",            subtitle: "6 отраслей (промбу/гидро/агро/энерг/нефтегаз/транспорт)",      level: "L5", exercises: 4,  color: "stone"   },
+  { id: "rural-construction",     category: "special",   href: "/smeta-trainer/drawings-practice/rural-construction",     icon: "🏡", title: "Сельское и дачное стр-во",        subtitle: "ИЖС до 500 м², уведомительный порядок, Бакыт, СБП, 6 программ", level: "L3", exercises: 4,  color: "green"   },
+  { id: "infrastructure-projects",category: "practice",  href: "/smeta-trainer/drawings-practice/infrastructure-projects",icon: "🌆", title: "Инфраструктурные мегапроекты",    subtitle: "БАКАД/метро/нефтегаз, FIDIC, AACE Class, EVMS, RICS",          level: "L5", exercises: 4,  color: "zinc"    },
+
+  // ── Реставрация, модули, восстановление ──
+  { id: "historical-monuments",   category: "special",   href: "/smeta-trainer/drawings-practice/historical-monuments",   icon: "🏛️", title: "Реставрация памятников",          subtitle: "СНиП РК 1.04-25, ЮНЕСКО, Ясави, Венецианская хартия 1964",     level: "L5", exercises: 4,  color: "amber"   },
+  { id: "modular-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/modular-construction",   icon: "🧩", title: "Модульное и быстровозводимое",    subtitle: "6 типов (контейнер/SIP/3D-печать/LSF), вдвое быстрее монолита",  level: "L4", exercises: 4,  color: "cyan"    },
+  { id: "post-disaster-recon",    category: "practice",  href: "/smeta-trainer/drawings-practice/post-disaster-recon",    icon: "🆘", title: "Послеаварийное восстановление",    subtitle: "Паводки 2024, ЗРК №188-V, Build Back Better, 6 типов ЧС РК",   level: "L5", exercises: 4,  color: "red"     },
+
+  // ── Адаптация, умный город, спорт ──
+  { id: "adaptive-reuse",         category: "special",   href: "/smeta-trainer/drawings-practice/adaptive-reuse",         icon: "♻️", title: "Адаптивное переиспользование",     subtitle: "Loft Almaty, заводы→лофты, ESG, экономия 20-40%, CO₂ −50-70%",  level: "L5", exercises: 4,  color: "orange"  },
+  { id: "smart-city-iot",         category: "utilities", href: "/smeta-trainer/drawings-practice/smart-city-iot",         icon: "🏙", title: "Умный город (Smart City IoT)",    subtitle: "Светофоры, освещение, ЖКХ. LoRaWAN, NB-IoT, ЗРК №94-V",       level: "L4", exercises: 4,  color: "fuchsia" },
+  { id: "stadium-arena",          category: "structure", href: "/smeta-trainer/drawings-practice/stadium-arena",          icon: "🏟", title: "Стадионы и арены",                subtitle: "FIFA Cat. 1-4, Astana Arena, эвакуация 8 мин, сейсмика 9 б.",  level: "L5", exercises: 4,  color: "emerald" },
+
+  // ── Виды ремонта (фундаментальные) ──
+  { id: "capital-vs-current-repair", category: "theory",  href: "/smeta-trainer/drawings-practice/capital-vs-current-repair", icon: "🔧", title: "Капремонт vs Текущий ремонт",     subtitle: "СН РК 3.02-01, ПП РК №1162, налог. учёт, гарантии 1 vs 5 лет",  level: "L4", exercises: 4,  color: "teal"    },
+  { id: "reconstruction-vs-modernization", category: "theory", href: "/smeta-trainer/drawings-practice/reconstruction-vs-modernization", icon: "🔄", title: "Реконструкция vs Модернизация",   subtitle: "Изменение параметров, МДС 81-35, К=1.15-1.25, экспертиза",       level: "L5", exercises: 4,  color: "purple"  },
+  { id: "renovation-types",       category: "practice",  href: "/smeta-trainer/drawings-practice/renovation-types",       icon: "🪜", title: "8 видов ремонта помещений",       subtitle: "От ямочного (50 тыс.) до VIP (300+ тыс. тг/м²), сметы по уровням", level: "L4", exercises: 4,  color: "rose"    },
+
+  // ── Капремонт по объектам ──
+  { id: "mkd-kapremont",          category: "process",   href: "/smeta-trainer/drawings-practice/mkd-kapremont",          icon: "🏢", title: "Капремонт МКД",                   subtitle: "10 видов работ, фонд капремонта, госсубсидии, Жил.код. 2/3",   level: "L4", exercises: 4,  color: "amber"   },
+  { id: "road-repair-types",      category: "special",   href: "/smeta-trainer/drawings-practice/road-repair-types",      icon: "🛣", title: "Виды ремонта дорог",              subtitle: "6 уровней работ, СН РК 3.03-09, ЩМА-15, фрезеровка, бенчм.",   level: "L4", exercises: 4,  color: "slate"   },
+  { id: "bridge-repair",          category: "special",   href: "/smeta-trainer/drawings-practice/bridge-repair",          icon: "🌉", title: "Ремонт мостов",                   subtitle: "СНиП 5.04-01, 8 элементов, водолазн. ЭСН Сб.45, FRP-усиление",  level: "L5", exercises: 4,  color: "cyan"    },
+
+  // ── Ввод в работу ──
+  { id: "commissioning-pnr",      category: "process",   href: "/smeta-trainer/drawings-practice/commissioning-pnr",      icon: "🔌", title: "Пуско-наладочные работы (ПНР)",   subtitle: "ЭСН Сб.4 ч.1/2, 8 этапов, 70 ч опробование, АСУТП 20-40%",    level: "L4", exercises: 4,  color: "yellow"  },
+  { id: "tech-connection",        category: "process",   href: "/smeta-trainer/drawings-practice/tech-connection",        icon: "⚡", title: "Технологическое присоединение",   subtitle: "ТУ от 6 сетей, Глава 6 ССР, плата ТП электр. 30 тыс. тг/кВт",  level: "L4", exercises: 4,  color: "sky"     },
+  { id: "shefmontazh",            category: "process",   href: "/smeta-trainer/drawings-practice/shefmontazh",            icon: "🔩", title: "Шефмонтаж и шефналадка",          subtitle: "Завод-изготовитель 2-10%, гарантия, иностранные спец-ты",       level: "L4", exercises: 4,  color: "lime"    },
+
+  // ── Отделочные и изоляционные работы ──
+  { id: "insulation-works",       category: "structure", href: "/smeta-trainer/drawings-practice/insulation-works",       icon: "🧱", title: "Изоляционные работы",             subtitle: "ЭСН Сб.25-27, тепло/гидро/звук, λ расчёт, 6 материалов",      level: "L3", exercises: 4,  color: "indigo"  },
+  { id: "floor-types",            category: "finishing", href: "/smeta-trainer/drawings-practice/floor-types",            icon: "🪟", title: "Виды напольных покрытий",         subtitle: "8 видов (стяжка/керамогр./ламинат/паркет/наливной), ЭСН Сб.17", level: "L3", exercises: 4,  color: "amber"   },
+  { id: "painting-plastering",    category: "finishing", href: "/smeta-trainer/drawings-practice/painting-plastering",    icon: "🎨", title: "Малярные и штукатурные работы",   subtitle: "ЭСН Сб.14-15, гипс/ЦПС/декор, покраска 4-5 слоёв, обои",      level: "L3", exercises: 4,  color: "fuchsia" },
+  { id: "glazing-works",          category: "finishing", href: "/smeta-trainer/drawings-practice/glazing-works",          icon: "🪟", title: "Стекольные работы",               subtitle: "6 видов стекла, витражи, стеклопакеты 1/2/3-кам, смарт-стекло", level: "L3", exercises: 4,  color: "sky"     },
+  { id: "natural-stone",          category: "finishing", href: "/smeta-trainer/drawings-practice/natural-stone",          icon: "💎", title: "Облицовка натуральным камнем",    subtitle: "Гранит/мрамор/травертин, ЭСН Сб.11, навесные системы",         level: "L4", exercises: 4,  color: "stone"   },
+  { id: "special-finishes",       category: "finishing", href: "/smeta-trainer/drawings-practice/special-finishes",       icon: "✨", title: "Специальные виды отделки",        subtitle: "Венецианка, микроцемент, сусальное золото, роспись, резьба",    level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── Специализированные здания ──
+  { id: "high-rise-buildings",    category: "structure", href: "/smeta-trainer/drawings-practice/high-rise-buildings",    icon: "🏢", title: "Высотные здания 30+ этажей",      subtitle: "ТМД, сейсмоизоляция, зонирование лифтов, VRF, бенчмарки",      level: "L5", exercises: 4,  color: "violet"  },
+  { id: "data-centers",           category: "tools",     href: "/smeta-trainer/drawings-practice/data-centers",           icon: "💻", title: "Дата-центры (ЦОД)",               subtitle: "Tier I-IV, PUE, NOVEC-тушение, HEPA, Qazcloud/KT примеры РК",  level: "L5", exercises: 4,  color: "slate"   },
+  { id: "clean-rooms",            category: "special",   href: "/smeta-trainer/drawings-practice/clean-rooms",            icon: "🧪", title: "Чистые комнаты (ISO 1-9)",        subtitle: "Фарм./медиц./нано, HEPA 99.97%, избыточное давление +15 Па",    level: "L5", exercises: 4,  color: "teal"    },
+  { id: "museums-galleries",      category: "practice",  href: "/smeta-trainer/drawings-practice/museums-galleries",      icon: "🏛️", title: "Музеи и галереи",                 subtitle: "Климат 18-22°C, 50-200 лк без УФ, NOVEC, сейсмовитрины",       level: "L5", exercises: 4,  color: "amber"   },
+  { id: "theaters-opera",         category: "practice",  href: "/smeta-trainer/drawings-practice/theaters-opera",         icon: "🎭", title: "Театры и оперы",                  subtitle: "RT60 1.1-3.0 с, сценическая механика, оркестровая яма",         level: "L5", exercises: 4,  color: "rose"    },
+  { id: "aquapark-pool",          category: "special",   href: "/smeta-trainer/drawings-practice/aquapark-pool",          icon: "🏊", title: "Аквапарки и бассейны",            subtitle: "FINA 50×25 м, ПВХ-гидроизоляция, рециркуляция, хлорамины",     level: "L4", exercises: 4,  color: "cyan"    },
+  { id: "military-defense",       category: "special",   href: "/smeta-trainer/drawings-practice/military-defense",       icon: "🪖", title: "Военные объекты",                 subtitle: "Допуск формы №2, секретные ЭСН МО, КП усиленный монолит",       level: "L5", exercises: 4,  color: "stone"   },
+  { id: "prison-corrections",     category: "special",   href: "/smeta-trainer/drawings-practice/prison-corrections",     icon: "🔒", title: "СИЗО и ИК",                       subtitle: "ДТКС периметр, 4 м²/чел, PC-остекление, нормы КУИС",            level: "L5", exercises: 4,  color: "slate"   },
+  { id: "cemetery-crematorium",   category: "special",   href: "/smeta-trainer/drawings-practice/cemetery-crematorium",   icon: "⚱️", title: "Кладбища и крематории",           subtitle: "500 м санразрыв, Qibla ориентация, HEPA дымоочистка кремат.",    level: "L4", exercises: 4,  color: "slate"   },
+  { id: "food-production",        category: "special",   href: "/smeta-trainer/drawings-practice/food-production",        icon: "🏭", title: "Пищевые производства",            subtitle: "HACCP, нержавейка AISI 304, EP полы 1-2% уклон, зонирование",   level: "L4", exercises: 4,  color: "lime"    },
+  { id: "anti-corrosion-works",   category: "process",   href: "/smeta-trainer/drawings-practice/anti-corrosion-works",   icon: "🛡", title: "Антикоррозионная защита",          subtitle: "ЭСН Сб.12, ISO 12944 C1-C5-M, горячее цинкование 40-80 лет",    level: "L4", exercises: 4,  color: "orange"  },
+  { id: "drainage-systems",       category: "utilities", href: "/smeta-trainer/drawings-practice/drainage-systems",       icon: "🌊", title: "Дренажные системы",               subtitle: "5 видов, геотекстиль, уклон 1‰, СН РК 4.01-43",                 level: "L3", exercises: 4,  color: "blue"    },
+
+  // ── Горное дело, промполы, логистика ──
+  { id: "drilling-blasting",      category: "special",   href: "/smeta-trainer/drawings-practice/drilling-blasting",      icon: "💥", title: "Взрывные и буровые работы",       subtitle: "ЭСН Сб.36, ANFO/эмульсии, паспорт БВР, лицензия МЧС",          level: "L5", exercises: 4,  color: "stone"   },
+  { id: "industrial-floors",      category: "finishing", href: "/smeta-trainer/drawings-practice/industrial-floors",      icon: "🏭", title: "Промышленные полы детально",      subtitle: "Топпинг, эпоксидные, ПУ, ММА — нагрузки 5-50 т/м²",              level: "L4", exercises: 4,  color: "zinc"    },
+  { id: "logistics-terminals",    category: "practice",  href: "/smeta-trainer/drawings-practice/logistics-terminals",    icon: "📦", title: "Логистические центры и терминалы",  subtitle: "Склады A/B/C, стеллажи Mecalux, доки DOK, ESFR, X-dock",          level: "L5", exercises: 4,  color: "orange"  },
+
+  // ── Карьеры, кессоны, зоопарки ──
+  { id: "mining-quarry",          category: "special",   href: "/smeta-trainer/drawings-practice/mining-quarry",          icon: "⛏️", title: "Горнодобывающие работы",          subtitle: "Карьеры, ЭКГ-12/15/20, БелАЗ 75710, рекультивация СНиП 3.06-12",  level: "L5", exercises: 4,  color: "stone"   },
+  { id: "caisson-works",          category: "special",   href: "/smeta-trainer/drawings-practice/caisson-works",          icon: "🌊", title: "Кессонные работы",                subtitle: "Опускные колодцы, шпунт Larssen, ВПТ, ЭСН Сб.45 водолазы",        level: "L5", exercises: 4,  color: "blue"    },
+  { id: "zoo-aquarium",           category: "practice",  href: "/smeta-trainer/drawings-practice/zoo-aquarium",           icon: "🐅", title: "Зоопарки и аквариумы",            subtitle: "EAZA/WAZA нормы, акрил 100-300 мм, LSS, климат-зоны",            level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

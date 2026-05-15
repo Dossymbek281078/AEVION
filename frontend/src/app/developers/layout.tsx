@@ -35,12 +35,32 @@ const apiReferenceJsonLd = {
   targetPlatform: "Web",
 };
 
+// Module-of-the-day section: rotates a featured AEVION module on the
+// developer portal. Surfacing it as a LearningResource lets search engines
+// pick it up as a recurring "what to learn next" callout and feeds rich
+// results for the developer portal landing page.
+const motdJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "LearningResource",
+  name: "AEVION Module of the Day",
+  description:
+    "A daily-rotating featured AEVION module on the developer portal: one curated module surfaced with description, endpoints and quick links to its API reference.",
+  url: `${SITE}/developers#module-of-the-day`,
+  learningResourceType: "Featured module",
+  educationalUse: "Developer onboarding",
+  inLanguage: "en",
+  about: ["AEVION modules", "REST API", "Daily highlight"],
+  isPartOf: { "@type": "WebPage", "@id": `${SITE}/developers` },
+  provider: { "@type": "Organization", name: "AEVION", url: SITE },
+};
+
 export default function DevelopersLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(techArticleJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(apiReferenceJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(motdJsonLd) }} />
       {children}
     </>
   );

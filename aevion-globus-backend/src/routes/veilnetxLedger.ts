@@ -1,4 +1,4 @@
-﻿/**
+/**
  * VeilNetX Ledger — privacy-blinded settlement ledger for the AEVION fintech
  * ecosystem. Mounts under /api/veilnetx-ledger to coexist with the waitlist
  * surface at /api/veilnetx.

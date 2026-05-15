@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /** qstore-smoke.js — 6 read-only checks for QStore */
 const BASE = process.env.BASE || "https://aevion-production-a70c.up.railway.app";
 let pass = 0, fail = 0;

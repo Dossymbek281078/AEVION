@@ -8,6 +8,8 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   id: string;
+  personaId?: string;
+  model?: string;
 }
 
 interface SessionRecord {
@@ -17,6 +19,33 @@ interface SessionRecord {
   createdAt: string;
 }
 
+interface Persona {
+  id: string;
+  name: string;
+  systemPrompt: string;
+  emoji: string;
+  description?: string;
+}
+
+interface Usage {
+  promptChars: number;
+  completionChars: number;
+  totalChars: number;
+  approxPromptTokens: number;
+  approxCompletionTokens: number;
+  approxTotalTokens: number;
+}
+
+// Fallback list if /personas endpoint not reachable
+const FALLBACK_PERSONAS: Persona[] = [
+  { id: "assistant", name: "AEVION Assistant", systemPrompt: "", emoji: "AI", description: "General-purpose helper" },
+  { id: "coder", name: "Code Expert", systemPrompt: "", emoji: "{}", description: "Software engineering, debugging" },
+  { id: "mentor", name: "Patient Mentor", systemPrompt: "", emoji: "M", description: "Teaching and explaining" },
+  { id: "critic", name: "Sharp Critic", systemPrompt: "", emoji: "!", description: "Reviewing ideas critically" },
+  { id: "writer", name: "Creative Writer", systemPrompt: "", emoji: "W", description: "Storytelling, copy" },
+  { id: "analyst", name: "Data Analyst", systemPrompt: "", emoji: "#", description: "Numbers and insights" },
+];
+
 function generateId(): string {
   return Math.random().toString(36).slice(2);
 }
@@ -24,22 +53,17 @@ function generateId(): string {
 function exportChatAsMarkdown(messages: Message[], sessionTitle?: string): void {
   const lines: string[] = [];
   lines.push(`# QAI Chat — ${sessionTitle || "Exported Session"}`);
-  lines.push(`
-Exported: ${new Date().toLocaleString()}
-`);
+  lines.push(`\nExported: ${new Date().toLocaleString()}\n`);
   for (const msg of messages) {
     if (msg.role === "user") {
-      lines.push(`
-**You:** ${msg.content}`);
+      lines.push(`\n**You:** ${msg.content}`);
     } else {
-      lines.push(`
-**QAI:**
-${msg.content}`);
+      lines.push(`\n**QAI${msg.personaId ? ` (${msg.personaId})` : ""}:**\n${msg.content}`);
     }
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = url;
   a.download = `qai-chat-${Date.now()}.md`;
   a.click();
@@ -57,18 +81,8 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       title="Copy"
-      style={{
-        background: "none",
-        border: "1px solid #e2e8f0",
-        borderRadius: 6,
-        padding: "3px 8px",
-        fontSize: 11,
-        cursor: "pointer",
-        color: copied ? "#0d9488" : "#94a3b8",
-        transition: "color 0.15s",
-        marginTop: 6,
-        display: "inline-block",
-      }}
+      className="mt-1.5 inline-block rounded border border-slate-700 bg-transparent px-2 py-0.5 text-[11px] transition-colors hover:border-slate-500"
+      style={{ color: copied ? "#34d399" : "#94a3b8" }}
     >
       {copied ? "Copied!" : "Copy"}
     </button>
@@ -82,7 +96,6 @@ function renderMarkdown(text: string): React.ReactNode[] {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    // Code block
     if (line.startsWith("```")) {
       const codeLines: string[] = [];
       i++;
@@ -93,16 +106,7 @@ function renderMarkdown(text: string): React.ReactNode[] {
       nodes.push(
         <pre
           key={i}
-          style={{
-            background: "#0f172a",
-            color: "#e2e8f0",
-            padding: 16,
-            borderRadius: 8,
-            overflow: "auto",
-            fontSize: 13,
-            margin: "8px 0",
-            lineHeight: 1.5,
-          }}
+          className="my-2 overflow-auto rounded-lg bg-black/60 p-4 text-[13px] leading-relaxed text-slate-100 ring-1 ring-slate-700"
         >
           {codeLines.join("\n")}
         </pre>
@@ -110,38 +114,31 @@ function renderMarkdown(text: string): React.ReactNode[] {
       i++;
       continue;
     }
-    // H3
     if (line.startsWith("# ")) {
       nodes.push(
-        <h3
-          key={i}
-          style={{ fontSize: 16, fontWeight: 700, margin: "10px 0 4px", color: "#0f172a" }}
-        >
+        <h3 key={i} className="my-2 text-base font-bold text-slate-100">
           {inlineFormat(line.slice(2))}
         </h3>
       );
       i++;
       continue;
     }
-    // List item
     if (line.startsWith("- ") || line.startsWith("* ")) {
       nodes.push(
-        <li key={i} style={{ marginLeft: 16, marginBottom: 2 }}>
+        <li key={i} className="ml-4 mb-0.5 list-disc">
           {inlineFormat(line.slice(2))}
         </li>
       );
       i++;
       continue;
     }
-    // Empty line → spacing
     if (line.trim() === "") {
-      nodes.push(<div key={i} style={{ height: 6 }} />);
+      nodes.push(<div key={i} className="h-1.5" />);
       i++;
       continue;
     }
-    // Regular paragraph line
     nodes.push(
-      <span key={i} style={{ display: "block" }}>
+      <span key={i} className="block">
         {inlineFormat(line)}
       </span>
     );
@@ -151,7 +148,6 @@ function renderMarkdown(text: string): React.ReactNode[] {
 }
 
 function inlineFormat(text: string): React.ReactNode {
-  // Handle **bold** and `code`
   const parts: React.ReactNode[] = [];
   const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
   let last = 0;
@@ -168,7 +164,7 @@ function inlineFormat(text: string): React.ReactNode {
       parts.push(
         <code
           key={idx++}
-          style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: 4, fontSize: "0.9em" }}
+          className="rounded bg-slate-800 px-1.5 py-0.5 text-[0.9em] text-emerald-300"
         >
           {raw.slice(1, -1)}
         </code>
@@ -180,27 +176,20 @@ function inlineFormat(text: string): React.ReactNode {
   return <>{parts}</>;
 }
 
-// Animated typing dots
 function TypingDots() {
   return (
-    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+    <span className="inline-flex items-center gap-1">
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: "50%",
-            background: "#0d9488",
-            display: "inline-block",
-            animation: `qai-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-          }}
+          className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400"
+          style={{ animation: `qai-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
         />
       ))}
       <style>{`
         @keyframes qai-bounce {
-          0%, 60%, 100% { transform: translateY(0); opacity: 0.6; }
-          30% { transform: translateY(-5px); opacity: 1; }
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+          30% { transform: translateY(-4px); opacity: 1; }
         }
       `}</style>
     </span>
@@ -218,20 +207,36 @@ export default function QAIPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [selectedPersona, setSelectedPersona] = useState<string>("assistant");
+  const [personas, setPersonas] = useState<Persona[]>(FALLBACK_PERSONAS);
+  const [activePersona, setActivePersona] = useState<string>("assistant");
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [sessionTotalTokens, setSessionTotalTokens] = useState<number>(0);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Load sessionId and history from localStorage
+  // Load personas + sessionId + history
   useEffect(() => {
+    // Personas — fetch best-effort
+    fetch(apiUrl("/api/qai/personas"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.personas && Array.isArray(data.personas)) {
+          setPersonas(data.personas);
+        }
+      })
+      .catch(() => {
+        // keep fallback
+      });
+
     const stored = localStorage.getItem("qai_session_id");
     if (stored) {
       setSessionId(stored);
-      // Restore messages for current session
       try {
         const saved = localStorage.getItem(`qai_msgs_${stored}`);
         if (saved) setMessages(JSON.parse(saved));
@@ -243,34 +248,37 @@ export default function QAIPage() {
       localStorage.setItem("qai_session_id", newId);
       setSessionId(newId);
     }
-    // Load session list
     try {
       const list = localStorage.getItem("qai_sessions");
       if (list) setSessions(JSON.parse(list));
     } catch {
       // ignore
     }
+    try {
+      const persona = localStorage.getItem("qai_persona");
+      if (persona) setActivePersona(persona);
+    } catch {
+      // ignore
+    }
   }, []);
 
-  // Fetch personas on mount
-  useEffect(() => {
-    fetch(apiUrl("/api/qai/personas"))
-      .then((r) => r.json())
-      .then((d) => { if (d.personas) setPersonas(d.personas); })
-      .catch(() => {});
-  }, []);
+  // Auto-scroll on new content
 
-  // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, streaming, streamingText]);
 
-  // Persist messages on change
+  // Persist messages
   useEffect(() => {
     if (sessionId && messages.length > 0) {
       localStorage.setItem(`qai_msgs_${sessionId}`, JSON.stringify(messages));
     }
   }, [messages, sessionId]);
+
+  // Persist persona choice
+  useEffect(() => {
+    localStorage.setItem("qai_persona", activePersona);
+  }, [activePersona]);
 
   const saveCurrentSession = useCallback(() => {
     if (!sessionId || messages.length === 0) return;
@@ -291,92 +299,128 @@ export default function QAIPage() {
     });
   }, [sessionId, messages]);
 
-  const sendMessage = useCallback(async () => {
+  const sendMessageStreaming = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || streaming) return;
 
     const userMsg: Message = { role: "user", content: text, id: generateId() };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
-    setLoading(true);
+    setStreaming(true);
+    setStreamingText("");
     setError(null);
 
-    // Add empty AI message that will be filled by stream chunks
-    const aiMsgId = generateId();
-    setMessages((prev) => [...prev, { role: "assistant", content: "", id: aiMsgId }]);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    let acc = "";
 
     try {
-      const response = await fetch(apiUrl("/api/qai/chat/stream"), {
+      const res = await fetch(apiUrl("/api/qai/chat/stream"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId, personaId: selectedPersona }),
+        body: JSON.stringify({ message: text, sessionId, personaId: activePersona }),
+        signal: controller.signal,
       });
 
-      if (!response.ok || !response.body) {
-        setMessages((prev) =>
-          prev.map((m) => m.id === aiMsgId ? { ...m, content: "Error: could not connect to AI" } : m)
-        );
-        setLoading(false);
-        textareaRef.current?.focus();
-        return;
+      if (!res.ok || !res.body) {
+        throw new Error(`stream failed (${res.status})`);
       }
 
-      const reader = response.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let lastDone: { reply?: string; usage?: Usage; model?: string; personaId?: string; sessionId?: string } | null = null;
 
-      while (true) {
+      let streamError: string | null = null;
+
+      streamLoop: while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n\n");
+        const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
-
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (!payload) continue;
+          let evt: { type?: string; text?: string; sessionId?: string; message?: string; reply?: string; usage?: Usage; model?: string; personaId?: string } | null = null;
           try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === "chunk") {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === aiMsgId ? { ...m, content: m.content + event.text } : m
-                )
-              );
-            }
-            if (event.type === "done") {
-              if (event.sessionId && event.sessionId !== sessionId) {
-                setSessionId(event.sessionId);
-                localStorage.setItem("qai_session_id", event.sessionId);
-              }
-            }
-            if (event.type === "error") {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === aiMsgId ? { ...m, content: `Error: ${event.message ?? "stream failed"}` } : m
-                )
-              );
-            }
+            evt = JSON.parse(payload);
           } catch {
-            // ignore parse errors
+            continue; // tolerate malformed SSE line
+          }
+          if (!evt || typeof evt !== "object") continue;
+          if (evt.type === "chunk" && typeof evt.text === "string") {
+            acc += evt.text;
+            setStreamingText(acc);
+          } else if (evt.type === "done") {
+            lastDone = evt;
+          } else if (evt.type === "start" && evt.sessionId) {
+            if (evt.sessionId !== sessionId) {
+              setSessionId(evt.sessionId);
+              localStorage.setItem("qai_session_id", evt.sessionId);
+            }
+          } else if (evt.type === "error") {
+            streamError = evt.message || "stream error";
+            break streamLoop;
           }
         }
       }
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === aiMsgId ? { ...m, content: "Error: network error — check your connection" } : m
-        )
-      );
+
+      if (streamError) {
+        throw new Error(streamError);
+      }
+
+      const finalText = lastDone?.reply ?? acc;
+      if (finalText) {
+        const aiMsg: Message = {
+          role: "assistant",
+          content: finalText,
+          id: generateId(),
+          personaId: lastDone?.personaId,
+          model: lastDone?.model,
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        if (lastDone?.usage) {
+          setUsage(lastDone.usage);
+          setSessionTotalTokens((t) => t + (lastDone?.usage?.approxTotalTokens ?? 0));
+        }
+      }
+    } catch (e: unknown) {
+      const err = e as { name?: string; message?: string };
+      if (err?.name === "AbortError") {
+        // Partial reply: if we accumulated something, save it
+        if (acc.trim().length > 0) {
+          const partial: Message = {
+            role: "assistant",
+            content: acc + "\n\n_[stopped]_",
+            id: generateId(),
+            personaId: activePersona,
+          };
+          setMessages((prev) => [...prev, partial]);
+        }
+      } else {
+        setError(err?.message || "Streaming error");
+      }
+
     } finally {
-      setLoading(false);
+      setStreaming(false);
+      setStreamingText("");
+      abortControllerRef.current = null;
       textareaRef.current?.focus();
     }
-  }, [input, loading, sessionId, selectedPersona]);
+  }, [input, streaming, sessionId, activePersona]);
+
+  const stopStreaming = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      sendMessage();
+      sendMessageStreaming();
     }
   };
 
@@ -388,6 +432,8 @@ export default function QAIPage() {
     setMessages([]);
     setError(null);
     setInput("");
+    setUsage(null);
+    setSessionTotalTokens(0);
     textareaRef.current?.focus();
   };
 
@@ -402,6 +448,8 @@ export default function QAIPage() {
       setMessages([]);
     }
     setError(null);
+    setUsage(null);
+    setSessionTotalTokens(0);
   };
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
@@ -423,406 +471,300 @@ export default function QAIPage() {
     }
   };
 
+  const activePersonaObj = personas.find((p) => p.id === activePersona) ?? personas[0];
+
   return (
     <>
       <Wave1Nav />
-      <div
-        style={{
-          display: "flex",
-          height: "calc(100vh - 64px)",
-          background: "#f8fafc",
-        }}
-      >
-        {/* Sidebar — conversation history */}
-        <div
-          style={{
-            width: 220,
-            flexShrink: 0,
-            background: "#fff",
-            borderRight: "1px solid #e2e8f0",
-            display: "flex",
-            flexDirection: "column",
-            overflowY: "auto",
-          }}
-        >
-          <div style={{ padding: "14px 12px 8px", borderBottom: "1px solid #f1f5f9" }}>
+      <div className="flex h-[calc(100vh-64px)] bg-slate-950 text-slate-100">
+        {/* Sidebar */}
+        <aside className="flex w-60 flex-shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900">
+          <div className="border-b border-slate-800 p-3">
             <button
               onClick={newChat}
-              style={{
-                width: "100%",
-                padding: "8px 0",
-                borderRadius: 8,
-                border: "1.5px dashed #cbd5e1",
-                background: "transparent",
-                color: "#374151",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-              }}
+              className="w-full rounded-lg border border-dashed border-slate-600 bg-transparent px-3 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-emerald-400 hover:text-emerald-300"
             >
               + New chat
             </button>
           </div>
-          <div style={{ padding: "8px 6px", flex: 1 }}>
+
+          {/* Persona selector */}
+          <div className="border-b border-slate-800 p-3">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Persona
+            </div>
+            <div className="flex flex-col gap-1">
+              {personas.map((p) => {
+                const active = p.id === activePersona;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setActivePersona(p.id)}
+                    title={p.description ?? p.name}
+                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                      active
+                        ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/40"
+                        : "text-slate-300 hover:bg-slate-800"
+                    }`}
+                  >
+                    <span
+                      className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[10px] font-bold ${
+                        active ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-400"
+                      }`}
+                    >
+                      {p.emoji}
+                    </span>
+                    <span className="flex-1 truncate">{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* History */}
+          <div className="flex-1 overflow-y-auto p-2">
+            <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              History
+            </div>
             {sessions.length === 0 && (
-              <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 6px" }}>No history yet</div>
+              <div className="px-2 py-1 text-xs text-slate-500">No history yet</div>
             )}
             {sessions.map((s) => (
               <div
                 key={s.id}
                 onClick={() => loadSession(s)}
-                style={{
-                  padding: "8px 8px",
-                  borderRadius: 7,
-                  cursor: "pointer",
-                  marginBottom: 2,
-                  background: s.id === sessionId ? "#f0fdf4" : "transparent",
-                  border: s.id === sessionId ? "1px solid #bbf7d0" : "1px solid transparent",
-                  position: "relative",
-                }}
-                onMouseEnter={(e) => {
-                  if (s.id !== sessionId)
-                    (e.currentTarget as HTMLDivElement).style.background = "#f8fafc";
-                }}
-                onMouseLeave={(e) => {
-                  if (s.id !== sessionId)
-                    (e.currentTarget as HTMLDivElement).style.background = "transparent";
-                }}
+                className={`group relative mb-0.5 cursor-pointer rounded-md border px-2 py-1.5 transition-colors ${
+                  s.id === sessionId
+                    ? "border-emerald-500/40 bg-emerald-500/10"
+                    : "border-transparent hover:bg-slate-800"
+                }`}
               >
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "#1e293b",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    paddingRight: 18,
-                  }}
-                >
-                  {s.title}
-                </div>
-                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                  {formatDate(s.createdAt)}
-                </div>
+                <div className="truncate pr-5 text-xs font-medium text-slate-200">{s.title}</div>
+                <div className="mt-0.5 text-[11px] text-slate-500">{formatDate(s.createdAt)}</div>
                 <button
                   onClick={(e) => deleteSession(s.id, e)}
                   title="Delete"
-                  style={{
-                    position: "absolute",
-                    right: 4,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#cbd5e1",
-                    fontSize: 14,
-                    lineHeight: 1,
-                    padding: "2px 4px",
-                  }}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
                 >
                   ×
                 </button>
               </div>
             ))}
           </div>
-        </div>
+        </aside>
 
-        {/* Main chat area */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
+        {/* Main chat */}
+        <main className="flex flex-1 flex-col overflow-hidden">
           {/* Header */}
-          <div
-            style={{
-              background: "#fff",
-              borderBottom: "1px solid #e2e8f0",
-              padding: "12px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                  fontSize: 18,
-                  fontWeight: 800,
-                }}
-              >
+          <header className="flex flex-shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-violet-600 text-base font-extrabold text-white">
                 Q
               </div>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a" }}>QAI Assistant</div>
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>Multi-provider AI · No account needed</div>
+                <div className="text-[15px] font-bold text-slate-100">QAI Assistant</div>
+                <div className="text-xs text-slate-400">
+                  Persona:{" "}
+                  <span className="text-emerald-300">{activePersonaObj?.name ?? activePersona}</span>
+                  {" · "}Multi-provider AI
+                </div>
               </div>
             </div>
-            {messages.length > 0 && (
-              <button
-                onClick={() => {
-                  const sess = sessions.find((s) => s.id === sessionId);
-                  exportChatAsMarkdown(messages, sess?.title);
-                }}
-                title="Export chat as Markdown"
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: 8,
-                  border: "1px solid #e2e8f0",
-                  background: "#fff",
-                  color: "#374151",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                ↓ Export .md
-              </button>
-            )}
-          </div>
+
+            <div className="flex items-center gap-3">
+              {/* Token usage badge */}
+              {(usage || sessionTotalTokens > 0) && (
+                <div className="hidden items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[11px] sm:flex">
+                  {usage && (
+                    <span className="text-slate-300" title="Tokens for last response (approx)">
+                      <span className="text-slate-500">last:</span>{" "}
+                      <span className="font-mono text-emerald-300">
+                        {usage.approxPromptTokens}↑ {usage.approxCompletionTokens}↓
+                      </span>
+                    </span>
+                  )}
+                  {sessionTotalTokens > 0 && (
+                    <span className="text-slate-300" title="Approx tokens used this session">
+                      <span className="text-slate-500">session:</span>{" "}
+                      <span className="font-mono text-violet-300">~{sessionTotalTokens}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {messages.length > 0 && (
+                <button
+                  onClick={() => {
+                    const sess = sessions.find((s) => s.id === sessionId);
+                    exportChatAsMarkdown(messages, sess?.title);
+                  }}
+                  title="Export chat as Markdown"
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:border-emerald-500/50 hover:text-emerald-300"
+                >
+                  ↓ Export .md
+                </button>
+              )}
+            </div>
+          </header>
 
           {/* Messages */}
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              padding: "24px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 16,
-              maxWidth: 800,
-              width: "100%",
-              margin: "0 auto",
-              boxSizing: "border-box",
-            }}
-          >
-            {messages.length === 0 && !loading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  color: "#94a3b8",
-                  marginTop: 80,
-                }}
-              >
-                <div style={{ fontSize: 48, marginBottom: 16 }}>◈</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: "#374151", marginBottom: 8 }}>
-                  How can I help you today?
-                </div>
-                <div style={{ fontSize: 14 }}>
-                  Ask anything — powered by Claude, GPT-4o, and Gemini
-                </div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 24, flexWrap: "wrap" }}>
-                  {[
-                    "What is AEVION?",
-                    "How does QRight protect IP?",
-                    "Explain QSign signatures",
-                    "How do I get started?",
-                  ].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setInput(s)}
-                      style={{
-                        padding: "8px 14px",
-                        borderRadius: 8,
-                        border: "1px solid #e2e8f0",
-                        background: "#fff",
-                        color: "#374151",
-                        fontSize: 13,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                style={{
-                  display: "flex",
-                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: "80%",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "12px 16px",
-                      borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                      background: msg.role === "user" ? "#0d9488" : "#fff",
-                      color: msg.role === "user" ? "#fff" : "#1e293b",
-                      fontSize: 14,
-                      lineHeight: 1.6,
-                      border: msg.role === "assistant" ? "1px solid #e2e8f0" : "none",
-                      boxShadow: msg.role === "assistant" ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {msg.role === "assistant"
-                      ? renderMarkdown(msg.content)
-                      : <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>}
+          <div className="flex-1 overflow-y-auto">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-6">
+              {messages.length === 0 && !streaming && (
+                <div className="mt-20 text-center text-slate-400">
+                  <div className="mb-4 text-5xl text-emerald-400/80">◈</div>
+                  <div className="mb-2 text-xl font-bold text-slate-100">
+                    How can I help you today?
                   </div>
-                  {msg.role === "assistant" && <CopyButton text={msg.content} />}
+                  <div className="text-sm">
+                    Persona:{" "}
+                    <span className="text-emerald-300">{activePersonaObj?.name}</span>
+                    {activePersonaObj?.description && (
+                      <span className="text-slate-500"> — {activePersonaObj.description}</span>
+                    )}
+                  </div>
+                  <div className="mt-6 flex flex-wrap justify-center gap-2">
+                    {[
+                      "What is AEVION?",
+                      "How does QRight protect IP?",
+                      "Explain QSign signatures",
+                      "How do I get started?",
+                    ].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setInput(s)}
+                        className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-200 transition-colors hover:border-emerald-500/50 hover:text-emerald-300"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )}
 
-            {loading && (
-              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              {messages.map((msg) => (
                 <div
-                  style={{
-                    padding: "14px 20px",
-                    borderRadius: "18px 18px 18px 4px",
-                    background: "#fff",
-                    border: "1px solid #e2e8f0",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
+                  key={msg.id}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  <TypingDots />
+                  <div className="max-w-[80%]">
+                    <div
+                      className={`break-words px-4 py-3 text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "rounded-2xl rounded-br-md bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-md shadow-emerald-900/40"
+                          : "rounded-2xl rounded-bl-md border border-slate-700 bg-slate-800/70 text-slate-100"
+                      }`}
+                    >
+                      {msg.role === "assistant" ? (
+                        renderMarkdown(msg.content)
+                      ) : (
+                        <span className="whitespace-pre-wrap">{msg.content}</span>
+                      )}
+                    </div>
+                    {msg.role === "assistant" && (
+                      <div className="mt-1 flex items-center gap-2">
+                        <CopyButton text={msg.content} />
+                        {msg.personaId && (
+                          <span className="text-[10px] text-slate-500">via {msg.personaId}</span>
+                        )}
+                        {msg.model && (
+                          <span className="text-[10px] text-slate-600">· {msg.model}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              ))}
 
-            {error && (
-              <div
-                style={{
-                  background: "#fee2e2",
-                  border: "1px solid #fca5a5",
-                  borderRadius: 10,
-                  padding: "10px 14px",
-                  color: "#991b1b",
-                  fontSize: 13,
-                }}
-              >
-                {error}
-              </div>
-            )}
+              {/* Live streaming bubble */}
+              {streaming && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] rounded-2xl rounded-bl-md border border-emerald-500/30 bg-slate-800/70 px-4 py-3 text-sm leading-relaxed text-slate-100">
+                    {streamingText ? (
+                      renderMarkdown(streamingText)
+                    ) : (
+                      <TypingDots />
+                    )}
+                    {streamingText && (
+                      <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-emerald-400 align-middle" />
+                    )}
+                  </div>
+                </div>
+              )}
 
-            <div ref={bottomRef} />
+              {error && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
+                  {error}
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
           </div>
 
           {/* Input */}
-          <div
-            style={{
-              background: "#fff",
-              borderTop: "1px solid #e2e8f0",
-              padding: "12px 24px 16px",
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                maxWidth: 800,
-                margin: "0 auto",
-              }}
-            >
-              {/* Persona selector */}
-              {personas.length > 0 && (
-                <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>Persona:</span>
-                  <select
-                    value={selectedPersona}
-                    onChange={(e) => setSelectedPersona(e.target.value)}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 8,
-                      border: "1px solid #e2e8f0",
-                      fontSize: 13,
-                      fontFamily: "inherit",
-                      outline: "none",
-                      background: "#f8fafc",
-                      color: "#374151",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {personas.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.emoji} {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-              <div style={{ flex: 1, position: "relative" }}>
+          <div className="flex-shrink-0 border-t border-slate-800 bg-slate-900 px-6 py-4">
+            <div className="mx-auto flex max-w-3xl items-end gap-2">
+              <div className="relative flex-1">
+
                 <textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Message QAI... (Enter to send, Shift+Enter for new line)"
+                  placeholder={`Message ${activePersonaObj?.name ?? "QAI"}...  (Enter to send, Shift+Enter for newline)`}
                   rows={1}
-                  style={{
-                    width: "100%",
-                    padding: "12px 16px",
-                    borderRadius: 12,
-                    border: "1.5px solid #e2e8f0",
-                    fontSize: 14,
-                    outline: "none",
-                    resize: "none",
-                    fontFamily: "inherit",
-                    lineHeight: 1.5,
-                    boxSizing: "border-box",
-                    transition: "border-color 0.15s",
-                    minHeight: 48,
-                    maxHeight: 200,
-                    overflowY: "auto",
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = "#0d9488")}
-                  onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
+                  disabled={streaming}
+                  className="max-h-[200px] min-h-[48px] w-full resize-none rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 outline-none transition-colors focus:border-emerald-500 disabled:opacity-60"
                 />
               </div>
-              <button
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                style={{
-                  padding: "12px 22px",
-                  borderRadius: 12,
-                  border: "none",
-                  background:
-                    loading || !input.trim()
-                      ? "#e2e8f0"
+
+              {streaming ? (
+                <button
+                  onClick={stopStreaming}
+                  title="Stop generation"
+                  className="h-12 flex-shrink-0 rounded-xl border border-red-500/50 bg-red-500/10 px-5 text-sm font-bold text-red-300 transition-colors hover:bg-red-500/20"
+                >
+                  ◼ Stop
+                </button>
+              ) : (
+                <button
+                  onClick={sendMessageStreaming}
+                  disabled={!input.trim()}
+                  className="h-12 flex-shrink-0 rounded-xl px-6 text-sm font-bold transition-all disabled:cursor-not-allowed"
+                  style={{
+                    background: !input.trim()
+                      ? "#334155"
                       : "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
-                  color: loading || !input.trim() ? "#94a3b8" : "#fff",
-                  fontWeight: 700,
-                  fontSize: 14,
-                  cursor: loading || !input.trim() ? "not-allowed" : "pointer",
-                  transition: "background 0.15s, color 0.15s",
-                  flexShrink: 0,
-                  height: 48,
-                }}
-              >
-                {loading ? "..." : "Send"}
-              </button>
-              </div>
+                    color: !input.trim() ? "#64748b" : "#fff",
+                  }}
+                >
+                  Send
+                </button>
+              )}
+            </div>
+
+            <div className="mx-auto mt-2 flex max-w-3xl items-center justify-between text-[11px] text-slate-500">
+              <span>
+                Session:{" "}
+                <span className="font-mono text-slate-400">
+                  {sessionId?.slice(0, 8) ?? "—"}
+                </span>
+              </span>
+              <span className="flex items-center gap-2">
+                {streaming && (
+                  <span className="text-emerald-400">● streaming</span>
+                )}
+                {!streaming && usage && (
+                  <span>
+                    last response: {usage.completionChars} chars · ~{usage.approxCompletionTokens} tokens
+                  </span>
+                )}
+              </span>
+
             </div>
           </div>
-        </div>
+        </main>
       </div>
     </>
   );

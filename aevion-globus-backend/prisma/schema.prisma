@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
@@ -280,4 +281,42 @@ model ChessPuzzle {
   @@index([rating])
   @@index([theme])
   @@index([goal, mateIn])
+}
+
+// ── CyberChess CPI (Chess Performance Index) ─────────────────────────
+// Per-user multi-factor rating state used by /cyberchess/cpi/leaderboard.
+// 11 factors + overall composite. Idempotent upsert via POST /upsert,
+// public read via GET /leaderboard. One row per userId — keyed by id.
+// displayName lookup is best-effort against auth (not joined here).
+
+model CyberchessCpiState {
+  userId           String   @id
+  displayName      String?
+  overall          Float    @default(0)
+  accuracy         Float    @default(0)
+  tactics          Float    @default(0)
+  endgame          Float    @default(0)
+  timing           Float    @default(0)
+  aggression       Float    @default(0)
+  timeControl      Float    @default(0)
+  opening          Float    @default(0)
+  defense          Float    @default(0)
+  consistency      Float    @default(0)
+  endgameTechnique Float    @default(0)
+  psychology       Float    @default(0)
+  gamesPlayed      Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  @@index([overall(sort: Desc)])
+  @@index([accuracy(sort: Desc)])
+  @@index([tactics(sort: Desc)])
+  @@index([endgame(sort: Desc)])
+  @@index([timing(sort: Desc)])
+  @@index([aggression(sort: Desc)])
+  @@index([timeControl(sort: Desc)])
+  @@index([opening(sort: Desc)])
+  @@index([defense(sort: Desc)])
+  @@index([consistency(sort: Desc)])
+  @@index([endgameTechnique(sort: Desc)])
+  @@index([psychology(sort: Desc)])
 }

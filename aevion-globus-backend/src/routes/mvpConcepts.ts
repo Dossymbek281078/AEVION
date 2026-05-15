@@ -202,10 +202,15 @@ function attachModuleExtensions(app: Express): void {
  * precedence over the catch-all stub.
  */
 export function mountMvpConcepts(app: Express): void {
+  // Module-specific extension endpoints MUST mount BEFORE the generic
+  // per-module routers — paths like `/api/mapreality/claims/nearby` would
+  // otherwise be swallowed by the per-module `/:itemId` handler matching
+  // `nearby` as an item id (and returning 404 from getItem). Specific
+  // before generic.
+  attachModuleExtensions(app);
   for (const cfg of CONCEPTS) {
     app.use(`/api/${cfg.id}`, buildRouter(cfg));
   }
-  attachModuleExtensions(app);
 }
 
 export const MVP_CONCEPT_IDS = CONCEPTS.map((c) => c.id);

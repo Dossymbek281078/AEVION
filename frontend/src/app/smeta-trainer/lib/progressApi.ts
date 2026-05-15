@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Клиент для backend-API прогресса студента (/api/smeta-trainer/*).
  * Работает через AEVION backend (по умолчанию http://localhost:4001),
  * с graceful fallback: если бэкенд недоступен, локальные данные

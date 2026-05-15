@@ -552,6 +552,82 @@ modulesRouter.get("/:id/detail", modulesEmbedRateLimit, async (req, res) => {
   }
 });
 
+// 🔹 GET /:id/history — bucketed traffic histogram for a single module.
+//    Drives the /modules page sparkline + dashboard "is this thing being
+//    used?" view. ?hours=1..168 (default 24), ?bucket=hour|day (default
+//    auto: hour for ≤48h, day otherwise). Uses the existing ModuleHit
+//    table — no new schema, no new index. Returns one row per bucket
+//    boundary (including zero-buckets) so the consumer can render a
+//    fixed-width sparkline without gap math. Cached 60s public.
+modulesRouter.get("/:id/history", modulesEmbedRateLimit, async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    if (!MODULE_RUNTIME[id]) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.status(404).json({ id, error: "unknown module id" });
+    }
+    const hoursRaw = parseInt(String(req.query.hours || "24"), 10);
+    const hours = Number.isFinite(hoursRaw) ? Math.max(1, Math.min(168, hoursRaw)) : 24;
+    const bucketParam = String(req.query.bucket || "").trim().toLowerCase();
+    const bucket: "hour" | "day" =
+      bucketParam === "hour" || bucketParam === "day"
+        ? bucketParam
+        : hours <= 48
+          ? "hour"
+          : "day";
+
+    // date_trunc keeps SQL portable across PG versions; bind interval
+    // separately to dodge the literal-string injection trap.
+    const r = await pool.query(
+      `SELECT date_trunc($1::text, "at") AS bucket, COUNT(*)::int AS hits
+       FROM "ModuleHit"
+       WHERE "moduleId" = $2
+         AND "at" >= NOW() - $3::interval
+       GROUP BY bucket
+       ORDER BY bucket ASC`,
+      [bucket, id, `${hours} hours`]
+    );
+
+    // Fill zero-buckets so the sparkline is gap-free. Rows from PG can be
+    // sparse if the module saw 0 hits in a window — pad with the bucket
+    // boundary itself for stable x-axis labels.
+    const stepMs = bucket === "hour" ? 3_600_000 : 86_400_000;
+    const now = Date.now();
+    const startMs = now - hours * 3_600_000;
+    // Align start to bucket boundary so first label is at, e.g., 14:00 not 14:23.
+    const alignedStart = Math.floor(startMs / stepMs) * stepMs;
+    const seriesMap = new Map<number, number>();
+    for (const row of r.rows as any[]) {
+      const t = row.bucket instanceof Date ? row.bucket.getTime() : new Date(row.bucket).getTime();
+      seriesMap.set(t, row.hits);
+    }
+    const series: { at: string; hits: number }[] = [];
+    let totalHits = 0;
+    for (let t = alignedStart; t <= now; t += stepMs) {
+      const hits = seriesMap.get(t) || 0;
+      totalHits += hits;
+      series.push({ at: new Date(t).toISOString(), hits });
+    }
+
+    const peak = series.reduce((m, s) => Math.max(m, s.hits), 0);
+
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      generatedAt: new Date().toISOString(),
+      moduleId: id,
+      hours,
+      bucket,
+      totalHits,
+      peakHits: peak,
+      bucketCount: series.length,
+      series,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "history failed" });
+  }
+});
+
 // 🔹 GET /:id/badge.svg — shields.io-style two-segment badge.
 //    Color is keyed off effective tier:
 //      mvp_live    → green   #0d9488

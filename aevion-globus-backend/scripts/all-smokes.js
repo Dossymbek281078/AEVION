@@ -34,6 +34,9 @@ const SMOKES = [
   // Read-only public endpoints — safe to run anywhere, including prod.
   // Tier 3 amplifier surfaces (OG cards, sitemaps, RSS, badges).
   { name: "tier3", script: "tier3-smoke.js", readOnly: true },
+  // Webhook signing — pure-crypto sign+verify roundtrip + rotation + replay rejection.
+  // No backend needed; deterministic, always safe.
+  { name: "webhook-sig", script: "webhook-sig-smoke.js", readOnly: true },
   // Hub catalog: read-only unified module discovery endpoint.
   { name: "hub-catalog", script: "hub-catalog-smoke.js", readOnly: true },
   // Waitlist unsubscribe: validates HMAC token rejection paths.
@@ -68,8 +71,18 @@ const SMOKES = [
   { name: "veilnetx-ledger", script: "veilnetx-ledger-smoke.js", readOnly: false },
   // VeilNetX chaos — bursty parallel writes + chain integrity check. Catches race-condition regressions.
   { name: "veilnetx-chaos", script: "veilnetx-chaos-smoke.js", readOnly: false },
-  // Fintech PROD — 21 read-only health + stats checks. Safe to run anywhere incl. prod.
+  // Fintech PROD — 53 read-only health + stats + auth-gate + OpenAPI checks across 6 modules. Safe for prod.
   { name: "fintech-prod", script: "fintech-prod-smoke.js", readOnly: true },
+  // QTrade PROD — 15 read-only checks for QTrade + QTradeOffline + AEV (trade/exchange/award trio).
+  { name: "qtrade-prod", script: "qtrade-prod-smoke.js", readOnly: true },
+  // Bureau PROD — 15 read-only checks for IP Bureau (health, transparency, notaries, auth gates).
+  { name: "bureau-prod", script: "bureau-prod-smoke.js", readOnly: true },
+  // QSign PROD — 15 read-only checks for QSign v2 (ML-DSA/Ed25519/HMAC) + legacy deprecation.
+  { name: "qsign-prod", script: "qsign-prod-smoke.js", readOnly: true },
+  // HealthAI PROD — 15 read-only checks (health, referrals, empty-series graceful, auth gates).
+  { name: "healthai-prod", script: "healthai-prod-smoke.js", readOnly: true },
+  // QShield + QRight PROD — 15 read-only checks (Shamir health, QRight objects, auth gates).
+  { name: "qshield-prod", script: "qshield-prod-smoke.js", readOnly: true },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.
@@ -100,6 +113,17 @@ const SMOKES = [
   { name: "qlearn", script: "qlearn-smoke.js", readOnly: true },
   // QStore — product catalogue/orders. Read-only public + auth gates.
   { name: "qstore", script: "qstore-smoke.js", readOnly: true },
+  // QEvents — events platform: health/categories/list/create/calendar.
+  { name: "qevents", script: "qevents-smoke.js", readOnly: false },
+  // New Wave MVPs (2026-05-13 batch) — startupx/kids-ai/mapreality/voe.
+  { name: "startupx", script: "startupx-smoke.js", readOnly: false },
+  { name: "kids-ai", script: "kids-ai-smoke.js", readOnly: false },
+  { name: "mapreality", script: "mapreality-smoke.js", readOnly: false },
+  { name: "voe", script: "voe-smoke.js", readOnly: false },
+  // Wave 3 MVPs (2026-05-14) — deepsan/qpersona/qfusionai.
+  { name: "deepsan", script: "deepsan-smoke.js", readOnly: false },
+  { name: "qpersona", script: "qpersona-smoke.js", readOnly: false },
+  { name: "qfusionai", script: "qfusionai-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

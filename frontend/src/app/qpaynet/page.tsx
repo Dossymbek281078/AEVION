@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
@@ -58,6 +58,21 @@ export default function QPayNetDashboard() {
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    window.setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 2200);
+  }
+
+  async function copyWalletId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id);
+      showToast("ID кошелька скопирован");
+    } catch {
+      showToast("Не удалось скопировать");
+    }
+  }
 
   useEffect(() => {
     const t = localStorage.getItem("aevion_token") ?? "";
@@ -129,12 +144,14 @@ export default function QPayNetDashboard() {
         </div>
       </header>
 
-      {/* Public stats */}
+      {/* Public stats — full grid on mobile, single row on desktop */}
       {stats && (
-        <div className="border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center gap-3 sm:gap-6 text-xs text-slate-500">
-          <span>💳 {stats.activeWallets} кошельков</span>
-          <span>⚡ {stats.totalTransactions} транзакций</span>
-          <span className="hidden sm:inline">₸ {fmt(stats.totalDepositedKzt)} тнг. депозитов</span>
+        <div className="border-b border-slate-800 px-4 sm:px-6 py-3">
+          <div className="grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center sm:gap-6 gap-2 text-[11px] sm:text-xs text-slate-500">
+            <span className="flex items-center gap-1.5"><span aria-hidden>💳</span>{stats.activeWallets} <span className="hidden xs:inline sm:inline">кошельков</span></span>
+            <span className="flex items-center gap-1.5"><span aria-hidden>⚡</span>{stats.totalTransactions} <span className="hidden xs:inline sm:inline">транзакций</span></span>
+            <span className="flex items-center gap-1.5"><span aria-hidden>₸</span><span className="truncate">{fmt(stats.totalDepositedKzt)}</span> <span className="hidden sm:inline">тнг. депозитов</span></span>
+          </div>
         </div>
       )}
 
@@ -158,12 +175,42 @@ export default function QPayNetDashboard() {
         </div>
       )}
 
+      {/* Toast — copy feedback, errors etc. */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-100 shadow-lg backdrop-blur"
+        >
+          {toast}
+        </div>
+      )}
+
       {token && !loading && <DashboardSummary token={token} />}
 
       {token && (
         <div className="max-w-5xl mx-auto px-6 py-8">
           {loading ? (
-            <div className="text-slate-500 text-sm py-12 text-center">Загрузка...</div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse" aria-label="Загрузка дашборда" role="status">
+              <div className="lg:col-span-1 space-y-3">
+                <div className="h-3 w-20 bg-slate-800 rounded" />
+                {[0,1].map(i => (
+                  <div key={i} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                    <div className="h-3 w-24 bg-slate-800 rounded" />
+                    <div className="h-6 w-32 bg-slate-800 rounded" />
+                    <div className="h-2 w-16 bg-slate-800 rounded" />
+                  </div>
+                ))}
+              </div>
+              <div className="lg:col-span-2 space-y-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="h-3 w-24 bg-slate-800 rounded" />
+                  <div className="h-8 w-40 bg-slate-800 rounded" />
+                  <div className="flex gap-2"><div className="h-7 w-24 bg-slate-800 rounded" /><div className="h-7 w-24 bg-slate-800 rounded" /><div className="h-7 w-24 bg-slate-800 rounded" /></div>
+                </div>
+                <div className="space-y-2">{[0,1,2,3].map(i => <div key={i} className="h-12 bg-slate-900 rounded-lg border border-slate-800" />)}</div>
+              </div>
+            </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left: wallets */}
@@ -228,21 +275,22 @@ export default function QPayNetDashboard() {
                         </div>
                         <div className="text-2xl font-bold">{fmt(activeW.balance)} ₸</div>
                       </div>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-2 sm:flex-wrap w-full sm:w-auto mt-3 sm:mt-0">
                         <Link href={`/qpaynet/deposit?wallet=${activeW.id}`}
-                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-semibold">+ Пополнить</Link>
+                          className="px-3 py-2.5 sm:py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">+ Пополнить</Link>
                         <Link href={`/qpaynet/send?wallet=${activeW.id}`}
-                          className="px-3 py-1.5 bg-violet-700 hover:bg-violet-600 rounded-lg text-xs font-semibold">→ Отправить</Link>
+                          className="px-3 py-2.5 sm:py-1.5 bg-violet-700 hover:bg-violet-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">→ Отправить</Link>
                         <Link href={`/qpaynet/request?wallet=${activeW.id}`}
-                          className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-semibold">📥 Запросить</Link>
+                          className="px-3 py-2.5 sm:py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">📥 Запросить</Link>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="text-[10px] text-slate-600 font-mono truncate">{activeW.id}</div>
                       <button
-                        onClick={() => { navigator.clipboard.writeText(activeW.id); }}
+                        onClick={() => copyWalletId(activeW.id)}
                         title="Скопировать ID кошелька"
-                        className="shrink-0 text-xs text-slate-500 hover:text-slate-300 px-1.5 py-1 bg-slate-800 rounded"
+                        aria-label="Скопировать ID кошелька"
+                        className="shrink-0 text-xs text-slate-500 hover:text-slate-300 px-2 py-1.5 bg-slate-800 rounded min-h-[32px]"
                       >
                         📋
                       </button>
@@ -368,10 +416,15 @@ function NotificationBell({ token }: { token: string }) {
     return () => { cancelled = true; clearInterval(iv); };
   }, [token]);
   return (
-    <Link href="/qpaynet/notifications" className="relative text-xs text-slate-400 hover:text-white">
-      🔔
+    <Link
+      href="/qpaynet/notifications"
+      className="relative text-xs text-slate-400 hover:text-white min-w-[32px] min-h-[32px] flex items-center justify-center"
+      aria-label={count > 0 ? `Уведомления, ${count} непрочитанных` : "Уведомления"}
+      title={count > 0 ? `${count} непрочитанных` : "Уведомления"}
+    >
+      <span aria-hidden>🔔</span>
       {count > 0 && (
-        <span className="absolute -top-1.5 -right-2 bg-amber-500 text-slate-950 text-[9px] font-bold rounded-full px-1.5 min-w-[18px] text-center">
+        <span className="absolute -top-1.5 -right-2 bg-amber-500 text-slate-950 text-[9px] font-bold rounded-full px-1.5 min-w-[18px] text-center" aria-hidden>
           {count > 99 ? "99+" : count}
         </span>
       )}

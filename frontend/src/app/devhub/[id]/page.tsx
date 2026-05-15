@@ -232,7 +232,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
   // AI Chat state
-  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "settings">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
@@ -265,6 +265,40 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileItem } | null>(null);
   const [renamingFile, setRenamingFile] = useState<FileItem | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // GitHub state
+  const [githubStatus, setGithubStatus] = useState<{ exists: boolean; stars?: number; openIssues?: number; lastPush?: string } | null>(null);
+  const [githubBranches, setGithubBranches] = useState<Array<{ name: string; sha: string }>>([]);
+  const [githubPushing, setGithubPushing] = useState(false);
+  const [githubSyncing, setGithubSyncing] = useState(false);
+  const [githubMsg, setGithubMsg] = useState<string | null>(null);
+
+  // ElevenLabs / Media state
+  const [mediaTab, setMediaTab] = useState<"tts" | "email" | "payment">("tts");
+  const [mediaTtsText, setMediaTtsText] = useState("");
+  const [mediaTtsVoice, setMediaTtsVoice] = useState("Rachel");
+  const [mediaTtsLoading, setMediaTtsLoading] = useState(false);
+  const [mediaTtsUrl, setMediaTtsUrl] = useState<string | null>(null);
+  const [mediaTtsError, setMediaTtsError] = useState<string | null>(null);
+
+  // Brevo email state
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Stripe payment link state
+  const [payName, setPayName] = useState("");
+  const [payAmount, setPayAmount] = useState("");
+  const [payCurrency, setPayCurrency] = useState("usd");
+  const [payDesc, setPayDesc] = useState("");
+  const [payLoading, setPayLoading] = useState(false);
+  const [payResult, setPayResult] = useState<{ url: string } | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  // Vercel deploy state
+  const [vercelDeploying, setVercelDeploying] = useState(false);
 
   // Settings state
   const [settingsName, setSettingsName] = useState("");
@@ -650,6 +684,191 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── GitHub helpers ──────────────────────────────────────────────────────────
+
+  const fetchGithubStatus = useCallback(async () => {
+    if (!project) return;
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/status`), { cache: "no-store" });
+      const d = await r.json();
+      setGithubStatus(d);
+    } catch { setGithubStatus(null); }
+  }, [project]);
+
+  const fetchGithubBranches = useCallback(async () => {
+    if (!project) return;
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/branches`), { cache: "no-store" });
+      const d = await r.json();
+      setGithubBranches(d.branches || []);
+    } catch { setGithubBranches([]); }
+  }, [project]);
+
+  useEffect(() => {
+    if (activeTab === "github" && project) {
+      fetchGithubStatus();
+      fetchGithubBranches();
+    }
+  }, [activeTab, fetchGithubStatus, fetchGithubBranches, project]);
+
+  const pushToGithub = async () => {
+    if (!project) return;
+    setGithubPushing(true);
+    setGithubMsg(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/push`), { method: "POST" });
+      const d = await r.json();
+      if (d.ok) {
+        setGithubMsg(`Pushed ${d.pushedFiles} files to GitHub: ${d.repoUrl}`);
+        setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
+        await fetchGithubStatus();
+        await fetchGithubBranches();
+      } else {
+        setGithubMsg(d.message || "Push failed");
+      }
+    } catch (e: any) {
+      setGithubMsg(e?.message || "Push failed");
+    } finally {
+      setGithubPushing(false);
+    }
+  };
+
+  const syncGithub = async () => {
+    if (!project) return;
+    setGithubSyncing(true);
+    setGithubMsg(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
+      const d = await r.json();
+      if (d.ok) {
+        setGithubMsg(`Synced. Default branch: ${d.defaultBranch} · Last push: ${d.lastPush ? new Date(d.lastPush).toLocaleDateString() : "—"}`);
+        await fetchGithubStatus();
+        await fetchGithubBranches();
+      } else {
+        setGithubMsg(d.message || "Sync failed");
+      }
+    } catch (e: any) {
+      setGithubMsg(e?.message || "Sync failed");
+    } finally {
+      setGithubSyncing(false);
+    }
+  };
+
+  // ── Vercel deploy ────────────────────────────────────────────────────────────
+
+  const deployToVercel = async () => {
+    if (!project) return;
+    setVercelDeploying(true);
+    showToast("Deploying to Vercel...", "info");
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        throw new Error(d.error || "Vercel deploy failed");
+      }
+      showToast(`Vercel: ${d.deployUrl}`, "success");
+      // Refresh project after 6s
+      setTimeout(async () => {
+        const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+        const pd = await pr.json();
+        setProject(pd.project);
+      }, 6000);
+    } catch (e: any) {
+      showToast(e?.message || "Vercel deploy failed", "error");
+    } finally {
+      setVercelDeploying(false);
+    }
+  };
+
+  // ── Brevo email helper ───────────────────────────────────────────────────────
+
+  const sendEmail = async () => {
+    if (!emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) return;
+    setEmailLoading(true);
+    setEmailMsg(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/email"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: emailTo.trim(), subject: emailSubject.trim(), htmlBody: emailBody }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setEmailMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setEmailMsg({ ok: true, text: `Email sent to ${emailTo}` });
+        setEmailTo(""); setEmailSubject(""); setEmailBody("");
+      }
+    } catch (e: any) {
+      setEmailMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  // ── Stripe payment link helper ───────────────────────────────────────────────
+
+  const createPaymentLink = async () => {
+    if (!payName.trim() || !payAmount.trim()) return;
+    const amtUnits = parseFloat(payAmount);
+    if (!Number.isFinite(amtUnits) || amtUnits <= 0) {
+      setPayError("Invalid amount");
+      return;
+    }
+    setPayLoading(true);
+    setPayError(null);
+    setPayResult(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/payment-link"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: payName.trim(),
+          amountCents: Math.round(amtUnits * 100),
+          currency: payCurrency,
+          description: payDesc.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setPayError(d.error || "Failed to create payment link");
+      } else {
+        setPayResult({ url: d.url });
+      }
+    } catch (e: any) {
+      setPayError(e?.message || "Failed to create payment link");
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  // ── ElevenLabs TTS helper ────────────────────────────────────────────────────
+
+  const generateTts = async () => {
+    if (!mediaTtsText.trim()) return;
+    setMediaTtsLoading(true);
+    setMediaTtsError(null);
+    setMediaTtsUrl(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/tts"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: mediaTtsText, voice: mediaTtsVoice }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error || `TTS error ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      setMediaTtsUrl(url);
+    } catch (e: any) {
+      setMediaTtsError(e?.message || "TTS failed");
+    } finally {
+      setMediaTtsLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
@@ -698,8 +917,25 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
             </a>
           )}
           <button
+            onClick={() => setActiveTab("github")}
+            title={project.repoUrl ? `GitHub: ${project.repoUrl}` : "Push to GitHub"}
+            style={{
+              padding: "8px 14px", background: project.repoUrl ? "#f0fdf4" : "#f8fafc",
+              color: project.repoUrl ? "#166534" : "#374151",
+              border: `1px solid ${project.repoUrl ? "#bbf7d0" : "#e2e8f0"}`,
+              borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            {project.repoUrl ? "GitHub ✓" : "GitHub"}
+          </button>
+          <button
             onClick={deploy}
             disabled={deploying}
+            title="Deploy to Railway"
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -707,6 +943,20 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
             }}
           >
             {deploying ? "Deploying..." : "Deploy"}
+          </button>
+          <button
+            onClick={deployToVercel}
+            disabled={vercelDeploying}
+            title="Deploy to Vercel"
+            style={{
+              padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
+              color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+              cursor: vercelDeploying ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 76 65" fill="currentColor"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>
+            {vercelDeploying ? "..." : "Vercel"}
           </button>
         </div>
       </div>
@@ -869,7 +1119,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
             <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "templates", "env", "deployments", "settings"] as const).map((tab) => (
+              {(["chat", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -880,7 +1130,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     borderBottom: activeTab === tab ? "2px solid #0d9488" : "2px solid transparent",
                   }}
                 >
-                  {tab === "chat" ? "AI Generate" : tab === "env" ? "Env Vars" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === "chat" ? "AI Generate" : tab === "env" ? "Env Vars" : tab === "github" ? "GitHub" : tab === "media" ? "ElevenLabs" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
             </div>
@@ -1005,6 +1255,327 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* GitHub Tab */}
+              {activeTab === "github" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {/* Repo status */}
+                  <div style={{ padding: "12px 14px", background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a", marginBottom: 8 }}>
+                      GitHub Repository
+                    </div>
+                    {project?.repoUrl ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <a href={project.repoUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 13, color: "#0d9488", fontWeight: 600, wordBreak: "break-all" }}>
+                          {project.repoUrl}
+                        </a>
+                        {githubStatus?.exists && (
+                          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#64748b" }}>
+                            <span>★ {githubStatus.stars ?? 0}</span>
+                            <span>Issues: {githubStatus.openIssues ?? 0}</span>
+                            {githubStatus.lastPush && <span>Last push: {new Date(githubStatus.lastPush).toLocaleDateString()}</span>}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: "#94a3b8" }}>No repository linked yet. Push to create one.</div>
+                    )}
+                  </div>
+
+                  {/* Branches */}
+                  {githubBranches.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Branches</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {githubBranches.map((b) => (
+                          <span key={b.name} style={{
+                            padding: "3px 10px", borderRadius: 6, background: "#f0fdfa",
+                            border: "1px solid #99f6e4", fontSize: 12, color: "#0d9488", fontFamily: "monospace",
+                          }}>
+                            {b.name} <span style={{ color: "#94a3b8" }}>#{b.sha}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Message */}
+                  {githubMsg && (
+                    <div style={{
+                      padding: "10px 14px", borderRadius: 8, fontSize: 13,
+                      background: githubMsg.includes("failed") || githubMsg.includes("error") ? "#fee2e2" : "#d1fae5",
+                      color: githubMsg.includes("failed") || githubMsg.includes("error") ? "#991b1b" : "#065f46",
+                      wordBreak: "break-all",
+                    }}>
+                      {githubMsg}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      onClick={pushToGithub}
+                      disabled={githubPushing}
+                      style={{
+                        padding: "9px 18px", background: githubPushing ? "#99f6e4" : "#0f172a",
+                        color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                        cursor: githubPushing ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {githubPushing ? "Pushing..." : project?.repoUrl ? "Push (update repo)" : "Push to GitHub (create repo)"}
+                    </button>
+                    {project?.repoUrl && (
+                      <button
+                        onClick={syncGithub}
+                        disabled={githubSyncing}
+                        style={{
+                          padding: "9px 18px", background: "#fff", color: "#0f172a",
+                          border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: githubSyncing ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {githubSyncing ? "Syncing..." : "Sync branches"}
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                    Set <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>GITHUB_TOKEN</code> env var on the server to enable GitHub integration.
+                    Token needs <em>repo</em> scope.
+                  </div>
+                </div>
+              )}
+
+              {/* ElevenLabs / Media Tab */}
+              {activeTab === "media" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Sub-tabs */}
+                  <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8 }}>
+                    {(["tts", "email", "payment"] as const).map((sub) => (
+                      <button
+                        key={sub}
+                        onClick={() => setMediaTab(sub)}
+                        style={{
+                          flex: 1, padding: "6px 10px", border: "none",
+                          background: mediaTab === sub ? "#fff" : "transparent",
+                          color: mediaTab === sub ? "#0d9488" : "#64748b",
+                          borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          boxShadow: mediaTab === sub ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                        }}
+                      >
+                        {sub === "tts" ? "ElevenLabs TTS" : sub === "email" ? "Brevo Email" : "Stripe Pay"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* TTS */}
+                  {mediaTab === "tts" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice</label>
+                        <select
+                          value={mediaTtsVoice}
+                          onChange={(e) => setMediaTtsVoice(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                        >
+                          {["Rachel", "Adam", "Antoni", "Arnold", "Bella", "Domi", "Elli", "Josh", "Sam"].map((v) => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Text</label>
+                        <textarea
+                          value={mediaTtsText}
+                          onChange={(e) => setMediaTtsText(e.target.value)}
+                          placeholder="Enter text to convert to speech..."
+                          rows={4}
+                          style={{
+                            width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
+                            borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      {mediaTtsError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {mediaTtsError}
+                        </div>
+                      )}
+                      {mediaTtsUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <audio controls src={mediaTtsUrl} style={{ width: "100%" }} />
+                          <a href={mediaTtsUrl} download="tts-output.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
+                            Download MP3
+                          </a>
+                        </div>
+                      )}
+                      <button
+                        onClick={generateTts}
+                        disabled={mediaTtsLoading || !mediaTtsText.trim()}
+                        style={{
+                          padding: "9px 18px", background: mediaTtsLoading ? "#99f6e4" : "#7c3aed",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (mediaTtsLoading || !mediaTtsText.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {mediaTtsLoading ? "Generating..." : "Generate Speech"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo Email */}
+                  {mediaTab === "email" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>To</label>
+                        <input
+                          type="email"
+                          value={emailTo}
+                          onChange={(e) => setEmailTo(e.target.value)}
+                          placeholder="recipient@example.com"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <input
+                          type="text"
+                          value={emailSubject}
+                          onChange={(e) => setEmailSubject(e.target.value)}
+                          placeholder="Welcome to our app"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Body (HTML)</label>
+                        <textarea
+                          value={emailBody}
+                          onChange={(e) => setEmailBody(e.target.value)}
+                          placeholder="<h1>Hi!</h1><p>Thanks for signing up.</p>"
+                          rows={6}
+                          style={{
+                            width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
+                            borderRadius: 7, fontSize: 12, resize: "vertical", fontFamily: "monospace", boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      {emailMsg && (
+                        <div style={{
+                          padding: "8px 12px", borderRadius: 7, fontSize: 13,
+                          background: emailMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: emailMsg.ok ? "#065f46" : "#991b1b",
+                        }}>
+                          {emailMsg.text}
+                        </div>
+                      )}
+                      <button
+                        onClick={sendEmail}
+                        disabled={emailLoading || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()}
+                        style={{
+                          padding: "9px 18px", background: emailLoading ? "#99f6e4" : "#0d9488",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (emailLoading || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {emailLoading ? "Sending..." : "Send Email"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_DEFAULT_SENDER</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stripe Payment Link */}
+                  {mediaTab === "payment" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
+                        <input
+                          type="text"
+                          value={payName}
+                          onChange={(e) => setPayName(e.target.value)}
+                          placeholder="Pro subscription"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 2 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Amount</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={payAmount}
+                            onChange={(e) => setPayAmount(e.target.value)}
+                            placeholder="9.99"
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Currency</label>
+                          <select
+                            value={payCurrency}
+                            onChange={(e) => setPayCurrency(e.target.value)}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                          >
+                            {["usd", "eur", "kzt", "rub", "gbp"].map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
+                        <input
+                          type="text"
+                          value={payDesc}
+                          onChange={(e) => setPayDesc(e.target.value)}
+                          placeholder="Monthly access to all features"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      {payError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {payError}
+                        </div>
+                      )}
+                      {payResult && (
+                        <div style={{ padding: "10px 12px", background: "#d1fae5", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Payment link created</div>
+                          <a href={payResult.url} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 12, color: "#0d9488", wordBreak: "break-all" }}>
+                            {payResult.url}
+                          </a>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(payResult.url)}
+                            style={{
+                              padding: "5px 10px", background: "#0d9488", color: "#fff",
+                              border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", alignSelf: "flex-start",
+                            }}
+                          >
+                            Copy link
+                          </button>
+                        </div>
+                      )}
+                      <button
+                        onClick={createPaymentLink}
+                        disabled={payLoading || !payName.trim() || !payAmount.trim()}
+                        style={{
+                          padding: "9px 18px", background: payLoading ? "#a5b4fc" : "#635bff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (payLoading || !payName.trim() || !payAmount.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {payLoading ? "Creating..." : "Create Payment Link"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>. Min amount 50 cents (or equivalent).
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -2684,3 +2684,61 @@ ${urls.join("\n")}
     res.status(500).json({ error: "sitemap failed" });
   }
 });
+
+// GET /api/pipeline/authors/:slug — public author profile.
+// slug = authorName lowercased with spaces → dashes (e.g. "john-doe").
+pipelineRouter.get("/authors/:slug", async (req: Request, res: Response) => {
+  const rawSlug = req.params["slug"];
+  if (!rawSlug || typeof rawSlug !== "string" || rawSlug.length > 120) {
+    return res.status(400).json({ error: "invalid slug" });
+  }
+  const slug = rawSlug.toLowerCase();
+  const namePattern = slug.replace(/-/g, " ");
+  try {
+    await ensureTables();
+    type CertRow = {
+      id: string; title: string; kind: string; description: string;
+      authorName: string | null; country: string | null; city: string | null;
+      contentHash: string; protectedAt: Date; verifiedCount: number;
+    };
+    const queryResult = await pool.query(
+      `SELECT id, title, kind, description, "authorName", country, city,
+              "contentHash", "protectedAt", COALESCE("verifiedCount", 0) AS "verifiedCount"
+         FROM "IPCertificate"
+        WHERE status = 'active'
+          AND (
+            LOWER(REPLACE(COALESCE("authorName", ''), ' ', '-')) = $1
+            OR LOWER(COALESCE("authorName", '')) ILIKE $2
+          )
+        ORDER BY "protectedAt" DESC
+        LIMIT 200`,
+      [slug, "%" + namePattern + "%"],
+    );
+    const rows = queryResult.rows as CertRow[];
+    if (rows.length === 0) return res.status(404).json({ error: "author not found" });
+    const name = rows[0].authorName ?? namePattern;
+    const countries = [...new Set(rows.map((r: CertRow) => r.country).filter((c: string | null): c is string => Boolean(c)))];
+    const byKind: Record<string, number> = {};
+    for (const r of rows) { byKind[r.kind] = (byKind[r.kind] || 0) + 1; }
+    const totalVerifications = rows.reduce((sum: number, r: CertRow) => sum + (Number(r.verifiedCount) || 0), 0);
+    return res.json({
+      slug, name,
+      stats: {
+        certificates: rows.length, verifications: totalVerifications, countries,
+        firstProtectedAt: rows[rows.length - 1]?.protectedAt?.toISOString() ?? null,
+        lastProtectedAt: rows[0]?.protectedAt?.toISOString() ?? null,
+        byKind: Object.entries(byKind).map(([kind, count]) => ({ kind, count })),
+      },
+      certificates: rows.map((r: CertRow) => ({
+        id: r.id, objectId: r.id, title: r.title, kind: r.kind,
+        description: r.description, authorName: r.authorName,
+        country: r.country, city: r.city, contentHash: r.contentHash,
+        protectedAt: r.protectedAt?.toISOString() ?? "",
+        verifiedCount: Number(r.verifiedCount) || 0,
+      })),
+    });
+  } catch (err: unknown) {
+    capturePipelineError(err instanceof Error ? err : new Error(String(err)), { route: "authors/:slug" });
+    res.status(500).json({ error: "author lookup failed" });
+  }
+});

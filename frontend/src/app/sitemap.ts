@@ -3,9 +3,6 @@ import { getApiBase } from "@/lib/apiBase";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
-const TIERS = ["free", "pro", "business", "enterprise"];
-const INDUSTRIES = ["banks", "startups", "government", "creators", "law-firms"];
-
 const TOP_LEVEL_ROUTES: Array<{
   path: string;
   changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
@@ -35,6 +32,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/cyberchess/economy", changeFrequency: "weekly", priority: 0.6 },
   { path: "/cyberchess/training", changeFrequency: "daily", priority: 0.7 },
   { path: "/cyberchess/tournament", changeFrequency: "daily", priority: 0.75 },
+  { path: "/cyberchess/studio", changeFrequency: "weekly", priority: 0.6 },
   // QBuild static routes
   { path: "/build", changeFrequency: "daily", priority: 1.0 },
   { path: "/build/vacancies", changeFrequency: "hourly", priority: 0.9 },
@@ -113,6 +111,89 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
 ];
 
+const DEFAULT_CHANGE_FREQ: MetadataRoute.Sitemap[number]["changeFrequency"] = "weekly";
+const DEFAULT_PRIORITY = 0.6;
+
+/**
+ * Walk `frontend/src/app/**` at build time and pick up every `page.tsx` so we
+ * don't have to hand-maintain a route list (and forget routes like
+ * `/cyberchess/studio` did historically). Returns route paths relative to the
+ * app root (e.g. `/qcoreai/playground`, or `/` for the root page).
+ *
+ * Excludes:
+ *  - Dynamic segments (`[id]`, `[slug]`, `[...rest]`) — those routes are
+ *    generated separately via `fetchIds()` against real data.
+ *  - Route groups `(group)` — they don't appear in URLs but are folder-only.
+ *  - Private folders starting with `_` (e.g. `_components`).
+ *  - The `api/` tree — server routes, not crawlable pages.
+ *
+ * Runtime-safe: only invoked when `fs` is actually available (Node runtime
+ * during build). On edge/runtime where the FS isn't reachable, the caller
+ * falls back to the manual `TOP_LEVEL_ROUTES` list.
+ */
+async function scanAppRoutes(): Promise<string[]> {
+  // Dynamic imports so the module graph doesn't drag node:fs into edge bundles.
+  // Wrapped in try/catch so any failure (sandboxed runtime, missing dir,
+  // permissions) just degrades to an empty array.
+  try {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+
+    // `process.cwd()` is the project root during `next build` (usually the
+    // `frontend/` directory). The Next.js convention is `src/app/**`.
+    const appDir = path.join(process.cwd(), "src", "app");
+
+    // Quick sanity check — if the dir isn't there, we're probably running in
+    // a serverless/edge context. Bail.
+    try {
+      const stat = await fs.stat(appDir);
+      if (!stat.isDirectory()) return [];
+    } catch {
+      return [];
+    }
+
+    const routes: string[] = [];
+
+    async function walk(dir: string, segments: string[]): Promise<void> {
+      let entries;
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        const name = entry.name;
+
+        if (entry.isDirectory()) {
+          // Skip dynamic segments (handled by fetchIds elsewhere).
+          if (name.startsWith("[")) continue;
+          // Skip private folders, route groups, and node_modules-ish stuff.
+          if (name.startsWith("_")) continue;
+          if (name.startsWith("(") && name.endsWith(")")) continue;
+          // Skip the API tree — those aren't browseable URLs.
+          if (segments.length === 0 && name === "api") continue;
+
+          await walk(path.join(dir, name), [...segments, name]);
+          continue;
+        }
+
+        if (!entry.isFile()) continue;
+        if (name !== "page.tsx" && name !== "page.ts" && name !== "page.jsx" && name !== "page.js") continue;
+
+        // Build the route path from the segments we walked into.
+        const route = segments.length === 0 ? "/" : "/" + segments.join("/");
+        routes.push(route);
+      }
+    }
+
+    await walk(appDir, []);
+    return routes;
+  } catch {
+    return [];
+  }
+}
+
 async function fetchIds(path: string, idField: string = "id"): Promise<string[]> {
   try {
     const res = await fetch(`${getApiBase()}${path}`, { next: { revalidate: 3600 } });
@@ -131,7 +212,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // already-curated list of brand-name profiles worth indexing. Capped
   // server-side at 20+20, so cheap to fetch.
   const origin = BASE_URL;
-  const [projectIds, vacancyIds, employerLeaderboard, popularSkills] = await Promise.all([
+  const [projectIds, vacancyIds, employerLeaderboard, popularSkills, scannedRoutes] = await Promise.all([
     fetchIds("/api/build/projects?limit=500&status=OPEN"),
     fetchIds("/api/build/vacancies?limit=1000&status=OPEN"),
     fetch(`${getApiBase()}/api/build/stats/leaderboard`, { next: { revalidate: 3600 } })
@@ -140,6 +221,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     fetch(`${getApiBase()}/api/build/vacancies/skills/popular`, { next: { revalidate: 3600 } })
       .then((r) => (r.ok ? r.json() : { data: { items: [] } }))
       .catch(() => ({ data: { items: [] } })),
+    scanAppRoutes(),
   ]);
 
   const employerIds: string[] = ((employerLeaderboard?.data?.employers ?? []) as { userId: string }[])
@@ -152,13 +234,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .slice(0, 50)
     .map((s) => s.toLowerCase().replace(/\s+/g, "-"));
 
+  // Merge strategy:
+  // 1. Every route in TOP_LEVEL_ROUTES keeps its hand-tuned changeFreq + priority
+  //    (SEO-sensitive — hourly leaderboards, daily landings, etc.).
+  // 2. Any route found on disk that ISN'T in TOP_LEVEL_ROUTES gets defaults.
+  // 3. If the FS scan returned nothing (edge runtime, sandbox, etc.), we still
+  //    have the full TOP_LEVEL_ROUTES list as a baseline.
+  const overrideMap = new Map(TOP_LEVEL_ROUTES.map((r) => [r.path, r]));
+  const allPaths = new Set<string>(TOP_LEVEL_ROUTES.map((r) => r.path));
+  for (const p of scannedRoutes) allPaths.add(p);
+
   const today = new Date();
-  const staticRoutes: MetadataRoute.Sitemap = TOP_LEVEL_ROUTES.map((r) => ({
-    url: `${origin}${r.path}`,
-    lastModified: today,
-    changeFrequency: r.changeFrequency,
-    priority: r.priority,
-  }));
+  const staticRoutes: MetadataRoute.Sitemap = Array.from(allPaths).map((p) => {
+    const override = overrideMap.get(p);
+    return {
+      url: `${origin}${p}`,
+      lastModified: today,
+      changeFrequency: override?.changeFrequency ?? DEFAULT_CHANGE_FREQ,
+      priority: override?.priority ?? DEFAULT_PRIORITY,
+    };
+  });
 
   const projectRoutes: MetadataRoute.Sitemap = projectIds.map((id) => ({
     url: `${origin}/build/project/${id}`,

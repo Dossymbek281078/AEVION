@@ -7,6 +7,7 @@ import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { feature as topoFeature } from "topojson-client";
 import countriesData from "world-atlas/countries-110m.json";
 import earcut from "earcut";
+import { apiUrl } from "@/lib/apiBase";
 
 type Project = {
   id: string;
@@ -698,6 +699,15 @@ export default function Globus3D({
       color: string;
     }>
   >([]);
+  /** Меши overlay-слоёв — для toggle через panel без пересоздания сцены. */
+  const cloudMeshRef = useRef<THREE.Mesh | null>(null);
+  const heatmapGroupRef = useRef<THREE.Group | null>(null);
+  /** MOTD-highlight group (золотистый pulsing ring вокруг страны module-of-the-day). */
+  const motdGroupRef = useRef<THREE.Group | null>(null);
+  const motdMatRef = useRef<THREE.LineBasicMaterial | null>(null);
+  /** Сеттер MOTD-страны: пересобирает контур внутри Three.js scope. */
+  const motdSetCountryRef = useRef<((name: string | null) => void) | null>(null);
+
   /** Tooltip-DOM для дуги; обновляем напрямую в animate. */
   const arcTooltipRef = useRef<HTMLDivElement | null>(null);
   /** Координаты курсора в координатах globe-контейнера (pointer move). */
@@ -719,17 +729,150 @@ export default function Globus3D({
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
   const hoveredCountryRef = useRef<string | null>(null);
 
+  /**
+   * Layer toggles — overlay-слои сцены. Изменение state НЕ пересоздаёт сцену:
+   * effect ниже пробрасывает `.visible` на меши через refs.
+   * Сохраняем в localStorage чтобы пользователь увидел свой выбор при возврате.
+   */
+  type LayerKey = "clouds" | "heatmap" | "arcs" | "motd";
+  const [layers, setLayers] = useState<Record<LayerKey, boolean>>(() => {
+    if (typeof window === "undefined") {
+      return { clouds: true, heatmap: true, arcs: true, motd: true };
+    }
+    let motd = true;
+    try {
+      const motdRaw = window.localStorage.getItem("aevion:globus:motd-layer");
+      if (motdRaw === "false") motd = false;
+    } catch {}
+    try {
+      const raw = window.localStorage.getItem("aevion:globus:layers");
+      if (raw) {
+        const v = JSON.parse(raw) as Partial<Record<LayerKey, boolean>>;
+        return {
+          clouds: v.clouds !== false,
+          heatmap: v.heatmap !== false,
+          arcs: v.arcs !== false,
+          motd: v.motd !== undefined ? v.motd !== false : motd,
+        };
+      }
+    } catch {}
+    return { clouds: true, heatmap: true, arcs: true, motd };
+  });
+  const toggleLayer = useCallback((k: LayerKey) => {
+    setLayers((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem("aevion:globus:layers", JSON.stringify(next));
+          if (k === "motd") {
+            window.localStorage.setItem(
+              "aevion:globus:motd-layer",
+              next.motd ? "true" : "false",
+            );
+          }
+        } catch {}
+      }
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    // Clouds — родной mesh.visible.
+    if (cloudMeshRef.current) cloudMeshRef.current.visible = layers.clouds;
+    // Heatmap — Group; one place to toggle.
+    if (heatmapGroupRef.current) heatmapGroupRef.current.visible = layers.heatmap;
+    // Arcs — лежат вне Group; гасим каждую линию (учитывая search/filter video в matches-effect).
+    // ВАЖНО: not-arcs-layer ⇒ скрываем все. Иначе оставляем как есть — другой effect управит видимостью.
+    if (!layers.arcs) {
+      for (const a of arcsRef.current) a.line.visible = false;
+    }
+    // При включении arcs обратно — следующий «matches» effect перенастроит видимость.
+    // MOTD — пульсирующее золотистое кольцо вокруг страны MOTD-модуля.
+    if (motdGroupRef.current) motdGroupRef.current.visible = layers.motd;
+  }, [layers]);
+
+  /**
+   * Module-of-the-day — cross-product link AEVION-hub → Globus.
+   * Один fetch на маунт; не зависит от user state. Сетевой fail = пустой стейт,
+   * фича additive — остальной globe работает как обычно.
+   */
+  type MotdInfo = {
+    id: string;
+    name: string;
+    code?: string;
+    description?: string;
+    tags?: string[];
+  };
+  const [motd, setMotd] = useState<MotdInfo | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await fetch(apiUrl("/api/aevion/module-of-the-day"), {
+          headers: { Accept: "application/json" },
+        });
+        if (!r.ok) return;
+        const json = (await r.json()) as {
+          module?: { id: string; name: string; code?: string; description?: string; tags?: string[] };
+        };
+        if (!alive || !json?.module?.id) return;
+        setMotd({
+          id: String(json.module.id),
+          name: String(json.module.name),
+          code: json.module.code,
+          description: json.module.description,
+          tags: Array.isArray(json.module.tags) ? json.module.tags : [],
+        });
+      } catch {
+        // Network/CORS issue — fail silent, layer just stays empty.
+      }
+    };
+    load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /**
+   * Country для MOTD-модуля. Источник:
+   *  1) marker registry (`markers.find(m => m.key === "project:<id>")`) — для уже отрисованных продуктов
+   *  2) projectGeo(id).country — fallback по детерм. хэшу (тот же что для маркеров)
+   * "World" обнуляется в null — пульсировать нечего (полигона нет).
+   */
+  const motdCountry = useMemo<string | null>(() => {
+    if (!motd?.id) return null;
+    // Попытка 1 — взять country из уже сматченного маркера.
+    // (markers — это useMemo ниже; на первом рендере он уже посчитан перед этим useMemo
+    // потому что React раскрывает useMemo сверху-вниз; чтобы не зависеть от порядка
+    // вычислений, используем projectGeo как источник истины — он и был seed'ом для маркеров.)
+    const g = projectGeo(motd.id);
+    const c = (g.country || "").trim();
+    if (!c || c === "World") return null;
+    return c;
+  }, [motd]);
+
+  /** Прокидываем имя страны в Three.js сеттер, когда меняется motdCountry или scene reset. */
+  useEffect(() => {
+    motdSetCountryRef.current?.(layers.motd ? motdCountry : null);
+  }, [motdCountry, layers.motd]);
+
   /** Локаль для отображения country names. */
   const [locale, setLocale] = useState<"en" | "ru" | "kk">("en");
   useEffect(() => {
     setLocale(detectLocale());
   }, []);
   const [topCountries, setTopCountries] = useState<Array<[string, number]>>([]);
+  const topCountriesRef = useRef<Array<[string, number]>>([]);
+  useEffect(() => {
+    topCountriesRef.current = topCountries;
+  }, [topCountries]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const selectedCountryRef = useRef<string | null>(null);
   useEffect(() => {
     selectedCountryRef.current = selectedCountry;
   }, [selectedCountry]);
+
+  /** Help overlay (toggle via "?" keyboard shortcut). */
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     labelRef.current = label;
@@ -903,104 +1046,131 @@ export default function Globus3D({
     return markers.filter((m) => m.country === selectedCountry);
   }, [selectedCountry, markers]);
 
+  /**
+   * Агрегат по странам — для hover preview / side-sheet stats без повторного скана `markers`.
+   * Считаем как по полю `m.country` (быстро, всегда), так и через aliasCountry для совпадения с
+   * topojson-именами, на которые ссылается hoveredCountry.
+   */
+  type CountryStat = {
+    total: number;
+    products: number;
+    awards: number;
+    qright: number;
+    infra: number;
+    focus: number;
+  };
+  const markerCountryStats = useMemo<Map<string, CountryStat>>(() => {
+    const map = new Map<string, CountryStat>();
+    const bump = (key: string | undefined, cat: MarkerCategory) => {
+      if (!key) return;
+      let s = map.get(key);
+      if (!s) {
+        s = { total: 0, products: 0, awards: 0, qright: 0, infra: 0, focus: 0 };
+        map.set(key, s);
+      }
+      s.total++;
+      if (cat === "product") s.products++;
+      else if (cat === "award") s.awards++;
+      else if (cat === "qright") s.qright++;
+      else if (cat === "infra") s.infra++;
+      else if (cat === "focus") s.focus++;
+    };
+    for (const m of markers) {
+      bump(m.country, m.category);
+    }
+    return map;
+  }, [markers]);
+
+  /** Краткая статистика для hovered country (учитывая alias topojson↔наши данные). */
+  const hoveredCountryStat = useMemo<CountryStat | null>(() => {
+    if (!hoveredCountry) return null;
+    const aliased = aliasCountry(hoveredCountry);
+    return markerCountryStats.get(aliased) ?? markerCountryStats.get(hoveredCountry) ?? null;
+  }, [hoveredCountry, markerCountryStats]);
+
+  /**
+   * Debounced query — чтобы matches-effect не дёргался на каждый символ при наборе.
+   * Обновляется через 120ms после последнего keystroke. visibleMatchCount всё ещё
+   * читает свежий `query` для мгновенного индикатора, но heavy-work идёт по debounced.
+   */
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQuery(query), 120);
+    return () => window.clearTimeout(t);
+  }, [query]);
+
+  /**
+   * Единый memo для search+filter+country — переиспользуется matches-effect,
+   * auto-focus и visibleMatchCount. До этого каждый из трёх делал свой O(N) проход
+   * по markers с одинаковой логикой. matchSet — Set<key> для быстрого lookup,
+   * matchedList — для auto-focus single-detection.
+   */
+  const markerMatch = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    const sel = selectedCountry;
+    const matchSet = new Set<string>();
+    const matchedList: Marker[] = [];
+    const inField = (s: string | undefined, qq: string) =>
+      !!s && s.toLowerCase().includes(qq);
+    for (const m of markers) {
+      if (filter !== "all" && m.category !== filter) continue;
+      if (sel && m.country !== sel) continue;
+      let pass = !q;
+      if (!pass) {
+        pass =
+          inField(m.title, q) ||
+          inField(m.label, q) ||
+          inField(m.country, q) ||
+          inField(m.city, q) ||
+          (m.tags?.some((t) => inField(t, q)) ?? false);
+      }
+      if (pass) {
+        matchSet.add(m.key);
+        matchedList.push(m);
+      }
+    }
+    return { matchSet, matchedList };
+  }, [markers, debouncedQuery, filter, selectedCountry]);
+
   /** Применяем поиск + фильтр без пересоздания сцены: меняем mesh.visible. */
   useEffect(() => {
-    const q = query.trim().toLowerCase();
-    const sel = selectedCountry;
-    const matches = (m: Marker) => {
-      if (filter !== "all" && m.category !== filter) return false;
-      if (sel && m.country !== sel) return false;
-      if (!q) return true;
-      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
-      return (
-        inField(m.title) ||
-        inField(m.label) ||
-        inField(m.country) ||
-        inField(m.city) ||
-        (m.tags?.some((t) => inField(t)) ?? false)
-      );
-    };
-    const visibleByKey = new Map<string, boolean>();
+    const matchSet = markerMatch.matchSet;
     for (const item of markerMeshesRef.current) {
-      const v = matches(item.marker);
+      const v = matchSet.has(item.marker.key);
       item.group.visible = v;
       // Также на head — иначе raycaster найдёт скрытый маркер (он проверяет only-self).
       item.mesh.visible = v;
-      visibleByKey.set(item.marker.key, v);
     }
     // Pulse уже внутри group → автоматически скрыт; просто синхронизируем.
     for (const [key, pulseMesh] of pulseMeshByKeyRef.current) {
-      pulseMesh.visible = visibleByKey.get(key) === true;
+      pulseMesh.visible = matchSet.has(key);
     }
     for (const a of arcsRef.current) {
       a.line.visible =
-        visibleByKey.get(a.fromKey) === true &&
-        visibleByKey.get(a.toKey) === true;
+        layers.arcs && matchSet.has(a.fromKey) && matchSet.has(a.toKey);
     }
-  }, [query, filter, selectedCountry, markers]);
+  }, [markerMatch, layers.arcs]);
 
   /** Auto-focus при единственном совпадении поиска. */
   useEffect(() => {
-    const q = query.trim().toLowerCase();
+    const q = debouncedQuery.trim().toLowerCase();
     if (!q && filter === "all") return;
-    // Считаем матчи и собираем единственный.
-    const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
-    let count = 0;
-    let single: Marker | null = null;
-    for (const m of markers) {
-      if (filter !== "all" && m.category !== filter) continue;
-      if (q) {
-        if (
-          !(
-            inField(m.title) ||
-            inField(m.label) ||
-            inField(m.country) ||
-            inField(m.city) ||
-            (m.tags?.some((t) => inField(t)) ?? false)
-          )
-        ) {
-          continue;
-        }
-      }
-      count++;
-      if (count > 1) {
-        single = null;
-        break;
-      }
-      single = m;
-    }
-    if (count !== 1 || !single) return;
+    const { matchedList } = markerMatch;
+    if (matchedList.length !== 1) return;
+    const single = matchedList[0];
     if (focusedRef.current?.key === single.key) return;
-    const target = single;
     const tm = window.setTimeout(() => {
-      focusMarkerRef.current(target);
+      focusMarkerRef.current(single);
     }, 700);
     return () => window.clearTimeout(tm);
-  }, [query, filter, markers]);
+  }, [debouncedQuery, filter, markerMatch]);
 
-  const visibleMatchCount = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (filter === "all" && !q) return markers.length;
-    let n = 0;
-    for (const m of markers) {
-      if (filter !== "all" && m.category !== filter) continue;
-      if (!q) {
-        n++;
-        continue;
-      }
-      const inField = (s?: string) => !!s && s.toLowerCase().includes(q);
-      if (
-        inField(m.title) ||
-        inField(m.label) ||
-        inField(m.country) ||
-        inField(m.city) ||
-        (m.tags?.some((t) => inField(t)) ?? false)
-      ) {
-        n++;
-      }
-    }
-    return n;
-  }, [markers, query, filter]);
+  /**
+   * Сколько маркеров матчится сейчас — read instantly from markerMatch (debounced).
+   * Trade-off: UI-счётчик обновляется через 120ms, но это та же задержка что у matches-effect,
+   * так что глобус и счётчик движутся в такт.
+   */
+  const visibleMatchCount = markerMatch.matchSet.size;
 
   const counts = useMemo(() => {
     let live = 0;
@@ -1254,6 +1424,7 @@ export default function Globus3D({
     });
     const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
     earthGroup.add(cloudMesh);
+    cloudMeshRef.current = cloudMesh;
 
     loadTextureChain(
       loader,
@@ -1452,6 +1623,7 @@ export default function Globus3D({
     // Density heatmap — постоянный нежный контур стран, в которых есть наши маркеры.
     const presenceOutlineGroup = new THREE.Group();
     earthGroup.add(presenceOutlineGroup);
+    heatmapGroupRef.current = presenceOutlineGroup;
 
     // Hovered-country outline — светящийся контур поверх borders, пересоздаётся при смене страны.
     const countryOutlineGroup = new THREE.Group();
@@ -1593,6 +1765,65 @@ export default function Globus3D({
     };
 
     selectedCountryVizRef.current = setSelectedCountryViz;
+
+    // MOTD-country highlight — золотистое pulsing-кольцо вокруг страны
+    // module-of-the-day (определяется на клиенте через /api/aevion/module-of-the-day).
+    // Дороже чем hover-outline (выше тяга к глазу), но дешевле чем selected-fill
+    // (без triangulated mesh-заливки — только контур).
+    const motdGroup = new THREE.Group();
+    earthGroup.add(motdGroup);
+    motdGroupRef.current = motdGroup;
+
+    const motdMat = new THREE.LineBasicMaterial({
+      color: 0xfacc15, // amber-400 — выделяется среди sky-blue selected/hover контуров
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+      linewidth: 2,
+    });
+    motdMat.blending = THREE.AdditiveBlending;
+    motdMatRef.current = motdMat;
+
+    let lastMotdCountry: string | null = null;
+    const setMotdCountry = (countryName: string | null) => {
+      if (countryName === lastMotdCountry) return;
+      lastMotdCountry = countryName;
+      while (motdGroup.children.length > 0) {
+        const ch = motdGroup.children[0] as THREE.Object3D & {
+          geometry?: { dispose?: () => void };
+        };
+        motdGroup.remove(ch);
+        ch.geometry?.dispose?.();
+      }
+      if (!countryName) return;
+      buildCountriesIfNeeded();
+      if (!countriesCache) return;
+      const aliased = aliasCountry(countryName);
+      const entry =
+        countriesCache.find((c) => c.name === countryName) ??
+        countriesCache.find((c) => c.name === aliased) ??
+        countriesCache.find((c) => aliasCountry(c.name) === aliased);
+      if (!entry) return;
+
+      for (const polygon of entry.rings) {
+        const ring = polygon[0];
+        if (!ring || ring.length < 2) continue;
+        // Контур чуть выше selected — амберовое сияние должно быть на самом верху.
+        const linePts: THREE.Vector3[] = [];
+        for (const [lon, lat] of ring) {
+          const p = geoFromLatLon(lat, lon, radius + 1.15);
+          linePts.push(new THREE.Vector3(p.x, p.y, p.z));
+        }
+        const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+        const line = new THREE.LineLoop(lineGeo, motdMat);
+        line.renderOrder = 7; // выше selected (6) и hover (5)
+        motdGroup.add(line);
+      }
+    };
+
+    motdSetCountryRef.current = setMotdCountry;
+    // Если country уже знаем к моменту инициализации сцены — сразу подсветим.
+    if (motdCountry && layers.motd) setMotdCountry(motdCountry);
 
     // Ecosystem arcs — динамические дуги от маркеров выбранной страны к их
     // «сородичам» в других странах (top-3 ближайших одной категории).
@@ -2188,6 +2419,13 @@ export default function Globus3D({
         countryOutlineMat.opacity = 0.6 + 0.35 * Math.sin(phase * Math.PI * 2);
       }
 
+      // MOTD-pulse — амберовое кольцо дышит длиннее (2.2с), чтобы не сливаться
+      // с hover-эффектом. Чуть ярче в пике (0.45..0.95 vs 0.25..0.95 у hover).
+      if (motdGroup.children.length > 0) {
+        const phase = (t % 2200) / 2200;
+        motdMat.opacity = 0.45 + 0.5 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2));
+      }
+
       // Прорисовка дуг от 0 до total за ARC_DRAW_MS (только при первом рендере).
       if (arcs.length > 0) {
         const arcElapsed = (t - arcStartTime) / ARC_DRAW_MS;
@@ -2596,6 +2834,49 @@ export default function Globus3D({
           if (item) focusMarkerRef.current(item.marker);
           break;
         }
+        // Layer toggles — одна буква на слой, не требует Tab.
+        case "c":
+        case "C":
+          toggleLayer("clouds");
+          break;
+        case "h":
+        case "H":
+          toggleLayer("heatmap");
+          break;
+        case "a":
+        case "A":
+          toggleLayer("arcs");
+          break;
+        case "m":
+        case "M":
+          toggleLayer("motd");
+          break;
+        // Country cycling — [ / ] циклически по topCountries списку.
+        case "[":
+        case "]": {
+          if (topCountriesRef.current.length === 0) {
+            handled = false;
+            break;
+          }
+          const list = topCountriesRef.current;
+          const cur = selectedCountryRef.current;
+          const curIdx = list.findIndex(([n]) => n === cur);
+          const len = list.length;
+          const nextIdx =
+            e.key === "]"
+              ? curIdx === -1 || curIdx === len - 1
+                ? 0
+                : curIdx + 1
+              : curIdx <= 0
+                ? len - 1
+                : curIdx - 1;
+          setSelectedCountryRef.current(list[nextIdx][0]);
+          break;
+        }
+        // Help overlay toggle.
+        case "?":
+          setShowHelp((v) => !v);
+          break;
         default:
           handled = false;
       }
@@ -2606,11 +2887,11 @@ export default function Globus3D({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [kbSelectedKey]);
+  }, [kbSelectedKey, toggleLayer]);
 
-  /** ESC закрывает focus-режим и тур. */
+  /** ESC закрывает focus-режим, тур, country-sheet и help. */
   useEffect(() => {
-    if (!focused && !tour && !selectedCountry) return;
+    if (!focused && !tour && !selectedCountry && !showHelp) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         targetYawRef.current = null;
@@ -2619,11 +2900,12 @@ export default function Globus3D({
         setFocused(null);
         setTour(false);
         setSelectedCountry(null);
+        setShowHelp(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focused, tour, selectedCountry]);
+  }, [focused, tour, selectedCountry, showHelp]);
 
   /** Tour mode — последовательный focus по приоритету. */
   const tourQueue = useMemo(() => {
@@ -2847,6 +3129,99 @@ export default function Globus3D({
           userSelect: "none",
         }}
       />
+
+      {/*
+        MOTD badge — cross-product link AEVION-hub → Globus.
+        Кликабелен (→ /<moduleId>). Подсвечивается тем же амбером, что и
+        country-ring на globe. Скрыт если layer "MOTD" выключен или country
+        у модуля отсутствует (например, randomized World marker).
+      */}
+      {!initError && motd && layers.motd ? (
+        <button
+          type="button"
+          onClick={() => {
+            onNavigateRef.current(`/${motd.id}`);
+          }}
+          aria-label={`Today's module: ${motd.name}. Open module page.`}
+          title={motdCountry
+            ? `Today's module: ${motd.name} · ${motdCountry} highlighted on globe — click to open`
+            : `Today's module: ${motd.name} — click to open`}
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            zIndex: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            maxWidth: isNarrow ? 220 : 280,
+            background: "rgba(12,18,32,0.82)",
+            border: "1px solid rgba(250,204,21,0.55)",
+            borderRadius: 999,
+            padding: "5px 12px 5px 8px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4), 0 0 18px rgba(250,204,21,0.15)",
+            cursor: "pointer",
+            color: "#fde68a",
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            textAlign: "left",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              borderRadius: 999,
+              background: "rgba(250,204,21,0.18)",
+              border: "1px solid rgba(250,204,21,0.45)",
+              fontSize: 13,
+              color: "#fde68a",
+            }}
+          >
+            ★
+          </span>
+          <span
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              minWidth: 0,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "rgba(250,204,21,0.7)",
+                lineHeight: 1,
+              }}
+            >
+              Today
+            </span>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: "#fde68a",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                lineHeight: 1.2,
+              }}
+            >
+              {motd.name}
+            </span>
+          </span>
+        </button>
+      ) : null}
 
       {!initError ? (
         <div
@@ -3412,6 +3787,93 @@ export default function Globus3D({
         </div>
       ) : null}
 
+      {/* Layers panel — toggle для overlay-слоёв сцены. Без re-render Three.js. */}
+      {!initError ? (
+        <div
+          role="group"
+          aria-label="Scene layer toggles"
+          style={{
+            position: "absolute",
+            left: 14,
+            bottom: isNarrow ? 14 : 86,
+            zIndex: 5,
+            display: "flex",
+            flexDirection: isNarrow ? "row" : "column",
+            gap: 4,
+            background: "rgba(12,18,32,0.78)",
+            border: "1px solid rgba(120,160,220,0.28)",
+            borderRadius: 12,
+            padding: isNarrow ? "4px 6px" : "6px 8px",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.4)",
+          }}
+        >
+          {!isNarrow ? (
+            <div
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#7a8fb0",
+                marginBottom: 2,
+              }}
+            >
+              Layers
+            </div>
+          ) : null}
+          {[
+            { key: "clouds" as LayerKey, icon: "☁", label: "Clouds" },
+            { key: "heatmap" as LayerKey, icon: "▣", label: "Heatmap" },
+            { key: "arcs" as LayerKey, icon: "↝", label: "Arcs" },
+            { key: "motd" as LayerKey, icon: "★", label: "MOTD" },
+          ].map((row) => {
+            const active = layers[row.key];
+            return (
+              <button
+                key={row.key}
+                type="button"
+                role="switch"
+                aria-checked={active}
+                aria-label={`Toggle ${row.label} layer`}
+                title={`${active ? "Hide" : "Show"} ${row.label}`}
+                onClick={() => toggleLayer(row.key)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  height: 24,
+                  padding: isNarrow ? "0 8px" : "0 10px",
+                  borderRadius: 999,
+                  border: "1px solid transparent",
+                  background: active ? "rgba(108,214,255,0.18)" : "transparent",
+                  color: active ? "#bae6fd" : "#7a8fb0",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                  cursor: "pointer",
+                  touchAction: "manipulation",
+                  textAlign: "left",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    fontSize: 12,
+                    width: 12,
+                    display: "inline-block",
+                    textAlign: "center",
+                  }}
+                >
+                  {row.icon}
+                </span>
+                {!isNarrow ? row.label : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {!initError && !isNarrow ? (
         <div
           aria-label="View compass minimap"
@@ -3578,6 +4040,20 @@ export default function Globus3D({
             style={ctrlBtn}
           >
             📷
+          </button>
+          <button
+            type="button"
+            title="Keyboard shortcuts (?)"
+            aria-label="Show keyboard shortcuts"
+            aria-haspopup="dialog"
+            aria-expanded={showHelp}
+            onClick={() => setShowHelp((v) => !v)}
+            style={{
+              ...ctrlBtn,
+              background: showHelp ? "rgba(108,214,255,0.28)" : ctrlBtn.background,
+            }}
+          >
+            ?
           </button>
         </div>
       ) : null}
@@ -4167,6 +4643,53 @@ export default function Globus3D({
           >
             {displayCountry(hoveredCountry, locale)}
           </span>
+
+          {/* Mini preview-stats: counts per category when our markers live there. */}
+          {hoveredCountryStat && hoveredCountryStat.total > 0 ? (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                marginLeft: 4,
+                borderLeft: "1px solid rgba(120,160,220,0.28)",
+                paddingLeft: 8,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  color: "#6cd6ff",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {hoveredCountryStat.total}
+              </span>
+              {hoveredCountryStat.products > 0 ? (
+                <span style={{ fontSize: 10, color: "#7dd3fc", fontWeight: 700 }}>
+                  🚀{hoveredCountryStat.products}
+                </span>
+              ) : null}
+              {hoveredCountryStat.awards > 0 ? (
+                <span style={{ fontSize: 10, color: "#e879f9", fontWeight: 700 }}>
+                  🏆{hoveredCountryStat.awards}
+                </span>
+              ) : null}
+              {hoveredCountryStat.qright > 0 ? (
+                <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700 }}>
+                  💎{hoveredCountryStat.qright}
+                </span>
+              ) : null}
+              {hoveredCountryStat.focus > 0 ? (
+                <span style={{ fontSize: 10, color: "#fbbf24", fontWeight: 700 }}>
+                  ★{hoveredCountryStat.focus}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+
           <span
             style={{
               fontSize: 10,
@@ -4177,7 +4700,9 @@ export default function Globus3D({
               whiteSpace: "nowrap",
             }}
           >
-            click → filter
+            {hoveredCountryStat && hoveredCountryStat.total > 0
+              ? "click → focus"
+              : "click → filter"}
           </span>
         </div>
       ) : null}
@@ -4560,6 +5085,117 @@ export default function Globus3D({
           </div>
         );
       })() : null}
+
+      {/* Keyboard shortcuts help overlay (toggle: "?"). */}
+      {showHelp ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Keyboard shortcuts"
+          onClick={() => setShowHelp(false)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 20,
+            background: "rgba(2,4,10,0.78)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "rgba(12,18,32,0.96)",
+              border: "1px solid rgba(120,160,220,0.32)",
+              borderRadius: 14,
+              padding: "18px 22px",
+              minWidth: 280,
+              maxWidth: 380,
+              cursor: "default",
+              boxShadow: "0 14px 36px rgba(0,0,0,0.55)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "#bae6fd",
+                marginBottom: 12,
+              }}
+            >
+              Keyboard shortcuts
+            </div>
+            {[
+              { keys: "↑ ↓ ← →", desc: "Rotate globe" },
+              { keys: "+  −", desc: "Zoom in / out" },
+              { keys: "Tab / ⇧ Tab", desc: "Cycle markers" },
+              { keys: "Enter / Space", desc: "Focus selected marker" },
+              { keys: "[  ]", desc: "Cycle top countries" },
+              { keys: "C", desc: "Toggle clouds layer" },
+              { keys: "H", desc: "Toggle heatmap layer" },
+              { keys: "A", desc: "Toggle ecosystem arcs" },
+              { keys: "M", desc: "Toggle MOTD highlight" },
+              { keys: "Esc", desc: "Close focus / sheet / help" },
+              { keys: "?", desc: "Show / hide this help" },
+            ].map((row) => (
+              <div
+                key={row.keys}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: 14,
+                  marginBottom: 6,
+                }}
+              >
+                <kbd
+                  style={{
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#e2e8f8",
+                    background: "rgba(108,214,255,0.12)",
+                    border: "1px solid rgba(108,214,255,0.3)",
+                    borderRadius: 6,
+                    padding: "2px 8px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {row.keys}
+                </kbd>
+                <span style={{ fontSize: 12, color: "#94a3b8", textAlign: "right" }}>
+                  {row.desc}
+                </span>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowHelp(false)}
+              style={{
+                marginTop: 12,
+                width: "100%",
+                height: 28,
+                borderRadius: 8,
+                border: "1px solid rgba(120,160,220,0.32)",
+                background: "rgba(108,214,255,0.12)",
+                color: "#bae6fd",
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                cursor: "pointer",
+              }}
+            >
+              CLOSE
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

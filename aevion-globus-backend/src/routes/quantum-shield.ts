@@ -1582,6 +1582,125 @@ quantumShieldRouter.post("/verify", async (req, res) => {
 });
 
 /**
+ * POST /verify-batch — verify many records in one request.
+ *
+ * Body: { items: Array<{ recordId: string; shards?: unknown[] }> }
+ *
+ * Returns: { results: Array<{ recordId, valid, matched?, threshold?, error? }> }
+ *
+ * Mirrors POST /verify semantics but parallelizes lookups so callers don't
+ * need N round-trips. Capped at 50 items per request to bound DB load.
+ *
+ * No auth required (verify is a public attestation), but rate-limited like
+ * single /verify.
+ */
+quantumShieldRouter.post("/verify-batch", async (req, res) => {
+  if (!rateLimit(verifyRateLimiter, req, res)) return;
+  try {
+    await ensureShieldTable();
+    const items = Array.isArray((req.body as { items?: unknown[] })?.items)
+      ? (req.body as { items: unknown[] }).items
+      : null;
+    if (!items) {
+      return res
+        .status(400)
+        .json({ error: "items array required (max 50)", valid: false });
+    }
+    if (items.length === 0) {
+      return res.json({ results: [] });
+    }
+    if (items.length > 50) {
+      return res
+        .status(400)
+        .json({ error: "batch size > 50 (got " + items.length + ")", valid: false });
+    }
+
+    const results = await Promise.all(
+      items.map(async (raw): Promise<Record<string, unknown>> => {
+        const item = (raw && typeof raw === "object" ? raw : {}) as {
+          recordId?: unknown;
+          shards?: unknown;
+        };
+        const recordId = typeof item.recordId === "string" ? item.recordId : null;
+        if (!recordId) {
+          return { recordId: null, valid: false, error: "recordId required" };
+        }
+        if (RESERVED_IDS.has(recordId)) {
+          return { recordId, valid: false, error: "reserved id" };
+        }
+        const { rows } = await pool.query(
+          `SELECT "id","threshold","shards","status" FROM "QuantumShield" WHERE "id" = $1`,
+          [recordId],
+        );
+        if (rows.length === 0) {
+          return { recordId, valid: false, error: "not_found" };
+        }
+        const r = rows[0] as Record<string, unknown>;
+        if (r.status === "revoked") {
+          return {
+            recordId,
+            valid: false,
+            error: "revoked",
+            threshold: r.threshold,
+          };
+        }
+        const storedShards = parseShards(r.shards, { shieldId: recordId });
+        const inputs = Array.isArray(item.shards) ? item.shards : [];
+
+        let hmacValidCount = 0;
+        for (const input of inputs) {
+          if (
+            input &&
+            typeof input === "object" &&
+            typeof (input as { sssShare?: unknown }).sssShare === "string"
+          ) {
+            const shardLike = input as {
+              index: number;
+              sssShare: string;
+              hmac: string;
+              hmacKeyVersion: number;
+            };
+            if (verifyShardHmac(shardLike, recordId)) hmacValidCount += 1;
+          }
+        }
+        const matchCount = inputs.filter((input) =>
+          typeof input === "string"
+            ? storedShards.some(
+                (s) =>
+                  (s as { sssShare?: string }).sssShare === input ||
+                  (s as unknown as { data?: string }).data === input ||
+                  (s as unknown as { id?: string }).id === input,
+              )
+            : false,
+        ).length;
+        const effectiveMatches = Math.max(hmacValidCount, matchCount);
+        const threshold = r.threshold as number;
+        return {
+          recordId,
+          valid: effectiveMatches >= threshold,
+          matched: effectiveMatches,
+          threshold,
+        };
+      }),
+    );
+
+    const okCount = results.filter((x) => x.valid).length;
+    res.json({
+      count: results.length,
+      ok: okCount,
+      failed: results.length - okCount,
+      results,
+    });
+  } catch (err) {
+    console.error(
+      "[QuantumShield] verify-batch error:",
+      err instanceof Error ? err.message : String(err),
+    );
+    res.status(500).json({ error: "Batch verification failed" });
+  }
+});
+
+/**
  * POST /:id/revoke — mark a record as revoked without deleting it.
  * Permission: owner or admin. Status change is logged in QuantumShieldAudit.
  * Re-revocation is idempotent (200 with status: "already-revoked").

@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, vString, vNumber } from "../../lib/build";
 import { sendToUser } from "./push";

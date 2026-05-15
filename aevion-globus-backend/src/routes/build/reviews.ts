@@ -1,4 +1,4 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import crypto from "crypto";
 import {

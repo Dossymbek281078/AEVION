@@ -1,10 +1,12 @@
 /**
- * QFusionAI — smart router across multiple LLM providers.
+ * QFusionAI — Hybrid AI Engine: intelligent multi-provider router.
  *
- * Thin orchestration on top of /api/qcoreai providers: classifies a prompt into
- * one of a few categories and routes to the strongest *configured* provider for
- * that category. Provides a single endpoint partners can call without owning
- * provider keys themselves.
+ * Endpoints:
+ *   POST /api/qfusionai/route     — main routing endpoint (strategy-based)
+ *   GET  /api/qfusionai/providers — list providers + live status
+ *   GET  /api/qfusionai/stats     — request stats (Postgres + in-memory fallback)
+ *   GET  /api/qfusionai/health    — health check
+ *   GET  /api/qfusionai/openapi.json — OpenAPI spec
  */
 
 import { Router, type Request, type Response } from "express";
@@ -15,12 +17,17 @@ import {
   type ChatMessage,
 } from "../services/qcoreai/providers";
 import { rateLimit } from "../lib/rateLimit";
+import { getPool } from "../lib/dbPool";
 
 export const qfusionaiRouter = Router();
 
-// ── Routing policy ──────────────────────────────────────────────────────────
-// Order = preference. First configured provider in the list wins.
-const ROUTING: Record<string, string[]> = {
+// ── Strategy types ───────────────────────────────────────────────────────────
+
+type Strategy = "speed" | "quality" | "cost" | "auto";
+
+// ── Category routing (existing logic, kept for auto-strategy) ────────────────
+
+const ROUTING_BY_CATEGORY: Record<string, string[]> = {
   code: ["deepseek", "anthropic", "openai", "gemini", "grok"],
   creative: ["anthropic", "openai", "grok", "gemini", "deepseek"],
   factual: ["openai", "anthropic", "gemini", "deepseek", "grok"],
@@ -29,7 +36,7 @@ const ROUTING: Record<string, string[]> = {
   general: ["anthropic", "openai", "gemini", "deepseek", "grok"],
 };
 
-type Category = keyof typeof ROUTING;
+type Category = keyof typeof ROUTING_BY_CATEGORY;
 
 function classifyPrompt(prompt: string): Category {
   const p = prompt.toLowerCase();
@@ -45,33 +52,246 @@ function classifyPrompt(prompt: string): Category {
   return "general";
 }
 
-function pickProviderFor(category: Category): string | null {
-  const configured = new Set(getProviders().filter((p) => p.configured).map((p) => p.id));
-  for (const id of ROUTING[category]) {
-    if (configured.has(id)) return id;
+// ── Strategy-based provider selection ───────────────────────────────────────
+
+/**
+ * Returns the provider id to use, plus a human-readable decision reason.
+ * Strategy determines the selection algorithm:
+ *   speed   — first available configured provider (fastest path)
+ *   quality — preference order: anthropic > openai > gemini > deepseek > grok
+ *   cost    — prefer cheapest: deepseek > gemini > openai > anthropic > grok
+ *   auto    — short prompt → speed, long prompt → quality, classified
+ */
+function selectProviderByStrategy(
+  prompt: string,
+  strategy: Strategy
+): { providerId: string | null; decisionReason: string } {
+  const configured = getProviders().filter((p) => p.configured);
+  const configuredIds = new Set(configured.map((p) => p.id));
+
+  if (configuredIds.size === 0) {
+    return { providerId: null, decisionReason: "No providers configured" };
   }
-  return null;
+
+  function firstFrom(order: string[]): string | null {
+    for (const id of order) {
+      if (configuredIds.has(id)) return id;
+    }
+    return configured[0]?.id ?? null;
+  }
+
+  switch (strategy) {
+    case "speed": {
+      const id = firstFrom(["gemini", "openai", "anthropic", "deepseek", "grok"]);
+      return {
+        providerId: id,
+        decisionReason: `speed strategy: selected first low-latency provider (${id ?? "none"})`,
+      };
+    }
+    case "quality": {
+      const id = firstFrom(["anthropic", "openai", "gemini", "deepseek", "grok"]);
+      return {
+        providerId: id,
+        decisionReason: `quality strategy: selected highest-reasoning provider (${id ?? "none"})`,
+      };
+    }
+    case "cost": {
+      const id = firstFrom(["deepseek", "gemini", "openai", "anthropic", "grok"]);
+      return {
+        providerId: id,
+        decisionReason: `cost strategy: selected lowest-cost provider (${id ?? "none"})`,
+      };
+    }
+    case "auto":
+    default: {
+      if (prompt.length < 200) {
+        const id = firstFrom(["gemini", "openai", "anthropic", "deepseek", "grok"]);
+        return {
+          providerId: id,
+          decisionReason: `auto strategy: short prompt (${prompt.length} chars) → speed routing → ${id ?? "none"}`,
+        };
+      }
+      const category = classifyPrompt(prompt);
+      const order = ROUTING_BY_CATEGORY[category] ?? ROUTING_BY_CATEGORY.general;
+      const id = firstFrom(order);
+      return {
+        providerId: id,
+        decisionReason: `auto strategy: prompt classified as "${category}" (len=${prompt.length}) → ${id ?? "none"}`,
+      };
+    }
+  }
 }
 
-// ── Endpoints ───────────────────────────────────────────────────────────────
+// ── In-memory stats store (fallback when DB unavailable) ────────────────────
+
+type StatEntry = {
+  strategy: Strategy;
+  provider: string;
+  latencyMs: number;
+  tokensEstimate: number;
+  createdAt: number;
+};
+
+const MEM_STATS: StatEntry[] = [];
+const MEM_STATS_MAX = 100;
+
+function pushMemStat(e: StatEntry): void {
+  MEM_STATS.push(e);
+  if (MEM_STATS.length > MEM_STATS_MAX) MEM_STATS.shift();
+}
+
+// ── Postgres lazy table creation ─────────────────────────────────────────────
+
+let dbTableReady = false;
+
+async function ensureFusionTable(): Promise<boolean> {
+  if (dbTableReady) return true;
+  try {
+    const pool = getPool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS qfusionai_requests (
+        id              SERIAL PRIMARY KEY,
+        strategy        TEXT,
+        provider        TEXT,
+        latency_ms      INTEGER,
+        tokens_estimate INTEGER,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    dbTableReady = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function insertStat(entry: StatEntry): Promise<void> {
+  const ready = await ensureFusionTable();
+  if (!ready) return;
+  try {
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO qfusionai_requests (strategy, provider, latency_ms, tokens_estimate)
+       VALUES ($1, $2, $3, $4)`,
+      [entry.strategy, entry.provider, entry.latencyMs, entry.tokensEstimate]
+    );
+  } catch {
+    // silently degrade — in-memory fallback already captured the stat
+  }
+}
+
+// ── Rate limiter ─────────────────────────────────────────────────────────────
 
 const routeLimiter = rateLimit({
   windowMs: 60_000,
-  max: 20,
+  max: 10,
   keyPrefix: "qfusionai:route",
-  message: "rate_limit_exceeded: max 20 routes per minute per IP",
+  message: "rate_limit_exceeded: max 10 routes per minute per IP",
 });
 
+// ── Endpoints ────────────────────────────────────────────────────────────────
+
+/** GET /health */
 qfusionaiRouter.get("/health", (_req, res) => {
-  const providers = getProviders().map((p) => ({ id: p.id, name: p.name, configured: p.configured }));
+  const providers = getProviders().map((p) => ({
+    id: p.id,
+    name: p.name,
+    configured: p.configured,
+  }));
   res.json({
     ok: true,
     module: "qfusionai",
+    version: "2.0.0-mvp",
     providers,
-    routes: Object.keys(ROUTING),
+    strategies: ["speed", "quality", "cost", "auto"],
   });
 });
 
+/** GET /providers — live status list */
+qfusionaiRouter.get("/providers", (_req, res) => {
+  const providers = getProviders().map((p) => ({
+    id: p.id,
+    name: p.name,
+    configured: p.configured,
+    defaultModel: p.defaultModel,
+    models: p.models,
+    status: p.configured ? "available" : "unconfigured",
+  }));
+  res.json({ providers, total: providers.length, available: providers.filter((p) => p.configured).length });
+});
+
+/** GET /stats — aggregate stats with Postgres + in-memory fallback */
+qfusionaiRouter.get("/stats", async (_req, res) => {
+  // Try Postgres first
+  try {
+    const ready = await ensureFusionTable();
+    if (ready) {
+      const pool = getPool();
+      const [totalRes, byStrategyRes, avgLatencyRes, topProviderRes, recentRes] = await Promise.all([
+        pool.query("SELECT COUNT(*)::int AS total FROM qfusionai_requests"),
+        pool.query(
+          "SELECT strategy, COUNT(*)::int AS cnt FROM qfusionai_requests GROUP BY strategy ORDER BY cnt DESC"
+        ),
+        pool.query("SELECT AVG(latency_ms)::int AS avg_latency FROM qfusionai_requests"),
+        pool.query(
+          "SELECT provider, COUNT(*)::int AS cnt FROM qfusionai_requests GROUP BY provider ORDER BY cnt DESC LIMIT 5"
+        ),
+        pool.query(
+          "SELECT strategy, provider, latency_ms, tokens_estimate, created_at FROM qfusionai_requests ORDER BY created_at DESC LIMIT 10"
+        ),
+      ]);
+      return res.json({
+        source: "postgres",
+        total: totalRes.rows[0]?.total ?? 0,
+        byStrategy: byStrategyRes.rows,
+        avgLatencyMs: avgLatencyRes.rows[0]?.avg_latency ?? 0,
+        topProviders: topProviderRes.rows,
+        recent: recentRes.rows,
+      });
+    }
+  } catch {
+    // fall through to in-memory
+  }
+
+  // In-memory fallback
+  const total = MEM_STATS.length;
+  const byStrategy: Record<string, number> = {};
+  const byProvider: Record<string, number> = {};
+  let latencySum = 0;
+  for (const s of MEM_STATS) {
+    byStrategy[s.strategy] = (byStrategy[s.strategy] ?? 0) + 1;
+    byProvider[s.provider] = (byProvider[s.provider] ?? 0) + 1;
+    latencySum += s.latencyMs;
+  }
+  const avgLatencyMs = total > 0 ? Math.round(latencySum / total) : 0;
+  const topProviders = Object.entries(byProvider)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([provider, cnt]) => ({ provider, cnt }));
+  const byStrategyArr = Object.entries(byStrategy)
+    .sort(([, a], [, b]) => b - a)
+    .map(([strategy, cnt]) => ({ strategy, cnt }));
+  const recent = MEM_STATS.slice(-10)
+    .reverse()
+    .map((s) => ({
+      strategy: s.strategy,
+      provider: s.provider,
+      latency_ms: s.latencyMs,
+      tokens_estimate: s.tokensEstimate,
+      created_at: new Date(s.createdAt).toISOString(),
+    }));
+
+  res.json({
+    source: "memory",
+    total,
+    byStrategy: byStrategyArr,
+    avgLatencyMs,
+    topProviders,
+    recent,
+  });
+});
+
+/** POST /route — main routing endpoint */
 qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response) => {
   const body = req.body || {};
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
@@ -82,60 +302,90 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
     return res.status(413).json({ error: "prompt-too-long", maxLength: 32000 });
   }
 
-  const hint =
-    typeof body.hint === "string" && body.hint in ROUTING
-      ? (body.hint as Category)
-      : "auto";
+  const rawStrategy = typeof body.strategy === "string" ? body.strategy : "auto";
+  const VALID_STRATEGIES: Strategy[] = ["speed", "quality", "cost", "auto"];
+  const strategy: Strategy = VALID_STRATEGIES.includes(rawStrategy as Strategy)
+    ? (rawStrategy as Strategy)
+    : "auto";
 
-  const category: Category = hint === "auto" ? classifyPrompt(prompt) : hint;
-  const provider = pickProviderFor(category);
+  const { providerId, decisionReason } = selectProviderByStrategy(prompt, strategy);
 
-  if (!provider) {
+  if (!providerId) {
     return res.status(503).json({
       error: "no-provider-configured",
-      category,
-      hint:
-        "Set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, or GROK_API_KEY on the server.",
+      strategy,
+      hint: "Set ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, or GROK_API_KEY on the server.",
     });
   }
 
-  const providerMeta = getProviders().find((p) => p.id === provider);
+  const providerMeta = getProviders().find((p) => p.id === providerId);
   if (!providerMeta) {
-    return res.status(503).json({ error: "provider-not-found", provider });
+    return res.status(503).json({ error: "provider-not-found", provider: providerId });
   }
+
   const model =
     typeof body.model === "string" && body.model.trim()
       ? body.model.trim()
       : providerMeta.defaultModel;
+
   const temperature = typeof body.temperature === "number" ? body.temperature : 0.7;
+  const context = typeof body.context === "string" ? body.context.trim() : null;
 
   const messages: ChatMessage[] =
     sanitizeMessages(body.messages) ?? [
-      { role: "system", content: "You are AEVION QFusionAI, routing prompts to the best provider for each task." },
+      {
+        role: "system",
+        content:
+          "You are AEVION QFusionAI, an intelligent AI assistant. Answer clearly and concisely." +
+          (context ? `\n\nContext: ${context}` : ""),
+      },
       { role: "user", content: prompt },
     ];
 
+  // Rough token estimate: ~4 chars per token
+  const tokensEstimate = Math.ceil(
+    messages.reduce((acc, m) => acc + m.content.length, 0) / 4
+  );
+
   const t0 = Date.now();
   try {
-    const result = await callProvider(provider, messages, model, temperature);
-    res.json({
-      provider,
+    const result = await callProvider(providerId, messages, model, temperature);
+    const latencyMs = Date.now() - t0;
+
+    const stat: StatEntry = {
+      strategy,
+      provider: providerId,
+      latencyMs,
+      tokensEstimate,
+      createdAt: Date.now(),
+    };
+    pushMemStat(stat);
+    insertStat(stat).catch(() => void 0); // fire-and-forget
+
+    return res.json({
+      result: result.reply,
+      provider: providerId,
       providerName: providerMeta.name,
       model: result.model,
-      reply: result.reply,
-      category,
-      hint,
-      durationMs: Date.now() - t0,
+      strategy,
+      latencyMs,
+      tokensEstimate,
+      decision_reason: decisionReason,
       usage: result.usage ?? null,
     });
   } catch (err) {
-    res.status(502).json({
+    const latencyMs = Date.now() - t0;
+    return res.status(502).json({
       error: "provider-error",
-      provider,
-      durationMs: Date.now() - t0,
+      provider: providerId,
+      strategy,
+      latencyMs,
+      message: err instanceof Error ? err.message : String(err),
     });
   }
 });
+
+// ── OpenAPI spec ─────────────────────────────────────────────────────────────
 
 qfusionaiRouter.options("/openapi.json", (_req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -150,9 +400,10 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION QFusionAI",
-      version: "1.0.0",
+      version: "2.0.0",
       description:
-        "Smart multi-provider LLM router. Classifies prompts and picks the strongest configured provider (Anthropic / OpenAI / Gemini / DeepSeek / Grok).",
+        "Hybrid AI Engine — multi-provider LLM router with strategy-based selection (speed/quality/cost/auto). " +
+        "Supports Anthropic, OpenAI, Gemini, DeepSeek, Grok with automatic fallback.",
       contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
     },
     servers: [{ url: `${base}/api/qfusionai`, description: "Production" }],
@@ -170,18 +421,56 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
                     properties: {
                       ok: { type: "boolean" },
                       module: { type: "string" },
-                      providers: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            id: { type: "string" },
-                            name: { type: "string" },
-                            configured: { type: "boolean" },
-                          },
-                        },
-                      },
-                      routes: { type: "array", items: { type: "string" } },
+                      version: { type: "string" },
+                      providers: { type: "array", items: { type: "object" } },
+                      strategies: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/providers": {
+        get: {
+          summary: "List all providers with live status",
+          responses: {
+            "200": {
+              description: "Provider list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      providers: { type: "array", items: { type: "object" } },
+                      total: { type: "integer" },
+                      available: { type: "integer" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/stats": {
+        get: {
+          summary: "Request statistics",
+          responses: {
+            "200": {
+              description: "Stats",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      source: { type: "string", enum: ["postgres", "memory"] },
+                      total: { type: "integer" },
+                      byStrategy: { type: "array" },
+                      avgLatencyMs: { type: "integer" },
+                      topProviders: { type: "array" },
+                      recent: { type: "array" },
                     },
                   },
                 },
@@ -192,7 +481,7 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
       },
       "/route": {
         post: {
-          summary: "Route a prompt to the best provider",
+          summary: "Route a prompt to the best AI provider by strategy",
           requestBody: {
             required: true,
             content: {
@@ -202,11 +491,14 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
                   required: ["prompt"],
                   properties: {
                     prompt: { type: "string", maxLength: 32000 },
-                    hint: {
+                    strategy: {
                       type: "string",
-                      enum: ["auto", "code", "creative", "factual", "longctx", "math", "general"],
+                      enum: ["speed", "quality", "cost", "auto"],
                       default: "auto",
+                      description:
+                        "speed: first fast provider; quality: best reasoning provider; cost: cheapest provider; auto: classify by length+content",
                     },
+                    context: { type: "string", description: "Optional system context injected into prompt" },
                     model: { type: "string" },
                     temperature: { type: "number", minimum: 0, maximum: 2 },
                   },
@@ -216,18 +508,20 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
           },
           responses: {
             "200": {
-              description: "Routed reply",
+              description: "Routed reply with metadata",
               content: {
                 "application/json": {
                   schema: {
                     type: "object",
                     properties: {
+                      result: { type: "string" },
                       provider: { type: "string" },
                       providerName: { type: "string" },
                       model: { type: "string" },
-                      reply: { type: "string" },
-                      category: { type: "string" },
-                      durationMs: { type: "integer" },
+                      strategy: { type: "string" },
+                      latencyMs: { type: "integer" },
+                      tokensEstimate: { type: "integer" },
+                      decision_reason: { type: "string" },
                     },
                   },
                 },
@@ -235,6 +529,7 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
             },
             "400": { description: "prompt missing" },
             "413": { description: "prompt too long" },
+            "429": { description: "rate limit exceeded" },
             "503": { description: "no configured provider" },
           },
         },

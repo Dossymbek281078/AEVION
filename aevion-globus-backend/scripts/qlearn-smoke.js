@@ -51,6 +51,16 @@ async function run() {
   assert("POST /me/courses without auth → 401", noAuth.status === 401, String(noAuth.status));
   const noAuthEnroll = await req("POST", "/api/qlearn/courses/fake_id/enroll");
   assert("POST /enroll without auth → 401", noAuthEnroll.status === 401, String(noAuthEnroll.status));
+  const noAuthBookmark = await req("POST", "/api/qlearn/courses/fake_id/bookmark");
+  assert("POST /bookmark without auth → 401", noAuthBookmark.status === 401, String(noAuthBookmark.status));
+  const noAuthBookmarkDel = await req("DELETE", "/api/qlearn/courses/fake_id/bookmark");
+  assert("DELETE /bookmark without auth → 401", noAuthBookmarkDel.status === 401, String(noAuthBookmarkDel.status));
+  const noAuthBookmarks = await req("GET", "/api/qlearn/me/bookmarks");
+  assert("GET /me/bookmarks without auth → 401", noAuthBookmarks.status === 401, String(noAuthBookmarks.status));
+  const noAuthStreak = await req("GET", "/api/qlearn/me/streak");
+  assert("GET /me/streak without auth → 401", noAuthStreak.status === 401, String(noAuthStreak.status));
+  const noAuthProgress = await req("GET", "/api/qlearn/me/progress");
+  assert("GET /me/progress without auth → 401", noAuthProgress.status === 401, String(noAuthProgress.status));
 
   if (JWT) {
     console.log("\n6. Authenticated flow");
@@ -58,6 +68,20 @@ async function run() {
     const enrollments = await req("GET", "/api/qlearn/me/enrollments", null, authH);
     assert("GET /me/enrollments → 200", enrollments.status === 200);
     assert("enrollments array", Array.isArray(enrollments.body?.enrollments ?? enrollments.body));
+
+    const streak = await req("GET", "/api/qlearn/me/streak", null, authH);
+    assert("GET /me/streak → 200", streak.status === 200);
+    assert("streak current is number", typeof streak.body?.current === "number");
+    assert("streak longest is number", typeof streak.body?.longest === "number");
+
+    const progress = await req("GET", "/api/qlearn/me/progress", null, authH);
+    assert("GET /me/progress → 200", progress.status === 200);
+    assert("progress.summary present", progress.body?.summary && typeof progress.body.summary.total === "number");
+    assert("continueLearning array", Array.isArray(progress.body?.continueLearning));
+
+    const bookmarks = await req("GET", "/api/qlearn/me/bookmarks", null, authH);
+    assert("GET /me/bookmarks → 200", bookmarks.status === 200);
+    assert("bookmarks array", Array.isArray(bookmarks.body?.bookmarks));
   } else {
     console.log("\n6. [Skipping auth flow — no TEST_JWT]");
   }

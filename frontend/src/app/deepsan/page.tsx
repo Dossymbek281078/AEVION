@@ -1,465 +1,531 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import StatsBar from "./components/StatsBar";
+import TaskCard, { type Task, type Priority } from "./components/TaskCard";
+import AddTaskForm from "./components/AddTaskForm";
+import FocusTimer from "./components/FocusTimer";
 
-type Priority = "high" | "medium" | "low";
-type TaskState = "next-action" | "waiting" | "done";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type ParsedTask = {
-  title: string;
-  owner: string;
-  deadline: string;
-  priority: Priority;
-  state: TaskState;
-};
-
-const SAMPLE_INBOX = `From: anna@school47.kz
-Subject: Re: смета капремонт
-Привет! Нужны коммерческие предложения на кровельные материалы
-до пятницы. Также Серик просил подготовить дефектный акт по фасаду
-к среде. И не забудь — Министерство ждёт форму №2 до 15-го числа.
-
----
-Slack #build-team:
-@dosym: статус по школе №47? замдиректора напоминает про КС-3
-@maria: вендор прислал счёт на 4.2млн — нужен второй квот срочно
-
----
-Notes (self):
-- созвон с подрядчиком завтра 11:00
-- проверить индекс пересчёта Q2/2025 для расценки 06-01-001-01`;
-
-const PRIORITY_BADGE: Record<Priority, string> = {
-  high: "bg-rose-500/20 text-rose-200 border-rose-400/40",
-  medium: "bg-amber-500/20 text-amber-200 border-amber-400/40",
-  low: "bg-slate-500/20 text-slate-200 border-slate-400/40",
-};
-
-const STATE_PILL: Record<TaskState, string> = {
-  "next-action": "bg-emerald-500/15 text-emerald-200 border-emerald-400/30",
-  waiting: "bg-amber-500/15 text-amber-200 border-amber-400/30",
-  done: "bg-slate-500/15 text-slate-300 border-slate-400/30 line-through",
-};
-
-const STATE_LABEL: Record<TaskState, string> = {
-  "next-action": "→ next-action",
-  waiting: "⏳ waiting",
-  done: "✓ done",
-};
-
-const NEXT_STATE: Record<TaskState, TaskState> = {
-  "next-action": "waiting",
-  waiting: "done",
-  done: "next-action",
-};
-
-function coercePriority(v: unknown): Priority {
-  const s = String(v ?? "").toLowerCase().trim();
-  if (s === "high" || s === "h" || s === "urgent" || s === "critical") return "high";
-  if (s === "low" || s === "l") return "low";
-  return "medium";
+interface Stats {
+  totalTasks: number;
+  doneTasks: number;
+  totalFocusMin: number;
+  streakDays: number;
 }
 
-function parseTasksFromReply(reply: string): ParsedTask[] {
-  if (!reply) return [];
-  let body = reply.trim();
-  // Strip ```json ... ``` fences
-  body = body.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "");
-  const first = body.indexOf("[");
-  const last = body.lastIndexOf("]");
-  if (first === -1 || last === -1 || last <= first) return [];
-  const slice = body.slice(first, last + 1);
-  let raw: unknown;
-  try {
-    raw = JSON.parse(slice);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(raw)) return [];
-  const out: ParsedTask[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const obj = item as Record<string, unknown>;
-    const title = String(obj.title ?? "").trim();
-    if (!title) continue;
-    out.push({
-      title,
-      owner: String(obj.owner ?? "").trim() || "—",
-      deadline: String(obj.deadline ?? "").trim() || "—",
-      priority: coercePriority(obj.priority),
-      state: "next-action",
-    });
-    if (out.length >= 6) break;
-  }
-  return out;
+interface ApiOk<T> {
+  success: true;
+  data: T;
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(apiUrl(path), {
+    ...opts,
+    headers: { "content-type": "application/json", ...opts?.headers },
+  });
+  const json = (await res.json()) as ApiOk<T> | { success: false; error: string };
+  if (!json.success) throw new Error((json as { success: false; error: string }).error ?? "api error");
+  return (json as ApiOk<T>).data;
+}
+
+// ─── Column helpers ───────────────────────────────────────────────────────────
+
+function columnTasks(tasks: Task[], col: "todo" | "inprogress" | "done"): Task[] {
+  if (col === "done") return tasks.filter((t) => t.done);
+  if (col === "inprogress") return tasks.filter((t) => !t.done && t.priority === "critical");
+  return tasks.filter((t) => !t.done && t.priority !== "critical");
+}
+
+const COL_LABELS: Record<"todo" | "inprogress" | "done", string> = {
+  todo: "Todo",
+  inprogress: "In Progress",
+  done: "Done",
+};
+
+const COL_ACCENT: Record<"todo" | "inprogress" | "done", string> = {
+  todo: "#94a3b8",
+  inprogress: "#f97316",
+  done: "#22c55e",
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function DeepSanPage() {
-  const [inbox, setInbox] = useState(SAMPLE_INBOX);
-  const [tasks, setTasks] = useState<ParsedTask[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  // Focus session
-  const FOCUS_SECONDS = 25 * 60;
-  const [secLeft, setSecLeft] = useState(FOCUS_SECONDS);
-  const [running, setRunning] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Toast for agent delegation mock
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [addBusy, setAddBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [focusTaskId, setFocusTaskId] = useState<number | null>(null);
+  const [activeFocusId, setActiveFocusId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (running) {
-      timerRef.current = setInterval(() => {
-        setSecLeft((s) => {
-          if (s <= 1) {
-            setRunning(false);
-            return 0;
-          }
-          return s - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [running]);
+  // ── Toast ──────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2400);
-    return () => clearTimeout(t);
-  }, [toast]);
+  function showToast(msg: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg);
+    toastTimer.current = setTimeout(() => setToast(null), 2800);
+  }
 
-  async function extract() {
-    if (busy) return;
-    setBusy(true);
-    setErr(null);
+  // ── Fetch tasks ────────────────────────────────────────────────────────────
+
+  const loadTasks = useCallback(async () => {
+    setTasksLoading(true);
     try {
-      const res = await fetch(apiUrl("/api/qcoreai/chat"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content:
-                "Extract actionable tasks. Reply ONLY in JSON array shape: [{title,owner,deadline,priority:'high'|'medium'|'low'}]. No commentary. Max 6 tasks.",
-            },
-            { role: "user", content: inbox },
-          ],
-          temperature: 0.3,
-        }),
-      });
-      const data = (await res.json()) as { reply?: string; mode?: string };
-      const parsed = parseTasksFromReply(data.reply || "");
-      if (!parsed.length) {
-        setErr("AI вернул пустой/невалидный JSON. Попробуйте ещё раз.");
-      } else {
-        setTasks(parsed);
-      }
+      const data = await apiFetch<Task[]>("/api/deepsan/tasks?limit=100");
+      setTasks(data);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "fetch failed");
+      setError(e instanceof Error ? e.message : "Failed to load tasks");
     } finally {
-      setBusy(false);
+      setTasksLoading(false);
+    }
+  }, []);
+
+  // ── Fetch stats ────────────────────────────────────────────────────────────
+
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const data = await apiFetch<Stats>("/api/deepsan/stats");
+      setStats(data);
+    } catch {
+      // stats are non-critical
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  // ── Fetch active focus session ─────────────────────────────────────────────
+
+  const loadActiveSession = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ id: number } | null>("/api/deepsan/focus/active");
+      setActiveFocusId(data ? data.id : null);
+    } catch {
+      // non-critical
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTasks();
+    loadStats();
+    loadActiveSession();
+  }, [loadTasks, loadStats, loadActiveSession]);
+
+  // ── Add task ───────────────────────────────────────────────────────────────
+
+  async function handleAddTask(payload: {
+    title: string;
+    description?: string;
+    priority: Priority;
+    dueDate?: string;
+    tags?: string[];
+  }) {
+    setAddBusy(true);
+    setError(null);
+    try {
+      const task = await apiFetch<Task>("/api/deepsan/tasks", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setTasks((prev) => [task, ...prev]);
+      loadStats();
+      showToast("Task added");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add task");
+    } finally {
+      setAddBusy(false);
     }
   }
 
-  function cycleState(idx: number) {
-    setTasks((prev) =>
-      prev.map((t, i) => (i === idx ? { ...t, state: NEXT_STATE[t.state] } : t))
-    );
+  // ── Toggle done ────────────────────────────────────────────────────────────
+
+  async function handleToggleDone(id: number, done: boolean) {
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done } : t)));
+    try {
+      await apiFetch<Task>(`/api/deepsan/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ done }),
+      });
+      loadStats();
+    } catch (e) {
+      // revert
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !done } : t)));
+      setError(e instanceof Error ? e.message : "Failed to update task");
+    }
   }
 
-  function startFocus() {
-    if (secLeft === 0) setSecLeft(FOCUS_SECONDS);
-    setRunning(true);
-  }
-  function pauseFocus() {
-    setRunning(false);
-  }
-  function resetFocus() {
-    setRunning(false);
-    setSecLeft(FOCUS_SECONDS);
+  // ── Delete task ────────────────────────────────────────────────────────────
+
+  async function handleDeleteTask(id: number) {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    try {
+      await apiFetch<{ deleted: number }>(`/api/deepsan/tasks/${id}`, { method: "DELETE" });
+      loadStats();
+      showToast("Task deleted");
+    } catch (e) {
+      loadTasks(); // re-fetch to restore
+      setError(e instanceof Error ? e.message : "Failed to delete task");
+    }
   }
 
-  const mm = String(Math.floor(secLeft / 60)).padStart(2, "0");
-  const ss = String(secLeft % 60).padStart(2, "0");
-  const pct = Math.round(((FOCUS_SECONDS - secLeft) / FOCUS_SECONDS) * 100);
+  // ── Start focus ────────────────────────────────────────────────────────────
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "AEVION DeepSan",
-    applicationCategory: "ProductivityApplication",
-    operatingSystem: "Web",
-    description:
-      "Anti-chaos productivity. Tasks-as-states, AI inbox parser, focus sessions, QCoreAI agent bridge.",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  };
+  async function handleStartFocus(durationMin: number, taskId: number | null): Promise<number | null> {
+    try {
+      const session = await apiFetch<{ id: number }>("/api/deepsan/focus", {
+        method: "POST",
+        body: JSON.stringify({ taskId, durationMin }),
+      });
+      setActiveFocusId(session.id);
+      showToast(`Focus session started (${durationMin} min)`);
+      return session.id;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start focus session");
+      return null;
+    }
+  }
+
+  // ── Complete focus ─────────────────────────────────────────────────────────
+
+  async function handleCompleteFocus(sessionId: number, actualMin: number): Promise<void> {
+    try {
+      await apiFetch(`/api/deepsan/focus/${sessionId}/done`, {
+        method: "PATCH",
+        body: JSON.stringify({ actualDurationMin: actualMin }),
+      });
+      setActiveFocusId(null);
+      loadStats();
+      showToast(`Focus session complete! ${actualMin} min logged.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to complete session");
+    }
+  }
+
+  // ─── Layout ────────────────────────────────────────────────────────────────
+
+  const cols: Array<"todo" | "inprogress" | "done"> = ["todo", "inprogress", "done"];
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-rose-950/40 to-slate-950 text-slate-100">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #0a0f1e 100%)",
+        color: "#e2e8f0",
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      }}
+    >
       {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-rose-400/15 bg-slate-950/70 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 text-sm">
-          <Link
-            href="/"
-            className="text-rose-200 hover:text-rose-100 transition"
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          borderBottom: "1px solid rgba(249,115,22,0.12)",
+          background: "rgba(10,15,30,0.85)",
+          backdropFilter: "blur(12px)",
+          padding: "12px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Link
+          href="/"
+          style={{ color: "#fed7aa", textDecoration: "none", fontSize: "13px" }}
+        >
+          ← AEVION · DeepSan
+        </Link>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <span
+            style={{
+              fontSize: "11px",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.12em",
+              color: "#f97316",
+              background: "rgba(249,115,22,0.12)",
+              border: "1px solid rgba(249,115,22,0.25)",
+              borderRadius: "6px",
+              padding: "3px 8px",
+            }}
           >
-            ← AEVION · DeepSan · MVP
-          </Link>
-          <nav className="flex gap-3 text-xs text-rose-200/70">
-            <Link href="/qcoreai" className="hover:text-rose-100">QCoreAI</Link>
-            <Link href="/multichat-engine" className="hover:text-rose-100">Multichat</Link>
-            <Link href="/qpersona" className="hover:text-rose-100">QPersona</Link>
-          </nav>
+            Anti-chaos MVP
+          </span>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-6xl px-4 pt-12 pb-8">
-        <div className="text-xs uppercase tracking-[0.2em] text-rose-300/80">
-          Productivity · Focus · Anti-chaos
-        </div>
-        <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight">
-          Order <span className="text-rose-300">from the inbox storm.</span>
-        </h1>
-        <p className="mt-4 max-w-2xl text-slate-300">
-          Антихаос-приложение: задачи как состояния, не списки.
-          AI вытягивает next-action из переписок, focus-сессии режут task-switch,
-          а исполнение делегируется QCoreAI-агентам.
-        </p>
-      </section>
-
-      {/* AI Inbox Parser */}
-      <section className="mx-auto max-w-6xl px-4 pb-10">
-        <div className="rounded-2xl border border-rose-400/20 bg-slate-900/60 p-5">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-lg font-semibold text-rose-100">
-              🧹 AI Inbox Parser
-            </h2>
-            <span className="text-xs text-rose-200/60">
-              POST /api/qcoreai/chat · JSON-only mode
-            </span>
+      <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "32px 24px" }}>
+        {/* Hero */}
+        <div style={{ marginBottom: "28px" }}>
+          <div
+            style={{
+              fontSize: "11px",
+              textTransform: "uppercase",
+              letterSpacing: "0.2em",
+              color: "#f97316",
+              marginBottom: "8px",
+            }}
+          >
+            Productivity · Focus · Anti-chaos
           </div>
-          <p className="mt-1 text-sm text-slate-400">
-            Вставьте дамп почты / Slack / заметок. AI извлечёт до 6 задач со
-            владельцем, дедлайном и приоритетом.
+          <h1
+            style={{
+              fontSize: "clamp(28px, 4vw, 42px)",
+              fontWeight: 800,
+              color: "#f1f5f9",
+              margin: "0 0 8px 0",
+              lineHeight: 1.15,
+            }}
+          >
+            Structure your chaos.{" "}
+            <span style={{ color: "#f97316" }}>Ship what matters.</span>
+          </h1>
+          <p style={{ color: "#64748b", fontSize: "14px", maxWidth: "560px", margin: 0 }}>
+            Tasks as states + deep focus sessions. No noise, no overwhelm.
           </p>
+        </div>
 
-          <textarea
-            value={inbox}
-            onChange={(e) => setInbox(e.target.value)}
-            rows={10}
-            className="mt-3 w-full rounded-xl border border-rose-400/20 bg-slate-950/60 p-3 text-sm font-mono text-slate-200 outline-none focus:border-rose-400/50"
-            spellCheck={false}
-          />
+        {/* Stats */}
+        <StatsBar stats={stats} loading={statsLoading} />
 
-          <div className="mt-3 flex items-center gap-3 flex-wrap">
+        {error && (
+          <div
+            style={{
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.3)",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              fontSize: "13px",
+              color: "#fca5a5",
+              marginBottom: "16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            {error}
             <button
-              onClick={extract}
-              disabled={busy || !inbox.trim()}
-              className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-rose-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {busy ? "Извлекаю…" : "Извлечь задачи"}
-            </button>
-            <button
-              onClick={() => {
-                setInbox(SAMPLE_INBOX);
-                setTasks([]);
-                setErr(null);
+              onClick={() => setError(null)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#fca5a5",
+                cursor: "pointer",
+                fontSize: "16px",
+                padding: 0,
               }}
-              className="rounded-xl border border-rose-400/30 px-3 py-2 text-xs text-rose-200 hover:bg-rose-500/10 transition"
             >
-              Сбросить пример
+              ×
             </button>
-            {err && <span className="text-xs text-rose-300">{err}</span>}
+          </div>
+        )}
+
+        {/* Main layout: Kanban + Timer */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 300px",
+            gap: "24px",
+            alignItems: "start",
+          }}
+        >
+          {/* Kanban */}
+          <div>
+            <AddTaskForm onAdd={handleAddTask} busy={addBusy} />
+            {tasksLoading ? (
+              <div style={{ color: "#475569", fontSize: "13px", padding: "20px 0" }}>
+                Loading tasks…
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: "16px",
+                }}
+              >
+                {cols.map((col) => {
+                  const colTasks = columnTasks(tasks, col);
+                  return (
+                    <div key={col}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          marginBottom: "12px",
+                          paddingBottom: "8px",
+                          borderBottom: `2px solid ${COL_ACCENT[col]}33`,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "50%",
+                            background: COL_ACCENT[col],
+                            display: "inline-block",
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.1em",
+                            color: COL_ACCENT[col],
+                          }}
+                        >
+                          {COL_LABELS[col]}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "#475569",
+                            marginLeft: "auto",
+                          }}
+                        >
+                          {colTasks.length}
+                        </span>
+                      </div>
+                      {colTasks.length === 0 ? (
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "#334155",
+                            textAlign: "center",
+                            padding: "20px 0",
+                            border: "1px dashed rgba(148,163,184,0.08)",
+                            borderRadius: "8px",
+                          }}
+                        >
+                          empty
+                        </div>
+                      ) : (
+                        colTasks.map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            onToggleDone={handleToggleDone}
+                            onDelete={handleDeleteTask}
+                            onStartFocus={(id) => {
+                              setFocusTaskId(id);
+                              showToast("Task selected for focus. Press Start Focus.");
+                            }}
+                          />
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {tasks.length > 0 && (
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {tasks.map((t, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-rose-400/15 bg-slate-950/50 p-3"
+          {/* Sidebar: Focus Timer */}
+          <div style={{ position: "sticky", top: "72px" }}>
+            {focusTaskId !== null && (
+              <div
+                style={{
+                  background: "rgba(249,115,22,0.08)",
+                  border: "1px solid rgba(249,115,22,0.2)",
+                  borderRadius: "8px",
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  color: "#fed7aa",
+                  marginBottom: "12px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span>Task #{focusTaskId} selected</span>
+                <button
+                  onClick={() => setFocusTaskId(null)}
+                  style={{ background: "none", border: "none", color: "#f97316", cursor: "pointer", fontSize: "14px", padding: 0 }}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="text-sm font-medium text-slate-100">
-                      {t.title}
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${PRIORITY_BADGE[t.priority]}`}
-                    >
-                      {t.priority}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
-                    <span>👤 {t.owner}</span>
-                    <span>📅 {t.deadline}</span>
-                  </div>
-                  <button
-                    onClick={() => cycleState(i)}
-                    className={`mt-3 rounded-full border px-3 py-1 text-[11px] font-medium transition ${STATE_PILL[t.state]}`}
-                    title="Click to cycle: next-action → waiting → done"
-                  >
-                    {STATE_LABEL[t.state]}
-                  </button>
-                </div>
+                  ×
+                </button>
+              </div>
+            )}
+            <FocusTimer
+              activeFocusId={activeFocusId}
+              onStart={handleStartFocus}
+              onComplete={handleCompleteFocus}
+              taskId={focusTaskId}
+            />
+
+            {/* Quick links */}
+            <div
+              style={{
+                marginTop: "16px",
+                background: "rgba(15,23,42,0.5)",
+                border: "1px solid rgba(148,163,184,0.08)",
+                borderRadius: "12px",
+                padding: "14px",
+              }}
+            >
+              <div style={{ fontSize: "11px", color: "#475569", marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                AEVION modules
+              </div>
+              {[
+                { href: "/qcoreai", label: "QCoreAI", desc: "AI agent engine" },
+                { href: "/multichat-engine", label: "Multichat", desc: "Inbox action items" },
+                { href: "/qpersona", label: "QPersona", desc: "AI twin" },
+              ].map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  style={{
+                    display: "block",
+                    padding: "8px",
+                    borderRadius: "8px",
+                    textDecoration: "none",
+                    marginBottom: "4px",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#f97316" }}>{link.label} →</div>
+                  <div style={{ fontSize: "11px", color: "#475569" }}>{link.desc}</div>
+                </Link>
               ))}
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* Focus Session + Agent Bridge */}
-      <section className="mx-auto max-w-6xl px-4 pb-12 grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Focus Timer */}
-        <div className="rounded-2xl border border-rose-400/20 bg-slate-900/60 p-5">
-          <h2 className="text-lg font-semibold text-rose-100">
-            🎯 Focus Session
-          </h2>
-          <p className="mt-1 text-sm text-slate-400">
-            25-минутный pomodoro. Анти-task-switch counter мониторит прерывания.
-          </p>
-
-          <div className="mt-5 flex items-center justify-between">
-            <div className="font-mono text-5xl text-rose-100 tabular-nums">
-              {mm}:{ss}
-            </div>
-            <div className="text-right text-xs">
-              <div className="text-slate-400">task-switch</div>
-              <div className="text-2xl font-bold text-emerald-300">0</div>
-            </div>
-          </div>
-
-          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full bg-gradient-to-r from-rose-400 to-amber-300 transition-[width] duration-500"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-
-          <div className="mt-4 flex gap-2">
-            {!running ? (
-              <button
-                onClick={startFocus}
-                className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400 transition"
-              >
-                ▶ Start
-              </button>
-            ) : (
-              <button
-                onClick={pauseFocus}
-                className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 transition"
-              >
-                ⏸ Pause
-              </button>
-            )}
-            <button
-              onClick={resetFocus}
-              className="rounded-xl border border-rose-400/30 px-4 py-2 text-sm text-rose-200 hover:bg-rose-500/10 transition"
-            >
-              ↺ Reset
-            </button>
           </div>
         </div>
+      </div>
 
-        {/* Agent Bridge */}
-        <div className="rounded-2xl border border-rose-400/20 bg-slate-900/60 p-5">
-          <h2 className="text-lg font-semibold text-rose-100">
-            🤖 Bridge → QCoreAI Agents
-          </h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Задачи — это не строки, а исполняемые сценарии. Делегируйте
-            рутину агенту.
-          </p>
-
-          <div className="mt-4 rounded-xl border border-rose-400/15 bg-slate-950/50 p-4">
-            <div className="text-sm font-medium text-slate-100">
-              Delegate: Find vendors and email top 3
-            </div>
-            <div className="mt-1 text-xs text-slate-400">
-              Поиск поставщиков кровельных материалов → шорт-лист 3 →
-              автодрафт письма с RFQ.
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-              <span className="rounded-full border border-rose-400/30 px-2 py-0.5 text-rose-200">
-                agent · vendor-finder
-              </span>
-              <span className="rounded-full border border-amber-400/30 px-2 py-0.5 text-amber-200">
-                async · ~4 min
-              </span>
-            </div>
-            <button
-              onClick={() => setToast("Routing to QCoreAI agent…")}
-              className="mt-3 rounded-xl bg-rose-500 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-400 transition"
-            >
-              Run agent
-            </button>
-          </div>
-
-          <div className="mt-4 text-xs text-slate-400">
-            Реальный routing — в{" "}
-            <Link href="/qcoreai" className="text-rose-300 hover:underline">
-              /qcoreai
-            </Link>
-            . Здесь — demo-stub.
-          </div>
-        </div>
-      </section>
-
-      {/* Cross-links footer */}
-      <section className="mx-auto max-w-6xl px-4 pb-16">
-        <div className="rounded-2xl border border-rose-400/15 bg-slate-900/40 p-5">
-          <h3 className="text-sm font-semibold text-rose-100">
-            Related AEVION modules
-          </h3>
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-            <Link
-              href="/qcoreai"
-              className="rounded-xl border border-rose-400/20 bg-slate-950/50 p-3 hover:border-rose-400/50 transition"
-            >
-              <div className="font-medium text-rose-200">QCoreAI →</div>
-              <div className="mt-1 text-xs text-slate-400">
-                Agent engine — куда DeepSan делегирует исполнение.
-              </div>
-            </Link>
-            <Link
-              href="/multichat-engine"
-              className="rounded-xl border border-rose-400/20 bg-slate-950/50 p-3 hover:border-rose-400/50 transition"
-            >
-              <div className="font-medium text-rose-200">Multichat Engine →</div>
-              <div className="mt-1 text-xs text-slate-400">
-                Inbox-источник: action items прямо из переписок.
-              </div>
-            </Link>
-            <Link
-              href="/qpersona"
-              className="rounded-xl border border-rose-400/20 bg-slate-950/50 p-3 hover:border-rose-400/50 transition"
-            >
-              <div className="font-medium text-rose-200">QPersona →</div>
-              <div className="mt-1 text-xs text-slate-400">
-                AI-двойник для исполнения задач вашим стилем.
-              </div>
-            </Link>
-          </div>
-        </div>
-      </section>
-
+      {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 rounded-xl border border-rose-400/30 bg-slate-900/90 px-4 py-2 text-sm text-rose-100 shadow-lg backdrop-blur">
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 50,
+            background: "rgba(15,23,42,0.95)",
+            border: "1px solid rgba(249,115,22,0.3)",
+            borderRadius: "10px",
+            padding: "10px 20px",
+            fontSize: "13px",
+            color: "#fed7aa",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            backdropFilter: "blur(12px)",
+            whiteSpace: "nowrap",
+          }}
+        >
           {toast}
         </div>
       )}

@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
-import { Wave1Nav } from "@/components/Wave1Nav";
+import AevionTicker from "./AevionTicker";
+import AevionProjectsBanner from "./AevionProjectsBanner";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
 import AiCoach from "./AiCoach";
@@ -14,7 +15,48 @@ import CoachLessonsModal from "./CoachLessonsModal";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
 import { Btn, Card, Badge, Tabs as UiTabs, Modal, Icon, Spinner, SectionHeader, ChessyFloat, Confetti } from "./ui";
-import { COLOR as CC, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
+import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
+
+// Dark theme palette — mirrors the keys of COLOR (./theme.ts) so the
+// component can swap CC=CC_LIGHT vs CC=CC_DARK at runtime via theme toggle.
+// Keep keys 1:1 with theme.ts COLOR or TS will narrow CC's type.
+// CC_DARK — lichess-inspired palette: коричневато-тёмный фон (не синий), высокий контраст
+const CC_DARK = {
+  bg: "#161512",           // lichess background
+  surface1: "#262421",     // lichess sidebar panels
+  surface2: "#1e1c19",     // deeper surfaces
+  surface3: "#100f0d",     // deepest
+  surfaceGlass: "rgba(22,21,18,0.85)",
+
+  text: "#bababa",         // lichess text — не ослепительно белый
+  textDim: "#8b8987",
+  textMute: "#5d5b59",
+  textInv: "#161512",
+
+  border: "#3d3b39",
+  borderStrong: "#5d5b59",
+
+  brand: "#759900",        // lichess зелёный (ходы, кнопки)
+  brandHover: "#88b300",
+  brandSoft: "rgba(117,153,0,0.2)",
+  accent: "#d1a227",       // lichess золотой акцент
+  accentSoft: "rgba(209,162,39,0.2)",
+  gold: "#e8a908",
+  goldSoft: "rgba(232,169,8,0.2)",
+  danger: "#e04040",
+  dangerSoft: "rgba(224,64,64,0.18)",
+  info: "#4990a4",
+  infoSoft: "rgba(73,144,164,0.18)",
+
+  // Board interaction overlays
+  sqSel: "rgba(20,85,30,0.9)",     // lichess green selection
+  sqValid: "rgba(20,85,30,0.6)",
+  sqCap: "rgba(224,64,64,0.5)",
+  sqLast: "rgba(184,128,40,0.45)", // lichess yellow last move
+  sqCheck: "rgba(224,64,64,0.7)",
+  sqPremove: "rgba(73,144,164,0.5)",
+  sqPremoveStrong: "rgba(73,144,164,0.7)",
+} as const;
 import { computeGameDNA, type GameDNA } from "./gameDna";
 import { useBoardInput, premoveLegalMoves } from "./useBoardInput";
 import { StreamerOverlay } from "./StreamerOverlay";
@@ -32,6 +74,8 @@ import { useWorkspace } from "./useWorkspace";
 import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
+import MusicPlayer from "./MusicPlayer";
+import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
@@ -172,28 +216,12 @@ function getAudioCtx():AudioContext|null{
   if(_audioCtx&&_audioCtx.state==="suspended"){_audioCtx.resume().catch(()=>{})}
   return _audioCtx;
 }
+// snd проксирует в playChessSound с текущим preset из localStorage. Сам preset
+// меняется через Settings → "Звуки фигур". Если "silent" — функция просто выходит.
 function snd(t:string){if(isMuted())return;try{
-  const x=getAudioCtx();if(!x)return;const n=x.currentTime;
-  const makeBurst=(at:number,dur:number,lpFreq:number,vol:number)=>{
-    const bufSize=Math.floor(x.sampleRate*dur);
-    const buf=x.createBuffer(1,bufSize,x.sampleRate);
-    const d=buf.getChannelData(0);
-    for(let i=0;i<bufSize;i++){d[i]=(Math.random()*2-1)*Math.exp(-i/(bufSize*0.18));}
-    const src=x.createBufferSource();src.buffer=buf;
-    const lp=x.createBiquadFilter();lp.type="lowpass";lp.frequency.value=lpFreq;lp.Q.value=0.8;
-    const hp=x.createBiquadFilter();hp.type="highpass";hp.frequency.value=180;
-    const g=x.createGain();g.gain.setValueAtTime(vol,at);g.gain.exponentialRampToValueAtTime(0.001,at+dur);
-    src.connect(hp);hp.connect(lp);lp.connect(g);g.connect(x.destination);src.start(at);
-  };
-  if(t==="move")   makeBurst(n,0.06,1400,0.22);
-  else if(t==="capture")  {makeBurst(n,0.10,700,0.35);makeBurst(n+0.03,0.07,1000,0.15);}
-  else if(t==="check")    makeBurst(n,0.07,2400,0.28);
-  else if(t==="castle")   {makeBurst(n,0.05,1200,0.2);makeBurst(n+0.08,0.05,1200,0.18);}
-  else if(t==="premove")  makeBurst(n,0.04,1800,0.12);
-  // Distinct premove-cancel sound: short downward tone — clearly different from "premove confirm".
-  else if(t==="cancel")   {makeBurst(n,0.05,900,0.18);makeBurst(n+0.05,0.05,500,0.13);}
-  else if(t==="x")        {for(let i=0;i<4;i++)makeBurst(n+i*0.08,0.07,600-i*60,0.15);}
-  else                    makeBurst(n,0.05,1200,0.20);
+  const preset=loadSoundPreset();
+  const evt=(t==="move"||t==="capture"||t==="check"||t==="castle"||t==="premove"||t==="cancel"||t==="x")?t:"move";
+  playChessSound(preset,evt);
 }catch{}}
 
 /* ═══ Rating ═══ */
@@ -400,12 +428,13 @@ type CellProps={
   cursor:"grab"|"default";
   iS:boolean;iV:boolean;iCk:boolean;iPM:boolean;iPS:boolean;
   iL:boolean;isShadow:boolean;isAnimDest:boolean;isDragOrigin:boolean;
+  iHover?:boolean;iHoverCap?:boolean;
   pmIdx?:number;
   coordFile?:string;
   coordRank?:number;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,pmIdx,coordFile,coordRank}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,pmIdx,coordFile,coordRank}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
   const isLifted=(iS||iPS)&&!isDragOrigin;
@@ -427,7 +456,12 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1}}>
-    {iV&&!hasPiece&&<div style={{width:"24%",height:"24%",borderRadius:"50%",background:"rgba(15,23,42,0.22)",position:"absolute",pointerEvents:"none"}}/>}
+    {/* Lichess-style move dots и кольца захвата */}
+    {(iV&&!hasPiece)||(iHover&&!iHoverCap&&!hasPiece)
+      ?<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"rgba(15,23,42,0.20)",position:"absolute",pointerEvents:"none",transition:"opacity 80ms"}}/>
+      :null}
+    {/* Кольцо захвата: iV&&hasPiece (clicked) или iHoverCap (hover) */}
+    {((iV&&!!hasPiece)||iHoverCap)&&<div style={{position:"absolute",inset:0,borderRadius:"50%",boxShadow:"inset 0 0 0 clamp(3px,9%,9px) rgba(15,23,42,0.28)",pointerEvents:"none"}}/>}
     {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"opacity 100ms ease-out",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
@@ -460,6 +494,9 @@ export default function CyberChessPage(){
   const bT=BOARD_THEMES[boardTheme]||BOARD_THEMES[0];
   const[sel,sSel]=useState<Square|null>(null);
   const[vm,sVm]=useState<Set<string>>(new Set());
+  // Hover preview — показываем возможные ходы при наведении мыши (без клика, как у lichess).
+  const[hoverSq,sHoverSq]=useState<Square|null>(null);
+  const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
   const[hist,sHist]=useState<string[]>([]);
@@ -707,10 +744,47 @@ export default function CyberChessPage(){
   const[enginePanelExpanded,sEnginePanelExpanded]=useState(false);
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
+  const[showMusicPlayer,sShowMusicPlayer]=useState(false);
+  // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
+  // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
+  // entire palette at render time; all ~720 CC.* references pick it up automatically.
+  // Default: dark (как lichess). Пользователь переключает в Settings.
+  const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="light"?"light":"dark"}catch{return"dark"}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_color_theme_v1",themeMode)}catch{}},[themeMode]);
+  // Active palette — shadows the imported CC_LIGHT so every existing CC.* lookup
+  // in this component reads the active theme. Top-level helpers above the
+  // component still see CC_LIGHT via the import alias (kept for backwards compat
+  // of any module-scoped colors, though currently none use CC.* outside the fn).
+  const CC = themeMode==="dark" ? CC_DARK : CC_LIGHT;
+  // T — dynamic alias к текущей теме (CC). Заменяет статичный module-level T={} чтобы
+  // переключение dark/light автоматически применялось к moves list, eval strip и т.д.
+  // ВАЖНО: должен быть после объявления CC (TDZ)
+  const T={
+    bg:CC.bg,surface:CC.surface1,border:CC.border,text:CC.text,dim:CC.textDim,
+    accent:CC.brand,gold:CC.gold,danger:CC.danger,blue:CC.info,purple:CC.accent,
+    sel:CC.sqSel,valid:CC.sqValid,cap:CC.sqCap,last:CC.sqLast,
+    chk:CC.sqCheck,pm:CC.sqPremove,pmS:CC.sqPremoveStrong,
+  };
+  // Apply theme globally: body background + data-cc-theme attribute (triggers CSS vars in globals.css)
+  useEffect(()=>{
+    if(typeof document==="undefined")return;
+    const prev=document.body.style.background;
+    document.body.style.background=themeMode==="dark"?CC_DARK.bg:CC_LIGHT.bg;
+    document.documentElement.setAttribute("data-cc-theme",themeMode);
+    return()=>{document.body.style.background=prev;document.documentElement.removeAttribute("data-cc-theme")};
+  },[themeMode]);
+  // Текущий звуковой пресет (40 пресетов + молчание). Сохраняется в localStorage.
+  const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
+  useEffect(()=>{saveSoundPreset(soundPresetId)},[soundPresetId]);
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_autoqueen_v1",autoQueen?"1":"0")}catch{}},[autoQueen]);
+  // F2 phase-3 — Stockfish analysis depth для CPI/metrics recall. 18 = быстро (по умолчанию),
+  // 25 = точнее, 30 = максимум. Влияет только на recordMoveWithMultiPV и top-3 metrics —
+  // не на playing strength AI противника (тот настраивается отдельно через Skill Level).
+  const[sfDepth,sSfDepth]=useState<number>(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_sf_depth_v1")||"18");return v>=12&&v<=40?v:18}catch{return 18}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_sf_depth_v1",String(sfDepth))}catch{}},[sfDepth]);
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
@@ -834,6 +908,8 @@ export default function CyberChessPage(){
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  const[showProjectsBanner,sShowProjectsBanner]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("cc_projects_banner_v1")!=="0"}catch{return true}});
+  useEffect(()=>{try{localStorage.setItem("cc_projects_banner_v1",showProjectsBanner?"1":"0")}catch{}},[showProjectsBanner]);
   const streamerToolbarRef=useRef<{showYT:()=>void;showTW:()=>void;ytVisible:boolean;twVisible:boolean}|null>(null);
   const activePieceSet=useActivePieceSet();
   // Threat Heatmap (killer #12) — overlay контроля доски, нет ни у chess.com, ни у lichess
@@ -1254,57 +1330,27 @@ export default function CyberChessPage(){
     }
     // Coach SR — surface due review reminders (1/3/7-day milestones).
     try{const due=getDueReminders();if(due.length>0)sDueReminders(due)}catch{}
-    // Load bundled puzzles first (instant), then try to expand from cloud API.
-    // Cloud API (/api-backend/puzzles) is Railway-hosted with the full Lichess CC0 DB.
-    // Falls back gracefully if offline or DB not seeded.
-    fetch("/puzzles.json")
-      .then(r=>r.json())
-      .then((bundled:Puzzle[])=>{
-        sPuzzles(bundled);
-        // Try cloud extension — if backend has more puzzles, fetch a random batch
-        // and merge (dedup by FEN). This runs in background; failure is silent.
-        const backendUrl=typeof window!=="undefined"&&window.location.hostname==="localhost"
-          ?"http://localhost:4001":"/api-backend";
-        fetch(`${backendUrl}/api/puzzles?nb=200&random=1`,{signal:AbortSignal.timeout(8000)})
-          .then(r=>r.ok?r.json():null)
-          .then(data=>{
-            if(!data||!Array.isArray(data.puzzles)||data.puzzles.length===0)return;
-            // Merge with bundled — deduplicate by FEN
-            const fenSet=new Set(bundled.map((p:Puzzle)=>p.fen));
-            const newOnes=data.puzzles.filter((p:Puzzle)=>p.fen&&!fenSet.has(p.fen));
-            if(newOnes.length>0){
-              sPuzzles(prev=>[...prev,...newOnes]);
-              console.log(`[Puzzles] +${newOnes.length} from cloud (total cloud DB: ${data.total})`);
-            }
-          })
-          .catch(()=>{/* cloud offline — bundled puzzles are sufficient */});
-      })
-      .catch(()=>sPuzzles([]));
-    fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
-      // Build FEN-indexed opening database for transposition detection
-      const map=new Map<string,OpeningIndexed>();
-      const indexed:OpeningIndexed[]=[];
-      for(const op of d){
-        try{
-          const g=new Chess();
-          const uciList=op.moves.trim().split(/\s+/);
-          for(const uci of uciList){
-            if(uci.length<4)continue;
-            g.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});
-          }
-          // FEN key: placement + active color + castling (ignore en passant, halfmove, fullmove for transposition match)
-          const parts=g.fen().split(" ");
-          const fenKey=`${parts[0]} ${parts[1]} ${parts[2]}`;
-          const entry:OpeningIndexed={...op,fenKey,plyLen:uciList.length};
-          indexed.push(entry);
-          // Keep the DEEPEST opening for each FEN key (longest move sequence wins)
-          const existing=map.get(fenKey);
-          if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
-        }catch{/* skip malformed */}
-      }
-      openingMapRef.current=map;
-      sOpeningsDb(indexed);
-    }).catch(()=>sOpeningsDb([]))
+    // Bundled puzzles — грузим сразу (нужно для Daily puzzle и Quick Puzzle на главной).
+    // Cloud API extension убрана из mount — зовём lazy только когда пользователь
+    // открывает Puzzle tab (см. отдельный useEffect ниже).
+    fetch("/puzzles.json").then(r=>r.json()).then((d:Puzzle[])=>sPuzzles(d)).catch(()=>sPuzzles([]));
+    // Openings DB — defer в idle/setTimeout чтобы не блокировать первый рендер.
+    const loadOpenings=()=>{
+      fetch("/openings.json").then(r=>r.json()).then((d:Opening[])=>{
+        const map=new Map<string,OpeningIndexed>();const indexed:OpeningIndexed[]=[];
+        for(const op of d){try{
+          const g=new Chess();const uciList=op.moves.trim().split(/\s+/);
+          for(const uci of uciList){if(uci.length<4)continue;g.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});}
+          const parts=g.fen().split(" ");const fenKey=`${parts[0]} ${parts[1]} ${parts[2]}`;
+          const entry:OpeningIndexed={...op,fenKey,plyLen:uciList.length};indexed.push(entry);
+          const existing=map.get(fenKey);if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
+        }catch{}}
+        openingMapRef.current=map;sOpeningsDb(indexed);
+      }).catch(()=>sOpeningsDb([]));
+    };
+    if(typeof window!=="undefined"&&"requestIdleCallback" in window){
+      (window as any).requestIdleCallback(loadOpenings,{timeout:6000});
+    }else{setTimeout(loadOpenings,2000);}
   },[]);
   useEffect(()=>{hR.current?.scrollTo({top:hR.current.scrollHeight,behavior:"smooth"})},[hist]);
 
@@ -1327,8 +1373,19 @@ export default function CyberChessPage(){
     }
     if(bestMatch)sCurrentOpening(bestMatch);
   },[hist,openingsDb]);
-  // Always load Stockfish for eval bar (not just for AI play)
-  useEffect(()=>{if(!sfR.current){const s=new SF();s.init();sfR.current=s;const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);const t=setTimeout(()=>clearInterval(c),15000);return()=>{clearInterval(c);clearTimeout(t)}}},[]);
+  // Lazy Stockfish init: грузим WASM только когда пользователь начинает играть или
+  // открывает Analysis/Coach. На setup screen Stockfish не нужен.
+  function ensureSF(){
+    if(sfR.current)return;
+    const s=new SF();s.init();sfR.current=s;
+    const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
+    setTimeout(()=>clearInterval(c),15000);
+  }
+  // Триггер: пользователь вошёл в игру или открыл анализ/коуча
+  useEffect(()=>{
+    if(on||tab==="analysis"||tab==="coach")ensureSF();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[on,tab]);
   // Terminate Stockfish worker on unmount so the WASM process doesn't outlive the page.
   useEffect(()=>()=>{try{sfR.current?.terminate()}catch{};sfR.current=null},[]);
   // Live eval on position change.
@@ -1409,7 +1466,7 @@ export default function CyberChessPage(){
     const idleId=typeof window!=="undefined"&&"requestIdleCallback" in window
       ?(window as any).requestIdleCallback(()=>{
         if(cancelled||!sfR.current?.ready())return;
-        sfR.current.multiPV(fenForTop3,18,3,(lines)=>{
+        sfR.current.multiPV(fenForTop3,sfDepth,3,(lines)=>{
           if(cancelled||!lines||lines.length===0)return;
           try{
             // Convert in-page PVLine shape to MetricsPVLine (structurally identical).
@@ -1419,7 +1476,7 @@ export default function CyberChessPage(){
       },{timeout:600})
       :setTimeout(()=>{
         if(cancelled||!sfR.current?.ready())return;
-        sfR.current.multiPV(fenForTop3,18,3,(lines)=>{
+        sfR.current.multiPV(fenForTop3,sfDepth,3,(lines)=>{
           if(cancelled||!lines||lines.length===0)return;
           try{metricsRef.current.setPendingTop3(fenForTop3,lines as unknown as MetricsPVLine[])}catch{}
         });
@@ -2516,9 +2573,25 @@ export default function CyberChessPage(){
   // Premove cancel flash: красный pulse на FROM-клетке отменённого премува (~600ms).
   const[cancelFlash,sCancelFlash]=useState<{sq:Square;key:number}|null>(null);
   useEffect(()=>{if(!cancelFlash)return;const id=window.setTimeout(()=>sCancelFlash(null),650);return()=>clearTimeout(id);},[cancelFlash?.key]);
-  // Animation effect removed — pieces snap to new positions instantly via
-  // React render. User wanted no "flying" pieces.
-  useEffect(()=>{ skipNextAnimRef.current=false; },[bk]);
+  // ── Move slide animation trigger ──
+  // На каждое обновление last-move (lm): если skipNextAnimRef=true (пользователь сам
+  // только что сделал ход через exec — анимация лишь добавит лаг), просто сбрасываем
+  // флаг и пропускаем. Иначе — запускаем floating piece от FROM к TO, фигура читается
+  // из game на позиции TO (после хода). Эффект очищается через 220ms.
+  const prevLmRef=useRef<{from:string;to:string}|null>(null);
+  useEffect(()=>{
+    if(!lm){prevLmRef.current=null;return}
+    const prev=prevLmRef.current;
+    if(prev&&prev.from===lm.from&&prev.to===lm.to)return;
+    prevLmRef.current={from:lm.from,to:lm.to};
+    if(skipNextAnimRef.current){skipNextAnimRef.current=false;return}
+    const pc=game.get(lm.to as Square);
+    if(!pc)return;
+    sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:{type:pc.type,color:pc.color},key:Date.now()});
+    const id=window.setTimeout(()=>sMoveAnim(null),220);
+    return()=>clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[lm?.from,lm?.to,bk]);
   // После mount floating piece — trigger transition через рефлоу, чтобы
   // initial transform (from→to negative offset) уехал в 0,0.
   useEffect(()=>{
@@ -3355,7 +3428,7 @@ export default function CyberChessPage(){
   // regenerate the tree on hydration, and event handlers attach immediately.
   if(!mounted){
     return(<main style={{background:T.bg,minHeight:"100vh"}}>
-      <ProductPageShell maxWidth={2000}><Wave1Nav/>
+      <ProductPageShell fullWidth><AevionTicker/>
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${T.dim}`,borderTopColor:T.accent,animation:"cc-spin 0.8s linear infinite"}}/>
@@ -3366,8 +3439,8 @@ export default function CyberChessPage(){
     </main>);
   }
 
-  return(<main style={{background:T.bg,minHeight:"100vh"}}>
-    <ProductPageShell maxWidth={2000}><Wave1Nav/>
+  return(<main suppressHydrationWarning style={{background:CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column"}}>
+    <ProductPageShell fullWidth><AevionTicker/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>
@@ -3550,41 +3623,16 @@ export default function CyberChessPage(){
           ariaLabel={muted?"Unmute":"Mute"}
           style={{padding:"6px 10px",minHeight:36,minWidth:36}}
         />
+        <button
+          onClick={()=>sShowMusicPlayer(true)}
+          title="Музыкальный плеер"
+          aria-label="Music player"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
+        >🎵</button>
       </div>}
 
-      {/* ─── AEVION ecosystem strip ─── compact pill-bar with cross-product links so users can
-          discover what else AEVION offers without leaving CyberChess. Hidden in streamer mode. */}
-      {!streamerMode&&<div style={{
-        display:"flex",alignItems:"center",gap:8,padding:"6px 10px",marginBottom:10,
-        background:"linear-gradient(135deg,rgba(15,23,42,0.04),rgba(124,58,237,0.06))",
-        border:`1px solid ${CC.border}`,borderRadius:RADIUS.lg,
-        flexWrap:"wrap",fontSize:11
-      }}>
-        <span style={{fontWeight:900,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,fontSize:10,marginRight:4}}>🌐 AEVION</span>
-        {[
-          {href:"/qcoreai",label:"🧠 QCoreAI",hint:"AI-агенты и чат"},
-          {href:"/qtrade",label:"📈 QTrade",hint:"Биржа AEV"},
-          {href:"/aev",label:"🪙 AEV",hint:"Токеномика"},
-          {href:"/qpaynet",label:"💸 QPayNet",hint:"Платежи P2P"},
-          {href:"/qright",label:"©  QRight",hint:"Авторские права"},
-          {href:"/qsign",label:"✍ QSign v2",hint:"PQ-подпись"},
-          {href:"/quantum-shield",label:"🛡 QShield",hint:"Threshold-секреты"},
-          {href:"/qbuild",label:"💼 QBuild",hint:"HR-платформа"},
-          {href:"/healthai",label:"🩺 HealthAI",hint:"Здоровье"},
-          {href:"/smeta-trainer",label:"📐 Smeta",hint:"Тренажёр сметчика"},
-        ].map(p=><a key={p.href} href={p.href} title={p.hint}
-          style={{
-            display:"inline-flex",alignItems:"center",padding:"4px 10px",
-            borderRadius:RADIUS.full,background:CC.surface1,
-            border:`1px solid ${CC.border}`,color:CC.text,
-            fontSize:11,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",
-            transition:`all ${MOTION.fast} ${MOTION.ease}`
-          }}
-          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.borderStrong;(e.currentTarget as HTMLElement).style.background="#fff"}}
-          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
-          {p.label}
-        </a>)}
-      </div>}
+      {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.
+          Кросс-продуктовая навигация остаётся в Wave1Nav (футер/нав) и через прямые ссылки. */}
 
       {/* Resume offer banner */}
       {resumeOffer&&(()=>{
@@ -4051,9 +4099,8 @@ export default function CyberChessPage(){
 
           </Card>
 
-          {/* ─── Совет дня из Coach Knowledge ─── */}
-          {(()=>{
-            // Pick a deterministic daily tip from COACH_KNOWLEDGE using date seed
+          {/* Совет дня убран с главного экрана — доступен в разделе Коуч → Knowledge */}
+          {false&&(()=>{
             const now=new Date();const seed=now.getFullYear()*10000+now.getMonth()*100+now.getDate();
             const allEntries=COACH_KNOWLEDGE.flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
             if(allEntries.length===0)return null;
@@ -4444,8 +4491,8 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
-          {/* ─── Лидерборды по категориям ─── */}
-          {(()=>{
+          {/* Лидерборды убраны с главного экрана — открываются через /cyberchess/cpi/leaderboard */}
+          {false&&(()=>{
             const categories:LbCategory[]=["blitz","rapid","bullet","puzzles","rush"];
             const myName="Ты";
             // Подбираем рейтинг под категорию: blitz/rapid/bullet — общий rat,
@@ -4490,7 +4537,8 @@ export default function CyberChessPage(){
 
 
           {/* ─── Game History ─── */}
-          {savedGames.length>0&&<Card padding={0} elevation="sm">
+          {/* Мои партии убраны с главного — открываются через кнопку 📜 в sidebar */}
+          {false&&savedGames.length>0&&<Card padding={0} elevation="sm">
             <div style={{padding:`${SPACE[2]}px ${SPACE[3]}px`,display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${CC.border}`}}>
               <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Мои партии <span style={{color:CC.textDim,fontWeight:600}}>({savedGames.length})</span></span>
               <UiTabs
@@ -4561,8 +4609,42 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
+      {/* In-game dashboard chips — quick access во время игры, не уходя в модалки.
+          Скрыт в setup (там есть hero-карточки) и в streamer mode. */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&<div style={{
+        display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,
+        padding:"6px 10px",marginBottom:10,
+        background:"linear-gradient(135deg,rgba(5,150,105,0.04),rgba(124,58,237,0.05))",
+        border:`1px solid ${CC.border}`,borderRadius:RADIUS.lg,
+      }}>
+        <span style={{fontWeight:900,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,fontSize:10,marginRight:6}}>⚡ Быстрый доступ</span>
+        {[
+          {label:"📊 Анализ",hint:"Открыть анализ позиции",onClick:()=>{sTab("analysis");showToast("Анализ","info")}},
+          {label:"🧠 Коуч",hint:"Спросить коуча",onClick:()=>{sTab("coach");showToast("Коуч","info")}},
+          {label:"🧩 Пазлы",hint:"Решить тактику",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+          {label:"⚡ Puzzle Rush",hint:"Скоростной режим",onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
+          {label:"🎲 Варианты",hint:"12 вариантов шахмат",onClick:()=>sShowVariants(true)},
+          {label:"📅 Daily",hint:"Дневной пазл",onClick:()=>{sTab("puzzles");if(dailyState&&PUZZLES[dailyState.idx])ldPz(dailyState.idx)}},
+          {label:"📚 Репертуар",hint:"Свои дебюты",onClick:()=>sRepertoireOpen(true)},
+          {label:"🏆 Турниры",hint:"Bracket + leaderboard",onClick:()=>sShowTournament(true)},
+          {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
+          {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
+          {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
+        ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
+          style={{
+            padding:"4px 10px",borderRadius:RADIUS.full,
+            background:CC.surface1,border:`1px solid ${CC.border}`,color:CC.text,
+            fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,
+            transition:`all ${MOTION.fast} ${MOTION.ease}`,
+          }}
+          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.borderStrong;(e.currentTarget as HTMLElement).style.background="#fff"}}
+          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
+          {c.label}
+        </button>)}
+      </div>}
+
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"stretch"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
@@ -4571,7 +4653,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",
+            width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -4584,15 +4666,72 @@ export default function CyberChessPage(){
             </button>
             <button onClick={()=>sActiveLesson(null)} style={{padding:"4px 8px",borderRadius:RADIUS.sm,border:"none",background:"transparent",color:"#94a3b8",fontSize:13,cursor:"pointer"}}>✕</button>
           </div>}
-          {tc.ini>0&&tab!=="analysis"&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:5,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}>
-            <div style={{padding:"8px 18px",borderRadius:10,background:game.turn()===aiC&&on&&!over?"#1e293b":T.surface,color:game.turn()===aiC&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:game.turn()===aiC&&on&&!over?"0 2px 8px rgba(30,41,59,0.2)":"none"}}>AI {fmt(aT.time)}</div>
-            <div style={{padding:"8px 18px",borderRadius:10,background:myT&&on&&!over?T.accent:T.surface,color:myT&&on&&!over?"#fff":T.dim,fontWeight:800,fontSize:16,fontFamily:"monospace",border:`1px solid ${T.border}`,boxShadow:myT&&on&&!over?"0 2px 8px rgba(5,150,105,0.25)":"none"}}>You {fmt(pT.time)}</div>
-          </div>}
+          {/* ── Chess.com-style player rows ─────────────────────
+              Показываются всегда в game mode, даже без таймера. */}
+          {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
+            // Material count: unicode → point value
+            const PIECE_VAL:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
+            const pieceVal=(s:string)=>PIECE_VAL[s]||0;
+            const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
+            const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
+            const al=ALS[aiI];
+            const bw="min(calc(100vh - 160px),calc(100vw * 0.6),900px)";
+            const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
+              const name=isAI?al.name+" AI":"Вы";
+              const elo=isAI?al.elo:rat;
+              return <div style={{
+                display:"flex",alignItems:"center",justifyContent:"space-between",
+                width:bw,padding:"5px 0",gap:8,
+                borderLeft:isActive?`3px solid ${CC.brand}`:"3px solid transparent",
+                paddingLeft:isActive?6:6,
+                transition:"border-color 200ms",
+              }}>
+                {/* Avatar + name + rank */}
+                <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                  <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+                    background:isAI?al.color+"22":"rgba(255,255,255,0.08)",
+                    border:`1px solid ${isAI?al.color+"44":CC.border}`,
+                    fontSize:16,flexShrink:0}}>
+                    {isAI?"🤖":"👤"}
+                  </div>
+                  <div style={{minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:13,fontWeight:800,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+                      <span style={{fontSize:10,fontWeight:700,color:isAI?al.color:CC.accent,background:isAI?al.color+"18":CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{elo}</span>
+                    </div>
+                    {/* Захваченные фигуры + advantage */}
+                    <div style={{display:"flex",alignItems:"center",gap:2,marginTop:1,flexWrap:"wrap"}}>
+                      {captures.map((c,i)=><span key={i} style={{fontSize:12,lineHeight:1,color:CC.textDim,opacity:0.9}}>{c}</span>)}
+                      {advantage>0&&<span style={{fontSize:10,fontWeight:800,color:CC.brand,marginLeft:2}}>+{advantage}</span>}
+                    </div>
+                  </div>
+                </div>
+                {/* Clock */}
+                {tc.ini>0&&<div style={{
+                  fontSize:20,fontWeight:900,fontFamily:"ui-monospace,monospace",letterSpacing:-0.5,
+                  color:lowTime?"#e04040":isActive?CC.brand:CC.textMute,
+                  background:isActive?"rgba(255,255,255,0.04)":"transparent",
+                  padding:"4px 10px",borderRadius:6,
+                  animation:lowTime&&isActive?"cc-clock-pulse 1s ease-in-out infinite":undefined,
+                  transition:"color 300ms",
+                }}>{fmt(time)}</div>}
+              </div>;
+            };
+            // Верхняя строка (противник) + нижняя (игрок)
+            const topIsAI=pCol==="w"; // белые играют снизу
+            const aiLow=aT.time<30000&&on&&!over;
+            const myLow=pT.time<30000&&on&&!over;
+            return <div style={{display:"flex",flexDirection:"column",gap:1,marginBottom:4}}>
+              {topIsAI
+                ?<PRow isAI={true} time={aT.time} isActive={game.turn()===aiC&&on&&!over} lowTime={aiLow} captures={capW} advantage={bMat-wMat>0?bMat-wMat:0}/>
+                :<PRow isAI={false} time={pT.time} isActive={myT&&on&&!over} lowTime={myLow} captures={capB} advantage={wMat-bMat>0?wMat-bMat:0}/>}
+            </div>;
+          })()}
 
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -4632,6 +4771,21 @@ export default function CyberChessPage(){
               onPointerDown={onBoardDown}
               draggable={false}
               onDragStart={e=>e.preventDefault()}
+              onMouseMove={e=>{
+                // Hover-dots: вычисляем возможные ходы фигуры под курсором синхронно.
+                // Показываем только если нет активного sel (иначе sel-vm приоритетнее).
+                if(sel)return;
+                const sq=sqFromPoint(e.clientX,e.clientY);
+                if(sq===hoverSq)return;
+                sHoverSq(sq);
+                if(!sq||over||!on&&tab==="play"){sHoverVm(new Set());return;}
+                const pc=game.get(sq);
+                // Показываем ходы только для своих фигур (или в анализе — для любых)
+                if(!pc||(tab==="play"&&pc.color!==pCol)){sHoverVm(new Set());return;}
+                const moves=game.moves({verbose:true,square:sq});
+                sHoverVm(new Set(moves.map(m=>m.to)));
+              }}
+              onMouseLeave={()=>{sHoverSq(null);sHoverVm(new Set());}}
               onClick={e=>{
                 // Pointerdown arms the gesture; window-pointerup decides drop vs tap
                 // and delegates taps to click(). onClick here only clears annotations
@@ -4671,7 +4825,8 @@ export default function CyberChessPage(){
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
-              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
+              className={`${bk<=2&&on?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
+              style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
               {/* Threat Heatmap overlay (killer #12) */}
@@ -4740,6 +4895,9 @@ export default function CyberChessPage(){
                 const isShadow=!scratchOn&&!!(pms.length>0&&p&&(!realP||realP.type!==p.type||realP.color!==p.color));
                 const turnRef=scratchOn&&scratchGame?scratchGame.turn():game.turn();
                 const iS=effSel===sq,iV=effVm.has(sq),iCp=iV&&!!p,iL=!!(effLm&&(effLm.from===sq||effLm.to===sq)),iCk=!!(chk&&p?.type==="k"&&p.color===turnRef),iPM=!scratchOn&&pmSet.has(sq),iPS=!scratchOn&&pmSel===sq;
+                // Hover preview — показываем когда нет active sel
+                const iHover=!sel&&hoverVm.has(sq);
+                const iHoverCap=iHover&&!!p;
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 const isDragOrigin=ghostFrom===sq;
@@ -4752,6 +4910,7 @@ export default function CyberChessPage(){
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
                   iS={iS} iV={iV} iCk={iCk} iPM={iPM} iPS={iPS} iL={iL}
+                  iHover={iHover} iHoverCap={iHoverCap}
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
                   pmIdx={pmToIdx.get(sq)}
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
@@ -4829,7 +4988,50 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(1040px,calc(100vw - 32px),calc(100vh - 160px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+
+          {/* Нижняя player row (свой игрок) — chess.com style */}
+          {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
+            const PV2:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
+            const pieceVal2=(s:string)=>PV2[s]||0;
+            const wMat2=capB.reduce((s,c)=>s+pieceVal2(c),0);const bMat2=capW.reduce((s,c)=>s+pieceVal2(c),0);
+            const bottomIsMe=pCol==="w";
+            const myCaptures=bottomIsMe?capB:capW;
+            const myAdvantage=bottomIsMe?Math.max(0,wMat2-bMat2):Math.max(0,bMat2-wMat2);
+            const myLow=pT.time<30000&&on&&!over;
+            return <div style={{
+              display:"flex",alignItems:"center",justifyContent:"space-between",
+              width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
+              padding:"5px 0",marginTop:2,gap:8,
+              borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
+              paddingLeft:6,transition:"border-color 200ms",
+            }}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+                  background:"rgba(255,255,255,0.08)",border:`1px solid ${CC.border}`,fontSize:16,flexShrink:0}}>
+                  👤
+                </div>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:13,fontWeight:800,color:CC.text}}>Вы</span>
+                    <span style={{fontSize:10,fontWeight:700,color:CC.accent,background:CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{rat}</span>
+                    <span style={{fontSize:10,color:CC.textDim}}>{gRank(rat).t}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:2,marginTop:1}}>
+                    {myCaptures.map((c,i)=><span key={i} style={{fontSize:12,lineHeight:1,color:CC.textDim}}>{c}</span>)}
+                    {myAdvantage>0&&<span style={{fontSize:10,fontWeight:800,color:CC.brand,marginLeft:2}}>+{myAdvantage}</span>}
+                  </div>
+                </div>
+              </div>
+              {tc.ini>0&&<div style={{
+                fontSize:20,fontWeight:900,fontFamily:"ui-monospace,monospace",letterSpacing:-0.5,
+                color:myLow?"#e04040":myT&&on&&!over?CC.brand:CC.textMute,
+                padding:"4px 10px",borderRadius:6,
+                background:myT&&on&&!over?"rgba(255,255,255,0.04)":"transparent",
+                animation:myLow&&myT&&on&&!over?"cc-clock-pulse 1s ease-in-out infinite":undefined,
+              }}>{fmt(pT.time)}</div>}
+            </div>;
+          })()}
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
@@ -5040,32 +5242,33 @@ export default function CyberChessPage(){
 
         {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
             and media pane get more breathing room. */}
-        {wsShowRight&&<div className="cc-right-panel" style={{flex:"0 1 360px",minWidth:300,maxWidth:420,display:"flex",flexDirection:"column",gap:10}}>
+        {wsShowRight&&<div className="cc-right-panel" style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
+          {/* Tools toolbar — compact icon row, без заголовка */}
           <div style={{
-            padding:"10px 12px",borderRadius:RADIUS.lg,
+            display:"flex",gap:4,flexWrap:"wrap",
+            padding:"6px 8px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
-            display:"flex",flexDirection:"column",gap:8
           }}>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:800,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const}}>
-              <span style={{fontSize:14}}>🛠</span>Инструменты
-            </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <Btn size="sm" variant="secondary" onClick={()=>sShowThreatMap(v=>!v)}
-                title="Подсветка контроля доски"
-                style={showThreatMap?{background:"linear-gradient(135deg,#fef2f2,#ecfdf5)",color:"#0f172a",borderColor:"#a7f3d0",fontWeight:900}:undefined}>
-                {showThreatMap?"🌡 Heatmap ON":"🌡 Heatmap"}
-              </Btn>
-              <Btn size="sm" variant="secondary" onClick={async()=>{
-                try{
-                  const text=await whisperAndSpeak(game.fen(),evalCp,evalMate);
-                  showToast(`🔊 ${text}`,"info");
-                }catch{showToast("Голос недоступен","error")}
-              }} title="Chessy объяснит позицию голосом"
-                style={{background:"linear-gradient(135deg,#f0fdfa,#ccfbf1)",color:"#115e59",borderColor:"#5eead4"}}>🔊 Whisper</Btn>
-              {savedGames.length>0&&<Btn size="sm" variant="secondary" onClick={()=>sGamesModalOpen(true)}>📜 История ({savedGames.length})</Btn>}
+            <button onClick={()=>sShowThreatMap(v=>!v)} title="Heatmap контроля доски"
+              style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                background:showThreatMap?CC.brandSoft:CC.surface2,
+                color:showThreatMap?CC.brand:CC.textDim}}>
+              🌡 Heatmap
+            </button>
+            <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast("Голос недоступен","error")}}}
+              title="Голосовой анализ позиции"
+              style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                background:CC.surface2,color:CC.textDim}}>
+              🔊 Whisper
+            </button>
+            {savedGames.length>0&&<button onClick={()=>sGamesModalOpen(true)}
+              style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
+                background:CC.surface2,color:CC.textDim}}>
+              📜 {savedGames.length}
+            </button>}
               {over&&fenHist.length>2&&<>
                 <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
                   const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
@@ -5092,7 +5295,6 @@ export default function CyberChessPage(){
                   showToast("SVG скачан — открой в браузере чтобы поделиться","success");
                 }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
               </>}
-            </div>
           </div>
           {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
               (it reads as "noise" when user is focused on the board). Shown in puzzles tab
@@ -5113,7 +5315,9 @@ export default function CyberChessPage(){
           {/* ─── Coach Quick Actions ─── in-game heuristic-driven coach buttons. Each runs a
               deterministic position evaluation + Stockfish suggestion and shows a coach-style
               explanation card. Available in Coach tab + Play tab when game is on. */}
-          {(tab==="play"||tab==="coach")&&on&&!over&&!setup&&sfOk&&<div style={{
+          {/* Coach Quick Actions доступны без SF — "Объясни" и "Слабости" работают на эвристике.
+              "Найди план" и "Тактика" сами проверяют sfR.current?.ready() */}
+          {tab==="coach"&&on&&!over&&!setup&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.lg,
             background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
             display:"flex",flexDirection:"column",gap:8
@@ -6079,18 +6283,40 @@ export default function CyberChessPage(){
                   const annotColor=(s?:string)=>ANNOT_SYMS.find(a=>a.s===s)?.c||T.text;
                   const openAnnot=(ply:number,e:React.MouseEvent)=>{if(tab!=="analysis")return;e.preventDefault();e.stopPropagation();sAnnotPicker({ply,x:Math.min(e.clientX,window.innerWidth-140),y:Math.min(e.clientY,window.innerHeight-120)});};
                   return <React.Fragment key={i}>
-                    <span data-pair-idx={i} data-active={isActivePair?"1":undefined} style={{color:T.dim,fontWeight:700,textAlign:"center",padding:"5px 0",background:isActivePair?"rgba(5,150,105,0.10)":"#fafafa",borderRight:`1px solid ${T.border}`,fontSize:12}}>{i+1}</span>
+                    {/* Move number */}
+                    <span data-pair-idx={i} data-active={isActivePair?"1":undefined}
+                      style={{color:CC.textMute,fontWeight:700,textAlign:"center",padding:"5px 0",
+                        background:isActivePair?CC.brandSoft:CC.surface2,
+                        borderRight:`1px solid ${CC.border}`,fontSize:11,fontFamily:"ui-monospace,monospace"}}>
+                      {i+1}
+                    </span>
+                    {/* White move */}
                     <span onMouseEnter={()=>{if(white)previewMove(wIdx)}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
                       title={tab==="analysis"?"Правый клик — добавить аннотацию":undefined}
-                      style={{color:T.text,fontWeight:600,padding:"5px 10px",background:wIsPreview?"rgba(245,158,11,0.20)":wIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:wIsPreview?`3px solid #f59e0b`:wIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>{white||""}{wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,marginLeft:2,fontSize:12}}>{wAnnot}</span>}{!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3}}>{qIcon(wQ)}</span>}</span>
-                      {wEval&&<span style={{fontSize:10,color:wEval.cp>0?T.accent:wEval.cp<0?T.danger:T.dim,fontWeight:700}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
+                      style={{
+                        color:wIsBrowsed?CC.brand:CC.text,fontWeight:wIsBrowsed?900:600,
+                        padding:"5px 8px",fontSize:13,
+                        background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:"transparent",
+                        borderLeft:wIsPreview?`3px solid ${CC.gold}`:wIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
+                        cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
+                        transition:"background 100ms",
+                      }}>
+                      <span>{white||""}{wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,marginLeft:2,fontSize:11}}>{wAnnot}</span>}{!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3,fontSize:11}}>{qIcon(wQ)}</span>}</span>
+                      {wEval&&<span style={{fontSize:10,color:wEval.cp>0?CC.brand:wEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
                     </span>
+                    {/* Black move */}
                     <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
                       title={tab==="analysis"&&black?"Правый клик — добавить аннотацию":undefined}
-                      style={{color:T.text,fontWeight:600,padding:"5px 10px",background:bIsPreview?"rgba(245,158,11,0.20)":bIsBrowsed?"rgba(5,150,105,0.15)":"transparent",borderLeft:bIsPreview?`3px solid #f59e0b`:bIsBrowsed?`3px solid ${T.accent}`:"3px solid transparent",cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span>{black||""}{bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,marginLeft:2,fontSize:12}}>{bAnnot}</span>}{!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3}}>{qIcon(bQ)}</span>}</span>
-                      {bEval&&<span style={{fontSize:10,color:bEval.cp>0?T.accent:bEval.cp<0?T.danger:T.dim,fontWeight:700}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
+                      style={{
+                        color:bIsBrowsed?CC.brand:CC.textDim,fontWeight:bIsBrowsed?900:500,
+                        padding:"5px 8px",fontSize:13,
+                        background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:"transparent",
+                        borderLeft:bIsPreview?`3px solid ${CC.gold}`:bIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
+                        cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",
+                        transition:"background 100ms",
+                      }}>
+                      <span>{black||""}{bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,marginLeft:2,fontSize:11}}>{bAnnot}</span>}{!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3,fontSize:11}}>{qIcon(bQ)}</span>}</span>
+                      {bEval&&<span style={{fontSize:10,color:bEval.cp>0?CC.brand:bEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
                     </span>
                   </React.Fragment>;
                 })}
@@ -9902,6 +10128,10 @@ ${question.trim()}`;
         );
         return <div style={{display:"flex",flexDirection:"column",gap:SPACE[3]}}>
           <div>
+            <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🌗 Внешний вид</div>
+            <Row label="Тёмная тема" desc="Тёмный фон, светлый текст. Темы доски и набор фигур не меняются." checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?"Светлая тема":"Тёмная тема","info")}}/>
+          </div>
+          <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>
             <Row label="Звук в игре" desc="Хлопки фигур, шах, мат, сигналы." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
             <Row label="Голосовые комментарии" desc="Coach зачитывает важные моменты партии (Chrome)." checked={liveCommentary} onChange={()=>sLiveCommentary(v=>!v)}/>
@@ -9909,12 +10139,68 @@ ${question.trim()}`;
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();
               sMasterVoice(v=>!v);
             }}/>
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Звуки фигур — 40 пресетов + молчание</div>
+              <div style={{fontSize:12,color:CC.textDim,lineHeight:1.4,marginBottom:SPACE[2]}}>
+                Сейчас: <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.name}</b>
+              </div>
+              {(["classic","exotic","silent"] as const).map(cat=>{
+                const items=CHESS_SOUND_PRESETS.filter(p=>p.category===cat);
+                if(items.length===0)return null;
+                const catLabel=cat==="classic"?"Классические":cat==="exotic"?"Нетиповые":"Тишина";
+                return <div key={cat} style={{marginBottom:SPACE[2]}}>
+                  <div style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>{catLabel}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {items.map(p=>{
+                      const selected=soundPresetId===p.id;
+                      return <button key={p.id}
+                        onClick={()=>{sSoundPresetId(p.id);playChessSound(p.id,"move");showToast(`${p.emoji} ${p.name}`,"info")}}
+                        title={p.desc}
+                        style={{
+                          padding:"4px 8px",borderRadius:RADIUS.full,
+                          border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                          background:selected?CC.brandSoft:CC.surface1,
+                          color:selected?CC.text:CC.textDim,
+                          cursor:"pointer",fontSize:11,fontWeight:selected?800:600,
+                          transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                          whiteSpace:"nowrap" as const,
+                        }}>
+                        {p.emoji} {p.name}
+                      </button>;
+                    })}
+                  </div>
+                </div>;
+              })}
+              <div style={{fontSize:11,color:CC.textMute,marginTop:4}}>Клик по пресету — мгновенный preview хода.</div>
+            </div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
             <Row label="Auto-queen (превращение в ферзя)" desc="Пешка на 8-й сразу становится ферзём — без модалки. Для bullet/blitz и премувов. Выключи если нужны underpromotions (конь, ладья, слон)." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
             <Row label="Threat Heatmap" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
             <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Глубина анализа Stockfish (F2-3)</div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>Для CPI и top-3 metrics. Не влияет на силу противника. <b style={{color:CC.text}}>Сейчас: depth={sfDepth}</b></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {[{d:14,lbl:"⚡ 14 (быстро)"},{d:18,lbl:"🎯 18 (баланс)"},{d:22,lbl:"📈 22 (точнее)"},{d:25,lbl:"🔬 25 (макс)"},{d:30,lbl:"🧠 30 (NNUE deep)"}].map(opt=>{
+                  const selected=sfDepth===opt.d;
+                  return <button key={opt.d}
+                    onClick={()=>{sSfDepth(opt.d);showToast(`Stockfish depth=${opt.d}`,"info")}}
+                    style={{
+                      padding:"5px 10px",borderRadius:RADIUS.full,
+                      border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                      background:selected?CC.brandSoft:CC.surface1,
+                      color:selected?CC.text:CC.textDim,
+                      cursor:"pointer",fontSize:11,fontWeight:selected?800:600,
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`,
+                    }}>
+                    {opt.lbl}
+                  </button>;
+                })}
+              </div>
+              <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>Чем выше — тем точнее CPI, но дольше ожидание (depth 25+ может занимать 1-2 сек на ход).</div>
+            </div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>📚 Анализ</div>
@@ -10329,6 +10615,8 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
+    <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

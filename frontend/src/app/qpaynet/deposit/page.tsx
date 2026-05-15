@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { apiUrl } from "@/lib/apiBase";
 
 import { useState, useEffect } from "react";
@@ -50,48 +50,50 @@ function DepositForm() {
   }
 
   if (done) return (
-    <div className="text-center py-12">
-      <div className="text-4xl mb-4">✅</div>
+    <div className="text-center py-12 px-4">
+      <div className="text-5xl mb-4" aria-hidden>✅</div>
       <h2 className="text-xl font-bold mb-2">Пополнено!</h2>
       <p className="text-slate-400 text-sm mb-6">Новый баланс: <strong className="text-emerald-400">{done.newBalance.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₸</strong></p>
-      <button onClick={() => router.push("/qpaynet")} className="px-6 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-semibold">← К кошельку</button>
+      <button onClick={() => router.push("/qpaynet")} className="px-6 py-3 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-semibold min-h-[44px]">← К кошельку</button>
     </div>
   );
 
   return (
-    <div className="max-w-sm mx-auto py-12 px-6">
+    <div className="max-w-sm mx-auto py-8 sm:py-12 px-4 sm:px-6">
       <h1 className="text-xl font-bold mb-6">Пополнить кошелёк</h1>
       <div className="space-y-4">
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">Сумма (тенге)</label>
-          <div className="flex gap-2 flex-wrap mb-2">
+          <label htmlFor="qpaynet-deposit-amount" className="text-xs text-slate-400 mb-1 block">Сумма (тенге)</label>
+          <div className="grid grid-cols-4 gap-2 mb-2">
             {[1000,5000,10000,50000].map(n => (
-              <button key={n} onClick={() => setAmount(String(n))}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${amount === String(n) ? "bg-violet-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
-                {n.toLocaleString("ru-RU")} ₸
+              <button key={n} type="button" onClick={() => setAmount(String(n))}
+                aria-pressed={amount === String(n)}
+                className={`px-2 py-2.5 rounded-lg text-xs font-semibold min-h-[40px] ${amount === String(n) ? "bg-violet-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
+                {n >= 1000 ? `${n / 1000}k` : n}<span className="hidden xs:inline"> ₸</span>
               </button>
             ))}
           </div>
-          <input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)}
+          <input id="qpaynet-deposit-amount" type="number" min="1" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)}
             placeholder="Сумма в тенге"
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500" />
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40" />
         </div>
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">Описание (опционально)</label>
-          <input type="text" value={description} onChange={e => setDescription(e.target.value)}
+          <label htmlFor="qpaynet-deposit-desc" className="text-xs text-slate-400 mb-1 block">Описание (опционально)</label>
+          <input id="qpaynet-deposit-desc" type="text" value={description} onChange={e => setDescription(e.target.value)}
             placeholder="Пополнение через карту"
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500" />
+            maxLength={500}
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40" />
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
         <button onClick={handleCard} disabled={loading || !amount}
-          className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-xl font-semibold flex items-center justify-center gap-2">
-          {loading ? "..." : <>💳 Оплатить картой{amount ? ` ${parseFloat(amount).toLocaleString("ru-RU")} ₸` : ""}</>}
+          className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[48px]">
+          {loading ? "..." : <><span aria-hidden>💳</span> Оплатить картой{amount ? ` ${parseFloat(amount).toLocaleString("ru-RU")} ₸` : ""}</>}
         </button>
         <button onClick={handleDeposit} disabled={loading || !amount}
-          className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 rounded-xl text-sm border border-slate-700">
-          🧪 Тестовое пополнение (без карты)
+          className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 rounded-xl text-sm border border-slate-700 min-h-[44px]">
+          <span aria-hidden>🧪</span> Тестовое пополнение (без карты)
         </button>
-        <Link href="/qpaynet" className="block text-center text-xs text-slate-500 hover:text-slate-300">← Назад</Link>
+        <Link href="/qpaynet" className="block text-center text-xs text-slate-500 hover:text-slate-300 py-2">← Назад</Link>
       </div>
     </div>
   );

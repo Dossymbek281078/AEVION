@@ -58,6 +58,38 @@ async function run() {
     console.log("\n5. [Skipping auth flow — no TEST_JWT]");
   }
 
+  console.log("\n6. Recommendations (anonymous → popular fallback)");
+  const recoAnon = await req("GET", "/api/qmedia/recommendations?limit=5");
+  assert("GET /recommendations → 200", recoAnon.status === 200, String(recoAnon.status));
+  assert("recommendations.items is array", Array.isArray(recoAnon.body?.items));
+  assert(
+    "anonymous mode === 'popular'",
+    recoAnon.body?.mode === "popular",
+    `mode=${recoAnon.body?.mode}`,
+  );
+  assert(
+    "limit param honoured (≤5)",
+    Array.isArray(recoAnon.body?.items) && recoAnon.body.items.length <= 5,
+    `len=${recoAnon.body?.items?.length}`,
+  );
+
+  if (JWT) {
+    console.log("\n6b. Recommendations (authenticated → personal or popular fallback)");
+    const recoAuth = await req("GET", "/api/qmedia/recommendations?limit=10", null, { Authorization: `Bearer ${JWT}` });
+    assert("GET /recommendations (auth) → 200", recoAuth.status === 200);
+    assert("auth mode in {personal,popular}", ["personal", "popular"].includes(recoAuth.body?.mode));
+    assert(
+      "auth response has profile object",
+      recoAuth.body && Object.prototype.hasOwnProperty.call(recoAuth.body, "profile"),
+    );
+  }
+
+  console.log("\n7. Trending");
+  const trending = await req("GET", "/api/qmedia/trending");
+  assert("GET /trending → 200", trending.status === 200, String(trending.status));
+  assert("trending.items array", Array.isArray(trending.body?.items));
+  assert("trending.genres array", Array.isArray(trending.body?.genres));
+
   console.log(`\nQMedia: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

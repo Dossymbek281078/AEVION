@@ -627,3 +627,767 @@ describe("v0.5 search + diff + fingerprint", () => {
     expect(fp1.length).toBe(fp2.length);
   });
 });
+
+// ── v0.6: extendedStats + moduleOfTheDay ───────────────────────────────────
+
+describe("AevionCatalog.extendedStats (v0.6)", () => {
+  it("no opts → /api/aevion/stats with no query string", async () => {
+    const body = {
+      total: 0, byStatus: {}, byKind: {}, byPriority: {},
+      topTags: [], coverage: {
+        health: { count: 0, total: 0, percent: 0 },
+        openapi: { count: 0, total: 0, percent: 0 },
+      },
+      recentActivity: [], generatedAt: "2026-01-01T00:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const s = await cat.extendedStats();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats");
+    expect(s.total).toBe(0);
+  });
+
+  it("recent=5 → ?recent=5", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: {
+        total: 1, byStatus: {}, byKind: {}, byPriority: {}, topTags: [],
+        coverage: { health: { count: 0, total: 1, percent: 0 }, openapi: { count: 0, total: 1, percent: 0 } },
+        recentActivity: [], generatedAt: "x",
+      },
+    });
+    await cat.extendedStats({ recent: 5 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats?recent=5");
+  });
+
+  it("recent clamped to [1..50] client-side before sending", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: {
+        total: 0, byStatus: {}, byKind: {}, byPriority: {}, topTags: [],
+        coverage: { health: { count: 0, total: 0, percent: 0 }, openapi: { count: 0, total: 0, percent: 0 } },
+        recentActivity: [], generatedAt: "x",
+      },
+    });
+    await cat.extendedStats({ recent: 999 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats?recent=50");
+    fetchMock.mockClear();
+    await cat.extendedStats({ recent: 0 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/stats?recent=1");
+  });
+
+  it("throws on HTTP error", async () => {
+    const { cat } = makeClient({ status: 500, body: { error: "boom" } });
+    await expect(cat.extendedStats()).rejects.toThrow(/HTTP 500/);
+  });
+});
+
+describe("AevionCatalog.moduleOfTheDay (v0.6)", () => {
+  const sampleBody = {
+    date: "2026-05-13", dayOfYear: 132, registrySize: 30,
+    module: {
+      id: "qright", code: "QRIGHT", name: "QRight", description: "",
+      kind: "product", status: "mvp", priority: 1, tags: ["ip"],
+      frontend: "https://aevion.app/qright",
+      ogImage: "https://aevion.app/qright/opengraph-image",
+      health: null, openapi: null, waitlist: null, status_url: null,
+      relatedModules: [],
+    },
+    tomorrow: { id: "qsign", code: "QSIGN", name: "QSign" },
+    generatedAt: "2026-05-13T00:00:00Z",
+  };
+
+  it("no opts → /api/aevion/module-of-the-day with no query string", async () => {
+    const { cat, fetchMock } = makeClient({ body: sampleBody });
+    const m = await cat.moduleOfTheDay();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/aevion/module-of-the-day");
+    expect(m.module.id).toBe("qright");
+    expect(m.tomorrow.id).toBe("qsign");
+  });
+
+  it("date='2026-05-13' → ?date=2026-05-13", async () => {
+    const { cat, fetchMock } = makeClient({ body: sampleBody });
+    await cat.moduleOfTheDay({ date: "2026-05-13" });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/aevion/module-of-the-day?date=2026-05-13",
+    );
+  });
+
+  it("rejects invalid date format before sending", async () => {
+    const { cat, fetchMock } = makeClient({ body: sampleBody });
+    await expect(cat.moduleOfTheDay({ date: "yesterday" })).rejects.toThrow(
+      /invalid date 'yesterday'/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("throws on HTTP 503 (empty registry)", async () => {
+    const { cat } = makeClient({ status: 503, body: { error: "registry-empty" } });
+    await expect(cat.moduleOfTheDay()).rejects.toThrow(/HTTP 503/);
+  });
+});
+
+// ── v0.6: QStore ───────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qstore (v0.6)", () => {
+  it("products() with no opts → /api/qstore/products (no query)", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { total: 0, sort: "popular", items: [] },
+    });
+    const r = await cat.qstore.products();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qstore/products");
+    expect(r.total).toBe(0);
+  });
+
+  it("products({ sort: 'trending' }) → ?sort=trending", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { total: 1, sort: "trending", items: [{ id: "p1", title: "Hot" }] },
+    });
+    await cat.qstore.products({ sort: "trending" });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qstore/products?sort=trending",
+    );
+  });
+
+  it("products({ sort: 'bogus' }) throws before sending", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() => cat.qstore.products({ sort: "bogus" as unknown as "popular" })).toThrow(
+      /invalid sort/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("featured() with no opts → /api/qstore/featured (no query)", async () => {
+    const body = { popular: [], trending: [], newest: [], topRated: [] };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qstore.featured();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qstore/featured");
+    expect(r).toEqual(body);
+  });
+
+  it("featured({ limit: 999 }) clamps to ?limit=50", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { popular: [], trending: [], newest: [], topRated: [] },
+    });
+    await cat.qstore.featured({ limit: 999 });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qstore/featured?limit=50");
+  });
+
+  it("products() throws on HTTP error", async () => {
+    const { cat } = makeClient({ status: 500, body: {} });
+    await expect(cat.qstore.products()).rejects.toThrow(/HTTP 500/);
+  });
+});
+
+// ── v0.6: QLearn ───────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qlearn (v0.6)", () => {
+  it("bookmark(id) → POST /api/qlearn/courses/:id/bookmark", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { ok: true, bookmarked: true, courseId: "smeta-101" },
+    });
+    const r = await cat.qlearn.bookmark("smeta-101");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qlearn/courses/smeta-101/bookmark",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.bookmarked).toBe(true);
+  });
+
+  it("unbookmark(id) → DELETE /api/qlearn/courses/:id/bookmark", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { ok: true, bookmarked: false, courseId: "smeta-101" },
+    });
+    await cat.qlearn.unbookmark("smeta-101");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("DELETE");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qlearn/courses/smeta-101/bookmark",
+    );
+  });
+
+  it("bookmark('') throws on invalid courseId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.qlearn.bookmark("")).rejects.toThrow(/invalid courseId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("bookmarks() → GET /api/qlearn/me/bookmarks", async () => {
+    const body = { total: 1, items: [{ id: "c1", title: "Course One" }] };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qlearn.bookmarks();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qlearn/me/bookmarks");
+    expect(r).toEqual(body);
+  });
+
+  it("streak() → GET /api/qlearn/me/streak with full shape", async () => {
+    const body = {
+      current: 4,
+      longest: 12,
+      totalDays: 30,
+      activeToday: true,
+      lastActiveAt: "2026-05-13T12:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qlearn.streak();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qlearn/me/streak");
+    expect(r.current).toBe(4);
+    expect(r.activeToday).toBe(true);
+  });
+
+  it("progress() → GET /api/qlearn/me/progress", async () => {
+    const body = {
+      summary: { total: 5, completed: 1, inProgress: 2, notStarted: 2 },
+      continueLearning: [{ courseId: "c1", progress: 0.4 }],
+      notStarted: [{ courseId: "c2", progress: 0 }],
+      completed: [{ courseId: "c3", progress: 1, completedAt: "2026-05-01" }],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qlearn.progress();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qlearn/me/progress");
+    expect(r.summary.total).toBe(5);
+    expect(r.continueLearning).toHaveLength(1);
+  });
+});
+
+// ── v0.6: QEvents ──────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qevents (v0.6)", () => {
+  it("list() with no opts → /api/qevents/events", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { total: 0, when: "upcoming", items: [] },
+    });
+    await cat.qevents.list();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qevents/events");
+  });
+
+  it("list({ when: 'past' }) → ?when=past", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { total: 0, when: "past", items: [] },
+    });
+    await cat.qevents.list({ when: "past" });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qevents/events?when=past",
+    );
+  });
+
+  it("list({ when: 'sometime' }) throws before sending", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() =>
+      cat.qevents.list({ when: "sometime" as unknown as "upcoming" }),
+    ).toThrow(/invalid when/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ics(id) → GET /api/qevents/events/:id/ics returning raw text", async () => {
+    const icsText = "BEGIN:VCALENDAR\nVERSION:2.0\nEND:VCALENDAR";
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      text: async () => icsText,
+    } as unknown as Response));
+    const cat = new AevionCatalog({ fetch: fetchMock as unknown as typeof fetch });
+    const r = await cat.qevents.ics("evt-1");
+    expect(r).toBe(icsText);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      "https://api.aevion.app/api/qevents/events/evt-1/ics",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect((init?.headers as Record<string, string>)?.Accept).toBe("text/calendar");
+  });
+
+  it("icsUrl(id) returns URL without fetching", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(cat.qevents.icsUrl("evt-42")).toBe(
+      "https://api.aevion.app/api/qevents/events/evt-42/ics",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ics('') throws on invalid eventId", async () => {
+    const { cat } = makeClient({ body: "" });
+    await expect(cat.qevents.ics("")).rejects.toThrow(/invalid eventId/);
+  });
+});
+
+// ── v0.6: DevHub ───────────────────────────────────────────────────────────
+
+describe("AevionCatalog.devhub (v0.6)", () => {
+  it("snippets() with no opts → /api/devhub/snippets", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.devhub.snippets();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/devhub/snippets");
+  });
+
+  it("snippets({ limit, tag, user }) sends all three query params", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.devhub.snippets({ limit: 10, tag: "ts", user: "alice" });
+    const url = urlFrom(fetchMock);
+    expect(url).toContain("limit=10");
+    expect(url).toContain("tag=ts");
+    expect(url).toContain("user=alice");
+  });
+
+  it("createSnippet(...) → POST /api/devhub/snippets with JSON body", async () => {
+    const created = {
+      id: "s1",
+      title: "Hello",
+      content: "console.log(1)",
+      language: "ts",
+      tags: ["demo"],
+    };
+    const { cat, fetchMock } = makeClient({ body: created });
+    const r = await cat.devhub.createSnippet({
+      title: "Hello",
+      content: "console.log(1)",
+      language: "ts",
+      tags: ["demo"],
+    });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/devhub/snippets");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>)?.["Content-Type"]).toBe(
+      "application/json",
+    );
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      title: "Hello",
+      content: "console.log(1)",
+      language: "ts",
+      tags: ["demo"],
+    });
+    expect(r).toEqual(created);
+  });
+
+  it("createSnippet without title throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() =>
+      cat.devhub.createSnippet({ title: "", content: "x", language: "ts" }),
+    ).toThrow(/missing title/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getSnippet(id) → GET /api/devhub/snippets/:id", async () => {
+    const body = {
+      id: "abc",
+      title: "T",
+      content: "C",
+      language: "ts",
+      tags: [],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.devhub.getSnippet("abc");
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/devhub/snippets/abc");
+    expect(r).toEqual(body);
+  });
+
+  it("star(id) → POST /api/devhub/snippets/:id/star", async () => {
+    const { cat, fetchMock } = makeClient({
+      body: { ok: true, starred: true, snippetId: "abc", stars: 7 },
+    });
+    const r = await cat.devhub.star("abc");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/devhub/snippets/abc/star",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.stars).toBe(7);
+  });
+
+  it("star('') throws on invalid snippetId", async () => {
+    const { cat } = makeClient({ body: {} });
+    await expect(cat.devhub.star("")).rejects.toThrow(/invalid snippetId/);
+  });
+});
+
+// ── v0.6: Planet ───────────────────────────────────────────────────────────
+
+describe("AevionCatalog.planet (v0.6)", () => {
+  it("activity() with no opts → /api/planet/activity (no query)", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.planet.activity();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/planet/activity");
+  });
+
+  it("activity({ limit: 5, kinds: ['release','post'] }) → ?limit=5&kinds=release,post", async () => {
+    const body = {
+      total: 1,
+      items: [
+        {
+          id: "a1",
+          kind: "release",
+          createdAt: "2026-05-13T10:00:00Z",
+        },
+      ],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    await cat.planet.activity({ limit: 5, kinds: ["release", "post"] });
+    const url = urlFrom(fetchMock);
+    expect(url).toContain("limit=5");
+    expect(url).toMatch(/kinds=(release%2Cpost|release,post)/);
+  });
+
+  it("activity({ kinds: 'event' }) accepts a single string", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.planet.activity({ kinds: "event" });
+    expect(urlFrom(fetchMock)).toContain("kinds=event");
+  });
+
+  it("activity() returns parsed items with kind", async () => {
+    const body = {
+      total: 1,
+      items: [
+        {
+          id: "x",
+          kind: "module_update",
+          module: "qsign",
+          createdAt: "2026-05-13T10:00:00Z",
+        },
+      ],
+    };
+    const { cat } = makeClient({ body });
+    const r = await cat.planet.activity();
+    expect(r.items[0].kind).toBe("module_update");
+    expect(r.items[0].module).toBe("qsign");
+  });
+});
+
+// ── v0.6: shared headers + custom config ───────────────────────────────────
+
+describe("AevionCatalog v0.6 shared infra", () => {
+  it("config.headers is applied to sub-client requests", async () => {
+    const fetchMock = mockFetch({
+      body: { total: 0, sort: "popular", items: [] },
+    });
+    const cat = new AevionCatalog({
+      fetch: fetchMock as unknown as typeof fetch,
+      headers: { Authorization: "Bearer test-token", "X-User-Id": "u1" },
+    });
+    await cat.qstore.products();
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const h = (init?.headers as Record<string, string>) ?? {};
+    expect(h.Authorization).toBe("Bearer test-token");
+    expect(h["X-User-Id"]).toBe("u1");
+    // Accept still set to application/json
+    expect(h.Accept).toBe("application/json");
+  });
+
+  it("sub-clients are wired on the root client", () => {
+    const { cat } = makeClient({ body: {} });
+    expect(cat.qstore).toBeDefined();
+    expect(cat.qlearn).toBeDefined();
+    expect(cat.qevents).toBeDefined();
+    expect(cat.devhub).toBeDefined();
+    expect(cat.planet).toBeDefined();
+  });
+});
+
+// ── v0.7: QCoreAI ──────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qcoreai (v0.7)", () => {
+  it("providers() → GET /api/qcoreai/providers", async () => {
+    const body = {
+      providers: [
+        { id: "openai", name: "OpenAI", enabled: true, models: ["gpt-4o"] },
+        { id: "anthropic", name: "Anthropic", enabled: true, models: ["claude-opus-4.7"] },
+      ],
+      count: 2,
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qcoreai.providers();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qcoreai/providers");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("GET");
+    expect(r.providers).toHaveLength(2);
+    expect(r.providers[0].id).toBe("openai");
+  });
+
+  it("health() → GET /api/qcoreai/health", async () => {
+    const body = {
+      status: "ok",
+      providers: { openai: { ok: true, status: 200, durationMs: 42 } },
+      timestamp: "2026-05-14T00:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qcoreai.health();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qcoreai/health");
+    expect(r.status).toBe("ok");
+  });
+
+  it("chat(...) → POST /api/qcoreai/chat with JSON body", async () => {
+    const reply = {
+      provider: "openai",
+      model: "gpt-4o",
+      message: { role: "assistant", content: "hi" },
+    };
+    const { cat, fetchMock } = makeClient({ body: reply });
+    const r = await cat.qcoreai.chat({
+      provider: "openai",
+      model: "gpt-4o",
+      messages: [{ role: "user", content: "hello" }],
+      temperature: 0.7,
+    });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qcoreai/chat");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>)?.["Content-Type"]).toBe(
+      "application/json",
+    );
+    const parsed = JSON.parse(String((init as { body?: string })?.body));
+    expect(parsed.provider).toBe("openai");
+    expect(parsed.model).toBe("gpt-4o");
+    expect(parsed.messages).toEqual([{ role: "user", content: "hello" }]);
+    expect(parsed.temperature).toBe(0.7);
+    expect(r).toEqual(reply);
+  });
+
+  it("chat() with empty messages throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() => cat.qcoreai.chat({ messages: [] })).toThrow(/missing messages/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.7: Multichat ────────────────────────────────────────────────────────
+
+describe("AevionCatalog.multichat (v0.7)", () => {
+  it("providerStatus() → GET /api/multichat/provider-status", async () => {
+    const body = {
+      providers: [
+        { id: "openai", name: "OpenAI", status: "online", latencyMs: 120 },
+        { id: "anthropic", name: "Anthropic", status: "online", latencyMs: 200 },
+      ],
+      generatedAt: "2026-05-14T00:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.multichat.providerStatus();
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/multichat/provider-status",
+    );
+    expect(r.providers).toHaveLength(2);
+    expect(r.providers[0].status).toBe("online");
+  });
+
+  it("presets() → GET /api/multichat/presets", async () => {
+    const body = {
+      total: 1,
+      presets: [
+        { id: "brainstorm", name: "Brainstorm", providers: ["openai", "anthropic"] },
+      ],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.multichat.presets();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/multichat/presets");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("GET");
+    expect(r.presets[0].id).toBe("brainstorm");
+  });
+
+  it("launchPreset(id) → POST /api/multichat/presets/:id/launch", async () => {
+    const body = {
+      ok: true,
+      sessionId: "sess-123",
+      presetId: "brainstorm",
+      providers: ["openai", "anthropic"],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.multichat.launchPreset("brainstorm");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/multichat/presets/brainstorm/launch",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.sessionId).toBe("sess-123");
+    expect(r.ok).toBe(true);
+  });
+
+  it("launchPreset('') throws on invalid presetId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.multichat.launchPreset("")).rejects.toThrow(/invalid presetId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.7: QMedia ───────────────────────────────────────────────────────────
+
+describe("AevionCatalog.qmedia (v0.7)", () => {
+  it("recommendations() with no opts → /api/qmedia/recommendations (no query)", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.qmedia.recommendations();
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/recommendations",
+    );
+  });
+
+  it("recommendations({ limit: 10 }) → ?limit=10", async () => {
+    const body = {
+      total: 1,
+      items: [{ id: "t1", title: "Theta Wave", durationSec: 1800 }],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.recommendations({ limit: 10 });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/recommendations?limit=10",
+    );
+    expect(r.items[0].id).toBe("t1");
+  });
+
+  it("recommendations({ limit: 999 }) clamps to ?limit=100", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.qmedia.recommendations({ limit: 999 });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/recommendations?limit=100",
+    );
+  });
+
+  it("trending() → GET /api/qmedia/trending", async () => {
+    const body = {
+      total: 2,
+      items: [
+        { id: "t1", title: "Hot 1" },
+        { id: "t2", title: "Hot 2" },
+      ],
+      window: "24h",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.trending();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qmedia/trending");
+    expect(r.items).toHaveLength(2);
+    expect(r.window).toBe("24h");
+  });
+
+  it("tracks() → GET /api/qmedia/tracks", async () => {
+    const body = { total: 1, items: [{ id: "t1", title: "Solo" }] };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.tracks();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qmedia/tracks");
+    expect(r.items[0].title).toBe("Solo");
+  });
+});
+
+// ── v0.7: Coach ────────────────────────────────────────────────────────────
+
+describe("AevionCatalog.coach (v0.7)", () => {
+  it("sessions() → GET /api/coach/sessions", async () => {
+    const body = {
+      total: 1,
+      items: [{ id: "s1", title: "Week 1 check-in", durationMin: 30 }],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.sessions();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/sessions");
+    expect(r.items[0].id).toBe("s1");
+  });
+
+  it("goals() with no opts → /api/coach/goals (no query)", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.coach.goals();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/goals");
+  });
+
+  it("goals({ completed: true }) → ?completed=true", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.coach.goals({ completed: true });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals?completed=true",
+    );
+  });
+
+  it("goals({ completed: false }) → ?completed=false", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.coach.goals({ completed: false });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals?completed=false",
+    );
+  });
+
+  it("createGoal({ title, description, dueDate }) → POST with JSON body", async () => {
+    const created = {
+      id: "g1",
+      title: "Ship v0.7",
+      description: "Add 4 sub-clients",
+      dueDate: "2026-06-01",
+      completed: false,
+    };
+    const { cat, fetchMock } = makeClient({ body: created });
+    const r = await cat.coach.createGoal({
+      title: "Ship v0.7",
+      description: "Add 4 sub-clients",
+      dueDate: "2026-06-01",
+    });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/goals");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect((init?.headers as Record<string, string>)?.["Content-Type"]).toBe(
+      "application/json",
+    );
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      title: "Ship v0.7",
+      description: "Add 4 sub-clients",
+      dueDate: "2026-06-01",
+    });
+    expect(r).toEqual(created);
+  });
+
+  it("createGoal without title throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() => cat.coach.createGoal({ title: "" })).toThrow(/missing title/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("createGoal with invalid dueDate throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() =>
+      cat.coach.createGoal({ title: "x", dueDate: "tomorrow" }),
+    ).toThrow(/invalid dueDate/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("completeGoal(id) → POST /api/coach/goals/:id/complete", async () => {
+    const body = {
+      ok: true,
+      goalId: "g1",
+      completed: true,
+      completedAt: "2026-05-14T10:00:00Z",
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.completeGoal("g1");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals/g1/complete",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.completed).toBe(true);
+    expect(r.goalId).toBe("g1");
+  });
+
+  it("completeGoal('') throws on invalid goalId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.coach.completeGoal("")).rejects.toThrow(/invalid goalId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.7: sub-clients wired ────────────────────────────────────────────────
+
+describe("AevionCatalog v0.7 shared infra", () => {
+  it("new sub-clients are wired on the root client", () => {
+    const { cat } = makeClient({ body: {} });
+    expect(cat.qcoreai).toBeDefined();
+    expect(cat.multichat).toBeDefined();
+    expect(cat.qmedia).toBeDefined();
+    expect(cat.coach).toBeDefined();
+  });
+
+  it("config.headers is forwarded to v0.7 sub-client requests", async () => {
+    const fetchMock = mockFetch({ body: { providers: [], count: 0 } });
+    const cat = new AevionCatalog({
+      fetch: fetchMock as unknown as typeof fetch,
+      headers: { Authorization: "Bearer v07-token", "X-User-Id": "u7" },
+    });
+    await cat.qcoreai.providers();
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const h = (init?.headers as Record<string, string>) ?? {};
+    expect(h.Authorization).toBe("Bearer v07-token");
+    expect(h["X-User-Id"]).toBe("u7");
+    expect(h.Accept).toBe("application/json");
+  });
+});

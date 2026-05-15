@@ -5,10 +5,12 @@
  * Keys are in format `aev_(test|live)_<32 random hex>`.
  *
  * Endpoints:
- *   POST   /api/keys        — create key (returns raw key ONCE)
- *   GET    /api/keys        — list keys (no raw values)
- *   DELETE /api/keys/:id   — revoke key
- *   GET    /api/keys/verify — verify a key (used by downstream services)
+ *   POST   /api/keys           — create key (returns raw key ONCE)
+ *   GET    /api/keys           — list keys (no raw values)
+ *   PATCH  /api/keys/:id       — rename key
+ *   GET    /api/keys/:id/usage — usage stats + quota meter for a single key
+ *   DELETE /api/keys/:id       — revoke key
+ *   GET    /api/keys/verify    — verify a key (used by downstream services)
  *
  * Quota enforcement (Phase C) is gated on first paying B2B customer.
  * For now: Developer tier (1 key) is auto-assigned; upgrade flows TBD.
@@ -67,6 +69,21 @@ function generateKey(env: "test" | "live"): { raw: string; hash: string; prefix:
   const prefix = raw.slice(0, 12);
   return { raw, hash, prefix };
 }
+
+// Tier quotas — MUST stay in sync with apiQuotas.ts TIERS. Duplicated here to
+// avoid cross-route imports for a 4-row lookup.
+const TIER_MONTHLY_LIMIT: Record<string, number | null> = {
+  developer: 10_000,
+  build: 100_000,
+  scale: 1_000_000,
+  enterprise: null, // unlimited / contract-negotiated
+};
+const TIER_RATE_PER_MIN: Record<string, number | null> = {
+  developer: 100,
+  build: 500,
+  scale: 2000,
+  enterprise: null,
+};
 
 // ── POST /api/keys ─────────────────────────────────────────────────────────
 
@@ -184,6 +201,116 @@ apiKeysRouter.delete("/:id", async (req, res) => {
   } catch (err: unknown) {
     console.error("[apiKeys] revoke_key_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "revoke_key_failed" });
+  }
+});
+
+// ── PATCH /api/keys/:id — rename key ───────────────────────────────────────
+
+const renameLimiter = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false });
+
+apiKeysRouter.patch("/:id", renameLimiter, async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+
+    const { name } = req.body || {};
+    if (!name || typeof name !== "string") {
+      return res.status(400).json({ error: "name_required" });
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0 || trimmed.length > 80) {
+      return res.status(400).json({ error: "invalid_name", message: "Name must be 1-80 chars" });
+    }
+
+    const r = await pool.query(
+      `UPDATE "PlatformApiKey" SET "name" = $1
+       WHERE "id" = $2 AND "userId" = $3 AND "revokedAt" IS NULL
+       RETURNING "id","name","keyPrefix","env","tier"`,
+      [trimmed, req.params.id, auth.sub]
+    );
+
+    if ((r.rowCount ?? 0) === 0) {
+      return res.status(404).json({ error: "key_not_found_or_revoked" });
+    }
+    const row = r.rows[0] as any;
+    res.json({
+      ok: true,
+      key: {
+        id: row.id,
+        name: row.name,
+        prefix: row.keyPrefix + "…",
+        env: row.env,
+        tier: row.tier,
+      },
+    });
+  } catch (err: unknown) {
+    console.error("[apiKeys] rename_key_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "rename_key_failed" });
+  }
+});
+
+// ── GET /api/keys/:id/usage — per-key usage + quota meter ─────────────────
+//
+// Returns: { callsThisMonth, monthlyLimit, percentUsed, remaining,
+//            rateLimitPerMinute, tier, env, lastUsedAt, daysUntilReset }.
+// Used by the frontend quota meter UI on the keys list page.
+
+apiKeysRouter.get("/:id/usage", async (req, res) => {
+  try {
+    await ensureTables();
+    const auth = requireAuth(req, res);
+    if (!auth) return;
+
+    const r = await pool.query(
+      `SELECT "id","name","keyPrefix","env","tier","callsMonth","lastUsedAt","revokedAt","createdAt"
+       FROM "PlatformApiKey"
+       WHERE "id" = $1 AND "userId" = $2
+       LIMIT 1`,
+      [req.params.id, auth.sub]
+    );
+
+    if (r.rowCount === 0) {
+      return res.status(404).json({ error: "key_not_found" });
+    }
+
+    const row = r.rows[0] as any;
+    const tier = (row.tier as string) || "developer";
+    const monthlyLimit = TIER_MONTHLY_LIMIT[tier] ?? null;
+    const rateLimitPerMinute = TIER_RATE_PER_MIN[tier] ?? null;
+    const callsThisMonth = Number(row.callsMonth) || 0;
+    const percentUsed = monthlyLimit && monthlyLimit > 0
+      ? Math.min(100, Math.round((callsThisMonth / monthlyLimit) * 1000) / 10)
+      : 0;
+    const remaining = monthlyLimit ? Math.max(0, monthlyLimit - callsThisMonth) : null;
+
+    // Days until monthly counter resets (assume reset on the 1st of next month UTC)
+    const now = new Date();
+    const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0));
+    const daysUntilReset = Math.ceil((nextReset.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    res.json({
+      id: row.id,
+      name: row.name,
+      prefix: row.keyPrefix + "…",
+      env: row.env,
+      tier,
+      active: !row.revokedAt,
+      callsThisMonth,
+      monthlyLimit,
+      monthlyLimitDisplay: monthlyLimit === null ? "unlimited" : monthlyLimit.toLocaleString("en-US"),
+      percentUsed,
+      remaining,
+      rateLimitPerMinute,
+      lastUsedAt: row.lastUsedAt,
+      createdAt: row.createdAt,
+      revokedAt: row.revokedAt,
+      resetAt: nextReset.toISOString(),
+      daysUntilReset,
+    });
+  } catch (err: unknown) {
+    console.error("[apiKeys] usage_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "usage_failed" });
   }
 });
 

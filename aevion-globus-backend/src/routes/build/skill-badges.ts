@@ -1,4 +1,4 @@
-﻿/**
+/**
  * QBuild Skill Tests & Badges — verify candidates' competencies.
  *
  * 3 built-in tests: welding / concrete / electrician

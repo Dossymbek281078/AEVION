@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from "express";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pg = require("pg") as typeof import("pg");
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
@@ -184,4 +186,224 @@ cyberchessRouter.post("/tournament-finalized", async (req, res) => {
     replayed,
     finalizedAt: new Date().toISOString(),
   });
+});
+
+// =====================================================================
+// CPI (Chess Performance Index) — per-user multi-factor rating
+// 11 factors + overall composite for /cyberchess/cpi/leaderboard.
+// Lazy Prisma init (mirrors routes/puzzles.ts pattern). Offline mode
+// returns an empty leaderboard so the UI degrades gracefully when
+// DATABASE_URL is unset locally.
+// =====================================================================
+
+const CPI_FACTORS = [
+  "overall",
+  "accuracy",
+  "tactics",
+  "endgame",
+  "timing",
+  "aggression",
+  "timeControl",
+  "opening",
+  "defense",
+  "consistency",
+  "endgameTechnique",
+  "psychology",
+] as const;
+type CpiFactor = (typeof CPI_FACTORS)[number];
+
+// CPI store — raw pg (Prisma 7 requires adapter; raw pool avoids that dependency)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let cpiPool: any = null;
+let cpiDbReady = false;
+let cpiDbInitTried = false;
+
+async function ensureCpiDb(): Promise<void> {
+  if (cpiDbInitTried) return;
+  cpiDbInitTried = true;
+  if (!process.env.DATABASE_URL) {
+    console.log("[CyberchessCPI] No DATABASE_URL — offline mode");
+    return;
+  }
+  try {
+    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    // Create table if not exists (idempotent — mirrors Prisma schema migration)
+    // Ensure updatedAt has a default (table may have been created by prisma db push without one)
+    await pool.query(`ALTER TABLE IF EXISTS "CyberchessCpiState" ALTER COLUMN "updatedAt" SET DEFAULT now()`).catch(() => {});
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "CyberchessCpiState" (
+        "userId"            TEXT PRIMARY KEY,
+        "displayName"       TEXT,
+        "overall"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "accuracy"          DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "tactics"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "endgame"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "timing"            DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "aggression"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "timeControl"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "opening"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "defense"           DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "consistency"       DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "endgameTechnique"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "psychology"        DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "gamesPlayed"       INTEGER NOT NULL DEFAULT 0,
+        "updatedAt"         TIMESTAMP NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS "cpi_overall_idx"     ON "CyberchessCpiState" ("overall" DESC);
+      CREATE INDEX IF NOT EXISTS "cpi_tactics_idx"     ON "CyberchessCpiState" ("tactics" DESC);
+      CREATE INDEX IF NOT EXISTS "cpi_accuracy_idx"    ON "CyberchessCpiState" ("accuracy" DESC);
+      CREATE INDEX IF NOT EXISTS "cpi_endgame_idx"     ON "CyberchessCpiState" ("endgame" DESC);
+    `);
+    cpiPool = pool;
+    cpiDbReady = true;
+    console.log("[CyberchessCPI] pg connected — CPI store ready");
+  } catch (e) {
+    console.warn("[CyberchessCPI] pg init failed:", e instanceof Error ? e.message : e);
+  }
+}
+
+// Map Prisma camelCase factor names to quoted PG column names
+const PG_COL: Record<string, string> = {
+  overall: '"overall"', accuracy: '"accuracy"', tactics: '"tactics"',
+  endgame: '"endgame"', timing: '"timing"', aggression: '"aggression"',
+  timeControl: '"timeControl"', opening: '"opening"', defense: '"defense"',
+  consistency: '"consistency"', endgameTechnique: '"endgameTechnique"',
+  psychology: '"psychology"',
+};
+
+function parseFactor(raw: unknown): CpiFactor {
+  if (typeof raw === "string" && (CPI_FACTORS as readonly string[]).includes(raw)) {
+    return raw as CpiFactor;
+  }
+  return "overall";
+}
+
+function parseLimit(raw: unknown, def = 20, max = 100): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return def;
+  return Math.min(max, Math.floor(n));
+}
+
+function clampFactorValue(raw: unknown): number {
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// GET /api/cyberchess/cpi/leaderboard?factor=<factor>&limit=20
+// Public. factor defaults to "overall", limit max 100.
+cyberchessRouter.get("/cpi/leaderboard", async (req: Request, res: Response) => {
+  await ensureCpiDb();
+  const factor = parseFactor(req.query.factor);
+  const limit = parseLimit(req.query.limit, 20, 100);
+
+  if (!cpiDbReady) {
+    return res.json({ data: { items: [], offline: true, factor, limit } });
+  }
+
+  try {
+    const col = PG_COL[factor] ?? '"overall"';
+    const { rows } = await cpiPool!.query(
+      `SELECT "userId","displayName",${col} AS value,"gamesPlayed" FROM "CyberchessCpiState" ORDER BY ${col} DESC LIMIT $1`,
+      [limit],
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = rows.map((r: any, idx: number) => ({
+      userId: r.userId,
+      displayName: r.displayName ?? null,
+      value: r.value ?? 0,
+      rank: idx + 1,
+      gamesPlayed: r.gamesPlayed ?? 0,
+    }));
+    res.json({ data: { items, factor, limit } });
+  } catch (err) {
+    console.error("[CyberchessCPI] leaderboard:", err);
+    res.status(500).json({ error: "cpi_leaderboard_failed" });
+  }
+});
+
+// POST /api/cyberchess/cpi/upsert
+// Body: { userId, factors: {...11 floats...}, gamesPlayed, displayName? }
+// Trust-based MVP (no auth) — upserts the row idempotently.
+cyberchessRouter.post("/cpi/upsert", async (req: Request, res: Response) => {
+  await ensureCpiDb();
+  if (!cpiDbReady) {
+    return res.status(503).json({ error: "cpi_db_not_ready" });
+  }
+
+  const { userId, factors, gamesPlayed, displayName } = (req.body ?? {}) as {
+    userId?: unknown;
+    factors?: Record<string, unknown>;
+    gamesPlayed?: unknown;
+    displayName?: unknown;
+  };
+
+  if (typeof userId !== "string" || userId.length === 0) {
+    return res.status(400).json({ error: "userId (string) required" });
+  }
+  if (!factors || typeof factors !== "object") {
+    return res.status(400).json({ error: "factors (object) required" });
+  }
+
+  const games = Number(gamesPlayed);
+  const gp = Number.isFinite(games) && games >= 0 ? Math.floor(games) : 0;
+
+  const data: Record<string, number | string | null> = {
+    overall: clampFactorValue(factors.overall),
+    accuracy: clampFactorValue(factors.accuracy),
+    tactics: clampFactorValue(factors.tactics),
+    endgame: clampFactorValue(factors.endgame),
+    timing: clampFactorValue(factors.timing),
+    aggression: clampFactorValue(factors.aggression),
+    timeControl: clampFactorValue(factors.timeControl),
+    opening: clampFactorValue(factors.opening),
+    defense: clampFactorValue(factors.defense),
+    consistency: clampFactorValue(factors.consistency),
+    endgameTechnique: clampFactorValue(factors.endgameTechnique),
+    psychology: clampFactorValue(factors.psychology),
+    gamesPlayed: gp,
+  };
+  if (typeof displayName === "string" && displayName.length > 0) {
+    data.displayName = displayName.slice(0, 120);
+  }
+
+  try {
+    const cols = Object.keys(data);
+    const vals = Object.values(data);
+    const setClauses = cols.map((c, i) => `"${c}" = $${i + 2}`).join(", ");
+    const insertCols = ['"userId"', ...cols.map(c => `"${c}"`)].join(", ");
+    const insertVals = ["$1", ...cols.map((_, i) => `$${i + 2}`)].join(", ");
+    const { rows } = await cpiPool!.query(
+      `INSERT INTO "CyberchessCpiState" (${insertCols}) VALUES (${insertVals})
+       ON CONFLICT ("userId") DO UPDATE SET ${setClauses}, "updatedAt" = now()
+       RETURNING *`,
+      [userId, ...vals],
+    );
+    res.status(200).json({ data: rows[0] ?? null });
+  } catch (err) {
+    console.error("[CyberchessCPI] upsert:", err);
+    res.status(500).json({ error: "cpi_upsert_failed" });
+  }
+});
+
+// GET /api/cyberchess/cpi/me?userId=...
+// Returns current state of a single user, or null if not present.
+cyberchessRouter.get("/cpi/me", async (req: Request, res: Response) => {
+  await ensureCpiDb();
+  const userId = typeof req.query.userId === "string" ? req.query.userId : "";
+  if (!userId) {
+    return res.status(400).json({ error: "userId query param required" });
+  }
+  if (!cpiDbReady) {
+    return res.json({ data: null, offline: true });
+  }
+  try {
+    const { rows } = await cpiPool!.query(
+      `SELECT * FROM "CyberchessCpiState" WHERE "userId" = $1 LIMIT 1`,
+      [userId],
+    );
+    res.json({ data: rows[0] ?? null });
+  } catch (err) {
+    console.error("[CyberchessCPI] me:", err);
+    res.status(500).json({ error: "cpi_me_failed" });
+  }
 });

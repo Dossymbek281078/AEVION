@@ -373,55 +373,87 @@ qjobsRouter.post("/ai/match", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
 
-  const { skills, experience, preferences } = req.body as {
+  const { skills: reqSkills, experience, preferences } = req.body as {
     skills?: string[];
     experience?: string;
     preferences?: string;
   };
 
-  if (!Array.isArray(skills) || skills.length === 0) {
-    return res.status(400).json({ error: "skills array required" });
+  // Auto-fetch skills from QBuild skill-badges if not provided
+  let skills = Array.isArray(reqSkills) && reqSkills.length > 0 ? reqSkills : [];
+  if (skills.length === 0) {
+    try {
+      const { getPool: gp } = await import("../lib/dbPool");
+      const bp = gp();
+      const { rows: badges } = await bp.query(
+        `SELECT "testTitle" FROM "SkillBadge" WHERE "userId"=$1 AND "status"='active' LIMIT 10`,
+        [auth.sub],
+      );
+      if (badges.length > 0) skills = badges.map((b: { testTitle: string }) => b.testTitle);
+    } catch { /* ignore — QBuild table may not exist */ }
   }
 
-  const activeJobs = Array.from(memJobs.values()).filter((j) => j.isActive);
+  if (skills.length === 0) {
+    return res.status(400).json({ error: "skills array required (or link your QBuild profile)" });
+  }
+
+  // Load active jobs from Postgres (prefer) or in-memory
+  let activeJobs: JobPosting[] = [];
+  try {
+    if (isQJobsDbReady()) {
+      const { rows } = await pool.query(
+        `SELECT * FROM "QJobsPosting" WHERE "isActive"=TRUE ORDER BY "createdAt" DESC LIMIT 20`,
+      );
+      activeJobs = rows as JobPosting[];
+    }
+  } catch { /* ignore */ }
+  if (activeJobs.length === 0) activeJobs = Array.from(memJobs.values()).filter((j) => j.isActive);
 
   try {
     const provider = getProviders().find((p) => p.configured);
     if (provider) {
-      const jobSummaries = activeJobs.slice(0, 10).map((j) => ({
-        id: j.id, title: j.title, skills: j.skills, type: j.type,
+      const jobSummaries = activeJobs.slice(0, 15).map((j) => ({
+        id: j.id, title: j.title, company: j.company, skills: j.skills, type: j.type,
       }));
-      const prompt = `Given candidate skills: ${skills.join(", ")} and experience: ${experience ?? "not specified"}. Preferences: ${preferences ?? "none"}. From these jobs: ${JSON.stringify(jobSummaries)} Return JSON array of top 3 job IDs ranked by match: [{"jobId": "...", "matchScore": 0-100, "reason": "..."}]`;
+      const prompt = `You are a job-matching AI. Candidate profile:\n- Skills: ${skills.join(", ")}\n- Experience: ${experience ?? "not specified"}\n- Preferences: ${preferences ?? "none"}\n\nRate these jobs by match (0–100). Respond ONLY with a JSON array, no prose:\n[{"jobId":"...","matchScore":85,"reason":"2 matching skills: TypeScript, React"}]\n\nJobs:\n${JSON.stringify(jobSummaries)}`;
       const result = await callProvider(
         provider.id,
         [{ role: "user" as const, content: prompt }],
-        provider.defaultModel,
-        0.3,
+        provider.defaultModel ?? "gpt-4o-mini",
+        0.2,
       );
       const raw = result.reply.trim();
       const jsonStr = raw.includes("[") ? raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1) : "[]";
       const aiMatches = JSON.parse(jsonStr) as Array<{ jobId: string; matchScore: number; reason: string }>;
+      const jobMap = new Map(activeJobs.map((j) => [j.id, j]));
       const matches = aiMatches
-        .map((m) => { const job = memJobs.get(m.jobId); return job ? { job, matchScore: m.matchScore, reason: m.reason } : null; })
+        .filter((m) => m.matchScore >= 20)
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, 5)
+        .map((m) => {
+          const job = jobMap.get(m.jobId);
+          return job ? { job, score: m.matchScore / 100, reasons: [m.reason] } : null;
+        })
         .filter(Boolean);
-      return res.json({ matches, mode: "ai" });
+      return res.json({ matches, mode: "ai", skillsUsed: skills });
     }
   } catch {
     // fall through to simple match
   }
 
-  // Fallback: simple skill overlap
+  // Fallback: simple skill overlap scoring
   const lowerSkills = skills.map((s) => s.toLowerCase());
   const ranked = activeJobs
     .map((j) => {
-      const overlap = j.skills.filter((js) => lowerSkills.some((s) => js.toLowerCase().includes(s))).length;
-      return { job: j, matchScore: Math.min(100, overlap * 25), reason: `Matched ${overlap} skill(s)` };
+      const matched = j.skills.filter((js) => lowerSkills.some((s) => js.toLowerCase().includes(s)));
+      const score = Math.min(1, matched.length * 0.25);
+      return { job: j, score, reasons: matched.length > 0 ? [`Matched skills: ${matched.join(", ")}`] : [] };
     })
-    .filter((m) => m.matchScore > 0)
-    .sort((a, b) => b.matchScore - a.matchScore)
-    .slice(0, 3);
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 
-  return res.json({ matches: ranked, mode: "fallback" });
+  return res.json({ matches: ranked, mode: "fallback", skillsUsed: skills });
 });
 
 // ─── GET /api/qjobs/salary-insights ──────────────────────────────────────────

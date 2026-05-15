@@ -364,6 +364,114 @@ qmediaRouter.post("/me/playlists/:id/collaborators", async (req, res) => {
   } catch { res.status(500).json({ error: "add collaborator failed" }); }
 });
 
+/* ── Recommendations + Trending ── */
+
+/**
+ * Personalised recommendations:
+ *  - Build a "taste profile" from the caller's likes + tracks they've authored (genre + tag affinity).
+ *  - Score every public track they have NOT liked: genre match (3) + tag overlap (1 each) + popularity log boost.
+ *  - If unauthenticated OR profile is empty → fall back to most-played public tracks.
+ *
+ * Query: ?limit=20 (max 50)
+ * Response: { mode: "personal" | "popular", items: TrackRow[], profile?: { genres, tags } }
+ */
+qmediaRouter.get("/recommendations", async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+    const auth = verifyBearerOptional(req);
+    const allPublic = Array.from(memTracks.values()).filter((t) => t.isPublic);
+
+    // Anonymous → popular fallback
+    if (!auth?.sub) {
+      const items = [...allPublic].sort((a, b) => b.playCount - a.playCount).slice(0, limit);
+      return res.json({ mode: "popular", items, profile: null });
+    }
+
+    const userId = auth.sub;
+
+    // Liked track ids of this user
+    const likedTrackIds = new Set<string>();
+    for (const key of memLikes.keys()) {
+      if (!key.startsWith(`${userId}:track:`)) continue;
+      const parts = key.split(":");
+      if (parts.length === 3) likedTrackIds.add(parts[2]);
+    }
+
+    // Build taste profile from liked tracks + tracks user authored
+    const genreScore = new Map<string, number>();
+    const tagScore = new Map<string, number>();
+    const seedTracks: TrackRow[] = [];
+    for (const id of likedTrackIds) {
+      const t = memTracks.get(id);
+      if (t) seedTracks.push(t);
+    }
+    for (const t of memTracks.values()) {
+      if (t.userId === userId) seedTracks.push(t);
+    }
+    for (const t of seedTracks) {
+      genreScore.set(t.genre, (genreScore.get(t.genre) ?? 0) + 1);
+      for (const tag of t.tags) tagScore.set(tag.toLowerCase(), (tagScore.get(tag.toLowerCase()) ?? 0) + 1);
+    }
+
+    // No profile data → popular fallback (still report as such)
+    if (genreScore.size === 0 && tagScore.size === 0) {
+      const items = [...allPublic].sort((a, b) => b.playCount - a.playCount).slice(0, limit);
+      return res.json({ mode: "popular", items, profile: { genres: [], tags: [] } });
+    }
+
+    // Score every candidate the user hasn't already liked or authored
+    const seen = new Set<string>([...likedTrackIds]);
+    for (const t of memTracks.values()) if (t.userId === userId) seen.add(t.id);
+
+    const scored = allPublic
+      .filter((t) => !seen.has(t.id))
+      .map((t) => {
+        let score = 0;
+        score += (genreScore.get(t.genre) ?? 0) * 3;
+        for (const tag of t.tags) score += (tagScore.get(tag.toLowerCase()) ?? 0);
+        score += Math.log1p(t.playCount) * 0.5;
+        return { track: t, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((x) => x.track);
+
+    // If personalised pool is too thin, top up with popularity-ranked tracks
+    if (scored.length < limit) {
+      const have = new Set(scored.map((t) => t.id));
+      const filler = [...allPublic]
+        .filter((t) => !seen.has(t.id) && !have.has(t.id))
+        .sort((a, b) => b.playCount - a.playCount)
+        .slice(0, limit - scored.length);
+      scored.push(...filler);
+    }
+
+    const topGenres = [...genreScore.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([g]) => g);
+    const topTags = [...tagScore.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+
+    res.json({ mode: "personal", items: scored, profile: { genres: topGenres, tags: topTags } });
+  } catch { res.status(500).json({ error: "recommendations failed" }); }
+});
+
+/**
+ * Trending — overall tastemaker view, no auth needed.
+ * Returns top tracks by playCount + top genres by aggregate plays.
+ */
+qmediaRouter.get("/trending", async (_req, res) => {
+  try {
+    const allPublic = Array.from(memTracks.values()).filter((t) => t.isPublic);
+    const items = [...allPublic].sort((a, b) => b.playCount - a.playCount).slice(0, 10);
+    const genreAgg = new Map<string, number>();
+    for (const t of allPublic) genreAgg.set(t.genre, (genreAgg.get(t.genre) ?? 0) + t.playCount);
+    const genres = [...genreAgg.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([genre, plays]) => ({ genre, plays }));
+    res.json({ items, genres });
+  } catch { res.status(500).json({ error: "trending failed" }); }
+});
+
 /* ── Radio + Similar Tracks ── */
 
 qmediaRouter.get("/radio/:genre", async (req, res) => {

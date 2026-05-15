@@ -48,6 +48,70 @@ const CARDS = [
     cta: "Open badge builder",
     accent: "#8b5cf6",
   },
+  {
+    href: "/api-explorer/health",
+    title: "Health dashboard",
+    blurb:
+      "Live per-service latency sparklines across the AEVION fleet — a dev-focused complement to /status with response-time history and error counters.",
+    cta: "Open health dashboard",
+    accent: "#06b6d4",
+  },
+  {
+    href: "/api-explorer/openapi",
+    title: "OpenAPI inspector",
+    blurb:
+      "Aggregate API index across 19 modules and 30 services. Browse endpoints grouped by tag, inspect operations, copy paths into your client of choice.",
+    cta: "Open OpenAPI inspector",
+    accent: "#f59e0b",
+  },
+  {
+    href: "/api-explorer/sitemap",
+    title: "Sitemap viewer",
+    blurb:
+      "Parsed urlset rendered with priority bars and group-by toggles (path, changefreq, month). Quick way to audit indexable coverage end-to-end.",
+    cta: "Open sitemap viewer",
+    accent: "#0ea5e9",
+  },
+  {
+    href: "/api-explorer/version",
+    title: "Version + SDKs",
+    blurb:
+      "Backend uptime, release SHA, build timestamp and the catalogue of published TypeScript clients — one place to verify what's deployed and what's installable.",
+    cta: "Open version + SDKs",
+    accent: "#ec4899",
+  },
+  {
+    href: "/api-explorer/sdk",
+    title: "SDK playground",
+    blurb:
+      "Live demo of every @aevion/catalog-client method via dropdown. Pick a method, see the request, the response and the exact TypeScript snippet to copy.",
+    cta: "Open SDK playground",
+    accent: "#3b82f6",
+  },
+  {
+    href: "/api-explorer/graph",
+    title: "Module graph",
+    blurb:
+      "SVG force-directed visualisation of tag-overlap (Jaccard) similarity. Drag nodes, hover edges, see which modules cluster around shared concepts.",
+    cta: "Open module graph",
+    accent: "#f43f5e",
+  },
+  {
+    href: "/api-explorer/diff",
+    title: "Module diff",
+    blurb:
+      "Side-by-side compare two modules — field-by-field equality plus tag-Jaccard overlap. Spot drift, audit parity, document the deltas in one screen.",
+    cta: "Open module diff",
+    accent: "#22c55e",
+  },
+  {
+    href: "/api-explorer/search",
+    title: "Module search",
+    blurb:
+      "Live full-text search across name, code, description and tags with a relevance score per hit. Type to filter the catalogue in real time.",
+    cta: "Open module search",
+    accent: "#f97316",
+  },
 ];
 
 export default async function ApiExplorerIndexPage() {
@@ -86,13 +150,30 @@ export default async function ApiExplorerIndexPage() {
             . {total} modules, one taxonomy, three export formats. Build queries by clicking,
             then copy the URL, curl command or SDK snippet straight into your code.
           </p>
+          <div style={{ marginTop: 12 }}>
+            <span
+              style={{
+                display: "inline-block",
+                padding: "4px 10px",
+                borderRadius: 999,
+                background: "rgba(13,148,136,0.12)",
+                color: "#0d9488",
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+              }}
+            >
+              10 interactive tools · live data
+            </span>
+          </div>
         </div>
 
         <div
           style={{
             display: "grid",
             gap: 14,
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
             marginBottom: 28,
           }}
         >

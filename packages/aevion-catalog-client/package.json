@@ -1,6 +1,6 @@
 {
   "name": "@aevion/catalog-client",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges. Zero deps.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

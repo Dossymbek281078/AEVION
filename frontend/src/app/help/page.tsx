@@ -5,14 +5,19 @@ import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 
-type FAQ = { q: string; a: string };
+type FAQ = { q: string; a: string; updated?: string };
 type FaqCategory = "users" | "investors";
+
+// Threshold: anything updated within this many days gets the "Updated" pill.
+const RECENT_DAYS = 30;
 
 const investorFaqs: FAQ[] = [
   {
     q: "How is AEVION worth $1B+?",
     a: "Five independent axes: (1) first-mover monopoly on a unified IP+signature+bureau+compliance+wallet pipeline; (2) Trust Graph data moat that compounds with every action; (3) cross-vertical revenue across $340B TAM (IP, creator economy, payments) from a single codebase; (4) quantum-resistant crypto stack as institutional-grade trust signal; (5) 27 modules with near-zero marginal cost per node. The full breakdown lives at /pitch.",
+    updated: "2026-05-10",
   },
   {
     q: "What is the round size and use of proceeds?",
@@ -53,6 +58,7 @@ const investorFaqs: FAQ[] = [
   {
     q: "Can I see live product, not just slides?",
     a: "Yes — every module on /pitch is a working MVP. /qright registers IP in seconds. /bureau issues court-grade certificates. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
+    updated: "2026-05-08",
   },
   {
     q: "How do I follow up?",
@@ -68,6 +74,7 @@ const faqs: FAQ[] = [
   {
     q: "How do I register my intellectual property?",
     a: "Auth → create an account → QRight → fill title + description → click Protect. You walk away with: a SHA-256 content fingerprint, AEVION + your-browser Ed25519 co-signatures, a Shamir-split private key (any 2 of 3 shards reconstruct it; AEVION holds at most 1), an OpenTimestamps proof anchored in a Bitcoin block, and a Verification Bundle .json anyone can verify offline forever — even if AEVION shuts down.",
+    updated: "2026-05-12",
   },
   {
     q: "What is Planet Compliance?",
@@ -84,6 +91,7 @@ const faqs: FAQ[] = [
   {
     q: "Is my data safe?",
     a: "Yes. Quantum Shield combines Ed25519 with Shamir 2-of-3 Secret Sharing — the signing key is split across independent locations, AEVION holds at most one shard. QRight certificates also carry a co-signature held only in your browser, so even a full platform breach cannot forge new claims under your identity. Storage is encrypted, audit trails are Merkle-rooted, passwords are hashed, and private data never reaches the public Trust Graph.",
+    updated: "2026-05-05",
   },
   {
     q: "How does CyberChess work?",
@@ -95,11 +103,43 @@ const faqs: FAQ[] = [
   },
 ];
 
+function isRecent(iso?: string): boolean {
+  if (!iso) return false;
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return false;
+  const ageDays = (Date.now() - ts) / 86_400_000;
+  return ageDays >= 0 && ageDays <= RECENT_DAYS;
+}
+
+function formatDate(iso: string, lang: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const locale = lang === "ru" ? "ru-RU" : lang === "kk" ? "kk-KZ" : "en-US";
+    return d.toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
+type ContactState =
+  | { kind: "idle" }
+  | { kind: "sending" }
+  | { kind: "sent"; via: "api" | "mailto" }
+  | { kind: "error"; message: string };
+
 export default function HelpPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [open, setOpen] = useState<number | null>(null);
   const [category, setCategory] = useState<FaqCategory>("users");
   const [query, setQuery] = useState("");
+
+  // Contact form state
+  const [contactSubject, setContactSubject] = useState("");
+  const [contactTopic, setContactTopic] = useState<string>("general");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+  const [contactStatus, setContactStatus] = useState<ContactState>({ kind: "idle" });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -127,6 +167,104 @@ export default function HelpPage() {
     const lower = query.trim().toLowerCase();
     return baseFaqs.filter((f) => (f.q + " " + f.a).toLowerCase().includes(lower));
   }, [baseFaqs, query]);
+
+  // "Recently updated" digest — top 3 across both audiences, newest first.
+  const recentUpdates = useMemo(() => {
+    const all: Array<FAQ & { cat: FaqCategory }> = [
+      ...faqs.map((f) => ({ ...f, cat: "users" as const })),
+      ...investorFaqs.map((f) => ({ ...f, cat: "investors" as const })),
+    ];
+    return all
+      .filter((f) => isRecent(f.updated))
+      .sort((a, b) => (b.updated || "").localeCompare(a.updated || ""))
+      .slice(0, 3);
+  }, []);
+
+  function buildMailtoHref(): string {
+    const subject = encodeURIComponent(
+      contactSubject.trim()
+        ? `[${contactTopic}] ${contactSubject.trim()}`
+        : `[${contactTopic}] AEVION Help`,
+    );
+    const lines = [
+      contactMessage.trim() || "(no message)",
+      "",
+      "—",
+      `Topic: ${contactTopic}`,
+      contactEmail.trim() ? `Reply to: ${contactEmail.trim()}` : "",
+      "Sent from /help",
+    ].filter(Boolean);
+    const body = encodeURIComponent(lines.join("\n"));
+    return `mailto:yahiin1978@gmail.com?subject=${subject}&body=${body}`;
+  }
+
+  async function handleContactSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!contactMessage.trim()) {
+      setContactStatus({ kind: "error", message: t("helpRoot.contactForm.errorEmpty") });
+      return;
+    }
+    setContactStatus({ kind: "sending" });
+
+    const payload = {
+      topic: contactTopic,
+      subject: contactSubject.trim(),
+      email: contactEmail.trim() || null,
+      message: contactMessage.trim(),
+      lang,
+      page: typeof window !== "undefined" ? window.location.href : "/help",
+    };
+
+    // Best-effort: try a backend endpoint if it exists. Always fall back
+    // to mailto: so the user is never blocked by missing infrastructure.
+    let apiOk = false;
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      const res = await fetch(apiUrl("/api/help/contact"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      apiOk = res.ok;
+    } catch {
+      apiOk = false;
+    }
+
+    if (apiOk) {
+      setContactStatus({ kind: "sent", via: "api" });
+      setContactSubject("");
+      setContactMessage("");
+      return;
+    }
+
+    // Fallback: open user's mail client with prefilled message.
+    try {
+      const href = buildMailtoHref();
+      if (typeof window !== "undefined") {
+        window.location.href = href;
+      }
+      setContactStatus({ kind: "sent", via: "mailto" });
+    } catch {
+      setContactStatus({ kind: "error", message: t("helpRoot.contactForm.errorMailto") });
+    }
+  }
+
+  const recentPillStyle: React.CSSProperties = {
+    display: "inline-block",
+    marginLeft: 8,
+    padding: "2px 8px",
+    borderRadius: 999,
+    background: "linear-gradient(135deg, #10b981, #059669)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase",
+    verticalAlign: "middle",
+  };
 
   return (
     <main>
@@ -185,6 +323,64 @@ export default function HelpPage() {
           ))}
         </div>
 
+        {/* Recently-updated digest */}
+        {recentUpdates.length > 0 ? (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: "14px 16px",
+              borderRadius: 14,
+              border: "1px solid rgba(16,185,129,0.3)",
+              background: "linear-gradient(135deg, rgba(16,185,129,0.07), rgba(14,165,233,0.05))",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={recentPillStyle}>{t("helpRoot.recent.badge")}</span>
+              <strong style={{ fontSize: 14, color: "#0f172a" }}>{t("helpRoot.recent.title")}</strong>
+            </div>
+            <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+              {recentUpdates.map((u) => (
+                <li key={`${u.cat}-${u.q}`} style={{ fontSize: 13, color: "#334155", lineHeight: 1.5 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCategory(u.cat);
+                      setQuery("");
+                      // Jump open to this FAQ in the current list.
+                      const list = u.cat === "investors" ? investorFaqs : faqs;
+                      const idx = list.findIndex((f) => f.q === u.q);
+                      setOpen(idx >= 0 ? idx : null);
+                      if (typeof window !== "undefined") {
+                        const el = document.getElementById("help-faq-section");
+                        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      textAlign: "left",
+                      color: "#0d9488",
+                      fontWeight: 700,
+                      textDecoration: "underline",
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    {u.q}
+                  </button>
+                  <span style={{ color: "#64748b", fontWeight: 500 }}>
+                    {" · "}
+                    {u.cat === "investors" ? t("helpRoot.faq.tab.investors") : t("helpRoot.faq.tab.users")}
+                    {" · "}
+                    {formatDate(u.updated as string, lang)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {/* FAQ search */}
         <div style={{ marginBottom: 16, position: "relative" }}>
           <label htmlFor="help-search" style={{ position: "absolute", left: -9999, width: 1, height: 1, overflow: "hidden" }}>
@@ -211,7 +407,7 @@ export default function HelpPage() {
         </div>
 
         {/* FAQ */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
+        <div id="help-faq-section" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>{t("helpRoot.faq.title")}</h2>
           <div
             role="tablist"
@@ -291,54 +487,69 @@ export default function HelpPage() {
           </div>
         ) : null}
         <div style={{ display: "grid", gap: 8 }}>
-          {activeFaqs.map((faq, i) => (
-            <div
-              key={i}
-              style={{
-                border: "1px solid rgba(15,23,42,0.1)",
-                borderRadius: 12,
-                overflow: "hidden",
-              }}
-            >
-              <button
-                onClick={() => setOpen(open === i ? null : i)}
+          {activeFaqs.map((faq, i) => {
+            const recent = isRecent(faq.updated);
+            return (
+              <div
+                key={i}
                 style={{
-                  width: "100%",
-                  padding: "14px 16px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  border: "none",
-                  background: open === i ? "rgba(15,23,42,0.03)" : "#fff",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "#0f172a",
+                  border: "1px solid rgba(15,23,42,0.1)",
+                  borderRadius: 12,
+                  overflow: "hidden",
                 }}
               >
-                {faq.q}
-                <span style={{ fontSize: 18, color: "#94a3b8", flexShrink: 0, marginLeft: 12 }}>
-                  {open === i ? "−" : "+"}
-                </span>
-              </button>
-              {open === i ? (
-                <div
+                <button
+                  onClick={() => setOpen(open === i ? null : i)}
                   style={{
-                    padding: "0 16px 14px",
+                    width: "100%",
+                    padding: "14px 16px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    border: "none",
+                    background: open === i ? "rgba(15,23,42,0.03)" : "#fff",
+                    cursor: "pointer",
+                    textAlign: "left",
                     fontSize: 14,
-                    color: "#475569",
-                    lineHeight: 1.65,
+                    fontWeight: 700,
+                    color: "#0f172a",
                   }}
                 >
-                  {faq.a}
-                </div>
-              ) : null}
-            </div>
-          ))}
+                  <span style={{ flex: 1 }}>
+                    {faq.q}
+                    {recent ? (
+                      <span style={recentPillStyle} title={faq.updated ? formatDate(faq.updated, lang) : undefined}>
+                        {t("helpRoot.recent.badge")}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span style={{ fontSize: 18, color: "#94a3b8", flexShrink: 0, marginLeft: 12 }}>
+                    {open === i ? "−" : "+"}
+                  </span>
+                </button>
+                {open === i ? (
+                  <div
+                    style={{
+                      padding: "0 16px 14px",
+                      fontSize: 14,
+                      color: "#475569",
+                      lineHeight: 1.65,
+                    }}
+                  >
+                    {faq.a}
+                    {faq.updated ? (
+                      <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8" }}>
+                        {t("helpRoot.recent.updatedOn")} {formatDate(faq.updated, lang)}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
 
-        {/* Contact */}
+        {/* Contact / support form */}
         <div
           style={{
             marginTop: 24,
@@ -348,12 +559,193 @@ export default function HelpPage() {
             background: "rgba(15,23,42,0.02)",
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>{t("helpRoot.contact.title")}</div>
-          <p style={{ margin: 0, fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
-            {t("helpRoot.contact.body")}{" "}
-            <Link href="/demo" style={{ color: "#0d9488", fontWeight: 700 }}>{t("helpRoot.contact.demoLink")}</Link>{" "}
-            {t("helpRoot.contact.bodyTail")}
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>{t("helpRoot.contact.title")}</div>
+          <p style={{ margin: "0 0 14px", fontSize: 13, color: "#475569", lineHeight: 1.55 }}>
+            {t("helpRoot.contactForm.intro")}
           </p>
+
+          {contactStatus.kind === "sent" ? (
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(16,185,129,0.3)",
+                background: "rgba(16,185,129,0.08)",
+                fontSize: 13,
+                color: "#065f46",
+                lineHeight: 1.55,
+              }}
+            >
+              <strong>{t("helpRoot.contactForm.sentTitle")}</strong>
+              <div style={{ marginTop: 4 }}>
+                {contactStatus.via === "api"
+                  ? t("helpRoot.contactForm.sentApi")
+                  : t("helpRoot.contactForm.sentMailto")}
+              </div>
+              <button
+                type="button"
+                onClick={() => setContactStatus({ kind: "idle" })}
+                style={{
+                  marginTop: 10,
+                  background: "transparent",
+                  border: "1px solid rgba(16,185,129,0.4)",
+                  color: "#047857",
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {t("helpRoot.contactForm.sendAnother")}
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleContactSubmit} style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label style={{ display: "grid", gap: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                    {t("helpRoot.contactForm.topic")}
+                  </span>
+                  <select
+                    value={contactTopic}
+                    onChange={(e) => setContactTopic(e.target.value)}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      fontSize: 13,
+                      background: "#fff",
+                    }}
+                  >
+                    <option value="general">{t("helpRoot.contactForm.topicGeneral")}</option>
+                    <option value="qright">{t("helpRoot.contactForm.topicQRight")}</option>
+                    <option value="bank">{t("helpRoot.contactForm.topicBank")}</option>
+                    <option value="planet">{t("helpRoot.contactForm.topicPlanet")}</option>
+                    <option value="bug">{t("helpRoot.contactForm.topicBug")}</option>
+                    <option value="investor">{t("helpRoot.contactForm.topicInvestor")}</option>
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                    {t("helpRoot.contactForm.email")}
+                  </span>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(15,23,42,0.15)",
+                      fontSize: 13,
+                      background: "#fff",
+                    }}
+                  />
+                </label>
+              </div>
+              <label style={{ display: "grid", gap: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                  {t("helpRoot.contactForm.subject")}
+                </span>
+                <input
+                  type="text"
+                  value={contactSubject}
+                  onChange={(e) => setContactSubject(e.target.value)}
+                  placeholder={t("helpRoot.contactForm.subjectPlaceholder")}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    fontSize: 13,
+                    background: "#fff",
+                  }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+                  {t("helpRoot.contactForm.message")}
+                </span>
+                <textarea
+                  value={contactMessage}
+                  onChange={(e) => setContactMessage(e.target.value)}
+                  placeholder={t("helpRoot.contactForm.messagePlaceholder")}
+                  rows={5}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(15,23,42,0.15)",
+                    fontSize: 13,
+                    background: "#fff",
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                    minHeight: 90,
+                  }}
+                />
+              </label>
+
+              {contactStatus.kind === "error" ? (
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: "rgba(239,68,68,0.08)",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    color: "#b91c1c",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  {contactStatus.message}
+                </div>
+              ) : null}
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  type="submit"
+                  disabled={contactStatus.kind === "sending"}
+                  style={{
+                    padding: "10px 18px",
+                    borderRadius: 10,
+                    border: "none",
+                    background:
+                      contactStatus.kind === "sending"
+                        ? "rgba(15,23,42,0.4)"
+                        : "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: contactStatus.kind === "sending" ? "wait" : "pointer",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {contactStatus.kind === "sending"
+                    ? t("helpRoot.contactForm.sending")
+                    : t("helpRoot.contactForm.submit")}
+                </button>
+                <a
+                  href={buildMailtoHref()}
+                  style={{
+                    fontSize: 12,
+                    color: "#64748b",
+                    fontWeight: 600,
+                    textDecoration: "underline",
+                  }}
+                >
+                  {t("helpRoot.contactForm.mailtoFallback")}
+                </a>
+              </div>
+
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                {t("helpRoot.contactForm.note")}{" "}
+                <Link href="/demo" style={{ color: "#0d9488", fontWeight: 700 }}>
+                  {t("helpRoot.contact.demoLink")}
+                </Link>
+                .
+              </p>
+            </form>
+          )}
         </div>
       </ProductPageShell>
     </main>

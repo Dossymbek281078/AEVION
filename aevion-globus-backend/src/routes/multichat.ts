@@ -598,6 +598,231 @@ multichatRouter.get("/search", async (req, res) => {
   }
 });
 
+// ─── Phase 3: provider health + system-prompt presets ────────────────────
+//
+// Two small additions that make the Multichat hub useful without opening a
+// chat first:
+//   1. /api/multichat/provider-status — per-provider live ping with latency.
+//      The /multichat-engine landing renders these as colored badges so a
+//      user sees at a glance whether Anthropic / OpenAI / Gemini / DeepSeek
+//      / Grok are reachable from THIS backend right now.
+//   2. /api/multichat/presets — curated "mission" presets (Code review /
+//      Translate / Summarize / Brainstorm / Debug). Each preset bundles a
+//      system prompt + recommended agent roles + a default provider, so a
+//      one-click "launch this mission" creates a conversation pre-wired for
+//      the task. Keeps preset definitions server-side so all clients see
+//      the same list (the in-page hardcoded PRESETS array is a UI bundle —
+//      this is the canonical mission catalogue for any client).
+//
+// Both endpoints are auth-required (mounted under multichatRouter, which
+// applies requireAuth at the top of the file) — they leak no business
+// secrets but reading them implies an active session.
+
+type ProviderStatus = {
+  id: string;
+  name: string;
+  configured: boolean;
+  reachable: boolean;
+  latencyMs: number | null;
+  defaultModel: string | null;
+  error?: string;
+};
+
+// Cache provider-status for 20s to avoid hammering the upstream qcoreai
+// /providers endpoint when the UI auto-refreshes every 30s across many tabs.
+let providerStatusCache: { at: number; data: ProviderStatus[] } | null = null;
+const PROVIDER_STATUS_TTL_MS = 20_000;
+
+// GET /api/multichat/provider-status — live health per LLM provider.
+multichatRouter.get("/provider-status", async (req, res) => {
+  const now = Date.now();
+  if (providerStatusCache && now - providerStatusCache.at < PROVIDER_STATUS_TTL_MS) {
+    return res.json({ providers: providerStatusCache.data, cachedAt: new Date(providerStatusCache.at).toISOString(), fresh: false });
+  }
+
+  const port = Number(process.env.PORT) || 4001;
+  const internalBase = process.env.INTERNAL_API_BASE_URL || `http://127.0.0.1:${port}`;
+  const authHeader = req.headers.authorization || "";
+
+  const started = Date.now();
+  try {
+    const r = await fetch(`${internalBase}/api/qcoreai/providers`, {
+      headers: authHeader ? { Authorization: authHeader } : {},
+    });
+    const totalLatency = Date.now() - started;
+    const data = (await r.json().catch(() => null)) as { providers?: Array<Record<string, unknown>> } | null;
+    const list = Array.isArray(data?.providers) ? data!.providers! : [];
+
+    const providers: ProviderStatus[] = list.map((p) => {
+      const configured = Boolean(p.configured);
+      return {
+        id: String(p.id ?? ""),
+        name: String(p.name ?? p.id ?? ""),
+        configured,
+        // reachable = both configured AND the upstream /providers route returned OK
+        reachable: configured && r.ok,
+        // Per-provider latency isn't measured upstream; approximate with the
+        // single round-trip latency to the qcoreai aggregator. Honest about
+        // it on the client.
+        latencyMs: configured ? totalLatency : null,
+        defaultModel: typeof p.defaultModel === "string" ? p.defaultModel : null,
+      };
+    });
+
+    providerStatusCache = { at: now, data: providers };
+    res.json({ providers, cachedAt: new Date(now).toISOString(), fresh: true });
+  } catch (err: any) {
+    res.status(502).json({
+      error: "provider_status_failed",
+      message: err?.message || "upstream unreachable",
+    });
+  }
+});
+
+type MultichatPreset = {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  systemPrompt: string;
+  recommendedAgents: Array<{ role: string; provider?: string; temperature?: number }>;
+  defaultProvider: string;
+};
+
+// Canonical preset catalogue. Order matters — UI renders top→down.
+const MULTICHAT_PRESETS: MultichatPreset[] = [
+  {
+    id: "code-review",
+    name: "Code review",
+    emoji: "💻",
+    description: "Three engineers grade your diff: clarity, correctness, security.",
+    systemPrompt:
+      "You are a senior software engineer doing code review. Focus on correctness bugs, " +
+      "security issues, and readability. Quote line numbers when possible. Be direct — no " +
+      "praise without a concrete reason. End with a one-line verdict: SHIP / FIX / REJECT.",
+    recommendedAgents: [
+      { role: "Code", provider: "anthropic", temperature: 0.2 },
+      { role: "Code", provider: "openai", temperature: 0.3 },
+      { role: "Compliance", provider: "anthropic", temperature: 0.2 },
+    ],
+    defaultProvider: "anthropic",
+  },
+  {
+    id: "translate",
+    name: "Translate",
+    emoji: "🌐",
+    description: "Faithful translation with tone preserved — two providers vote on phrasing.",
+    systemPrompt:
+      "You are a professional translator. Detect the source language; translate into the " +
+      "target language the user specifies (default: English). Preserve register, idioms, " +
+      "and proper nouns. After the translation, list any phrasing choices that have a " +
+      "meaningful alternative — one bullet each.",
+    recommendedAgents: [
+      { role: "Translator", provider: "anthropic", temperature: 0.4 },
+      { role: "Translator", provider: "openai", temperature: 0.4 },
+    ],
+    defaultProvider: "anthropic",
+  },
+  {
+    id: "summarize",
+    name: "Summarize",
+    emoji: "📋",
+    description: "Long doc → 5 bullets + a one-liner. Parallel runs on 2 models for cross-check.",
+    systemPrompt:
+      "You are a precise document summarizer. Produce EXACTLY two artifacts: (1) a one-sentence " +
+      "TL;DR, then (2) 5 bullet points covering the most important facts. Do not editorialize. " +
+      "If the source contradicts itself, surface the contradiction in a final bullet prefixed " +
+      "with ⚠.",
+    recommendedAgents: [
+      { role: "General", provider: "anthropic", temperature: 0.3 },
+      { role: "General", provider: "openai", temperature: 0.3 },
+    ],
+    defaultProvider: "anthropic",
+  },
+  {
+    id: "brainstorm",
+    name: "Brainstorm",
+    emoji: "💡",
+    description: "Diverge fast: three different agents pitch ideas at different temperatures.",
+    systemPrompt:
+      "You are in divergent-thinking mode. Generate 5 distinct ideas in response to the user's " +
+      "prompt. Each idea: 1-line title + 2 sentences of rationale. Be willing to be weird; " +
+      "save the safest idea for last. Do NOT critique your own ideas — that's a different " +
+      "agent's job.",
+    recommendedAgents: [
+      { role: "General", provider: "anthropic", temperature: 0.9 },
+      { role: "General", provider: "openai", temperature: 1.0 },
+      { role: "General", provider: "deepseek", temperature: 0.85 },
+    ],
+    defaultProvider: "anthropic",
+  },
+  {
+    id: "debug",
+    name: "Debug",
+    emoji: "🐞",
+    description: "Stack trace + repro → root cause hypothesis. Two engineers race to the bug.",
+    systemPrompt:
+      "You are a senior debugger. Given an error, stack trace, or symptom: " +
+      "(1) state your top-1 root-cause hypothesis in one sentence, " +
+      "(2) list 2-3 next diagnostic steps the user should run, " +
+      "(3) propose a minimal patch if you're confident enough. " +
+      "Refuse to guess — if context is missing, say what you need.",
+    recommendedAgents: [
+      { role: "Code", provider: "anthropic", temperature: 0.2 },
+      { role: "Code", provider: "openai", temperature: 0.2 },
+    ],
+    defaultProvider: "anthropic",
+  },
+];
+
+// GET /api/multichat/presets — read-only mission catalogue.
+multichatRouter.get("/presets", async (_req, res) => {
+  res.json({
+    presets: MULTICHAT_PRESETS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      emoji: p.emoji,
+      description: p.description,
+      // Full systemPrompt is included so the UI can preview it before launching.
+      systemPrompt: p.systemPrompt,
+      recommendedAgents: p.recommendedAgents,
+      defaultProvider: p.defaultProvider,
+    })),
+    total: MULTICHAT_PRESETS.length,
+  });
+});
+
+// POST /api/multichat/presets/:id/launch — create a conversation pre-wired
+// for the chosen preset. Returns the new conversation id + the agent
+// specs the client should spawn locally. Idempotent only in the sense
+// that each call creates a NEW conversation (presets are templates, not
+// singletons).
+multichatRouter.post("/presets/:id/launch", async (req, res) => {
+  const userId = req.auth!.sub;
+  const presetId = String(req.params.id);
+  const preset = MULTICHAT_PRESETS.find((p) => p.id === presetId);
+  if (!preset) return res.status(404).json({ error: "preset_not_found" });
+
+  try {
+    const title = typeof req.body?.title === "string" && req.body.title.trim()
+      ? req.body.title.trim()
+      : `${preset.emoji} ${preset.name}`;
+    const conv = await createConv(userId, title);
+    res.status(201).json({
+      conversation: conv,
+      preset: {
+        id: preset.id,
+        name: preset.name,
+        systemPrompt: preset.systemPrompt,
+        recommendedAgents: preset.recommendedAgents,
+        defaultProvider: preset.defaultProvider,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "launch_failed" });
+  }
+});
+
 // GET /api/multichat/shared/:token — PUBLIC view of a shared conversation.
 // No auth required. Returns conversation metadata + last 200 turns (no usage
 // to keep cost data private). Mounted as a separate sub-route to bypass the

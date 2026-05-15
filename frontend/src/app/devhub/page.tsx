@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -15,6 +16,18 @@ interface Project {
   stack: Stack;
   status: ProjectStatus;
   deployUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Snippet {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  language: string;
+  tags: string[];
+  stars: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,13 +122,103 @@ export default function DevHubPage() {
     }
   };
 
+  // ── Snippet Shelf ──────────────────────────────────────────────────────────
+  const [snippets, setSnippets] = useState<Snippet[]>([]);
+  const [snippetsLoading, setSnippetsLoading] = useState(true);
+  const [snippetForm, setSnippetForm] = useState({
+    title: "",
+    language: "javascript",
+    content: "",
+    tags: "",
+  });
+  const [snippetSubmitting, setSnippetSubmitting] = useState(false);
+  const [snippetError, setSnippetError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const fetchSnippets = useCallback(async () => {
+    setSnippetsLoading(true);
+    try {
+      const data = await catalog.devhub.snippets({ limit: 5 });
+      // SDK returns { total, items }. Backend legacy used `snippets` —
+      // accept either to stay tolerant of mixed deployments.
+      const raw = data as unknown as { items?: Snippet[]; snippets?: Snippet[] };
+      const list = Array.isArray(raw.items)
+        ? raw.items
+        : Array.isArray(raw.snippets)
+          ? raw.snippets
+          : [];
+      setSnippets(list);
+    } catch {
+      setSnippetError("Failed to load snippets");
+    } finally {
+      setSnippetsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSnippets(); }, [fetchSnippets]);
+
+  const submitSnippet = async () => {
+    if (!snippetForm.title.trim() || !snippetForm.content.trim()) return;
+    setSnippetSubmitting(true);
+    setSnippetError(null);
+    try {
+      const tags = snippetForm.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      await catalog.devhub.createSnippet({
+        title: snippetForm.title.trim(),
+        content: snippetForm.content,
+        language: snippetForm.language.trim() || "plaintext",
+        tags,
+      });
+      setSnippetForm({ title: "", language: "javascript", content: "", tags: "" });
+      await fetchSnippets();
+    } catch (e: any) {
+      setSnippetError(e?.message || "Failed to share snippet");
+    } finally {
+      setSnippetSubmitting(false);
+    }
+  };
+
+  const copySnippet = async (s: Snippet) => {
+    try {
+      await navigator.clipboard.writeText(s.content);
+      setCopiedId(s.id);
+      setTimeout(() => setCopiedId((c) => (c === s.id ? null : c)), 1600);
+    } catch {
+      setSnippetError("Clipboard unavailable");
+    }
+  };
+
+  const starSnippet = async (s: Snippet) => {
+    // Optimistic update.
+    setSnippets((arr) =>
+      arr.map((x) => (x.id === s.id ? { ...x, stars: x.stars + 1 } : x))
+    );
+    try {
+      const data = await catalog.devhub.star(s.id);
+      if (typeof data?.stars === "number") {
+        setSnippets((arr) =>
+          arr.map((x) => (x.id === s.id ? { ...x, stars: data.stars } : x))
+        );
+      }
+    } catch {
+      // Rollback.
+      setSnippets((arr) =>
+        arr.map((x) => (x.id === s.id ? { ...x, stars: Math.max(0, x.stars - 1) } : x))
+      );
+      setSnippetError("Could not star snippet");
+    }
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", overflowX: "hidden" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px" }}>
         <Wave1Nav />
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", margin: 0 }}>
               DevHub
@@ -160,7 +263,7 @@ export default function DevHubPage() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 20 }}>
             {projects.map((p) => {
               const stackStyle = STACK_COLORS[p.stack] ?? { bg: "#64748b", fg: "#fff" };
               const statusStyle = STATUS_STYLES[p.status] ?? STATUS_STYLES.draft;
@@ -227,15 +330,182 @@ export default function DevHubPage() {
             })}
           </div>
         )}
+
+        {/* ── Snippet Shelf ───────────────────────────────────────────────── */}
+        <div className="mt-12 rounded-2xl bg-slate-950 text-slate-100 p-6 sm:p-8 border border-slate-800 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-white">
+                Snippet shelf
+              </h2>
+              <p className="text-sm text-slate-400 mt-1">
+                Last 5 publicly shared snippets. Copy, star, or share your own.
+              </p>
+            </div>
+            <button
+              onClick={fetchSnippets}
+              className="self-start sm:self-auto px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {snippetError && (
+            <div className="mb-4 rounded-md border border-rose-700 bg-rose-950/60 px-3 py-2 text-sm text-rose-200 flex justify-between">
+              <span>{snippetError}</span>
+              <button
+                onClick={() => setSnippetError(null)}
+                className="font-bold text-rose-200"
+                aria-label="dismiss"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {snippetsLoading ? (
+            <div className="text-center text-slate-500 py-10">Loading snippets…</div>
+          ) : snippets.length === 0 ? (
+            <div className="text-center text-slate-500 py-10 border border-dashed border-slate-800 rounded-lg">
+              No snippets yet. Be the first to share one below.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {snippets.map((s) => {
+                const preview = (s.content || "").slice(0, 200);
+                const truncated = (s.content || "").length > 200;
+                return (
+                  <div
+                    key={s.id}
+                    className="rounded-xl bg-slate-900/80 border border-slate-800 p-4 flex flex-col gap-3 hover:border-slate-700 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-white leading-snug">
+                        {s.title}
+                      </h3>
+                      <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase tracking-wider bg-teal-900/60 text-teal-200 border border-teal-800">
+                        {s.language || "plaintext"}
+                      </span>
+                    </div>
+
+                    <pre className="text-[11px] font-mono leading-relaxed text-slate-300 bg-slate-950/60 border border-slate-800 rounded-md p-2 overflow-x-auto max-h-32 whitespace-pre-wrap break-words">
+                      {preview}{truncated ? "…" : ""}
+                    </pre>
+
+                    {s.tags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {s.tags.slice(0, 6).map((t) => (
+                          <span
+                            key={t}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                          >
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-slate-800">
+                      <button
+                        onClick={() => starSnippet(s)}
+                        className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-200"
+                        aria-label="star snippet"
+                      >
+                        <span aria-hidden>★</span>
+                        <span>{s.stars}</span>
+                      </button>
+                      <button
+                        onClick={() => copySnippet(s)}
+                        className={
+                          "text-xs font-semibold px-2.5 py-1 rounded-md border transition-colors " +
+                          (copiedId === s.id
+                            ? "bg-emerald-900/60 border-emerald-700 text-emerald-200"
+                            : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200")
+                        }
+                      >
+                        {copiedId === s.id ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Share form */}
+          <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
+            <h3 className="text-sm font-semibold text-white mb-3">
+              Поделиться сниппетом
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={snippetForm.title}
+                onChange={(e) =>
+                  setSnippetForm((f) => ({ ...f, title: e.target.value }))
+                }
+                placeholder="Title"
+                className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
+              />
+              <input
+                type="text"
+                value={snippetForm.language}
+                onChange={(e) =>
+                  setSnippetForm((f) => ({ ...f, language: e.target.value }))
+                }
+                placeholder="Language (e.g. javascript)"
+                className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
+              />
+            </div>
+            <textarea
+              value={snippetForm.content}
+              onChange={(e) =>
+                setSnippetForm((f) => ({ ...f, content: e.target.value }))
+              }
+              placeholder="// paste your snippet here"
+              rows={5}
+              className="mt-3 w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700 resize-y"
+            />
+            <input
+              type="text"
+              value={snippetForm.tags}
+              onChange={(e) =>
+                setSnippetForm((f) => ({ ...f, tags: e.target.value }))
+              }
+              placeholder="tags, comma, separated"
+              className="mt-3 w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
+            />
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={submitSnippet}
+                disabled={
+                  snippetSubmitting ||
+                  !snippetForm.title.trim() ||
+                  !snippetForm.content.trim()
+                }
+                className={
+                  "px-4 py-2 rounded-md text-sm font-semibold transition-colors " +
+                  (snippetSubmitting ||
+                  !snippetForm.title.trim() ||
+                  !snippetForm.content.trim()
+                    ? "bg-teal-900/60 text-teal-300/60 cursor-not-allowed"
+                    : "bg-teal-600 hover:bg-teal-500 text-white")
+                }
+              >
+                {snippetSubmitting ? "Sharing…" : "Share snippet"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* New Project Modal */}
       {showModal && (
         <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}
         >
-          <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: "100%", maxWidth: 480 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: "20px clamp(16px, 4vw, 32px)", width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }}>
             <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 20, color: "#0f172a" }}>New Project</h2>
 
             <div style={{ marginBottom: 16 }}>
@@ -247,7 +517,7 @@ export default function DevHubPage() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="My awesome app"
-                style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
                 autoFocus
               />
             </div>
@@ -261,7 +531,7 @@ export default function DevHubPage() {
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="Short description of the project"
-                style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
+                style={{ width: "100%", padding: "10px 14px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 16, boxSizing: "border-box" }}
               />
             </div>
 

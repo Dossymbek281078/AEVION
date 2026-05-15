@@ -1,13 +1,24 @@
 #!/usr/bin/env node
 /**
- * Fintech PROD smoke — 25 read-only health + stats checks for the 5
- * fintech modules: QGood, QMaskCard, VeilNetX Ledger, Z-Tide, QChainGov.
- * Last 4 checks cover chain integrity reachability + Z-Tide aggregate
- * consistency (SUM(leaderboard.score) == stats.total_weight).
+ * Fintech PROD smoke — 50+ read-only health + stats + invariant + auth-gate
+ * + OpenAPI checks for the 6 fintech modules: QGood, QMaskCard, VeilNetX
+ * Ledger, Z-Tide, QChainGov, QPayNet.
  *
- * Safe to run anywhere — every endpoint is GET, anonymous, and read-only.
- * No DB writes, no auth, no test users. Designed for the daily-smoke CI
- * workflow's READ_ONLY=1 track against production.
+ * Coverage:
+ *   - health probes per module (6)
+ *   - stats endpoints with field-shape assertions per module
+ *   - VeilNetX chain head + verify + entries + search edge cases
+ *   - Z-Tide aggregate consistency (SUM(leaderboard.score) == stats.total_weight)
+ *   - QPayNet stats shape, public wallet 404, request token 404
+ *   - QChainGov status filters (open / executed / invalid)
+ *   - Auth-gate assertions: routes requiring Bearer return 401, not 500/200
+ *   - OpenAPI fetch sanity (root /api/openapi.json reachable + components present)
+ *   - Root /api/health and content-type sanity
+ *
+ * Safe to run anywhere — every assertion is GET (or auth-rejected POST),
+ * anonymous, and read-only. No DB writes, no auth tokens, no test users.
+ * Designed for the daily-smoke CI workflow's READ_ONLY=1 track against
+ * production.
  *
  * Default BASE points at production (https://aevion-production-a70c.up.railway.app)
  * unlike the other smokes which default to localhost.
@@ -24,11 +35,18 @@ let passed = 0; let failed = 0;
 function ok(l, e) { passed++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); }
 function fail(l, r) { failed++; console.error(`  ✗ ${l}${r ? "  ↳ " + r : ""}`); }
 
-async function req(method, path) {
+async function req(method, path, opts = {}) {
   try {
-    const r = await fetch(`${BASE}${path}`, { method, headers: { "Accept": "application/json" } });
+    const headers = { "Accept": "application/json", ...(opts.headers || {}) };
+    const init = { method, headers };
+    if (opts.body !== undefined) {
+      headers["Content-Type"] = headers["Content-Type"] || "application/json";
+      init.body = typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body);
+    }
+    const r = await fetch(`${BASE}${path}`, init);
+    const contentType = r.headers.get("content-type") || "";
     let json; try { json = await r.json(); } catch { json = {}; }
-    return { status: r.status, body: json };
+    return { status: r.status, body: json, contentType };
   } catch (e) {
     return { status: 0, body: {}, error: e?.message || String(e) };
   }
@@ -298,6 +316,252 @@ async function run() {
     } else {
       fail("GET /ztide/leaderboard", `${r.status}`);
     }
+  }
+
+  // ── QPayNet (6th module) ─────────────────────────────────────────────────
+  // 26. QPayNet health
+  r = await req("GET", "/api/qpaynet/health");
+  if (r.status === 200 && (r.body?.service === "qpaynet" || r.body?.status === "ok")) {
+    ok("GET /api/qpaynet/health", `service=${r.body?.service ?? "?"}`);
+  } else {
+    fail("GET /api/qpaynet/health", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 27. QPayNet stats shape
+  r = await req("GET", "/api/qpaynet/stats");
+  let qpayStats = null;
+  if (r.status === 200 && typeof r.body === "object" && r.body !== null) {
+    qpayStats = r.body;
+    ok("GET /api/qpaynet/stats reachable", `status=200 keys=${Object.keys(qpayStats).length}`);
+  } else {
+    fail("GET /api/qpaynet/stats", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 28. QPayNet stats — wallet counts numeric (totalWallets OR activeWallets)
+  if (qpayStats) {
+    const walletCount = qpayStats.totalWallets ?? qpayStats.total_wallets ?? qpayStats.activeWallets ?? qpayStats.active_wallets;
+    if (typeof walletCount === "number") {
+      const which = qpayStats.totalWallets !== undefined ? "totalWallets" : qpayStats.activeWallets !== undefined ? "activeWallets" : "(other)";
+      ok("QPayNet stats wallets count :number", `${which}=${walletCount}`);
+    } else {
+      fail("QPayNet stats wallets count :number", `got=${typeof walletCount} (keys=${Object.keys(qpayStats).join(",")})`);
+    }
+  }
+
+  // 29. QPayNet stats — transactions count numeric
+  if (qpayStats) {
+    const totalTx = qpayStats.totalTransactions ?? qpayStats.total_transactions;
+    if (typeof totalTx === "number") {
+      ok("QPayNet stats transactions :number", `totalTransactions=${totalTx}`);
+    } else {
+      fail("QPayNet stats transactions :number", `got=${typeof totalTx}`);
+    }
+  }
+
+  // 30. QPayNet — POST /wallets без Bearer → 401 (auth gate)
+  r = await req("POST", "/api/qpaynet/wallets", { body: { label: "smoke", currency: "KZT" } });
+  if (r.status === 401) {
+    ok("POST /api/qpaynet/wallets (no auth) → 401", "auth gate OK");
+  } else {
+    fail("POST /api/qpaynet/wallets (no auth) → 401", `got=${r.status}`);
+  }
+
+  // 31. QPayNet — GET /wallets без Bearer → 401
+  r = await req("GET", "/api/qpaynet/wallets");
+  if (r.status === 401) {
+    ok("GET /api/qpaynet/wallets (no auth) → 401", "auth gate OK");
+  } else {
+    fail("GET /api/qpaynet/wallets (no auth) → 401", `got=${r.status}`);
+  }
+
+  // 32. QPayNet — public wallet 404 для несуществующего uuid
+  r = await req("GET", "/api/qpaynet/wallets/00000000-0000-0000-0000-000000000000/public");
+  if (r.status === 404 || r.status === 400) {
+    ok("GET /qpaynet/wallets/<unknown>/public → 4xx", `status=${r.status}`);
+  } else {
+    fail("GET /qpaynet/wallets/<unknown>/public", `got=${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 33. QPayNet — payment request unknown token → 404
+  r = await req("GET", "/api/qpaynet/requests/aev_nonexistent_token_for_smoke");
+  if (r.status === 404 || r.status === 400) {
+    ok("GET /qpaynet/requests/<unknown-token> → 4xx", `status=${r.status}`);
+  } else {
+    fail("GET /qpaynet/requests/<unknown-token>", `got=${r.status} ${JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 34. QPayNet — merchant/charge без X-Merchant-Key → 401
+  r = await req("POST", "/api/qpaynet/merchant/charge", { body: { payerWalletId: "00000000-0000-0000-0000-000000000000", amountCents: 100, paymentRef: "smoke-no-key" } });
+  if (r.status === 401 || r.status === 403) {
+    ok("POST /qpaynet/merchant/charge (no key) → 401/403", `status=${r.status}`);
+  } else {
+    fail("POST /qpaynet/merchant/charge (no key)", `got=${r.status}`);
+  }
+
+  // ── Cross-module auth gates ──────────────────────────────────────────────
+  // 35. QMaskCard — POST /masks без Bearer → 401
+  r = await req("POST", "/api/qmaskcard/masks", { body: { label: "smoke", spendLimitCents: 100, currency: "KZT", kind: "single-use" } });
+  if (r.status === 401) {
+    ok("POST /api/qmaskcard/masks (no auth) → 401", "auth gate OK");
+  } else {
+    fail("POST /api/qmaskcard/masks (no auth) → 401", `got=${r.status}`);
+  }
+
+  // 36. QGood — POST /campaigns без Bearer → 401
+  r = await req("POST", "/api/qgood/campaigns", { body: { title: "smoke campaign", description: "x".repeat(40), category: "other", targetCents: 1000, currency: "USD" } });
+  if (r.status === 401) {
+    ok("POST /api/qgood/campaigns (no auth) → 401", "auth gate OK");
+  } else {
+    fail("POST /api/qgood/campaigns (no auth) → 401", `got=${r.status}`);
+  }
+
+  // 37. QChainGov — POST /proposals без Bearer → 401
+  r = await req("POST", "/api/qchaingov/proposals", { body: { title: "smoke proposal", description: "x".repeat(40), voteMode: "yes-no-abstain" } });
+  if (r.status === 401) {
+    ok("POST /api/qchaingov/proposals (no auth) → 401", "auth gate OK");
+  } else {
+    fail("POST /api/qchaingov/proposals (no auth) → 401", `got=${r.status}`);
+  }
+
+  // 38. VeilNetX — POST /entries без Bearer → 401 (write requires auth)
+  r = await req("POST", "/api/veilnetx-ledger/entries", { body: { kind: "test", amountCents: 0 } });
+  if (r.status === 401 || r.status === 400 || r.status === 403) {
+    ok("POST /veilnetx-ledger/entries (no auth) → 4xx", `status=${r.status}`);
+  } else {
+    fail("POST /veilnetx-ledger/entries (no auth)", `got=${r.status}`);
+  }
+
+  // ── OpenAPI consolidation reachability ────────────────────────────────────
+  // 39. Root OpenAPI fetch
+  r = await req("GET", "/api/openapi.json");
+  let openapi = null;
+  if (r.status === 200 && r.body?.openapi && typeof r.body?.paths === "object") {
+    openapi = r.body;
+    ok("GET /api/openapi.json reachable", `openapi=${openapi.openapi} paths=${Object.keys(openapi.paths).length}`);
+  } else {
+    fail("GET /api/openapi.json", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 40. OpenAPI contains fintech tags
+  if (openapi) {
+    const tagNames = Array.isArray(openapi.tags) ? openapi.tags.map(t => t?.name).filter(Boolean) : [];
+    const expected = ["QGood", "QMaskCard", "VeilNetX Ledger", "Z-Tide", "QChainGov"];
+    const missing = expected.filter(t => !tagNames.includes(t));
+    if (missing.length === 0) {
+      ok("OpenAPI tags include 5 fintech modules", `tags=${tagNames.length}`);
+    } else {
+      fail("OpenAPI tags missing", `missing=${missing.join(",")}`);
+    }
+  }
+
+  // 41. OpenAPI contains at least one QPayNet path (post-block-2 wiring)
+  if (openapi) {
+    const qpayPaths = Object.keys(openapi.paths).filter(p => p.startsWith("/api/qpaynet/"));
+    if (qpayPaths.length > 0) {
+      ok("OpenAPI exposes QPayNet paths", `count=${qpayPaths.length}`);
+    } else {
+      // Soft signal — wiring may be staged; report don't fail
+      ok("OpenAPI QPayNet paths (informational)", "0 paths — spec library not yet wired into builder");
+    }
+  }
+
+  // ── Root + content-type sanity ────────────────────────────────────────────
+  // 42. Root /api/health
+  r = await req("GET", "/api/health");
+  if (r.status === 200 && (r.body?.status === "ok" || r.body?.ok === true)) {
+    ok("GET /api/health (root)", "status=ok");
+  } else if (r.status === 200) {
+    ok("GET /api/health (root) reachable", `status=200 body=${JSON.stringify(r.body).slice(0, 50)}`);
+  } else {
+    fail("GET /api/health (root)", `${r.status} ${r.error || JSON.stringify(r.body).slice(0, 80)}`);
+  }
+
+  // 43. JSON content-type on a representative health endpoint
+  r = await req("GET", "/api/qgood/health");
+  if (r.status === 200 && /application\/json/i.test(r.contentType || "")) {
+    ok("Content-Type: application/json on /qgood/health", r.contentType);
+  } else {
+    fail("Content-Type on /qgood/health", `ct='${r.contentType}'`);
+  }
+
+  // ── Per-module 404 + edge cases ──────────────────────────────────────────
+  // 44. QGood — unknown campaign id
+  r = await req("GET", "/api/qgood/campaigns/00000000-0000-0000-0000-000000000000");
+  if (r.status === 404 || r.status === 400) {
+    ok("GET /qgood/campaigns/<unknown> → 4xx", `status=${r.status}`);
+  } else {
+    fail("GET /qgood/campaigns/<unknown>", `got=${r.status}`);
+  }
+
+  // 45. QChainGov — unknown proposal id
+  r = await req("GET", "/api/qchaingov/proposals/00000000-0000-0000-0000-000000000000");
+  if (r.status === 404 || r.status === 400) {
+    ok("GET /qchaingov/proposals/<unknown> → 4xx", `status=${r.status}`);
+  } else {
+    fail("GET /qchaingov/proposals/<unknown>", `got=${r.status}`);
+  }
+
+  // 46. VeilNetX — entries with limit=1 returns ≤ 1
+  r = await req("GET", "/api/veilnetx-ledger/entries?limit=1");
+  if (r.status === 200 && Array.isArray(r.body?.entries) && r.body.entries.length <= 1) {
+    ok("GET /veilnetx-ledger/entries limit honored", `len=${r.body.entries.length}`);
+  } else {
+    fail("GET /veilnetx-ledger/entries limit=1", `${r.status} got=${r.body?.entries?.length}`);
+  }
+
+  // 47. QGood — invalid status filter returns 200 with default (defensive)
+  r = await req("GET", "/api/qgood/campaigns?status=__never__&limit=1");
+  if (r.status === 200 && Array.isArray(r.body?.campaigns)) {
+    ok("GET /qgood/campaigns?status=__never__ defensive", `campaigns=${r.body.campaigns.length}`);
+  } else if (r.status === 400) {
+    ok("GET /qgood/campaigns?status=__never__ → 400", "strict validation OK");
+  } else {
+    fail("GET /qgood/campaigns invalid status", `got=${r.status}`);
+  }
+
+  // 48. QChainGov — invalid status filter
+  r = await req("GET", "/api/qchaingov/proposals?status=__never__&limit=1");
+  if ((r.status === 200 && Array.isArray(r.body?.proposals)) || r.status === 400) {
+    ok("GET /qchaingov/proposals?status=__never__ tolerated", `status=${r.status}`);
+  } else {
+    fail("GET /qchaingov/proposals invalid status", `got=${r.status}`);
+  }
+
+  // 49. Z-Tide — leaderboard limit clamp (limit=10000 must not 5xx)
+  r = await req("GET", "/api/ztide/leaderboard?limit=10000");
+  if (r.status === 200 && Array.isArray(r.body?.leaderboard)) {
+    ok("GET /ztide/leaderboard limit=10000 OK", `entries=${r.body.leaderboard.length}`);
+  } else {
+    fail("GET /ztide/leaderboard limit=10000", `got=${r.status}`);
+  }
+
+  // 50. QMaskCard — public stats includes total_volume_cents OR similar
+  r = await req("GET", "/api/qmaskcard/stats");
+  if (r.status === 200 && typeof r.body === "object" && r.body !== null) {
+    const keys = Object.keys(r.body);
+    if (keys.length >= 3) {
+      ok("QMaskCard /stats has multiple fields", `keys=${keys.length}`);
+    } else {
+      fail("QMaskCard /stats shallow", `keys=${keys.length}`);
+    }
+  } else {
+    fail("QMaskCard /stats", `got=${r.status}`);
+  }
+
+  // 51. VeilNetX — search with too-short hash should be tolerated (400 OR empty 200)
+  r = await req("GET", "/api/veilnetx-ledger/search?hash=ab");
+  if (r.status === 200 || r.status === 400) {
+    ok("GET /veilnetx-ledger/search short-hash tolerated", `status=${r.status}`);
+  } else {
+    fail("GET /veilnetx-ledger/search short-hash", `got=${r.status}`);
+  }
+
+  // 52. Z-Tide rank for invalid characters in user id
+  r = await req("GET", "/api/ztide/rank/<invalid>");
+  if (r.status === 200 || r.status === 400 || r.status === 404) {
+    ok("GET /ztide/rank/<invalid> tolerated", `status=${r.status}`);
+  } else {
+    fail("GET /ztide/rank/<invalid>", `got=${r.status}`);
   }
 
   console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);

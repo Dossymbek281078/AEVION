@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Клиент для backend QCoreAI (POST /api/qcoreai/chat).
  * Формирует system-prompt с контекстом текущей сметы + переписку,
  * шлёт на бэкенд, парсит ответ. Graceful fallback на локальную KB

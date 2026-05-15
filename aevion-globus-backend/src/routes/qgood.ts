@@ -1,9 +1,11 @@
 /**
- * QGood — charity / good-deeds campaign platform.
+ * QGood — charity / good-deeds campaign platform + AI Psychology platform.
  *
  * Working v1 MVP — transparent campaigns with Stripe/QPayNet payment chain
  * and QRight audit trail. Per AEVION manifest: ecosystem-native economy
  * layer for contribution-based value flows.
+ *
+ * Extended with Psychology MVP: mood tracking, AI therapeutic chat, exercises.
  *
  * Architecture:
  *  - Identity:  reuses AEVION JWT (verifyBearerOptional)
@@ -12,7 +14,7 @@
  *  - Audit:     every donation written, never mutated; campaign roll-ups atomic
  *  - Scaling:   pure Postgres, no in-memory state; rate-limited per IP
  *
- * Endpoints:
+ * Endpoints (Charity):
  *   GET    /api/qgood/health
  *   GET    /api/qgood/campaigns           — list active (filterable by category)
  *   GET    /api/qgood/campaigns/:id       — detail + recent donations
@@ -20,6 +22,14 @@
  *   POST   /api/qgood/campaigns/:id/approve — admin only
  *   POST   /api/qgood/campaigns/:id/donations — record donation (anonymous-friendly)
  *   GET    /api/qgood/stats               — ecosystem-wide roll-up
+ *
+ * Endpoints (Psychology MVP):
+ *   POST   /api/qgood/mood                — log mood entry (score 1-10, emotion, context)
+ *   GET    /api/qgood/mood                — list mood entries (?limit=30&userId=me)
+ *   GET    /api/qgood/mood/trends         — 7-day average + emotion frequency
+ *   POST   /api/qgood/chat                — AI therapeutic chat (empathic, ≤150 words)
+ *   GET    /api/qgood/exercises           — list 5 built-in exercises
+ *   POST   /api/qgood/exercises/:id/complete — log exercise completion, return streak
  */
 
 import { Router } from "express";
@@ -28,6 +38,7 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
+import { ensureQGoodTables, isQGoodDbReady } from "../lib/ensureQGoodTables";
 
 export const qgoodRouter = Router();
 
@@ -463,4 +474,378 @@ qgoodRouter.get("/stats", readLimit, async (_req, res) => {
     console.error("[qgood] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PSYCHOLOGY MVP — Mood tracking, AI chat, Exercises
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// ── In-memory fallbacks for when Postgres is unavailable ────────────────────
+
+interface MoodEntry {
+  id: number;
+  user_id: string;
+  score: number;
+  emotion: string | null;
+  context: string | null;
+  logged_at: string;
+}
+
+interface CompletionEntry {
+  id: number;
+  user_id: string;
+  exercise_id: string;
+  completed_at: string;
+}
+
+let memMoodSeq = 1;
+let memCompletionSeq = 1;
+const memMoods: MoodEntry[] = [];
+const memCompletions: CompletionEntry[] = [];
+
+// ── Rate limiters ────────────────────────────────────────────────────────────
+
+const chatLimit = rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false });
+const moodLimit = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
+
+// ── Exercise seed (static, no DB) ───────────────────────────────────────────
+
+const EXERCISES = [
+  {
+    id: "breathing-478",
+    title: "4-7-8 Дыхание",
+    description: "Вдох 4 сек → задержка 7 сек → выдох 8 сек. Успокаивает нервную систему.",
+    category: "breathing",
+    durationSec: 60,
+    steps: ["Вдох через нос — 4 секунды", "Задержка дыхания — 7 секунд", "Выдох через рот — 8 секунд", "Повторите 4 раза"],
+  },
+  {
+    id: "grounding-54321",
+    title: "5-4-3-2-1 Заземление",
+    description: "Осознайте 5 вещей, которые видите, 4 — слышите, 3 — чувствуете, 2 — обоняете, 1 — вкус.",
+    category: "grounding",
+    durationSec: 120,
+    steps: ["5 вещей, которые вы видите", "4 звука, которые слышите", "3 тактильных ощущения", "2 запаха", "1 вкус"],
+  },
+  {
+    id: "gratitude-list",
+    title: "Список благодарности",
+    description: "Запишите 3 вещи, за которые вы благодарны сегодня. Сдвигает фокус с негатива.",
+    category: "gratitude",
+    durationSec: 180,
+    steps: ["Возьмите блокнот или откройте заметки", "Напишите 3 конкретные вещи", "К каждой добавьте 1 предложение — почему это важно", "Перечитайте список вслух"],
+  },
+  {
+    id: "body-scan",
+    title: "Сканирование тела",
+    description: "Медленно пройдитесь вниманием от макушки до пяток, отмечая напряжение без осуждения.",
+    category: "mindfulness",
+    durationSec: 300,
+    steps: ["Закройте глаза, сядьте удобно", "Внимание на макушку — расслабьте", "Плечи, грудь, живот — отпустите напряжение", "Руки, ноги, ступни — полное расслабление"],
+  },
+  {
+    id: "positive-reframe",
+    title: "Позитивное переформулирование",
+    description: "Возьмите одну тревожную мысль и найдите для неё три более сбалансированные интерпретации.",
+    category: "cognitive",
+    durationSec: 120,
+    steps: ["Запишите тревожную мысль", "Найдите 3 аргумента «против» этой мысли", "Сформулируйте более сбалансированный взгляд", "Прочитайте новую формулировку 3 раза"],
+  },
+];
+
+// ── Helper: init psych tables on first use ──────────────────────────────────
+
+let psychTablesInit = false;
+async function initPsychTables(): Promise<void> {
+  if (psychTablesInit) return;
+  psychTablesInit = true;
+  try {
+    const pool = getPool();
+    await ensureQGoodTables(pool);
+  } catch {
+    // silent — in-memory fallback will be used
+  }
+}
+
+// ── Helper: callLlm — uses first available provider ─────────────────────────
+
+async function callLlm(systemPrompt: string, userPrompt: string): Promise<string> {
+  // Anthropic
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (anthropicKey) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 512,
+        temperature: 0.7,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+    const data = (await r.json()) as { content?: Array<{ text?: string }>; error?: { message?: string } };
+    if (!r.ok) throw new Error(data.error?.message || `Anthropic ${r.status}`);
+    return data.content?.map((b) => b.text || "").join("").trim() || "";
+  }
+
+  // OpenAI fallback
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  if (openaiKey) {
+    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const r = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        max_tokens: 512,
+        temperature: 0.7,
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+      }),
+    });
+    const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
+    if (!r.ok) throw new Error(data.error?.message || `OpenAI ${r.status}`);
+    return data.choices?.[0]?.message?.content?.trim() || "";
+  }
+
+  throw new Error("not-configured");
+}
+
+// ── POST /api/qgood/mood ─────────────────────────────────────────────────────
+
+qgoodRouter.post("/mood", moodLimit, async (req, res) => {
+  await initPsychTables();
+  const body = req.body || {};
+  const score = parseInt(String(body.score ?? ""), 10);
+  if (!Number.isFinite(score) || score < 1 || score > 10) {
+    return res.status(400).json({ error: "score must be 1..10" });
+  }
+  const emotion = body.emotion ? String(body.emotion).slice(0, 50) : null;
+  const context = body.context ? String(body.context).slice(0, 500) : null;
+  const userId = body.userId ? String(body.userId).slice(0, 100) : "anonymous";
+
+  if (isQGoodDbReady()) {
+    try {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO qgood_moods (user_id, score, emotion, context) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [userId, score, emotion, context],
+      );
+      return res.status(201).json({ ok: true, entry: r.rows[0] });
+    } catch (err: unknown) {
+      console.error("[qgood] mood_insert_failed", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // In-memory fallback
+  const entry: MoodEntry = {
+    id: memMoodSeq++,
+    user_id: userId,
+    score,
+    emotion,
+    context,
+    logged_at: new Date().toISOString(),
+  };
+  memMoods.push(entry);
+  res.status(201).json({ ok: true, entry });
+});
+
+// ── GET /api/qgood/mood ──────────────────────────────────────────────────────
+
+qgoodRouter.get("/mood", readLimit, async (req, res) => {
+  await initPsychTables();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1), 100);
+  const userId = req.query.userId ? String(req.query.userId).slice(0, 100) : "anonymous";
+
+  if (isQGoodDbReady()) {
+    try {
+      const pool = getPool();
+      const r = await pool.query(
+        `SELECT * FROM qgood_moods WHERE user_id = $1 ORDER BY logged_at DESC LIMIT $2`,
+        [userId, limit],
+      );
+      return res.json({ moods: r.rows, total: r.rowCount });
+    } catch (err: unknown) {
+      console.error("[qgood] mood_list_failed", err instanceof Error ? err.message : err);
+    }
+  }
+
+  const filtered = memMoods.filter((m) => m.user_id === userId).slice(-limit).reverse();
+  res.json({ moods: filtered, total: filtered.length });
+});
+
+// ── GET /api/qgood/mood/trends ───────────────────────────────────────────────
+
+qgoodRouter.get("/mood/trends", readLimit, async (req, res) => {
+  await initPsychTables();
+  const userId = req.query.userId ? String(req.query.userId).slice(0, 100) : "anonymous";
+
+  if (isQGoodDbReady()) {
+    try {
+      const pool = getPool();
+      const avgRow = await pool.query(
+        `SELECT ROUND(AVG(score)::numeric, 1) AS avg_score, COUNT(*) AS count
+         FROM qgood_moods
+         WHERE user_id = $1 AND logged_at >= NOW() - INTERVAL '7 days'`,
+        [userId],
+      );
+      const emotionRow = await pool.query(
+        `SELECT emotion, COUNT(*) AS freq
+         FROM qgood_moods
+         WHERE user_id = $1 AND emotion IS NOT NULL AND logged_at >= NOW() - INTERVAL '7 days'
+         GROUP BY emotion ORDER BY freq DESC LIMIT 5`,
+        [userId],
+      );
+      const dailyRow = await pool.query(
+        `SELECT DATE(logged_at) AS day, ROUND(AVG(score)::numeric,1) AS avg_score
+         FROM qgood_moods
+         WHERE user_id = $1 AND logged_at >= NOW() - INTERVAL '7 days'
+         GROUP BY day ORDER BY day ASC`,
+        [userId],
+      );
+      return res.json({
+        period: "7d",
+        avg_score: avgRow.rows[0]?.avg_score ?? null,
+        total_entries: Number(avgRow.rows[0]?.count ?? 0),
+        emotion_frequency: emotionRow.rows,
+        daily: dailyRow.rows,
+      });
+    } catch (err: unknown) {
+      console.error("[qgood] mood_trends_failed", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // In-memory fallback trends
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const recent = memMoods.filter((m) => m.user_id === userId && m.logged_at >= cutoff);
+  const avg = recent.length ? +(recent.reduce((s, m) => s + m.score, 0) / recent.length).toFixed(1) : null;
+  const emotionFreq: Record<string, number> = {};
+  for (const m of recent) {
+    if (m.emotion) emotionFreq[m.emotion] = (emotionFreq[m.emotion] || 0) + 1;
+  }
+  const emotion_frequency = Object.entries(emotionFreq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([emotion, freq]) => ({ emotion, freq }));
+  res.json({ period: "7d", avg_score: avg, total_entries: recent.length, emotion_frequency, daily: [] });
+});
+
+// ── POST /api/qgood/chat ─────────────────────────────────────────────────────
+
+const PSYCH_SYSTEM_PROMPT =
+  "Ты — эмпатичный психолог-ассистент. Помогай мягко и поддерживающе. " +
+  "НЕ ставь диагнозы и не назначай лечение. " +
+  "Всегда напоминай, что при серьёзных проблемах стоит обратиться к специалисту. " +
+  "Ответ ≤150 слов. Пиши на том языке, на котором пишет пользователь.";
+
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+qgoodRouter.post("/chat", chatLimit, async (req, res) => {
+  const body = req.body || {};
+  const message = typeof body.message === "string" ? body.message.trim().slice(0, 1000) : "";
+  if (!message) return res.status(400).json({ error: "message required" });
+
+  const history: ChatMessage[] = Array.isArray(body.history)
+    ? (body.history as unknown[])
+        .slice(-10)
+        .filter(
+          (m): m is ChatMessage =>
+            typeof m === "object" &&
+            m !== null &&
+            ("role" in m) &&
+            ("content" in m) &&
+            ((m as ChatMessage).role === "user" || (m as ChatMessage).role === "assistant") &&
+            typeof (m as ChatMessage).content === "string",
+        )
+    : [];
+
+  // Build user prompt with history context
+  const historyText = history
+    .map((m) => `${m.role === "user" ? "Пользователь" : "Ассистент"}: ${m.content}`)
+    .join("\n");
+  const userPrompt = historyText ? `${historyText}\nПользователь: ${message}` : message;
+
+  try {
+    const reply = await callLlm(PSYCH_SYSTEM_PROMPT, userPrompt);
+    return res.json({ reply, ok: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "not-configured") {
+      return res.status(503).json({
+        error: "llm-not-configured",
+        hint: "Set ANTHROPIC_API_KEY or OPENAI_API_KEY in environment.",
+        reply: "Я сейчас недоступен. Попробуйте позже или обратитесь к специалисту напрямую.",
+      });
+    }
+    console.error("[qgood] chat_failed", msg);
+    res.status(502).json({ error: "llm-failed", reply: "Произошла ошибка. Попробуйте ещё раз." });
+  }
+});
+
+// ── GET /api/qgood/exercises ─────────────────────────────────────────────────
+
+qgoodRouter.get("/exercises", readLimit, (_req, res) => {
+  res.json({ exercises: EXERCISES, total: EXERCISES.length });
+});
+
+// ── POST /api/qgood/exercises/:id/complete ───────────────────────────────────
+
+qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
+  await initPsychTables();
+  const exerciseId = String(req.params.id || "").trim();
+  if (!EXERCISES.find((e) => e.id === exerciseId)) {
+    return res.status(404).json({ error: "exercise_not_found" });
+  }
+  const body = req.body || {};
+  const userId = body.userId ? String(body.userId).slice(0, 100) : "anonymous";
+
+  if (isQGoodDbReady()) {
+    try {
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO qgood_completions (user_id, exercise_id) VALUES ($1, $2)`,
+        [userId, exerciseId],
+      );
+      const statsRow = await pool.query(
+        `SELECT COUNT(*) AS total_done FROM qgood_completions WHERE user_id = $1 AND exercise_id = $2`,
+        [userId, exerciseId],
+      );
+      const total_done = Number((statsRow.rows[0] as { total_done?: string } | undefined)?.total_done ?? 0);
+
+      // Streak: consecutive days with any exercise completion
+      const streakRow = await pool.query(
+        `SELECT COUNT(DISTINCT DATE(completed_at)) AS streak_days
+         FROM qgood_completions
+         WHERE user_id = $1
+           AND completed_at >= NOW() - INTERVAL '30 days'`,
+        [userId],
+      );
+      const streak = Number((streakRow.rows[0] as { streak_days?: string } | undefined)?.streak_days ?? 0);
+
+      return res.status(201).json({ ok: true, exercise_id: exerciseId, streak, total_done });
+    } catch (err: unknown) {
+      console.error("[qgood] exercise_complete_failed", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // In-memory fallback
+  const entry: CompletionEntry = {
+    id: memCompletionSeq++,
+    user_id: userId,
+    exercise_id: exerciseId,
+    completed_at: new Date().toISOString(),
+  };
+  memCompletions.push(entry);
+  const total_done = memCompletions.filter((c) => c.user_id === userId && c.exercise_id === exerciseId).length;
+  const uniqueDays = new Set(
+    memCompletions
+      .filter((c) => c.user_id === userId)
+      .map((c) => c.completed_at.slice(0, 10)),
+  ).size;
+  res.status(201).json({ ok: true, exercise_id: exerciseId, streak: uniqueDays, total_done });
 });

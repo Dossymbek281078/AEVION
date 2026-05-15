@@ -2,6 +2,56 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.6.0] — 2026-05-14
+
+### Added — module sub-clients
+
+Namespaced sub-clients on the root `AevionCatalog`, sharing baseUrl/fetch/headers:
+
+- **QStore** (`cat.qstore`)
+  - `products({ sort?: 'popular'|'newest'|'trending'|'rating' })`
+  - `featured({ limit? })` — 4 buckets (popular/trending/newest/topRated)
+- **QLearn** (`cat.qlearn`)
+  - `bookmark(courseId)` / `unbookmark(courseId)` — POST/DELETE
+  - `bookmarks()` — user's saved courses
+  - `streak()` — { current, longest, totalDays, activeToday, lastActiveAt }
+  - `progress()` — { summary, continueLearning, notStarted, completed }
+- **QEvents** (`cat.qevents`)
+  - `list({ when?: 'upcoming'|'past'|'all' })`
+  - `ics(eventId)` — returns text/calendar payload
+  - `icsUrl(eventId)` — URL only (no fetch)
+- **DevHub** (`cat.devhub`)
+  - `snippets({ limit?, tag?, user? })`
+  - `createSnippet({ title, content, language, tags? })`
+  - `getSnippet(id)`
+  - `star(id)`
+- **Planet** (`cat.planet`)
+  - `activity({ limit?, kinds? })` — cross-module activity feed
+
+### Added — config & infra
+
+- `AevionCatalogConfig.headers` — default headers (e.g. `Authorization`)
+  forwarded to every request, including all sub-client calls.
+- Shared internal `_request()` helper centralises URL/query/body/headers
+  assembly across new sub-clients.
+
+### Added — convenience exports
+
+`getQStoreProducts`, `getQStoreFeatured`, `bookmarkCourse`,
+`unbookmarkCourse`, `getMyBookmarks`, `getMyStreak`, `getMyProgress`,
+`getEvents`, `getEventIcs`, `getSnippets`, `createSnippet`, `getSnippet`,
+`starSnippet`, `getPlanetActivity`.
+
+### Added — types
+
+`QStoreSort`, `QStoreProduct`, `QStoreProductsResponse`,
+`QStoreFeaturedResponse`, `QLearnCourseRef`, `QLearnBookmarkResult`,
+`QLearnBookmarksResponse`, `QLearnStreak`, `QLearnProgressItem`,
+`QLearnProgress`, `QEventsWhen`, `QEvent`, `QEventsListResponse`,
+`DevHubSnippet`, `DevHubSnippetsResponse`, `DevHubCreateSnippetInput`,
+`DevHubStarResult`, `PlanetActivityKind`, `PlanetActivityItem`,
+`PlanetActivityResponse`.
+
 ## [0.5.0] — 2026-05-12
 
 ### Added

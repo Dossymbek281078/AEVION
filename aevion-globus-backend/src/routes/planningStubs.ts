@@ -121,6 +121,50 @@ function isValidEmail(value: unknown): value is string {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
 }
 
+/**
+ * Parse human-readable ETA strings like "Q3 2027", "Q1 2028", "TBD".
+ *
+ * Quarter → first day of the first month of that quarter (UTC):
+ *   Q1 → Jan 1, Q2 → Apr 1, Q3 → Jul 1, Q4 → Oct 1.
+ *
+ * Returns null for "TBD" / unparseable strings.
+ */
+export function parseEtaToDate(eta: string): Date | null {
+  if (!eta) return null;
+  const trimmed = eta.trim();
+  if (!trimmed || /^tbd$/i.test(trimmed)) return null;
+
+  // "Q3 2027" / "q3 2027" / "Q3-2027"
+  const q = trimmed.match(/^Q([1-4])[\s-]+(\d{4})$/i);
+  if (q) {
+    const quarter = Number(q[1]);
+    const year = Number(q[2]);
+    const month = (quarter - 1) * 3; // 0, 3, 6, 9
+    return new Date(Date.UTC(year, month, 1));
+  }
+
+  // "2027-04-01" / "2027/04/01"
+  const iso = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  }
+
+  // "2027" → mid-year (Jul 1) as best-guess for raw years
+  const yearOnly = trimmed.match(/^(\d{4})$/);
+  if (yearOnly) {
+    return new Date(Date.UTC(Number(yearOnly[1]), 6, 1));
+  }
+
+  return null;
+}
+
+/** Days from `from` (default: now) until `target`. Negative if target is past. */
+export function daysUntil(target: Date, from: Date = new Date()): number {
+  const ms = target.getTime() - from.getTime();
+  return Math.round(ms / 86_400_000);
+}
+
 async function getWaitlistCount(moduleId: string): Promise<number> {
   await ensureTables();
   if (dbAvailable) {
@@ -211,6 +255,33 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
     });
   });
 
+  // Public ETA endpoint: parses the human ETA string into a structured
+  // countdown so the frontend can render "launches in N days / weeks".
+  router.get("/eta", (_req, res) => {
+    const target = parseEtaToDate(config.eta);
+    if (!target) {
+      return res.json({
+        module: config.id,
+        eta: config.eta,
+        etaDate: null,
+        daysUntil: null,
+        weeksUntil: null,
+        isPast: false,
+        tbd: true,
+      });
+    }
+    const days = daysUntil(target);
+    res.json({
+      module: config.id,
+      eta: config.eta,
+      etaDate: target.toISOString(),
+      daysUntil: days,
+      weeksUntil: Math.round(days / 7),
+      isPast: days < 0,
+      tbd: false,
+    });
+  });
+
   router.post("/waitlist", waitlistLimiter, async (req: Request, res: Response) => {
     const email = (req.body || {}).email;
     if (!isValidEmail(email)) {
@@ -282,6 +353,12 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
       paths: {
         "/health": { get: { summary: "Service health" } },
         "/status": { get: { summary: "Public status, phase, ETA, principles, milestones" } },
+        "/eta": {
+          get: {
+            summary: "Parsed ETA countdown (etaDate, daysUntil, weeksUntil)",
+            responses: { "200": { description: "ETA breakdown; tbd:true if eta is not parseable" } },
+          },
+        },
         "/waitlist": {
           post: {
             summary: "Join the launch waitlist (rate-limited 5/min/IP)",

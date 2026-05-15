@@ -1341,3 +1341,293 @@ pricingRouter.get("/healthz", (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+/* ===========================
+ * FAQ (categorised)
+ * Источник истины для frontend /pricing FAQ-секции и для будущих
+ * SEO-страниц /pricing/faq/[category]. Раньше FAQ хардкодился в page.tsx —
+ * теперь backend даёт стабильный API.
+ *
+ * Фильтры:
+ *   ?category=billing|plans|security|enterprise|data — фильтр по теме
+ *   ?search=строка — простой substring-match по q+a (case-insensitive)
+ *   ?limit=N (по умолчанию 50, макс 200)
+ *
+ * Возвращает: { items, total, categories: [{id,label,count}] }
+ * =========================== */
+
+type FaqCategory = "billing" | "plans" | "security" | "enterprise" | "data";
+
+interface FaqEntry {
+  id: string;
+  q: string;
+  a: string;
+  category: FaqCategory;
+  /** Опциональные теги для будущих фильтров (industry / tier) */
+  tags?: string[];
+}
+
+const FAQ_CATEGORY_LABELS: Record<FaqCategory, string> = {
+  billing: "Биллинг и оплата",
+  plans: "Тарифы и модули",
+  security: "Безопасность",
+  enterprise: "Enterprise / SLA",
+  data: "Данные и экспорт",
+};
+
+const PRICING_FAQ: FaqEntry[] = [
+  {
+    id: "billing-prorate",
+    category: "billing",
+    q: "Как считается биллинг при смене тарифа?",
+    a: "Пропорционально дням. При апгрейде — кредит за неиспользованное на старом тарифе автоматически зачитывается. При даунгрейде — кредит остаётся на счёте до следующего цикла.",
+    tags: ["upgrade", "downgrade"],
+  },
+  {
+    id: "billing-annual-savings",
+    category: "billing",
+    q: "Сколько экономит annual-биллинг?",
+    a: "16% (≈2 месяца бесплатно). Скидка применяется автоматически при выборе Annual в калькуляторе. Доступно для всех платных тарифов и бандлов.",
+    tags: ["annual", "discount"],
+  },
+  {
+    id: "billing-currency",
+    category: "billing",
+    q: "Можно ли платить в KZT / RUB / EUR?",
+    a: "Окончательный счёт всегда в USD. Цены в KZT/RUB/EUR на странице — справочные, конвертация по фиксированному курсу обновляется еженедельно. Для Enterprise возможен договор в локальной валюте.",
+    tags: ["currency", "kzt", "rub", "eur"],
+  },
+  {
+    id: "plans-addon-only",
+    category: "plans",
+    q: "Можно ли купить только один модуль без тарифа?",
+    a: "Любой add-on модуль покупается поверх Free тарифа. Получаете нужный модуль без переплаты за все остальные.",
+    tags: ["modules", "addon"],
+  },
+  {
+    id: "plans-bundles",
+    category: "plans",
+    q: "Что если хочется AI Suite + IP Suite вместе?",
+    a: "Берите Business — там оба контура включены без отдельных бандлов. Сэкономите ~$20/мес против покупки бандлов поверх Pro.",
+    tags: ["bundles", "business"],
+  },
+  {
+    id: "plans-education",
+    category: "plans",
+    q: "Есть ли образовательный тариф?",
+    a: "Free покрывает 95% студенческих сценариев. Для университетов и хакатонов — связывайтесь, делаем sponsorship-аккаунты.",
+    tags: ["edu"],
+  },
+  {
+    id: "plans-trial",
+    category: "plans",
+    q: "Есть ли бесплатный пробный период?",
+    a: "14 дней free trial для Pro и Business — без привязки карты. Активируется кнопкой 'Try free' на карточке тарифа. По окончании trial — без авто-списания, нужно явно подтвердить переход на платный план.",
+    tags: ["trial"],
+  },
+  {
+    id: "enterprise-onprem",
+    category: "enterprise",
+    q: "Поддерживается ли on-premise установка?",
+    a: "Только для Enterprise. Включает Docker / Kubernetes артефакты, runbook, аудит. Минимальный контракт — 12 мес.",
+    tags: ["onprem", "k8s"],
+  },
+  {
+    id: "enterprise-sla",
+    category: "enterprise",
+    q: "Какой SLA на Enterprise?",
+    a: "99.95% uptime SLA, response 1h для critical, dedicated CSM. Финансовые компенсации при downtime прописаны в MSA. Для regulated industries — отдельный compliance addendum.",
+    tags: ["sla", "uptime"],
+  },
+  {
+    id: "enterprise-dpa",
+    category: "enterprise",
+    q: "Подписываете ли DPA / NDA?",
+    a: "DPA — стандартно для всех платных тарифов, без доп. оплаты. NDA — для Enterprise, либо при запросе на ProServ. Шаблоны GDPR-ready.",
+    tags: ["dpa", "nda", "gdpr"],
+  },
+  {
+    id: "security-data-location",
+    category: "security",
+    q: "Где хранятся данные?",
+    a: "По умолчанию — EU (Frankfurt) + RU/KZ зеркала для локализации. Для Enterprise — выбор региона или ваш VPC.",
+    tags: ["region", "gdpr"],
+  },
+  {
+    id: "security-encryption",
+    category: "security",
+    q: "Как шифруются данные?",
+    a: "At-rest: AES-256 (managed keys). In-transit: TLS 1.3. Для QSign/QRight подписи — Ed25519 + Shamir Secret Sharing (Quantum Shield). BYOK доступен для Enterprise.",
+    tags: ["encryption", "tls", "ed25519"],
+  },
+  {
+    id: "data-export",
+    category: "data",
+    q: "Можно ли отменить и забрать данные?",
+    a: "Да. Экспорт всех ваших QRight-объектов и QSign-подписей в JSON/PDF — кнопка в личном кабинете. После отмены — 30 дней grace period, затем soft-delete с возможностью восстановления ещё 60 дней.",
+    tags: ["export", "cancel"],
+  },
+  {
+    id: "data-portability",
+    category: "data",
+    q: "Какие форматы экспорта поддерживаются?",
+    a: "JSON (полный реестр), PDF (печатные сертификаты QRight / QSign), CSV (QTrade-операции), OpenAPI-snapshot для интеграций. Webhook-история — отдельный экспорт через /api/pricing/webhooks/export.",
+    tags: ["export", "json", "pdf", "csv"],
+  },
+  {
+    id: "plans-vs-stack",
+    category: "plans",
+    q: "Чем AEVION лучше связки DocuSign + OpenAI + Stripe?",
+    a: "Единый аккаунт, единый биллинг, единый аудит. Одна подпись = одна запись в реестре, одна оплата — связана. Модули знают друг про друга: AI-агент видит подпись, подпись видит платёж, реестр видит всё.",
+    tags: ["competitors"],
+  },
+];
+
+pricingRouter.get("/faq", (req, res) => {
+  const VALID: FaqCategory[] = ["billing", "plans", "security", "enterprise", "data"];
+  const category = typeof req.query.category === "string" && VALID.includes(req.query.category as FaqCategory)
+    ? (req.query.category as FaqCategory)
+    : undefined;
+  const search = typeof req.query.search === "string" ? req.query.search.trim().toLowerCase().slice(0, 100) : "";
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10), 1), 200);
+
+  let items = PRICING_FAQ.slice();
+  if (category) {
+    items = items.filter((f) => f.category === category);
+  }
+  if (search) {
+    items = items.filter(
+      (f) => f.q.toLowerCase().includes(search) || f.a.toLowerCase().includes(search),
+    );
+  }
+  const total = items.length;
+  items = items.slice(0, limit);
+
+  // Категории с count рассчитываем по universe (без category-фильтра, но с search),
+  // чтобы UI-фильтры не пропадали при выбранной категории.
+  const universe = PRICING_FAQ.filter((f) => {
+    if (!search) return true;
+    return f.q.toLowerCase().includes(search) || f.a.toLowerCase().includes(search);
+  });
+  const counts: Record<FaqCategory, number> = {
+    billing: 0, plans: 0, security: 0, enterprise: 0, data: 0,
+  };
+  for (const f of universe) counts[f.category] += 1;
+
+  const categories = VALID.map((id) => ({
+    id,
+    label: FAQ_CATEGORY_LABELS[id],
+    count: counts[id],
+  }));
+
+  res.json({
+    items,
+    total,
+    categories,
+    filter: { category: category ?? null, search: search || null },
+  });
+});
+
+/* ===========================
+ * Social proof: live "X teams already onboard" counter
+ * Агрегирует:
+ *   - newsletter subscribers (data/newsletter.jsonl)
+ *   - leads (data/leads.jsonl)
+ *   - affiliate + partner applications
+ *   - базовый "onboard" base (фиксированный — отображает реальный pre-launch traction)
+ *
+ * Возвращает структурированный snapshot с trend-данными за 7 дней.
+ * Используется фронтом для live-каунтера в hero и trust-секции.
+ * =========================== */
+
+/**
+ * BASE — стартовое число, отражающее реальный pre-launch traction
+ * (signups до запуска public counter). Не должно расти само по себе —
+ * только когда есть реальные новые leads/newsletter в JSONL.
+ */
+const SOCIAL_PROOF_BASE = 247;
+
+function countJsonlLines(file: string): number {
+  if (!existsSync(file)) return 0;
+  try {
+    const content = readFileSync(file, "utf8");
+    return content.split("\n").filter((l) => l.trim().length > 0).length;
+  } catch {
+    return 0;
+  }
+}
+
+interface JsonlWithTs {
+  ts?: string;
+}
+
+function countRecentSince(file: string, sinceIso: string): number {
+  if (!existsSync(file)) return 0;
+  try {
+    const content = readFileSync(file, "utf8");
+    const lines = content.split("\n").filter((l) => l.trim().length > 0);
+    let n = 0;
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line) as JsonlWithTs;
+        if (typeof obj.ts === "string" && obj.ts >= sinceIso) n += 1;
+      } catch {
+        // ignore
+      }
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
+pricingRouter.get("/social-proof", (_req, res) => {
+  const leads = countJsonlLines(LEADS_FILE);
+  const newsletter = countJsonlLines(NEWSLETTER_FILE);
+  const affiliates = countJsonlLines(AFFILIATE_FILE);
+  const partners = countJsonlLines(PARTNERS_FILE);
+  const edu = countJsonlLines(EDU_FILE);
+
+  const teamsOnboard = SOCIAL_PROOF_BASE + leads + newsletter + affiliates + partners + edu;
+
+  // Trend за последние 7 дней — реальные новые leads/newsletter
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const weeklyLeads = countRecentSince(LEADS_FILE, weekAgo);
+  const weeklyNewsletter = countRecentSince(NEWSLETTER_FILE, weekAgo);
+  const weeklyAffiliates = countRecentSince(AFFILIATE_FILE, weekAgo);
+  const weeklyPartners = countRecentSince(PARTNERS_FILE, weekAgo);
+  const weeklyEdu = countRecentSince(EDU_FILE, weekAgo);
+  const weeklyDelta = weeklyLeads + weeklyNewsletter + weeklyAffiliates + weeklyPartners + weeklyEdu;
+
+  // 24h тренд — для "live" feel
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const dailyLeads = countRecentSince(LEADS_FILE, dayAgo);
+  const dailyNewsletter = countRecentSince(NEWSLETTER_FILE, dayAgo);
+  const dailyDelta = dailyLeads + dailyNewsletter;
+
+  res.json({
+    teamsOnboard,
+    breakdown: {
+      base: SOCIAL_PROOF_BASE,
+      leads,
+      newsletter,
+      affiliates,
+      partners,
+      edu,
+    },
+    trend: {
+      weekly: weeklyDelta,
+      daily: dailyDelta,
+      weeklyPercentage: teamsOnboard > 0 ? Math.round((weeklyDelta / teamsOnboard) * 1000) / 10 : 0,
+    },
+    /**
+     * Полезные подписи для UI без необходимости форматирования на клиенте.
+     */
+    captions: {
+      headline: `${teamsOnboard.toLocaleString("en-US")} teams already onboard`,
+      trendLabel: weeklyDelta > 0 ? `+${weeklyDelta} за последнюю неделю` : "Стабильный рост",
+      dailyLabel: dailyDelta > 0 ? `+${dailyDelta} за 24 часа` : null,
+    },
+    generatedAt: new Date().toISOString(),
+  });
+});

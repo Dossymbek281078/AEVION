@@ -14,6 +14,7 @@ import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { statusRouter } from "./routes/status";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
@@ -23,6 +24,7 @@ import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -30,6 +32,7 @@ import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
+import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
@@ -53,6 +56,7 @@ import { veilnetxLedgerRouter } from "./routes/veilnetxLedger";
 import { ztideRouter } from "./routes/ztide";
 import { qchaingovRouter } from "./routes/qchaingov";
 import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
+import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
 import { isSentryEnabled, captureException } from "./lib/sentry";
 import { devhubRouter } from "./routes/devhub";
 import { qmediaRouter } from "./routes/qmedia";
@@ -63,7 +67,14 @@ import { qlearnRouter } from "./routes/qlearn";
 import { qsocialRouter } from "./routes/qsocial";
 import { qnewsRouter } from "./routes/qnews";
 import { qjobsRouter } from "./routes/qjobs";
+import { mapRealityRouter } from "./routes/mapReality";
+import { startupExchangeRouter } from "./routes/startupExchange";
+import { kidsAiContentRouter } from "./routes/kidsAiContent";
+import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
+import { deepSanRouter } from "./routes/deepsan";
+import { qpersonaRouter } from "./routes/qpersona";
+import { qlifeRouter } from "./routes/qlife";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -182,6 +193,7 @@ app.get("/api/globus/projects/:id", (req, res) => {
 });
 
 app.use("/api/modules", modulesRouter);
+app.use("/api/status", statusRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
@@ -347,7 +359,10 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Aggregated metrics — admin token required" },
       },
       "/api/pricing/events/recent": {
-        get: { summary: "Last N events — admin token required" },
+        get: { summary: "Last N events — admin token required (CSV filters: source,type,tier,industry,sid)" },
+      },
+      "/api/pricing/events/aggregate": {
+        get: { summary: "Time-bucketed counts (period=hour|day, groupBy=source|type|tier|industry) — admin token required" },
       },
       "/api/pricing/leads": {
         get: { summary: "List recent leads — admin token required" },
@@ -373,13 +388,23 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/checkout/subscriptions/count": {
         get: { summary: "Total provisioned subscriptions count" },
       },
+      "/api/pricing/provisioning/history": {
+        get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
+      },
+      "/api/pricing/provisioning/stats": {
+        get: { summary: "Aggregate provisioning stats: total, byTier, last7d, trialsActive, recent" },
+      },
+      "/api/pricing/provisioning/healthz": {
+        get: { summary: "Provisioning subsystem health: storage path, email mode" },
+      },
       "/api/pricing/roadmap": {
         get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
       ...FINTECH_OPENAPI_PATHS,
+      ...NEW_WAVE_OPENAPI_PATHS,
     },
-    components: { schemas: { ...FINTECH_OPENAPI_SCHEMAS } },
-    tags: FINTECH_OPENAPI_TAGS,
+    components: { schemas: { ...FINTECH_OPENAPI_SCHEMAS, ...NEW_WAVE_OPENAPI_SCHEMAS } },
+    tags: [...FINTECH_OPENAPI_TAGS, ...NEW_WAVE_OPENAPI_TAGS],
   });
 });
 
@@ -392,6 +417,7 @@ app.use("/api/qright", qrightRouter);
 app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
+app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================
 // QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)
@@ -420,6 +446,7 @@ app.use("/api/ztide", ztideRouter);
 app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
+app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth
@@ -485,6 +512,14 @@ app.use("/api/qstore", qstoreRouter);
 app.use("/api/qlearn", qlearnRouter);
 // QNews — standalone product #30
 app.use("/api/qnews", qnewsRouter);
+// MapReality — civic signals map (MVP: signals + supports)
+app.use("/api/mapreality", mapRealityRouter);
+// StartupX — startup ideas marketplace + investor interest
+app.use("/api/startupx", startupExchangeRouter);
+// Kids AI Content — multilang lesson catalog + AI tutor
+app.use("/api/kids-ai", kidsAiContentRouter);
+// Voice of Earth — multilang music tracks + voting
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
 // QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
 app.use("/api/build/jobs", qjobsRouter);
 app.use("/api/qjobs", qjobsRouter);
@@ -493,6 +528,13 @@ app.use("/api/build/social", qsocialRouter);
 app.use("/api/qsocial", qsocialRouter);
 // QEvents — events platform (RSVP, create, attend)
 app.use("/api/qevents", qeventsRouter);
+
+// DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
+app.use("/api/deepsan", deepSanRouter);
+// QPersona — digital avatar profiles (persona CRUD, AI bio, public gallery)
+app.use("/api/qpersona", qpersonaRouter);
+// QLife — longevity & anti-aging (biomarker log, trends, AI plan)
+app.use("/api/qlife", qlifeRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

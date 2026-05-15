@@ -217,6 +217,100 @@ export interface ProposalTallyRow {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// QPayNet — wallets, transfers, payment requests, merchant rail
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type WalletStatus = "active" | "frozen" | "closed";
+export type WalletKycLevel = "none" | "basic" | "verified";
+
+export interface Wallet {
+  id: string;
+  ownerUserId: string | null;
+  ownerEmail: string | null;
+  label: string;
+  currency: string;
+  /** Big-int cents; serialized as a string by Postgres for safety. */
+  balanceCents: string;
+  /** Reserved for in-flight payouts; spendable = balanceCents - reservedCents. */
+  reservedCents: string;
+  status: WalletStatus;
+  kycLevel: WalletKycLevel;
+  isMerchant: boolean;
+  createdAt: string;
+  closedAt: string | null;
+}
+
+export type TransactionKind =
+  | "deposit"
+  | "transfer"
+  | "withdraw"
+  | "merchant_charge"
+  | "refund"
+  | "payout"
+  | "fee";
+
+export type TransactionStatus = "pending" | "completed" | "failed" | "refunded";
+
+export interface Transaction {
+  id: string;
+  kind: TransactionKind;
+  fromWalletId: string | null;
+  toWalletId: string | null;
+  /** Big-int cents; serialized as a string. */
+  amountCents: string;
+  feeCents: string;
+  currency: string;
+  paymentRef: string | null;
+  description: string | null;
+  status: TransactionStatus;
+  createdAt: string;
+}
+
+export type PaymentRequestStatus = "open" | "paid" | "expired" | "cancelled";
+
+export interface PaymentRequest {
+  id: string;
+  ownerWalletId: string;
+  payerToken: string;
+  amountCents: string;
+  currency: string;
+  memo: string | null;
+  status: PaymentRequestStatus;
+  expiresAt: string | null;
+  maxViews: number | null;
+  viewCount: number;
+  paidAt: string | null;
+  paidByWalletId: string | null;
+  createdAt: string;
+}
+
+export interface MerchantApiKey {
+  id: string;
+  walletId: string;
+  keyPrefix: string;
+  label: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * Result of POST /api/qpaynet/merchant/charge. `idempotent: true` means the
+ * same paymentRef was already charged successfully and the original
+ * transaction is returned unchanged.
+ */
+export interface MerchantChargeResult {
+  id: string;
+  walletId: string;
+  amountCents: string;
+  currency: string;
+  paymentRef: string;
+  status: "completed" | "failed";
+  idempotent: boolean;
+  createdAt: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Error envelope
 // ─────────────────────────────────────────────────────────────────────────────
 

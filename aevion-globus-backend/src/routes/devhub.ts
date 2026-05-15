@@ -65,15 +65,29 @@ interface DevHubDeployment {
   completedAt: string | null;
 }
 
+interface DevHubSnippet {
+  id: string;
+  userId: string;
+  title: string;
+  content: string;
+  language: string;
+  tags: string[];
+  stars: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const memProjects = new Map<string, DevHubProject>();
 const memFiles = new Map<string, DevHubFile>();
 const memDeployments = new Map<string, DevHubDeployment>();
+const memSnippets = new Map<string, DevHubSnippet>();
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
 export function __resetDevHubStore() {
   memProjects.clear();
   memFiles.clear();
   memDeployments.clear();
+  memSnippets.clear();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1489,6 +1503,152 @@ devhubRouter.get("/projects/:id/deployments", async (req, res) => {
   }
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Snippet Shelf (publicly shareable code snippets, gist-style)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function rowToSnippet(row: any): DevHubSnippet {
+  return {
+    id: row.id,
+    userId: row.userId,
+    title: row.title,
+    content: row.content,
+    language: row.language,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    stars: typeof row.stars === "number" ? row.stars : Number(row.stars) || 0,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+  };
+}
+
+async function dbListSnippets(opts: { tag?: string; userId?: string; limit?: number }): Promise<DevHubSnippet[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  if (!isDevHubDbReady()) {
+    let arr = [...memSnippets.values()];
+    if (opts.userId) arr = arr.filter((s) => s.userId === opts.userId);
+    if (opts.tag) {
+      const tag = opts.tag.toLowerCase();
+      arr = arr.filter((s) => s.tags.some((t) => t.toLowerCase() === tag));
+    }
+    return arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+  }
+  const params: any[] = [];
+  const conds: string[] = [];
+  if (opts.userId) {
+    params.push(opts.userId);
+    conds.push(`"userId" = $${params.length}`);
+  }
+  if (opts.tag) {
+    params.push(JSON.stringify([opts.tag]));
+    conds.push(`"tags" @> $${params.length}::jsonb`);
+  }
+  params.push(limit);
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  const r = await pool.query(
+    `SELECT * FROM "DevHubSnippet" ${where} ORDER BY "createdAt" DESC LIMIT $${params.length}`,
+    params
+  );
+  return r.rows.map(rowToSnippet);
+}
+
+async function dbGetSnippet(id: string): Promise<DevHubSnippet | null> {
+  if (!isDevHubDbReady()) return memSnippets.get(id) ?? null;
+  const r = await pool.query(`SELECT * FROM "DevHubSnippet" WHERE "id" = $1`, [id]);
+  return r.rows[0] ? rowToSnippet(r.rows[0]) : null;
+}
+
+async function dbSaveSnippet(s: DevHubSnippet): Promise<void> {
+  if (!isDevHubDbReady()) { memSnippets.set(s.id, s); return; }
+  await pool.query(
+    `INSERT INTO "DevHubSnippet" ("id","userId","title","content","language","tags","stars","createdAt","updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)
+     ON CONFLICT ("id") DO UPDATE SET
+       "title"=$3,"content"=$4,"language"=$5,"tags"=$6::jsonb,"stars"=$7,"updatedAt"=$9`,
+    [s.id, s.userId, s.title, s.content, s.language, JSON.stringify(s.tags), s.stars, s.createdAt, s.updatedAt]
+  );
+}
+
+// GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
+devhubRouter.get("/snippets", async (req, res) => {
+  const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
+  const userId = req.query.user ? String(req.query.user).trim() : undefined;
+  const limit = req.query.limit ? Math.min(parseInt(String(req.query.limit), 10) || 50, 200) : 50;
+  try {
+    const snippets = await dbListSnippets({ tag, userId, limit });
+    res.json({ snippets, total: snippets.length });
+  } catch {
+    let arr = [...memSnippets.values()];
+    if (userId) arr = arr.filter((s) => s.userId === userId);
+    if (tag) {
+      const t = tag.toLowerCase();
+      arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
+    }
+    const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+    res.json({ snippets, total: snippets.length });
+  }
+});
+
+// POST /api/devhub/snippets — create a snippet
+devhubRouter.post("/snippets", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const { title, content, language, tags } = req.body || {};
+  if (!title || typeof title !== "string") return res.status(400).json({ error: "title is required" });
+  if (typeof content !== "string") return res.status(400).json({ error: "content must be a string" });
+  const normTags = Array.isArray(tags)
+    ? tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 10)
+    : [];
+  const snippet: DevHubSnippet = {
+    id: crypto.randomUUID(),
+    userId,
+    title: title.trim().slice(0, 200),
+    content: String(content).slice(0, 100_000),
+    language: language ? String(language).trim().slice(0, 40) : "plaintext",
+    tags: normTags,
+    stars: 0,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  try {
+    await dbSaveSnippet(snippet);
+  } catch {
+    memSnippets.set(snippet.id, snippet);
+  }
+  res.status(201).json({ snippet });
+});
+
+// GET /api/devhub/snippets/:id — fetch single snippet
+devhubRouter.get("/snippets/:id", async (req, res) => {
+  try {
+    const snippet = await dbGetSnippet(req.params.id);
+    if (!snippet) return res.status(404).json({ error: "snippet not found" });
+    res.json({ snippet });
+  } catch {
+    const snippet = memSnippets.get(req.params.id);
+    if (!snippet) return res.status(404).json({ error: "snippet not found" });
+    res.json({ snippet });
+  }
+});
+
+// POST /api/devhub/snippets/:id/star — increment star count
+devhubRouter.post("/snippets/:id/star", async (req, res) => {
+  let snippet: DevHubSnippet | null;
+  try {
+    snippet = await dbGetSnippet(req.params.id);
+  } catch {
+    snippet = memSnippets.get(req.params.id) ?? null;
+  }
+  if (!snippet) return res.status(404).json({ error: "snippet not found" });
+  snippet.stars += 1;
+  snippet.updatedAt = now();
+  try {
+    await dbSaveSnippet(snippet);
+  } catch {
+    memSnippets.set(snippet.id, snippet);
+  }
+  res.json({ ok: true, stars: snippet.stars });
+});
+
 // GET /api/devhub/projects/:id/env/validate — check required env vars
 devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -1514,4 +1674,303 @@ devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
   const required = requiredByStack[project.stack] ?? [];
   const missing = required.filter((key) => !(key in project!.envVars));
   res.json({ valid: missing.length === 0, missing });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ROUTES — Media (ElevenLabs TTS)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// POST /api/devhub/media/tts — text-to-speech via ElevenLabs
+devhubRouter.post("/media/tts", async (req, res) => {
+  const { text, voice = "Rachel" } = req.body || {};
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return res.status(400).json({ error: "text is required" });
+  }
+  if (text.trim().length > 5000) {
+    return res.status(400).json({ error: "text too long (max 5000 chars)" });
+  }
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+      setupUrl: "https://elevenlabs.io/api",
+    });
+  }
+
+  // Map voice name → ElevenLabs voice ID (common voices)
+  const VOICE_IDS: Record<string, string> = {
+    Rachel: "21m00Tcm4TlvDq8ikWAM",
+    Adam:   "pNInz6obpgDQGcFmaJgB",
+    Antoni: "ErXwobaYiN019PkySvjV",
+    Arnold: "VR6AewLTigWG4xSOukaG",
+    Bella:  "EXAVITQu4vr4xnSDxMaL",
+    Domi:   "AZnzlk1XvdvUeBnXmlld",
+    Elli:   "MF3mGyEYCl7XYWbV9V6O",
+    Josh:   "TxGEqnHWrfWFTfGW9XjX",
+    Sam:    "yoZ06aMxZJJ28mfd3POQ",
+  };
+  const voiceId = VOICE_IDS[voice as string] ?? VOICE_IDS["Rachel"];
+
+  try {
+    const elResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text: text.trim(),
+        model_id: "eleven_monolingual_v1",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+
+    if (!elResp.ok) {
+      const errText = await elResp.text();
+      return res.status(elResp.status).json({ error: `ElevenLabs error: ${errText.slice(0, 200)}` });
+    }
+
+    const audioBuffer = Buffer.from(await elResp.arrayBuffer());
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", audioBuffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(audioBuffer);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "TTS generation failed" });
+  }
+});
+
+// POST /api/devhub/media/email — send email via Brevo
+devhubRouter.post("/media/email", async (req, res) => {
+  const { to, subject, htmlBody, from } = req.body || {};
+  if (!to || typeof to !== "string") return res.status(400).json({ error: "to (email) required" });
+  if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });
+  if (!htmlBody || typeof htmlBody !== "string") return res.status(400).json({ error: "htmlBody required" });
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRe.test(to.trim())) return res.status(400).json({ error: "invalid recipient email" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "Brevo not configured — set BREVO_API_KEY",
+      setupUrl: "https://app.brevo.com/settings/keys/api",
+    });
+  }
+
+  const senderEmail = (from && typeof from === "string" && emailRe.test(from.trim()))
+    ? from.trim()
+    : (process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app");
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        sender: { email: senderEmail, name: "AEVION DevHub" },
+        to: [{ email: to.trim() }],
+        subject: subject.trim().slice(0, 200),
+        htmlContent: htmlBody.slice(0, 100_000),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Email send failed" });
+  }
+});
+
+// POST /api/devhub/media/payment-link — create Stripe payment link
+devhubRouter.post("/media/payment-link", async (req, res) => {
+  const { name, amountCents, currency = "usd", description } = req.body || {};
+  if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
+  const amt = Number(amountCents);
+  if (!Number.isFinite(amt) || amt < 50) return res.status(400).json({ error: "amountCents must be ≥ 50" });
+
+  const apiKey = process.env.STRIPE_SECRET_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "Stripe not configured — set STRIPE_SECRET_KEY",
+      setupUrl: "https://dashboard.stripe.com/apikeys",
+    });
+  }
+
+  try {
+    // 1. Create product
+    const productResp = await fetch("https://api.stripe.com/v1/products", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        name: name.trim().slice(0, 200),
+        ...(description ? { description: String(description).slice(0, 500) } : {}),
+      }).toString(),
+    });
+    if (!productResp.ok) {
+      const errText = await productResp.text();
+      return res.status(productResp.status).json({ error: `Stripe product error: ${errText.slice(0, 300)}` });
+    }
+    const product = await productResp.json() as { id: string };
+
+    // 2. Create price
+    const priceResp = await fetch("https://api.stripe.com/v1/prices", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        product: product.id,
+        unit_amount: String(Math.round(amt)),
+        currency: String(currency).toLowerCase().slice(0, 3),
+      }).toString(),
+    });
+    if (!priceResp.ok) {
+      const errText = await priceResp.text();
+      return res.status(priceResp.status).json({ error: `Stripe price error: ${errText.slice(0, 300)}` });
+    }
+    const price = await priceResp.json() as { id: string };
+
+    // 3. Create payment link
+    const linkResp = await fetch("https://api.stripe.com/v1/payment_links", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        "line_items[0][price]": price.id,
+        "line_items[0][quantity]": "1",
+      }).toString(),
+    });
+    if (!linkResp.ok) {
+      const errText = await linkResp.text();
+      return res.status(linkResp.status).json({ error: `Stripe link error: ${errText.slice(0, 300)}` });
+    }
+    const link = await linkResp.json() as { id: string; url: string };
+    res.json({ ok: true, paymentLinkId: link.id, url: link.url, productId: product.id, priceId: price.id });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Payment link creation failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
+devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  const vercelToken = process.env.VERCEL_API_TOKEN;
+  if (!vercelToken) {
+    return res.status(503).json({
+      error: "Vercel not configured — set VERCEL_API_TOKEN",
+      setupUrl: "https://vercel.com/account/tokens",
+    });
+  }
+
+  const deploymentId = crypto.randomUUID();
+  const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
+
+  const deployment: DevHubDeployment = {
+    id: deploymentId,
+    projectId: project.id,
+    userId,
+    status: "pending",
+    deployUrl: null,
+    buildLog: null,
+    triggeredAt: now(),
+    completedAt: null,
+  };
+  try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+  try {
+    const files = await dbListFiles(project.id);
+    // Vercel Deployments API v13 — inline file payload
+    const vercelFiles = files.map((f) => ({
+      file: f.path,
+      data: Buffer.from(f.content).toString("base64"),
+      encoding: "base64",
+    }));
+
+    const vResp = await fetch("https://api.vercel.com/v13/deployments", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${vercelToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: deploySlug,
+        files: vercelFiles,
+        target: "production",
+        projectSettings: {
+          framework: project.stack === "next" ? "nextjs"
+                   : project.stack === "react" ? "vite"
+                   : project.stack === "express" ? null
+                   : null,
+        },
+      }),
+    });
+
+    if (!vResp.ok) {
+      const errText = await vResp.text();
+      deployment.status = "failed";
+      deployment.buildLog = `Vercel error: ${errText.slice(0, 500)}`;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(vResp.status).json({ ok: false, error: `Vercel deploy error: ${errText.slice(0, 300)}` });
+    }
+
+    const vData = await vResp.json() as { id: string; url: string };
+    const liveUrl = `https://${vData.url}`;
+
+    deployment.status = "building";
+    deployment.deployUrl = liveUrl;
+    deployment.buildLog = `Vercel deployment ${vData.id} created`;
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+    // After 5s, mark live + update project
+    setTimeout(async () => {
+      const d = memDeployments.get(deployment.id) ?? deployment;
+      d.status = "live";
+      d.completedAt = now();
+      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+      if (project) {
+        project.status = "live";
+        project.deployUrl = liveUrl;
+        project.updatedAt = now();
+        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+      }
+    }, 5000);
+
+    return res.json({
+      ok: true,
+      deploymentId,
+      vercelDeploymentId: vData.id,
+      deployUrl: liveUrl,
+      provider: "vercel",
+      message: "Vercel deployment started",
+    });
+  } catch (e: any) {
+    deployment.status = "failed";
+    deployment.buildLog = e?.message || "deploy failed";
+    deployment.completedAt = now();
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    return res.status(500).json({ ok: false, error: e?.message || "Vercel deploy failed" });
+  }
 });

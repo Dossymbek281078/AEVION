@@ -11,6 +11,50 @@
   --aevion-accent-hover: #0f766e;
   --aevion-navy: #0f172a;
   --aevion-muted: #64748b;
+
+  /* CyberChess theme vars — light (default) */
+  --cc-bg: #f5f6fa;
+  --cc-surface1: #ffffff;
+  --cc-surface2: #fafbfd;
+  --cc-surface3: #f1f2f7;
+  --cc-text: #0f172a;
+  --cc-text-dim: #5b6474;
+  --cc-text-mute: #8b94a3;
+  --cc-text-inv: #ffffff;
+  --cc-border: #e4e7ee;
+  --cc-border-strong: #cbd0db;
+  --cc-brand: #059669;
+  --cc-brand-hover: #047857;
+  --cc-brand-soft: rgba(5,150,105,0.1);
+  --cc-accent: #7c3aed;
+  --cc-accent-soft: rgba(124,58,237,0.1);
+  --cc-gold: #d97706;
+  --cc-danger: #dc2626;
+  --cc-info: #2563eb;
+  --cc-shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.03);
+}
+
+/* CyberChess dark mode via data-theme attribute */
+:root[data-cc-theme="dark"] {
+  --cc-bg: #161512;
+  --cc-surface1: #262421;
+  --cc-surface2: #1e1c19;
+  --cc-surface3: #100f0d;
+  --cc-text: #bababa;
+  --cc-text-dim: #8b8987;
+  --cc-text-mute: #5d5b59;
+  --cc-text-inv: #161512;
+  --cc-border: #3d3b39;
+  --cc-border-strong: #5d5b59;
+  --cc-brand: #759900;
+  --cc-brand-hover: #88b300;
+  --cc-brand-soft: rgba(117,153,0,0.2);
+  --cc-accent: #d1a227;
+  --cc-accent-soft: rgba(209,162,39,0.2);
+  --cc-gold: #e8a908;
+  --cc-danger: #e04040;
+  --cc-info: #4990a4;
+  --cc-shadow-sm: 0 1px 3px rgba(0,0,0,0.25);
 }
 
 @theme inline {
@@ -515,6 +559,74 @@ button:focus:not(:focus-visible) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   CyberChess Animations
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Доска: fade+scale при старте партии */
+@keyframes cc-board-enter {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.cc-board-enter {
+  animation: cc-board-enter 320ms cubic-bezier(0.25,0.46,0.45,0.94) both;
+}
+
+/* Шах: brief red pulse на всей доске */
+@keyframes cc-check-flash {
+  0%,100% { box-shadow: inset 0 0 0 0 rgba(224,64,64,0); }
+  40%     { box-shadow: inset 0 0 0 4px rgba(224,64,64,0.7); }
+}
+.cc-check-flash {
+  animation: cc-check-flash 600ms ease-out both;
+}
+
+/* Победа: green glow */
+@keyframes cc-win-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(117,153,0,0); }
+  50%  { box-shadow: 0 0 32px 8px rgba(117,153,0,0.45); }
+  100% { box-shadow: 0 0 0 0 rgba(117,153,0,0); }
+}
+.cc-win-glow {
+  animation: cc-win-glow 800ms ease-out both;
+}
+
+/* Поражение: dim */
+@keyframes cc-loss-dim {
+  from { opacity: 1; }
+  to   { opacity: 0.75; filter: grayscale(20%); }
+}
+.cc-loss-dim {
+  animation: cc-loss-dim 400ms ease-out forwards;
+}
+
+/* Таймер <30s: пульсирует */
+@keyframes cc-clock-pulse {
+  0%,100% { opacity: 1; }
+  50%     { opacity: 0.55; }
+}
+
+/* Новая игра: фигуры fade-in */
+@keyframes cc-piece-appear {
+  from { opacity:0; transform: translateY(-4px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+@keyframes cc-ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Desktop: cc-main-row занимает всю высоту viewport чтобы не было пустоты снизу */
+.cc-main-row {
+  min-height: calc(100vh - 110px);
+  align-items: stretch !important;
+}
+/* Sidebar на десктопе тянется на всю высоту строки */
+.cc-right-panel {
+  align-self: stretch !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    CyberChess Mobile Layout — responsive overrides for ≤ 768px
    Key changes:
    • Board fills full width, panels stack vertically
@@ -524,9 +636,9 @@ button:focus:not(:focus-visible) {
    ═══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 768px) {
-  /* Board container — fill viewport width */
-  [style*="min(1040px"] {
-    width: min(100vw - 8px, calc(100vh - 180px)) !important;
+  /* Board container — fill viewport width on mobile */
+  [style*="min(calc(100vh - 160px)"] {
+    width: min(calc(100vw - 8px), calc(100vh - 180px)) !important;
   }
 
   /* Main flex row (board + right panel) — stack vertically */
@@ -671,7 +783,7 @@ button:focus:not(:focus-visible) {
 /* Phone portrait: board takes 100% width, right panel becomes scrollable strip */
 @media (max-width: 600px) {
   /* Board max-width override — match screen exactly */
-  [style*="min(1040px"] {
+  [style*="min(calc(100vh - 160px)"] {
     width: calc(100vw - 8px) !important;
     max-width: calc(100vw - 8px) !important;
   }

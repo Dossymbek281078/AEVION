@@ -74,6 +74,7 @@ const bucketLabel: Record<ValueBucket, string> = {
 };
 
 const TOC = [
+  { id: "demo-stack", label: "Demo stack" },
   { id: "pillars", label: "Pillars" },
   { id: "videos", label: "Walkthroughs" },
   { id: "market", label: "Market" },
@@ -521,6 +522,182 @@ export default function PitchPage() {
           </p>
         </div>
       </section>
+
+      {/* ───────── DEMO STACK + PRESS KIT ───────── */}
+      <Section
+        anchor="demo-stack"
+        eyebrow="Try every layer in 8 minutes"
+        title="The five live touchpoints, in the order an investor should click them."
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 14,
+            marginBottom: 28,
+          }}
+        >
+          {[
+            {
+              step: 1,
+              code: "AUTH",
+              name: "Sign in",
+              href: "/auth",
+              body: "Create an AEVION identity — the seed for every downstream signature.",
+              color: "#7dd3fc",
+            },
+            {
+              step: 2,
+              code: "QRIGHT",
+              name: "Register",
+              href: "/qright",
+              body: "Hash a file to SHA-256, mint an immutable registry record.",
+              color: "#5eead4",
+            },
+            {
+              step: 3,
+              code: "QSIGN",
+              name: "Sign · ML-DSA-65",
+              href: "/qsign",
+              body: "Post-quantum NIST FIPS 204 signature attached to the record.",
+              color: "#a78bfa",
+            },
+            {
+              step: 4,
+              code: "BUREAU",
+              name: "Certify",
+              href: "/bureau",
+              body: "Issue a legally-meaningful certificate with notary timestamp.",
+              color: "#fbbf24",
+            },
+            {
+              step: 5,
+              code: "PLANET",
+              name: "Compliance",
+              href: "/planet",
+              body: "Feed the artifact into the Planet compliance pipeline.",
+              color: "#86efac",
+            },
+          ].map((s) => (
+            <Link
+              key={s.code}
+              href={s.href}
+              style={{
+                display: "block",
+                padding: 18,
+                borderRadius: 14,
+                background: "linear-gradient(165deg, rgba(15,23,42,0.85), rgba(15,23,42,0.55))",
+                border: `1px solid ${s.color}40`,
+                textDecoration: "none",
+                color: "inherit",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 12,
+                  right: 14,
+                  fontSize: 32,
+                  fontWeight: 900,
+                  color: `${s.color}28`,
+                  letterSpacing: "-0.05em",
+                  lineHeight: 1,
+                }}
+              >
+                {s.step}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.18em",
+                  color: s.color,
+                  textTransform: "uppercase",
+                  marginBottom: 6,
+                }}
+              >
+                {s.code}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 850, color: "#fff", marginBottom: 8, lineHeight: 1.25 }}>
+                {s.name}
+              </div>
+              <p style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.5, margin: "0 0 10px" }}>{s.body}</p>
+              <span style={{ fontSize: 12, fontWeight: 700, color: s.color }}>Open →</span>
+            </Link>
+          ))}
+        </div>
+
+        {/* Press kit row */}
+        <div
+          style={{
+            padding: 22,
+            borderRadius: 16,
+            background: "linear-gradient(165deg, rgba(125,211,252,0.08), rgba(15,23,42,0.6))",
+            border: "1px solid rgba(125,211,252,0.25)",
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            gap: 20,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: "0.2em",
+                color: "#7dd3fc",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Press kit
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 850, color: "#fff", margin: "0 0 6px", lineHeight: 1.3 }}>
+              Logos, screenshots, founder bio, one-pager, deck PDF.
+            </h3>
+            <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.55, margin: 0 }}>
+              Everything press, partners, and LPs need to write about AEVION without asking us first.
+            </p>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <Link
+              href="/press"
+              style={{
+                padding: "12px 22px",
+                borderRadius: 10,
+                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                color: "#fff",
+                fontWeight: 800,
+                textDecoration: "none",
+                fontSize: 14,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Open press kit →
+            </Link>
+            <Link
+              href="/pitch/print"
+              style={{
+                padding: "12px 22px",
+                borderRadius: 10,
+                background: "rgba(251,191,36,0.12)",
+                border: "1px solid rgba(251,191,36,0.45)",
+                color: "#fbbf24",
+                fontWeight: 800,
+                textDecoration: "none",
+                fontSize: 14,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Deck PDF ⤓
+            </Link>
+          </div>
+        </div>
+      </Section>
 
       {/* ───────── PILLARS ───────── */}
       <Section anchor="pillars" eyebrow="Three architectural pillars" title="Why this is one product, not 27">

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * QBuild transactional emails.
  * Uses nodemailer with SMTP (works with Gmail, Yandex, any provider).
  * All sends are fire-and-forget — never block the HTTP response.

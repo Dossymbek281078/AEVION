@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,14 +103,22 @@ function EventCard({
   event,
   currentUserId,
   onRSVP,
+  isPast,
 }: {
   event: QEvent;
   currentUserId: string | null;
   onRSVP: (id: string, status: string, attendeeCount: number) => void;
+  isPast: boolean;
 }) {
   const [rsvping, setRsvping] = useState(false);
   const [rsvpStatus, setRsvpStatus] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+
+  function handleIcsDownload() {
+    // Trigger native browser download via direct navigation.
+    // SDK helper returns the absolute URL for the iCal endpoint.
+    window.location.href = catalog.qevents.icsUrl(event.id);
+  }
 
   async function handleRSVP() {
     if (!currentUserId) return;
@@ -195,9 +204,9 @@ function EventCard({
           </p>
         )}
 
-        {/* RSVP button */}
-        <div style={{ marginTop: "auto" }}>
-          {currentUserId ? (
+        {/* Actions */}
+        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+          {!isPast && currentUserId && (
             <button
               onClick={handleRSVP}
               disabled={rsvping}
@@ -216,11 +225,49 @@ function EventCard({
             >
               {rsvping ? "..." : isGoing ? "Going ✓" : "RSVP"}
             </button>
-          ) : (
+          )}
+          {!isPast && !currentUserId && (
             <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
               Sign in to RSVP
             </div>
           )}
+          {isPast && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#94a3b8",
+                textAlign: "center",
+                background: "#f1f5f9",
+                borderRadius: 8,
+                padding: "8px",
+                fontWeight: 600,
+              }}
+            >
+              Past event
+            </div>
+          )}
+          <button
+            onClick={handleIcsDownload}
+            title="Download .ics file to add this event to your calendar"
+            style={{
+              width: "100%",
+              background: "#fff",
+              color: "#475569",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              padding: "8px",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: 13,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              transition: "all 0.15s",
+            }}
+          >
+            📅 Add to calendar
+          </button>
         </div>
       </div>
     </div>
@@ -283,8 +330,8 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
     width: "100%",
     border: "1px solid #e2e8f0",
     borderRadius: 8,
-    padding: "9px 12px",
-    fontSize: 14,
+    padding: "10px 12px",
+    fontSize: 16,
     outline: "none",
     fontFamily: "inherit",
     boxSizing: "border-box",
@@ -310,7 +357,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
         style={{
           background: "#fff",
           borderRadius: 16,
-          padding: 28,
+          padding: "20px clamp(16px, 4vw, 28px)",
           width: "100%",
           maxWidth: 480,
           maxHeight: "90vh",
@@ -390,28 +437,30 @@ const CATEGORIES = [
   { id: "networking", label: "Networking" },
 ];
 
+type WhenFilter = "upcoming" | "past";
+
 export default function QEventsPage() {
   const [events, setEvents] = useState<QEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("");
+  const [when, setWhen] = useState<WhenFilter>("upcoming");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const currentUserId = getAuthSub();
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (category) params.set("category", category);
-      const url = `${apiUrl("/api/qevents/events")}${params.toString() ? "?" + params.toString() : ""}`;
-      const resp = await fetch(url);
-      if (resp.ok) {
-        const data = await resp.json() as { events: QEvent[] };
-        setEvents(data.events ?? []);
-      }
+      // SDK list() returns time-filtered events; SDK doesn't expose `category`
+      // filter, so we apply it client-side to preserve existing UX.
+      const data = await catalog.qevents.list({ when });
+      const all = (data.events ?? []) as unknown as QEvent[];
+      setEvents(category ? all.filter((e) => e.category === category) : all);
+    } catch {
+      // swallow — preserves prior behavior (no error UI on list failure)
     } finally {
       setLoading(false);
     }
-  }, [category]);
+  }, [category, when]);
 
   useEffect(() => {
     fetchEvents();
@@ -478,6 +527,45 @@ export default function QEventsPage() {
           )}
         </div>
 
+        {/* Time tabs (Upcoming / Past) */}
+        <div
+          style={{
+            display: "inline-flex",
+            background: "#f1f5f9",
+            borderRadius: 10,
+            padding: 4,
+            marginBottom: 16,
+            gap: 4,
+          }}
+          role="tablist"
+          aria-label="Time filter"
+        >
+          {(["upcoming", "past"] as WhenFilter[]).map((w) => {
+            const active = when === w;
+            return (
+              <button
+                key={w}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setWhen(w)}
+                style={{
+                  padding: "7px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  background: active ? "#0f172a" : "transparent",
+                  color: active ? "#fff" : "#64748b",
+                  transition: "all 0.15s",
+                }}
+              >
+                {w === "upcoming" ? "🔜 Upcoming" : "📜 Past"}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Category tabs */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
           {CATEGORIES.map((cat) => (
@@ -508,15 +596,23 @@ export default function QEventsPage() {
               color: "#94a3b8",
             }}
           >
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
-            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>No upcoming events</div>
-            <div style={{ fontSize: 14 }}>Be the first to create an event!</div>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>
+              {when === "upcoming" ? "🎉" : "📜"}
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>
+              {when === "upcoming" ? "No upcoming events" : "No past events"}
+            </div>
+            <div style={{ fontSize: 14 }}>
+              {when === "upcoming"
+                ? "Be the first to create an event!"
+                : "Past events will appear here once they end."}
+            </div>
           </div>
         )}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))",
             gap: 20,
           }}
         >
@@ -526,6 +622,7 @@ export default function QEventsPage() {
               event={event}
               currentUserId={currentUserId}
               onRSVP={handleRSVP}
+              isPast={when === "past"}
             />
           ))}
         </div>

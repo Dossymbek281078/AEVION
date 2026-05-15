@@ -128,6 +128,45 @@ export interface RegistryStats {
   generatedAt: string;
 }
 
+export interface CoverageBucket {
+  count: number;
+  total: number;
+  percent: number;
+}
+
+export interface ExtendedStatsRecentItem {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+  kind: string;
+  priority: number;
+  touchedAt: string | null;
+}
+
+export interface ExtendedStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byKind: Record<string, number>;
+  byPriority: Record<string, number>;
+  topTags: { tag: string; count: number }[];
+  coverage: {
+    health: CoverageBucket;
+    openapi: CoverageBucket;
+  };
+  recentActivity: ExtendedStatsRecentItem[];
+  generatedAt: string;
+}
+
+export interface ModuleOfTheDay {
+  date: string;        // YYYY-MM-DD
+  dayOfYear: number;   // 0..365
+  registrySize: number;
+  module: CatalogItem;
+  tomorrow: { id: string; code: string; name: string };
+  generatedAt: string;
+}
+
 export interface CatalogListOptions {
   status?: string | string[];
   tag?: string | string[];
@@ -138,6 +177,358 @@ export interface CatalogListOptions {
 export interface AevionCatalogConfig {
   baseUrl?: string;
   fetch?: typeof fetch;
+  /**
+   * Optional headers applied to all requests (e.g. `Authorization`, `X-User-Id`).
+   * Per-request headers (Accept) override these on collision.
+   */
+  headers?: Record<string, string>;
+}
+
+// ── v0.6 sub-domain types ───────────────────────────────────────────────────
+
+export type QStoreSort = "popular" | "newest" | "trending" | "rating";
+
+export interface QStoreProduct {
+  id: string;
+  slug?: string;
+  title: string;
+  description?: string;
+  price?: number;
+  currency?: string;
+  rating?: number;
+  ratingCount?: number;
+  purchases?: number;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface QStoreProductsResponse {
+  total: number;
+  sort: QStoreSort | string;
+  items: QStoreProduct[];
+}
+
+export interface QStoreFeaturedResponse {
+  popular: QStoreProduct[];
+  trending: QStoreProduct[];
+  newest: QStoreProduct[];
+  topRated: QStoreProduct[];
+  generatedAt?: string;
+}
+
+export interface QLearnCourseRef {
+  id: string;
+  slug?: string;
+  title: string;
+  thumbnail?: string;
+  level?: string;
+  durationMin?: number;
+  [key: string]: unknown;
+}
+
+export interface QLearnBookmarkResult {
+  ok: boolean;
+  bookmarked: boolean;
+  courseId: string;
+}
+
+export interface QLearnBookmarksResponse {
+  total: number;
+  items: QLearnCourseRef[];
+}
+
+export interface QLearnStreak {
+  current: number;
+  longest: number;
+  totalDays: number;
+  activeToday: boolean;
+  lastActiveAt: string | null;
+}
+
+export interface QLearnProgressItem {
+  courseId: string;
+  course?: QLearnCourseRef;
+  progress: number; // 0..1
+  lastViewedAt?: string | null;
+  completedAt?: string | null;
+  [key: string]: unknown;
+}
+
+export interface QLearnProgress {
+  summary: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    notStarted: number;
+  };
+  continueLearning: QLearnProgressItem[];
+  notStarted: QLearnProgressItem[];
+  completed: QLearnProgressItem[];
+}
+
+export type QEventsWhen = "upcoming" | "past" | "all";
+
+export interface QEvent {
+  id: string;
+  slug?: string;
+  title: string;
+  description?: string;
+  startAt: string;
+  endAt?: string | null;
+  location?: string | null;
+  online?: boolean;
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+export interface QEventsListResponse {
+  total?: number;
+  when?: QEventsWhen;
+  /** Server returns `events` (legacy); SDK aliases to both for forward-compat. */
+  events: QEvent[];
+  items?: QEvent[];
+}
+
+export interface DevHubSnippet {
+  id: string;
+  title: string;
+  content: string;
+  language: string;
+  tags: string[];
+  user?: string;
+  stars?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface DevHubSnippetsResponse {
+  total: number;
+  items: DevHubSnippet[];
+}
+
+export interface DevHubCreateSnippetInput {
+  title: string;
+  content: string;
+  language: string;
+  tags?: string[];
+}
+
+export interface DevHubStarResult {
+  ok: boolean;
+  starred: boolean;
+  snippetId: string;
+  stars: number;
+}
+
+export type PlanetActivityKind =
+  | "module_update"
+  | "release"
+  | "post"
+  | "comment"
+  | "purchase"
+  | "course_complete"
+  | "event"
+  | string;
+
+export interface PlanetActivityItem {
+  id: string;
+  kind: PlanetActivityKind;
+  /** ISO timestamp — server returns `at` (aliased from createdAt/revokedAt). */
+  at: string;
+  /** Legacy/raw timestamp alias. */
+  createdAt?: string;
+  ownerId?: string | null;
+  ref?: string | null;
+  title?: string | null;
+  actor?: string | null;
+  subject?: string | null;
+  module?: string | null;
+  url?: string | null;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface PlanetActivityResponse {
+  items: PlanetActivityItem[];
+  count: number;
+  kinds: string[];
+  total?: number;
+}
+
+// ── v0.7 sub-domain types ───────────────────────────────────────────────────
+
+export interface QCoreAIProvider {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  models?: string[];
+  defaultModel?: string;
+  [key: string]: unknown;
+}
+
+export interface QCoreAIProvidersResponse {
+  providers: QCoreAIProvider[];
+  count?: number;
+  [key: string]: unknown;
+}
+
+export interface QCoreAIHealthResponse {
+  status: "ok" | "degraded" | "down" | string;
+  providers?: Record<string, { ok: boolean; status?: number; durationMs?: number }>;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+export interface QCoreAIChatMessage {
+  role: "system" | "user" | "assistant" | string;
+  content: string;
+  [key: string]: unknown;
+}
+
+export interface QCoreAIChatRequest {
+  provider?: string;
+  model?: string;
+  messages: QCoreAIChatMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  [key: string]: unknown;
+}
+
+export interface QCoreAIChatResponse {
+  provider?: string;
+  model?: string;
+  message?: QCoreAIChatMessage;
+  reply?: string;
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+  [key: string]: unknown;
+}
+
+export interface MultichatProvider {
+  id: string;
+  name: string;
+  status: "online" | "offline" | "degraded" | string;
+  latencyMs?: number;
+  lastCheckedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface MultichatProviderStatus {
+  providers: MultichatProvider[];
+  generatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface MultichatPreset {
+  id: string;
+  name: string;
+  description?: string;
+  providers?: string[];
+  prompt?: string;
+  tags?: string[];
+  [key: string]: unknown;
+}
+
+export interface MultichatPresetsResponse {
+  total?: number;
+  presets: MultichatPreset[];
+  [key: string]: unknown;
+}
+
+export interface MultichatLaunchResponse {
+  ok: boolean;
+  sessionId?: string;
+  presetId: string;
+  providers?: string[];
+  url?: string;
+  [key: string]: unknown;
+}
+
+export interface QMediaTrack {
+  id: string;
+  title: string;
+  artist?: string;
+  album?: string;
+  durationSec?: number;
+  url?: string;
+  cover?: string;
+  tags?: string[];
+  bpm?: number;
+  mood?: string;
+  [key: string]: unknown;
+}
+
+export interface QMediaTracksResponse {
+  total?: number;
+  items: QMediaTrack[];
+  [key: string]: unknown;
+}
+
+export interface QMediaRecommendationsResponse {
+  total?: number;
+  items: QMediaTrack[];
+  basedOn?: string | null;
+  [key: string]: unknown;
+}
+
+export interface QMediaTrendingResponse {
+  total?: number;
+  items: QMediaTrack[];
+  window?: string;
+  [key: string]: unknown;
+}
+
+export interface CoachSession {
+  id: string;
+  title?: string;
+  startedAt?: string;
+  endedAt?: string | null;
+  durationMin?: number;
+  topic?: string;
+  summary?: string;
+  [key: string]: unknown;
+}
+
+export interface CoachSessionsResponse {
+  total?: number;
+  items: CoachSession[];
+  sessions?: CoachSession[];
+  [key: string]: unknown;
+}
+
+export interface CoachGoal {
+  id: string;
+  title: string;
+  description?: string;
+  dueDate?: string | null;
+  completed?: boolean;
+  completedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface CoachGoalsResponse {
+  total?: number;
+  items: CoachGoal[];
+  goals?: CoachGoal[];
+  [key: string]: unknown;
+}
+
+export interface CoachGoalCreateInput {
+  title: string;
+  description?: string;
+  dueDate?: string;
+}
+
+export interface CoachGoalCompleteResponse {
+  ok: boolean;
+  goalId: string;
+  completed: boolean;
+  completedAt?: string;
+  [key: string]: unknown;
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -166,6 +557,26 @@ function buildQuery(opts: CatalogListOptions, extra: Record<string, string> = {}
 export class AevionCatalog {
   readonly baseUrl: string;
   private readonly _fetch: typeof fetch;
+  private readonly _defaultHeaders: Record<string, string>;
+
+  /** QStore (catalogue / marketplace) sub-client. */
+  readonly qstore: QStoreClient;
+  /** QLearn (courses + progress) sub-client. */
+  readonly qlearn: QLearnClient;
+  /** QEvents (event calendar + ICS) sub-client. */
+  readonly qevents: QEventsClient;
+  /** DevHub (snippets + stars) sub-client. */
+  readonly devhub: DevHubClient;
+  /** Planet (cross-module activity feed) sub-client. */
+  readonly planet: PlanetClient;
+  /** QCoreAI (LLM providers / chat) sub-client (v0.7). */
+  readonly qcoreai: QCoreAIClient;
+  /** Multichat (multi-provider presets + provider status) sub-client (v0.7). */
+  readonly multichat: MultichatClient;
+  /** QMedia (recommendations / trending / tracks) sub-client (v0.7). */
+  readonly qmedia: QMediaClient;
+  /** Coach (sessions + goals) sub-client (v0.7). */
+  readonly coach: CoachClient;
 
   constructor(config: AevionCatalogConfig = {}) {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE).replace(/\/+$/, "");
@@ -178,6 +589,57 @@ export class AevionCatalog {
               "global fetch is not available — pass `fetch` in config (e.g. node-fetch).",
             );
           }) as typeof fetch);
+    this._defaultHeaders = { ...(config.headers ?? {}) };
+
+    this.qstore = new QStoreClient(this);
+    this.qlearn = new QLearnClient(this);
+    this.qevents = new QEventsClient(this);
+    this.devhub = new DevHubClient(this);
+    this.planet = new PlanetClient(this);
+    this.qcoreai = new QCoreAIClient(this);
+    this.multichat = new MultichatClient(this);
+    this.qmedia = new QMediaClient(this);
+    this.coach = new CoachClient(this);
+  }
+
+  /** @internal — used by sub-clients. */
+  _request<T>(
+    method: string,
+    path: string,
+    opts: {
+      query?: Record<string, string | number | undefined>;
+      body?: unknown;
+      accept?: string;
+      asText?: boolean;
+    } = {},
+  ): Promise<T> {
+    const params = new URLSearchParams();
+    if (opts.query) {
+      for (const [k, v] of Object.entries(opts.query)) {
+        if (v === undefined || v === null || v === "") continue;
+        params.set(k, String(v));
+      }
+    }
+    const qs = params.toString();
+    const url = `${this.baseUrl}${path.startsWith("/") ? "" : "/"}${path}${qs ? `?${qs}` : ""}`;
+    const headers: Record<string, string> = {
+      ...this._defaultHeaders,
+      Accept: opts.accept ?? "application/json",
+    };
+    const init: RequestInit = { method, headers };
+    if (opts.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      (init as { body?: string }).body = JSON.stringify(opts.body);
+    }
+    return this._fetch(url, init).then(async (r) => {
+      if (!r.ok) {
+        throw new Error(`AevionCatalog ${method} HTTP ${r.status} on ${url}`);
+      }
+      if (opts.asText) return (await r.text()) as unknown as T;
+      // 204 No Content support
+      if (r.status === 204) return undefined as unknown as T;
+      return (await r.json()) as T;
+    });
   }
 
   /** GET /api/aevion/catalog with optional filters + field projection. */
@@ -277,6 +739,50 @@ export class AevionCatalog {
   async topTags(n = 10): Promise<{ tag: string; count: number }[]> {
     const s = await this.stats();
     return s.byTag.slice(0, n);
+  }
+
+  /**
+   * GET /api/aevion/stats — extended platform-wide statistics.
+   *
+   * Adds health/openapi coverage matrix, byPriority buckets and a
+   * recentActivity feed on top of /registry-stats. Accepts a `recent`
+   * size (clamped 1..50 server-side, default 10).
+   */
+  async extendedStats(opts: { recent?: number } = {}): Promise<ExtendedStats> {
+    const params = new URLSearchParams();
+    if (opts.recent != null) {
+      const n = Math.max(1, Math.min(50, Math.floor(opts.recent)));
+      params.set("recent", String(n));
+    }
+    const qs = params.toString();
+    const url = `${this.baseUrl}/api/aevion/stats${qs ? `?${qs}` : ""}`;
+    const r = await this._fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`AevionCatalog.extendedStats HTTP ${r.status} on ${url}`);
+    return (await r.json()) as ExtendedStats;
+  }
+
+  /**
+   * GET /api/aevion/module-of-the-day — deterministic daily pick.
+   *
+   * Same module is returned for all consumers hitting the endpoint on the
+   * same UTC day. Pass `date` (YYYY-MM-DD) to query a specific day, e.g.
+   * for back-fill on archived posts.
+   */
+  async moduleOfTheDay(opts: { date?: string } = {}): Promise<ModuleOfTheDay> {
+    const params = new URLSearchParams();
+    if (opts.date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+        throw new Error(
+          `AevionCatalog.moduleOfTheDay invalid date '${opts.date}', expected YYYY-MM-DD`,
+        );
+      }
+      params.set("date", opts.date);
+    }
+    const qs = params.toString();
+    const url = `${this.baseUrl}/api/aevion/module-of-the-day${qs ? `?${qs}` : ""}`;
+    const r = await this._fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`AevionCatalog.moduleOfTheDay HTTP ${r.status} on ${url}`);
+    return (await r.json()) as ModuleOfTheDay;
   }
 
   // ── Graph helpers (v0.4) ───────────────────────────────────────────────────
@@ -455,6 +961,320 @@ export class AevionCatalog {
   }
 }
 
+// ── v0.6 sub-clients: QStore / QLearn / QEvents / DevHub / Planet ───────────
+
+/** QStore (marketplace) sub-client. Lazy — constructed by `AevionCatalog`. */
+export class QStoreClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/qstore/products?sort=popular|newest|trending|rating */
+  products(opts: { sort?: QStoreSort } = {}): Promise<QStoreProductsResponse> {
+    const sort = opts.sort;
+    if (sort && !["popular", "newest", "trending", "rating"].includes(sort)) {
+      throw new Error(`QStore.products invalid sort: '${sort}'`);
+    }
+    return this._root._request<QStoreProductsResponse>("GET", "/api/qstore/products", {
+      query: { sort },
+    });
+  }
+
+  /** GET /api/qstore/featured?limit=N — 4 buckets (popular/trending/newest/topRated). */
+  featured(opts: { limit?: number } = {}): Promise<QStoreFeaturedResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(50, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    return this._root._request<QStoreFeaturedResponse>("GET", "/api/qstore/featured", { query });
+  }
+}
+
+/** QLearn (courses, bookmarks, streak, progress) sub-client. */
+export class QLearnClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  private _assertCourseId(id: string): void {
+    if (!id || !/^[a-z0-9-]+$/i.test(id)) {
+      throw new Error(`QLearn invalid courseId: '${id}'`);
+    }
+  }
+
+  /** POST /api/qlearn/courses/:id/bookmark — add bookmark. */
+  bookmark(courseId: string): Promise<QLearnBookmarkResult> {
+    this._assertCourseId(courseId);
+    return this._root._request<QLearnBookmarkResult>(
+      "POST",
+      `/api/qlearn/courses/${courseId}/bookmark`,
+    );
+  }
+
+  /** DELETE /api/qlearn/courses/:id/bookmark — remove bookmark. */
+  unbookmark(courseId: string): Promise<QLearnBookmarkResult> {
+    this._assertCourseId(courseId);
+    return this._root._request<QLearnBookmarkResult>(
+      "DELETE",
+      `/api/qlearn/courses/${courseId}/bookmark`,
+    );
+  }
+
+  /** GET /api/qlearn/me/bookmarks — user's bookmarked courses. */
+  bookmarks(): Promise<QLearnBookmarksResponse> {
+    return this._root._request<QLearnBookmarksResponse>("GET", "/api/qlearn/me/bookmarks");
+  }
+
+  /** GET /api/qlearn/me/streak — learning streak summary. */
+  streak(): Promise<QLearnStreak> {
+    return this._root._request<QLearnStreak>("GET", "/api/qlearn/me/streak");
+  }
+
+  /** GET /api/qlearn/me/progress — full progress breakdown. */
+  progress(): Promise<QLearnProgress> {
+    return this._root._request<QLearnProgress>("GET", "/api/qlearn/me/progress");
+  }
+}
+
+/** QEvents (event listing + ICS export) sub-client. */
+export class QEventsClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/qevents/events?when=upcoming|past|all */
+  list(opts: { when?: QEventsWhen } = {}): Promise<QEventsListResponse> {
+    const when = opts.when;
+    if (when && !["upcoming", "past", "all"].includes(when)) {
+      throw new Error(`QEvents.list invalid when: '${when}'`);
+    }
+    return this._root._request<QEventsListResponse>("GET", "/api/qevents/events", {
+      query: { when },
+    });
+  }
+
+  /** GET /api/qevents/events/:id/ics — returns ICS text/calendar payload. */
+  ics(eventId: string): Promise<string> {
+    if (!eventId || !/^[a-z0-9-]+$/i.test(eventId)) {
+      throw new Error(`QEvents.ics invalid eventId: '${eventId}'`);
+    }
+    return this._root._request<string>("GET", `/api/qevents/events/${eventId}/ics`, {
+      accept: "text/calendar",
+      asText: true,
+    });
+  }
+
+  /** Returns the absolute ICS URL (no fetch). */
+  icsUrl(eventId: string): string {
+    if (!/^[a-z0-9-]+$/i.test(eventId)) {
+      throw new Error(`QEvents.icsUrl invalid eventId: '${eventId}'`);
+    }
+    return `${this._root.baseUrl}/api/qevents/events/${eventId}/ics`;
+  }
+}
+
+/** DevHub (snippets + stars) sub-client. */
+export class DevHubClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/devhub/snippets?limit&tag&user — list snippets. */
+  snippets(opts: { limit?: number; tag?: string; user?: string } = {}): Promise<DevHubSnippetsResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(200, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    if (opts.tag) query.tag = opts.tag;
+    if (opts.user) query.user = opts.user;
+    return this._root._request<DevHubSnippetsResponse>("GET", "/api/devhub/snippets", { query });
+  }
+
+  /** POST /api/devhub/snippets — create a new snippet. */
+  createSnippet(input: DevHubCreateSnippetInput): Promise<DevHubSnippet> {
+    if (!input || typeof input.title !== "string" || input.title.trim().length === 0) {
+      throw new Error(`DevHub.createSnippet missing title`);
+    }
+    if (typeof input.content !== "string" || input.content.length === 0) {
+      throw new Error(`DevHub.createSnippet missing content`);
+    }
+    if (typeof input.language !== "string" || input.language.trim().length === 0) {
+      throw new Error(`DevHub.createSnippet missing language`);
+    }
+    const body: DevHubCreateSnippetInput = {
+      title: input.title,
+      content: input.content,
+      language: input.language,
+      tags: Array.isArray(input.tags) ? input.tags : [],
+    };
+    return this._root._request<DevHubSnippet>("POST", "/api/devhub/snippets", { body });
+  }
+
+  /** GET /api/devhub/snippets/:id — fetch single snippet. */
+  getSnippet(snippetId: string): Promise<DevHubSnippet> {
+    if (!snippetId || !/^[a-z0-9-]+$/i.test(snippetId)) {
+      throw new Error(`DevHub.getSnippet invalid snippetId: '${snippetId}'`);
+    }
+    return this._root._request<DevHubSnippet>("GET", `/api/devhub/snippets/${snippetId}`);
+  }
+
+  /** POST /api/devhub/snippets/:id/star — toggle / increment star. */
+  star(snippetId: string): Promise<DevHubStarResult> {
+    if (!snippetId || !/^[a-z0-9-]+$/i.test(snippetId)) {
+      throw new Error(`DevHub.star invalid snippetId: '${snippetId}'`);
+    }
+    return this._root._request<DevHubStarResult>(
+      "POST",
+      `/api/devhub/snippets/${snippetId}/star`,
+    );
+  }
+}
+
+/** Planet (cross-module activity feed) sub-client. */
+export class PlanetClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/planet/activity?limit&kinds — activity feed across all modules. */
+  activity(opts: { limit?: number; kinds?: PlanetActivityKind | PlanetActivityKind[] } = {}): Promise<PlanetActivityResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(200, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    if (opts.kinds) {
+      query.kinds = Array.isArray(opts.kinds) ? opts.kinds.join(",") : String(opts.kinds);
+    }
+    return this._root._request<PlanetActivityResponse>("GET", "/api/planet/activity", { query });
+  }
+}
+
+// ── v0.7 sub-clients: QCoreAI / Multichat / QMedia / Coach ──────────────────
+
+/** QCoreAI (LLM providers + chat) sub-client. */
+export class QCoreAIClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/qcoreai/providers — list available LLM providers. */
+  providers(): Promise<QCoreAIProvidersResponse> {
+    return this._root._request<QCoreAIProvidersResponse>("GET", "/api/qcoreai/providers");
+  }
+
+  /** GET /api/qcoreai/health — per-provider health snapshot. */
+  health(): Promise<QCoreAIHealthResponse> {
+    return this._root._request<QCoreAIHealthResponse>("GET", "/api/qcoreai/health");
+  }
+
+  /** POST /api/qcoreai/chat — single completion. */
+  chat(input: QCoreAIChatRequest): Promise<QCoreAIChatResponse> {
+    if (!input || !Array.isArray(input.messages) || input.messages.length === 0) {
+      throw new Error("QCoreAI.chat missing messages[]");
+    }
+    return this._root._request<QCoreAIChatResponse>("POST", "/api/qcoreai/chat", {
+      body: input,
+    });
+  }
+}
+
+/** Multichat (multi-provider presets + provider status) sub-client. */
+export class MultichatClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/multichat/provider-status — health-style summary per provider. */
+  providerStatus(): Promise<MultichatProviderStatus> {
+    return this._root._request<MultichatProviderStatus>(
+      "GET",
+      "/api/multichat/provider-status",
+    );
+  }
+
+  /** GET /api/multichat/presets — list available presets. */
+  presets(): Promise<MultichatPresetsResponse> {
+    return this._root._request<MultichatPresetsResponse>("GET", "/api/multichat/presets");
+  }
+
+  /** POST /api/multichat/presets/:id/launch — launch a preset, returns session. */
+  launchPreset(presetId: string): Promise<MultichatLaunchResponse> {
+    if (!presetId || !/^[a-z0-9-]+$/i.test(presetId)) {
+      throw new Error(`Multichat.launchPreset invalid presetId: '${presetId}'`);
+    }
+    return this._root._request<MultichatLaunchResponse>(
+      "POST",
+      `/api/multichat/presets/${presetId}/launch`,
+    );
+  }
+}
+
+/** QMedia (recommendations / trending / tracks) sub-client. */
+export class QMediaClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/qmedia/recommendations?limit=N — personalised picks. */
+  recommendations(opts: { limit?: number } = {}): Promise<QMediaRecommendationsResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(100, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    return this._root._request<QMediaRecommendationsResponse>(
+      "GET",
+      "/api/qmedia/recommendations",
+      { query },
+    );
+  }
+
+  /** GET /api/qmedia/trending — currently-trending tracks. */
+  trending(): Promise<QMediaTrendingResponse> {
+    return this._root._request<QMediaTrendingResponse>("GET", "/api/qmedia/trending");
+  }
+
+  /** GET /api/qmedia/tracks — full tracks listing. */
+  tracks(): Promise<QMediaTracksResponse> {
+    return this._root._request<QMediaTracksResponse>("GET", "/api/qmedia/tracks");
+  }
+}
+
+/** Coach (sessions + goals) sub-client. */
+export class CoachClient {
+  constructor(private readonly _root: AevionCatalog) {}
+
+  /** GET /api/coach/sessions — current user's coach sessions. */
+  sessions(): Promise<CoachSessionsResponse> {
+    return this._root._request<CoachSessionsResponse>("GET", "/api/coach/sessions");
+  }
+
+  /** GET /api/coach/goals?completed=true|false — list goals. */
+  goals(opts: { completed?: boolean } = {}): Promise<CoachGoalsResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.completed != null) {
+      query.completed = opts.completed ? "true" : "false";
+    }
+    return this._root._request<CoachGoalsResponse>("GET", "/api/coach/goals", { query });
+  }
+
+  /** POST /api/coach/goals — create a new goal. */
+  createGoal(input: CoachGoalCreateInput): Promise<CoachGoal> {
+    if (!input || typeof input.title !== "string" || input.title.trim().length === 0) {
+      throw new Error("Coach.createGoal missing title");
+    }
+    const body: CoachGoalCreateInput = { title: input.title };
+    if (input.description !== undefined) body.description = input.description;
+    if (input.dueDate !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}/.test(input.dueDate)) {
+        throw new Error(
+          `Coach.createGoal invalid dueDate '${input.dueDate}', expected ISO YYYY-MM-DD[...]`,
+        );
+      }
+      body.dueDate = input.dueDate;
+    }
+    return this._root._request<CoachGoal>("POST", "/api/coach/goals", { body });
+  }
+
+  /** POST /api/coach/goals/:id/complete — mark a goal as completed. */
+  completeGoal(goalId: string): Promise<CoachGoalCompleteResponse> {
+    if (!goalId || !/^[a-z0-9-]+$/i.test(goalId)) {
+      throw new Error(`Coach.completeGoal invalid goalId: '${goalId}'`);
+    }
+    return this._root._request<CoachGoalCompleteResponse>(
+      "POST",
+      `/api/coach/goals/${goalId}/complete`,
+    );
+  }
+}
+
 // ── Hub aggregate types (v0.3) ───────────────────────────────────────────────
 
 export interface OpenApiModuleRef {
@@ -573,5 +1393,109 @@ export const diff = (idA: string, idB: string) => _default.diff(idA, idB);
 
 /** Convenience: stable content fingerprint using default client (v0.5). */
 export const fingerprintModule = (id: string) => _default.fingerprintModule(id);
+
+/** Convenience: extended /stats snapshot using default client (v0.6). */
+export const getExtendedStats = (opts?: { recent?: number }) =>
+  _default.extendedStats(opts);
+
+/** Convenience: deterministic module-of-the-day using default client (v0.6). */
+export const getModuleOfTheDay = (opts?: { date?: string }) =>
+  _default.moduleOfTheDay(opts);
+
+// ── v0.6 convenience: QStore / QLearn / QEvents / DevHub / Planet ──────────
+
+/** Convenience: QStore products listing. */
+export const getQStoreProducts = (opts?: { sort?: QStoreSort }) =>
+  _default.qstore.products(opts);
+
+/** Convenience: QStore featured 4-bucket grid. */
+export const getQStoreFeatured = (opts?: { limit?: number }) =>
+  _default.qstore.featured(opts);
+
+/** Convenience: add a QLearn course bookmark. */
+export const bookmarkCourse = (courseId: string) => _default.qlearn.bookmark(courseId);
+
+/** Convenience: remove a QLearn course bookmark. */
+export const unbookmarkCourse = (courseId: string) => _default.qlearn.unbookmark(courseId);
+
+/** Convenience: list current user's QLearn bookmarks. */
+export const getMyBookmarks = () => _default.qlearn.bookmarks();
+
+/** Convenience: current user's QLearn streak. */
+export const getMyStreak = () => _default.qlearn.streak();
+
+/** Convenience: current user's QLearn progress. */
+export const getMyProgress = () => _default.qlearn.progress();
+
+/** Convenience: QEvents listing. */
+export const getEvents = (opts?: { when?: QEventsWhen }) => _default.qevents.list(opts);
+
+/** Convenience: ICS payload for a single event. */
+export const getEventIcs = (eventId: string) => _default.qevents.ics(eventId);
+
+/** Convenience: DevHub snippets listing. */
+export const getSnippets = (opts?: { limit?: number; tag?: string; user?: string }) =>
+  _default.devhub.snippets(opts);
+
+/** Convenience: create a DevHub snippet. */
+export const createSnippet = (input: DevHubCreateSnippetInput) =>
+  _default.devhub.createSnippet(input);
+
+/** Convenience: fetch a DevHub snippet by id. */
+export const getSnippet = (snippetId: string) => _default.devhub.getSnippet(snippetId);
+
+/** Convenience: star a DevHub snippet. */
+export const starSnippet = (snippetId: string) => _default.devhub.star(snippetId);
+
+/** Convenience: Planet cross-module activity feed. */
+export const getPlanetActivity = (opts?: {
+  limit?: number;
+  kinds?: PlanetActivityKind | PlanetActivityKind[];
+}) => _default.planet.activity(opts);
+
+// ── v0.7 convenience: QCoreAI / Multichat / QMedia / Coach ─────────────────
+
+/** Convenience: QCoreAI providers listing. */
+export const getQCoreAIProviders = () => _default.qcoreai.providers();
+
+/** Convenience: QCoreAI per-provider health snapshot. */
+export const getQCoreAIHealth = () => _default.qcoreai.health();
+
+/** Convenience: QCoreAI chat completion. */
+export const qcoreaiChat = (input: QCoreAIChatRequest) => _default.qcoreai.chat(input);
+
+/** Convenience: Multichat presets listing. */
+export const getMultichatPresets = () => _default.multichat.presets();
+
+/** Convenience: Multichat provider-status. */
+export const getMultichatProviderStatus = () => _default.multichat.providerStatus();
+
+/** Convenience: launch a Multichat preset. */
+export const launchMultichatPreset = (presetId: string) =>
+  _default.multichat.launchPreset(presetId);
+
+/** Convenience: QMedia personalised recommendations. */
+export const getQMediaRecommendations = (opts?: { limit?: number }) =>
+  _default.qmedia.recommendations(opts);
+
+/** Convenience: QMedia trending tracks. */
+export const getQMediaTrending = () => _default.qmedia.trending();
+
+/** Convenience: QMedia full tracks listing. */
+export const getQMediaTracks = () => _default.qmedia.tracks();
+
+/** Convenience: current user's coach sessions. */
+export const getMyCoachSessions = () => _default.coach.sessions();
+
+/** Convenience: current user's coach goals. */
+export const getMyCoachGoals = (opts?: { completed?: boolean }) =>
+  _default.coach.goals(opts);
+
+/** Convenience: create a new coach goal. */
+export const createCoachGoal = (input: CoachGoalCreateInput) =>
+  _default.coach.createGoal(input);
+
+/** Convenience: mark a coach goal as completed. */
+export const completeCoachGoal = (goalId: string) => _default.coach.completeGoal(goalId);
 
 export default AevionCatalog;

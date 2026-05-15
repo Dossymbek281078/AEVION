@@ -11,6 +11,7 @@
 
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
+import { Router } from "express";
 import type { TierId, BillingPeriod } from "../data/pricing";
 
 const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
@@ -60,6 +61,78 @@ export function countSubscriptions(): number {
   } catch {
     return 0;
   }
+}
+
+/**
+ * Прочитать все подписки с диска (JSONL → массив). Тихо игнорируем мусорные строки.
+ * Возвращает результат, отсортированный по убыванию ts (сначала новые).
+ */
+export function readSubscriptions(filter?: { email?: string; tierId?: TierId }): Subscription[] {
+  if (!existsSync(SUBS_FILE)) return [];
+  let content: string;
+  try {
+    content = readFileSync(SUBS_FILE, "utf8");
+  } catch {
+    return [];
+  }
+  const out: Subscription[] = [];
+  const wantEmail = filter?.email?.toLowerCase().trim();
+  const wantTier = filter?.tierId;
+  for (const raw of content.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      const sub = JSON.parse(line) as Subscription;
+      if (wantEmail && sub.email?.toLowerCase() !== wantEmail) continue;
+      if (wantTier && sub.tierId !== wantTier) continue;
+      out.push(sub);
+    } catch {
+      // skip malformed line
+    }
+  }
+  out.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+  return out;
+}
+
+/** Аггрегаты для observability/admin: total + by tier + last 7 days + sample. */
+export function aggregateSubscriptions(): {
+  total: number;
+  byTier: Record<TierId, number>;
+  last7d: number;
+  trialsActive: number;
+  recent: Array<{ id: string; ts: string; tierId: TierId; period: BillingPeriod; trial: boolean }>;
+} {
+  const all = readSubscriptions();
+  const byTier: Record<TierId, number> = { free: 0, pro: 0, business: 0, enterprise: 0 };
+  const cutoff7 = Date.now() - 7 * 86400000;
+  const now = Date.now();
+  let last7d = 0;
+  let trialsActive = 0;
+  for (const s of all) {
+    byTier[s.tierId] = (byTier[s.tierId] ?? 0) + 1;
+    const t = Date.parse(s.ts);
+    if (!Number.isNaN(t) && t >= cutoff7) last7d++;
+    if (s.trialDays > 0 && s.validUntil) {
+      const v = Date.parse(s.validUntil);
+      if (!Number.isNaN(v) && v >= now) trialsActive++;
+    }
+  }
+  const recent = all.slice(0, 10).map((s) => ({
+    id: s.id,
+    ts: s.ts,
+    tierId: s.tierId,
+    period: s.period,
+    trial: s.trialDays > 0,
+  }));
+  return { total: all.length, byTier, last7d, trialsActive, recent };
+}
+
+/** Маскируем email для публичного отображения: `joh***@example.com`. */
+function maskEmail(email: string): string {
+  const [user, domain] = email.split("@");
+  if (!user || !domain) return "***";
+  if (user.length <= 3) return `${user[0] ?? "*"}***@${domain}`;
+  return `${user.slice(0, 3)}***@${domain}`;
 }
 
 interface EmailPayload {
@@ -223,3 +296,87 @@ export async function provisionSubscription(input: {
     emailError: result.error,
   };
 }
+
+/**
+ * Router публичных эндпоинтов provisioning'а.
+ * Монтируется в index.ts под /api/pricing/provisioning.
+ *
+ * История подписок (по email) — нужна:
+ *   - UI «мой кабинет» после оплаты (понять, что подписка реально записалась);
+ *   - саппорту — быстрый lookup без доступа к БД;
+ *   - smoke-тестам после stub-checkout.
+ *
+ * Защита: PII (email) обязан совпадать в query, иначе только агрегаты без id/email.
+ * История ограничена 100 последними записями (защита от слишком длинного JSONL).
+ */
+export const provisioningRouter = Router();
+
+const HISTORY_LIMIT = 100;
+
+provisioningRouter.get("/healthz", (_req, res) => {
+  res.json({
+    ok: true,
+    storage: SUBS_FILE,
+    storageExists: existsSync(SUBS_FILE),
+    emailMode: RESEND_KEY ? "real" : "stub",
+  });
+});
+
+provisioningRouter.get("/stats", (_req, res) => {
+  try {
+    const agg = aggregateSubscriptions();
+    res.json(agg);
+  } catch (e) {
+    console.error("[provisioning/stats] failed", e);
+    res.status(500).json({ error: "stats_failed" });
+  }
+});
+
+provisioningRouter.get("/history", (req, res) => {
+  try {
+    const email = (req.query.email as string | undefined)?.trim();
+    if (!email) {
+      return res.status(400).json({ error: "missing_email", hint: "use ?email=..." });
+    }
+    // Очень базовая валидация: должен содержать @ и хотя бы 5 символов.
+    if (!email.includes("@") || email.length < 5) {
+      return res.status(400).json({ error: "invalid_email" });
+    }
+    const items = readSubscriptions({ email }).slice(0, HISTORY_LIMIT);
+    const now = Date.now();
+    const enriched = items.map((s) => {
+      const validTs = s.validUntil ? Date.parse(s.validUntil) : null;
+      const daysLeft =
+        validTs && !Number.isNaN(validTs) ? Math.max(0, Math.ceil((validTs - now) / 86400000)) : null;
+      const active = validTs ? validTs >= now : true;
+      const status =
+        !active ? "expired" : s.trialDays > 0 && validTs && validTs >= now ? "trial" : "active";
+      return {
+        id: s.id,
+        ts: s.ts,
+        tierId: s.tierId,
+        period: s.period,
+        seats: s.seats,
+        modules: s.modules,
+        trialDays: s.trialDays,
+        validUntil: s.validUntil ?? null,
+        amountUsd: s.amountUsd ?? null,
+        promoCode: s.promoCode ?? null,
+        source: s.source ?? null,
+        // НЕ возвращаем stripeSessionId по умолчанию — пусть это будет admin-only.
+        daysLeft,
+        status,
+        emailMasked: maskEmail(s.email),
+      };
+    });
+    res.json({
+      email: maskEmail(email),
+      count: enriched.length,
+      truncated: items.length >= HISTORY_LIMIT,
+      items: enriched,
+    });
+  } catch (e) {
+    console.error("[provisioning/history] failed", e);
+    res.status(500).json({ error: "history_failed" });
+  }
+});

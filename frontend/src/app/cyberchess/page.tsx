@@ -6141,8 +6141,8 @@ export default function CyberChessPage(){
               the avatar block above, so no need to repeat it here. */}
           {on&&!setup&&(tab==="play"||tab==="coach"||tab==="analysis")&&(currentOpening||tab==="analysis")&&<div style={{
             padding:"6px 10px",borderRadius:7,
-            background:currentOpening?"linear-gradient(90deg,#ecfdf5,#f0fdf4)":T.surface,
-            border:`1px solid ${currentOpening?"#a7f3d0":T.border}`,
+            background:currentOpening?"rgba(16,185,129,0.10)":T.surface,
+            border:`1px solid ${currentOpening?"rgba(16,185,129,0.35)":T.border}`,
             display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,flexWrap:"wrap",
           }}>
             {currentOpening&&hist.length>0&&<>
@@ -6151,7 +6151,7 @@ export default function CyberChessPage(){
                 background:CC.brand,color:"#fff",
                 fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.8,
               }}>{currentOpening.eco}</span>
-              <span style={{fontSize:12,fontWeight:800,color:"#065f46"}} title={currentOpening.desc}>{currentOpening.name}</span>
+              <span style={{fontSize:12,fontWeight:800,color:T.accent}} title={currentOpening.desc}>{currentOpening.name}</span>
             </>}
             {tab==="analysis"&&<>
               <span style={{flex:1}}/>
@@ -6419,10 +6419,10 @@ export default function CyberChessPage(){
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>
                 Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
                 {currentOpening&&hist.length>0&&hist.length<=30&&<span style={{
-                  marginLeft:4,fontSize:10,fontWeight:700,color:"#059669",
+                  marginLeft:4,fontSize:10,fontWeight:700,color:T.accent,
                   letterSpacing:0.3,textTransform:"none" as const,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:130,
-                  padding:"1px 6px",borderRadius:RADIUS.full,background:"rgba(5,150,105,0.10)",
+                  padding:"1px 6px",borderRadius:RADIUS.full,background:"rgba(16,185,129,0.10)",
                 }} title={currentOpening.name}>{currentOpening.eco} · {currentOpening.name}</span>}
                 {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
               </span>

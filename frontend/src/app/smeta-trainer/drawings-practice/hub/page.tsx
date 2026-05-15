@@ -313,6 +313,11 @@ const MODULES: Module[] = [
   { id: "gas-processing-plants",  category: "special",   href: "/smeta-trainer/drawings-practice/gas-processing-plants",  icon: "🔥", title: "ГПЗ — газоперераб. заводы",       subtitle: "KPO Карачаганак, ТШО FGP, процесс Клауса, аминовая очистка",      level: "L5", exercises: 4,  color: "orange"  },
   { id: "main-pipelines",         category: "special",   href: "/smeta-trainer/drawings-practice/main-pipelines",         icon: "🛢️", title: "Магистральные трубопроводы",      subtitle: "КТК Тенгиз-Новороссийск, Туркм.-Китай, СКЗ, 400 млн тг/км",       level: "L5", exercises: 4,  color: "stone"   },
   { id: "airports-terminals",     category: "practice",  href: "/smeta-trainer/drawings-practice/airports-terminals",     icon: "✈️", title: "Аэропорты и терминалы",          subtitle: "ICAO Code 4F, ВПП 4500 м, ILS Cat III, Алматы AAA, Астана NQZ",   level: "L5", exercises: 4,  color: "sky"     },
+
+  // ── Ж/д, морпорты, электростанции ──
+  { id: "railways-stations",      category: "special",   href: "/smeta-trainer/drawings-practice/railways-stations",      icon: "🚂", title: "Железные дороги и вокзалы",       subtitle: "Колея 1520, Р65, Ш1, ВСМ Алматы-Астана 1200 км, 25 кВ AC",        level: "L5", exercises: 4,  color: "slate"   },
+  { id: "seaports-harbors",       category: "special",   href: "/smeta-trainer/drawings-practice/seaports-harbors",       icon: "⚓", title: "Морские и речные порты",          subtitle: "Актау 10 млн т, STS-краны, Liebherr LHM 600, TEU, дноуглубление", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "power-plants",           category: "special",   href: "/smeta-trainer/drawings-practice/power-plants",           icon: "⚡", title: "Электростанции (ТЭЦ/ГЭС/ВЭС/СЭС)", subtitle: "Экибастуз ГРЭС-1 4000 МВт, Мойнакская ГЭС, СЭС 330 млн тг/МВт",   level: "L5", exercises: 4,  color: "yellow"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

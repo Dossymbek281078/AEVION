@@ -10,7 +10,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import crypto from "node:crypto";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import {
   callProvider,
   getProviders,
@@ -540,15 +540,6 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────
-interface QFusionAIConceptMessage {
-  id: string;
-  payload: Record<string, unknown>;
-  tags: string[];
-  createdAt: string;
-}
-
-const QFUSIONAI_CONCEPT_MAX = 200;
-const qfusionaiConceptMessages: QFusionAIConceptMessage[] = [];
 
 qfusionaiRouter.get("/status", routeLimiter, (_req: Request, res: Response) => {
   res.json({
@@ -562,65 +553,8 @@ qfusionaiRouter.get("/status", routeLimiter, (_req: Request, res: Response) => {
       conceptMessages: "/api/qfusionai/concept/messages",
       conceptStats: "/api/qfusionai/concept-stats",
     },
-    conceptMessagesCount: qfusionaiConceptMessages.length,
     timestamp: new Date().toISOString(),
   });
 });
 
-qfusionaiRouter.get("/concept/messages", routeLimiter, (req: Request, res: Response) => {
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
-  const items = qfusionaiConceptMessages.slice(0, limit);
-  res.json({ items, total: qfusionaiConceptMessages.length, moduleId: "qfusionai", noun: "concept/messages" });
-});
-
-qfusionaiRouter.post("/concept/messages", routeLimiter, (req: Request, res: Response) => {
-  try {
-    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
-    const payload = (body.payload && typeof body.payload === "object")
-      ? body.payload as Record<string, unknown>
-      : body;
-    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
-    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
-    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
-    const author = String(payload.author ?? "").trim().slice(0, 80);
-    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["qfusionai"];
-    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
-    const msg: QFusionAIConceptMessage = {
-      id: crypto.randomUUID(),
-      payload: { idea, rationale, author },
-      tags: tags.length ? tags : ["qfusionai"],
-      createdAt: new Date().toISOString(),
-    };
-    qfusionaiConceptMessages.unshift(msg);
-    if (qfusionaiConceptMessages.length > QFUSIONAI_CONCEPT_MAX) {
-      qfusionaiConceptMessages.length = QFUSIONAI_CONCEPT_MAX;
-    }
-    return res.status(201).json(msg);
-  } catch (err: unknown) {
-    console.error("[qfusionai] concept_post_failed", err instanceof Error ? err.message : err);
-    return res.status(500).json({ error: "concept_post_failed" });
-  }
-});
-
-qfusionaiRouter.get("/concept-stats", routeLimiter, (_req: Request, res: Response) => {
-  const now = Date.now();
-  const sevenDays = 7 * 86_400_000;
-  const last7d = qfusionaiConceptMessages.filter(
-    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
-  ).length;
-  const tagCounts = new Map<string, number>();
-  for (const m of qfusionaiConceptMessages) {
-    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-  }
-  const topTags = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([tag, count]) => ({ tag, count }));
-  res.json({
-    moduleId: "qfusionai",
-    noun: "concept/messages",
-    total: qfusionaiConceptMessages.length,
-    last7d,
-    topTags,
-  });
-});
+mountConceptBoard({ router: qfusionaiRouter, moduleId: "qfusionai", defaultTag: "qfusionai", readLimit: routeLimiter, writeLimit: routeLimiter });

@@ -232,9 +232,20 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
   // AI Chat state
-  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "settings">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
   const [aiPrompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+
+  // Agent workflow state
+  type AgentStep = { type: "code" | "image" | "tts" | "sfx"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; saveAs?: string; stack?: string };
+  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
+    { type: "code", prompt: "Landing page for an AI startup with hero, headline, CTA", saveAs: "pages/index.tsx" },
+    { type: "image", prompt: "AI startup hero — futuristic, vivid colors, abstract", saveAs: "public/hero.url.txt" },
+    { type: "tts", text: "Welcome to our AI platform", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+  ]);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentResults, setAgentResults] = useState<Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }>>([]);
+  const [agentSummary, setAgentSummary] = useState<{ totalSteps: number; successCount: number; failureCount: number } | null>(null);
   const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
 
   // Templates
@@ -274,7 +285,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "email" | "payment">("tts");
+  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "payment">("tts");
 
   // DALL-E image state
   const [imgPrompt, setImgPrompt] = useState("");
@@ -302,6 +313,28 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   // Domain auto-setup state
   const [domainSetupLoading, setDomainSetupLoading] = useState(false);
   const [domainSetupMsg, setDomainSetupMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Voice clone state
+  const [voiceCloneName, setVoiceCloneName] = useState("");
+  const [voiceCloneDesc, setVoiceCloneDesc] = useState("");
+  const [voiceCloneFile, setVoiceCloneFile] = useState<File | null>(null);
+  const [voiceCloneLoading, setVoiceCloneLoading] = useState(false);
+  const [voiceCloneMsg, setVoiceCloneMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // STT state
+  const [sttFile, setSttFile] = useState<File | null>(null);
+  const [sttLanguage, setSttLanguage] = useState("");
+  const [sttLoading, setSttLoading] = useState(false);
+  const [sttResult, setSttResult] = useState<{ text: string; language: string | null; confidence: number | null } | null>(null);
+  const [sttError, setSttError] = useState<string | null>(null);
+
+  // Drive state
+  const [driveQuery, setDriveQuery] = useState("");
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<Array<{ id: string; name: string; mimeType: string }>>([]);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [driveImporting, setDriveImporting] = useState<string | null>(null);
+
   const [mediaTtsText, setMediaTtsText] = useState("");
   const [mediaTtsVoice, setMediaTtsVoice] = useState("Rachel");
   const [mediaTtsLoading, setMediaTtsLoading] = useState(false);
@@ -977,6 +1010,165 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── Agent workflow ───────────────────────────────────────────────────────────
+
+  const runAgentWorkflow = async () => {
+    if (!project || agentRunning || agentSteps.length === 0) return;
+    setAgentRunning(true);
+    setAgentResults([]);
+    setAgentSummary(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/agent/workflow`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ steps: agentSteps }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Workflow failed");
+      setAgentResults(d.results || []);
+      setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
+      // Reload file tree
+      const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+      const listData = await listR.json();
+      setFiles(listData.files || []);
+      showToast(`Agent: ${d.successCount}/${d.totalSteps} steps ok`, d.successCount === d.totalSteps ? "success" : "error");
+    } catch (e: any) {
+      showToast(e?.message || "Workflow failed", "error");
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
+  const addAgentStep = (type: AgentStep["type"]) => {
+    setAgentSteps((s) => [...s, type === "code" ? { type, prompt: "", stack: project?.stack || "next" }
+      : type === "image" ? { type, prompt: "" }
+      : type === "tts" ? { type, text: "", voice: "Rachel" }
+      : { type, text: "", durationSeconds: 3 }]);
+  };
+
+  const updateAgentStep = (i: number, patch: Partial<AgentStep>) => {
+    setAgentSteps((s) => s.map((st, idx) => idx === i ? { ...st, ...patch } : st));
+  };
+
+  const removeAgentStep = (i: number) => {
+    setAgentSteps((s) => s.filter((_, idx) => idx !== i));
+  };
+
+  // ── Voice clone (file upload) ────────────────────────────────────────────────
+
+  const cloneVoice = async () => {
+    if (!voiceCloneName.trim() || !voiceCloneFile) return;
+    setVoiceCloneLoading(true);
+    setVoiceCloneMsg(null);
+    try {
+      const buf = await voiceCloneFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const r = await fetch(apiUrl("/api/devhub/media/voice-clone"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: voiceCloneName.trim(),
+          description: voiceCloneDesc.trim() || undefined,
+          sampleBase64: base64,
+          mimeType: voiceCloneFile.type || "audio/mpeg",
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setVoiceCloneMsg({ ok: false, text: d.error || "Clone failed" });
+      } else {
+        setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
+        setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
+      }
+    } catch (e: any) {
+      setVoiceCloneMsg({ ok: false, text: e?.message || "Clone failed" });
+    } finally {
+      setVoiceCloneLoading(false);
+    }
+  };
+
+  // ── STT ──────────────────────────────────────────────────────────────────────
+
+  const transcribeAudio = async () => {
+    if (!sttFile) return;
+    setSttLoading(true);
+    setSttError(null);
+    setSttResult(null);
+    try {
+      const buf = await sttFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const r = await fetch(apiUrl("/api/devhub/media/stt"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioBase64: base64,
+          mimeType: sttFile.type || "audio/mpeg",
+          language: sttLanguage.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setSttError(d.error || "STT failed");
+      } else {
+        setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
+      }
+    } catch (e: any) {
+      setSttError(e?.message || "STT failed");
+    } finally {
+      setSttLoading(false);
+    }
+  };
+
+  // ── Google Drive ─────────────────────────────────────────────────────────────
+
+  const searchDrive = async () => {
+    setDriveLoading(true);
+    setDriveError(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/drive-search"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: driveQuery.trim(), limit: 20 }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setDriveError(d.error || "Drive search failed");
+        setDriveFiles([]);
+      } else {
+        setDriveFiles(d.files || []);
+      }
+    } catch (e: any) {
+      setDriveError(e?.message || "Drive search failed");
+    } finally {
+      setDriveLoading(false);
+    }
+  };
+
+  const importDriveFile = async (fileId: string, name: string) => {
+    if (!project) return;
+    setDriveImporting(fileId);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/drive/import`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        showToast(d.error || "Import failed", "error");
+      } else {
+        showToast(`Imported ${d.path} (${d.bytes} bytes)`, "success");
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json();
+        setFiles(listData.files || []);
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Import failed", "error");
+    } finally {
+      setDriveImporting(null);
+    }
+  };
+
   // ── ElevenLabs TTS helper ────────────────────────────────────────────────────
 
   const generateTts = async () => {
@@ -1254,7 +1446,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
           <div style={{ flex: "0 0 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
             {/* Tabs */}
             <div style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
+              {(["chat", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1265,7 +1457,12 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     borderBottom: activeTab === tab ? "2px solid #0d9488" : "2px solid transparent",
                   }}
                 >
-                  {tab === "chat" ? "AI Generate" : tab === "env" ? "Env Vars" : tab === "github" ? "GitHub" : tab === "media" ? "ElevenLabs" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === "chat" ? "AI Generate"
+                  : tab === "env" ? "Env Vars"
+                  : tab === "github" ? "GitHub"
+                  : tab === "media" ? "Media"
+                  : tab === "agent" ? "🤖 Agent"
+                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
             </div>
@@ -1489,7 +1686,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["tts", "image", "sfx", "music", "email", "payment"] as const).map((sub) => (
+                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "email", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -1502,7 +1699,15 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           boxShadow: mediaTab === sub ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                         }}
                       >
-                        {sub === "tts" ? "TTS" : sub === "image" ? "DALL-E" : sub === "sfx" ? "SFX" : sub === "music" ? "Music" : sub === "email" ? "Email" : "Pay"}
+                        {sub === "tts" ? "TTS"
+                        : sub === "image" ? "DALL-E"
+                        : sub === "sfx" ? "SFX"
+                        : sub === "music" ? "Music"
+                        : sub === "clone" ? "Clone"
+                        : sub === "stt" ? "STT"
+                        : sub === "drive" ? "Drive"
+                        : sub === "email" ? "Email"
+                        : "Pay"}
                       </button>
                     ))}
                   </div>
@@ -1900,6 +2105,219 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </div>
                     </div>
                   )}
+
+                  {/* Voice Clone */}
+                  {mediaTab === "clone" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice Name</label>
+                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="My Custom Voice"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
+                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Male, calm, narrative"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Audio sample (MP3/WAV, 30 sec+)</label>
+                        <input type="file" accept="audio/*" onChange={(e) => setVoiceCloneFile(e.target.files?.[0] || null)}
+                          style={{ width: "100%", fontSize: 12 }} />
+                        {voiceCloneFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{voiceCloneFile.name} ({Math.round(voiceCloneFile.size / 1024)} KB)</div>}
+                      </div>
+                      {voiceCloneMsg && (
+                        <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
+                          background: voiceCloneMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: voiceCloneMsg.ok ? "#065f46" : "#991b1b" }}>
+                          {voiceCloneMsg.text}
+                        </div>
+                      )}
+                      <button
+                        onClick={cloneVoice}
+                        disabled={voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile}
+                        style={{
+                          padding: "9px 18px", background: voiceCloneLoading ? "#c4b5fd" : "#7c3aed",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {voiceCloneLoading ? "Cloning..." : "Clone Voice"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Premium tier required.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Speech-to-Text */}
+                  {mediaTab === "stt" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Audio file</label>
+                        <input type="file" accept="audio/*" onChange={(e) => setSttFile(e.target.files?.[0] || null)}
+                          style={{ width: "100%", fontSize: 12 }} />
+                        {sttFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{sttFile.name} ({Math.round(sttFile.size / 1024)} KB)</div>}
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Language hint (optional, e.g. en, ru)</label>
+                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="auto-detect if empty"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      {sttError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {sttError}
+                        </div>
+                      )}
+                      {sttResult && (
+                        <div style={{ padding: "10px 12px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 11, color: "#0d9488", fontWeight: 700 }}>
+                            {sttResult.language && `${sttResult.language} · `}{sttResult.confidence != null && `${Math.round(sttResult.confidence * 100)}% confidence`}
+                          </div>
+                          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{sttResult.text}</div>
+                          <button onClick={() => navigator.clipboard.writeText(sttResult.text)}
+                            style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy text</button>
+                        </div>
+                      )}
+                      <button
+                        onClick={transcribeAudio}
+                        disabled={sttLoading || !sttFile}
+                        style={{
+                          padding: "9px 18px", background: sttLoading ? "#a5b4fc" : "#6366f1",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (sttLoading || !sttFile) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {sttLoading ? "Transcribing..." : "Transcribe"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Google Drive */}
+                  {mediaTab === "drive" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Search Drive..."
+                          onKeyDown={(e) => { if (e.key === "Enter") searchDrive(); }}
+                          style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                        <button onClick={searchDrive} disabled={driveLoading}
+                          style={{ padding: "7px 16px", background: driveLoading ? "#a5b4fc" : "#4285f4",
+                            color: "#fff", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                          {driveLoading ? "..." : "Search"}
+                        </button>
+                      </div>
+                      {driveError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {driveError}
+                        </div>
+                      )}
+                      {driveFiles.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto" }}>
+                          {driveFiles.map((f) => (
+                            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "#f8fafc", borderRadius: 7 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                                <div style={{ fontSize: 11, color: "#94a3b8" }}>{f.mimeType.replace(/^application\/(vnd\.)?google-apps\./, "google ")}</div>
+                              </div>
+                              <button
+                                onClick={() => importDriveFile(f.id, f.name)}
+                                disabled={driveImporting === f.id}
+                                style={{ padding: "4px 10px", background: "#4285f4", color: "#fff",
+                                  border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                {driveImporting === f.id ? "..." : "Import"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>GOOGLE_DRIVE_ACCESS_TOKEN</code> (OAuth Bearer)
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Agent Workflow Tab */}
+              {activeTab === "agent" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ padding: "10px 12px", background: "linear-gradient(90deg, #ecfeff 0%, #f0fdfa 100%)", borderRadius: 10, border: "1px solid #99f6e4" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>🤖 Multi-step Agent</div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Орchestrate code + image + voice in one workflow. One prompt → full app with hero image and voiceover.
+                    </div>
+                  </div>
+
+                  {/* Step list */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {agentSteps.map((step, i) => (
+                      <div key={i} style={{ padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ width: 20, height: 20, borderRadius: 4, background: "#0d9488", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                          <select value={step.type} onChange={(e) => updateAgentStep(i, { type: e.target.value as AgentStep["type"] })}
+                            style={{ padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 12, fontWeight: 700 }}>
+                            <option value="code">Code</option>
+                            <option value="image">Image (DALL-E)</option>
+                            <option value="tts">Voice (TTS)</option>
+                            <option value="sfx">SFX</option>
+                          </select>
+                          <input value={step.saveAs || ""} onChange={(e) => updateAgentStep(i, { saveAs: e.target.value })}
+                            placeholder="saveAs (path)"
+                            style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontFamily: "monospace" }} />
+                          <button onClick={() => removeAgentStep(i)}
+                            style={{ padding: "4px 8px", background: "none", border: "1px solid #fca5a5", borderRadius: 5, fontSize: 11, color: "#ef4444", cursor: "pointer" }}>
+                            ×
+                          </button>
+                        </div>
+                        {(step.type === "code" || step.type === "image") ? (
+                          <input value={step.prompt || ""} onChange={(e) => updateAgentStep(i, { prompt: e.target.value })}
+                            placeholder={step.type === "code" ? "Describe what to build..." : "Describe the image..."}
+                            style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
+                        ) : (
+                          <input value={step.text || ""} onChange={(e) => updateAgentStep(i, { text: e.target.value })}
+                            placeholder={step.type === "tts" ? "Text to speak..." : "Sound effect description..."}
+                            style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
+                        )}
+                        {/* Step result indicator */}
+                        {agentResults[i] && (
+                          <div style={{ marginTop: 6, fontSize: 11, color: agentResults[i].ok ? "#065f46" : "#991b1b", fontWeight: 600 }}>
+                            {agentResults[i].ok ? "✓" : "✗"} {agentResults[i].ok ? (agentResults[i].savedAs || "ok") : agentResults[i].error}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {(["code", "image", "tts", "sfx"] as const).map((t) => (
+                      <button key={t} onClick={() => addAgentStep(t)}
+                        style={{ padding: "4px 10px", background: "#f1f5f9", border: "1px dashed #94a3b8",
+                          borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
+                        + {t === "code" ? "Code" : t === "image" ? "Image" : t === "tts" ? "Voice" : "SFX"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {agentSummary && (
+                    <div style={{ padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      background: agentSummary.failureCount === 0 ? "#d1fae5" : "#fef3c7",
+                      color: agentSummary.failureCount === 0 ? "#065f46" : "#92400e" }}>
+                      Workflow complete: {agentSummary.successCount}/{agentSummary.totalSteps} steps successful, {agentSummary.failureCount} failed
+                    </div>
+                  )}
+
+                  <button
+                    onClick={runAgentWorkflow}
+                    disabled={agentRunning || agentSteps.length === 0}
+                    style={{
+                      padding: "11px 18px",
+                      background: agentRunning ? "linear-gradient(90deg, #c4b5fd 0%, #fcd34d 100%)" : "linear-gradient(90deg, #7c3aed 0%, #f59e0b 100%)",
+                      color: "#fff", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 14,
+                      cursor: (agentRunning || agentSteps.length === 0) ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {agentRunning ? "Running workflow..." : `🤖 Run ${agentSteps.length}-step Workflow`}
+                  </button>
                 </div>
               )}
 

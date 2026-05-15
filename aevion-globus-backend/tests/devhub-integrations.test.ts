@@ -534,7 +534,7 @@ describe("POST /api/devhub/media/drive-search (Google Drive)", () => {
     expect(r.body.ok).toBe(true);
     expect(r.body.files).toHaveLength(2);
     const url = fetchMock.mock.calls[0][0];
-    expect(url).toContain("name contains 'doc'");
+    expect(url).toMatch(/name\+contains\+%27doc%27/);
     expect(url).toContain("pageSize=10");
   });
 });

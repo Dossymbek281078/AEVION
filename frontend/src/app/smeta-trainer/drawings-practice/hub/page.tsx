@@ -323,6 +323,11 @@ const MODULES: Module[] = [
   { id: "dams-hydrostructures",   category: "special",   href: "/smeta-trainer/drawings-practice/dams-hydrostructures",   icon: "🌊", title: "Плотины и гидротехника",          subtitle: "Бухтарма H=90 м, Капшагай 28 км³, Tainter gate, КИА, СН РК 3.04-13", level: "L5", exercises: 4,  color: "blue"    },
   { id: "substations-power",      category: "utilities", href: "/smeta-trainer/drawings-practice/substations-power",      icon: "⚡", title: "Подстанции 110-1150 кВ",          subtitle: "KEGOC ПС 500/1150 кВ, КРУЭ ABB/Siemens, РЗА SIPROTEC",            level: "L5", exercises: 4,  color: "amber"   },
   { id: "mine-shafts-underground",category: "special",   href: "/smeta-trainer/drawings-practice/mine-shafts-underground",icon: "⛏️", title: "Шахты и подземные выработки",     subtitle: "Стволы Ø6-8 м H=1000 м, СВП-22/27/33, ПБ 03-553, Караганда",      level: "L5", exercises: 4,  color: "stone"   },
+
+  // ── Цемент, металлургия, текстиль ──
+  { id: "cement-plants",          category: "special",   href: "/smeta-trainer/drawings-practice/cement-plants",          icon: "🏭", title: "Цементные заводы",                subtitle: "Карагандацемент 2.5 млн т, вращающаяся печь Ø5×75 м, клинкер 1450°C", level: "L5", exercises: 4,  color: "stone"   },
+  { id: "metallurgy-plants",      category: "special",   href: "/smeta-trainer/drawings-practice/metallurgy-plants",      icon: "🔥", title: "Металлургические заводы",         subtitle: "АО АрселорМиттал Темиртау 5 млн т стали, конвертер LD 250 т, ДП-9", level: "L5", exercises: 4,  color: "red"     },
+  { id: "textile-factories",      category: "special",   href: "/smeta-trainer/drawings-practice/textile-factories",      icon: "🧵", title: "Текстильные фабрики",             subtitle: "Шымкент 50 млрд тг, прядение/ткачество, цех 144×72 м, кондиционирование", level: "L5", exercises: 4,  color: "rose"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

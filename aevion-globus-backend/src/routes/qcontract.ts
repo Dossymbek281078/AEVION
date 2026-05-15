@@ -842,3 +842,89 @@ qcontractRouter.get("/openapi.json", (_req, res) => {
     },
   });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+interface QContractConceptMessage {
+  id: string;
+  payload: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+}
+
+const QCONTRACT_CONCEPT_MAX = 200;
+const qcontractConceptMessages: QContractConceptMessage[] = [];
+
+qcontractRouter.get("/status", (_req, res) => {
+  res.json({
+    module: "qcontract",
+    code: "QCONTRACT",
+    status: "mvp",
+    description: "Self-destructing smart documents with view-count limits + concept board.",
+    endpoints: {
+      documents: "/api/qcontract/documents",
+      stats: "/api/qcontract/stats",
+      conceptMessages: "/api/qcontract/concept/messages",
+      conceptStats: "/api/qcontract/concept-stats",
+    },
+    conceptMessagesCount: qcontractConceptMessages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+qcontractRouter.get("/concept/messages", (req, res) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+  const items = qcontractConceptMessages.slice(0, limit);
+  res.json({ items, total: qcontractConceptMessages.length, moduleId: "qcontract", noun: "concept/messages" });
+});
+
+qcontractRouter.post("/concept/messages", (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
+    const payload = (body.payload && typeof body.payload === "object")
+      ? body.payload as Record<string, unknown>
+      : body;
+    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
+    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
+    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
+    const author = String(payload.author ?? "").trim().slice(0, 80);
+    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["qcontract"];
+    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
+    const msg: QContractConceptMessage = {
+      id: randomUUID(),
+      payload: { idea, rationale, author },
+      tags: tags.length ? tags : ["qcontract"],
+      createdAt: new Date().toISOString(),
+    };
+    qcontractConceptMessages.unshift(msg);
+    if (qcontractConceptMessages.length > QCONTRACT_CONCEPT_MAX) {
+      qcontractConceptMessages.length = QCONTRACT_CONCEPT_MAX;
+    }
+    return res.status(201).json(msg);
+  } catch (err: unknown) {
+    console.error("[qcontract] concept_post_failed", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "concept_post_failed" });
+  }
+});
+
+qcontractRouter.get("/concept-stats", (_req, res) => {
+  const now = Date.now();
+  const sevenDays = 7 * 86_400_000;
+  const last7d = qcontractConceptMessages.filter(
+    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
+  ).length;
+  const tagCounts = new Map<string, number>();
+  for (const m of qcontractConceptMessages) {
+    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  }
+  const topTags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag, count]) => ({ tag, count }));
+  res.json({
+    moduleId: "qcontract",
+    noun: "concept/messages",
+    total: qcontractConceptMessages.length,
+    last7d,
+    topTags,
+  });
+});

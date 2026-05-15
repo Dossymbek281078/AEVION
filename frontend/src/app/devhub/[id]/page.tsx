@@ -237,7 +237,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [generating, setGenerating] = useState(false);
 
   // Agent workflow state
-  type AgentStep = { type: "code" | "image" | "tts" | "sfx"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; saveAs?: string; stack?: string };
+  type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
     { type: "code", prompt: "Landing page for an AI startup with hero, headline, CTA", saveAs: "pages/index.tsx" },
     { type: "image", prompt: "AI startup hero — futuristic, vivid colors, abstract", saveAs: "public/hero.url.txt" },
@@ -297,8 +297,20 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     { code: "PT", name: "Português" }, { code: "IT", name: "Italiano" }, { code: "PL", name: "Polski" },
     { code: "TR", name: "Türkçe" }, { code: "JA", name: "日本語" }, { code: "ZH", name: "中文" },
   ];
+  const BULK_PRESETS = [
+    { label: "🌍 Wide reach", codes: ["RU", "EN", "KK", "DE", "FR", "ES"] },
+    { label: "📰 Blog", codes: ["RU", "EN", "KK"] },
+    { label: "📚 Docs", codes: ["RU", "EN", "KK", "DE", "JA", "ZH"] },
+    { label: "🇰🇿 KZ trio", codes: ["RU", "EN", "KK"] },
+  ];
   const [bulkPaths, setBulkPaths] = useState<string[]>([]);
-  const [bulkLangs, setBulkLangs] = useState<string[]>(["RU", "EN"]);
+  const [bulkLangs, setBulkLangs] = useState<string[]>(() => {
+    try {
+      const saved = typeof window !== "undefined" && localStorage.getItem("devhub-bulk-lang-preset");
+      if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; }
+    } catch { /* ignore */ }
+    return ["RU", "EN"];
+  });
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkResults, setBulkResults] = useState<Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; error?: string }>>([]);
   const [bulkSummary, setBulkSummary] = useState<{ total: number; successCount: number; failureCount: number } | null>(null);
@@ -393,6 +405,10 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [voiceCloneFile, setVoiceCloneFile] = useState<File | null>(null);
   const [voiceCloneLoading, setVoiceCloneLoading] = useState(false);
   const [voiceCloneMsg, setVoiceCloneMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState(false);
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+  const [voicePreviewText, setVoicePreviewText] = useState("AEVION voice preview — your custom voice is ready");
+  const [voicePreviewOk, setVoicePreviewOk] = useState(false);
 
   // STT state
   const [sttFile, setSttFile] = useState<File | null>(null);
@@ -1423,8 +1439,16 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const toggleBulkPath = (path: string) => {
     setBulkPaths((prev) => prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]);
   };
+  const applyBulkLangPreset = (codes: string[]) => {
+    setBulkLangs(codes);
+    try { localStorage.setItem("devhub-bulk-lang-preset", JSON.stringify(codes)); } catch { /* ignore */ }
+  };
   const toggleBulkLang = (lang: string) => {
-    setBulkLangs((prev) => prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]);
+    setBulkLangs((prev) => {
+      const next = prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang];
+      try { localStorage.setItem("devhub-bulk-lang-preset", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   };
 
   // ── Brevo template builder (create new SMTP template) ────────────────────────
@@ -1512,6 +1536,45 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     if (f) importZipFile(f);
   };
 
+  const [fileTreeDragOver, setFileTreeDragOver] = useState(false);
+  const fileTreeDragDepth = useRef(0);
+
+  const isZipFile = (f: File) => {
+    if (!f) return false;
+    const t = (f.type || "").toLowerCase();
+    if (t === "application/zip" || t === "application/x-zip-compressed") return true;
+    return /\.zip$/i.test(f.name);
+  };
+
+  const onFileTreeDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    fileTreeDragDepth.current += 1;
+    setFileTreeDragOver(true);
+  };
+  const onFileTreeDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+  const onFileTreeDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    fileTreeDragDepth.current = Math.max(0, fileTreeDragDepth.current - 1);
+    if (fileTreeDragDepth.current === 0) setFileTreeDragOver(false);
+  };
+  const onFileTreeDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    fileTreeDragDepth.current = 0;
+    setFileTreeDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    if (!isZipFile(f)) {
+      setZipResult({ ok: false, text: `"${f.name}" is not a .zip` });
+      return;
+    }
+    importZipFile(f);
+  };
+
   // ── TTS Voice preview ────────────────────────────────────────────────────────
 
   const previewVoice = async (voice: string) => {
@@ -1568,6 +1631,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     setAgentSteps((s) => [...s, type === "code" ? { type, prompt: "", stack: project?.stack || "next" }
       : type === "image" ? { type, prompt: "" }
       : type === "tts" ? { type, text: "", voice: "Rachel" }
+      : type === "music" ? { type, prompt: "", lengthSeconds: 30 }
       : { type, text: "", durationSeconds: 3 }]);
   };
 
@@ -1581,13 +1645,64 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   // ── Voice clone (file upload) ────────────────────────────────────────────────
 
+  const fileToBase64 = async (file: File): Promise<string> => {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+    }
+    return btoa(binary);
+  };
+
+  const previewClonedVoice = async () => {
+    if (!voiceCloneFile) {
+      setVoiceCloneMsg({ ok: false, text: "Pick an audio sample first" });
+      return;
+    }
+    setVoicePreviewLoading(true);
+    setVoiceCloneMsg(null);
+    setVoicePreviewOk(false);
+    if (voicePreviewUrl) { URL.revokeObjectURL(voicePreviewUrl); setVoicePreviewUrl(null); }
+    try {
+      const base64 = await fileToBase64(voiceCloneFile);
+      const r = await fetch(apiUrl("/api/devhub/media/voice-clone/preview"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sampleBase64: base64,
+          mimeType: voiceCloneFile.type || "audio/mpeg",
+          previewText: voicePreviewText.trim() || undefined,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setVoiceCloneMsg({ ok: false, text: d.error || "Preview failed" });
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      setVoicePreviewUrl(url);
+      setVoicePreviewOk(true);
+      setVoiceCloneMsg({ ok: true, text: "Preview ready — listen below, then Save if you like it" });
+    } catch (e: any) {
+      setVoiceCloneMsg({ ok: false, text: e?.message || "Preview failed" });
+    } finally {
+      setVoicePreviewLoading(false);
+    }
+  };
+
   const cloneVoice = async () => {
     if (!voiceCloneName.trim() || !voiceCloneFile) return;
+    if (!voicePreviewOk) {
+      setVoiceCloneMsg({ ok: false, text: "Preview first — click 🎧 Preview, listen, then Save" });
+      return;
+    }
     setVoiceCloneLoading(true);
     setVoiceCloneMsg(null);
     try {
-      const buf = await voiceCloneFile.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const base64 = await fileToBase64(voiceCloneFile);
       const r = await fetch(apiUrl("/api/devhub/media/voice-clone"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1596,6 +1711,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
           description: voiceCloneDesc.trim() || undefined,
           sampleBase64: base64,
           mimeType: voiceCloneFile.type || "audio/mpeg",
+          confirm: true,
         }),
       });
       const d = await r.json();
@@ -1604,6 +1720,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
+        setVoicePreviewOk(false);
+        if (voicePreviewUrl) { URL.revokeObjectURL(voicePreviewUrl); setVoicePreviewUrl(null); }
       }
     } catch (e: any) {
       setVoiceCloneMsg({ ok: false, text: e?.message || "Clone failed" });
@@ -1853,7 +1971,27 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       {/* Main IDE area */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", height: showBuildLog ? "calc(100vh - 220px)" : "calc(100vh - 60px)" }}>
         {/* File tree — left sidebar */}
-        <div style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div
+          onDragEnter={onFileTreeDragEnter}
+          onDragOver={onFileTreeDragOver}
+          onDragLeave={onFileTreeDragLeave}
+          onDrop={onFileTreeDrop}
+          style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0, position: "relative" }}>
+          {fileTreeDragOver && (
+            <div style={{
+              position: "absolute", inset: 6, zIndex: 5, pointerEvents: "none",
+              border: "2px dashed #0d9488", borderRadius: 10,
+              background: "rgba(13,148,136,0.08)",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              gap: 6, color: "#0d9488", fontWeight: 700, fontSize: 13, textAlign: "center", padding: 14,
+            }}>
+              <span style={{ fontSize: 28, lineHeight: 1 }}>📦</span>
+              <span>Drop ZIP to import</span>
+              <span style={{ fontSize: 10, color: "#475569", fontWeight: 500 }}>
+                {zipOverwrite ? "Overwrites existing files" : "Skips existing files"}
+              </span>
+            </div>
+          )}
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Files</span>
             <div style={{ display: "flex", gap: 4 }}>
@@ -2826,9 +2964,27 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </div>
 
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                          Target languages ({bulkLangs.length} selected)
-                        </label>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+                            Target languages ({bulkLangs.length} selected)
+                          </label>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {BULK_PRESETS.map((preset) => {
+                              const active = preset.codes.length === bulkLangs.length && preset.codes.every((c) => bulkLangs.includes(c));
+                              return (
+                                <button key={preset.label} type="button" onClick={() => applyBulkLangPreset(preset.codes)}
+                                  style={{
+                                    padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                    border: "1px solid " + (active ? "#0d9488" : "#e2e8f0"),
+                                    background: active ? "#0d9488" : "#f8fafc",
+                                    color: active ? "#fff" : "#64748b", borderRadius: 5, whiteSpace: "nowrap",
+                                  }}>
+                                  {preset.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {BULK_LANG_OPTIONS.map((opt) => {
                             const on = bulkLangs.includes(opt.code);
@@ -3132,6 +3288,12 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           style={{ width: "100%", fontSize: 12 }} />
                         {voiceCloneFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{voiceCloneFile.name} ({Math.round(voiceCloneFile.size / 1024)} KB)</div>}
                       </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Preview text</label>
+                        <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
+                          placeholder="AEVION voice preview — your custom voice is ready"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
                       {voiceCloneMsg && (
                         <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
                           background: voiceCloneMsg.ok ? "#d1fae5" : "#fee2e2",
@@ -3139,18 +3301,39 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           {voiceCloneMsg.text}
                         </div>
                       )}
-                      <button
-                        onClick={cloneVoice}
-                        disabled={voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile}
-                        style={{
-                          padding: "9px 18px", background: voiceCloneLoading ? "#c4b5fd" : "#7c3aed",
-                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                          cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile) ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {voiceCloneLoading ? "Cloning..." : "Clone Voice"}
-                      </button>
+                      {voicePreviewUrl && (
+                        <div style={{ padding: "8px 12px", background: "#eef2ff", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 11, color: "#4338ca", fontWeight: 700 }}>Listen before saving — temp voice already deleted from your account</div>
+                          <audio controls src={voicePreviewUrl} style={{ width: "100%" }} />
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          onClick={previewClonedVoice}
+                          disabled={voicePreviewLoading || !voiceCloneFile}
+                          style={{
+                            padding: "9px 18px", background: voicePreviewLoading ? "#a5b4fc" : "#6366f1",
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: (voicePreviewLoading || !voiceCloneFile) ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {voicePreviewLoading ? "Previewing..." : "🎧 Preview voice (no commit)"}
+                        </button>
+                        <button
+                          onClick={cloneVoice}
+                          disabled={voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile || !voicePreviewOk}
+                          title={!voicePreviewOk ? "Preview the voice first, then Save" : "Save permanent voice to ElevenLabs account"}
+                          style={{
+                            padding: "9px 18px", background: voiceCloneLoading ? "#c4b5fd" : (voicePreviewOk ? "#7c3aed" : "#cbd5e1"),
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile || !voicePreviewOk) ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {voiceCloneLoading ? "Saving..." : "✓ Save voice to account"}
+                        </button>
+                      </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Preview clones temporarily, renders TTS sample, then deletes the temp voice — no slot is consumed.
                         Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Premium tier required.
                       </div>
                     </div>
@@ -3317,6 +3500,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                             <option value="image">Image (DALL-E)</option>
                             <option value="tts">Voice (TTS)</option>
                             <option value="sfx">SFX</option>
+                            <option value="music">Music</option>
                           </select>
                           <input value={step.saveAs || ""} onChange={(e) => updateAgentStep(i, { saveAs: e.target.value })}
                             placeholder="saveAs (path)"
@@ -3326,14 +3510,23 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                             ×
                           </button>
                         </div>
-                        {(step.type === "code" || step.type === "image") ? (
+                        {(step.type === "code" || step.type === "image" || step.type === "music") ? (
                           <input value={step.prompt || ""} onChange={(e) => updateAgentStep(i, { prompt: e.target.value })}
-                            placeholder={step.type === "code" ? "Describe what to build..." : "Describe the image..."}
+                            placeholder={step.type === "code" ? "Describe what to build..." : step.type === "image" ? "Describe the image..." : "Describe the music (genre, mood, instruments)..."}
                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
                         ) : (
                           <input value={step.text || ""} onChange={(e) => updateAgentStep(i, { text: e.target.value })}
                             placeholder={step.type === "tts" ? "Text to speak..." : "Sound effect description..."}
                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
+                        )}
+                        {step.type === "music" && (
+                          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                            <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>Length (s):</label>
+                            <input type="number" min={10} max={300} value={step.lengthSeconds ?? 30}
+                              onChange={(e) => updateAgentStep(i, { lengthSeconds: Math.max(10, Math.min(300, Number(e.target.value) || 30)) })}
+                              style={{ width: 70, padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11 }} />
+                            <span style={{ fontSize: 10, color: "#94a3b8" }}>10–300</span>
+                          </div>
                         )}
                         {/* Step result indicator */}
                         {agentResults[i] && (
@@ -3346,11 +3539,11 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   </div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {(["code", "image", "tts", "sfx"] as const).map((t) => (
+                    {(["code", "image", "tts", "sfx", "music"] as const).map((t) => (
                       <button key={t} onClick={() => addAgentStep(t)}
                         style={{ padding: "4px 10px", background: "#f1f5f9", border: "1px dashed #94a3b8",
                           borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-                        + {t === "code" ? "Code" : t === "image" ? "Image" : t === "tts" ? "Voice" : "SFX"}
+                        + {t === "code" ? "Code" : t === "image" ? "Image" : t === "tts" ? "Voice" : t === "sfx" ? "SFX" : "Music"}
                       </button>
                     ))}
                   </div>

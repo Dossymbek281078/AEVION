@@ -75,6 +75,7 @@ import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
 import MusicPlayer from "./MusicPlayer";
+import AevionMiniHub from "./AevionMiniHub";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -3707,6 +3708,12 @@ export default function CyberChessPage(){
         <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
 
         <div style={{flex:1}}/>
+
+        {/* AEVION ecosystem mini-hub — переход в другие продукты без покидания CyberChess */}
+        <AevionMiniHub
+          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+          text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
+        />
 
         {/* Rating badge */}
         <div style={{

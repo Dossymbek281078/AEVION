@@ -896,6 +896,13 @@ export default function CyberChessPage(){
   const[resumeOffer,sResumeOffer]=useState<ResumeSnap|null>(null);
   const[replaying,sReplaying]=useState(false);
   const[replaySpeed,sReplaySpeed]=useState(1000);
+  // Replay Director — cinematic auto-replay (killer feature #9)
+  const[cinematic,sCinematic]=useState(false);
+  const[cinematicMoment,sCinematicMoment]=useState<{label:string;color:string;sub?:string}|null>(null);
+  // AI Story Mode — narrative voiced summary of the finished game (killer feature #10)
+  const[showStory,sShowStory]=useState(false);
+  const[storyText,sStoryText]=useState<string>("");
+  const[storyPlaying,sStoryPlaying]=useState(false);
   type Arrow={from:Square;to:Square;c:string};
   type SqHL={sq:Square;c:string};
   const[arrows,sArrows]=useState<Arrow[]>([]);
@@ -2296,6 +2303,206 @@ export default function CyberChessPage(){
     }
   },[totalGames,pzSolvedCount,dailyGoals,addChessy,showToast]);
 
+  /* ── Chess Vision: трекет фаз ── */
+  const startVisionRound=useCallback(()=>{
+    if(PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
+    // Pick random puzzle from filtered list (use easier ones for vision: rating <= 1500)
+    const candidates=PUZZLES.filter(p=>p.r<=1500&&p.sol.length>=1);
+    const pool=candidates.length>0?candidates:PUZZLES;
+    const pz=pool[Math.floor(Math.random()*pool.length)];
+    sVisionPuzzle(pz);sVisionAnswer("");sVisionResult("idle");
+    sVisionPhase("countdown");sVisionCountdown(3);
+  },[PUZZLES,showToast]);
+  // Countdown 3..2..1 → show
+  useEffect(()=>{
+    if(!showVision||visionPhase!=="countdown")return;
+    if(visionCountdown<=0){sVisionPhase("show");return}
+    const t=setTimeout(()=>sVisionCountdown(c=>c-1),700);
+    return()=>clearTimeout(t);
+  },[showVision,visionPhase,visionCountdown]);
+  // Show → hidden after visionShowMs
+  useEffect(()=>{
+    if(!showVision||visionPhase!=="show")return;
+    const t=setTimeout(()=>sVisionPhase("hidden"),visionShowMs);
+    return()=>clearTimeout(t);
+  },[showVision,visionPhase,visionShowMs]);
+  const submitVisionAnswer=useCallback(()=>{
+    if(!visionPuzzle)return;
+    const expectedUci=visionPuzzle.sol[0]||"";
+    const ans=visionAnswer.trim();
+    if(!ans){showToast("Введи ход","error");return}
+    // Try matching as SAN first, then UCI
+    let isCorrect=false;
+    try{
+      const c=new Chess(visionPuzzle.fen);
+      const m=c.move(ans);
+      if(m){
+        const playedUci=`${m.from}${m.to}${m.promotion||""}`;
+        isCorrect=playedUci===expectedUci||playedUci.slice(0,4)===expectedUci.slice(0,4);
+      }
+    }catch{}
+    if(!isCorrect){
+      // Try as UCI directly
+      const compact=ans.replace(/\s+/g,"").toLowerCase();
+      if(compact===expectedUci||compact.slice(0,4)===expectedUci.slice(0,4))isCorrect=true;
+    }
+    sVisionResult(isCorrect?"correct":"wrong");
+    sVisionPhase("answered");
+    sVisionScore(s=>({right:s.right+(isCorrect?1:0),total:s.total+1}));
+    if(isCorrect){
+      const newStreak=visionStreak+1;
+      sVisionStreak(newStreak);
+      if(newStreak>visionBest){sVisionBest(newStreak);try{localStorage.setItem("aevion_vision_best_v1",String(newStreak))}catch{}}
+      const reward=Math.min(15,2+Math.floor(newStreak/3));
+      addChessy(reward,`🧠 Vision · streak ${newStreak}`);
+      snd("check");
+    }else{
+      sVisionStreak(0);
+      snd("capture");
+    }
+  },[visionPuzzle,visionAnswer,visionStreak,visionBest,addChessy,showToast]);
+
+  /* ── AI Story Mode: generate + voice-narrate the finished game ── */
+  const generateStory=useCallback(():string=>{
+    const userIsWhite=pCol==="w";
+    const lines:string[]=[];
+    if(currentOpening?.name)lines.push(`Партия началась как ${currentOpening.name}.`);
+    else lines.push(`Это была партия из ${hist.length} полуходов.`);
+    // Pivotal moments by severity
+    const moments:{ply:number;type:string;sev:number}[]=[];
+    for(let i=0;i<analysis.length;i++){
+      const a=analysis[i];const isUserMove=userIsWhite?i%2===0:i%2===1;
+      if(a.quality==="blunder")moments.push({ply:i,type:isUserMove?"user_blunder":"ai_blunder",sev:3});
+      else if(a.quality==="mistake")moments.push({ply:i,type:isUserMove?"user_mistake":"ai_mistake",sev:2});
+      else if(a.quality==="great")moments.push({ply:i,type:isUserMove?"user_great":"ai_great",sev:2});
+      if(a.mate!==0&&Math.abs(a.mate)<=3)moments.push({ply:i,type:"mate_threat",sev:3});
+    }
+    const top=moments.sort((a,b)=>b.sev-a.sev).slice(0,3).sort((a,b)=>a.ply-b.ply);
+    const ai=lv.name;
+    for(const m of top){
+      const num=Math.floor(m.ply/2)+1;const dot=m.ply%2===0?"":"…";
+      if(m.type==="user_blunder")lines.push(`На ${num}${dot}-м ходу ты допустил серьёзную ошибку — это могло стоить партии.`);
+      else if(m.type==="user_mistake")lines.push(`Неточность на ${num}${dot}-м ходу слегка осложнила твою позицию.`);
+      else if(m.type==="user_great")lines.push(`На ${num}-м ходу ты нашёл сильный ход — позиция получила импульс.`);
+      else if(m.type==="ai_blunder")lines.push(`${ai} допустил блундер на ${num}-м — это был твой шанс.`);
+      else if(m.type==="ai_great")lines.push(`${ai} ответил сильным ходом на ${num}-м.`);
+      else if(m.type==="mate_threat")lines.push(`К ${num}-му ходу на доске возникла матовая угроза.`);
+    }
+    if(over){
+      if(over.includes("You win"))lines.push(`В итоге ты одержал победу. Хорошая работа.`);
+      else if(over.includes("AI wins")||over.includes("resigned"))lines.push(`К сожалению, на этот раз победа осталась за соперником.`);
+      else if(over.includes("Stalemate")||over.includes("draw")||over.includes("Insufficient")||over.includes("repetition"))lines.push(`Партия завершилась вничью.`);
+      else if(over.toLowerCase().includes("time"))lines.push(`Время сыграло свою роль — флаг упал.`);
+    }
+    return lines.join(" ");
+  },[pCol,hist.length,currentOpening,analysis,lv.name,over]);
+  const speakStory=useCallback((text:string)=>{
+    if(typeof window==="undefined"||!window.speechSynthesis||!text)return;
+    try{
+      window.speechSynthesis.cancel();
+      const utt=new SpeechSynthesisUtterance(text);
+      utt.lang="ru-RU";utt.rate=1.0;utt.volume=0.95;utt.pitch=1.0;
+      utt.onend=()=>sStoryPlaying(false);
+      utt.onerror=()=>sStoryPlaying(false);
+      window.speechSynthesis.speak(utt);
+      sStoryPlaying(true);
+    }catch{sStoryPlaying(false)}
+  },[]);
+  const stopStory=useCallback(()=>{
+    try{if(typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel()}catch{}
+    sStoryPlaying(false);
+  },[]);
+
+  /* ── Multiverse: launch + animation tick ── */
+  const startMultiverse=useCallback(()=>{
+    if(!sfR.current?.ready()){showToast("Stockfish loading...","error");return}
+    const fen=game.fen();
+    sMultiverseFen(fen);sMultiverseLines([]);sMultiverseRunning(true);
+    sShowMultiverse(true);sMultiverseTick(0);sMultiversePaused(false);
+    sfR.current.multiPV(fen,14,3,(lines)=>{
+      const turn=fen.split(" ")[1];const sign=turn==="w"?1:-1;
+      sMultiverseLines(lines.map(l=>({...l,cp:l.cp*sign,mate:l.mate*sign})));
+      sMultiverseRunning(false);
+    });
+  },[game,showToast]);
+  useEffect(()=>{
+    if(!showMultiverse||multiverseRunning||multiversePaused||multiverseLines.length===0)return;
+    const maxLen=Math.max(...multiverseLines.map(l=>Math.min(l.moves.length,8)));
+    if(maxLen===0)return;
+    const id=setInterval(()=>{
+      sMultiverseTick(t=>(t+1)%(maxLen+2));
+    },multiverseSpeed);
+    return()=>clearInterval(id);
+  },[showMultiverse,multiverseRunning,multiversePaused,multiverseLines,multiverseSpeed]);
+  // Helper: replay UCI moves on a starting FEN up to given ply, return final FEN + last-move squares
+  const replayLine=useCallback((startFen:string,uciMoves:string[],upToPly:number):{fen:string;lm:{from:string;to:string}|null}=>{
+    try{
+      const c=new Chess(startFen);
+      let lm:{from:string;to:string}|null=null;
+      const upTo=Math.min(upToPly,uciMoves.length);
+      for(let i=0;i<upTo;i++){
+        const u=uciMoves[i];
+        const m=c.move({from:u.slice(0,2) as Square,to:u.slice(2,4) as Square,promotion:u.length>4?u[4] as any:"q"});
+        if(m)lm={from:m.from,to:m.to};
+      }
+      return{fen:c.fen(),lm};
+    }catch{return{fen:startFen,lm:null}}
+  },[]);
+
+  /* ── Ghost Duel: detect divergence ── */
+  useEffect(()=>{
+    if(!ghostDuelConfig||ghostDuelDiverged!==null||hist.length===0)return;
+    const div=checkDivergence(ghostDuelConfig,hist);
+    if(div!==null&&div<hist.length){
+      sGhostDuelDiverged(div);
+      const moveNum=Math.floor(div/2)+1;
+      showToast(`◈ Развилка на ${moveNum}-м ходу — путь разошёлся с прошлой партией`,"info");
+    }
+  },[hist.length,ghostDuelConfig,ghostDuelDiverged,showToast]);
+
+  /* ── Ghost Duel: sample current eval per-ply ── */
+  useEffect(()=>{
+    if(!ghostDuelConfig||hist.length===0)return;
+    const ply=hist.length-1;
+    sGhostCurrentEval(prev=>{
+      if(prev.find(s=>s.ply===ply))return prev;
+      return [...prev,{ply,cp:evalCp}];
+    });
+  },[bk,ghostDuelConfig,hist.length,evalCp]);
+
+  /* ── Ghost Duel: end-of-game summary ── */
+  useEffect(()=>{
+    if(!ghostDuelConfig||!over)return;
+    const gameKey=`${ghostDuelConfig.pastGameId}-${hist.length}`;
+    if(ghostLearnedRef.current===gameKey)return;
+    ghostLearnedRef.current=gameKey;
+    const isWin=over.includes("You win");
+    const isDraw=over.includes("Stalemate")||over.includes("draw")||over.includes("repetition")||over.includes("Insufficient");
+    const pastWasWin=ghostDuelConfig.pastResult.includes("You win");
+    const pastWasLoss=ghostDuelConfig.pastResult.includes("AI wins")||ghostDuelConfig.pastResult.includes("resigned")||ghostDuelConfig.pastResult.includes("Time out");
+    // Bonus structure:
+    // - Win where past you lost: huge (+30)
+    // - Win where past you won: solid (+15)
+    // - Win after divergence: +5
+    // - Draw: 5
+    // - Loss: 1
+    let reward=0;
+    if(isWin){
+      reward=pastWasLoss?30:pastWasWin?15:20;
+      if(ghostDuelDiverged!==null)reward+=5;
+    }else if(isDraw){
+      reward=pastWasLoss?12:5;
+    }else{
+      reward=1;
+    }
+    const cmp=compareEvals(ghostCurrentEval,ghostPastEval,ghostDuelConfig.userPlaysAs);
+    const summary=ghostSummary(ghostDuelConfig,ghostDuelDiverged,cmp,over);
+    sGhostDuelEndModal({betterCp:cmp.betterCp,samples:cmp.samples,divergedAtPly:ghostDuelDiverged,result:over,summary,reward});
+    setTimeout(()=>addChessy(reward,`👻 Ghost Duel`),900);
+    const newStats=recordDuelResult(ghostDuelStats,isWin,isDraw,cmp.betterCp);
+    sGhostDuelStats(newStats);svGhostDuelStats(newStats);
+  },[over,ghostDuelConfig,ghostDuelDiverged,ghostCurrentEval,ghostPastEval,ghostDuelStats,addChessy,hist.length]);
+
   /* ── Rival learning — after each encounter, adapt profile and save ── */
   const rivalLearnedRef=useRef<string|null>(null);
   useEffect(()=>{
@@ -2654,14 +2861,37 @@ export default function CyberChessPage(){
   /* ── Replay auto-advance ── */
   useEffect(()=>{
     if(!replaying||hist.length===0)return;
-    const t=setInterval(()=>{
-      const cur=browseIdx<0?hist.length:browseIdx;
-      const ni=cur+1;
-      if(ni>=hist.length){sReplaying(false);sBrowseIdx(-1);try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1)}catch{}return}
-      try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());snd("move")}catch{sReplaying(false)}
-    },replaySpeed);
-    return()=>clearInterval(t);
-  },[replaying,replaySpeed,browseIdx,hist.length,fenHist]);
+    // Cinematic mode: speed adapts to quality of next move; key moments flash title cards
+    const cur=browseIdx<0?hist.length:browseIdx;
+    const ni=cur+1;
+    let delay=replaySpeed;
+    let momentForNext:typeof cinematicMoment=null;
+    if(cinematic&&ni<hist.length&&analysis[ni]){
+      const q=analysis[ni].quality;
+      if(q==="blunder"){delay=2200;momentForNext={label:"⚠ BLUNDER",color:"#dc2626",sub:`ход ${Math.floor(ni/2)+1}${ni%2===0?" белых":" чёрных"}`}}
+      else if(q==="mistake"){delay=1700;momentForNext={label:"✗ Ошибка",color:"#ea580c",sub:`ход ${Math.floor(ni/2)+1}`}}
+      else if(q==="inacc"){delay=1100;momentForNext={label:"~ Неточность",color:"#ca8a04"}}
+      else if(q==="great"){delay=1900;momentForNext={label:"✨ BRILLIANT",color:"#7c3aed",sub:"эталонный ход"}}
+      else delay=420;
+      // Special moments: mate-in-N flash
+      if(analysis[ni].mate!==0&&Math.abs(analysis[ni].mate)<=3){
+        const m=analysis[ni].mate;
+        momentForNext={label:m>0?`♛ Мат в ${m}`:`♚ Мат в ${-m}`,color:m>0?"#059669":"#dc2626",sub:"переломный момент"};
+        delay=2400;
+      }
+    }
+    const t=setTimeout(()=>{
+      if(ni>=hist.length){
+        sReplaying(false);sBrowseIdx(-1);
+        try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1)}catch{}
+        if(cinematic){sCinematicMoment({label:"🏁 КОНЕЦ ПАРТИИ",color:"#0f172a",sub:over||""});setTimeout(()=>{sCinematicMoment(null);sCinematic(false)},2400)}
+        return;
+      }
+      try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());snd("move")}catch{sReplaying(false);return}
+      if(cinematic&&momentForNext){sCinematicMoment(momentForNext);setTimeout(()=>sCinematicMoment(null),Math.min(1500,delay-300))}
+    },delay);
+    return()=>clearTimeout(t);
+  },[replaying,replaySpeed,browseIdx,hist.length,fenHist,cinematic,analysis,over]);
 
   /* ── Puzzle achievement tracker ── */
   useEffect(()=>{
@@ -3369,6 +3599,15 @@ export default function CyberChessPage(){
     if(earned>0)addChessy(earned,`Puzzle Rush${boostMult>1?" ⚡2x":""} · ${rushScore} решено`);
     if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
     if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
+    // AEV mint: Puzzle Rush finale — 1.0 base × score-scaled bonus.
+    // Capped to avoid over-emit if user farms rush; rate scales sub-linearly.
+    if(rushScore>0){
+      const bonusAev=Math.min(8,RATE_CARD.play.cyberchess_puzzle_rush.aev*Math.sqrt(rushScore));
+      const minted=mintAevFromChess("cyberchess_puzzle_rush",bonusAev);
+      if(minted>0){
+        setTimeout(()=>showToast(`◆ +${minted.toFixed(2)} AEV · Rush ${rushScore} solved${isNewBest?" · NEW BEST":""}`,"success"),600);
+      }
+    }
   },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
 
   // Auto-advance to next puzzle in rush/timed modes after a correct solve
@@ -5957,6 +6196,48 @@ export default function CyberChessPage(){
             </div>;
           })()}
           {over&&(tab==="play"||tab==="coach")&&analyzing&&<div style={{marginTop:8,padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Считаем точность…</div>}
+          {/* Replay Director + AI Story (killer #9 + #10) */}
+          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>0&&!cinematic&&<div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap"}}>
+            <button
+              onClick={()=>{
+                try{const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}catch{}
+                sCinematic(true);sReplaying(true);
+                sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
+                setTimeout(()=>sCinematicMoment(null),1800);
+              }}
+              className="cc-focus-ring"
+              style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
+                border:"none",background:"linear-gradient(90deg,#0c0a09,#1e1b4b,#831843,#1e1b4b,#0c0a09)",
+                backgroundSize:"200% 100%",
+                color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.5,cursor:"pointer",
+                boxShadow:"0 4px 16px rgba(15,23,42,0.4)",
+                display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
+              <span style={{fontSize:18}}>🎬</span>
+              <span>CINEMATIC REPLAY</span>
+            </button>
+            <button
+              onClick={()=>{const txt=generateStory();sStoryText(txt);sShowStory(true);setTimeout(()=>speakStory(txt),300)}}
+              className="cc-focus-ring"
+              style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
+                border:"none",background:"linear-gradient(90deg,#7c2d12,#c2410c,#f59e0b,#c2410c,#7c2d12)",
+                backgroundSize:"200% 100%",
+                color:"#fff",fontSize:14,fontWeight:900,letterSpacing:0.5,cursor:"pointer",
+                boxShadow:"0 4px 16px rgba(194,65,12,0.35)",
+                display:"flex",alignItems:"center",justifyContent:"center" as const,gap:10}}>
+              <span style={{fontSize:18}}>📖</span>
+              <span>STORY · озвучка партии</span>
+            </button>
+          </div>}
+          {cinematic&&<div style={{marginTop:8,padding:"10px 16px",borderRadius:10,
+            background:"linear-gradient(135deg,#0c0a09,#1e1b4b)",color:"#fff",
+            display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+            boxShadow:"0 2px 12px rgba(15,23,42,0.3)"}}>
+            <span style={{fontSize:13,fontWeight:900,letterSpacing:0.5}}>🎬 CINEMATIC · ход {(browseIdx<0?hist.length:browseIdx)}/{hist.length}</span>
+            <button onClick={()=>{sCinematic(false);sReplaying(false);sCinematicMoment(null)}}
+              style={{padding:"4px 10px",fontSize:11,fontWeight:800,borderRadius:6,
+                background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",
+                color:"#fff",cursor:"pointer"}}>Стоп</button>
+          </div>}
 
           {/* ── Game Insights — auto summary after analysis completes ── */}
           {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>3&&(()=>{
@@ -7245,6 +7526,10 @@ export default function CyberChessPage(){
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
                 <button onClick={()=>{if(guessMode){sGuessMode(false);runMultiPV()}else startGuess()}} style={{padding:"6px 14px",borderRadius:7,border:guessMode?`2px solid #f59e0b`:`1px solid ${T.border}`,background:guessMode?"#fffbeb":"#fff",color:guessMode?"#92400e":T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>{guessMode?"✕ Exit Guess":"🎯 Guess Move"}</button>
+                <button onClick={startMultiverse} title="Top-3 кандидатских хода в параллельных вселенных" style={{padding:"6px 14px",borderRadius:7,border:"none",
+                  background:"linear-gradient(135deg,#0c0a09,#1e1b4b,#7c3aed)",
+                  color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",
+                  boxShadow:"0 2px 8px rgba(124,58,237,0.35)"}}>🌌 Multiverse</button>
               </div>
               {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
               <div style={{display:"flex",gap:4,alignItems:"center"}}>

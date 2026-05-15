@@ -46,7 +46,10 @@ afterEach(() => {
   for (const key of [
     "GITHUB_TOKEN", "VERCEL_API_TOKEN", "ELEVENLABS_API_KEY",
     "BREVO_API_KEY", "STRIPE_SECRET_KEY", "OPENAI_API_KEY",
-    "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID",
+    "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_R2_ACCOUNT_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID",
+    "CLOUDFLARE_R2_SECRET_KEY", "CLOUDFLARE_R2_BUCKET", "CLOUDFLARE_R2_PUBLIC_URL",
+    "DEEPL_API_KEY", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME",
     "GOOGLE_DRIVE_ACCESS_TOKEN",
   ]) {
     delete process.env[key];
@@ -1182,5 +1185,453 @@ describe("Agent workflow image step → auto-upload to Cloudflare", () => {
     expect(r.status).toBe(200);
     expect(r.body.results[0].output.url).toBe("https://oai.example/temp.png");
     expect(fetchMock).toHaveBeenCalledTimes(1); // no CF call
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 20. Cloudflare R2 audio upload
+// ═════════════════════════════════════════════════════════════════════════════
+
+function setR2Env() {
+  process.env.CLOUDFLARE_R2_ACCOUNT_ID = "acc-r2";
+  process.env.CLOUDFLARE_R2_ACCESS_KEY_ID = "ak-r2";
+  process.env.CLOUDFLARE_R2_SECRET_KEY = "sk-r2";
+  process.env.CLOUDFLARE_R2_BUCKET = "aevion-media";
+}
+
+describe("POST /api/devhub/media/upload-audio (Cloudflare R2)", () => {
+  test("400 when neither sourceUrl nor base64", async () => {
+    const r = await request(makeApp()).post("/api/devhub/media/upload-audio").send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("503 when R2 env missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-audio")
+      .send({ base64: Buffer.from("xx").toString("base64") });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/R2/);
+  });
+
+  test("uploads base64 audio + returns CDN url (with public base)", async () => {
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-audio")
+      .send({ base64: Buffer.from("fake-mp3").toString("base64"), mimeType: "audio/mpeg", key: "audio/test.mp3" });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.key).toBe("audio/test.mp3");
+    expect(r.body.url).toBe("https://cdn.aevion.test/audio/test.mp3");
+
+    const callUrl = fetchMock.mock.calls[0][0] as string;
+    expect(callUrl).toContain("acc-r2.r2.cloudflarestorage.com");
+    expect(callUrl).toContain("/aevion-media/audio/test.mp3");
+    const init = fetchMock.mock.calls[0][1] as any;
+    expect(init.method).toBe("PUT");
+    expect(init.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 /);
+    expect(init.headers["x-amz-date"]).toMatch(/^\d{8}T\d{6}Z$/);
+    expect(init.headers["x-amz-content-sha256"]).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  test("fetches sourceUrl then uploads, returns S3-style url without public base", async () => {
+    setR2Env();
+    const srcBytes = Buffer.from("audio-bytes");
+    const ab = new ArrayBuffer(srcBytes.length);
+    new Uint8Array(ab).set(srcBytes);
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        arrayBuffer: async () => ab,
+        text: async () => "", json: async () => ({}),
+      } as any)
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-audio")
+      .send({ sourceUrl: "https://elevenlabs.example/tmp.mp3", mimeType: "audio/mpeg" });
+    expect(r.status).toBe(200);
+    expect(r.body.url).toContain("acc-r2.r2.cloudflarestorage.com/aevion-media/audio/");
+    expect(r.body.bytes).toBe(srcBytes.length);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("502 when R2 PUT fails", async () => {
+    setR2Env();
+    fetchMock.mockResolvedValueOnce({
+      ok: false, status: 403,
+      json: async () => ({}), text: async () => "<Error>AccessDenied</Error>", arrayBuffer: async () => new ArrayBuffer(0),
+    } as any);
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-audio")
+      .send({ base64: Buffer.from("xx").toString("base64") });
+    expect(r.status).toBe(502);
+    expect(r.body.error).toMatch(/R2 PUT 403/);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 21. DeepL bulk translate
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/files/translate-bulk (DeepL)", () => {
+  async function createProjectWithFiles(app: express.Express, files: Array<{ path: string; content: string }>) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "TBulk" });
+    const id = cr.body.project.id;
+    for (const f of files) {
+      await request(app).put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent(f.path)}`).send({ content: f.content, language: "markdown" });
+    }
+    return id;
+  }
+
+  test("400 missing paths", async () => {
+    process.env.DEEPL_API_KEY = "fx-key:fx";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "X" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/files/translate-bulk`)
+      .send({ targetLangs: ["RU"] });
+    expect(r.status).toBe(400);
+  });
+
+  test("400 missing targetLangs", async () => {
+    process.env.DEEPL_API_KEY = "fx-key:fx";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "X" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/files/translate-bulk`)
+      .send({ paths: ["a.md"] });
+    expect(r.status).toBe(400);
+  });
+
+  test("503 when DEEPL_API_KEY missing", async () => {
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "X" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/files/translate-bulk`)
+      .send({ paths: ["a.md"], targetLangs: ["RU"] });
+    expect(r.status).toBe(503);
+  });
+
+  test("translates 2 files × 2 langs → 4 saved files with lang suffix", async () => {
+    process.env.DEEPL_API_KEY = "fx:fx";
+    const app = makeApp();
+    const id = await createProjectWithFiles(app, [
+      { path: "README.md", content: "Hello" },
+      { path: "docs/intro.md", content: "World" },
+    ]);
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { translations: [{ text: "Привет" }] }))
+      .mockResolvedValueOnce(jsonResp(200, { translations: [{ text: "Bonjour" }] }))
+      .mockResolvedValueOnce(jsonResp(200, { translations: [{ text: "Мир" }] }))
+      .mockResolvedValueOnce(jsonResp(200, { translations: [{ text: "Monde" }] }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/files/translate-bulk`)
+      .send({ paths: ["README.md", "docs/intro.md"], targetLangs: ["ru", "fr"] });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.total).toBe(4);
+    expect(r.body.successCount).toBe(4);
+    const outputPaths = r.body.results.map((x: any) => x.outputPath).filter(Boolean).sort();
+    expect(outputPaths).toEqual(["README.fr.md", "README.ru.md", "docs/intro.fr.md", "docs/intro.ru.md"].sort());
+  });
+
+  test("missing file reports per-language errors", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "X" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/files/translate-bulk`)
+      .send({ paths: ["missing.md"], targetLangs: ["RU", "DE"] });
+    expect(r.status).toBe(200);
+    expect(r.body.successCount).toBe(0);
+    expect(r.body.failureCount).toBe(2);
+    expect(r.body.results.every((x: any) => x.error === "file not found")).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 22. Brevo template create
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/email-template-create (Brevo)", () => {
+  test("400 missing fields", async () => {
+    const r = await request(makeApp()).post("/api/devhub/media/email-template-create").send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("503 when BREVO_API_KEY missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-create")
+      .send({ name: "T", subject: "S", htmlContent: "<p>H</p>", senderEmail: "a@b.co" });
+    expect(r.status).toBe(503);
+  });
+
+  test("400 when senderEmail missing & no env", async () => {
+    process.env.BREVO_API_KEY = "k";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-create")
+      .send({ name: "T", subject: "S", htmlContent: "<p>H</p>" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/senderEmail/);
+  });
+
+  test("creates template + returns id", async () => {
+    process.env.BREVO_API_KEY = "k";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, { id: 99 }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-create")
+      .send({ name: "Hello", subject: "Hi", htmlContent: "<p>Body</p>", senderEmail: "noreply@aevion.io", senderName: "AEVION" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, id: 99, name: "Hello", subject: "Hi" });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.templateName).toBe("Hello");
+    expect(body.sender).toEqual({ email: "noreply@aevion.io", name: "AEVION" });
+    expect(body.isActive).toBe(true);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.brevo.com/v3/smtp/templates");
+  });
+
+  test("falls back to BREVO_SENDER_EMAIL env", async () => {
+    process.env.BREVO_API_KEY = "k";
+    process.env.BREVO_SENDER_EMAIL = "default@aevion.io";
+    process.env.BREVO_SENDER_NAME = "AEVION Bot";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, { id: 42 }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-create")
+      .send({ name: "N", subject: "S", htmlContent: "<p>X</p>" });
+    expect(r.status).toBe(200);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.sender).toEqual({ email: "default@aevion.io", name: "AEVION Bot" });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 23. ZIP import (symmetric to /export)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const __CRC32_TBL = (() => {
+  const tbl = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    tbl[i] = c >>> 0;
+  }
+  return tbl;
+})();
+function __crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = __CRC32_TBL[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function buildSimpleZip(entries: Array<{ name: string; data: Buffer }>): Buffer {
+  // Minimal ZIP writer (stored method=0) for tests — mirrors export endpoint format
+  const crc32 = __crc32;
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const e of entries) {
+    const nameBuf = Buffer.from(e.name, "utf8");
+    const size = e.data.length;
+    const crc = crc32(e.data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(0, 10); local.writeUInt16LE(0, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(size, 18);
+    local.writeUInt32LE(size, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    const localBlock = Buffer.concat([local, nameBuf, e.data]);
+    locals.push(localBlock);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0, 8); central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(0, 12); central.writeUInt16LE(0, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(size, 20); central.writeUInt32LE(size, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30); central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34); central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(Buffer.concat([central, nameBuf]));
+    offset += localBlock.length;
+  }
+  const localBlock = Buffer.concat(locals);
+  const centralBlock = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBlock.length, 12);
+  eocd.writeUInt32LE(localBlock.length, 16);
+  return Buffer.concat([localBlock, centralBlock, eocd]);
+}
+
+describe("POST /api/devhub/projects/:id/import-zip", () => {
+  async function createProj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "ZipP", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("400 missing base64Zip", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/import-zip`).send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("400 on invalid ZIP buffer", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: Buffer.from("garbage that is long enough not to be empty").toString("base64") });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/EOCD|valid ZIP/);
+  });
+
+  test("imports text + binary files (binary gets .b64 suffix)", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    const zip = buildSimpleZip([
+      { name: "README.md", data: Buffer.from("# Hello AEVION", "utf8") },
+      { name: "public/song.mp3", data: Buffer.from([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x01]) },
+      { name: "aevion-export.json", data: Buffer.from('{"meta":1}', "utf8") },
+    ]);
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64") });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.importedCount).toBe(2);
+    const paths = r.body.imported.map((x: any) => x.path).sort();
+    expect(paths).toEqual(["README.md", "public/song.mp3.b64"]);
+    const binary = r.body.imported.find((x: any) => x.path === "public/song.mp3.b64");
+    expect(binary.binary).toBe(true);
+    const meta = r.body.skipped.find((x: any) => x.path === "aevion-export.json");
+    expect(meta).toBeDefined();
+
+    // Verify file content is queryable via /files
+    const listR = await request(app).get(`/api/devhub/projects/${id}/files`);
+    const filePaths = (listR.body.files || []).map((f: any) => f.path);
+    expect(filePaths).toContain("README.md");
+    expect(filePaths).toContain("public/song.mp3.b64");
+  });
+
+  test("path traversal entries are skipped", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    const zip = buildSimpleZip([
+      { name: "../etc/passwd", data: Buffer.from("evil", "utf8") },
+      { name: "ok.txt", data: Buffer.from("good", "utf8") },
+    ]);
+
+    const r = await request(app).post(`/api/devhub/projects/${id}/import-zip`).send({ base64Zip: zip.toString("base64") });
+    expect(r.status).toBe(200);
+    expect(r.body.importedCount).toBe(1);
+    expect(r.body.imported[0].path).toBe("ok.txt");
+    const traversal = r.body.skipped.find((x: any) => x.reason === "path traversal");
+    expect(traversal).toBeDefined();
+  });
+
+  test("overwrite=false skips existing files", async () => {
+    const app = makeApp();
+    const id = await createProj(app);
+    await request(app).put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent("README.md")}`)
+      .send({ content: "ORIGINAL", language: "markdown" });
+
+    const zip = buildSimpleZip([{ name: "README.md", data: Buffer.from("OVERWRITE", "utf8") }]);
+    const r = await request(app).post(`/api/devhub/projects/${id}/import-zip`)
+      .send({ base64Zip: zip.toString("base64"), overwrite: false });
+    expect(r.status).toBe(200);
+    expect(r.body.importedCount).toBe(0);
+    expect(r.body.skipped[0].reason).toBe("already exists");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 24. Agent workflow tts/sfx — auto-upload audio to Cloudflare R2
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("Agent workflow audio step → auto-upload to R2", () => {
+  async function createProj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "AudioP", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("tts step: when R2 env set, saves permanent CDN URL (not .mp3.b64)", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 4096)) // ElevenLabs TTS audio bytes
+      .mockResolvedValueOnce(jsonResp(200, {}));   // R2 PUT 200
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "tts", text: "Hello world", voice: "Rachel", saveAs: "public/voice-0.mp3.b64" }] });
+    expect(r.status).toBe(200);
+    const step0 = r.body.results[0];
+    expect(step0.ok).toBe(true);
+    expect(step0.savedAs).toBe("public/voice-0.url.txt"); // rewrote suffix
+    expect(step0.output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\//);
+    expect(step0.output.bytes).toBe(4096);
+
+    // R2 PUT was the 2nd fetch — check signature headers exist
+    const r2Init = fetchMock.mock.calls[1][1] as any;
+    expect(r2Init.method).toBe("PUT");
+    expect(r2Init.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 /);
+  });
+
+  test("tts step: when R2 env missing, falls back to .mp3.b64 storage", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock.mockResolvedValueOnce(audioResp(200, 2048));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "tts", text: "Hi", voice: "Rachel" }] });
+    expect(r.status).toBe(200);
+    const step0 = r.body.results[0];
+    expect(step0.ok).toBe(true);
+    expect(step0.savedAs).toBe("public/voice-0.mp3.b64");
+    expect(step0.output.url).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no R2 call
+  });
+
+  test("sfx step: R2 set → permanent CDN URL", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 512))
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "sfx", text: "whoosh", durationSeconds: 1.5 }] });
+    expect(r.status).toBe(200);
+    expect(r.body.results[0].savedAs).toBe("public/sfx-0.url.txt");
+    expect(r.body.results[0].output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\//);
   });
 });

@@ -1696,9 +1696,10 @@ export default function CyberChessPage(){
 
   // Когда true — следующий апдейт lm (свой ход юзера) НЕ запускает slide-animation.
   // Юзер только что сам перетащил/щёлкнул — анимация лишь добавляет восприятия лага.
+  // fromUser=false (AI/P2P/Ghost) — НЕ ставим skip → slide-animation играет 180ms.
   const skipNextAnimRef=useRef(false);
-  const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
-    skipNextAnimRef.current=true;
+  const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n",fromUser:boolean=true)=>{
+    if(fromUser)skipNextAnimRef.current=true;
     const p=game.get(from);if(!p)return false;
     // ── OPENING TRAINER — верификация хода против скрипта дебюта ──
     if(openingDrill){
@@ -2740,7 +2741,7 @@ export default function CyberChessPage(){
       if(msg.t==="mv"){
         const f=msg.uci.slice(0,2) as Square,t=msg.uci.slice(2,4) as Square;
         const pr=msg.uci[4] as any||undefined;
-        exec(f,t,pr);
+        exec(f,t,pr,false);
       }else if(msg.t==="hello"){sP2pOpponentName((msg as any).name||"Оппонент")}
       else if(msg.t==="resign"){sOver(`${p2pOpponentName} сдался — Вы победили!`);sOn(false)}
       else if(msg.t==="draw-accept"){sOver("Ничья (договорились)");sOn(false)}
@@ -2870,7 +2871,7 @@ export default function CyberChessPage(){
             if(game.fen()!==fenAtTrigger){sThink(false);return}
             const c=new Chess(fenAtTrigger);
             const mv=c.move(preferred);
-            if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+            if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any,false);
           }catch{}
           sThink(false);
         },Math.max(500,delay*0.6));
@@ -2888,7 +2889,7 @@ export default function CyberChessPage(){
               if(game.fen()!==fenAtTrigger){sThink(false);return}
               const c=new Chess(fenAtTrigger);
               const mv=c.move(bookSan);
-              if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+              if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any,false);
             }catch{}
             sThink(false);
           },Math.max(700,delay*0.7));
@@ -2912,7 +2913,7 @@ export default function CyberChessPage(){
             const top=evals.slice(0,Math.min(5,evals.length)).map(e=>e.m);
             const ck2=new Chess(fenAtTrigger);
             const pick=pickGhostStyleMove(activeGhost,ck2,top);
-            if(pick)exec(pick.from as Square,pick.to as Square,pick.promotion as any);
+            if(pick)exec(pick.from as Square,pick.to as Square,pick.promotion as any,false);
           }catch{}
           sThink(false);
         },delay);
@@ -2939,7 +2940,7 @@ export default function CyberChessPage(){
             const scored=allowed.map(m=>{c.move(m);const s=ev(c)*(c.turn()==="w"?-1:1);c.undo();return{m,s:s+(Math.random()-0.5)*30}});
             scored.sort((a,b)=>b.s-a.s);
             const b=scored[0].m;
-            exec(b.from as Square,b.to as Square,b.promotion as any);
+            exec(b.from as Square,b.to as Square,b.promotion as any,false);
           }
         }catch{}
         sThink(false);
@@ -2949,7 +2950,7 @@ export default function CyberChessPage(){
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
-        try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any)}catch{}
+        try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any,false)}catch{}
         sThink(false);
       }),delay);
       return()=>clearTimeout(t);
@@ -2957,7 +2958,7 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>{
       try{if(game.fen()!==fenAtTrigger){sThink(false);return}
         const c=new Chess(fenAtTrigger);const b=best(c,lv.depth,lv.rand);
-        if(b)exec(b.from as Square,b.to as Square,b.promotion as any);
+        if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);
       }catch{}
       sThink(false);
     },delay);

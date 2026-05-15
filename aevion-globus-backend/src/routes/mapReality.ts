@@ -262,7 +262,7 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
 
   try {
     if (isMapRealityDbReady()) {
-      const { rows } = await pool.query<Signal & { distance_km: number }>(
+      const _qResult = await pool.query(
         `SELECT *,
            (6371 * acos(
              cos(radians($1)) * cos(radians(lat)) *
@@ -280,6 +280,7 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
          LIMIT $4`,
         [lat, lng, radius, limit],
       );
+      const rows = _qResult.rows;
       return res.json({
         success: true,
         data: { signals: rows, center: { lat, lng }, radius, count: rows.length },

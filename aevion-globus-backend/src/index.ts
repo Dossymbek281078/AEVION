@@ -47,6 +47,7 @@ import { qcontractRouter } from "./routes/qcontract";
 import { healthaiRouter } from "./routes/healthai";
 import { qfusionaiRouter } from "./routes/qfusionai";
 import { veilnetxRouter } from "./routes/veilnetx";
+import { shadownetRouter } from "./routes/shadownet";
 import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
 import { mountMvpConcepts } from "./routes/mvpConcepts";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
@@ -78,7 +79,6 @@ import { qeventsRouter } from "./routes/qevents";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
-import { psyappDepsRouter } from "./routes/psyappDeps";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -451,7 +451,6 @@ app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
-app.use("/api/psyapp-deps", psyappDepsRouter);
 app.use("/api/qmaskcard", qmaskcardRouter);
 app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
 app.use("/api/ztide", ztideRouter);
@@ -498,6 +497,11 @@ app.use("/api/qfusionai", qfusionaiRouter);
 
 // VeilNetX — privacy proxy pre-launch status + waitlist
 app.use("/api/veilnetx", veilnetxRouter);
+
+// ShadowNet — alternative private internet concept simulator.
+// Mounted BEFORE the generic planning stubs loop (which would also create
+// /api/shadownet) so the dedicated endpoints win.
+app.use("/api/shadownet", shadownetRouter);
 
 // MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
 // the generic planning stubs so module-specific paths (e.g.

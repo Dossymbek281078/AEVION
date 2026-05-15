@@ -1079,14 +1079,6 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
 
 // POST /api/devhub/projects/:id/github/push
 devhubRouter.post("/projects/:id/github/push", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
-  if (!githubToken) {
-    return res.json({
-      ok: false,
-      message: "Set GITHUB_TOKEN env var to enable GitHub integration",
-      setupUrl: "https://github.com/settings/tokens",
-    });
-  }
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1097,6 +1089,14 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   }
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
+  }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return res.json({
+      ok: false,
+      message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+      setupUrl: "https://github.com/settings/tokens",
+    });
   }
   try {
     const projectSlug = slugify(project.name) + "-" + project.id.slice(0, 8);
@@ -1181,7 +1181,6 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
 
 // GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
 devhubRouter.get("/projects/:id/github/status", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1193,6 +1192,7 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
   }
@@ -1228,7 +1228,6 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
 
 // GET /api/devhub/projects/:id/github/branches — list branches of linked repo
 devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1240,6 +1239,7 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });
   }
@@ -1268,7 +1268,6 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
 
 // POST /api/devhub/projects/:id/github/sync — pull latest commit SHA for default branch
 devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1280,8 +1279,9 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
-    return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing" });
+    return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing (set in project envVars or server env)" });
   }
   try {
     const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
@@ -2074,6 +2074,297 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Domain setup failed" });
   }
+});
+
+// POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample
+devhubRouter.post("/media/voice-clone", async (req, res) => {
+  const { name, description, sampleBase64, mimeType = "audio/mpeg" } = req.body || {};
+  if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+  if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
+  if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
+
+  try {
+    const audioBuffer = Buffer.from(sampleBase64, "base64");
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${name.trim()}\r\n`);
+    if (description) push(`--${boundary}\r\nContent-Disposition: form-data; name="description"\r\n\r\n${String(description).slice(0, 500)}\r\n`);
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="sample.${mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+    parts.push(audioBuffer);
+    push(`\r\n--${boundary}--\r\n`);
+    const body = Buffer.concat(parts);
+    const r = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Voice clone error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { voice_id: string; requires_verification?: boolean };
+    res.json({ ok: true, voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Voice clone failed" });
+  }
+});
+
+// POST /api/devhub/media/stt — ElevenLabs Speech-to-Text (scribe-v1)
+devhubRouter.post("/media/stt", async (req, res) => {
+  const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
+  if (!audioBase64 || typeof audioBase64 !== "string") return res.status(400).json({ error: "audioBase64 required" });
+  if (audioBase64.length > 30_000_000) return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY" });
+
+  try {
+    const audioBuffer = Buffer.from(audioBase64, "base64");
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="model_id"\r\n\r\nscribe_v1\r\n`);
+    if (language) push(`--${boundary}\r\nContent-Disposition: form-data; name="language_code"\r\n\r\n${String(language).slice(0, 10)}\r\n`);
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+    parts.push(audioBuffer);
+    push(`\r\n--${boundary}--\r\n`);
+    const body = Buffer.concat(parts);
+    const r = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `STT error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
+    res.json({ ok: true, text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "STT failed" });
+  }
+});
+
+// POST /api/devhub/media/drive-search — Google Drive file search
+devhubRouter.post("/media/drive-search", async (req, res) => {
+  const { query = "", limit = 20 } = req.body || {};
+  const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  if (!token) {
+    return res.status(503).json({
+      error: "Google Drive not configured — set GOOGLE_DRIVE_ACCESS_TOKEN (OAuth Bearer)",
+      setupUrl: "https://developers.google.com/drive/api/quickstart/js",
+    });
+  }
+  try {
+    const q = String(query).trim();
+    const params = new URLSearchParams({
+      pageSize: String(Math.min(Math.max(Number(limit) || 20, 1), 100)),
+      fields: "files(id,name,mimeType,modifiedTime,size)",
+    });
+    if (q) params.set("q", `name contains '${q.replace(/'/g, "\\'")}' and trashed = false`);
+    else params.set("q", "trashed = false");
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Drive error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { files: Array<{ id: string; name: string; mimeType: string; modifiedTime?: string; size?: string }> };
+    res.json({ ok: true, files: data.files || [] });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Drive search failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/drive/import — import Drive file into project files
+devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { fileId, targetPath } = req.body || {};
+  if (!fileId || typeof fileId !== "string") return res.status(400).json({ error: "fileId required" });
+  const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  if (!token) return res.status(503).json({ error: "Google Drive not configured — set GOOGLE_DRIVE_ACCESS_TOKEN" });
+
+  try {
+    const metaResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,mimeType`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!metaResp.ok) {
+      const t = await metaResp.text();
+      return res.status(metaResp.status).json({ error: `Drive metadata error: ${t.slice(0, 200)}` });
+    }
+    const meta = await metaResp.json() as { name: string; mimeType: string };
+    const isGoogleDoc = meta.mimeType.startsWith("application/vnd.google-apps");
+    let contentResp: Response;
+    if (isGoogleDoc) {
+      const exportMime = meta.mimeType.includes("document") ? "text/markdown"
+                      : meta.mimeType.includes("spreadsheet") ? "text/csv"
+                      : "text/plain";
+      contentResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(exportMime)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } else {
+      contentResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+    if (!contentResp.ok) {
+      const t = await contentResp.text();
+      return res.status(contentResp.status).json({ error: `Drive content error: ${t.slice(0, 200)}` });
+    }
+    const content = await contentResp.text();
+    const path = String(targetPath || meta.name).replace(/^\/+/, "").slice(0, 200) || meta.name;
+    const file: DevHubFile = {
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      path,
+      content,
+      language: detectLanguage(path),
+      updatedAt: now(),
+    };
+    try { await dbUpsertFile(file); }
+    catch {
+      const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path);
+      if (existing) { existing.content = file.content; existing.language = file.language; existing.updatedAt = file.updatedAt; }
+      else memFiles.set(file.id, file);
+    }
+    res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Drive import failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
+devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { steps } = req.body || {};
+  if (!Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: "steps array required" });
+  if (steps.length > 20) return res.status(400).json({ error: "max 20 steps per workflow" });
+
+  const results: Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }> = [];
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const type = String(step?.type || "");
+    try {
+      if (type === "code") {
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for code step");
+        const stack = String(step.stack || project.stack);
+        const targetFile = step.saveAs ? String(step.saveAs) : undefined;
+        const files = await generateCodeWithAI(prompt, stack, targetFile);
+        for (const gf of files) {
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: gf.path,
+            content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); }
+          catch {
+            const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === gf.path);
+            if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
+            else memFiles.set(f.id, f);
+          }
+        }
+        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path) } });
+      } else if (type === "image") {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for image step");
+        const dResp = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "dall-e-3", prompt, n: 1, size: step.size || "1024x1024", response_format: "url" }),
+        });
+        if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
+        const d = await dResp.json() as { data: Array<{ url: string }> };
+        const url = d.data?.[0]?.url;
+        if (!url) throw new Error("no image url returned");
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: url, language: detectLanguage(savedAs), updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        results.push({ step: i, type, ok: true, output: { url }, savedAs });
+      } else if (type === "tts") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for tts step");
+        const VOICE_IDS: Record<string, string> = {
+          Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
+          Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
+        };
+        const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+        });
+        if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
+      } else if (type === "sfx") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for sfx step");
+        const body: Record<string, unknown> = { text };
+        const dur = Number(step.durationSeconds);
+        if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
+        const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
+      } else {
+        results.push({ step: i, type, ok: false, error: `unknown step type: ${type}` });
+      }
+    } catch (e: any) {
+      results.push({ step: i, type, ok: false, error: e?.message || "step failed" });
+    }
+  }
+
+  const okCount = results.filter((r) => r.ok).length;
+  res.json({
+    ok: okCount === results.length,
+    totalSteps: results.length,
+    successCount: okCount,
+    failureCount: results.length - okCount,
+    results,
+  });
 });
 
 // POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel

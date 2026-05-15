@@ -47,6 +47,7 @@ afterEach(() => {
     "GITHUB_TOKEN", "VERCEL_API_TOKEN", "ELEVENLABS_API_KEY",
     "BREVO_API_KEY", "STRIPE_SECRET_KEY", "OPENAI_API_KEY",
     "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID",
+    "GOOGLE_DRIVE_ACCESS_TOKEN",
   ]) {
     delete process.env[key];
   }
@@ -407,5 +408,331 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
     expect(r.status).toBe(200);
     expect(r.body.action).toBe("updated");
     expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 7. ElevenLabs Voice Clone
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/voice-clone (ElevenLabs)", () => {
+  test("503 when API key missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone")
+      .send({ name: "My Voice", sampleBase64: "AAAA" });
+    expect(r.status).toBe(503);
+  });
+
+  test("400 when name missing", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone")
+      .send({ sampleBase64: "AAAA" });
+    expect(r.status).toBe(400);
+  });
+
+  test("400 when sampleBase64 missing", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone")
+      .send({ name: "My Voice" });
+    expect(r.status).toBe(400);
+  });
+
+  test("calls /v1/voices/add with multipart body + returns voiceId", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      voice_id: "voice-abc-123",
+      requires_verification: false,
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone")
+      .send({
+        name: "My Voice",
+        description: "Test voice",
+        sampleBase64: Buffer.from("fake-audio").toString("base64"),
+        mimeType: "audio/mpeg",
+      });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.voiceId).toBe("voice-abc-123");
+    expect(r.body.requiresVerification).toBe(false);
+    expect(fetchMock.mock.calls[0][0]).toContain("/v1/voices/add");
+    const headers = (fetchMock.mock.calls[0][1] as any).headers;
+    expect(headers["xi-api-key"]).toBe("fake");
+    expect(headers["Content-Type"]).toMatch(/multipart\/form-data; boundary=/);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 8. ElevenLabs Speech-to-Text
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/stt (ElevenLabs)", () => {
+  test("503 when API key missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/stt")
+      .send({ audioBase64: "AAAA" });
+    expect(r.status).toBe(503);
+  });
+
+  test("400 when audio missing", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    const r = await request(makeApp()).post("/api/devhub/media/stt").send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("calls /v1/speech-to-text + returns transcript", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      text: "Hello world",
+      language_code: "en",
+      language_probability: 0.99,
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/stt")
+      .send({
+        audioBase64: Buffer.from("fake-audio").toString("base64"),
+        language: "en",
+      });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      ok: true,
+      text: "Hello world",
+      language: "en",
+      confidence: 0.99,
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain("/v1/speech-to-text");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 9. Google Drive search + import
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/drive-search (Google Drive)", () => {
+  test("503 when token missing", async () => {
+    const r = await request(makeApp()).post("/api/devhub/media/drive-search").send({ query: "foo" });
+    expect(r.status).toBe(503);
+  });
+
+  test("returns file list from Drive", async () => {
+    process.env.GOOGLE_DRIVE_ACCESS_TOKEN = "fake-bearer";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      files: [
+        { id: "f1", name: "doc.md", mimeType: "text/markdown", size: "100" },
+        { id: "f2", name: "spec.txt", mimeType: "text/plain" },
+      ],
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/drive-search")
+      .send({ query: "doc", limit: 10 });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.files).toHaveLength(2);
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain("name contains 'doc'");
+    expect(url).toContain("pageSize=10");
+  });
+});
+
+describe("POST /api/devhub/projects/:id/drive/import", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    return cr.body.project.id;
+  }
+
+  test("400 when fileId missing", async () => {
+    process.env.GOOGLE_DRIVE_ACCESS_TOKEN = "fake";
+    const app = makeApp();
+    const id = await createProject(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/drive/import`).send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("imports binary file content into project", async () => {
+    process.env.GOOGLE_DRIVE_ACCESS_TOKEN = "fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { name: "spec.md", mimeType: "text/markdown" }))
+      .mockResolvedValueOnce({
+        ok: true, status: 200, json: async () => ({}),
+        text: async () => "# Spec content from Drive",
+        arrayBuffer: async () => new ArrayBuffer(0),
+      });
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/drive/import`)
+      .send({ fileId: "drive-abc-123" });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.path).toBe("spec.md");
+    expect(r.body.mimeType).toBe("text/markdown");
+    // alt=media endpoint for binary
+    expect(fetchMock.mock.calls[1][0]).toContain("alt=media");
+  });
+
+  test("exports Google native doc as markdown", async () => {
+    process.env.GOOGLE_DRIVE_ACCESS_TOKEN = "fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, {
+        name: "MyDoc", mimeType: "application/vnd.google-apps.document",
+      }))
+      .mockResolvedValueOnce({
+        ok: true, status: 200, json: async () => ({}),
+        text: async () => "# Exported markdown",
+        arrayBuffer: async () => new ArrayBuffer(0),
+      });
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/drive/import`)
+      .send({ fileId: "doc-1", targetPath: "docs/MyDoc.md" });
+    expect(r.status).toBe(200);
+    expect(r.body.path).toBe("docs/MyDoc.md");
+    expect(fetchMock.mock.calls[1][0]).toContain("/export");
+    expect(fetchMock.mock.calls[1][0]).toContain("text%2Fmarkdown");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 10. Agent workflow orchestration
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/agent/workflow", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("400 when steps array empty/missing", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/agent/workflow`).send({ steps: [] });
+    expect(r.status).toBe(400);
+  });
+
+  test("400 when > 20 steps", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    const steps = Array.from({ length: 21 }, () => ({ type: "code", prompt: "x" }));
+    const r = await request(app).post(`/api/devhub/projects/${id}/agent/workflow`).send({ steps });
+    expect(r.status).toBe(400);
+  });
+
+  test("runs multi-step workflow: code → image → tts", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock
+      // step 1: code (no providers configured → stub, no fetch needed)
+      // step 2: DALL-E
+      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/hero.png" }] }))
+      // step 3: TTS
+      .mockResolvedValueOnce(audioResp(200, 4096));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({
+        steps: [
+          { type: "code", prompt: "hello world page", stack: "next", saveAs: "pages/index.tsx" },
+          { type: "image", prompt: "AI startup hero", saveAs: "public/hero.url.txt" },
+          { type: "tts", text: "Welcome to our app", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+        ],
+      });
+    expect(r.status).toBe(200);
+    expect(r.body.totalSteps).toBe(3);
+    expect(r.body.successCount).toBe(3);
+    expect(r.body.results[0].type).toBe("code");
+    expect(r.body.results[1].savedAs).toBe("public/hero.url.txt");
+    expect(r.body.results[2].savedAs).toBe("public/welcome.mp3.b64");
+  });
+
+  test("reports per-step errors without aborting workflow", async () => {
+    // OpenAI key missing → image step fails
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock.mockResolvedValueOnce(audioResp(200, 1024)); // tts succeeds
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({
+        steps: [
+          { type: "image", prompt: "x" },  // will fail — no OPENAI_API_KEY
+          { type: "tts", text: "hi" },
+          { type: "unknown" },
+        ],
+      });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(false);
+    expect(r.body.failureCount).toBe(2);
+    expect(r.body.results[0].ok).toBe(false);
+    expect(r.body.results[0].error).toMatch(/OPENAI_API_KEY/);
+    expect(r.body.results[1].ok).toBe(true);
+    expect(r.body.results[2].ok).toBe(false);
+    expect(r.body.results[2].error).toMatch(/unknown step type/);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 11. Per-project GitHub token (envVars.GITHUB_TOKEN beats env)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("Per-project GitHub token override", () => {
+  async function createProjectWithRepo(app: express.Express, perProjectToken?: string) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "GHTest" });
+    const id = cr.body.project.id;
+    await request(app).patch(`/api/devhub/projects/${id}`).send({
+      repoUrl: "https://github.com/owner/repo",
+    });
+    if (perProjectToken) {
+      await request(app).put(`/api/devhub/projects/${id}/env`).send({
+        key: "GITHUB_TOKEN", value: perProjectToken,
+      });
+    }
+    return id;
+  }
+
+  test("/github/status uses project-level token if set", async () => {
+    process.env.GITHUB_TOKEN = "server-token";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app, "user-personal-pat");
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      stargazers_count: 42, open_issues_count: 3, pushed_at: "2026-01-01T00:00:00Z",
+    }));
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/github/status`);
+    expect(r.status).toBe(200);
+    expect(r.body.stars).toBe(42);
+    // Verify it used the PER-PROJECT token, not the env one
+    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer user-personal-pat");
+  });
+
+  test("/github/branches falls back to env token when no project token", async () => {
+    process.env.GITHUB_TOKEN = "fallback-server-token";
+    const app = makeApp();
+    const id = await createProjectWithRepo(app); // no per-project token
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, [
+      { name: "main", commit: { sha: "abcdef1234" } },
+    ]));
+
+    const r = await request(app).get(`/api/devhub/projects/${id}/github/branches`);
+    expect(r.status).toBe(200);
+    expect(r.body.connected).toBe(true);
+    expect(r.body.branches).toHaveLength(1);
+    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer fallback-server-token");
   });
 });

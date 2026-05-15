@@ -10,7 +10,7 @@ export function getApiBase(): string {
   if (pub) {
     if (pub.startsWith("/")) {
       if (typeof window === "undefined") {
-        const internal = process.env.API_INTERNAL_BASE_URL?.trim();
+        const internal = process.env.API_INTERNAL_BASE_URL?.trim() || process.env.BACKEND_PROXY_TARGET?.trim();
         if (internal) return stripTrailingSlash(internal);
         return "http://127.0.0.1:4001";
       }
@@ -21,7 +21,7 @@ export function getApiBase(): string {
 
   if (typeof window !== "undefined") return "/api-backend";
 
-  const internal = process.env.API_INTERNAL_BASE_URL?.trim();
+  const internal = process.env.API_INTERNAL_BASE_URL?.trim() || process.env.BACKEND_PROXY_TARGET?.trim();
   if (internal) return stripTrailingSlash(internal);
 
   return "http://127.0.0.1:4001";

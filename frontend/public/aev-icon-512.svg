@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="aevbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#aevbg)"/>
+  <g transform="translate(256 226)">
+    <path d="M 0 -112 L 86 0 L 0 112 L -86 0 Z" fill="#22d3ee"/>
+    <path d="M 0 -112 L 86 0 L 0 0 Z" fill="#67e8f9" opacity="0.7"/>
+  </g>
+  <text x="256" y="436" font-size="80" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="800" fill="#ffffff" letter-spacing="6">AEV</text>
+</svg>

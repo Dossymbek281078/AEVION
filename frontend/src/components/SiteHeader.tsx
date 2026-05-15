@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { getBackendOrigin } from "@/lib/apiBase";
-import { LangSwitch } from "@/lib/i18n";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
@@ -59,7 +59,7 @@ export function SiteHeader() {
             API
           </a>
           <div style={{ marginLeft: 4 }}>
-            <LangSwitch />
+            <LanguageSwitcher />
           </div>
         </div>
       </div>

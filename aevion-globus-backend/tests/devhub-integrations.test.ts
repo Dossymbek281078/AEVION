@@ -1678,3 +1678,88 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // no R2 call
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 25. SSE stream — audio steps (tts/sfx/music) parity with non-stream auto-R2
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
+  async function createProj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "StreamP", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  function parseSseEvents(body: string): any[] {
+    return body.split("\n\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)));
+  }
+
+  test("tts in stream: R2 set → step-done emits url + .url.txt savedAs", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 2048))
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "tts", text: "Hi", voice: "Rachel" }] });
+    expect(r.status).toBe(200);
+    const events = parseSseEvents(r.text);
+    const done = events.find((e) => e.type === "step-done" && e.index === 0);
+    expect(done.ok).toBe(true);
+    expect(done.savedAs).toBe("public/voice-0.url.txt");
+    expect(done.output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\//);
+  });
+
+  test("music in stream: R2 set → step-done emits url + lengthSeconds→music_length_ms", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 16384))
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "music", prompt: "Ambient", lengthSeconds: 60, saveAs: "public/bg.mp3.b64" }] });
+    expect(r.status).toBe(200);
+    const events = parseSseEvents(r.text);
+    const start = events.find((e) => e.type === "step-start" && e.index === 0);
+    const done = events.find((e) => e.type === "step-done" && e.index === 0);
+    expect(start.stepType).toBe("music");
+    expect(done.ok).toBe(true);
+    expect(done.savedAs).toBe("public/bg.url.txt");
+    expect(done.output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\/.*\/music-0-/);
+    const elBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(elBody.music_length_ms).toBe(60_000);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
+  });
+
+  test("music in stream: R2 missing → step-done emits bytes only (no url)", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock.mockResolvedValueOnce(audioResp(200, 1024));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "music", prompt: "Chill jazz" }] });
+    expect(r.status).toBe(200);
+    const events = parseSseEvents(r.text);
+    const done = events.find((e) => e.type === "step-done" && e.index === 0);
+    expect(done.ok).toBe(true);
+    expect(done.savedAs).toBe("public/music-0.mp3.b64");
+    expect(done.output.url).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

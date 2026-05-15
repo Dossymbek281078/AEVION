@@ -2565,13 +2565,25 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         });
         if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
         const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
-        const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
-        const f: DevHubFile = {
-          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-          content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-        };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-        emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
         okCount++;
       } else if (type === "sfx") {
         const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -2588,13 +2600,62 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         });
         if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
         const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
-        const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
-        const f: DevHubFile = {
-          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
-          content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
-        };
-        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
-        emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+        okCount++;
+      } else if (type === "music") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const prompt = String(step.prompt || step.text || "");
+        if (!prompt) throw new Error("prompt required for music step");
+        const body: Record<string, unknown> = { prompt };
+        const lenSec = Number(step.lengthSeconds);
+        if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
+          body.music_length_ms = Math.round(lenSec * 1000);
+        }
+        const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await musicResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
         okCount++;
       } else {
         emit({ type: "step-done", index: i, ok: false, error: `unknown step type: ${type}` });

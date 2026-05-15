@@ -237,7 +237,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [generating, setGenerating] = useState(false);
 
   // Agent workflow state
-  type AgentStep = { type: "code" | "image" | "tts" | "sfx"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; saveAs?: string; stack?: string };
+  type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
     { type: "code", prompt: "Landing page for an AI startup with hero, headline, CTA", saveAs: "pages/index.tsx" },
     { type: "image", prompt: "AI startup hero — futuristic, vivid colors, abstract", saveAs: "public/hero.url.txt" },
@@ -1568,6 +1568,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     setAgentSteps((s) => [...s, type === "code" ? { type, prompt: "", stack: project?.stack || "next" }
       : type === "image" ? { type, prompt: "" }
       : type === "tts" ? { type, text: "", voice: "Rachel" }
+      : type === "music" ? { type, prompt: "", lengthSeconds: 30 }
       : { type, text: "", durationSeconds: 3 }]);
   };
 
@@ -3317,6 +3318,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                             <option value="image">Image (DALL-E)</option>
                             <option value="tts">Voice (TTS)</option>
                             <option value="sfx">SFX</option>
+                            <option value="music">Music</option>
                           </select>
                           <input value={step.saveAs || ""} onChange={(e) => updateAgentStep(i, { saveAs: e.target.value })}
                             placeholder="saveAs (path)"
@@ -3326,14 +3328,23 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                             ×
                           </button>
                         </div>
-                        {(step.type === "code" || step.type === "image") ? (
+                        {(step.type === "code" || step.type === "image" || step.type === "music") ? (
                           <input value={step.prompt || ""} onChange={(e) => updateAgentStep(i, { prompt: e.target.value })}
-                            placeholder={step.type === "code" ? "Describe what to build..." : "Describe the image..."}
+                            placeholder={step.type === "code" ? "Describe what to build..." : step.type === "image" ? "Describe the image..." : "Describe the music (genre, mood, instruments)..."}
                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
                         ) : (
                           <input value={step.text || ""} onChange={(e) => updateAgentStep(i, { text: e.target.value })}
                             placeholder={step.type === "tts" ? "Text to speak..." : "Sound effect description..."}
                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
+                        )}
+                        {step.type === "music" && (
+                          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                            <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>Length (s):</label>
+                            <input type="number" min={10} max={300} value={step.lengthSeconds ?? 30}
+                              onChange={(e) => updateAgentStep(i, { lengthSeconds: Math.max(10, Math.min(300, Number(e.target.value) || 30)) })}
+                              style={{ width: 70, padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11 }} />
+                            <span style={{ fontSize: 10, color: "#94a3b8" }}>10–300</span>
+                          </div>
                         )}
                         {/* Step result indicator */}
                         {agentResults[i] && (
@@ -3346,11 +3357,11 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   </div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {(["code", "image", "tts", "sfx"] as const).map((t) => (
+                    {(["code", "image", "tts", "sfx", "music"] as const).map((t) => (
                       <button key={t} onClick={() => addAgentStep(t)}
                         style={{ padding: "4px 10px", background: "#f1f5f9", border: "1px dashed #94a3b8",
                           borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-                        + {t === "code" ? "Code" : t === "image" ? "Image" : t === "tts" ? "Voice" : "SFX"}
+                        + {t === "code" ? "Code" : t === "image" ? "Image" : t === "tts" ? "Voice" : t === "sfx" ? "SFX" : "Music"}
                       </button>
                     ))}
                   </div>

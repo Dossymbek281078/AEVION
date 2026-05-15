@@ -338,6 +338,11 @@ const MODULES: Module[] = [
   { id: "banks-branches",         category: "special",   href: "/smeta-trainer/drawings-practice/banks-branches",         icon: "🏦", title: "Банковские отделения",            subtitle: "Halyk/Kaspi/ForteBank, хранилище кл. III ГОСТ Р 50862, бронестекло Б3", level: "L5", exercises: 4,  color: "emerald" },
   { id: "shopping-malls",         category: "special",   href: "/smeta-trainer/drawings-practice/shopping-malls",         icon: "🛍️", title: "Торгово-развлекательные центры",  subtitle: "Mega/Esentai 50 000 м² GLA, эскалаторы Schindler, СН РК 2.02-15 Ф3.1",  level: "L5", exercises: 4,  color: "violet"  },
   { id: "hotels-resorts",         category: "special",   href: "/smeta-trainer/drawings-practice/hotels-resorts",         icon: "🏨", title: "Гостиницы 5★ и курорты",          subtitle: "Ritz-Carlton/Rixos, СП РК 3.02-08, Rw≥52 дБ, СПА, банкетные залы",      level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── Медицина и образование ──
+  { id: "hospitals-clinics",      category: "practice",  href: "/smeta-trainer/drawings-practice/hospitals-clinics",      icon: "🏥", title: "Больницы и клиники",              subtitle: "РКБ Алматы 600 коек, ОРИТ 18 м²/койка, O₂ 540 л/мин, ОП Класс «А» ISO 5", level: "L5", exercises: 4,  color: "rose"    },
+  { id: "schools-modern",         category: "practice",  href: "/smeta-trainer/drawings-practice/schools-modern",         icon: "🏫", title: "Современные школы",               subtitle: "ШГ-1500, СП РК 3.02-04, спортзал 18×30×7, актовый 600 мест, СанПиН 4.01-007", level: "L5", exercises: 4,  color: "sky"     },
+  { id: "universities-campuses",  category: "practice",  href: "/smeta-trainer/drawings-practice/universities-campuses",  icon: "🎓", title: "Университеты и кампусы",          subtitle: "Назарбаев Универс. 152 га, BSL-3 лаборатории, амфитеатр 500 мест, бассейн 50 м", level: "L5", exercises: 4,  color: "violet"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

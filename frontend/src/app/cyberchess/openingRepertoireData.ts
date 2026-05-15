@@ -8,6 +8,8 @@
 // Rate-limit: ~60 req/min per IP — aggressive caching via Map + TTL.
 // Offline fallback: existing mock helpers (mockBookStats / mockStreak).
 
+import { sanToUci } from "./sanToUci";
+
 export type RepertoireColor = "white" | "black";
 
 export type RepertoireBranch = {
@@ -16,6 +18,12 @@ export type RepertoireBranch = {
   color: RepertoireColor;
   eco: string;
   moves: string[];
+  /**
+   * UCI representation of `moves`, generated lazily from SAN via `sanToUci`.
+   * Optional for backwards-compat with v1 data — missing/stale `uciMoves`
+   * are repopulated transparently on `loadRepertoire()`.
+   */
+  uciMoves?: string[];
   notes?: string;
   attempts: number;
   successes: number;
@@ -395,6 +403,26 @@ export function mockBookStats(branch: RepertoireBranch): BookReply[] {
 
 // ===== Persistence =====
 
+/**
+ * Lazily ensures every branch has up-to-date `uciMoves` derived from `moves`.
+ * Returns a new array with migrated branches (does NOT mutate input).
+ * Sets `dirty=true` on the wrapper if any branch was migrated so caller can persist.
+ */
+function migrateBranchesUci(
+  branches: RepertoireBranch[]
+): { branches: RepertoireBranch[]; dirty: boolean } {
+  let dirty = false;
+  const out = branches.map((b) => {
+    const need =
+      !Array.isArray(b.uciMoves) || b.uciMoves.length !== b.moves.length;
+    if (!need) return b;
+    const uci = sanToUci(b.moves);
+    dirty = true;
+    return { ...b, uciMoves: uci };
+  });
+  return { branches: out, dirty };
+}
+
 export function loadRepertoire(): RepertoireBranch[] {
   if (typeof window === "undefined") return [];
   try {
@@ -406,7 +434,18 @@ export function loadRepertoire(): RepertoireBranch[] {
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return defaultRepertoire();
-    return parsed as RepertoireBranch[];
+    // Lazy SAN→UCI migration: transparently fill missing/stale uciMoves.
+    const { branches: migrated, dirty } = migrateBranchesUci(
+      parsed as RepertoireBranch[]
+    );
+    if (dirty) {
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      } catch {
+        // ignore quota errors — in-memory copy still has uciMoves
+      }
+    }
+    return migrated;
   } catch {
     return defaultRepertoire();
   }
@@ -423,8 +462,14 @@ export function saveRepertoire(branches: RepertoireBranch[]): void {
 
 export function defaultRepertoire(): RepertoireBranch[] {
   const now = Date.now();
+  const make = (
+    base: Omit<RepertoireBranch, "uciMoves">
+  ): RepertoireBranch => ({
+    ...base,
+    uciMoves: sanToUci(base.moves),
+  });
   return [
-    {
+    make({
       id: "seed-italian",
       name: "Italian Game — main line",
       color: "white",
@@ -435,8 +480,8 @@ export function defaultRepertoire(): RepertoireBranch[] {
       successes: 0,
       created: now - 86400000 * 7,
       lastReview: 0,
-    },
-    {
+    }),
+    make({
       id: "seed-caro",
       name: "Caro-Kann — Advance variation",
       color: "black",
@@ -447,8 +492,8 @@ export function defaultRepertoire(): RepertoireBranch[] {
       successes: 0,
       created: now - 86400000 * 5,
       lastReview: 0,
-    },
-    {
+    }),
+    make({
       id: "seed-najdorf",
       name: "Sicilian Najdorf",
       color: "black",
@@ -459,8 +504,8 @@ export function defaultRepertoire(): RepertoireBranch[] {
       successes: 0,
       created: now - 86400000 * 3,
       lastReview: 0,
-    },
-    {
+    }),
+    make({
       id: "seed-qgd",
       name: "Queen's Gambit — main",
       color: "white",
@@ -471,18 +516,20 @@ export function defaultRepertoire(): RepertoireBranch[] {
       successes: 0,
       created: now - 86400000,
       lastReview: 0,
-    },
+    }),
   ];
 }
 
 export function newBranchFromPreset(preset: EcoPreset, name?: string): RepertoireBranch {
   const now = Date.now();
+  const moves = [...preset.moves];
   return {
     id: `branch-${now}-${Math.random().toString(36).slice(2, 8)}`,
     name: name || preset.name,
     color: preset.color,
     eco: preset.eco,
-    moves: [...preset.moves],
+    moves,
+    uciMoves: sanToUci(moves),
     notes: "",
     attempts: 0,
     successes: 0,
@@ -499,18 +546,40 @@ export function newBranchFromEco(
   notes?: string
 ): RepertoireBranch {
   const now = Date.now();
+  const sanMoves = [...moves];
   return {
     id: `branch-${now}-${Math.random().toString(36).slice(2, 8)}`,
     name,
     color,
     eco,
-    moves: [...moves],
+    moves: sanMoves,
+    uciMoves: sanToUci(sanMoves),
     notes: notes || "",
     attempts: 0,
     successes: 0,
     created: now,
     lastReview: 0,
   };
+}
+
+/**
+ * Wrapper around `fetchRealBookStats` that auto-supplies `branch.uciMoves`
+ * when available. Falls back to mock when uciMoves is absent (e.g. very old
+ * un-migrated entries that bypassed loadRepertoire).
+ *
+ * Prefer using this from UI code — keeps SAN→UCI plumbing internal.
+ */
+export function fetchBookStatsForBranch(
+  branch: RepertoireBranch,
+  opts?: { signal?: AbortSignal; ratings?: number[]; speeds?: string[] }
+): Promise<BookReply[]> {
+  // If branch has up-to-date uciMoves, pass them; else trigger lazy generation
+  // here so a single missed branch still gets real-API data (no mutation).
+  const uciMoves =
+    branch.uciMoves && branch.uciMoves.length === branch.moves.length
+      ? branch.uciMoves
+      : sanToUci(branch.moves);
+  return fetchRealBookStats(branch.moves, { ...opts, uciMoves });
 }
 
 export function successRate(b: RepertoireBranch): number {

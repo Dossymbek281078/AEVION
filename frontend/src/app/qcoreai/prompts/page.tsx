@@ -48,6 +48,10 @@ export default function QCorePromptsPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [chain, setChain] = useState<Prompt[]>([]);
+  // V34 — version diff
+  type DiffSegment = { text: string; type: "equal" | "insert" | "delete" };
+  const [diffData, setDiffData] = useState<DiffSegment[] | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -62,6 +66,22 @@ export default function QCorePromptsPage() {
   const [browseQ, setBrowseQ] = useState("");
   const [browseItems, setBrowseItems] = useState<Prompt[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
+
+  // Audit log tab
+  const [auditTab, setAuditTab] = useState(false);
+  const [auditLog, setAuditLog] = useState<Array<{ id: string; promptId: string; promptName: string; action: string; changedFields: string | null; createdAt: string }>>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const fetchAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const r = await fetch(apiUrl("/api/qcoreai/prompts/audit?limit=50"), { headers: bearerHeader() });
+      const data = await r.json().catch(() => ({}));
+      if (Array.isArray(data?.items)) setAuditLog(data.items);
+    } catch { /* noop */ } finally {
+      setAuditLoading(false);
+    }
+  }, []);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -278,6 +298,62 @@ export default function QCorePromptsPage() {
           </div>
         </div>
 
+        {/* Tab bar */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+          {[
+            { id: false, label: "📝 My prompts" },
+            { id: true,  label: "🔍 Audit log" },
+          ].map(({ id, label }) => (
+            <button
+              key={String(id)}
+              onClick={() => {
+                setAuditTab(id as boolean);
+                if (id && auditLog.length === 0) fetchAudit();
+              }}
+              style={{
+                padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                border: "1px solid " + (auditTab === id ? "#0f172a" : "#e2e8f0"),
+                background: auditTab === id ? "#0f172a" : "#fff",
+                color: auditTab === id ? "#fff" : "#475569",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {auditTab && (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Audit log</span>
+              <button onClick={fetchAudit} disabled={auditLoading} style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#fff", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>
+                {auditLoading ? "…" : "↻ Refresh"}
+              </button>
+            </div>
+            {auditLog.length === 0 && !auditLoading && (
+              <p style={{ color: "#94a3b8", fontSize: 13 }}>No audit entries yet.</p>
+            )}
+            {auditLog.map((e) => (
+              <div key={e.id} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.08)", marginBottom: 6, display: "flex", gap: 10, alignItems: "flex-start", background: "#fff" }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 999, whiteSpace: "nowrap",
+                  background: e.action === "create" ? "rgba(16,185,129,0.1)" : e.action === "delete" ? "rgba(239,68,68,0.08)" : "rgba(245,158,11,0.1)",
+                  color: e.action === "create" ? "#065f46" : e.action === "delete" ? "#991b1b" : "#92400e",
+                }}>
+                  {e.action.toUpperCase()}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{e.promptName}</span>
+                  {e.changedFields && <span style={{ fontSize: 11, color: "#64748b", marginLeft: 8 }}>{e.changedFields}</span>}
+                </div>
+                <span style={{ fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap" }}>
+                  {new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {!auditTab && (<>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Your prompts</h2>
           <div style={{ display: "flex", gap: 8 }}>
@@ -635,14 +711,32 @@ export default function QCorePromptsPage() {
 
                   {chain.length > 1 && (
                     <div>
-                      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
-                        Version chain ({chain.length})
+                      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span>Version chain ({chain.length})</span>
+                        {selected.version > 1 && (
+                          <button
+                            onClick={async () => {
+                              if (diffData) { setDiffData(null); return; }
+                              setDiffLoading(true);
+                              try {
+                                const token = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+                                const r = await fetch(`/api/qcoreai/prompts/${selected.id}/diff`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                const d = await r.json().catch(() => ({}));
+                                if (Array.isArray(d.diff)) setDiffData(d.diff);
+                              } catch { /* ignore */ }
+                              finally { setDiffLoading(false); }
+                            }}
+                            style={{ padding: "2px 8px", borderRadius: 6, background: diffData ? "rgba(239,68,68,0.08)" : "rgba(79,70,229,0.08)", color: diffData ? "#dc2626" : "#4f46e5", border: "1px solid currentColor", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+                          >
+                            {diffLoading ? "Loading…" : diffData ? "Hide diff" : "Δ Diff"}
+                          </button>
+                        )}
                       </div>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {chain.map((v) => (
                           <button
                             key={v.id}
-                            onClick={() => setSelectedId(v.id)}
+                            onClick={() => { setSelectedId(v.id); setDiffData(null); }}
                             style={{
                               padding: "4px 10px",
                               borderRadius: 6,
@@ -658,6 +752,22 @@ export default function QCorePromptsPage() {
                           </button>
                         ))}
                       </div>
+                      {diffData && (
+                        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "#fafafa", border: "1px solid #e2e8f0", fontSize: 12, lineHeight: 1.6, fontFamily: "monospace", maxHeight: 200, overflowY: "auto" }}>
+                          {diffData.map((seg, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                background: seg.type === "insert" ? "rgba(16,185,129,0.15)" : seg.type === "delete" ? "rgba(239,68,68,0.15)" : "transparent",
+                                color: seg.type === "insert" ? "#065f46" : seg.type === "delete" ? "#991b1b" : "#0f172a",
+                                textDecoration: seg.type === "delete" ? "line-through" : "none",
+                              }}
+                            >
+                              {seg.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -665,6 +775,7 @@ export default function QCorePromptsPage() {
             </div>
           </div>
         )}
+        </>)} {/* end !auditTab block */}
       </ProductPageShell>
     </main>
   );

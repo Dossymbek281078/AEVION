@@ -11,36 +11,160 @@ import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
 import { authRouter } from "./routes/auth";
+import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
+import { statusRouter } from "./routes/status";
 import { awardsRouter } from "./routes/awards";
-import { qcoreaiRouter } from "./routes/qcoreai";
+import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
-import { aevRouter } from "./routes/aev";
-import { aevionHubRouter } from "./routes/aevion-hub";
+import { pricingRouter } from "./routes/pricing";
+import { checkoutRouter } from "./routes/checkout";
+import { healthaiRouter } from "./routes/healthai";
+import { pricingRouter } from "./routes/pricing";
+import { checkoutRouter } from "./routes/checkout";
+import { provisioningRouter } from "./routes/provisioning";
+import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
+import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
+import { aevRouter } from "./routes/aev";
+import { ecosystemRouter } from "./routes/ecosystem";
+import { cyberchessRouter } from "./routes/cyberchess";
+import { puzzlesRouter } from "./routes/puzzles";
+import { buildRouter } from "./routes/build";
+import { aevionHubRouter } from "./routes/aevion-hub";
+import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
+import { planetPayoutsRouter } from "./routes/planetPayouts";
+import { bankTestRouter } from "./routes/bankTest";
+import { metricsRouter } from "./routes/metrics";
+import { smetaTrainerRouter } from "./routes/smeta-trainer";
+import { qcontractRouter } from "./routes/qcontract";
+import { healthaiRouter } from "./routes/healthai";
+import { qfusionaiRouter } from "./routes/qfusionai";
+import { veilnetxRouter } from "./routes/veilnetx";
+import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
+import { mountMvpConcepts } from "./routes/mvpConcepts";
+import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
+import { qtradeOfflineRouter } from "./routes/qtradeoffline";
+import { apiQuotasRouter } from "./routes/apiQuotas";
+import { apiKeysRouter } from "./routes/apiKeys";
+import { qgoodRouter } from "./routes/qgood";
+import { qmaskcardRouter } from "./routes/qmaskcard";
+import { veilnetxLedgerRouter } from "./routes/veilnetxLedger";
+import { ztideRouter } from "./routes/ztide";
+import { qchaingovRouter } from "./routes/qchaingov";
+import { FINTECH_OPENAPI_PATHS, FINTECH_OPENAPI_SCHEMAS, FINTECH_OPENAPI_TAGS } from "./lib/openapiFintechSpec";
+import { NEW_WAVE_OPENAPI_PATHS, NEW_WAVE_OPENAPI_SCHEMAS, NEW_WAVE_OPENAPI_TAGS } from "./lib/openapiNewWaveSpec";
+import { isSentryEnabled, captureException } from "./lib/sentry";
+import { devhubRouter } from "./routes/devhub";
+import { qmediaRouter } from "./routes/qmedia";
+import { paymentsRouter } from "./routes/payments";
+import { qaiRouter } from "./routes/qai";
+import { qstoreRouter } from "./routes/qstore";
+import { qlearnRouter } from "./routes/qlearn";
+import { qsocialRouter } from "./routes/qsocial";
+import { qnewsRouter } from "./routes/qnews";
+import { qjobsRouter } from "./routes/qjobs";
+import { mapRealityRouter } from "./routes/mapReality";
+import { startupExchangeRouter } from "./routes/startupExchange";
+import { kidsAiContentRouter } from "./routes/kidsAiContent";
+import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
+import { qeventsRouter } from "./routes/qevents";
+import { deepSanRouter } from "./routes/deepsan";
+import { qpersonaRouter } from "./routes/qpersona";
+import { qlifeRouter } from "./routes/qlife";
+import { psyappDepsRouter } from "./routes/psyappDeps";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
+
+// Optional Sentry. No-op when SENTRY_DSN is unset OR @sentry/node missing.
+initSentry();
 
 const app = express();
 const PORT = process.env.PORT || 4001;
 
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+// 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
+// Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.
+//
+// `verify` stashes the raw bytes on req.rawBody for paths that need exact-byte
+// signature verification (Stripe webhooks: /api/qpaynet/deposit/webhook,
+// /api/checkout/webhook, etc.). All other handlers ignore rawBody.
+app.use(express.json({
+  limit: "10mb",
+  verify: (req, _res, buf) => {
+    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 
-// Health-check
-app.get("/health", (_req, res) => {
-  res.json({
+// Health-check. Both /health (legacy) and /api/health (the path the
+// frontend + diagnostics page have always probed against) return the
+// same shape so existing callers don't break.
+function healthPayload() {
+  return {
     status: "ok",
     service: "AEVION Globus Backend",
     timestamp: new Date().toISOString(),
-  });
+  };
+}
+app.get("/health", (_req, res) => res.json(healthPayload()));
+app.get("/api/health", (_req, res) => res.json(healthPayload()));
+
+// Deep health: aggregates ops-relevant counts so /bank/diagnostics +
+// oncall don't have to compose multiple endpoints. No auth — counts
+// only, no per-user data. If you need access control, gate via your
+// load balancer or use METRICS_TOKEN on /api/metrics for richer detail.
+const STARTED_AT = Date.now();
+app.get("/api/health/deep", async (_req, res) => {
+  // Lazy imports so this module's load order doesn't fight with
+  // ecosystem persistence. Errors are caught and surfaced.
+  try {
+    const { getQtradeMetrics } = await import("./routes/qtrade");
+    const { getEcosystemMetrics, ensureEcosystemLoaded } = await import("./routes/ecosystem");
+    await ensureEcosystemLoaded();
+    const q = getQtradeMetrics();
+    const e = getEcosystemMetrics();
+    const mem = process.memoryUsage();
+    res.json({
+      status: "ok",
+      service: "AEVION Globus Backend",
+      timestamp: new Date().toISOString(),
+      uptimeSec: Math.floor((Date.now() - STARTED_AT) / 1000),
+      sentry: isSentryEnabled(),
+      ledger: {
+        accounts: q.accounts,
+        transfers: q.transfers,
+        operations: q.operations,
+        idempotencyCacheSize: q.idemCache,
+        royaltyEvents: e.royaltyEvents,
+        chessPrizes: e.chessPrizes,
+        planetCerts: e.planetCerts,
+        backend: e.backend,
+      },
+      memory: {
+        heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024),
+        rssMb: Math.round(mem.rss / 1024 / 1024),
+      },
+      env: {
+        nodeEnv: process.env.NODE_ENV || "development",
+        bankDailyTopupCap: Number(process.env.BANK_DAILY_TOPUP_CAP || 5000),
+        bankDailyTransferCap: Number(process.env.BANK_DAILY_TRANSFER_CAP || 2000),
+        corsRestricted: !!process.env.CORS_ALLOWED_ORIGINS,
+        metricsTokenSet: !!process.env.METRICS_TOKEN,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      message: err instanceof Error ? err.message : "deep health failed",
+    });
+  }
 });
 
 // Проверка соединения
@@ -73,10 +197,16 @@ app.get("/api/globus/projects/:id", (req, res) => {
 });
 
 app.use("/api/modules", modulesRouter);
+app.use("/api/status", statusRouter);
 
 app.use("/api/qcoreai", qcoreaiRouter);
+// Public share-link route mounted BEFORE the auth-gated multichat router so
+// /api/multichat/shared/:token bypasses requireAuth.
+app.use("/api/multichat", multichatPublicRouter);
+app.use("/api/multichat", multichatRouter);
 
-/** Минимальная машиночитаемая карта API для ускорения интеграций */
+/** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
+ *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */
 app.get("/api/openapi.json", (_req, res) => {
   res.json({
     openapi: "3.1.0",
@@ -202,13 +332,87 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qtrade/summary": { get: { summary: "QTrade summary metrics" } },
       "/api/qtrade/topup": { post: { summary: "Top up balance" } },
       "/api/qtrade/transfer": { post: { summary: "P2P transfer" } },
-      "/api/aev/wallet/{deviceId}": { get: { summary: "AEV wallet snapshot" } },
-      "/api/aev/wallet/{deviceId}/sync": { post: { summary: "Idempotent wallet upsert (last-writer-wins on balance, max() on lifetime counters)" } },
-      "/api/aev/wallet/{deviceId}/mint": { post: { summary: "Append mint entry, debit cap, credit balance + lifetimeMined" } },
-      "/api/aev/wallet/{deviceId}/spend": { post: { summary: "Append spend entry, debit balance, credit lifetimeSpent" } },
-      "/api/aev/ledger/{deviceId}": { get: { summary: "Append-only ledger tail (?limit=1..1000, default 100, newest first)" } },
-      "/api/aev/stats": { get: { summary: "Global AEV aggregates (wallets, totalMined/Spent/Balance, capRemaining of 21M)" } },
+      "/api/pricing": { get: { summary: "Full pricing payload (tiers + modules + bundles)" } },
+      "/api/pricing/tiers": { get: { summary: "List pricing tiers" } },
+      "/api/pricing/tiers/{id}": { get: { summary: "Single tier detail" } },
+      "/api/pricing/modules": { get: { summary: "Per-module add-on prices" } },
+      "/api/pricing/modules/{id}": { get: { summary: "Single module pricing" } },
+      "/api/pricing/bundles": { get: { summary: "Bundled module suites" } },
+      "/api/pricing/quote": {
+        post: { summary: "Build a price quote: tier + modules + seats + period" },
+      },
+      "/api/pricing/lead": {
+        post: { summary: "Submit a sales lead (Enterprise / industry contact form)" },
+      },
+      "/api/pricing/leads/count": {
+        get: { summary: "Total leads count (no content exposed)" },
+      },
+      "/api/pricing/checkout/session": {
+        post: { summary: "Create Stripe Checkout session (or stub if no STRIPE_SECRET_KEY)" },
+      },
+      "/api/pricing/checkout/webhook": {
+        post: { summary: "Stripe webhook receiver (verifies stripe-signature in real mode)" },
+      },
+      "/api/pricing/checkout/healthz": {
+        get: { summary: "Checkout mode probe: real/stub + webhook readiness" },
+      },
+      "/api/pricing/events": {
+        post: { summary: "Ingest analytics event (page_view, cta_click, etc)" },
+      },
+      "/api/pricing/events/summary": {
+        get: { summary: "Aggregated metrics — admin token required" },
+      },
+      "/api/pricing/events/recent": {
+        get: { summary: "Last N events — admin token required" },
+        get: { summary: "Last N events — admin token required (CSV filters: source,type,tier,industry,sid)" },
+      },
+      "/api/pricing/events/aggregate": {
+        get: { summary: "Time-bucketed counts (period=hour|day, groupBy=source|type|tier|industry) — admin token required" },
+      },
+      "/api/pricing/leads": {
+        get: { summary: "List recent leads — admin token required" },
+      },
+      "/api/pricing/promo": {
+        get: { summary: "Public list of active promo codes" },
+      },
+      "/api/pricing/promo/validate": {
+        post: { summary: "Validate a promo code against a tier (no charge)" },
+      },
+      "/api/pricing/testimonials": {
+        get: { summary: "Public customer testimonials (filterable)" },
+      },
+      "/api/pricing/trust": {
+        get: { summary: "Trust signals: numbers + compliance badges" },
+      },
+      "/api/pricing/newsletter": {
+        post: { summary: "Newsletter signup (email only)" },
+      },
+      "/api/pricing/newsletter/count": {
+        get: { summary: "Total newsletter subscribers count" },
+      },
+      "/api/pricing/checkout/subscriptions/count": {
+        get: { summary: "Total provisioned subscriptions count" },
+      },
+      "/api/pricing/roadmap": {
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
+      },
+      "/api/pricing/provisioning/history": {
+        get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
+      },
+      "/api/pricing/provisioning/stats": {
+        get: { summary: "Aggregate provisioning stats: total, byTier, last7d, trialsActive, recent" },
+      },
+      "/api/pricing/provisioning/healthz": {
+        get: { summary: "Provisioning subsystem health: storage path, email mode" },
+      },
+      "/api/pricing/roadmap": {
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
+      },
+      ...FINTECH_OPENAPI_PATHS,
+      ...NEW_WAVE_OPENAPI_PATHS,
     },
+    components: { schemas: { ...FINTECH_OPENAPI_SCHEMAS, ...NEW_WAVE_OPENAPI_SCHEMAS } },
+    tags: [...FINTECH_OPENAPI_TAGS, ...NEW_WAVE_OPENAPI_TAGS],
   });
 });
 
@@ -218,6 +422,10 @@ app.get("/api/openapi.json", (_req, res) => {
 app.use("/api/qtrade", qtradeRouter);
 app.use("/api/aev", aevRouter);
 app.use("/api/qright", qrightRouter);
+app.use("/api/qright", qrightRoyaltiesRouter);
+app.use("/api/ecosystem", ecosystemRouter);
+app.use("/api/cyberchess", cyberchessRouter);
+app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================
 // QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)
@@ -231,16 +439,38 @@ app.use("/api/qsign", qsignRouter);
 app.use("/api/quantum-shield", quantumShieldRouter);
 app.use("/api/pipeline", pipelineRouter);
 app.use("/api/bureau", bureauRouter);
+app.use("/api/build", buildRouter);
 app.use("/api/coach", coachRouter);
+app.use("/api/healthai", healthaiRouter);
+
+// ==========================
+// Pricing / GTM
+// ==========================
+app.use("/api/pricing", pricingRouter);
+app.use("/api/pricing/checkout", checkoutRouter);
+app.use("/api/quotas", apiQuotasRouter);
+app.use("/api/keys", apiKeysRouter);
+app.use("/api/qgood", qgoodRouter);
+app.use("/api/psyapp-deps", psyappDepsRouter);
+app.use("/api/qmaskcard", qmaskcardRouter);
+app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
+app.use("/api/ztide", ztideRouter);
+app.use("/api/qchaingov", qchaingovRouter);
+app.use("/api/pricing", pricingRouter);
+app.use("/api/pricing/checkout", checkoutRouter);
+app.use("/api/pricing/provisioning", provisioningRouter);
+app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth
 // ==========================
 app.use("/api/auth", authRouter);
+app.use("/api/auth/oauth", authOauthRouter);
 
 // ==========================
 // Planet / Compliance / Evidence / Certificate
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
+app.use("/api/planet", planetPayoutsRouter);
 app.use("/api/awards", awardsRouter);
 
 // ==========================
@@ -248,14 +478,96 @@ app.use("/api/awards", awardsRouter);
 // ==========================
 app.use("/api/aevion", aevionHubRouter);
 
+// Internal: synthetic webhook dispatcher used by /bank/diagnostics.
+app.use("/api/bank", bankTestRouter);
+
+// Prometheus metrics. Public unless METRICS_TOKEN is set in env.
+app.use("/api/metrics", metricsRouter);
+
+// Smeta Trainer — progress sync + LMS webhook
+app.use("/api/smeta-trainer", smetaTrainerRouter);
+
+// QContract — self-destruct smart documents
+app.use("/api/qcontract", qcontractRouter);
+
+// HealthAI — personal AI doctor
+app.use("/api/healthai", healthaiRouter);
+
+// QFusionAI — smart multi-provider LLM router
+app.use("/api/qfusionai", qfusionaiRouter);
+
+// VeilNetX — privacy proxy pre-launch status + waitlist
+app.use("/api/veilnetx", veilnetxRouter);
+
+// MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
+// the generic planning stubs so module-specific paths (e.g.
+// `/api/startup-exchange/listings`) take precedence and unknown paths
+// still fall through to /health, /waitlist on the planning stub.
+mountMvpConcepts(app);
+
+// Planning-stage modules — shared status + waitlist surface
+for (const cfg of PLANNING_MODULES) {
+  app.use(`/api/${cfg.id}`, createPlanningStubRouter(cfg));
+}
+
+// DevHub — AI-powered developer platform
+app.use("/api/devhub", devhubRouter);
+// QMedia — music, video and creative tools
+app.use("/api/qmedia", qmediaRouter);
+// Payments — Stripe + PayBox KZ unified gateway
+app.use("/api/payments", paymentsRouter);
+// QAI — universal public AI assistant
+app.use("/api/qai", qaiRouter);
+// QStore — digital marketplace
+app.use("/api/qstore", qstoreRouter);
+// QLearn — learning platform
+app.use("/api/qlearn", qlearnRouter);
+// QNews — standalone product #30
+app.use("/api/qnews", qnewsRouter);
+// MapReality — civic signals map (MVP: signals + supports)
+app.use("/api/mapreality", mapRealityRouter);
+// StartupX — startup ideas marketplace + investor interest
+app.use("/api/startupx", startupExchangeRouter);
+// Kids AI Content — multilang lesson catalog + AI tutor
+app.use("/api/kids-ai", kidsAiContentRouter);
+// Voice of Earth — multilang music tracks + voting
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
+// QJobs → QBuild social hiring layer. Canonical: /api/build/jobs, legacy: /api/qjobs
+app.use("/api/build/jobs", qjobsRouter);
+app.use("/api/qjobs", qjobsRouter);
+// QSocial → QBuild social layer. Canonical: /api/build/social, legacy: /api/qsocial
+app.use("/api/build/social", qsocialRouter);
+app.use("/api/qsocial", qsocialRouter);
+// QEvents — events platform (RSVP, create, attend)
+app.use("/api/qevents", qeventsRouter);
+
+// DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
+app.use("/api/deepsan", deepSanRouter);
+// QPersona — digital avatar profiles (persona CRUD, AI bio, public gallery)
+app.use("/api/qpersona", qpersonaRouter);
+// QLife — longevity & anti-aging (biomarker log, trends, AI plan)
+app.use("/api/qlife", qlifeRouter);
+
+// QPayNet — embedded payment infrastructure
+app.use("/api/qpaynet", qpaynetRouter);
+startQpaynetRetryWorker();
+
+// QTradeOffline — offline-first P2P AEV payments (ECDSA P-256, /sync batch)
+app.use("/api/qtradeoffline", qtradeOfflineRouter);
+
 app.use(
   (
     err: unknown,
-    _req: express.Request,
+    req: express.Request,
     res: express.Response,
     _next: express.NextFunction,
   ) => {
     console.error("[express]", err);
+    captureException(err, {
+      url: req.originalUrl ?? req.url,
+      method: req.method,
+      ip: req.ip,
+    });
     if (res.headersSent) return;
     res.status(500).json({ error: "internal_error" });
   },
@@ -274,3 +586,6 @@ const httpServer = app.listen(PORT, () => {
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
 // but lets clients interject mid-run guidance on the same connection.
 attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");
+
+// QCoreAI scheduler — polls for due scheduled batches every minute.
+startScheduler();

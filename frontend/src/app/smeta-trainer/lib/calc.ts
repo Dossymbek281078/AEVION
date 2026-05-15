@@ -1,0 +1,227 @@
+// Расчётный движок ЛСР. Чистые функции, без сайд-эффектов.
+//
+// Принцип учебного расчёта:
+//   ПЗ_позиции = объём × baseCostPerUnit (в базисе)
+//     ↓ применяем суммарный коэффициент условий производства работ
+//   ПЗ_позиции_с_коэф = ПЗ × Π(coefficients)
+//     ↓ разносим по компонентам (ФОТ / ЭМ / материалы) пропорционально базисной структуре
+//     ↓ применяем индексы пересчёта по компонентам
+//   ПЗ_текущие = ФОТ_тек + ЭМ_тек + Материалы_тек
+//
+//   НР = ФОТ_тек × overheadPct%
+//   СП = ФОТ_тек × profitPct%   (для категорий с base = "ФОТ")
+//   Итого_раздела = Σ ПЗ_текущие + НР + СП
+//
+// НДС применяется один раз на итог сметы.
+
+import type {
+  Rate,
+  Resource,
+  SmetaPosition,
+  SmetaSection,
+  Lsr,
+  IndexSet,
+  OverheadRules,
+  PositionCalc,
+  SectionCalc,
+  LsrCalc,
+} from "./types";
+import { findRate, findOverhead, findIndex } from "./corpus";
+import { findSscMatch } from "./materialPrices";
+import { findLaborRate, findMachineRate } from "./laborMachinePrices";
+
+const VAT_RATE = 0.12;
+
+/** Опции расчёта.
+ * useSscPrices: вместо учебных basePrice материалов брать сметные ССЦ РК-2025
+ *   (по material-ssc-map.json). Если для материала нет матча — fallback на basePrice.
+ *   Поскольку ССЦ-цены уже в текущих тенге, индекс к материалам в этом режиме НЕ применяется. */
+export interface CalcOptions {
+  useSscPrices?: boolean;
+}
+
+/** Сумма произведения коэффициентов условий производства работ. */
+export function appliedCoefMultiplier(position: SmetaPosition): number {
+  return position.coefficients.reduce((acc, c) => acc * c.value, 1);
+}
+
+/** Базисная структура: разнесение по компонентам ФОТ/ЭМ/Материалы.
+ *  Принимает массив ресурсов напрямую — это позволяет использовать
+ *  переопределённые ресурсы из SmetaPosition.resourceOverrides.
+ *  category — из rate.category или section.category, для маппинга
+ *  на правильную группу СЦЗТ при useSscPrices. */
+export function resourcesStructure(
+  resources: readonly Resource[],
+  opts: CalcOptions = {},
+  category?: string,
+): { fot: number; em: number; emMachinistWage: number; materials: number; sscMatched: number; sscTotal: number } {
+  let fot = 0;
+  let em = 0;
+  let emMachinistWage = 0;
+  let materials = 0;
+  let sscMatched = 0;
+  let sscTotal = 0;
+
+  for (const r of resources) {
+    let unitPrice = r.basePrice;
+    if (opts.useSscPrices) {
+      sscTotal++;
+      if (r.kind === "материал") {
+        const m = findSscMatch(r.name, r.unit);
+        if (m && m.smetnaya > 0) {
+          unitPrice = m.smetnaya;
+          sscMatched++;
+        }
+      } else if (r.kind === "труд") {
+        const lr = findLaborRate(r.name, category);
+        if (lr && lr.sczt > 0) {
+          unitPrice = lr.sczt;
+          sscMatched++;
+        }
+      } else if (r.kind === "машины") {
+        const mr = findMachineRate(r.name);
+        if (mr && mr.smetnaya > 0) {
+          unitPrice = mr.smetnaya;
+          sscMatched++;
+        }
+      }
+    }
+    const cost = r.qtyPerUnit * unitPrice;
+    if (r.kind === "труд") {
+      fot += cost;
+    } else if (r.kind === "машины") {
+      em += cost;
+      const wage = (r.machinistWageRate ?? 0) * r.qtyPerUnit;
+      emMachinistWage += wage;
+    } else if (r.kind === "материал") {
+      materials += cost;
+    }
+  }
+
+  return { fot, em, emMachinistWage, materials, sscMatched, sscTotal };
+}
+
+/** Базисная структура расценки: использует resourceOverrides если они заданы. */
+export function rateBaseStructure(
+  rate: Rate,
+  opts: CalcOptions = {},
+): { fot: number; em: number; emMachinistWage: number; materials: number; sscMatched: number; sscTotal: number } {
+  return resourcesStructure(rate.resources, opts, rate.category);
+}
+
+/** Расчёт одной позиции. */
+export function calcPosition(
+  position: SmetaPosition,
+  index: IndexSet | undefined,
+  opts: CalcOptions = {},
+): PositionCalc | null {
+  const rate = findRate(position.rateCode);
+  if (!rate) return null;
+
+  // Если у позиции есть resourceOverrides — используем их вместо нормативных.
+  // Категория для маппинга на группу СЦЗТ — берём из расценки (rate.category).
+  const effectiveResources = position.resourceOverrides ?? rate.resources;
+  const struct = resourcesStructure(effectiveResources, opts, rate.category);
+  const baseDirect = struct.fot + struct.em + struct.materials;
+  const coefMul = appliedCoefMultiplier(position);
+
+  // Базисные суммы по позиции = структура × объём × коэффициент
+  const baseFotPos = struct.fot * position.volume * coefMul;
+  const baseEmPos = struct.em * position.volume * coefMul;
+  const baseMatPos = struct.materials * position.volume * coefMul;
+  const baseEmMachWagePos = struct.emMachinistWage * position.volume * coefMul;
+
+  // Применение индексов:
+  //  - индекс к ФОТ применяется к ФОТ + ЗП машинистов (по СН РК 8.02-07 учебно)
+  //  - индекс к ЭМ применяется к стоимости ЭМ за вычетом ЗП машинистов
+  //  - индекс к материалам — к материалам
+  // Если useSscPrices: ССЦ-цены уже в текущих тенге, индекс к материалам = 1.
+  const idxFOT = index?.toFOT ?? 1;
+  const idxEM = index?.toEM ?? 1;
+  const idxMat = opts.useSscPrices ? 1 : (index?.toMaterials ?? 1);
+
+  const curFot = (baseFotPos + baseEmMachWagePos) * idxFOT;
+  const curEm = (baseEmPos - baseEmMachWagePos) * idxEM;
+  const curMat = baseMatPos * idxMat;
+  const curDirect = curFot + curEm + curMat;
+
+  return {
+    position,
+    rate,
+    base: {
+      fot: baseFotPos,
+      em: baseEmPos,
+      emMachinistWage: baseEmMachWagePos,
+      materials: baseMatPos,
+      direct: baseFotPos + baseEmPos + baseMatPos,
+    },
+    appliedCoefMultiplier: coefMul,
+    current: {
+      fot: curFot,
+      em: curEm,
+      materials: curMat,
+      direct: curDirect,
+    },
+    unitPrice: position.volume > 0 ? curDirect / position.volume : 0,
+  };
+}
+
+/** Расчёт раздела. */
+export function calcSection(section: SmetaSection, index: IndexSet | undefined, opts: CalcOptions = {}): SectionCalc {
+  const positions: PositionCalc[] = [];
+  for (const p of section.positions) {
+    const calc = calcPosition(p, index, opts);
+    if (calc) positions.push(calc);
+  }
+
+  const direct = positions.reduce((s, p) => s + p.current.direct, 0);
+  const fot = positions.reduce((s, p) => s + p.current.fot, 0);
+
+  // НР и СП — по правилам категории раздела (учебно: одна категория на раздел)
+  const overheadRule = findOverhead(section.category);
+  const overheadPct = overheadRule?.overheadPct ?? 0;
+  const profitPct = overheadRule?.profitPct ?? 0;
+
+  // Если база "ФОТ" — берём ФОТ; если "ПЗ" — берём direct (учебно).
+  const overheadBase = overheadRule?.base === "ПЗ" ? direct : fot;
+  const overhead = (overheadBase * overheadPct) / 100;
+  const profit = (overheadBase * profitPct) / 100;
+
+  return {
+    section,
+    positions,
+    direct,
+    fot,
+    overhead,
+    profit,
+    total: direct + overhead + profit,
+  };
+}
+
+/** Расчёт всей ЛСР. */
+export function calcLsr(lsr: Lsr, opts: CalcOptions = {}): LsrCalc {
+  const index = findIndex(lsr.indexRegion, lsr.indexQuarter);
+
+  const sections = lsr.sections.map((s) => calcSection(s, index, opts));
+  const totalBeforeVat = sections.reduce((s, sec) => s + sec.total, 0);
+  const vat = totalBeforeVat * VAT_RATE;
+
+  return {
+    lsr,
+    sections,
+    totalBeforeVat,
+    vat,
+    totalWithVat: totalBeforeVat + vat,
+  };
+}
+
+/** Форматирование тенге для UI: разделители тысяч + 0 копеек. */
+export function formatKzt(value: number): string {
+  const n = Math.round(value);
+  return n.toLocaleString("ru-RU") + " ₸";
+}
+
+/** Форматирование тенге с копейками. */
+export function formatKztPrecise(value: number): string {
+  return value.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₸";
+}

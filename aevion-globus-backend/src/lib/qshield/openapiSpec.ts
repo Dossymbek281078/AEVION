@@ -14,12 +14,12 @@ export const QSHIELD_OPENAPI = {
       "with HMAC-SHA256 per-shard authentication, key rotation, and a " +
       "distributed_v2 policy (witness CID + author offline shard) so the " +
       "server alone cannot forge reconstruction.",
-    contact: { name: "AEVION", url: "https://aevion.com" },
+    contact: { name: "AEVION", url: "https://aevion.app" },
     license: { name: "Proprietary" },
   },
   servers: [
     {
-      url: "https://aevion-production-a70c.up.railway.app/api/quantum-shield",
+      url: "https://api.aevion.app/api/quantum-shield",
       description: "Production",
     },
     { url: "http://127.0.0.1:4001/api/quantum-shield", description: "Local dev" },
@@ -218,6 +218,74 @@ export const QSHIELD_OPENAPI = {
             },
           },
           "404": { description: "No witness for this id" },
+        },
+      },
+    },
+    "/verify-batch": {
+      post: {
+        tags: ["reconstruct"],
+        summary: "Batch verification (up to 50 records in one call)",
+        description:
+          "Parallel HMAC-only verification. Mirrors POST /verify per item " +
+          "but reduces N round-trips to one. Returns per-record valid flag, " +
+          "matched shard count, and threshold. Revoked/missing/reserved IDs " +
+          "surface in `error`.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["items"],
+                properties: {
+                  items: {
+                    type: "array",
+                    maxItems: 50,
+                    items: {
+                      type: "object",
+                      required: ["recordId"],
+                      properties: {
+                        recordId: { type: "string" },
+                        shards: { type: "array", items: {} },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Per-item verification results",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    count: { type: "integer" },
+                    ok: { type: "integer" },
+                    failed: { type: "integer" },
+                    results: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          recordId: { type: "string", nullable: true },
+                          valid: { type: "boolean" },
+                          matched: { type: "integer" },
+                          threshold: { type: "integer" },
+                          error: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { description: "items array missing or > 50" },
+          "429": { description: "Rate-limited" },
         },
       },
     },

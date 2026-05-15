@@ -363,7 +363,7 @@ export default function EmbedRunPage() {
       >
         Powered by{" "}
         <a
-          href="https://aevion.io/qcoreai"
+          href="https://aevion.app/qcoreai"
           target="_blank"
           rel="noreferrer"
           style={{ color: colors.accent, textDecoration: "none", fontWeight: 700 }}

@@ -34,7 +34,7 @@ publishing {
             pom {
                 name.set("AEVION QCoreAI Client")
                 description.set("Kotlin client for AEVION QCoreAI multi-agent pipeline")
-                url.set("https://aevion.io/qcoreai")
+                url.set("https://aevion.app/qcoreai")
                 licenses {
                     license {
                         name.set("Apache-2.0")

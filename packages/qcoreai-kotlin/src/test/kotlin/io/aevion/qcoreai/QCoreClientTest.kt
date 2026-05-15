@@ -7,14 +7,14 @@ class QCoreClientTest {
     @Test
     fun rejectsMissingProtocol() {
         val ex = assertFailsWith<IllegalArgumentException> {
-            QCoreClient(baseUrl = "api.aevion.io")
+            QCoreClient(baseUrl = "api.aevion.app")
         }
         assertTrue(ex.message!!.contains("http"))
     }
 
     @Test
     fun trimTrailingSlash() {
-        val c = QCoreClient(baseUrl = "https://api.aevion.io/")
+        val c = QCoreClient(baseUrl = "https://api.aevion.app/")
         // No accessor for cleanBase, but constructor is happy — proves trailing
         // slash doesn't blow up. (We rely on `init` to validate.)
         assertNull(c.token)

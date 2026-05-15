@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PitchValueCallout } from "@/components/PitchValueCallout";
+import PlanetActivityFeed from "@/components/PlanetActivityFeed";
 import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 import { planetNominationOptions } from "@/lib/planetNominations";
 
@@ -366,6 +368,8 @@ export default function PlanetCompliancePage() {
         Single pipeline: canonization → validators → evidenceRoot → signed certificate. Code/web segments shown based on your code.
       </div>
 
+      <PitchValueCallout moduleId="planet" variant="dark" />
+
       {planetStats ? (
         <div
           style={{
@@ -682,6 +686,38 @@ export default function PlanetCompliancePage() {
             Resubmit (after flagged)
           </button>
         </div>
+      </section>
+
+      <section style={{ marginTop: 18 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            marginBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>What&apos;s happening on Planet</div>
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              Last 10 submissions, certificates, revocations and votes — auto-refresh every 60s.
+            </div>
+          </div>
+          <Link
+            href="/planet/activity"
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              color: "#0f766e",
+              textDecoration: "none",
+            }}
+          >
+            Full activity feed →
+          </Link>
+        </div>
+        <PlanetActivityFeed limit={10} compact heading="Recent activity" />
       </section>
 
       {res ? (

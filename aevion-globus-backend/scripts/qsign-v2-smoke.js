@@ -158,19 +158,12 @@ async function main() {
     if (!r.ok) return fail("sign", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
     if (!r.data?.id || !r.data?.hmac?.signature || !r.data?.ed25519?.signature)
       return fail("sign", `malformed response: ${JSON.stringify(r.data)}`);
-    if (!r.data?.dilithium) return fail("sign", `missing dilithium block`);
-    const dilMode = r.data.dilithium.mode;
-    const dilSlot = r.data.dilithium.signature || r.data.dilithium.digest;
-    if ((dilMode !== "preview" && dilMode !== "real") || !dilSlot) {
-      return fail(
-        "sign",
-        `malformed dilithium block (mode=${dilMode}, slot=${!!dilSlot}): ${JSON.stringify(r.data.dilithium)}`,
-      );
-    }
+    if (!r.data?.dilithium || r.data.dilithium.mode !== "preview" || !r.data.dilithium.digest)
+      return fail("sign", `missing dilithium preview block: ${JSON.stringify(r.data?.dilithium)}`);
     signed = r.data;
     pass(
       "sign",
-      `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid} pq=${signed.dilithium.kid} mode=${dilMode}`,
+      `id=${signed.id.slice(0, 8)} kids=${signed.hmac.kid}/${signed.ed25519.kid} pq=${signed.dilithium.kid}`,
     );
   }
 
@@ -229,7 +222,7 @@ async function main() {
         signatureHmac: signed.hmac.signature,
         ed25519Kid: signed.ed25519.kid,
         signatureEd25519: signed.ed25519.signature,
-        signatureDilithium: signed.dilithium?.signature || signed.dilithium?.digest,
+        signatureDilithium: signed.dilithium?.digest,
       },
     });
     if (!r.ok)
@@ -239,9 +232,9 @@ async function main() {
     if (!r.data?.dilithium || r.data.dilithium.valid !== true)
       return fail(
         "stateless verify",
-        `dilithium did not round-trip: ${JSON.stringify(r.data?.dilithium)}`,
+        `dilithium preview did not round-trip: ${JSON.stringify(r.data?.dilithium)}`,
       );
-    pass("stateless verify", `hmac+ed25519+dilithium-${signed.dilithium.mode} valid`);
+    pass("stateless verify", `hmac+ed25519+dilithium-preview valid`);
   }
 
   // 6 — stateless verify with tampered payload (should fail)

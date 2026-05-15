@@ -145,7 +145,7 @@ async function main() {
       body: { shards: twoShards },
     });
     if (!r.ok) return fail("reconstruct", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
-    if (r.data?.ok !== true) return fail("reconstruct", `not ok: ${JSON.stringify(r.data)}`);
+    if (r.data?.valid !== true) return fail("reconstruct", `not valid: ${JSON.stringify(r.data)}`);
     pass("reconstruct", "Lagrange + probe-sign verified");
   }
 
@@ -311,6 +311,37 @@ async function main() {
     if (!text.includes("# TYPE"))
       return fail("metrics", "missing # TYPE prometheus comment");
     pass("metrics", `${text.split("\n").length} lines, found qshield_* metrics`);
+  }
+
+  // 7h — verify-batch endpoint (revoked record + non-existent + reserved id)
+  {
+    const r = await jsonFetch("POST", "/api/quantum-shield/verify-batch", {
+      body: {
+        items: [
+          { recordId: shieldId }, // revoked above in 7f
+          { recordId: "qs-doesnt-exist-12345" },
+          { recordId: "health" }, // reserved
+        ],
+      },
+    });
+    if (!r.ok) return fail("verify-batch", `HTTP ${r.status}: ${JSON.stringify(r.data)}`);
+    if (r.data?.count !== 3)
+      return fail("verify-batch.count", `expected 3, got ${r.data?.count}`);
+    const errs = (r.data?.results || []).map((x) => x.error || (x.valid ? "valid" : "invalid"));
+    if (!errs.includes("revoked"))
+      return fail("verify-batch.revoked", "missing 'revoked' error for revoked id");
+    if (!errs.includes("not_found"))
+      return fail("verify-batch.not_found", "missing 'not_found' error");
+    if (!errs.includes("reserved id"))
+      return fail("verify-batch.reserved", "missing 'reserved id' error");
+    pass("verify-batch", `count=${r.data.count} errs=${[...new Set(errs)].join("+")}`);
+
+    // batch size > 50 → 400
+    const big = { items: Array.from({ length: 51 }, (_, i) => ({ recordId: "x" + i })) };
+    const r2 = await jsonFetch("POST", "/api/quantum-shield/verify-batch", { body: big });
+    if (r2.status !== 400)
+      return fail("verify-batch.cap", `expected 400 for >50, got ${r2.status}`);
+    pass("verify-batch.cap", "51-item batch rejected with 400");
   }
 
   // 8 — delete (owner can)

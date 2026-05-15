@@ -3,8 +3,8 @@ import XCTest
 
 final class QCoreClientTests: XCTestCase {
     func testInitWithStringBaseUrl() {
-        let client = QCoreClient(baseUrl: "https://api.aevion.io", token: "abc")
-        XCTAssertEqual(client.baseUrl.absoluteString, "https://api.aevion.io")
+        let client = QCoreClient(baseUrl: "https://api.aevion.app", token: "abc")
+        XCTAssertEqual(client.baseUrl.absoluteString, "https://api.aevion.app")
         XCTAssertEqual(client.token, "abc")
     }
 

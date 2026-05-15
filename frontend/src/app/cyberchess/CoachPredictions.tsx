@@ -124,87 +124,74 @@ export default function CoachPredictions({
   const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
   const matchedRank = actualMove && predictions ? predictions.find(p => p.uci === actualMove)?.rank ?? null : null;
 
+  // Compact one-line strip — chips inline, no vertical column.
   return (
     <div style={{
-      borderRadius: RADIUS.lg, border: `1px solid ${CC.accent}40`,
-      background: `linear-gradient(135deg, ${CC.accentSoft}, rgba(255,255,255,0.6))`,
-      padding: SPACE[3], boxShadow: SHADOW.sm,
+      borderRadius: RADIUS.md, border: `1px solid ${CC.accent}33`,
+      background: `linear-gradient(90deg, ${CC.accentSoft}, rgba(255,255,255,0.55))`,
+      padding: "5px 9px", display: "flex", alignItems: "center", gap: SPACE[2],
+      flexWrap: "wrap", boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
       animation: `cc-fade-in ${MOTION.base} ${MOTION.ease}`,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: SPACE[2], marginBottom: SPACE[2] }}>
-        <span style={{ fontSize: 14 }}>🔮</span>
-        <div style={{ fontSize: 11, fontWeight: 900, color: CC.accent, letterSpacing: 0.5, textTransform: "uppercase" }}>
-          Предсказания соперника
-        </div>
-        <div style={{ flex: 1 }} />
-        {stats.total > 0 && (
-          <Tooltip label={`${stats.correct} из ${stats.total} ходов угаданы`}>
-            <Badge tone="accent" size="xs">{accuracy}% точность</Badge>
-          </Tooltip>
-        )}
-        <Tooltip label="Выключить">
-          <button onClick={onToggle}
-            style={{ background: "transparent", border: "none", color: CC.textDim, cursor: "pointer", fontSize: 11, padding: 2 }}>
-            ✕
-          </button>
-        </Tooltip>
-      </div>
-
+      <span style={{ fontSize: 11, fontWeight: 900, color: CC.accent, letterSpacing: 0.5, textTransform: "uppercase", flexShrink: 0 }}>
+        🔮 Предсказания
+      </span>
       {loading && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, color: CC.textDim, fontSize: 12, padding: `${SPACE[2]}px 0` }}>
-          <Spinner size={12} /> Stockfish считает что сыграет {opponentColor === "w" ? "белый" : "чёрный"}…
-        </div>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: CC.textDim, fontSize: 11 }}>
+          <Spinner size={10} /> думаю…
+        </span>
       )}
-
+      {!loading && predictions && predictions.length > 0 && predictions.map(p => {
+        const isMatch = actualMove === p.uci;
+        const wasShown = !!actualMove;
+        return (
+          <span key={p.uci} style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "2px 7px 2px 4px", borderRadius: 999,
+            background: isMatch ? "rgba(5,150,105,0.18)" : "#fff",
+            border: `1px solid ${isMatch ? CC.brand : "rgba(0,0,0,0.08)"}`,
+            opacity: wasShown && !isMatch ? 0.45 : 1,
+            fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular, monospace", fontWeight: 800,
+            color: CC.text, flexShrink: 0,
+          }}>
+            <span style={{
+              width: 14, height: 14, borderRadius: 7,
+              background: p.rank === 1 ? CC.gold : p.rank === 2 ? "#94a3b8" : "#cbd0db",
+              color: "#fff", fontSize: 9, fontWeight: 900,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+            }}>{p.rank}</span>
+            {p.san}
+            <span style={{ color: CC.textDim, fontWeight: 600, fontSize: 10, marginLeft: 2 }}>
+              {fmtEval(p.cp, p.mate)}
+            </span>
+            {isMatch && <span style={{ color: CC.brand, fontWeight: 900, fontSize: 12, marginLeft: 2 }}>✓</span>}
+          </span>
+        );
+      })}
       {!loading && (!predictions || predictions.length === 0) && (
-        <div style={{ fontSize: 12, color: CC.textDim, padding: `${SPACE[2]}px 0` }}>
-          {isOpponentTurn ? "Жду движок…" : "Жду хода соперника, чтобы предсказать его следующий…"}
-        </div>
+        <span style={{ fontSize: 11, color: CC.textDim, fontStyle: "italic" }}>
+          {isOpponentTurn ? "жду движок…" : "жду ход соперника"}
+        </span>
       )}
-
-      {!loading && predictions && predictions.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: SPACE[1] }}>
-          {predictions.map(p => {
-            const isMatch = actualMove === p.uci;
-            const wasShown = !!actualMove;
-            return (
-              <div key={p.uci} style={{
-                display: "flex", alignItems: "center", gap: SPACE[2],
-                padding: `${SPACE[1] + 2}px ${SPACE[2]}px`,
-                borderRadius: RADIUS.md,
-                background: isMatch ? "rgba(5,150,105,0.12)" : wasShown ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.65)",
-                border: `1px solid ${isMatch ? CC.brand : "rgba(0,0,0,0.05)"}`,
-                opacity: wasShown && !isMatch ? 0.55 : 1,
-                transition: `all ${MOTION.fast} ${MOTION.ease}`,
-              }}>
-                <span style={{
-                  width: 20, height: 20, borderRadius: "50%",
-                  background: p.rank === 1 ? CC.gold : p.rank === 2 ? CC.textMute : "#cbd0db",
-                  color: "#fff", fontSize: 11, fontWeight: 900,
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  flexShrink: 0,
-                }}>{p.rank}</span>
-                <span style={{ fontSize: 14, fontWeight: 900, color: CC.text, fontFamily: "ui-monospace, monospace", minWidth: 56 }}>
-                  {p.san}
-                </span>
-                <span style={{ fontSize: 11, color: CC.textDim, fontWeight: 700, flex: 1 }}>
-                  eval {fmtEval(p.cp, p.mate)}
-                </span>
-                {isMatch && <Badge tone="brand" size="xs">✓ угадано</Badge>}
-              </div>
-            );
-          })}
-          {actualMove && matchedRank === null && (
-            <div style={{
-              marginTop: SPACE[1], padding: `${SPACE[1] + 2}px ${SPACE[2]}px`,
-              borderRadius: RADIUS.md, background: "rgba(217,119,6,0.1)",
-              border: `1px dashed ${CC.gold}`,
-              fontSize: 12, color: "#92400e", fontWeight: 700,
-            }}>
-              Сюрприз! Соперник сыграл <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: 900 }}>{uciToSan(predictedFor || fen, actualMove)}</span> — этого хода не было в топ-3.
-            </div>
-          )}
-        </div>
+      <span style={{ flex: 1 }} />
+      {stats.total > 0 && (
+        <Tooltip label={`${stats.correct}/${stats.total} угаданы`}>
+          <Badge tone="accent" size="xs">{accuracy}%</Badge>
+        </Tooltip>
+      )}
+      <Tooltip label="Выключить предсказания">
+        <button onClick={onToggle}
+          style={{ background: "transparent", border: "none", color: CC.textDim, cursor: "pointer", fontSize: 13, padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>
+          ✕
+        </button>
+      </Tooltip>
+      {actualMove && matchedRank === null && (
+        <span style={{
+          padding: "2px 7px", borderRadius: 999, background: "rgba(217,119,6,0.12)",
+          border: `1px dashed ${CC.gold}`, fontSize: 10, color: "#92400e", fontWeight: 800,
+        }}>
+          сюрприз: {uciToSan(predictedFor || fen, actualMove)}
+        </span>
       )}
     </div>
   );

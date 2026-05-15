@@ -393,6 +393,10 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [voiceCloneFile, setVoiceCloneFile] = useState<File | null>(null);
   const [voiceCloneLoading, setVoiceCloneLoading] = useState(false);
   const [voiceCloneMsg, setVoiceCloneMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState(false);
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+  const [voicePreviewText, setVoicePreviewText] = useState("AEVION voice preview — your custom voice is ready");
+  const [voicePreviewOk, setVoicePreviewOk] = useState(false);
 
   // STT state
   const [sttFile, setSttFile] = useState<File | null>(null);
@@ -1582,13 +1586,64 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   // ── Voice clone (file upload) ────────────────────────────────────────────────
 
+  const fileToBase64 = async (file: File): Promise<string> => {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+    }
+    return btoa(binary);
+  };
+
+  const previewClonedVoice = async () => {
+    if (!voiceCloneFile) {
+      setVoiceCloneMsg({ ok: false, text: "Pick an audio sample first" });
+      return;
+    }
+    setVoicePreviewLoading(true);
+    setVoiceCloneMsg(null);
+    setVoicePreviewOk(false);
+    if (voicePreviewUrl) { URL.revokeObjectURL(voicePreviewUrl); setVoicePreviewUrl(null); }
+    try {
+      const base64 = await fileToBase64(voiceCloneFile);
+      const r = await fetch(apiUrl("/api/devhub/media/voice-clone/preview"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sampleBase64: base64,
+          mimeType: voiceCloneFile.type || "audio/mpeg",
+          previewText: voicePreviewText.trim() || undefined,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setVoiceCloneMsg({ ok: false, text: d.error || "Preview failed" });
+        return;
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      setVoicePreviewUrl(url);
+      setVoicePreviewOk(true);
+      setVoiceCloneMsg({ ok: true, text: "Preview ready — listen below, then Save if you like it" });
+    } catch (e: any) {
+      setVoiceCloneMsg({ ok: false, text: e?.message || "Preview failed" });
+    } finally {
+      setVoicePreviewLoading(false);
+    }
+  };
+
   const cloneVoice = async () => {
     if (!voiceCloneName.trim() || !voiceCloneFile) return;
+    if (!voicePreviewOk) {
+      setVoiceCloneMsg({ ok: false, text: "Preview first — click 🎧 Preview, listen, then Save" });
+      return;
+    }
     setVoiceCloneLoading(true);
     setVoiceCloneMsg(null);
     try {
-      const buf = await voiceCloneFile.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const base64 = await fileToBase64(voiceCloneFile);
       const r = await fetch(apiUrl("/api/devhub/media/voice-clone"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1597,6 +1652,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
           description: voiceCloneDesc.trim() || undefined,
           sampleBase64: base64,
           mimeType: voiceCloneFile.type || "audio/mpeg",
+          confirm: true,
         }),
       });
       const d = await r.json();
@@ -1605,6 +1661,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
+        setVoicePreviewOk(false);
+        if (voicePreviewUrl) { URL.revokeObjectURL(voicePreviewUrl); setVoicePreviewUrl(null); }
       }
     } catch (e: any) {
       setVoiceCloneMsg({ ok: false, text: e?.message || "Clone failed" });
@@ -3133,6 +3191,12 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           style={{ width: "100%", fontSize: 12 }} />
                         {voiceCloneFile && <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{voiceCloneFile.name} ({Math.round(voiceCloneFile.size / 1024)} KB)</div>}
                       </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Preview text</label>
+                        <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
+                          placeholder="AEVION voice preview — your custom voice is ready"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
                       {voiceCloneMsg && (
                         <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
                           background: voiceCloneMsg.ok ? "#d1fae5" : "#fee2e2",
@@ -3140,18 +3204,39 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           {voiceCloneMsg.text}
                         </div>
                       )}
-                      <button
-                        onClick={cloneVoice}
-                        disabled={voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile}
-                        style={{
-                          padding: "9px 18px", background: voiceCloneLoading ? "#c4b5fd" : "#7c3aed",
-                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                          cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile) ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {voiceCloneLoading ? "Cloning..." : "Clone Voice"}
-                      </button>
+                      {voicePreviewUrl && (
+                        <div style={{ padding: "8px 12px", background: "#eef2ff", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 11, color: "#4338ca", fontWeight: 700 }}>Listen before saving — temp voice already deleted from your account</div>
+                          <audio controls src={voicePreviewUrl} style={{ width: "100%" }} />
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          onClick={previewClonedVoice}
+                          disabled={voicePreviewLoading || !voiceCloneFile}
+                          style={{
+                            padding: "9px 18px", background: voicePreviewLoading ? "#a5b4fc" : "#6366f1",
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: (voicePreviewLoading || !voiceCloneFile) ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {voicePreviewLoading ? "Previewing..." : "🎧 Preview voice (no commit)"}
+                        </button>
+                        <button
+                          onClick={cloneVoice}
+                          disabled={voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile || !voicePreviewOk}
+                          title={!voicePreviewOk ? "Preview the voice first, then Save" : "Save permanent voice to ElevenLabs account"}
+                          style={{
+                            padding: "9px 18px", background: voiceCloneLoading ? "#c4b5fd" : (voicePreviewOk ? "#7c3aed" : "#cbd5e1"),
+                            color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                            cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile || !voicePreviewOk) ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {voiceCloneLoading ? "Saving..." : "✓ Save voice to account"}
+                        </button>
+                      </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Preview clones temporarily, renders TTS sample, then deletes the temp voice — no slot is consumed.
                         Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Premium tier required.
                       </div>
                     </div>

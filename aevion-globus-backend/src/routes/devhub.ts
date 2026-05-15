@@ -2076,9 +2076,23 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   }
 });
 
-// POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample
+// ── Voice clone helpers ─────────────────────────────────────────────────────
+
+function buildVoiceCloneMultipart(opts: { name: string; description?: string; mimeType: string; audio: Buffer }): { body: Buffer; boundary: string } {
+  const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+  const parts: Buffer[] = [];
+  const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+  push(`--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${opts.name}\r\n`);
+  if (opts.description) push(`--${boundary}\r\nContent-Disposition: form-data; name="description"\r\n\r\n${opts.description}\r\n`);
+  push(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="sample.${opts.mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${opts.mimeType}\r\n\r\n`);
+  parts.push(opts.audio);
+  push(`\r\n--${boundary}--\r\n`);
+  return { body: Buffer.concat(parts), boundary };
+}
+
+// POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
 devhubRouter.post("/media/voice-clone", async (req, res) => {
-  const { name, description, sampleBase64, mimeType = "audio/mpeg" } = req.body || {};
+  const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
@@ -2086,21 +2100,20 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
 
+  if (confirm !== true) {
+    return res.status(400).json({ error: "preview first — pass confirm:true after listening to /media/voice-clone/preview", needsConfirm: true });
+  }
+
   try {
     const audioBuffer = Buffer.from(sampleBase64, "base64");
-    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
-    const parts: Buffer[] = [];
-    const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
-    push(`--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${name.trim()}\r\n`);
-    if (description) push(`--${boundary}\r\nContent-Disposition: form-data; name="description"\r\n\r\n${String(description).slice(0, 500)}\r\n`);
-    push(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="sample.${mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
-    parts.push(audioBuffer);
-    push(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat(parts);
+    const { body, boundary } = buildVoiceCloneMultipart({
+      name: name.trim(), description: description ? String(description).slice(0, 500) : undefined,
+      mimeType, audio: audioBuffer,
+    });
     const r = await fetch("https://api.elevenlabs.io/v1/voices/add", {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
-      body,
+      body: body as unknown as BodyInit,
     });
     if (!r.ok) {
       const errText = await r.text();
@@ -2110,6 +2123,73 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
     res.json({ ok: true, voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Voice clone failed" });
+  }
+});
+
+// POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
+// Body: { sampleBase64, mimeType?, previewText? }
+// Response: audio/mpeg of `previewText` rendered with the cloned voice
+devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
+  const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
+  if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
+  if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
+
+  const text = String(previewText || "AEVION voice preview — your custom voice is ready").slice(0, 500);
+  const tempName = `aevion-preview-${crypto.randomBytes(4).toString("hex")}`;
+  let voiceId: string | null = null;
+
+  try {
+    const audioBuffer = Buffer.from(sampleBase64, "base64");
+
+    // 1. Clone voice (temporary)
+    const cloneReq = buildVoiceCloneMultipart({ name: tempName, mimeType, audio: audioBuffer });
+    const cloneResp = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${cloneReq.boundary}` },
+      body: cloneReq.body as unknown as BodyInit,
+    });
+    if (!cloneResp.ok) {
+      const errText = await cloneResp.text();
+      return res.status(cloneResp.status).json({ error: `Clone (preview) failed: ${errText.slice(0, 300)}` });
+    }
+    const cloneData = await cloneResp.json() as { voice_id: string };
+    voiceId = cloneData.voice_id;
+    if (!voiceId) return res.status(500).json({ error: "no voice_id returned for preview" });
+
+    // 2. Render preview TTS with the cloned voice
+    const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+    });
+    if (!ttsResp.ok) {
+      const errText = await ttsResp.text();
+      // Best-effort cleanup before bailing
+      fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => {});
+      return res.status(ttsResp.status).json({ error: `Preview TTS failed: ${errText.slice(0, 300)}` });
+    }
+    const audio = Buffer.from(await ttsResp.arrayBuffer());
+
+    // 3. Best-effort delete to avoid leaking temp voices in the user's account
+    try {
+      await fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, {
+        method: "DELETE", headers: { "xi-api-key": apiKey },
+      });
+    } catch { /* leak is acceptable — preview already returned */ }
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", audio.length);
+    res.setHeader("X-Aevion-Preview-Bytes", String(audio.length));
+    res.setHeader("Cache-Control", "no-store");
+    res.send(audio);
+  } catch (e: any) {
+    if (voiceId) {
+      fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => {});
+    }
+    res.status(500).json({ error: e?.message || "Voice preview failed" });
   }
 });
 
@@ -3584,7 +3664,7 @@ async function r2PutObject(key: string, body: Buffer, contentType: string): Prom
   const headers = signR2PutHeaders({ host, bucket, key, body, contentType, accessKey, secretKey });
   const uri = `/${bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
   try {
-    const r = await fetch(`https://${host}${uri}`, { method: "PUT", headers, body });
+    const r = await fetch(`https://${host}${uri}`, { method: "PUT", headers, body: body as unknown as BodyInit });
     if (!r.ok) {
       const errText = await r.text();
       return { ok: false, error: `R2 PUT ${r.status}: ${errText.slice(0, 200)}` };

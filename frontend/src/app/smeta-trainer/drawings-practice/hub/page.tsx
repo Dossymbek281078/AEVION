@@ -343,6 +343,11 @@ const MODULES: Module[] = [
   { id: "hospitals-clinics",      category: "practice",  href: "/smeta-trainer/drawings-practice/hospitals-clinics",      icon: "🏥", title: "Больницы и клиники",              subtitle: "РКБ Алматы 600 коек, ОРИТ 18 м²/койка, O₂ 540 л/мин, ОП Класс «А» ISO 5", level: "L5", exercises: 4,  color: "rose"    },
   { id: "schools-modern",         category: "practice",  href: "/smeta-trainer/drawings-practice/schools-modern",         icon: "🏫", title: "Современные школы",               subtitle: "ШГ-1500, СП РК 3.02-04, спортзал 18×30×7, актовый 600 мест, СанПиН 4.01-007", level: "L5", exercises: 4,  color: "sky"     },
   { id: "universities-campuses",  category: "practice",  href: "/smeta-trainer/drawings-practice/universities-campuses",  icon: "🎓", title: "Университеты и кампусы",          subtitle: "Назарбаев Универс. 152 га, BSL-3 лаборатории, амфитеатр 500 мест, бассейн 50 м", level: "L5", exercises: 4,  color: "violet"  },
+
+  // ── ТЭК: нефтехимия, СПГ, ВИЭ ──
+  { id: "refineries-oil",         category: "special",   href: "/smeta-trainer/drawings-practice/refineries-oil",         icon: "🛢️", title: "Нефтеперерабатывающие заводы",    subtitle: "АНПЗ 6 млн т/год, ЭЛОУ-АВТ-6 H=60 м, ATEX 0/1/2, факел H=80 м, ПУЭ 7.3", level: "L5", exercises: 4,  color: "stone"   },
+  { id: "lng-plants",             category: "special",   href: "/smeta-trainer/drawings-practice/lng-plants",             icon: "🧊", title: "СПГ-заводы и терминалы",          subtitle: "2 млн т/год, C3MR Air Products, Full Containment Ø80 м −162°C, NFPA 59A", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "wind-solar-farms",       category: "special",   href: "/smeta-trainer/drawings-practice/wind-solar-farms",       icon: "🌬️", title: "ВЭС и СЭС (ВИЭ)",                 subtitle: "Жанатас 100 МВт, V150-5 МВт башня 120 м, JinkoSolar 550 Вт, IEC 61400-24",  level: "L5", exercises: 4,  color: "lime"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -25,9 +25,6 @@ import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
 import { healthaiRouter } from "./routes/healthai";
-import { pricingRouter } from "./routes/pricing";
-import { checkoutRouter } from "./routes/checkout";
-import { provisioningRouter } from "./routes/provisioning";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -44,9 +41,11 @@ import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { qcontractRouter } from "./routes/qcontract";
-import { healthaiRouter } from "./routes/healthai";
 import { qfusionaiRouter } from "./routes/qfusionai";
 import { veilnetxRouter } from "./routes/veilnetx";
+import { shadownetRouter } from "./routes/shadownet";
+import { psyappDepsRouter } from "./routes/psyappDeps";
+import { lifeboxRouter } from "./routes/lifebox";
 import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
 import { mountMvpConcepts } from "./routes/mvpConcepts";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
@@ -78,7 +77,6 @@ import { qeventsRouter } from "./routes/qevents";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
-import { psyappDepsRouter } from "./routes/psyappDeps";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -363,7 +361,6 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Aggregated metrics — admin token required" },
       },
       "/api/pricing/events/recent": {
-        get: { summary: "Last N events — admin token required" },
         get: { summary: "Last N events — admin token required (CSV filters: source,type,tier,industry,sid)" },
       },
       "/api/pricing/events/aggregate": {
@@ -404,9 +401,6 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/pricing/provisioning/healthz": {
         get: { summary: "Provisioning subsystem health: storage path, email mode" },
-      },
-      "/api/pricing/roadmap": {
-        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
       ...FINTECH_OPENAPI_PATHS,
       ...NEW_WAVE_OPENAPI_PATHS,
@@ -451,14 +445,12 @@ app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
-app.use("/api/psyapp-deps", psyappDepsRouter);
 app.use("/api/qmaskcard", qmaskcardRouter);
 app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
 app.use("/api/ztide", ztideRouter);
 app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
-app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth
@@ -498,6 +490,19 @@ app.use("/api/qfusionai", qfusionaiRouter);
 
 // VeilNetX — privacy proxy pre-launch status + waitlist
 app.use("/api/veilnetx", veilnetxRouter);
+
+// ShadowNet — alternative private internet concept simulator.
+// Mounted BEFORE the generic planning stubs loop (which would also create
+// /api/shadownet) so the dedicated endpoints win.
+app.use("/api/shadownet", shadownetRouter);
+app.use("/api/psyapp-deps", psyappDepsRouter);
+app.use("/api/lifebox", lifeboxRouter);
+// Wave 1/3/4 MVPs — mount BEFORE planning stubs so dedicated routes win.
+app.use("/api/mapreality", mapRealityRouter);
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
+app.use("/api/deepsan", deepSanRouter);
+app.use("/api/qpersona", qpersonaRouter);
+app.use("/api/qlife", qlifeRouter);
 
 // MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
 // the generic planning stubs so module-specific paths (e.g.

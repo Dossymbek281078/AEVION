@@ -18,8 +18,20 @@ export interface MusicTrack {
   name: string;
   url: string;        // http(s):// или blob: URL (blob теряется после reload)
   isLocal: boolean;
+  isLibrary?: boolean; // подгружено из /music/index.json — read-only, нельзя удалить
+  artist?: string;
+  license?: string;
   addedAt: number;
 }
+
+type LibraryIndexEntry = {
+  id?: string;
+  name?: string;
+  artist?: string;
+  file?: string;
+  license?: string;
+  duration?: number;
+};
 
 function loadPlaylist(): MusicTrack[] {
   if (typeof window === "undefined") return [];
@@ -28,13 +40,45 @@ function loadPlaylist(): MusicTrack[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as MusicTrack[];
     // blob: URL'ы не выживают после reload — отфильтровываем
-    return Array.isArray(parsed) ? parsed.filter(t => !t.url.startsWith("blob:")) : [];
+    // library треки не сохраняем — они приходят свежими из index.json
+    return Array.isArray(parsed)
+      ? parsed.filter(t => !t.url.startsWith("blob:") && !t.isLibrary)
+      : [];
   } catch { return []; }
 }
 
 function savePlaylist(list: MusicTrack[]) {
   if (typeof window === "undefined") return;
-  try { localStorage.setItem(PLAYLIST_KEY, JSON.stringify(list.filter(t => !t.url.startsWith("blob:")))); } catch {}
+  try {
+    // Сохраняем только user-added (не blob, не library)
+    localStorage.setItem(
+      PLAYLIST_KEY,
+      JSON.stringify(list.filter(t => !t.url.startsWith("blob:") && !t.isLibrary))
+    );
+  } catch {}
+}
+
+async function loadLibraryTracks(): Promise<MusicTrack[]> {
+  try {
+    const res = await fetch("/music/index.json", { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const entries: LibraryIndexEntry[] = Array.isArray(data?.tracks) ? data.tracks : [];
+    return entries
+      .filter(e => e && typeof e.file === "string" && e.file.length > 0)
+      .map((e, i) => ({
+        id: `lib-${e.id || e.file || i}`,
+        name: e.name || e.file || `Track ${i + 1}`,
+        url: `/music/${e.file}`,
+        isLocal: false,
+        isLibrary: true,
+        artist: e.artist || "Library",
+        license: e.license || "",
+        addedAt: 0,
+      }));
+  } catch {
+    return [];
+  }
 }
 
 // Рекомендуемые источники royalty-free музыки — открываются во внешней вкладке,
@@ -62,7 +106,16 @@ export default function MusicPlayer({ open, onClose }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => { setTracks(loadPlaylist()); }, []);
+  useEffect(() => {
+    // Library треки (из /public/music/index.json) идут первыми, затем user-added.
+    let cancelled = false;
+    (async () => {
+      const lib = await loadLibraryTracks();
+      const user = loadPlaylist();
+      if (!cancelled) setTracks([...lib, ...user]);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -108,6 +161,7 @@ export default function MusicPlayer({ open, onClose }: Props) {
 
   const removeTrack = (idx: number) => {
     const t = tracks[idx];
+    if (t.isLibrary) return; // library треки read-only
     if (t.url.startsWith("blob:")) URL.revokeObjectURL(t.url);
     const next = tracks.filter((_, i) => i !== idx);
     setTracks(next); savePlaylist(next);
@@ -260,9 +314,11 @@ export default function MusicPlayer({ open, onClose }: Props) {
                   <button onClick={() => playTrack(idx)} title="Играть" style={{ width: 28, height: 28, border: "none", borderRadius: "50%", background: currentIdx === idx && playing ? "#22c55e" : "#f1f5f9", cursor: "pointer", fontSize: 12 }}>▶</button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
-                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{t.isLocal ? "📁 локальный" : "🔗 URL"}</div>
+                    <div style={{ fontSize: 10, color: "#94a3b8" }}>
+                      {t.isLibrary ? `📦 библиотека${t.artist ? " · " + t.artist : ""}${t.license ? " · " + t.license : ""}` : t.isLocal ? "📁 локальный" : "🔗 URL"}
+                    </div>
                   </div>
-                  <button onClick={() => removeTrack(idx)} title="Удалить" style={{ width: 28, height: 28, border: "1px solid #fecaca", borderRadius: 6, background: "#fef2f2", color: "#b91c1c", cursor: "pointer", fontSize: 12 }}>✕</button>
+                  {!t.isLibrary && <button onClick={() => removeTrack(idx)} title="Удалить" style={{ width: 28, height: 28, border: "1px solid #fecaca", borderRadius: 6, background: "#fef2f2", color: "#b91c1c", cursor: "pointer", fontSize: 12 }}>✕</button>}
                 </div>
               ))}
             </div>

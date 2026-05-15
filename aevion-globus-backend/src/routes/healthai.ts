@@ -4,6 +4,18 @@ import { PrismaClient } from "@prisma/client";
 import { verifyBearerOptional } from "../lib/authJwt";
 
 /**
+ * qstr — нормализует значение из req.params / req.query / req.headers,
+ * которое в типах Express 5 имеет вид `string | string[] | undefined`,
+ * в обычный `string`. Если пришёл массив — берём первый элемент.
+ * Runtime-safe (в отличие от `as string`).
+ */
+function qstr(v: unknown, defaultValue = ""): string {
+  if (Array.isArray(v)) return String(v[0] ?? defaultValue);
+  if (v === undefined || v === null) return defaultValue;
+  return String(v);
+}
+
+/**
  * HealthAI v1 — Personal AI Doctor MVP.
  *
  * In-memory storage. No DB yet, no real LLM yet — symptom advice через
@@ -693,17 +705,17 @@ healthaiRouter.get("/profiles/me", async (req: Request, res: Response) => {
 healthaiRouter.delete("/profile/:id", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth-required" });
-  const profile = await store.getProfile(req.params.id);
+  const profile = await store.getProfile(qstr(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   if (profile.userId !== auth.sub) {
     return res.status(403).json({ error: "not-profile-owner" });
   }
-  const ok = await store.deleteProfile(req.params.id);
+  const ok = await store.deleteProfile(qstr(req.params.id));
   res.json({ ok });
 });
 
 healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {
-  const profile = await store.getProfile(req.params.id);
+  const profile = await store.getProfile(qstr(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   res.json({
     profile,
@@ -775,14 +787,14 @@ healthaiRouter.post("/log", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const cks = await store.getChecks(profileId, 20);
   const lgs = await store.getLogs(profileId, 90);
   res.json({ checks: cks, logs: lgs });
 });
 
 healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const lgs = await store.getLogs(profileId);
   if (lgs.length === 0) {
     return res.json({
@@ -1093,7 +1105,7 @@ healthaiRouter.post("/import", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1240,7 +1252,7 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
  * подсказки. Безопасно: не диагноз, не подменяет врача.
  */
 healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1321,7 +1333,7 @@ healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) 
  * мотивационный (НЕ диагноз). Подсвечивает слабое звено для фокуса.
  */
 healthaiRouter.get("/score/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1490,7 +1502,7 @@ healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const all = await store.getCycles(profileId);
   if (all.length === 0) {
     return res.json({
@@ -1644,7 +1656,7 @@ healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/phq9/:profileId",
   async (req: Request, res: Response) => {
-    const last = PHQ9_LAST.get(req.params.profileId);
+    const last = PHQ9_LAST.get(qstr(req.params.profileId));
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1725,7 +1737,7 @@ healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/gad7/:profileId",
   async (req: Request, res: Response) => {
-    const last = GAD7_LAST.get(req.params.profileId);
+    const last = GAD7_LAST.get(qstr(req.params.profileId));
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1753,7 +1765,7 @@ type GeneratedPlan = {
 };
 
 healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1942,7 +1954,7 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Response) => {
-  const list = await store.listPlanSnapshots(req.params.profileId);
+  const list = await store.listPlanSnapshots(qstr(req.params.profileId));
   res.json({
     snapshots: list.map((s) => ({
       id: s.id,
@@ -1956,14 +1968,14 @@ healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Respons
 });
 
 healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => {
-  const snap = await store.getPlanSnapshot(req.params.id);
+  const snap = await store.getPlanSnapshot(qstr(req.params.id));
   if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
   res.json(snap);
 });
 
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   const cks = await store.getChecks(profileId);
@@ -1997,7 +2009,7 @@ const POP_BASELINE = {
 };
 
 healthaiRouter.get("/population/:profileId", async (req, res) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 

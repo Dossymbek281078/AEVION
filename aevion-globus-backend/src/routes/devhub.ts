@@ -1741,3 +1741,236 @@ devhubRouter.post("/media/tts", async (req, res) => {
     res.status(500).json({ error: e?.message || "TTS generation failed" });
   }
 });
+
+// POST /api/devhub/media/email — send email via Brevo
+devhubRouter.post("/media/email", async (req, res) => {
+  const { to, subject, htmlBody, from } = req.body || {};
+  if (!to || typeof to !== "string") return res.status(400).json({ error: "to (email) required" });
+  if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });
+  if (!htmlBody || typeof htmlBody !== "string") return res.status(400).json({ error: "htmlBody required" });
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRe.test(to.trim())) return res.status(400).json({ error: "invalid recipient email" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "Brevo not configured — set BREVO_API_KEY",
+      setupUrl: "https://app.brevo.com/settings/keys/api",
+    });
+  }
+
+  const senderEmail = (from && typeof from === "string" && emailRe.test(from.trim()))
+    ? from.trim()
+    : (process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app");
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        sender: { email: senderEmail, name: "AEVION DevHub" },
+        to: [{ email: to.trim() }],
+        subject: subject.trim().slice(0, 200),
+        htmlContent: htmlBody.slice(0, 100_000),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Email send failed" });
+  }
+});
+
+// POST /api/devhub/media/payment-link — create Stripe payment link
+devhubRouter.post("/media/payment-link", async (req, res) => {
+  const { name, amountCents, currency = "usd", description } = req.body || {};
+  if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
+  const amt = Number(amountCents);
+  if (!Number.isFinite(amt) || amt < 50) return res.status(400).json({ error: "amountCents must be ≥ 50" });
+
+  const apiKey = process.env.STRIPE_SECRET_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "Stripe not configured — set STRIPE_SECRET_KEY",
+      setupUrl: "https://dashboard.stripe.com/apikeys",
+    });
+  }
+
+  try {
+    // 1. Create product
+    const productResp = await fetch("https://api.stripe.com/v1/products", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        name: name.trim().slice(0, 200),
+        ...(description ? { description: String(description).slice(0, 500) } : {}),
+      }).toString(),
+    });
+    if (!productResp.ok) {
+      const errText = await productResp.text();
+      return res.status(productResp.status).json({ error: `Stripe product error: ${errText.slice(0, 300)}` });
+    }
+    const product = await productResp.json() as { id: string };
+
+    // 2. Create price
+    const priceResp = await fetch("https://api.stripe.com/v1/prices", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        product: product.id,
+        unit_amount: String(Math.round(amt)),
+        currency: String(currency).toLowerCase().slice(0, 3),
+      }).toString(),
+    });
+    if (!priceResp.ok) {
+      const errText = await priceResp.text();
+      return res.status(priceResp.status).json({ error: `Stripe price error: ${errText.slice(0, 300)}` });
+    }
+    const price = await priceResp.json() as { id: string };
+
+    // 3. Create payment link
+    const linkResp = await fetch("https://api.stripe.com/v1/payment_links", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        "line_items[0][price]": price.id,
+        "line_items[0][quantity]": "1",
+      }).toString(),
+    });
+    if (!linkResp.ok) {
+      const errText = await linkResp.text();
+      return res.status(linkResp.status).json({ error: `Stripe link error: ${errText.slice(0, 300)}` });
+    }
+    const link = await linkResp.json() as { id: string; url: string };
+    res.json({ ok: true, paymentLinkId: link.id, url: link.url, productId: product.id, priceId: price.id });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Payment link creation failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
+devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try {
+    project = await dbGetProject(req.params.id);
+  } catch {
+    project = memProjects.get(req.params.id) ?? null;
+  }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+
+  const vercelToken = process.env.VERCEL_API_TOKEN;
+  if (!vercelToken) {
+    return res.status(503).json({
+      error: "Vercel not configured — set VERCEL_API_TOKEN",
+      setupUrl: "https://vercel.com/account/tokens",
+    });
+  }
+
+  const deploymentId = crypto.randomUUID();
+  const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
+
+  const deployment: DevHubDeployment = {
+    id: deploymentId,
+    projectId: project.id,
+    userId,
+    status: "pending",
+    deployUrl: null,
+    buildLog: null,
+    triggeredAt: now(),
+    completedAt: null,
+  };
+  try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+  try {
+    const files = await dbListFiles(project.id);
+    // Vercel Deployments API v13 — inline file payload
+    const vercelFiles = files.map((f) => ({
+      file: f.path,
+      data: Buffer.from(f.content).toString("base64"),
+      encoding: "base64",
+    }));
+
+    const vResp = await fetch("https://api.vercel.com/v13/deployments", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${vercelToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: deploySlug,
+        files: vercelFiles,
+        target: "production",
+        projectSettings: {
+          framework: project.stack === "next" ? "nextjs"
+                   : project.stack === "react" ? "vite"
+                   : project.stack === "express" ? null
+                   : null,
+        },
+      }),
+    });
+
+    if (!vResp.ok) {
+      const errText = await vResp.text();
+      deployment.status = "failed";
+      deployment.buildLog = `Vercel error: ${errText.slice(0, 500)}`;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(vResp.status).json({ ok: false, error: `Vercel deploy error: ${errText.slice(0, 300)}` });
+    }
+
+    const vData = await vResp.json() as { id: string; url: string };
+    const liveUrl = `https://${vData.url}`;
+
+    deployment.status = "building";
+    deployment.deployUrl = liveUrl;
+    deployment.buildLog = `Vercel deployment ${vData.id} created`;
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+
+    // After 5s, mark live + update project
+    setTimeout(async () => {
+      const d = memDeployments.get(deployment.id) ?? deployment;
+      d.status = "live";
+      d.completedAt = now();
+      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+      if (project) {
+        project.status = "live";
+        project.deployUrl = liveUrl;
+        project.updatedAt = now();
+        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+      }
+    }, 5000);
+
+    return res.json({
+      ok: true,
+      deploymentId,
+      vercelDeploymentId: vData.id,
+      deployUrl: liveUrl,
+      provider: "vercel",
+      message: "Vercel deployment started",
+    });
+  } catch (e: any) {
+    deployment.status = "failed";
+    deployment.buildLog = e?.message || "deploy failed";
+    deployment.completedAt = now();
+    try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+    return res.status(500).json({ ok: false, error: e?.message || "Vercel deploy failed" });
+  }
+});

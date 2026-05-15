@@ -966,3 +966,221 @@ describe("POST /api/devhub/media/upload-image (Cloudflare Images)", () => {
     expect(r.body.imageId).toBe("cf-img-b64");
   });
 });
+
+afterEach(() => {
+  for (const key of ["DEEPL_API_KEY"]) delete process.env[key];
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 17. DeepL translate
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/translate (DeepL)", () => {
+  test("503 when DEEPL_API_KEY missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/translate")
+      .send({ text: "hello", targetLang: "RU" });
+    expect(r.status).toBe(503);
+  });
+
+  test("400 on missing fields", async () => {
+    process.env.DEEPL_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/translate")
+      .send({ text: "hello" });
+    expect(r.status).toBe(400);
+  });
+
+  test("uses free endpoint when key ends with :fx", async () => {
+    process.env.DEEPL_API_KEY = "abc-fake:fx";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      translations: [{ text: "привет", detected_source_language: "EN" }],
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/translate")
+      .send({ text: "hello", targetLang: "ru" });
+    expect(r.status).toBe(200);
+    expect(r.body.text).toBe("привет");
+    expect(r.body.detectedSource).toBe("EN");
+    expect(r.body.targetLang).toBe("RU");
+    expect(fetchMock.mock.calls[0][0]).toContain("api-free.deepl.com");
+  });
+
+  test("uses pro endpoint for non-:fx key", async () => {
+    process.env.DEEPL_API_KEY = "pro-key-no-suffix";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      translations: [{ text: "Bonjour", detected_source_language: "EN" }],
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/translate")
+      .send({ text: "Hello", targetLang: "FR" });
+    expect(r.status).toBe(200);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.deepl.com/v2/translate");
+  });
+});
+
+describe("POST /api/devhub/projects/:id/files/translate", () => {
+  async function createProjectWithFile(app: express.Express, path: string, content: string) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const id = cr.body.project.id;
+    await request(app).put(`/api/devhub/projects/${id}/file?path=${encodeURIComponent(path)}`)
+      .send({ content, language: "markdown" });
+    return id;
+  }
+
+  test("404 when file not in project", async () => {
+    process.env.DEEPL_API_KEY = "fake";
+    const app = makeApp();
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T" });
+    const r = await request(app)
+      .post(`/api/devhub/projects/${cr.body.project.id}/files/translate`)
+      .send({ path: "missing.md", targetLang: "RU" });
+    expect(r.status).toBe(404);
+  });
+
+  test("translates file + saves with lang suffix", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    const app = makeApp();
+    const id = await createProjectWithFile(app, "README.md", "Hello world");
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      translations: [{ text: "Привет мир" }],
+    }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/files/translate`)
+      .send({ path: "README.md", targetLang: "ru" });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.path).toBe("README.ru.md");
+    expect(r.body.targetLang).toBe("RU");
+  });
+
+  test("uses custom saveAs path when provided", async () => {
+    process.env.DEEPL_API_KEY = "key:fx";
+    const app = makeApp();
+    const id = await createProjectWithFile(app, "docs/intro.md", "Hello");
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      translations: [{ text: "Hallo" }],
+    }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/files/translate`)
+      .send({ path: "docs/intro.md", targetLang: "DE", saveAs: "docs/de/intro.md" });
+    expect(r.status).toBe(200);
+    expect(r.body.path).toBe("docs/de/intro.md");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 18. Brevo email templates (list + send by template)
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("GET /api/devhub/media/email-templates (Brevo)", () => {
+  test("503 when BREVO_API_KEY missing", async () => {
+    const r = await request(makeApp()).get("/api/devhub/media/email-templates");
+    expect(r.status).toBe(503);
+  });
+
+  test("lists templates with limit/offset", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      count: 3,
+      templates: [
+        { id: 1, name: "Welcome", subject: "Welcome!", isActive: true, createdAt: "2026-01-01T00:00:00Z" },
+        { id: 2, name: "Reset", subject: "Reset password", isActive: true, createdAt: "2026-01-02T00:00:00Z" },
+      ],
+    }));
+
+    const r = await request(makeApp()).get("/api/devhub/media/email-templates?limit=10&offset=0");
+    expect(r.status).toBe(200);
+    expect(r.body.total).toBe(3);
+    expect(r.body.templates).toHaveLength(2);
+    expect(r.body.templates[0]).toMatchObject({ id: 1, name: "Welcome", subject: "Welcome!" });
+    expect(fetchMock.mock.calls[0][0]).toContain("/v3/smtp/templates?limit=10&offset=0");
+  });
+});
+
+describe("POST /api/devhub/media/email-template-send (Brevo)", () => {
+  test("400 missing templateId", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-send")
+      .send({ to: "x@y.com" });
+    expect(r.status).toBe(400);
+  });
+
+  test("400 invalid email", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-send")
+      .send({ templateId: 1, to: "not-email" });
+    expect(r.status).toBe(400);
+  });
+
+  test("sends transac email by templateId with params", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, { messageId: "mid-456" }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/email-template-send")
+      .send({ templateId: 7, to: "user@example.com", params: { name: "Alice", code: "1234" } });
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.messageId).toBe("mid-456");
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.templateId).toBe(7);
+    expect(body.to[0].email).toBe("user@example.com");
+    expect(body.params).toEqual({ name: "Alice", code: "1234" });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 19. Agent workflow auto-uploads images to Cloudflare when env set
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("Agent workflow image step → auto-upload to Cloudflare", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("when CF env set, image step saves permanent CDN URL", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/temp.png" }] }))
+      .mockResolvedValueOnce(jsonResp(200, {
+        result: { id: "cf-img-1", variants: ["https://imagedelivery.net/x/cf-img-1/public"], uploaded: "now" },
+      }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "image", prompt: "hero", saveAs: "public/hero.url.txt" }] });
+    expect(r.status).toBe(200);
+    expect(r.body.results[0].ok).toBe(true);
+    expect(r.body.results[0].output.url).toBe("https://imagedelivery.net/x/cf-img-1/public");
+  });
+
+  test("when CF env missing, image step keeps OAI URL", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      data: [{ url: "https://oai.example/temp.png" }],
+    }));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "image", prompt: "hero" }] });
+    expect(r.status).toBe(200);
+    expect(r.body.results[0].output.url).toBe("https://oai.example/temp.png");
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no CF call
+  });
+});

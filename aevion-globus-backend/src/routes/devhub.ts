@@ -2294,8 +2294,11 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
         });
         if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
         const d = await dResp.json() as { data: Array<{ url: string }> };
-        const url = d.data?.[0]?.url;
-        if (!url) throw new Error("no image url returned");
+        const oaiUrl = d.data?.[0]?.url;
+        if (!oaiUrl) throw new Error("no image url returned");
+        // Auto-upload to Cloudflare Images for permanent URL (if env set)
+        const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
+        const url = permanentUrl || oaiUrl;
         const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
         const f: DevHubFile = {
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
@@ -2471,8 +2474,11 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         });
         if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
         const d = await dResp.json() as { data: Array<{ url: string }> };
-        const url = d.data?.[0]?.url;
-        if (!url) throw new Error("no image url returned");
+        const oaiUrl = d.data?.[0]?.url;
+        if (!oaiUrl) throw new Error("no image url returned");
+        // Auto-upload to Cloudflare Images for permanent URL (if env set)
+        const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
+        const url = permanentUrl || oaiUrl;
         const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
         const f: DevHubFile = {
           id: crypto.randomUUID(), projectId: project.id, path: savedAs,
@@ -2684,6 +2690,202 @@ devhubRouter.post("/media/upload-image", async (req, res) => {
     });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Image upload failed" });
+  }
+});
+
+// ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
+async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | null> {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) return null;
+  try {
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="url"\r\n\r\n${sourceUrl}\r\n--${boundary}--\r\n`, "utf8"));
+    const body = Buffer.concat(parts);
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) return null;
+    const data = await r.json() as { result?: { variants?: string[] } };
+    return data.result?.variants?.[0] ?? null;
+  } catch { return null; }
+}
+
+// POST /api/devhub/media/translate — DeepL text translation
+devhubRouter.post("/media/translate", async (req, res) => {
+  const { text, targetLang, sourceLang, formality } = req.body || {};
+  if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
+  if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
+  if (text.length > 128_000) return res.status(400).json({ error: "text too long (max 128k chars)" });
+
+  const apiKey = process.env.DEEPL_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "DeepL not configured — set DEEPL_API_KEY",
+      setupUrl: "https://www.deepl.com/account/summary",
+    });
+  }
+  const endpoint = apiKey.endsWith(":fx")
+    ? "https://api-free.deepl.com/v2/translate"
+    : "https://api.deepl.com/v2/translate";
+
+  try {
+    const params = new URLSearchParams();
+    params.append("text", text);
+    params.append("target_lang", targetLang.toUpperCase().slice(0, 5));
+    if (sourceLang) params.append("source_lang", String(sourceLang).toUpperCase().slice(0, 5));
+    if (formality && ["default", "more", "less", "prefer_more", "prefer_less"].includes(String(formality))) {
+      params.append("formality", String(formality));
+    }
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `DeepL-Auth-Key ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
+    const first = data.translations?.[0];
+    if (!first) return res.status(500).json({ error: "no translation returned" });
+    res.json({
+      ok: true,
+      text: first.text,
+      detectedSource: first.detected_source_language,
+      targetLang: targetLang.toUpperCase(),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Translation failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
+devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { path, targetLang, saveAs } = req.body || {};
+  if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
+  if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required" });
+
+  const apiKey = process.env.DEEPL_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
+
+  let file: DevHubFile | null;
+  try { file = await dbGetFile(project.id, path); }
+  catch { file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path) ?? null; }
+  if (!file) return res.status(404).json({ error: "file not found in project" });
+
+  const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+  try {
+    const params = new URLSearchParams();
+    params.append("text", file.content);
+    params.append("target_lang", targetLang.toUpperCase().slice(0, 5));
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { translations: Array<{ text: string }> };
+    const translated = data.translations?.[0]?.text;
+    if (!translated) return res.status(500).json({ error: "no translation returned" });
+
+    const lang = targetLang.toLowerCase();
+    const newPath = String(saveAs || path.replace(/(\.[^./]+)$/, `.${lang}$1`) || `${path}.${lang}`).slice(0, 200);
+    const out: DevHubFile = {
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      path: newPath,
+      content: translated,
+      language: file.language,
+      updatedAt: now(),
+    };
+    try { await dbUpsertFile(out); }
+    catch {
+      const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === newPath);
+      if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
+      else memFiles.set(out.id, out);
+    }
+    res.json({ ok: true, path: newPath, bytes: translated.length, targetLang: targetLang.toUpperCase() });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "File translation failed" });
+  }
+});
+
+// GET /api/devhub/media/email-templates — list Brevo SMTP templates
+devhubRouter.get("/media/email-templates", async (req, res) => {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  try {
+    const r = await fetch(`https://api.brevo.com/v3/smtp/templates?limit=${limit}&offset=${offset}`, {
+      headers: { "api-key": apiKey, Accept: "application/json" },
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { templates?: Array<{ id: number; name: string; subject: string; isActive: boolean; createdAt: string }>; count?: number };
+    res.json({
+      ok: true,
+      total: data.count ?? 0,
+      templates: (data.templates || []).map((t) => ({
+        id: t.id, name: t.name, subject: t.subject, isActive: t.isActive, createdAt: t.createdAt,
+      })),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Templates fetch failed" });
+  }
+});
+
+// POST /api/devhub/media/email-template-send — send transac email by template ID with params
+devhubRouter.post("/media/email-template-send", async (req, res) => {
+  const { templateId, to, params } = req.body || {};
+  if (!templateId || (typeof templateId !== "number" && typeof templateId !== "string")) {
+    return res.status(400).json({ error: "templateId required" });
+  }
+  if (!to || typeof to !== "string") return res.status(400).json({ error: "to (email) required" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())) return res.status(400).json({ error: "invalid recipient email" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        templateId: Number(templateId) || templateId,
+        to: [{ email: to.trim() }],
+        ...(params && typeof params === "object" ? { params } : {}),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Template send failed" });
   }
 });
 

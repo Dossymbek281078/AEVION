@@ -288,7 +288,32 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "payment" | "sms" | "whatsapp">("tts");
+  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "payment" | "sms" | "whatsapp" | "translate">("tts");
+
+  // DeepL translate state
+  const [trText, setTrText] = useState("");
+  const [trTarget, setTrTarget] = useState("RU");
+  const [trSource, setTrSource] = useState("");
+  const [trLoading, setTrLoading] = useState(false);
+  const [trResult, setTrResult] = useState<{ text: string; detectedSource: string } | null>(null);
+  const [trError, setTrError] = useState<string | null>(null);
+  // File translate
+  const [trFilePath, setTrFilePath] = useState("");
+  const [trFileLang, setTrFileLang] = useState("RU");
+  const [trFileLoading, setTrFileLoading] = useState(false);
+  const [trFileMsg, setTrFileMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Brevo email templates state
+  const [emailTemplates, setEmailTemplates] = useState<Array<{ id: number; name: string; subject: string; isActive: boolean }>>([]);
+  const [emailTemplatesLoading, setEmailTemplatesLoading] = useState(false);
+  const [emailTemplatesError, setEmailTemplatesError] = useState<string | null>(null);
+  const [tplSendTo, setTplSendTo] = useState("");
+  const [tplSendParams, setTplSendParams] = useState("");
+  const [tplSendingId, setTplSendingId] = useState<number | null>(null);
+  const [tplSendMsg, setTplSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // TTS voice preview state
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
 
   // SMS state
   const [smsRecipient, setSmsRecipient] = useState("");
@@ -1205,6 +1230,151 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── DeepL translate ──────────────────────────────────────────────────────────
+
+  const translateText = async () => {
+    if (!trText.trim() || !trTarget.trim()) return;
+    setTrLoading(true);
+    setTrError(null);
+    setTrResult(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/translate"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: trText,
+          targetLang: trTarget,
+          ...(trSource.trim() ? { sourceLang: trSource.trim() } : {}),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTrError(d.error || "Translation failed");
+      } else {
+        setTrResult({ text: d.text, detectedSource: d.detectedSource });
+      }
+    } catch (e: any) {
+      setTrError(e?.message || "Translation failed");
+    } finally {
+      setTrLoading(false);
+    }
+  };
+
+  const translateProjectFile = async () => {
+    if (!project || !trFilePath.trim() || !trFileLang.trim()) return;
+    setTrFileLoading(true);
+    setTrFileMsg(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files/translate`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: trFilePath.trim(), targetLang: trFileLang.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTrFileMsg({ ok: false, text: d.error || "Translation failed" });
+      } else {
+        setTrFileMsg({ ok: true, text: `Translated to ${d.path} (${d.bytes} bytes)` });
+        // Reload file tree
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json();
+        setFiles(listData.files || []);
+      }
+    } catch (e: any) {
+      setTrFileMsg({ ok: false, text: e?.message || "Translation failed" });
+    } finally {
+      setTrFileLoading(false);
+    }
+  };
+
+  // ── Brevo email templates ────────────────────────────────────────────────────
+
+  const loadEmailTemplates = useCallback(async () => {
+    setEmailTemplatesLoading(true);
+    setEmailTemplatesError(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setEmailTemplatesError(d.error || "Failed to load templates");
+        setEmailTemplates([]);
+      } else {
+        setEmailTemplates(d.templates || []);
+      }
+    } catch (e: any) {
+      setEmailTemplatesError(e?.message || "Failed to load templates");
+    } finally {
+      setEmailTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "media" && mediaTab === "templates" && emailTemplates.length === 0 && !emailTemplatesError) {
+      loadEmailTemplates();
+    }
+  }, [activeTab, mediaTab, emailTemplates.length, emailTemplatesError, loadEmailTemplates]);
+
+  const sendByTemplate = async (templateId: number) => {
+    if (!tplSendTo.trim()) {
+      setTplSendMsg({ ok: false, text: "Recipient email required" });
+      return;
+    }
+    setTplSendingId(templateId);
+    setTplSendMsg(null);
+    try {
+      let params: any = undefined;
+      if (tplSendParams.trim()) {
+        try { params = JSON.parse(tplSendParams); } catch {
+          setTplSendMsg({ ok: false, text: "params must be valid JSON" });
+          setTplSendingId(null);
+          return;
+        }
+      }
+      const r = await fetch(apiUrl("/api/devhub/media/email-template-send"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId, to: tplSendTo.trim(), params }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTplSendMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setTplSendMsg({ ok: true, text: `Sent template #${templateId} (msg ${d.messageId})` });
+      }
+    } catch (e: any) {
+      setTplSendMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setTplSendingId(null);
+    }
+  };
+
+  // ── TTS Voice preview ────────────────────────────────────────────────────────
+
+  const previewVoice = async (voice: string) => {
+    if (previewingVoice) return;
+    setPreviewingVoice(voice);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/tts"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Hello! This is what I sound like.", voice }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error || `Preview error ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch (e: any) {
+      showToast(e?.message || "Preview failed", "error");
+    } finally {
+      setTimeout(() => setPreviewingVoice(null), 2500);
+    }
+  };
+
   // ── Cloudflare Images upload (call from DALL-E result) ───────────────────────
 
   const uploadImageToCloudflare = async (sourceUrl: string) => {
@@ -1878,7 +2048,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "email", "payment"] as const).map((sub) => (
+                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "email", "templates", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -1898,7 +2068,11 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                         : sub === "clone" ? "Clone"
                         : sub === "stt" ? "STT"
                         : sub === "drive" ? "Drive"
+                        : sub === "translate" ? "DeepL"
                         : sub === "email" ? "Email"
+                        : sub === "templates" ? "Templates"
+                        : sub === "sms" ? "SMS"
+                        : sub === "whatsapp" ? "WhatsApp"
                         : "Pay"}
                       </button>
                     ))}
@@ -1909,15 +2083,31 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice</label>
-                        <select
-                          value={mediaTtsVoice}
-                          onChange={(e) => setMediaTtsVoice(e.target.value)}
-                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
-                        >
-                          {["Rachel", "Adam", "Antoni", "Arnold", "Bella", "Domi", "Elli", "Josh", "Sam"].map((v) => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <select
+                            value={mediaTtsVoice}
+                            onChange={(e) => setMediaTtsVoice(e.target.value)}
+                            style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                          >
+                            {["Rachel", "Adam", "Antoni", "Arnold", "Bella", "Domi", "Elli", "Josh", "Sam"].map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => previewVoice(mediaTtsVoice)}
+                            disabled={!!previewingVoice}
+                            title="Preview voice with a short sample"
+                            style={{
+                              padding: "7px 12px", background: previewingVoice === mediaTtsVoice ? "#a5b4fc" : "#7c3aed",
+                              color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
+                              cursor: previewingVoice ? "not-allowed" : "pointer",
+                              display: "flex", alignItems: "center", gap: 4,
+                            }}
+                          >
+                            {previewingVoice === mediaTtsVoice ? "🔊" : "▶ Preview"}
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Text</label>
@@ -2314,6 +2504,164 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>. Min amount 50 cents (or equivalent).
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DeepL Translate */}
+                  {mediaTab === "translate" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Translate text</div>
+                      <div>
+                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Text to translate..."
+                          rows={4}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Source (auto if empty)</label>
+                          <select value={trSource} onChange={(e) => setTrSource(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
+                            <option value="">Auto-detect</option>
+                            {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Target</label>
+                          <select value={trTarget} onChange={(e) => setTrTarget(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
+                            {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      {trError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {trError}
+                        </div>
+                      )}
+                      {trResult && (
+                        <div style={{ padding: "10px 12px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 11, color: "#0d9488", fontWeight: 700 }}>
+                            {trResult.detectedSource} → {trTarget}
+                          </div>
+                          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{trResult.text}</div>
+                          <button onClick={() => navigator.clipboard.writeText(trResult.text)}
+                            style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy</button>
+                        </div>
+                      )}
+                      <button
+                        onClick={translateText}
+                        disabled={trLoading || !trText.trim()}
+                        style={{
+                          padding: "9px 18px", background: trLoading ? "#a5b4fc" : "#0066ff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (trLoading || !trText.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {trLoading ? "Translating..." : "Translate"}
+                      </button>
+
+                      {/* File translate */}
+                      <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Translate project file</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <select value={trFilePath} onChange={(e) => setTrFilePath(e.target.value)}
+                            style={{ flex: 2, minWidth: 160, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace" }}>
+                            <option value="">— select file —</option>
+                            {files.map((f) => <option key={f.path} value={f.path}>{f.path}</option>)}
+                          </select>
+                          <select value={trFileLang} onChange={(e) => setTrFileLang(e.target.value)}
+                            style={{ flex: 1, minWidth: 80, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12 }}>
+                            {["RU", "EN", "DE", "FR", "ES", "IT", "JA", "ZH", "UK", "TR"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <button
+                            onClick={translateProjectFile}
+                            disabled={trFileLoading || !trFilePath.trim()}
+                            style={{ padding: "7px 14px", background: trFileLoading ? "#a5b4fc" : "#0066ff",
+                              color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
+                              cursor: (trFileLoading || !trFilePath.trim()) ? "not-allowed" : "pointer" }}>
+                            {trFileLoading ? "..." : "Translate file"}
+                          </button>
+                        </div>
+                        {trFileMsg && (
+                          <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 7, fontSize: 12,
+                            background: trFileMsg.ok ? "#d1fae5" : "#fee2e2",
+                            color: trFileMsg.ok ? "#065f46" : "#991b1b" }}>
+                            {trFileMsg.text}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code> (use :fx suffix for Free tier)
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo Email Templates */}
+                  {mediaTab === "templates" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Brevo SMTP templates</div>
+                        <button onClick={loadEmailTemplates}
+                          style={{ padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          Refresh
+                        </button>
+                      </div>
+                      {emailTemplatesError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {emailTemplatesError}
+                        </div>
+                      )}
+                      {emailTemplatesLoading ? (
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading templates...</div>
+                      ) : emailTemplates.length === 0 && !emailTemplatesError ? (
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>No templates found</div>
+                      ) : (
+                        <>
+                          {/* Send config */}
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <input type="email" value={tplSendTo} onChange={(e) => setTplSendTo(e.target.value)} placeholder="recipient@example.com"
+                              style={{ flex: 2, minWidth: 160, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, boxSizing: "border-box" }} />
+                            <input value={tplSendParams} onChange={(e) => setTplSendParams(e.target.value)} placeholder='Params JSON {"name":"Alice"}'
+                              style={{ flex: 3, minWidth: 200, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box" }} />
+                          </div>
+                          {tplSendMsg && (
+                            <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 12,
+                              background: tplSendMsg.ok ? "#d1fae5" : "#fee2e2",
+                              color: tplSendMsg.ok ? "#065f46" : "#991b1b" }}>
+                              {tplSendMsg.text}
+                            </div>
+                          )}
+                          {/* Templates list */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                            {emailTemplates.map((t) => (
+                              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#f8fafc", borderRadius: 7 }}>
+                                <span style={{ width: 36, height: 36, borderRadius: 6, background: t.isActive ? "#d1fae5" : "#f1f5f9",
+                                  color: t.isActive ? "#065f46" : "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 12, fontWeight: 700 }}>#{t.id}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                                  <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.subject}</div>
+                                </div>
+                                <button
+                                  onClick={() => sendByTemplate(t.id)}
+                                  disabled={tplSendingId === t.id || !tplSendTo.trim()}
+                                  style={{ padding: "5px 10px",
+                                    background: tplSendingId === t.id ? "#fde68a" : (!tplSendTo.trim() ? "#e2e8f0" : "#0d9488"),
+                                    color: !tplSendTo.trim() ? "#94a3b8" : "#fff",
+                                    border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700,
+                                    cursor: (tplSendingId === t.id || !tplSendTo.trim()) ? "not-allowed" : "pointer" }}>
+                                  {tplSendingId === t.id ? "..." : "Send"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Manage templates at <a href="https://my.brevo.com/templates" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>my.brevo.com/templates</a>. Set `params` with template variables.
                       </div>
                     </div>
                   )}

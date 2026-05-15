@@ -298,6 +298,11 @@ const MODULES: Module[] = [
   { id: "mining-quarry",          category: "special",   href: "/smeta-trainer/drawings-practice/mining-quarry",          icon: "⛏️", title: "Горнодобывающие работы",          subtitle: "Карьеры, ЭКГ-12/15/20, БелАЗ 75710, рекультивация СНиП 3.06-12",  level: "L5", exercises: 4,  color: "stone"   },
   { id: "caisson-works",          category: "special",   href: "/smeta-trainer/drawings-practice/caisson-works",          icon: "🌊", title: "Кессонные работы",                subtitle: "Опускные колодцы, шпунт Larssen, ВПТ, ЭСН Сб.45 водолазы",        level: "L5", exercises: 4,  color: "blue"    },
   { id: "zoo-aquarium",           category: "practice",  href: "/smeta-trainer/drawings-practice/zoo-aquarium",           icon: "🐅", title: "Зоопарки и аквариумы",            subtitle: "EAZA/WAZA нормы, акрил 100-300 мм, LSS, климат-зоны",            level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── Спорт, атом, берегоукрепление ──
+  { id: "sports-fields",          category: "practice",  href: "/smeta-trainer/drawings-practice/sports-fields",          icon: "⚽", title: "Спортивные поля и гольф",         subtitle: "FIFA 105×68, IAAF Mondotrack, ITF корты, USGA 18 лунок",          level: "L4", exercises: 4,  color: "emerald" },
+  { id: "nuclear-radiation",      category: "special",   href: "/smeta-trainer/drawings-practice/nuclear-radiation",      icon: "☢️", title: "Атомные и радиационные объекты", subtitle: "АЭС Балхаш ВВЭР-1200, бункеры LINAC, КАЭН РК, НРБ-99",          level: "L5", exercises: 4,  color: "red"     },
+  { id: "coast-protection",       category: "special",   href: "/smeta-trainer/drawings-practice/coast-protection",       icon: "🌊", title: "Берегоукрепление и намыв",        subtitle: "Тетраподы 2-25 т, габионы Maccaferri, землесос, Каспий",          level: "L5", exercises: 4,  color: "cyan"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

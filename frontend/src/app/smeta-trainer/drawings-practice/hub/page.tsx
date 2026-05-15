@@ -358,6 +358,11 @@ const MODULES: Module[] = [
   { id: "arena-football",         category: "practice",  href: "/smeta-trainer/drawings-practice/arena-football",         icon: "⚽", title: "Футбольные арены",                subtitle: "Astana Arena 30 000 мест, UEFA Cat. 4, ретракт. крыша ПТФЭ, освещ. 2400 лк EBU HDR", level: "L5", exercises: 4,  color: "orange"  },
   { id: "museum-archives",        category: "practice",  href: "/smeta-trainer/drawings-practice/museum-archives",        icon: "🏛️", title: "Музеи и фондохранилища",          subtitle: "Нац. музей РК 74 000 м², +18°C/RH 50%, HEPA F9, Inergen IG-541, ICOM/ISO 11799", level: "L5", exercises: 4,  color: "fuchsia" },
   { id: "observatory-research",   category: "practice",  href: "/smeta-trainer/drawings-practice/observatory-research",   icon: "🔭", title: "Обсерватории и научные станции",  subtitle: "Тянь-Шань Цейсс-1000 d=1 м, купол Ø15 м, раздел. фундамент, IDA Dark Sky",        level: "L5", exercises: 4,  color: "blue"    },
+
+  // ── Экстремальные климатические зоны ──
+  { id: "permafrost-objects",     category: "special",   href: "/smeta-trainer/drawings-practice/permafrost-objects",     icon: "❄️", title: "Объекты на вечной мерзлоте",      subtitle: "Сваи Long Yang, термосифоны СВВ-25 (CO₂), проветр. подполье H=1.5 м, СНиП 2.02.04", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "desert-objects",         category: "special",   href: "/smeta-trainer/drawings-practice/desert-objects",         icon: "🏜️", title: "Объекты в пустынной зоне",        subtitle: "Кызылкум +45°C, «русло-катушка» водосбор, Cool Roof, защита от «Афганец», СП РК 4.04", level: "L5", exercises: 4,  color: "yellow"  },
+  { id: "mountain-resort",        category: "special",   href: "/smeta-trainer/drawings-practice/mountain-resort",        icon: "🎿", title: "Горнолыжные курорты",             subtitle: "Чимбулак 6-кр. Doppelmayr D-LINE, TechnoAlpin TR-V, галереи Daher, EN 1907",       level: "L5", exercises: 4,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

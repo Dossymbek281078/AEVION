@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { catalog } from "@/lib/aevionCatalog";
 
 const CATEGORIES = ["All", "Tutorial", "Music Video", "Short Film", "Documentary", "Other"];
 
@@ -19,9 +20,15 @@ export default function QMediaVideosPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", url: "", thumbnailUrl: "", category: "other" });
 
+  // v0.8: load videos via @aevion/catalog-client SDK (cat.qmedia.videos).
   useEffect(() => {
-    const c = category === "All" ? "" : category.toLowerCase().replace(/ /g, "-");
-    fetch(apiUrl(`/api/qmedia/videos?limit=50${c ? `&category=${c}` : ""}`)).then(r => r.json()).then(d => { if (d.items) setVideos(d.items); }).catch(() => {});
+    const c = category === "All" ? undefined : category.toLowerCase().replace(/ /g, "-");
+    catalog.qmedia
+      .videos({ limit: 50, category: c })
+      .then((d) => {
+        if (d.items) setVideos(d.items);
+      })
+      .catch(() => {});
   }, [category]);
 
   const addVideo = async () => {

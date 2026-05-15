@@ -288,7 +288,34 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "payment" | "sms" | "whatsapp" | "translate">("tts");
+  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("tts");
+
+  // DeepL bulk translate state (N files × M langs)
+  const BULK_LANG_OPTIONS = [
+    { code: "RU", name: "Русский" }, { code: "EN", name: "English" }, { code: "KK", name: "Қазақша" },
+    { code: "DE", name: "Deutsch" }, { code: "FR", name: "Français" }, { code: "ES", name: "Español" },
+    { code: "PT", name: "Português" }, { code: "IT", name: "Italiano" }, { code: "PL", name: "Polski" },
+    { code: "TR", name: "Türkçe" }, { code: "JA", name: "日本語" }, { code: "ZH", name: "中文" },
+  ];
+  const [bulkPaths, setBulkPaths] = useState<string[]>([]);
+  const [bulkLangs, setBulkLangs] = useState<string[]>(["RU", "EN"]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkResults, setBulkResults] = useState<Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; error?: string }>>([]);
+  const [bulkSummary, setBulkSummary] = useState<{ total: number; successCount: number; failureCount: number } | null>(null);
+
+  // Email template builder state
+  const [tplBuilderName, setTplBuilderName] = useState("");
+  const [tplBuilderSubject, setTplBuilderSubject] = useState("");
+  const [tplBuilderHtml, setTplBuilderHtml] = useState("<h1>Hello {{params.name}}</h1>\n<p>Welcome to AEVION.</p>");
+  const [tplBuilderSender, setTplBuilderSender] = useState("");
+  const [tplBuilderLoading, setTplBuilderLoading] = useState(false);
+  const [tplBuilderMsg, setTplBuilderMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // ZIP import state
+  const [zipImporting, setZipImporting] = useState(false);
+  const [zipOverwrite, setZipOverwrite] = useState(false);
+  const [zipResult, setZipResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
 
   // DeepL translate state
   const [trText, setTrText] = useState("");
@@ -1348,6 +1375,143 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── DeepL bulk translate ─────────────────────────────────────────────────────
+
+  const runBulkTranslate = async () => {
+    if (!project) return;
+    if (bulkPaths.length === 0) {
+      showToast("Select at least one file", "error");
+      return;
+    }
+    if (bulkLangs.length === 0) {
+      showToast("Select at least one target language", "error");
+      return;
+    }
+    if (bulkPaths.length * bulkLangs.length > 50) {
+      showToast("Max 50 translations per batch (files × langs)", "error");
+      return;
+    }
+    setBulkLoading(true);
+    setBulkResults([]);
+    setBulkSummary(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files/translate-bulk`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: bulkPaths, targetLangs: bulkLangs }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showToast(d.error || "Bulk translate failed", "error");
+        return;
+      }
+      setBulkResults(d.results || []);
+      setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
+      if (d.successCount > 0) {
+        showToast(`Translated ${d.successCount} / ${d.total}`, "success");
+        await fetchProject();
+      } else {
+        showToast(`All ${d.total} translations failed`, "error");
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Bulk translate failed", "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const toggleBulkPath = (path: string) => {
+    setBulkPaths((prev) => prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]);
+  };
+  const toggleBulkLang = (lang: string) => {
+    setBulkLangs((prev) => prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]);
+  };
+
+  // ── Brevo template builder (create new SMTP template) ────────────────────────
+
+  const createEmailTemplate = async () => {
+    if (!tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()) {
+      setTplBuilderMsg({ ok: false, text: "Name, subject and HTML body are all required" });
+      return;
+    }
+    setTplBuilderLoading(true);
+    setTplBuilderMsg(null);
+    try {
+      const body: Record<string, unknown> = {
+        name: tplBuilderName.trim(),
+        subject: tplBuilderSubject.trim(),
+        htmlContent: tplBuilderHtml,
+      };
+      if (tplBuilderSender.trim()) body.senderEmail = tplBuilderSender.trim();
+      const r = await fetch(apiUrl("/api/devhub/media/email-template-create"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTplBuilderMsg({ ok: false, text: d.error || "Template create failed" });
+        return;
+      }
+      setTplBuilderMsg({ ok: true, text: `Created template #${d.id} — "${d.name}"` });
+      // Refresh templates list if user already opened it
+      if (emailTemplates.length > 0) await loadEmailTemplates();
+    } catch (e: any) {
+      setTplBuilderMsg({ ok: false, text: e?.message || "Template create failed" });
+    } finally {
+      setTplBuilderLoading(false);
+    }
+  };
+
+  // ── ZIP import (symmetric to /export) ────────────────────────────────────────
+
+  const importZipFile = async (file: File) => {
+    if (!project) return;
+    if (file.size > 50 * 1024 * 1024) {
+      setZipResult({ ok: false, text: "ZIP too large (max 50 MB)" });
+      return;
+    }
+    setZipImporting(true);
+    setZipResult(null);
+    try {
+      const buf = await file.arrayBuffer();
+      // Convert to base64 without blowing the stack on large files
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+      }
+      const base64Zip = btoa(binary);
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/import-zip`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64Zip, overwrite: zipOverwrite }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setZipResult({ ok: false, text: d.error || "Import failed" });
+        return;
+      }
+      setZipResult({
+        ok: true,
+        text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
+      });
+      showToast(`Imported ${d.importedCount} file(s) from ${file.name}`, "success");
+      await fetchProject();
+    } catch (e: any) {
+      setZipResult({ ok: false, text: e?.message || "Import failed" });
+    } finally {
+      setZipImporting(false);
+      if (zipInputRef.current) zipInputRef.current.value = "";
+    }
+  };
+
+  const onZipInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) importZipFile(f);
+  };
+
   // ── TTS Voice preview ────────────────────────────────────────────────────────
 
   const previewVoice = async (voice: string) => {
@@ -1692,12 +1856,37 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
         <div style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Files</span>
-            <button
-              onClick={() => setShowNewFile(true)}
-              style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
-              title="New file"
-            >+</button>
+            <div style={{ display: "flex", gap: 4 }}>
+              <input ref={zipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }} onChange={onZipInputChange} />
+              <button
+                onClick={() => zipInputRef.current?.click()}
+                disabled={zipImporting || !project}
+                style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
+                title="Import ZIP (symmetric to export)"
+              >{zipImporting ? "..." : "📦"}</button>
+              <button
+                onClick={() => setShowNewFile(true)}
+                style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+                title="New file"
+              >+</button>
+            </div>
           </div>
+          {zipResult && (
+            <div style={{
+              padding: "6px 12px", fontSize: 11, lineHeight: 1.4,
+              background: zipResult.ok ? "#d1fae5" : "#fee2e2",
+              color: zipResult.ok ? "#065f46" : "#991b1b",
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6,
+            }}>
+              <span>{zipResult.text}</span>
+              <button onClick={() => setZipResult(null)}
+                style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontWeight: 700, fontSize: 14, lineHeight: 1 }}>×</button>
+            </div>
+          )}
+          <label style={{ padding: "4px 14px 6px", fontSize: 10, color: "#94a3b8", display: "flex", alignItems: "center", gap: 4 }}>
+            <input type="checkbox" checked={zipOverwrite} onChange={(e) => setZipOverwrite(e.target.checked)} style={{ width: 11, height: 11 }} />
+            ZIP overwrite existing
+          </label>
 
           {showNewFile && (
             <div style={{ padding: "8px 10px", borderBottom: "1px solid #f1f5f9" }}>
@@ -2048,7 +2237,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "email", "templates", "sms", "whatsapp", "payment"] as const).map((sub) => (
+                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -2069,8 +2258,10 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                         : sub === "stt" ? "STT"
                         : sub === "drive" ? "Drive"
                         : sub === "translate" ? "DeepL"
+                        : sub === "bulk" ? "Bulk i18n"
                         : sub === "email" ? "Email"
                         : sub === "templates" ? "Templates"
+                        : sub === "builder" ? "Tpl Builder"
                         : sub === "sms" ? "SMS"
                         : sub === "whatsapp" ? "WhatsApp"
                         : "Pay"}
@@ -2599,6 +2790,111 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     </div>
                   )}
 
+                  {/* DeepL Bulk translate — N files × M langs */}
+                  {mediaTab === "bulk" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Bulk i18n — translate many files into many languages
+                      </div>
+
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Files ({bulkPaths.length} selected)</label>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button type="button" onClick={() => setBulkPaths(files.map((f) => f.path))}
+                              style={{ padding: "3px 8px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                              All
+                            </button>
+                            <button type="button" onClick={() => setBulkPaths([])}
+                              style={{ padding: "3px 8px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                              None
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 0", background: "#fff" }}>
+                          {files.length === 0 ? (
+                            <div style={{ padding: 12, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>No files in project</div>
+                          ) : (
+                            files.map((f) => (
+                              <label key={f.path} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontFamily: "monospace" }}>
+                                <input type="checkbox" checked={bulkPaths.includes(f.path)} onChange={() => toggleBulkPath(f.path)} />
+                                <span style={{ color: "#0f172a" }}>{f.path}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                          Target languages ({bulkLangs.length} selected)
+                        </label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {BULK_LANG_OPTIONS.map((opt) => {
+                            const on = bulkLangs.includes(opt.code);
+                            return (
+                              <button key={opt.code} type="button" onClick={() => toggleBulkLang(opt.code)}
+                                style={{
+                                  padding: "5px 10px", border: "1px solid " + (on ? "#0d9488" : "#e2e8f0"),
+                                  background: on ? "#0d9488" : "#fff", color: on ? "#fff" : "#475569",
+                                  borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                }}>
+                                {opt.code} · {opt.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 11, color: "#64748b" }}>
+                        Will produce <b>{bulkPaths.length * bulkLangs.length}</b> translations (limit 50/batch).
+                        Output files are saved next to originals with lang suffix: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>README.ru.md</code>.
+                      </div>
+
+                      <button onClick={runBulkTranslate}
+                        disabled={bulkLoading || bulkPaths.length === 0 || bulkLangs.length === 0 || bulkPaths.length * bulkLangs.length > 50}
+                        style={{
+                          padding: "10px 18px", background: bulkLoading ? "#a5b4fc" : "#0066ff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: bulkLoading ? "not-allowed" : "pointer",
+                        }}>
+                        {bulkLoading ? "Translating..." : `Translate ${bulkPaths.length} × ${bulkLangs.length}`}
+                      </button>
+
+                      {bulkSummary && (
+                        <div style={{
+                          padding: "10px 12px", borderRadius: 7,
+                          background: bulkSummary.failureCount === 0 ? "#d1fae5" : "#fef3c7",
+                          color: bulkSummary.failureCount === 0 ? "#065f46" : "#92400e",
+                          fontSize: 12, fontWeight: 600,
+                        }}>
+                          {bulkSummary.successCount} of {bulkSummary.total} translations OK
+                          {bulkSummary.failureCount > 0 && ` · ${bulkSummary.failureCount} failed`}
+                        </div>
+                      )}
+
+                      {bulkResults.length > 0 && (
+                        <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 7 }}>
+                          {bulkResults.map((r, idx) => (
+                            <div key={idx} style={{
+                              padding: "5px 10px", fontSize: 11, fontFamily: "monospace",
+                              borderBottom: idx < bulkResults.length - 1 ? "1px solid #f1f5f9" : "none",
+                              color: r.ok ? "#065f46" : "#991b1b",
+                              display: "flex", justifyContent: "space-between", gap: 8,
+                            }}>
+                              <span>{r.ok ? "✓" : "✗"} {r.path} → {r.targetLang}</span>
+                              <span style={{ color: "#64748b" }}>{r.outputPath || r.error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Brevo Email Templates */}
                   {mediaTab === "templates" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2662,6 +2958,66 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       )}
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         Manage templates at <a href="https://my.brevo.com/templates" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>my.brevo.com/templates</a>. Set `params` with template variables.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo Template Builder — create new SMTP template */}
+                  {mediaTab === "builder" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Create new email template
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template name</label>
+                        <input value={tplBuilderName} onChange={(e) => setTplBuilderName(e.target.value)} placeholder="welcome-v1"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Welcome to AEVION, {{params.name}}!"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender email (optional — falls back to BREVO_SENDER_EMAIL env)</label>
+                        <input value={tplBuilderSender} onChange={(e) => setTplBuilderSender(e.target.value)} placeholder="noreply@aevion.io"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>HTML body</label>
+                        <textarea value={tplBuilderHtml} onChange={(e) => setTplBuilderHtml(e.target.value)} rows={10}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+                          Variables: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>{`{{params.name}}`}</code>, <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>{`{{contact.EMAIL}}`}</code>
+                        </div>
+                      </div>
+                      {tplBuilderHtml.trim() && (
+                        <details style={{ border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 10px" }}>
+                          <summary style={{ fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>HTML preview</summary>
+                          <div style={{ marginTop: 8, padding: 10, background: "#fff", border: "1px solid #f1f5f9", borderRadius: 6, fontSize: 13 }}
+                            dangerouslySetInnerHTML={{ __html: tplBuilderHtml }} />
+                        </details>
+                      )}
+                      {tplBuilderMsg && (
+                        <div style={{
+                          padding: "8px 12px", borderRadius: 7, fontSize: 12,
+                          background: tplBuilderMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: tplBuilderMsg.ok ? "#065f46" : "#991b1b",
+                        }}>
+                          {tplBuilderMsg.text}
+                        </div>
+                      )}
+                      <button onClick={createEmailTemplate}
+                        disabled={tplBuilderLoading || !tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()}
+                        style={{
+                          padding: "10px 18px", background: tplBuilderLoading ? "#a5b4fc" : "#0066ff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: tplBuilderLoading ? "not-allowed" : "pointer",
+                        }}>
+                        {tplBuilderLoading ? "Creating..." : "Create template"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code>, <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SENDER_EMAIL</code>
                       </div>
                     </div>
                   )}

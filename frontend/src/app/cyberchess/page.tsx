@@ -4869,7 +4869,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)",
+            width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -4891,7 +4891,7 @@ export default function CyberChessPage(){
             const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
-            const bw="min(calc(100vh - 120px),calc(100vw * 0.62),1000px)";
+            const bw="min(calc(100vh - 120px),calc(100vw * 0.62),1400px)";
             const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
               const name=isAI?al.name+" AI":"Вы";
               const elo=isAI?al.elo:rat;
@@ -4947,7 +4947,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -5204,7 +5204,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Нижняя player row (свой игрок) — chess.com style */}
           {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
@@ -5217,7 +5217,7 @@ export default function CyberChessPage(){
             const myLow=pT.time<30000&&on&&!over;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
-              width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)",
+              width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",
               padding:"5px 0",marginTop:2,gap:8,
               borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
               paddingLeft:6,transition:"border-color 200ms",

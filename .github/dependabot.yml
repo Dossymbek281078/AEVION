@@ -1,0 +1,106 @@
+# Dependabot — automated security & version updates.
+#
+# Strategy:
+#   - npm: weekly grouped PRs per ecosystem; auto-merge enabled for patch
+#     bumps, manual review for minor/major.
+#   - github-actions: monthly grouped PR for Action version bumps.
+#
+# Ignored: nothing. Even framework majors should surface a PR — we triage
+# manually rather than freeze versions.
+
+version: 2
+
+updates:
+  # ── Backend ────────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/aevion-globus-backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "backend"
+    commit-message:
+      prefix: "deps(backend)"
+      include: "scope"
+    groups:
+      backend-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      backend-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
+
+  # ── Frontend ───────────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "deps(frontend)"
+      include: "scope"
+    groups:
+      frontend-patch:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      frontend-security:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+          - "minor"
+          - "major"
+
+  # ── Frontend (qcore worktree) — same monorepo, separate package.json ──
+  - package-ecosystem: "npm"
+    directory: "/frontend-qcore"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend-qcore"
+    commit-message:
+      prefix: "deps(qcore)"
+
+  # ── SDK packages ───────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/packages/qpaynet-client"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "sdk"
+    commit-message:
+      prefix: "deps(sdk-qpaynet)"
+
+  # ── GitHub Actions ─────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci(deps)"
+      include: "scope"

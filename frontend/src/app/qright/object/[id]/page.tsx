@@ -4,6 +4,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
 import { revokeReasonLabel } from "@/lib/qrightRevokeReasons";
+import { pickLang, tString } from "@/lib/qrightServerI18n";
 import { CopyHash } from "./CopyHash";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,53 @@ async function loadEmbed(id: string): Promise<EmbedView | null> {
   }
 }
 
+type BureauCertView = {
+  certId: string;
+  status: string;
+  verificationLevel: "anonymous" | "verified" | "premium" | string;
+  protectedAt: string;
+  viewUrl: string;
+  upgradeUrl: string | null;
+};
+
+async function loadBureauCert(qrightObjectId: string): Promise<BureauCertView | null> {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/bureau/cert-for-qright/${encodeURIComponent(qrightObjectId)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as BureauCertView;
+  } catch {
+    return null;
+  }
+}
+
+type PolicyView = {
+  id: string;
+  type: "license" | "restriction" | "attribution";
+  scope: string;
+  termsText: string;
+  spdxId?: string | null;
+  url?: string | null;
+  validUntil?: string | null;
+  createdAt: string;
+};
+
+async function loadPolicies(objectId: string): Promise<PolicyView[]> {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/qright/objects/${encodeURIComponent(objectId)}/policies`,
+      { cache: "no-store", signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return [];
+    const j = await res.json();
+    return Array.isArray(j.policies) ? j.policies : [];
+  } catch {
+    return [];
+  }
+}
+
 async function getOrigin(): Promise<string> {
   try {
     const h = await headers();
@@ -56,10 +104,15 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
+  const origin = await getOrigin();
+  const rssUrl = origin
+    ? `${origin}/api-backend/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`
+    : `${getApiBase()}/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`;
   const fallback: Metadata = {
     title: "QRight registration — AEVION",
     description: "Public registration record on the AEVION QRight registry.",
     openGraph: { type: "article", title: "QRight registration — AEVION" },
+    twitter: { card: "summary_large_image", title: "QRight registration — AEVION" },
   };
   if (!id) return fallback;
   const data = await loadEmbed(id);
@@ -82,8 +135,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${titleLine} — AEVION QRight`,
     description: desc,
+    alternates: { types: { "application/rss+xml": rssUrl } },
     openGraph: {
       type: "article",
+      title: titleLine,
+      description: desc,
+    },
+    twitter: {
+      card: "summary_large_image",
       title: titleLine,
       description: desc,
     },
@@ -120,8 +179,16 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
   const { id } = await params;
   const sp = (await searchParams) || {};
   const isEmbed = sp.embed === "1" || sp.embed === "true";
-  const data = await loadEmbed(id);
-  const origin = await getOrigin();
+  const h = await headers();
+  const lang = pickLang(sp, h);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    tString("object", lang, key, vars);
+  const [data, bureauCert, policies, origin] = await Promise.all([
+    loadEmbed(id),
+    loadBureauCert(id),
+    loadPolicies(id),
+    getOrigin(),
+  ]);
 
   const badgeUrl = `${getApiBase()}/api/qright/badge/${encodeURIComponent(id)}.svg`;
   const verifyUrl = origin ? `${origin}/qright/object/${id}` : `/qright/object/${id}`;
@@ -134,8 +201,8 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
       <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "48px 16px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto" }}>
           <div style={{ ...card, color: "#b91c1c", borderColor: "rgba(185,28,28,0.2)" }}>
-            <div style={{ fontWeight: 800, marginBottom: 4 }}>Failed to load</div>
-            <div style={{ fontSize: 13 }}>The AEVION registry is unreachable. Try again later.</div>
+            <div style={{ fontWeight: 800, marginBottom: 4 }}>{t("failedTitle")}</div>
+            <div style={{ fontSize: 13 }}>{t("failedDetail")}</div>
           </div>
         </div>
       </main>
@@ -154,15 +221,24 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
               color: "#854d0e",
             }}
           >
-            <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 16 }}>Not registered</div>
+            <div style={{ fontWeight: 800, marginBottom: 4, fontSize: 16 }}>{t("notFoundTitle")}</div>
             <div style={{ fontSize: 13, marginBottom: 12 }}>
-              No QRight object with id <code style={mono}>{id}</code>.
+              {(() => {
+                const [pre, post] = t("notFoundDetail").split("{id}");
+                return (
+                  <>
+                    {pre}
+                    <code style={mono}>{id}</code>
+                    {post}
+                  </>
+                );
+              })()}
             </div>
             <Link
               href="/qright"
               style={{ color: "#0d9488", fontWeight: 800, textDecoration: "none", fontSize: 13 }}
             >
-              ← Register your work on AEVION QRight
+              {t("registerCta")}
             </Link>
           </div>
         </div>
@@ -213,7 +289,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 letterSpacing: "0.08em",
               }}
             >
-              {isRevoked ? "✕ REVOKED" : "✓ AEVION QRIGHT"}
+              {isRevoked ? t("revokedFull") : "✓ AEVION QRIGHT"}
             </span>
             {data.kind && (
               <span style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>
@@ -227,7 +303,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
             )}
           </div>
           <div style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.3, color: "#0f172a", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {data.title || "Untitled work"}
+            {data.title || t("untitled")}
           </div>
           {data.contentHashPrefix && (
             <div style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 10, color: "#64748b" }}>
@@ -240,22 +316,51 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
             </div>
           )}
           <div style={{ marginTop: 6, fontSize: 10, color: accent, fontWeight: 700 }}>
-            View proof →
+            {t("viewProof")}
           </div>
         </a>
       </main>
     );
   }
 
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "AEVION",
+        item: origin || "https://aevion.app",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "QRight",
+        item: origin ? `${origin}/qright` : "https://aevion.app/qright",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: data.title || `QRight ${id.slice(0, 8)}`,
+        item: verifyUrl,
+      },
+    ],
+  };
+
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "32px 16px" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+      />
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <div style={{ marginBottom: 16 }}>
           <Link
             href="/qright"
             style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none" }}
           >
-            ← AEVION QRight
+            {t("back")}
           </Link>
         </div>
 
@@ -281,16 +386,16 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
               marginBottom: 10,
             }}
           >
-            {isRevoked ? "✕ REVOKED" : "✓ REGISTERED"}
+            {isRevoked ? t("revokedFull") : `✓ ${t("registered")}`}
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: "#0f172a", margin: 0 }}>
-            {data.title || "Untitled work"}
+            {data.title || t("untitled")}
           </h1>
           {isRevoked && (
             <p style={{ marginTop: 10, marginBottom: 0, color: "#7f1d1d", fontSize: 13 }}>
-              <strong>This registration has been revoked by the owner.</strong>
+              <strong>{t("revokedNotice")}</strong>
               {data.revokeReasonCode ? (
-                <> Reason: <em>{revokeReasonLabel(data.revokeReasonCode)}</em>.</>
+                <> {t("revokedReason")}: <em>{revokeReasonLabel(data.revokeReasonCode, lang)}</em>.</>
               ) : null}
               {data.revokeReason ? ` ${data.revokeReason}` : null}
             </p>
@@ -310,65 +415,222 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 border: `1px solid ${accent}`,
               }}
             >
-              Get embed code →
+              {t("embedCta")}
             </Link>
           </div>
         </div>
 
         <div style={{ ...card, marginBottom: 18 }}>
           <h2 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0, marginBottom: 14 }}>
-            Registration record
+            {t("recordTitle")}
           </h2>
           {data.kind && (
             <>
-              <div style={dt}>Kind</div>
+              <div style={dt}>{t("kind")}</div>
               <p style={{ ...dd, textTransform: "uppercase", fontWeight: 700 }}>{data.kind}</p>
             </>
           )}
           {data.ownerName && (
             <>
-              <div style={dt}>Owner</div>
+              <div style={dt}>{t("owner")}</div>
               <p style={dd}>{data.ownerName}</p>
             </>
           )}
           {(data.country || data.city) && (
             <>
-              <div style={dt}>Location</div>
+              <div style={dt}>{t("location")}</div>
               <p style={dd}>{[data.city, data.country].filter(Boolean).join(", ")}</p>
             </>
           )}
           {data.createdAt && (
             <>
-              <div style={dt}>Registered</div>
+              <div style={dt}>{t("registeredAt")}</div>
               <p style={dd}>{new Date(data.createdAt).toUTCString()}</p>
             </>
           )}
           {data.revokedAt && (
             <>
-              <div style={dt}>Revoked</div>
+              <div style={dt}>{t("revokedAt")}</div>
               <p style={{ ...dd, color: "#b91c1c" }}>{new Date(data.revokedAt).toUTCString()}</p>
             </>
           )}
           {data.contentHash && (
             <>
-              <div style={dt}>SHA-256 of canonical payload</div>
+              <div style={dt}>{t("contentHash")}</div>
               <p style={{ ...dd, ...mono, display: "flex", alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ flex: "1 1 auto" }}>{data.contentHash}</span>
                 <CopyHash value={data.contentHash} label="SHA-256" />
               </p>
             </>
           )}
-          <div style={dt}>Object ID</div>
+          <div style={dt}>{t("objectId")}</div>
           <p style={{ ...dd, ...mono }}>{id}</p>
+        </div>
+
+        {/* ── AIPB cross-product card: Bureau certificate status ─────────── */}
+        <div
+          style={{
+            ...card,
+            marginBottom: 18,
+            borderColor: bureauCert
+              ? bureauCert.verificationLevel === "verified"
+                ? "rgba(16,185,129,0.4)"
+                : "rgba(245,158,11,0.4)"
+              : "rgba(99,102,241,0.3)",
+            background: bureauCert
+              ? bureauCert.verificationLevel === "verified"
+                ? "linear-gradient(135deg, rgba(16,185,129,0.06), #fff)"
+                : "linear-gradient(135deg, rgba(245,158,11,0.06), #fff)"
+              : "linear-gradient(135deg, rgba(99,102,241,0.05), #fff)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  fontWeight: 900,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase" as const,
+                  marginBottom: 8,
+                  background: bureauCert
+                    ? bureauCert.verificationLevel === "verified"
+                      ? "rgba(16,185,129,0.12)"
+                      : "rgba(245,158,11,0.12)"
+                    : "rgba(99,102,241,0.10)",
+                  color: bureauCert
+                    ? bureauCert.verificationLevel === "verified"
+                      ? "#047857"
+                      : "#92400e"
+                    : "#4338ca",
+                }}
+              >
+                <span>🏛</span>
+                <span>AEVION IP Bureau</span>
+              </div>
+              <h2 style={{ fontSize: 15, fontWeight: 800, color: "#0f172a", margin: 0, marginBottom: 4 }}>
+                {bureauCert
+                  ? bureauCert.verificationLevel === "verified"
+                    ? "Bureau-verified certificate"
+                    : "Bureau certificate (unverified)"
+                  : "Upgrade to legal-grade certificate"}
+              </h2>
+              <p style={{ fontSize: 12, color: "#475569", margin: 0, lineHeight: 1.55, maxWidth: 460 }}>
+                {bureauCert
+                  ? bureauCert.verificationLevel === "verified"
+                    ? "This work is sealed by KYC-verified identity + notarized chain. Court-admissible in 130+ countries (Hague Convention)."
+                    : "Anonymous cert is registered. Complete KYC + payment to upgrade to a legally-binding Bureau certificate."
+                  : "Add KYC identity verification + Stripe-secured payment to receive a notary-grade IP certificate linked to this work."}
+              </p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+              {bureauCert ? (
+                <>
+                  <Link
+                    href={bureauCert.viewUrl}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 10,
+                      background: bureauCert.verificationLevel === "verified" ? "#059669" : "#334155",
+                      color: "#fff",
+                      textDecoration: "none",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    View certificate →
+                  </Link>
+                  {bureauCert.upgradeUrl && (
+                    <Link
+                      href={bureauCert.upgradeUrl}
+                      style={{
+                        padding: "9px 14px",
+                        borderRadius: 10,
+                        background: "#f59e0b",
+                        color: "#1f2937",
+                        textDecoration: "none",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Upgrade to verified →
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <Link
+                  href={`/bureau?qrightObjectId=${encodeURIComponent(id)}`}
+                  style={{
+                    padding: "9px 14px",
+                    borderRadius: 10,
+                    background: "#4338ca",
+                    color: "#fff",
+                    textDecoration: "none",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Start protection →
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Usage Policies ── */}
+        <div style={{ ...card, marginBottom: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0 }}>
+              Usage policies
+            </h2>
+            <Link
+              href={`/qright/object/${id}/policies`}
+              style={{ fontSize: 11, fontWeight: 800, color: "#7c3aed", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 6 }}
+            >
+              Manage →
+            </Link>
+          </div>
+          {policies.length === 0 ? (
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>
+              No usage policies attached to this work.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {policies.map((p) => {
+                const typeColor: Record<string, string> = { license: "#0d9488", restriction: "#dc2626", attribution: "#7c3aed" };
+                return (
+                  <div key={p.id} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, padding: "12px 14px", background: "#f8fafc" }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+                      <span style={{ background: typeColor[p.type] ?? "#475569", color: "#fff", fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase" as const }}>
+                        {p.type}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase" as const }}>{p.scope}</span>
+                      {p.spdxId && <span style={{ fontSize: 11, color: "#0d9488", fontFamily: "ui-monospace,monospace" }}>{p.spdxId}</span>}
+                      {p.validUntil && <span style={{ fontSize: 11, color: "#94a3b8" }}>until {new Date(p.validUntil).toLocaleDateString()}</span>}
+                    </div>
+                    <p style={{ fontSize: 13, color: "#334155", margin: 0, lineHeight: 1.5 }}>{p.termsText}</p>
+                    {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#0d9488", display: "block", marginTop: 4 }}>{p.url}</a>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div style={{ ...card, marginBottom: 18 }}>
           <h2 style={{ fontSize: 14, fontWeight: 800, color: "#0f172a", margin: 0, marginBottom: 12 }}>
-            Independent verification
+            {t("verifyTitle")}
           </h2>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 0, marginBottom: 14, lineHeight: 1.6 }}>
-            The hash above is reproducible from the original work. To verify without trusting AEVION, drop
-            the work&apos;s file plus the verification bundle into the offline verifier.
+            {t("verifyHelp")}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             {data.certificateId && (
@@ -384,7 +646,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                   textDecoration: "none",
                 }}
               >
-                Cryptographic verify →
+                {t("cryptoVerify")}
               </Link>
             )}
             <Link
@@ -400,7 +662,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 textDecoration: "none",
               }}
             >
-              Offline verifier →
+              {t("offlineVerify")}
             </Link>
             <a
               href={embedJsonUrl}
@@ -417,7 +679,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 textDecoration: "none",
               }}
             >
-              Embed JSON
+              {t("embedJson")}
             </a>
             <a
               href={badgeUrl}
@@ -434,7 +696,7 @@ export default async function QRightObjectPage({ params, searchParams }: Props) 
                 textDecoration: "none",
               }}
             >
-              Raw badge SVG
+              {t("rawBadge")}
             </a>
           </div>
         </div>

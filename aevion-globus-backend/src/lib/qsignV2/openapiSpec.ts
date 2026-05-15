@@ -15,11 +15,11 @@ export const QSIGN_V2_OPENAPI = {
       "HMAC-SHA256 + Ed25519 hybrid + post-quantum-ready Dilithium preview slot, " +
       "key rotation with overlap, revocation ledger, geo-anchoring, audit log, " +
       "webhooks, and PDF stamps. Independent of legacy /api/qsign/* (v1).",
-    contact: { name: "AEVION", url: "https://aevion.com" },
+    contact: { name: "AEVION", url: "https://aevion.app" },
     license: { name: "Proprietary" },
   },
   servers: [
-    { url: "https://aevion-production-a70c.up.railway.app/api/qsign/v2", description: "Production" },
+    { url: "https://api.aevion.app/api/qsign/v2", description: "Production" },
     { url: "http://127.0.0.1:4001/api/qsign/v2", description: "Local dev" },
   ],
   tags: [

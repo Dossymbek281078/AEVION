@@ -115,6 +115,13 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   // QCoreMessage — per-call cost (computed from provider/model/tokens at runtime).
   await pool.query(`ALTER TABLE "QCoreMessage" ADD COLUMN IF NOT EXISTS "costUsd" DOUBLE PRECISION;`);
 
+  // QCoreSession — pin to top of sidebar.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT false;`);
+
+  // QCoreRun — free-form tags ([]) + GIN index for tag-filter chip strip.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_tags_gin_idx" ON "QCoreRun" USING GIN ("tags");`);
+
   // Per-user webhook config. One row per JWT sub. URL is required, secret
   // optional (when set, run.completed POSTs include X-QCore-Signature).
   await pool.query(`
@@ -125,6 +132,590 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  // Agent marketplace — community-shared presets. Owner can publish, others
+  // can browse and import to their personal localStorage presets bar.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSharedPreset" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT TRUE,
+      "importCount" INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreSharedPreset_public_imports_idx"
+      ON "QCoreSharedPreset" ("isPublic", "importCount" DESC, "updatedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreSharedPreset_owner_idx"
+      ON "QCoreSharedPreset" ("ownerUserId");
+  `);
+
+  // Eval harness — test suites and runs for regression tracking. A suite
+  // is a list of cases (input + judge config); a run executes every case
+  // through the orchestrator and aggregates a 0..1 score.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreEvalSuite" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "cases"       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreEvalSuite_owner_updated_idx"
+      ON "QCoreEvalSuite" ("ownerUserId", "updatedAt" DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreEvalRun" (
+      "id"             TEXT PRIMARY KEY,
+      "suiteId"        TEXT NOT NULL,
+      "ownerUserId"    TEXT NOT NULL,
+      "status"         TEXT NOT NULL DEFAULT 'running',
+      "score"          DOUBLE PRECISION,
+      "totalCases"     INTEGER NOT NULL DEFAULT 0,
+      "passedCases"    INTEGER NOT NULL DEFAULT 0,
+      "totalCostUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "results"        JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "errorMessage"   TEXT,
+      "startedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "completedAt"    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreEvalRun_suite_started_idx"
+      ON "QCoreEvalRun" ("suiteId", "startedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreEvalRun_owner_started_idx"
+      ON "QCoreEvalRun" ("ownerUserId", "startedAt" DESC);
+  `);
+
+  // Prompts library — versioned custom system prompts per agent role.
+  // parentPromptId chains versions; root prompts have parentPromptId=null.
+  // Public prompts can be browsed and forked into the user's own library.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePrompt" (
+      "id"              TEXT PRIMARY KEY,
+      "ownerUserId"     TEXT NOT NULL,
+      "name"            TEXT NOT NULL,
+      "description"     TEXT,
+      "role"            TEXT NOT NULL DEFAULT 'writer',
+      "content"         TEXT NOT NULL,
+      "version"         INTEGER NOT NULL DEFAULT 1,
+      "parentPromptId"  TEXT,
+      "isPublic"        BOOLEAN NOT NULL DEFAULT FALSE,
+      "importCount"     INTEGER NOT NULL DEFAULT 0,
+      "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCorePrompt_owner_updated_idx"
+      ON "QCorePrompt" ("ownerUserId", "updatedAt" DESC);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCorePrompt_parent_idx"
+      ON "QCorePrompt" ("parentPromptId");
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCorePrompt_public_imports_idx"
+      ON "QCorePrompt" ("isPublic", "importCount" DESC, "updatedAt" DESC);
+  `);
+
+  // QCoreSession — pinned flag for sessions sidebar (starred sessions float to top).
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
+
+  // Notebook collections — named groups of snippets.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreNotebookCollection" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "color"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebookCollection_owner_idx" ON "QCoreNotebookCollection" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`ALTER TABLE "QCoreNotebook" ADD COLUMN IF NOT EXISTS "collectionId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_collection_idx" ON "QCoreNotebook" ("collectionId") WHERE "collectionId" IS NOT NULL;`);
+
+  // Custom pipelines — user-defined multi-step agent chains saved as named configs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePipeline" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "steps"       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "useCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePipeline_owner_idx" ON "QCorePipeline" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePipeline_public_idx" ON "QCorePipeline" ("isPublic", "useCount" DESC);`);
+
+  // Agent personas — custom display names for agent roles per user.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAgentPersona" (
+      "userId"    TEXT NOT NULL,
+      "roleId"    TEXT NOT NULL,
+      "name"      TEXT NOT NULL,
+      "emoji"     TEXT,
+      "color"     TEXT,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "roleId")
+    );
+  `);
+
+  // Analytics goals — monthly run count and cost targets per user.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAnalyticsGoal" (
+      "userId"        TEXT PRIMARY KEY,
+      "monthlyRuns"   INTEGER,
+      "monthlyCostUsd" DOUBLE PRECISION,
+      "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Session archiving — soft-delete with ability to restore. Archived sessions hidden from default list.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMPTZ;`);
+
+  // Session tags — free-form labels on sessions for grouping.
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "tags" TEXT[] DEFAULT '{}';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_tags_gin_idx" ON "QCoreSession" USING GIN ("tags");`);
+
+  // Run bookmarks — user can star specific runs for quick re-access.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunBookmark" (
+      "runId"     TEXT NOT NULL,
+      "userId"    TEXT NOT NULL,
+      "label"     TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("runId", "userId")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunBookmark_user_idx" ON "QCoreRunBookmark" ("userId", "createdAt" DESC);`);
+
+  // Run ratings — user feedback on final answers (thumbs up/down + optional note).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunRating" (
+      "runId"     TEXT NOT NULL,
+      "userId"    TEXT,
+      "rating"    INTEGER NOT NULL CHECK ("rating" IN (1, -1)),
+      "note"      TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("runId", COALESCE("userId", ''))
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunRating_runId_idx" ON "QCoreRunRating" ("runId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunRating_userId_idx" ON "QCoreRunRating" ("userId") WHERE "userId" IS NOT NULL;`);
+
+  // Webhook delivery log — auditable record of every POST attempt.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWebhookLog" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT,
+      "event"       TEXT NOT NULL,
+      "url"         TEXT NOT NULL,
+      "statusCode"  INTEGER,
+      "durationMs"  INTEGER,
+      "error"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWebhookLog_user_created_idx" ON "QCoreWebhookLog" ("userId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWebhookLog_created_idx" ON "QCoreWebhookLog" ("createdAt" DESC);`);
+
+  // Notebook — user-curated snippets from run outputs.
+  // A snippet is a highlighted fragment of a run's final or agent content,
+  // optionally annotated. Snippets form a searchable knowledge base.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreNotebook" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "runId"       TEXT NOT NULL,
+      "role"        TEXT NOT NULL DEFAULT 'final',
+      "content"     TEXT NOT NULL,
+      "annotation"  TEXT,
+      "tags"        TEXT[] NOT NULL DEFAULT '{}',
+      "pinned"      BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_owner_updated_idx" ON "QCoreNotebook" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_run_idx" ON "QCoreNotebook" ("runId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_tags_gin_idx" ON "QCoreNotebook" USING GIN ("tags");`);
+
+  // Public comments on shared runs. No auth required to post — authorName is free-text.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunComment" (
+      "id"         TEXT PRIMARY KEY,
+      "runId"      TEXT NOT NULL,
+      "authorName" TEXT NOT NULL DEFAULT 'Anonymous',
+      "content"    TEXT NOT NULL,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunComment_runId_idx" ON "QCoreRunComment" ("runId", "createdAt" ASC);`);
+
+  // Audit log for prompt library changes (create / update / delete).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePresetAuditLog" (
+      "id"           TEXT PRIMARY KEY,
+      "userId"       TEXT NOT NULL,
+      "promptId"     TEXT NOT NULL,
+      "promptName"   TEXT NOT NULL,
+      "action"       TEXT NOT NULL,
+      "changedFields" TEXT,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePresetAuditLog_user_idx" ON "QCorePresetAuditLog" ("userId", "createdAt" DESC);`);
+
+  // Workspaces — shared session collections with role-based access.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspace" (
+      "id"          TEXT PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "ownerId"     TEXT NOT NULL,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspace_owner_idx" ON "QCoreWorkspace" ("ownerId");`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspaceMember" (
+      "workspaceId" TEXT NOT NULL,
+      "userId"      TEXT NOT NULL,
+      "role"        TEXT NOT NULL DEFAULT 'viewer',
+      "joinedAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("workspaceId", "userId")
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreWorkspaceSession" (
+      "workspaceId" TEXT NOT NULL,
+      "sessionId"   TEXT NOT NULL,
+      "addedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("workspaceId", "sessionId")
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreWorkspaceSession_session_idx" ON "QCoreWorkspaceSession" ("sessionId");`);
+
+  // Batch runs — run N prompts against the same agent config in one call.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreBatch" (
+      "id"             TEXT PRIMARY KEY,
+      "ownerUserId"    TEXT NOT NULL,
+      "strategy"       TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "status"         TEXT NOT NULL DEFAULT 'running',
+      "totalRuns"      INTEGER NOT NULL DEFAULT 0,
+      "completedRuns"  INTEGER NOT NULL DEFAULT 0,
+      "failedRuns"     INTEGER NOT NULL DEFAULT 0,
+      "totalCostUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "inputs"         JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "completedAt"    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreBatch_owner_created_idx" ON "QCoreBatch" ("ownerUserId", "createdAt" DESC);`);
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "batchId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_batchId_idx" ON "QCoreRun" ("batchId") WHERE "batchId" IS NOT NULL;`);
+
+  // Per-user monthly spend limit.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSpendLimit" (
+      "userId"          TEXT PRIMARY KEY,
+      "monthlyLimitUsd" DOUBLE PRECISION NOT NULL,
+      "alertAt"         DOUBLE PRECISION NOT NULL DEFAULT 0.8,
+      "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Scheduled batch runs.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreScheduledBatch" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "inputs"      JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "schedule"    TEXT NOT NULL DEFAULT 'once',
+      "nextRunAt"   TIMESTAMPTZ,
+      "lastRunAt"   TIMESTAMPTZ,
+      "lastBatchId" TEXT,
+      "enabled"     BOOLEAN NOT NULL DEFAULT TRUE,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_owner_idx" ON "QCoreScheduledBatch" ("ownerUserId", "createdAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreScheduledBatch_nextRun_idx" ON "QCoreScheduledBatch" ("nextRunAt") WHERE "enabled"=TRUE AND "nextRunAt" IS NOT NULL;`);
+
+  // QCoreRun — threading.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "parentRunId" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "threadId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_threadId_startedAt_idx" ON "QCoreRun" ("threadId", "startedAt");`);
+
+  // Run templates.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreTemplate" (
+      "id"          TEXT PRIMARY KEY,
+      "ownerUserId" TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "input"       TEXT NOT NULL,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "useCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_owner_updated_idx" ON "QCoreTemplate" ("ownerUserId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreTemplate_public_uses_idx" ON "QCoreTemplate" ("isPublic", "useCount" DESC, "updatedAt" DESC);`);
+
+  // V33 — EvalSuite public sharing.
+  await pool.query(`ALTER TABLE "QCoreEvalSuite" ADD COLUMN IF NOT EXISTS "isPublic" BOOLEAN NOT NULL DEFAULT FALSE;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreEvalSuite_public_idx" ON "QCoreEvalSuite" ("isPublic", "updatedAt" DESC) WHERE "isPublic"=TRUE;`);
+
+  // Annotations — user notes attached to individual agent messages within a run.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAnnotation" (
+      "id"          TEXT PRIMARY KEY,
+      "runId"       TEXT NOT NULL,
+      "userId"      TEXT NOT NULL,
+      "messageRole" TEXT NOT NULL,
+      "messageIdx"  INTEGER NOT NULL DEFAULT 0,
+      "note"        TEXT NOT NULL,
+      "color"       TEXT NOT NULL DEFAULT 'yellow',
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreAnnotation_run_idx" ON "QCoreAnnotation" ("runId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreAnnotation_user_idx" ON "QCoreAnnotation" ("userId", "createdAt" DESC);`);
+
+  // Workspace session pinning — ordered pin within a workspace.
+  await pool.query(`ALTER TABLE "QCoreWorkspaceSession" ADD COLUMN IF NOT EXISTS "pinOrder" INTEGER;`);
+
+  // Run follow-up link — track which run was forked from which.
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "followUpFromId" TEXT;`);
+
+  // Search indexes on run inputs and session titles (btree for ILIKE queries).
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRun_userInput_idx" ON "QCoreRun" ("userInput");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSession_title_idx" ON "QCoreSession" ("title");`);
+
+  // V39 — Organizations (multi-user teams).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreOrg" (
+      "id"          TEXT PRIMARY KEY,
+      "name"        TEXT NOT NULL,
+      "ownerId"     TEXT NOT NULL,
+      "plan"        TEXT NOT NULL DEFAULT 'team',
+      "memberLimit" INTEGER NOT NULL DEFAULT 5,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreOrg_owner_idx" ON "QCoreOrg" ("ownerId");`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreOrgMember" (
+      "orgId"    TEXT NOT NULL,
+      "userId"   TEXT NOT NULL,
+      "role"     TEXT NOT NULL DEFAULT 'member',
+      "joinedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("orgId", "userId")
+    );
+  `);
+
+  // V43 — Personal API keys (personal access tokens, SHA-256 hashed).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreApiKey" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "keyHash"     TEXT NOT NULL UNIQUE,
+      "keyPrefix"   TEXT NOT NULL,
+      "lastUsedAt"  TIMESTAMPTZ,
+      "expiresAt"   TIMESTAMPTZ,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreApiKey_user_idx" ON "QCoreApiKey" ("userId");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreApiKey_hash_idx" ON "QCoreApiKey" ("keyHash");`);
+
+  // V45 — Run claps (public appreciation counter on shared runs).
+  await pool.query(`ALTER TABLE "QCoreRun" ADD COLUMN IF NOT EXISTS "clapCount" INTEGER NOT NULL DEFAULT 0;`);
+
+  // V47 — Session AI summary (cached, generated on demand).
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "aiSummary" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreSession" ADD COLUMN IF NOT EXISTS "aiSummaryAt" TIMESTAMPTZ;`);
+
+  // V49 — Per-user rate limits.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRateLimit" (
+      "userId"      TEXT NOT NULL,
+      "bucket"      TEXT NOT NULL,
+      "count"       INTEGER NOT NULL DEFAULT 0,
+      "windowStart" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "bucket")
+    );
+  `);
+
+  // V51 — Prompt chains (multi-step prompt sequences).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCorePromptChain" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "description" TEXT,
+      "steps"       JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "isPublic"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "runCount"    INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePromptChain_user_idx" ON "QCorePromptChain" ("userId", "updatedAt" DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCorePromptChain_public_idx" ON "QCorePromptChain" ("isPublic", "runCount" DESC) WHERE "isPublic"=TRUE;`);
+
+  // V52 — Agent personas v2 (defaultProvider, defaultModel, bio, systemPromptHint).
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "defaultProvider" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "defaultModel" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
+  await pool.query(`ALTER TABLE "QCoreAgentPersona" ADD COLUMN IF NOT EXISTS "systemPromptHint" TEXT;`);
+
+  // V55 — Session invites (read-only share links with token).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreSessionInvite" (
+      "id"          TEXT PRIMARY KEY,
+      "sessionId"   TEXT NOT NULL,
+      "invitedBy"   TEXT NOT NULL,
+      "token"       TEXT NOT NULL UNIQUE,
+      "role"        TEXT NOT NULL DEFAULT 'viewer',
+      "expiresAt"   TIMESTAMPTZ,
+      "usedCount"   INTEGER NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSessionInvite_token_idx" ON "QCoreSessionInvite" ("token");`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreSessionInvite_session_idx" ON "QCoreSessionInvite" ("sessionId");`);
+
+  // V56 — Comprehensive user audit log.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreUserAuditLog" (
+      "id"           TEXT PRIMARY KEY,
+      "userId"       TEXT NOT NULL,
+      "action"       TEXT NOT NULL,
+      "resourceId"   TEXT,
+      "resourceType" TEXT,
+      "meta"         JSONB,
+      "ip"           TEXT,
+      "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreUserAuditLog_user_created_idx" ON "QCoreUserAuditLog" ("userId", "createdAt" DESC);`);
+
+  // V59 — AI Memory: persistent cross-session user context.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreMemory" (
+      "id"        TEXT PRIMARY KEY,
+      "userId"    TEXT NOT NULL,
+      "content"   TEXT NOT NULL,
+      "category"  TEXT NOT NULL DEFAULT 'general',
+      "source"    TEXT,
+      "pinned"    BOOLEAN NOT NULL DEFAULT FALSE,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreMemory_user_idx"
+      ON "QCoreMemory" ("userId", "pinned" DESC, "createdAt" DESC);
+  `);
+
+  // V60 — Template pin column.
+  await pool.query(`ALTER TABLE "QCoreTemplate" ADD COLUMN IF NOT EXISTS "pinned" BOOLEAN NOT NULL DEFAULT FALSE;`);
+
+  // V63 — A/B testing for prompts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreAbTest" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT NOT NULL,
+      "name"        TEXT NOT NULL,
+      "promptA"     TEXT NOT NULL,
+      "promptB"     TEXT NOT NULL,
+      "strategy"    TEXT NOT NULL DEFAULT 'sequential',
+      "overrides"   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      "status"      TEXT NOT NULL DEFAULT 'active',
+      "runsA"       INTEGER NOT NULL DEFAULT 0,
+      "runsB"       INTEGER NOT NULL DEFAULT 0,
+      "avgCostA"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "avgCostB"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "avgRatingA"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "avgRatingB"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreAbTest_user_idx"
+      ON "QCoreAbTest" ("userId", "createdAt" DESC);
+  `);
+
+  // V64 — User settings (key-value store).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreUserSettings" (
+      "userId"    TEXT NOT NULL,
+      "key"       TEXT NOT NULL,
+      "value"     JSONB NOT NULL,
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY ("userId", "key")
+    );
+  `);
+
+  // V67 — Conditional run branching.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QCoreRunBranch" (
+      "id"               TEXT PRIMARY KEY,
+      "parentRunId"      TEXT NOT NULL,
+      "branchReason"     TEXT NOT NULL,
+      "alternativeInput" TEXT NOT NULL,
+      "strategy"         TEXT NOT NULL DEFAULT 'debate',
+      "status"           TEXT NOT NULL DEFAULT 'pending',
+      "resultRunId"      TEXT,
+      "createdAt"        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS "QCoreRunBranch_parent_idx"
+      ON "QCoreRunBranch" ("parentRunId");
   `);
 
     dbReady = true;

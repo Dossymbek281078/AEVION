@@ -26,6 +26,10 @@ import {
   DILITHIUM_KID_PREVIEW,
   DILITHIUM_KID_REAL,
 } from "../lib/qsignV2/dilithium";
+import {
+  createShieldRecord,
+  ensureShieldTableShared,
+} from "../lib/qshield/createRecord";
 
 /* ───────── rate limits ─────────
  * Per-IP token-bucket style windows guarding the two expensive write paths.
@@ -400,7 +404,7 @@ qsignV2Router.get("/metrics", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.send(lines.join("\n") + "\n");
   } catch (e: any) {
-    errResp(req, res, 500, { error: "metrics_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "metrics_failed" }, e);
   }
 });
 
@@ -601,7 +605,7 @@ qsignV2Router.get("/stats", async (req, res) => {
       asOf: new Date().toISOString(),
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "stats_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "stats_failed" }, e);
   }
 });
 
@@ -656,7 +660,7 @@ qsignV2Router.get("/recent", async (req, res) => {
       limit,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "recent_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "recent_failed" }, e);
   }
 });
 
@@ -785,7 +789,7 @@ qsignV2Router.get("/audit", async (req, res) => {
       asOf: new Date().toISOString(),
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "audit_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "audit_failed" }, e);
   }
 });
 
@@ -839,7 +843,7 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       canonical = canonicalJson(payload);
       payloadHash = sha256Hex(canonical);
     } catch (e: any) {
-      return res.status(400).json({ error: "canonicalization failed", details: e?.message });
+      return res.status(400).json({ error: "canonicalization failed" });
     }
 
     /* Idempotency-Key honors both `Idempotency-Key` (RFC standard form) and
@@ -969,6 +973,37 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
       issuerEmail: auth.email,
     });
 
+    /* Optional QShield link — caller opts in via body.shield === true.
+     * Failure here MUST NOT fail the signature itself; we log and return
+     * shieldError so the caller can surface a partial-success state. */
+    let shieldOut:
+      | { id: string; publicKey: string; threshold: number; totalShards: number; createdAt: string }
+      | null = null;
+    let shieldErr: string | null = null;
+    if (body.shield === true) {
+      try {
+        await ensureShieldTableShared(pool);
+        const created = await createShieldRecord(pool, {
+          objectId: id,
+          objectTitle: typeof body.shieldTitle === "string"
+            ? body.shieldTitle.slice(0, 80)
+            : `QSign ${id.slice(0, 8)}`,
+          payload: { qsignId: id, payloadHash },
+          ownerUserId: auth.sub,
+        });
+        shieldOut = {
+          id: created.id,
+          publicKey: created.publicKey,
+          threshold: created.threshold,
+          totalShards: created.totalShards,
+          createdAt: created.createdAt,
+        };
+      } catch (shieldE: any) {
+        shieldErr = shieldE?.message || String(shieldE);
+        console.error(`[qsign v2] [req=${reqId(req)}] qshield link failed`, shieldE);
+      }
+    }
+
     res.status(201).json({
       id,
       algoVersion: ALGO_VERSION,
@@ -998,12 +1033,14 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
             lng: geo.lng,
           }
         : null,
+      qshield: shieldOut,
+      shieldError: shieldErr,
       createdAt: new Date().toISOString(),
       verifyUrl: `/api/qsign/v2/verify/${id}`,
       publicUrl: `/qsign/verify/${id}`,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "sign_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "sign_failed" }, e);
   }
 });
 
@@ -1125,7 +1162,7 @@ qsignV2Router.post("/sign/batch", signLimiter, async (req, res) => {
       results,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "batch_sign_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "batch_sign_failed" }, e);
   }
 });
 
@@ -1150,7 +1187,7 @@ qsignV2Router.post("/verify", async (req, res) => {
       canonical = canonicalJson(payload);
       payloadHash = sha256Hex(canonical);
     } catch (e: any) {
-      return res.status(400).json({ error: "canonicalization failed", details: e?.message });
+      return res.status(400).json({ error: "canonicalization failed" });
     }
 
     const hmacRow = hmacKid ? await resolveHmac(hmacKid) : await getActiveHmac();
@@ -1187,7 +1224,7 @@ qsignV2Router.post("/verify", async (req, res) => {
       stateless: true,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "verify_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "verify_failed" }, e);
   }
 });
 
@@ -1251,7 +1288,7 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
 
     res.json(out);
   } catch (e: any) {
-    errResp(req, res, 500, { error: "verify_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "verify_failed" }, e);
   }
 });
 
@@ -1370,7 +1407,7 @@ qsignV2Router.post("/revoke/:id", revokeLimiter, async (req, res) => {
         "Historical signatures remain cryptographically valid; verify endpoints will report valid=false due to revocation status.",
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "revoke_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "revoke_failed" }, e);
   }
 });
 
@@ -1405,7 +1442,7 @@ qsignV2Router.get("/webhooks", async (req, res) => {
       })),
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "webhooks_list_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "webhooks_list_failed" }, e);
   }
 });
 
@@ -1457,7 +1494,7 @@ qsignV2Router.post("/webhooks", async (req, res) => {
         "Save the secret — it is shown ONCE and used to verify X-QSign-Signature on every delivery (HMAC-SHA256 over the raw JSON body).",
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "webhook_create_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "webhook_create_failed" }, e);
   }
 });
 
@@ -1493,7 +1530,7 @@ qsignV2Router.post("/webhooks/:id/rotate-secret", async (req, res) => {
         "Save the new secret — it is shown ONCE and replaces the old. Update receiver-side verification immediately; the next delivery will sign with this secret.",
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "webhook_rotate_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "webhook_rotate_failed" }, e);
   }
 });
 
@@ -1550,7 +1587,7 @@ qsignV2Router.get("/webhooks/:id/deliveries", async (req, res) => {
       })),
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "deliveries_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "deliveries_failed" }, e);
   }
 });
 
@@ -1582,7 +1619,7 @@ qsignV2Router.delete("/webhooks/:id", async (req, res) => {
     }
     res.json({ deleted: true, id: req.params.id });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "webhook_delete_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "webhook_delete_failed" }, e);
   }
 });
 
@@ -1617,7 +1654,7 @@ qsignV2Router.get("/keys", async (req, res) => {
       total: items.length,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "keys_list_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "keys_list_failed" }, e);
   }
 });
 
@@ -1638,7 +1675,7 @@ qsignV2Router.get("/keys/:kid", async (req, res) => {
       notes: row.notes,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "key_lookup_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "key_lookup_failed" }, e);
   }
 });
 
@@ -1774,7 +1811,7 @@ qsignV2Router.post("/keys/rotate", rotateLimiter, async (req, res) => {
         "Previous active key (if any) is now 'retired' and remains valid for verification of historical signatures.",
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "rotate_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "rotate_failed" }, e);
   }
 });
 
@@ -2049,7 +2086,7 @@ qsignV2Router.get("/:id/pdf", async (req, res) => {
   } catch (e: any) {
     console.error("[qsign v2] :id/pdf error", e);
     if (!res.headersSent) {
-      errResp(req, res, 500, { error: "pdf_render_failed", details: e?.message }, e);
+      errResp(req, res, 500, { error: "pdf_render_failed" }, e);
     } else {
       res.end();
     }
@@ -2162,7 +2199,7 @@ qsignV2Router.get("/:id/public", async (req, res) => {
           : null,
     });
   } catch (e: any) {
-    errResp(req, res, 500, { error: "public_view_failed", details: e?.message }, e);
+    errResp(req, res, 500, { error: "public_view_failed" }, e);
   }
 });
 

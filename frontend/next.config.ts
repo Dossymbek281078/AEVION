@@ -1,5 +1,11 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { withSentryConfig } from "@sentry/nextjs";
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
 
 // Прокси API на бэкенд: браузер бьёт в same-origin `/api-backend/...` → без CORS.
 // В проде задайте BACKEND_PROXY_TARGET на сборке (URL без завершающего слэша).
@@ -24,33 +30,26 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Studio hosts cross-origin iframes (Twitch / YouTube / Lichess).
-        // unsafe-none = no isolation = full third-party iframe support
-        // including cookies/storage that Twitch needs. Stockfish in the
-        // chess-internal iframe loses SharedArrayBuffer here — user can
-        // open the standalone /cyberchess tab via the pane "↗" button.
-        // NOTE: declared AFTER the catch-all so its values override.
-        source: "/cyberchess/studio",
+        // CyberChess: COEP=credentialless даёт SharedArrayBuffer (Stockfish multi-thread)
+        // И при этом разрешает YouTube/Twitch/любые third-party iframe — они грузятся
+        // без credentials (cookies) но без CORP-блокировки. Поддерживается:
+        // Chrome 96+, Firefox 110+, Safari 16.4+. На старом Safari fallback на single-thread.
+        // Меняли с unsafe-none → credentialless 2026-05-13: console показал
+        // "SharedArrayBuffer is not defined", Stockfish работал в degraded mode.
+        source: "/cyberchess",
         headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
-          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
         ],
       },
       {
-        source: "/cyberchess/studio/:path*",
+        source: "/cyberchess/:path*",
         headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
-          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
         ],
       },
       {
-        // QRight public surfaces are intended to be embedded on third-party
-        // sites. Override X-Frame-Options to ALLOWALL (legacy) + CSP
-        // frame-ancestors *. The catch-all COEP above would otherwise prevent
-        // these from being loaded as <iframe>.
-        // Also: COEP credentialless lets credentialed sub-resources work in
-        // modern browsers, and a tight Permissions-Policy denies the embed
-        // any sensitive APIs by default.
         source: "/qright/object/:id",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
@@ -78,7 +77,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Public transparency report — no PII, freely embeddable.
         source: "/qright/transparency",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
@@ -90,9 +88,25 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // QSign embed widget — must be embeddable cross-origin in any iframe.
-        // Disable COOP/COEP isolation here and allow framing from anywhere.
         source: "/qsign/embed/:path*",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+        ],
+      },
+      {
+        source: "/qcoreai/embed/:path*",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
+          { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+        ],
+      },
+      {
+        source: "/qpaynet/widget/:path*",
         headers: [
           { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
           { key: "Cross-Origin-Embedder-Policy", value: "unsafe-none" },
@@ -113,4 +127,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Sentry wrapper. Без NEXT_PUBLIC_SENTRY_DSN init/upload не выполняются,
+// но wrapper резервирует hooks для server/edge instrumentation.
+// Bundle analyzer (ANALYZE=true npm run build) — outermost wrap.
+export default withBundleAnalyzer(withSentryConfig(nextConfig, {
+  silent: true,
+}));

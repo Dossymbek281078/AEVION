@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
@@ -211,4 +212,199 @@ model AevLedgerEntry {
 
   @@index([walletId, ts])
   @@index([sourceModule])
+}
+
+// ── AI-тренажёр сметного дела РК (smeta-trainer) ─────────────────────
+// Прогресс студентов курса «Сметное дело в РК» (5 уровней).
+// Ключевание по deviceId (anonymous) либо userId (если авторизован).
+// Frontend держит копию в localStorage (useProgress.ts) — БД нужна для
+// cross-device sync, leaderboard'ов и аналитики курса для куратора.
+
+model SmetaStudent {
+  id          String           @id @default(uuid())
+  deviceId    String           @unique
+  userId      String?
+  displayName String?          // как студент представился
+  group       String?          // учебная группа / поток
+  startedAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  progress    SmetaProgress[]
+  attempts    SmetaAttempt[]
+
+  @@index([userId])
+  @@index([group])
+}
+
+model SmetaProgress {
+  id           String       @id @default(uuid())
+  studentId    String
+  student      SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level        Int          // 1..5 (соответствует LEVELS в frontend/lib/levels.ts)
+  status       String       // "open" | "in-progress" | "done"
+  score        Int?         // 0..100 для уровней с тестами
+  completedAt  DateTime?
+  attemptsCnt  Int          @default(0) // сколько раз заходил/сдавал
+  lastVisitAt  DateTime     @default(now())
+
+  @@unique([studentId, level])
+  @@index([level, score])
+}
+
+model SmetaAttempt {
+  id        String       @id @default(uuid())
+  studentId String
+  student   SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level     Int
+  kind      String       // "quiz" | "exercise" | "lsr-submit"
+  score     Int?         // 0..100
+  payload   String?      // JSON: ответы / снимок ЛСР / детали попытки
+  feedback  String?      // ответ AI-советника / комментарий куратора
+  ts        DateTime     @default(now())
+
+  @@index([studentId, ts])
+  @@index([level, ts])
+}
+
+model ChessPuzzle {
+  id       String  @id                     // lichess puzzle ID or "gen_xxx"
+  fen      String                           // position FEN (player to move)
+  sol      String                           // UCI moves JSON array string
+  name     String                           // human-readable name
+  rating   Int     @default(1200)
+  theme    String  @default("Тактика")
+  phase    String  @default("Middlegame")
+  side     String  @default("w")            // w|b
+  goal     String  @default("Best move")    // Mate|Best move
+  mateIn   Int?                             // null if not a mate puzzle
+  createdAt DateTime @default(now())
+
+  @@index([rating])
+  @@index([theme])
+  @@index([goal, mateIn])
+}
+
+// ── CyberChess CPI (Chess Performance Index) ─────────────────────────
+// Per-user multi-factor rating state used by /cyberchess/cpi/leaderboard.
+// 11 factors + overall composite. Idempotent upsert via POST /upsert,
+// public read via GET /leaderboard. One row per userId — keyed by id.
+// displayName lookup is best-effort against auth (not joined here).
+
+model CyberchessCpiState {
+  userId           String   @id
+  displayName      String?
+  overall          Float    @default(0)
+  accuracy         Float    @default(0)
+  tactics          Float    @default(0)
+  endgame          Float    @default(0)
+  timing           Float    @default(0)
+  aggression       Float    @default(0)
+  timeControl      Float    @default(0)
+  opening          Float    @default(0)
+  defense          Float    @default(0)
+  consistency      Float    @default(0)
+  endgameTechnique Float    @default(0)
+  psychology       Float    @default(0)
+  gamesPlayed      Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  @@index([overall(sort: Desc)])
+  @@index([accuracy(sort: Desc)])
+  @@index([tactics(sort: Desc)])
+  @@index([endgame(sort: Desc)])
+  @@index([timing(sort: Desc)])
+  @@index([aggression(sort: Desc)])
+  @@index([timeControl(sort: Desc)])
+  @@index([opening(sort: Desc)])
+  @@index([defense(sort: Desc)])
+  @@index([consistency(sort: Desc)])
+  @@index([endgameTechnique(sort: Desc)])
+  @@index([psychology(sort: Desc)])
+}
+
+// ============ HealthAI ============
+
+model HealthProfile {
+  id           String   @id
+  userId       String?
+  memberLabel  String?
+  age          Int      @default(0)
+  sex          String   @default("other")
+  heightCm     Int      @default(0)
+  weightKg     Float    @default(0)
+  conditions   String[] @default([])
+  allergies    String[] @default([])
+  medications  String[] @default([])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  symptomChecks SymptomCheck[]
+  dailyLogs     HealthDailyLog[]
+  cycleEntries  CycleEntry[]
+  planSnapshots PlanSnapshot[]
+
+  @@index([userId])
+}
+
+model CycleEntry {
+  id        String   @id
+  profileId String
+  date      String
+  flow      String?
+  symptoms  String[] @default([])
+  notes     String?
+  createdAt DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, date])
+  @@index([profileId, date])
+}
+
+model PlanSnapshot {
+  id          String   @id
+  profileId   String
+  plan        Json
+  bmi         Float?
+  avgSleep7d  Float?
+  avgMood7d   Float?
+  generatedAt DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, generatedAt])
+}
+
+model SymptomCheck {
+  id         String   @id
+  profileId  String
+  symptoms   String[] @default([])
+  severity   Int      @default(5)
+  durationH  Float    @default(0)
+  notes      String?
+  matched    Json     @default("[]")
+  generic    String?
+  disclaimer String?
+  createdAt  DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, createdAt])
+}
+
+model HealthDailyLog {
+  id          String   @id
+  profileId   String
+  date        String
+  sleepHours  Float?
+  moodScore   Int?
+  weightKg    Float?
+  waterL      Float?
+  exerciseMin Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, date])
+  @@index([profileId, date])
 }

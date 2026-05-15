@@ -1,0 +1,27 @@
+{
+  "name": "AEVION QTrade",
+  "short_name": "QTrade",
+  "description": "AEVION QTrade — биржа и торговля криптоактивами",
+  "start_url": "/qtrade",
+  "scope": "/qtrade",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "ru-RU",
+  "categories": ["finance", "business"],
+  "icons": [
+    {
+      "src": "/qtrade-icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/qtrade-icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

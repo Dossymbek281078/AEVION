@@ -1,4 +1,4 @@
-# AEVION — Why This MVP Is Worth $1 Billion Today
+﻿# AEVION — Why This MVP Is Worth $1 Billion Today
 
 ## Investment Memorandum · March 2026
 
@@ -148,7 +148,7 @@ Astana, Kazakhstan is not a limitation — it's a **strategic asset:**
 ### At $1B pre-money, a $50M investment buys 5% of:
 
 1. **The only operational electronic patent bureau in the world** — first-mover with documented IP
-2. **A live platform with 29 modules** — not PowerPoint slides, working code at aevion.vercel.app
+2. **A live platform with 29 modules** — not PowerPoint slides, working code at aevion.app
 3. **A Trust Graph that compounds daily** — every new user makes the platform more valuable
 4. **Four simultaneous network effects** — data, economic, financial, and cross-module
 5. **$2B+ Year 5 revenue potential** across 7 revenue streams
@@ -197,6 +197,6 @@ In 5 years, AEVION's Trust Graph will be the definitive source of truth for digi
 
 *AEVION — The trust infrastructure the digital world has been waiting for.*
 
-*Live demo: aevion.vercel.app*
+*Live demo: aevion.app*
 *Code: github.com/Dossymbek281078/AEVION*
 *Contact: yahiin1978@gmail.com · Astana, Kazakhstan*

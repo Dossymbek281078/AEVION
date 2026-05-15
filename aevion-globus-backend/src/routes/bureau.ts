@@ -13,7 +13,9 @@
  */
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-import { verifyBearerOptional } from "../lib/authJwt";
+import jwt from "jsonwebtoken";
+import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
+import { internalMintForDevice } from "./aev";
 import { getPool } from "../lib/dbPool";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getKycProvider } from "../lib/kyc";
@@ -22,14 +24,59 @@ import {
   getVerifiedTierCurrency,
   getVerifiedTierPriceCents,
 } from "../lib/payment";
+import { rateLimit } from "../lib/rateLimit";
+import { refererHost } from "../lib/qrightHelpers";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
+import { makeServiceCapture } from "../lib/sentry/platform";
+import { emitEcosystemEvent } from "../lib/ecosystemEvents";
+const captureBureauError = makeServiceCapture("bureau");
+
+const bureauEmbedRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 240,
+  keyPrefix: "bureau:embed",
+});
 
 export const bureauRouter = Router();
 const pool = getPool();
+
+bureauRouter.get("/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "bureau",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 let bureauTablesReady = false;
 
 async function ensureBureauTables(): Promise<void> {
   if (bureauTablesReady) return;
+  // IPCertificate is the canonical table created by pipeline.ts. Ensure it
+  // exists here as well so bureau can boot independently (e.g. in CI where
+  // the pipeline route may not have been hit yet).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "IPCertificate" (
+      "id" TEXT PRIMARY KEY,
+      "objectId" TEXT NOT NULL,
+      "shieldId" TEXT,
+      "title" TEXT NOT NULL,
+      "kind" TEXT NOT NULL DEFAULT 'other',
+      "description" TEXT NOT NULL DEFAULT '',
+      "authorName" TEXT,
+      "authorEmail" TEXT,
+      "country" TEXT,
+      "city" TEXT,
+      "contentHash" TEXT NOT NULL DEFAULT '',
+      "signatureHmac" TEXT NOT NULL DEFAULT '',
+      "algorithm" TEXT NOT NULL DEFAULT 'HMAC-SHA256',
+      "legalBasis" JSONB NOT NULL DEFAULT '[]',
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "protectedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "verifiedCount" INT NOT NULL DEFAULT 0,
+      "lastVerifiedAt" TIMESTAMPTZ
+    );
+  `);
   await pool.query(
     `ALTER TABLE "IPCertificate"
        ADD COLUMN IF NOT EXISTS "authorVerificationLevel" TEXT NOT NULL DEFAULT 'anonymous';`,
@@ -173,7 +220,153 @@ async function ensureBureauTables(): Promise<void> {
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "notarySignatureId" TEXT;`,
   );
+  // Tier 2: per-Referer hostname counters for embed/badge fetches (no PII).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauCertFetchSource" (
+      "certId" TEXT NOT NULL,
+      "sourceHost" TEXT NOT NULL,
+      "day" DATE NOT NULL,
+      "fetches" BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY ("certId", "sourceHost", "day")
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauCertFetchSource_cert_day_idx" ON "BureauCertFetchSource" ("certId", "day");`,
+  );
+  // Tier 2: append-only admin audit (force-verify, revoke-verification).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauAuditLog" (
+      "id" TEXT PRIMARY KEY,
+      "action" TEXT NOT NULL,
+      "certId" TEXT,
+      "verificationId" TEXT,
+      "actor" TEXT,
+      "payload" JSONB,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauAuditLog_at_idx" ON "BureauAuditLog" ("at" DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauAuditLog_action_at_idx" ON "BureauAuditLog" ("action", "at" DESC);`,
+  );
+  // P3-4: Trust Graph append-only edge log. One row per cert verification
+  // event — links certId ↔ userId at a tier ("verified" / "notarized" / "filed-kz").
+  // Read by Trust Graph visualisations and by AEC reward provisioning.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauTrustEdge" (
+      "id" TEXT PRIMARY KEY,
+      "certId" TEXT NOT NULL,
+      "userId" TEXT,
+      "tier" TEXT NOT NULL,
+      "verificationId" TEXT,
+      "verifiedName" TEXT,
+      "paymentAmountCents" INTEGER,
+      "paymentCurrency" TEXT,
+      "aecRewardPlanned" INTEGER NOT NULL DEFAULT 0,
+      "aecRewardClaimedAt" TIMESTAMPTZ,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_certId_idx" ON "BureauTrustEdge" ("certId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_userId_idx" ON "BureauTrustEdge" ("userId");`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauTrustEdge_tier_createdAt_idx" ON "BureauTrustEdge" ("tier", "createdAt" DESC);`,
+  );
+  // Webhook event dedup. Stripe and Sumsub may redeliver an event after a
+  // network blip; without this table a single payment could double-mint AEC
+  // rewards (the row update is idempotent but a planned future "side-effect
+  // on first delivery" would not be). Insert the event id BEFORE downstream
+  // logic; on conflict we 200 OK without re-running anything.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "BureauWebhookEvent" (
+      "eventId"     TEXT PRIMARY KEY,
+      "kind"        TEXT NOT NULL,        -- 'payment' | 'kyc'
+      "provider"    TEXT NOT NULL,        -- 'stripe' | 'sumsub' | 'stub' ...
+      "intentId"    TEXT,                 -- bureauIntentId or kyc sessionId, for forensics
+      "receivedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "BureauWebhookEvent_kind_receivedAt_idx" ON "BureauWebhookEvent" ("kind", "receivedAt" DESC);`,
+  );
   bureauTablesReady = true;
+}
+
+// AEC reward per Bureau tier. AEC↔fiat boundary R1 (see docs/bank/AEC_FIAT_BOUNDARY.md):
+// fiat→AEC is platform-minted on event, never automatic from Stripe. Default 0
+// until product decides reward sizing; the row is still recorded so a later
+// claim flow can backfill mints when a user device links their account.
+export function bureauAecReward(tier: string): number {
+  const env = (key: string): number => {
+    const raw = process.env[key];
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+  };
+  switch (tier) {
+    case "verified":
+      return env("BUREAU_VERIFIED_AEC_REWARD");
+    case "notarized":
+      return env("BUREAU_NOTARIZED_AEC_REWARD");
+    case "filed-kz":
+      return env("BUREAU_FILED_KZ_AEC_REWARD");
+    case "filed-pct":
+      return env("BUREAU_FILED_PCT_AEC_REWARD");
+    default:
+      return 0;
+  }
+}
+
+// Record a Trust Graph edge for a verification event. Idempotent on
+// (certId, tier) — re-calling on an already-recorded edge is a no-op so
+// /upgrade/:certId stays idempotent end-to-end. AEC mint itself happens
+// separately via aev.ts when the user device claims the reward.
+async function recordTrustEdge(opts: {
+  certId: string;
+  userId: string | null;
+  tier: string;
+  verificationId: string | null;
+  verifiedName: string | null;
+  paymentAmountCents: number | null;
+  paymentCurrency: string | null;
+}): Promise<{ edgeId: string; aecRewardPlanned: number; idempotent: boolean }> {
+  const existing = await pool.query(
+    `SELECT "id","aecRewardPlanned" FROM "BureauTrustEdge"
+       WHERE "certId" = $1 AND "tier" = $2 LIMIT 1`,
+    [opts.certId, opts.tier],
+  );
+  if (existing.rows.length > 0) {
+    return {
+      edgeId: existing.rows[0].id,
+      aecRewardPlanned: existing.rows[0].aecRewardPlanned,
+      idempotent: true,
+    };
+  }
+  const reward = bureauAecReward(opts.tier);
+  const edgeId = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO "BureauTrustEdge"
+       ("id","certId","userId","tier","verificationId","verifiedName",
+        "paymentAmountCents","paymentCurrency","aecRewardPlanned")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      edgeId,
+      opts.certId,
+      opts.userId,
+      opts.tier,
+      opts.verificationId,
+      opts.verifiedName,
+      opts.paymentAmountCents,
+      opts.paymentCurrency,
+      reward,
+    ],
+  );
+  return { edgeId, aecRewardPlanned: reward, idempotent: false };
 }
 
 function slugify(name: string): string {
@@ -244,6 +437,7 @@ bureauRouter.post("/verify/start", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "verify/start failed";
     console.error("[Bureau] verify/start:", msg);
+    captureBureauError(err, { route: "verify/start" });
     res.status(500).json({ error: msg });
   }
 });
@@ -341,6 +535,7 @@ bureauRouter.get("/verify/status/:verificationId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "status failed";
     console.error("[Bureau] verify/status:", msg);
+    captureBureauError(err, { route: "verify/status" });
     res.status(500).json({ error: msg });
   }
 });
@@ -412,6 +607,7 @@ bureauRouter.post("/payment/intent", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "payment/intent failed";
     console.error("[Bureau] payment/intent:", msg);
+    captureBureauError(err, { route: "payment/intent" });
     res.status(500).json({ error: msg });
   }
 });
@@ -464,10 +660,21 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
       return res.status(404).json({ error: "certificate not found" });
     }
     if (cRows[0].authorVerificationLevel === "verified") {
+      const trust = await recordTrustEdge({
+        certId,
+        userId: v.userId,
+        tier: "verified",
+        verificationId,
+        verifiedName: v.kycVerifiedName,
+        paymentAmountCents: v.paymentAmountCents,
+        paymentCurrency: v.paymentCurrency,
+      });
       return res.json({
         certId,
         verificationLevel: "verified",
         idempotent: true,
+        trustEdgeId: trust.edgeId,
+        aecRewardPlanned: trust.aecRewardPlanned,
       });
     }
 
@@ -487,16 +694,182 @@ bureauRouter.post("/upgrade/:certId", async (req, res) => {
       [verificationId],
     );
 
+    const trust = await recordTrustEdge({
+      certId,
+      userId: v.userId,
+      tier: "verified",
+      verificationId,
+      verifiedName: v.kycVerifiedName,
+      paymentAmountCents: v.paymentAmountCents,
+      paymentCurrency: v.paymentCurrency,
+    });
+
+    // Fire-and-forget: VeilNetX settlement trail + Z-Tide bureau-cert (+10) for the upgraded user.
+    const payerIdentifier = v.userId || v.email || `bureau-verification:${verificationId}`;
+    void emitEcosystemEvent({
+      module: "bureau",
+      ledger: {
+        kind: "settlement",
+        fromIdentifier: payerIdentifier,
+        toIdentifier: `bureau-cert:${certId}`,
+        amountCents: v.paymentAmountCents ? String(v.paymentAmountCents) : "1",
+        currency: v.paymentCurrency || "USD",
+        meta: { certId, action: "upgrade-to-verified", verificationId },
+      },
+      reputation: v.userId
+        ? { userId: v.userId, kind: "bureau-cert", meta: { certId } }
+        : undefined,
+    });
+
     res.json({
       certId,
       verificationLevel: "verified",
       verifiedName: v.kycVerifiedName,
       verifiedAt: new Date().toISOString(),
       provider: v.kycProvider,
+      trustEdgeId: trust.edgeId,
+      aecRewardPlanned: trust.aecRewardPlanned,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "upgrade failed";
     console.error("[Bureau] upgrade:", msg);
+    captureBureauError(err, { route: "upgrade" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/bureau/trust-edges/cert/:certId
+ * Public read of all Trust Graph edges for a certificate (one per tier
+ * the cert has reached). No PII beyond verifiedName.
+ */
+bureauRouter.get("/trust-edges/cert/:certId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const { certId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT "id","tier","verifiedName","paymentAmountCents",
+              "paymentCurrency","aecRewardPlanned","createdAt"
+         FROM "BureauTrustEdge"
+        WHERE "certId" = $1
+        ORDER BY "createdAt" ASC`,
+      [certId],
+    );
+    res.json({ certId, edges: rows });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "trust edges read failed";
+    captureBureauError(err, { route: "trust-edges-by-cert" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * GET /api/bureau/trust-edges/me
+ * Authenticated read of all Trust Graph edges that name the caller as
+ * the verified party. Used by Bank dashboard to surface earned tiers.
+ */
+bureauRouter.get("/trust-edges/me", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) {
+      return res.status(401).json({ error: "authentication required" });
+    }
+    const { rows } = await pool.query(
+      `SELECT "id","certId","tier","verifiedName","paymentAmountCents",
+              "paymentCurrency","aecRewardPlanned","aecRewardClaimedAt","createdAt"
+         FROM "BureauTrustEdge"
+        WHERE "userId" = $1
+        ORDER BY "createdAt" DESC
+        LIMIT 200`,
+      [user.userId],
+    );
+    res.json({ userId: user.userId, edges: rows });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "trust edges read failed";
+    captureBureauError(err, { route: "trust-edges-by-user" });
+    res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * POST /api/bureau/trust-edges/:edgeId/claim-aec
+ * Body: { deviceId }
+ *
+ * Mints the planned AEC reward for a Trust Graph edge into the caller's
+ * device wallet. Bridges aev.ts (device-keyed wallets) and the auth-keyed
+ * Bureau verification flow — boundary rule R1 in AEC_FIAT_BOUNDARY.md.
+ *
+ * Idempotent: re-calling on an already-claimed edge returns the prior
+ * mint reference and does not re-mint. Caller's userId must match
+ * edge.userId; the device wallet, if previously bound, must also match.
+ */
+bureauRouter.post("/trust-edges/:edgeId/claim-aec", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) {
+      return res.status(401).json({ error: "authentication required" });
+    }
+    const { edgeId } = req.params;
+    const deviceId = typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+    if (!deviceId) {
+      return res.status(400).json({ error: "deviceId is required" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT "id","certId","userId","tier","aecRewardPlanned","aecRewardClaimedAt"
+         FROM "BureauTrustEdge" WHERE "id" = $1`,
+      [edgeId],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "edge not found" });
+    }
+    const edge = rows[0];
+    if (edge.userId && edge.userId !== user.userId) {
+      return res.status(403).json({ error: "edge belongs to another user" });
+    }
+    if (edge.aecRewardClaimedAt) {
+      return res.json({
+        edgeId,
+        idempotent: true,
+        claimedAt: edge.aecRewardClaimedAt,
+        amount: edge.aecRewardPlanned,
+      });
+    }
+    if (!edge.aecRewardPlanned || edge.aecRewardPlanned <= 0) {
+      return res.status(409).json({ error: "no reward planned for this edge" });
+    }
+
+    const mint = await internalMintForDevice({
+      deviceId,
+      amount: edge.aecRewardPlanned,
+      sourceKind: "bureau-cert-reward",
+      sourceModule: "bureau",
+      sourceAction: `verified-tier-${edge.tier}`,
+      reason: `Bureau ${edge.tier} cert (${edge.certId})`,
+      expectedUserId: user.userId,
+    });
+    if (!mint.ok) {
+      return res.status(409).json({ error: mint.error });
+    }
+
+    await pool.query(
+      `UPDATE "BureauTrustEdge" SET "aecRewardClaimedAt" = NOW() WHERE "id" = $1`,
+      [edgeId],
+    );
+
+    res.json({
+      edgeId,
+      claimedAt: new Date().toISOString(),
+      amount: edge.aecRewardPlanned,
+      walletBalance: mint.wallet.balance,
+      ledgerEntryId: mint.entry.id,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "claim failed";
+    console.error("[Bureau] claim-aec:", msg);
+    captureBureauError(err, { route: "trust-edges-claim-aec" });
     res.status(500).json({ error: msg });
   }
 });
@@ -531,9 +904,32 @@ bureauRouter.get("/dashboard", async (req, res) => {
         LIMIT 20`,
       [user.userId],
     );
+    const { rows: trustEdges } = await pool.query(
+      `SELECT "id","certId","tier","aecRewardPlanned","aecRewardClaimedAt","createdAt"
+         FROM "BureauTrustEdge"
+        WHERE "userId" = $1
+        ORDER BY "createdAt" DESC
+        LIMIT 200`,
+      [user.userId],
+    );
+    const aecSummary = trustEdges.reduce(
+      (acc: { totalPlanned: number; totalClaimed: number; unclaimed: number }, e: { aecRewardPlanned: number | null; aecRewardClaimedAt: string | null }) => {
+        const planned = e.aecRewardPlanned || 0;
+        acc.totalPlanned += planned;
+        if (e.aecRewardClaimedAt) {
+          acc.totalClaimed += planned;
+        } else {
+          acc.unclaimed += planned;
+        }
+        return acc;
+      },
+      { totalPlanned: 0, totalClaimed: 0, unclaimed: 0 },
+    );
     res.json({
       certificates: certs,
       verifications,
+      trustEdges,
+      aecSummary,
       pricing: {
         verifiedTierCents: getVerifiedTierPriceCents(),
         currency: getVerifiedTierCurrency(),
@@ -542,6 +938,7 @@ bureauRouter.get("/dashboard", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "dashboard failed";
     console.error("[Bureau] dashboard:", msg);
+    captureBureauError(err, { route: "dashboard" });
     res.status(500).json({ error: msg });
   }
 });
@@ -552,6 +949,55 @@ bureauRouter.get("/dashboard", async (req, res) => {
  * handles signature verification + decoding. We only update status; the
  * client must hit /upgrade/:certId separately to apply Verified tier.
  */
+// Webhook event dedup. Stripe and Sumsub may redeliver an event after a
+// network blip; INSERT...ON CONFLICT DO NOTHING acts as a guard. Returns
+// `true` when this is the first delivery and downstream logic should run.
+// Falls back to a sha256 of the raw body if the provider didn't surface an
+// event id (stub providers in dev/CI).
+async function claimWebhookEventOrSkip(opts: {
+  eventId: string | null;
+  rawBody: string;
+  kind: "payment" | "kyc";
+  provider: string;
+  intentId: string | null;
+}): Promise<boolean> {
+  const id =
+    opts.eventId ||
+    `sha256:${crypto.createHash("sha256").update(opts.rawBody).digest("hex")}`;
+  const r = await pool.query(
+    `INSERT INTO "BureauWebhookEvent" ("eventId","kind","provider","intentId")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT ("eventId") DO NOTHING
+       RETURNING "eventId"`,
+    [id, opts.kind, opts.provider, opts.intentId],
+  );
+  return r.rowCount === 1; // 1 = freshly inserted, 0 = already seen
+}
+
+// Webhook failure classifier — distinguishes scanner noise from real errors.
+// Used by /payment/webhook and /verify/webhook to gate Sentry capture so
+// alerts fire only when a Stripe/Sumsub-shaped request fails verification or
+// downstream logic, not when random crawlers hit the URL.
+function classifyWebhookFailure(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("missing stripe-signature") || m.includes("missing x-payload-digest")) {
+    return "no_signature_header";
+  }
+  if (m.includes("signature") || m.includes("constructevent") || m.includes("hmac")) {
+    return "signature_invalid";
+  }
+  if (m.includes("metadata.bureauintentid") || m.includes("missing metadata")) {
+    return "metadata_missing";
+  }
+  if (m.includes("unhandled stripe event")) {
+    return "unhandled_event";
+  }
+  if (m.includes("env is not set") || m.includes("not yet implemented")) {
+    return "config_missing";
+  }
+  return "unknown";
+}
+
 bureauRouter.post("/verify/webhook", async (req, res) => {
   try {
     await ensureBureauTables();
@@ -560,8 +1006,27 @@ bureauRouter.post("/verify/webhook", async (req, res) => {
     for (const [k, val] of Object.entries(req.headers)) {
       headers[k.toLowerCase()] = Array.isArray(val) ? val.join(",") : String(val ?? "");
     }
-    const rawBody = JSON.stringify(req.body ?? {});
-    const { sessionId, result } = kyc.parseWebhook(headers, rawBody);
+    // Same raw-body discipline as /payment/webhook — HMAC over re-serialised
+    // JSON does not match what the provider signed.
+    const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
+    const parsed = kyc.parseWebhook(headers, rawBody);
+    const { sessionId, result } = parsed;
+
+    // KYC providers (Sumsub) deliver at-least-once too. Same dedup pattern
+    // as /payment/webhook. We don't have a provider event id from the stub,
+    // but a sha256 of the raw body is good enough — the provider re-sends
+    // the exact same body on retry.
+    const fresh = await claimWebhookEventOrSkip({
+      eventId: (parsed as { eventId?: string }).eventId ?? null,
+      rawBody,
+      kind: "kyc",
+      provider: kyc.id,
+      intentId: sessionId,
+    });
+    if (!fresh) {
+      return res.json({ ok: true, deduped: true });
+    }
 
     await pool.query(
       `UPDATE "BureauVerification"
@@ -585,7 +1050,11 @@ bureauRouter.post("/verify/webhook", async (req, res) => {
     res.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "kyc webhook failed";
-    console.error("[Bureau] kyc webhook:", msg);
+    const failure = classifyWebhookFailure(msg);
+    console.error("[Bureau] kyc webhook:", failure, msg);
+    if (failure !== "no_signature_header") {
+      captureBureauError(err, { route: `verify/webhook:${failure}` });
+    }
     res.status(400).json({ ok: false, error: msg });
   }
 });
@@ -602,8 +1071,29 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
     for (const [k, val] of Object.entries(req.headers)) {
       headers[k.toLowerCase()] = Array.isArray(val) ? val.join(",") : String(val ?? "");
     }
-    const rawBody = JSON.stringify(req.body ?? {});
-    const { intentId, result } = pay.parseWebhook(headers, rawBody);
+    // Stripe webhook signature verification requires the EXACT raw bytes
+    // received. express.json() stashes them on req.rawBody (see src/index.ts).
+    // Falling back to JSON.stringify(req.body) breaks the signature.
+    const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+    const rawBody = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
+    const parsed = pay.parseWebhook(headers, rawBody);
+    const { intentId, result } = parsed;
+    const eventId = parsed.eventId ?? null;
+
+    // Dedup BEFORE any side-effects. Stripe doc'd at-least-once delivery —
+    // a redelivered evt_* must not double-update. Returns 200 OK either way
+    // so the provider doesn't keep retrying.
+    const fresh = await claimWebhookEventOrSkip({
+      eventId,
+      rawBody,
+      kind: "payment",
+      provider: pay.id,
+      intentId,
+    });
+    if (!fresh) {
+      return res.json({ ok: true, deduped: true });
+    }
+
     await pool.query(
       `UPDATE "BureauVerification"
          SET "paymentStatus" = $1,
@@ -614,7 +1104,14 @@ bureauRouter.post("/payment/webhook", async (req, res) => {
     res.json({ ok: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "payment webhook failed";
-    console.error("[Bureau] payment webhook:", msg);
+    // Classify so Sentry alerts distinguish real signature-mismatch (means
+    // wrong webhook secret on our side OR compromised attempt) from random
+    // scanners hitting the URL with no stripe-signature header at all.
+    const failure = classifyWebhookFailure(msg);
+    console.error("[Bureau] payment webhook:", failure, msg);
+    if (failure !== "no_signature_header") {
+      captureBureauError(err, { route: `payment/webhook:${failure}` });
+    }
     res.status(400).json({ ok: false, error: msg });
   }
 });
@@ -667,6 +1164,7 @@ bureauRouter.get("/notaries", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list notaries failed";
     console.error("[Bureau] notaries list:", msg);
+    captureBureauError(err, { route: "notaries list" });
     res.status(500).json({ error: msg });
   }
 });
@@ -697,6 +1195,7 @@ bureauRouter.get("/notaries/:notaryId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "notary detail failed";
     console.error("[Bureau] notary detail:", msg);
+    captureBureauError(err, { route: "notary detail" });
     res.status(500).json({ error: msg });
   }
 });
@@ -776,6 +1275,7 @@ bureauRouter.post("/org", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "create org failed";
     console.error("[Bureau] org create:", msg);
+    captureBureauError(err, { route: "org create" });
     res.status(500).json({ error: msg });
   }
 });
@@ -803,6 +1303,7 @@ bureauRouter.get("/org/mine", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list orgs failed";
     console.error("[Bureau] org/mine:", msg);
+    captureBureauError(err, { route: "org/mine" });
     res.status(500).json({ error: msg });
   }
 });
@@ -857,6 +1358,7 @@ bureauRouter.get("/org/:orgId", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "get org failed";
     console.error("[Bureau] org get:", msg);
+    captureBureauError(err, { route: "org get" });
     res.status(500).json({ error: msg });
   }
 });
@@ -910,6 +1412,7 @@ bureauRouter.post("/org/:orgId/invite", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "invite failed";
     console.error("[Bureau] org invite:", msg);
+    captureBureauError(err, { route: "org invite" });
     res.status(500).json({ error: msg });
   }
 });
@@ -982,6 +1485,7 @@ bureauRouter.post("/org/accept/:token", async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "accept failed";
     console.error("[Bureau] org accept:", msg);
+    captureBureauError(err, { route: "org accept" });
     res.status(500).json({ error: msg });
   }
 });
@@ -1004,4 +1508,1209 @@ bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
   the upgrade page in 1 second...</p>
   <script>setTimeout(() => { window.location.href = ${JSON.stringify(back)}; }, 1000);</script>
   </body></html>`);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 2: embed + badge + transparency + admin + audit
+// ─────────────────────────────────────────────────────────────────────────
+
+function bumpCertFetchCounter(req: Request, certId: string): void {
+  const host = refererHost(req);
+  const day = new Date().toISOString().slice(0, 10);
+  pool
+    .query(
+      `INSERT INTO "BureauCertFetchSource" ("certId","sourceHost","day","fetches")
+       VALUES ($1,$2,$3,1)
+       ON CONFLICT ("certId","sourceHost","day")
+       DO UPDATE SET "fetches" = "BureauCertFetchSource"."fetches" + 1`,
+      [certId, host, day]
+    )
+    .catch(() => {});
+}
+
+function bureauAdminEmailsAllowlist(): Set<string> {
+  const raw = String(process.env.BUREAU_ADMIN_EMAILS || "").trim();
+  if (!raw) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function isBureauAdmin(req: Request): { ok: boolean; email: string | null; reason: string | null } {
+  const auth = String(req.headers.authorization || "");
+  if (!auth.startsWith("Bearer ")) return { ok: false, email: null, reason: "no-bearer" };
+  const token = auth.slice(7).trim();
+  try {
+    // Single source of truth for JWT secret across the codebase. Throws in
+    // production if AUTH_JWT_SECRET is unset/weak — better fail loud than
+    // silently accept tokens signed with a public default.
+    const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] }) as Record<string, unknown>;
+    const email = String(decoded.email || "").toLowerCase();
+    const role = String(decoded.role || "").toLowerCase();
+    if (role === "admin") return { ok: true, email, reason: null };
+    const allow = bureauAdminEmailsAllowlist();
+    if (allow.has(email)) return { ok: true, email, reason: null };
+    return { ok: false, email, reason: "not-in-allowlist" };
+  } catch {
+    return { ok: false, email: null, reason: "invalid-token" };
+  }
+}
+
+async function logBureauAudit(opts: {
+  action: string;
+  certId: string | null;
+  verificationId: string | null;
+  actor: string | null;
+  payload: Record<string, unknown> | null;
+}): Promise<void> {
+  await pool
+    .query(
+      `INSERT INTO "BureauAuditLog" ("id","action","certId","verificationId","actor","payload")
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        crypto.randomUUID(),
+        opts.action,
+        opts.certId,
+        opts.verificationId,
+        opts.actor,
+        opts.payload ? JSON.stringify(opts.payload) : null,
+      ]
+    )
+    .catch(() => {});
+}
+
+// 🔹 GET /cert/:certId/embed — sanitized JSON for third-party pages.
+bureauRouter.get("/cert/:certId/embed", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const certId = String(req.params.certId);
+    const r = await pool.query(
+      `SELECT "id","title","kind","authorVerificationLevel","authorVerifiedName",
+              "authorVerifiedAt","protectedAt","status"
+       FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    if (r.rowCount === 0) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.status(404).json({ id: certId, status: "not_found" });
+    }
+    const row = r.rows[0] as any;
+    const verifiedAtMs = row.authorVerifiedAt
+      ? (row.authorVerifiedAt instanceof Date ? row.authorVerifiedAt.getTime() : new Date(row.authorVerifiedAt).getTime())
+      : 0;
+    const etag = `W/"bureau-embed-${certId}-${row.authorVerificationLevel}-${verifiedAtMs}-${row.status}"`;
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=120");
+      return res.status(304).end();
+    }
+    bumpCertFetchCounter(req, certId);
+    res.setHeader("ETag", etag);
+    res.setHeader("Cache-Control", "public, max-age=120");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      id: row.id,
+      title: row.title,
+      kind: row.kind,
+      verificationLevel: row.authorVerificationLevel || "anonymous",
+      verifiedName: row.authorVerifiedName || null,
+      verifiedAt: row.authorVerifiedAt
+        ? row.authorVerifiedAt instanceof Date
+          ? row.authorVerifiedAt.toISOString()
+          : row.authorVerifiedAt
+        : null,
+      protectedAt: row.protectedAt instanceof Date ? row.protectedAt.toISOString() : row.protectedAt,
+      status: row.status,
+      verifyUrl: `/bureau/upgrade/${row.id}`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "embed failed" });
+  }
+});
+
+// 🔹 GET /cert/:certId/badge.svg — verification badge.
+bureauRouter.get("/cert/:certId/badge.svg", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const certId = String(req.params.certId);
+    const theme = String(req.query.theme || "dark").toLowerCase() === "light" ? "light" : "dark";
+    const r = await pool.query(
+      `SELECT "authorVerificationLevel","status" FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+
+    function esc(s: string): string {
+      return s
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+    }
+    function svgShell(left: string, right: string, rightFill: string): string {
+      const padX = 8;
+      const charW = 6.6;
+      const lW = Math.max(70, Math.round(left.length * charW + padX * 2));
+      const rW = Math.max(80, Math.round(right.length * charW + padX * 2));
+      const total = lW + rW;
+      const leftFill = theme === "light" ? "#e2e8f0" : "#1e293b";
+      const leftText = theme === "light" ? "#0f172a" : "#e2e8f0";
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${total}" height="22" role="img" aria-label="${esc(left)}: ${esc(right)}">
+  <linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-opacity=".08"/></linearGradient>
+  <rect width="${total}" height="22" rx="4" fill="${leftFill}"/>
+  <rect x="${lW}" width="${rW}" height="22" rx="4" fill="${rightFill}"/>
+  <rect x="${lW - 4}" width="8" height="22" fill="${rightFill}"/>
+  <rect width="${total}" height="22" rx="4" fill="url(#s)"/>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11" font-weight="700">
+    <text x="${lW / 2}" y="15" fill="${leftText}">${esc(left)}</text>
+    <text x="${lW + rW / 2}" y="15">${esc(right)}</text>
+  </g>
+</svg>`;
+    }
+
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (r.rowCount === 0) {
+      res.setHeader("Cache-Control", "public, max-age=30");
+      return res.send(svgShell("AEVION BUREAU", "not found", "#94a3b8"));
+    }
+    const row = r.rows[0] as any;
+    const lvl = String(row.authorVerificationLevel || "anonymous");
+    const status = String(row.status || "active");
+    let label: string;
+    let color: string;
+    if (status === "revoked") {
+      label = "revoked";
+      color = "#dc2626";
+    } else if (lvl === "verified") {
+      label = "✓ Verified";
+      color = "#16a34a";
+    } else if (lvl === "notarized") {
+      label = "⚖ Notarized";
+      color = "#7c3aed";
+    } else {
+      label = "anonymous";
+      color = "#475569";
+    }
+    const etag = `W/"bureau-badge-${certId}-${lvl}-${status}-${theme}"`;
+    if (req.headers["if-none-match"] === etag) {
+      res.setHeader("ETag", etag);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.status(304).end();
+    }
+    bumpCertFetchCounter(req, certId);
+    res.setHeader("ETag", etag);
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.send(svgShell("AEVION BUREAU", label, color));
+  } catch (err: any) {
+    res.status(500).json({ error: "badge failed" });
+  }
+});
+
+// 🔹 GET /transparency — public aggregate counts (no PII).
+bureauRouter.get("/transparency", bureauEmbedRateLimit, async (_req, res) => {
+  try {
+    await ensureBureauTables();
+    const totals = await pool.query(
+      `SELECT "authorVerificationLevel" AS "level", COUNT(*)::int AS "n"
+       FROM "IPCertificate" GROUP BY "authorVerificationLevel"`
+    );
+    const verifs = await pool.query(
+      `SELECT "kycStatus" AS "k", COUNT(*)::int AS "n"
+       FROM "BureauVerification" GROUP BY "kycStatus"`
+    );
+    const countries = await pool.query(
+      `SELECT "kycVerifiedCountry" AS "c", COUNT(*)::int AS "n"
+       FROM "BureauVerification"
+       WHERE "kycVerifiedCountry" IS NOT NULL
+       GROUP BY "kycVerifiedCountry" ORDER BY "n" DESC LIMIT 10`
+    );
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.json({
+      totalsByLevel: Object.fromEntries(totals.rows.map((r: any) => [r.level || "anonymous", r.n])),
+      verificationsByStatus: Object.fromEntries(verifs.rows.map((r: any) => [r.k, r.n])),
+      topCountries: countries.rows.map((r: any) => ({ country: r.c, count: r.n })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "transparency failed" });
+  }
+});
+
+// 🔹 Admin probe.
+bureauRouter.get("/admin/whoami", (req, res) => {
+  const a = isBureauAdmin(req);
+  res.json({ isAdmin: a.ok, email: a.email, reason: a.reason });
+});
+
+// 🔹 Admin: list verifications (?status, ?limit≤200).
+bureauRouter.get("/admin/verifications", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+  const status = String(req.query.status || "").trim();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const args: any[] = [];
+  let where = "";
+  if (status) {
+    args.push(status);
+    where = `WHERE "kycStatus" = $1`;
+  }
+  args.push(limit);
+  const r = await pool.query(
+    `SELECT "id","userId","email","kycProvider","kycStatus","kycVerifiedName",
+            "kycVerifiedCountry","paymentStatus","createdAt","completedAt","orgId"
+     FROM "BureauVerification" ${where}
+     ORDER BY "createdAt" DESC LIMIT $${args.length}`,
+    args
+  );
+  res.json({ items: r.rows });
+});
+
+// 🔹 Admin: force-verify a cert (bypass payment / KYC).
+bureauRouter.post("/admin/cert/:certId/force-verify", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+  const certId = String(req.params.certId);
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  const verifiedName = String(req.body?.verifiedName || "").trim().slice(0, 200) || null;
+  const cur = await pool.query(
+    `SELECT "id","authorVerificationLevel" FROM "IPCertificate" WHERE "id" = $1`,
+    [certId]
+  );
+  if (cur.rowCount === 0) return res.status(404).json({ error: "cert_not_found" });
+  await pool.query(
+    `UPDATE "IPCertificate"
+       SET "authorVerificationLevel" = 'verified',
+           "authorVerificationProvider" = 'admin',
+           "authorVerifiedAt" = NOW(),
+           "authorVerifiedName" = COALESCE($2, "authorVerifiedName")
+     WHERE "id" = $1`,
+    [certId, verifiedName]
+  );
+  await logBureauAudit({
+    action: "admin.force-verify",
+    certId,
+    verificationId: null,
+    actor: a.email,
+    payload: { reason, verifiedName, prevLevel: cur.rows[0].authorVerificationLevel },
+  });
+  res.json({ ok: true });
+});
+
+// 🔹 Admin: revoke a cert's verification status.
+bureauRouter.post("/admin/cert/:certId/revoke-verification", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+  const certId = String(req.params.certId);
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
+  if (!reason) return res.status(400).json({ error: "reason_required" });
+  const cur = await pool.query(
+    `SELECT "id","authorVerificationLevel","authorVerifiedName" FROM "IPCertificate" WHERE "id" = $1`,
+    [certId]
+  );
+  if (cur.rowCount === 0) return res.status(404).json({ error: "cert_not_found" });
+  await pool.query(
+    `UPDATE "IPCertificate"
+       SET "authorVerificationLevel" = 'anonymous',
+           "authorVerifiedAt" = NULL,
+           "authorVerifiedName" = NULL
+     WHERE "id" = $1`,
+    [certId]
+  );
+  await logBureauAudit({
+    action: "admin.revoke-verification",
+    certId,
+    verificationId: null,
+    actor: a.email,
+    payload: { reason, prevLevel: cur.rows[0].authorVerificationLevel, prevName: cur.rows[0].authorVerifiedName },
+  });
+  res.json({ ok: true });
+});
+
+// 🔹 Admin: audit reader.
+bureauRouter.get("/admin/audit", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1), 200);
+  const action = String(req.query.action || "").trim();
+  const args: any[] = [];
+  let where = "";
+  if (action) {
+    args.push(action);
+    where = `WHERE "action" = $1`;
+  }
+  args.push(limit);
+  const r = await pool.query(
+    `SELECT "id","action","certId","verificationId","actor","payload","at"
+     FROM "BureauAuditLog" ${where}
+     ORDER BY "at" DESC LIMIT $${args.length}`,
+    args
+  );
+  res.json({ items: r.rows });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — OG cards, sitemap, per-cert RSS, bulk admin
+// ─────────────────────────────────────────────────────────────────────────
+
+function bureauEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function bureauWrap(text: string, perLine: number, maxLines: number): string[] {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const w of words) {
+    if ((current + " " + w).trim().length > perLine) {
+      if (current) lines.push(current);
+      current = w;
+      if (lines.length >= maxLines - 1) break;
+    } else {
+      current = (current + " " + w).trim();
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  const consumed = lines.join(" ").split(/\s+/).filter(Boolean).length;
+  if (consumed < words.length && lines.length === maxLines) {
+    lines[maxLines - 1] = (lines[maxLines - 1] || "").replace(/\s+\S+$/, "") + "…";
+  }
+  return lines;
+}
+
+function bureauLevelTheme(level: string, status: string): { color: string; label: string } {
+  if (status === "revoked") return { color: "#dc2626", label: "REVOKED" };
+  if (level === "notarized") return { color: "#7c3aed", label: "NOTARIZED" };
+  if (level === "verified") return { color: "#16a34a", label: "VERIFIED" };
+  return { color: "#94a3b8", label: "ANONYMOUS" };
+}
+
+// 🔹 GET /cert/:certId/og.svg — 1200x630 social-share card. Verification
+//    level drives the accent color; revoked certs are red so a paste in
+//    Slack/Discord/etc visibly reads as bad.
+bureauRouter.get("/cert/:certId/og.svg", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const certId = String(req.params.certId);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const r = await pool.query(
+      `SELECT "id","title","kind","authorVerificationLevel","authorVerifiedName",
+              "authorVerifiedAt","protectedAt","status"
+       FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    if (r.rowCount === 0) {
+      const fallback = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <text x="60" y="320" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="#e2e8f0">Cert not found</text>
+  <text x="60" y="380" font-family="ui-monospace, monospace" font-size="24" fill="#64748b">${bureauEsc(certId)}</text>
+</svg>`;
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(fallback);
+    }
+    const row = r.rows[0] as any;
+    const lvl = String(row.authorVerificationLevel || "anonymous");
+    const status = String(row.status || "active");
+    const verifiedAtMs = row.authorVerifiedAt
+      ? (row.authorVerifiedAt instanceof Date
+          ? row.authorVerifiedAt.getTime()
+          : new Date(row.authorVerifiedAt).getTime())
+      : 0;
+    if (applyOgEtag(req, res, `bureau-cert-${certId}-${lvl}-${status}-${verifiedAtMs}`)) return;
+    const theme = bureauLevelTheme(lvl, status);
+    const titleLines = bureauWrap(row.title || certId, 24, 2);
+    const verifiedAt = row.authorVerifiedAt
+      ? (row.authorVerifiedAt instanceof Date ? row.authorVerifiedAt.toISOString() : String(row.authorVerifiedAt)).slice(0, 10)
+      : null;
+    const author = row.authorVerifiedName ? `by ${row.authorVerifiedName}` : "anonymous author";
+    const subLines = bureauWrap(`${author} · kind=${row.kind || "—"}${verifiedAt ? ` · verified ${verifiedAt}` : ""}`, 60, 2);
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${theme.color}"/>
+      <stop offset="1" stop-color="${theme.color}" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION BUREAU</text>
+    <g transform="translate(60, 170)">
+      ${titleLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 92}" font-size="80" font-weight="900" letter-spacing="-2">${bureauEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, ${170 + titleLines.length * 92 + 40})">
+      ${subLines
+        .map(
+          (line, i) =>
+            `<text y="${i * 38}" font-size="28" font-weight="500" fill="#cbd5e1">${bureauEsc(line)}</text>`
+        )
+        .join("\n      ")}
+    </g>
+    <g transform="translate(60, 540)">
+      <rect width="${theme.label.length * 18 + 56}" height="44" rx="22" fill="${theme.color}" fill-opacity="0.18" stroke="${theme.color}" stroke-width="2"/>
+      <text x="22" y="30" font-size="22" font-weight="900" fill="${theme.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">${bureauEsc(theme.label)}</text>
+    </g>
+    <g transform="translate(${1200 - 60}, 540)" text-anchor="end">
+      <text font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">${bureauEsc(certId.slice(0, 18))}</text>
+    </g>
+  </g>
+</svg>`;
+
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "cert og failed" });
+  }
+});
+
+// 🔹 GET /og.svg — index-page social-share card for /bureau. Mirrors the
+//    transparency totals so a share of the bureau root reflects current
+//    verification volume.
+bureauRouter.get("/og.svg", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT "authorVerificationLevel" AS "level", COUNT(*)::int AS "n"
+       FROM "IPCertificate" GROUP BY "authorVerificationLevel"`
+    );
+    const byLevel: Record<string, number> = {};
+    for (const r of totals.rows as any[]) byLevel[r.level || "anonymous"] = r.n;
+    const verified = byLevel.verified || 0;
+    const notarized = byLevel.notarized || 0;
+    const anon = byLevel.anonymous || 0;
+    const total = verified + notarized + anon;
+    if (applyOgEtag(req, res, `bureau-index-${verified}-${notarized}-${anon}`)) return;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#16a34a"/>
+      <stop offset="0.5" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION BUREAU</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${bureauEsc(String(total))} certificates</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Author identity tier — verified, notarized, anonymous.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#16a34a" fill-opacity="0.15" stroke="#16a34a" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#16a34a">${bureauEsc(String(verified))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#86efac">VERIFIED</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#7c3aed" fill-opacity="0.15" stroke="#7c3aed" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#a78bfa">${bureauEsc(String(notarized))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#c4b5fd">NOTARIZED</text>
+      </g>
+      <g transform="translate(480, 0)">
+        <rect width="220" height="80" rx="14" fill="#94a3b8" fill-opacity="0.18" stroke="#94a3b8" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#e2e8f0">${bureauEsc(String(anon))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#cbd5e1">ANONYMOUS</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / bureau</text>
+  </g>
+</svg>`;
+
+    res.send(svg);
+  } catch (err: any) {
+    res.status(500).json({ error: "index og failed" });
+  }
+});
+
+// 🔹 GET /cert/:certId/changelog.rss — RSS 2.0 of admin actions affecting
+//    one certificate (force-verify, revoke-verification). Lets a partner
+//    subscribe to status changes on a single cert without polling.
+bureauRouter.get("/cert/:certId/changelog.rss", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const certId = String(req.params.certId);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.app";
+    const selfUrl = `${proto}://${host}/api/bureau/cert/${encodeURIComponent(certId)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/bureau/cert/${encodeURIComponent(certId)}`;
+
+    const certRow = await pool.query(
+      `SELECT "title" FROM "IPCertificate" WHERE "id" = $1 LIMIT 1`,
+      [certId]
+    );
+    const certTitle = certRow.rows[0]?.title || certId;
+
+    const r = await pool.query(
+      `SELECT "id","action","actor","payload","at"
+       FROM "BureauAuditLog"
+       WHERE "certId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [certId, limit]
+    );
+
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `bureau-cert-${certId}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      switch (row.action) {
+        case "admin.force-verify":
+          return `Force-verified by ${row.actor || "admin"}${p.reason ? ` — ${p.reason}` : ""}`;
+        case "admin.revoke-verification":
+          return `Verification revoked by ${row.actor || "admin"}${p.reason ? ` — ${p.reason}` : ""}`;
+        default:
+          return row.action || "Bureau event";
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${certTitle} — ${summary}`;
+        const guid = `aevion-bureau-${row.id}`;
+        return `    <item>
+      <title>${bureauEsc(title)}</title>
+      <link>${bureauEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${bureauEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${bureauEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION Bureau · ${bureauEsc(certTitle)} — verification log</title>
+    <link>${bureauEsc(siteUrl)}</link>
+    <atom:link href="${bureauEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Verification status changes for AEVION certificate ${bureauEsc(certId)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "cert rss failed" });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap for the bureau surface. Covers /bureau plus
+//    every public cert page for non-anonymous (verified or notarized) certs.
+//    Anonymous certs are excluded — there's nothing to index.
+bureauRouter.get("/sitemap.xml", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.app";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","authorVerifiedAt","protectedAt"
+       FROM "IPCertificate"
+       WHERE "authorVerificationLevel" IN ('verified','notarized')
+         AND "status" <> 'revoked'
+       ORDER BY COALESCE("authorVerifiedAt","protectedAt") DESC
+       LIMIT 5000`
+    );
+
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.authorVerifiedAt || rows[0]?.protectedAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `bureau-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${bureauEsc(origin)}/bureau</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    urls.push(`  <url>
+    <loc>${bureauEsc(origin)}/bureau/transparency</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    for (const row of r.rows as any[]) {
+      const lastmodSrc = row.authorVerifiedAt || row.protectedAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${bureauEsc(origin)}/bureau/cert/${bureauEsc(row.id)}</loc>
+    <lastmod>${bureauEsc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`);
+      urls.push(`  <url>
+    <loc>${bureauEsc(origin)}/bureau/badge/${bureauEsc(row.id)}</loc>
+    <lastmod>${bureauEsc(lastmod)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    res.status(500).json({ error: "sitemap failed" });
+  }
+});
+
+// 🔹 PATCH /admin/bulk — apply force-verify or revoke-verification to up
+//    to 100 certs in one request. Body:
+//    { items: [{ certId, action: "force-verify"|"revoke-verification",
+//                reason?, verifiedName? }, …] }
+//    All writes happen in a single transaction; one audit row per cert.
+//    Aborts on first invalid row (no partial writes).
+bureauRouter.patch("/admin/bulk", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  try {
+    await ensureBureauTables();
+    const itemsRaw = req.body?.items;
+    if (!Array.isArray(itemsRaw) || itemsRaw.length === 0) {
+      return res.status(400).json({ error: "items must be a non-empty array" });
+    }
+    if (itemsRaw.length > 100) {
+      return res.status(400).json({ error: "max 100 items per call" });
+    }
+
+    type BulkItem = {
+      certId: string;
+      action: "force-verify" | "revoke-verification";
+      reason: string;
+      verifiedName: string | null;
+    };
+    const items: BulkItem[] = [];
+    for (const raw of itemsRaw) {
+      if (!raw || typeof raw !== "object") {
+        return res.status(400).json({ error: "each item must be an object" });
+      }
+      const certId = typeof raw.certId === "string" ? raw.certId.trim() : "";
+      if (!certId) return res.status(400).json({ error: "certId required" });
+      const action = String(raw.action || "");
+      if (action !== "force-verify" && action !== "revoke-verification") {
+        return res.status(400).json({ error: "invalid action", certId, action });
+      }
+      const reason = String(raw.reason || "").trim().slice(0, 500);
+      if (action === "revoke-verification" && !reason) {
+        return res.status(400).json({ error: "reason required for revoke", certId });
+      }
+      const verifiedName = action === "force-verify"
+        ? (typeof raw.verifiedName === "string" ? raw.verifiedName.trim().slice(0, 200) || null : null)
+        : null;
+      items.push({ certId, action, reason, verifiedName });
+    }
+
+    const results: Array<{
+      certId: string;
+      ok: boolean;
+      action: string;
+      prevLevel?: string;
+      error?: string;
+    }> = [];
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const it of items) {
+        const cur = await client.query(
+          `SELECT "id","authorVerificationLevel","authorVerifiedName"
+           FROM "IPCertificate" WHERE "id" = $1`,
+          [it.certId]
+        );
+        if (cur.rowCount === 0) {
+          results.push({ certId: it.certId, ok: false, action: it.action, error: "cert_not_found" });
+          continue;
+        }
+        const prev = cur.rows[0];
+        if (it.action === "force-verify") {
+          await client.query(
+            `UPDATE "IPCertificate"
+               SET "authorVerificationLevel" = 'verified',
+                   "authorVerificationProvider" = 'admin',
+                   "authorVerifiedAt" = NOW(),
+                   "authorVerifiedName" = COALESCE($2, "authorVerifiedName")
+             WHERE "id" = $1`,
+            [it.certId, it.verifiedName]
+          );
+          await client.query(
+            `INSERT INTO "BureauAuditLog" ("id","action","certId","verificationId","actor","payload")
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              crypto.randomUUID(),
+              "admin.force-verify",
+              it.certId,
+              null,
+              a.email,
+              JSON.stringify({
+                reason: it.reason,
+                verifiedName: it.verifiedName,
+                prevLevel: prev.authorVerificationLevel,
+                bulk: true,
+              }),
+            ]
+          );
+        } else {
+          await client.query(
+            `UPDATE "IPCertificate"
+               SET "authorVerificationLevel" = 'anonymous',
+                   "authorVerifiedAt" = NULL,
+                   "authorVerifiedName" = NULL
+             WHERE "id" = $1`,
+            [it.certId]
+          );
+          await client.query(
+            `INSERT INTO "BureauAuditLog" ("id","action","certId","verificationId","actor","payload")
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              crypto.randomUUID(),
+              "admin.revoke-verification",
+              it.certId,
+              null,
+              a.email,
+              JSON.stringify({
+                reason: it.reason,
+                prevLevel: prev.authorVerificationLevel,
+                prevName: prev.authorVerifiedName,
+                bulk: true,
+              }),
+            ]
+          );
+        }
+        results.push({
+          certId: it.certId,
+          ok: true,
+          action: it.action,
+          prevLevel: prev.authorVerificationLevel,
+        });
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const okCount = results.filter((r) => r.ok).length;
+    res.json({ ok: true, applied: okCount, total: results.length, results });
+  } catch (err: any) {
+    res.status(500).json({ error: "bulk failed" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase B: Org member management
+// ─────────────────────────────────────────────────────────────────────────
+
+/** DELETE /api/bureau/org/:orgId/members/:memberId — remove a member. Owner/admin only; cannot remove the org owner. */
+bureauRouter.delete("/org/:orgId/members/:memberId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { orgId, memberId } = req.params;
+    const myAccess = await pool.query(
+      `SELECT "role" FROM "BureauMember" WHERE "orgId" = $1 AND "userId" = $2`,
+      [orgId, user.userId],
+    );
+    if (myAccess.rows.length === 0 || !["owner", "admin"].includes(myAccess.rows[0].role)) {
+      return res.status(403).json({ error: "owner/admin role required" });
+    }
+    const target = await pool.query(
+      `SELECT "role","userId" FROM "BureauMember" WHERE "id" = $1 AND "orgId" = $2`,
+      [memberId, orgId],
+    );
+    if (target.rows.length === 0) return res.status(404).json({ error: "member not found" });
+    if (target.rows[0].role === "owner") return res.status(400).json({ error: "cannot remove the org owner" });
+    if (target.rows[0].userId === user.userId) return res.status(400).json({ error: "cannot remove yourself" });
+    await pool.query(`DELETE FROM "BureauMember" WHERE "id" = $1`, [memberId]);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** PATCH /api/bureau/org/:orgId/members/:memberId — change a member's role. Owner only. */
+bureauRouter.patch("/org/:orgId/members/:memberId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { orgId, memberId } = req.params;
+    const myAccess = await pool.query(
+      `SELECT "role" FROM "BureauMember" WHERE "orgId" = $1 AND "userId" = $2`,
+      [orgId, user.userId],
+    );
+    if (myAccess.rows.length === 0 || myAccess.rows[0].role !== "owner") {
+      return res.status(403).json({ error: "owner role required to change roles" });
+    }
+    const { role } = req.body || {};
+    if (!["admin", "member"].includes(role)) {
+      return res.status(400).json({ error: "role must be 'admin' or 'member'" });
+    }
+    const target = await pool.query(
+      `SELECT "role","userId" FROM "BureauMember" WHERE "id" = $1 AND "orgId" = $2`,
+      [memberId, orgId],
+    );
+    if (target.rows.length === 0) return res.status(404).json({ error: "member not found" });
+    if (target.rows[0].role === "owner") return res.status(400).json({ error: "cannot change the owner's role" });
+    await pool.query(`UPDATE "BureauMember" SET "role" = $1 WHERE "id" = $2`, [role, memberId]);
+    res.json({ ok: true, role });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** DELETE /api/bureau/org/:orgId/invites/:inviteId — cancel a pending invite. Owner/admin only. */
+bureauRouter.delete("/org/:orgId/invites/:inviteId", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { orgId, inviteId } = req.params;
+    const myAccess = await pool.query(
+      `SELECT "role" FROM "BureauMember" WHERE "orgId" = $1 AND "userId" = $2`,
+      [orgId, user.userId],
+    );
+    if (myAccess.rows.length === 0 || !["owner", "admin"].includes(myAccess.rows[0].role)) {
+      return res.status(403).json({ error: "owner/admin role required" });
+    }
+    await pool.query(`DELETE FROM "BureauOrgInvite" WHERE "id" = $1 AND "orgId" = $2`, [inviteId, orgId]);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase C: Notarized tier — request + status + admin sign + seed
+// ─────────────────────────────────────────────────────────────────────────
+
+async function ensureNotarizeColumns(): Promise<void> {
+  await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'pending';`);
+  await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "requestedByUserId" TEXT;`);
+}
+
+/**
+ * POST /api/bureau/cert/:certId/notarize/request
+ * Body: { notaryId }
+ * Creates a pending notarization request. Cert must be at 'verified' tier.
+ */
+bureauRouter.post("/cert/:certId/notarize/request", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const user = await resolveUser(req);
+    if (!user.userId) return res.status(401).json({ error: "authentication required" });
+    const { certId } = req.params;
+    const { notaryId } = req.body || {};
+    if (!notaryId) return res.status(400).json({ error: "notaryId is required" });
+
+    const certRow = await pool.query(
+      `SELECT c."id", c."contentHash", c."authorVerificationLevel", c."notarySignatureId"
+         FROM "IPCertificate" c
+         JOIN "QRightObject" o ON o."id" = c."objectId"
+        WHERE c."id" = $1 AND o."ownerUserId" = $2`,
+      [certId, user.userId],
+    );
+    if (certRow.rows.length === 0) return res.status(404).json({ error: "cert not found or not yours" });
+    const cert = certRow.rows[0];
+    if (cert.authorVerificationLevel !== "verified") {
+      return res.status(400).json({ error: "cert must be at Verified tier before requesting notarization" });
+    }
+    if (cert.notarySignatureId) {
+      const existing = await pool.query(
+        `SELECT "status" FROM "BureauNotarySignature" WHERE "id" = $1`,
+        [cert.notarySignatureId],
+      );
+      if (existing.rows.length > 0 && existing.rows[0].status !== "rejected") {
+        return res.status(409).json({ error: "a notarization request already exists", status: existing.rows[0].status });
+      }
+    }
+
+    const notary = await pool.query(
+      `SELECT "id","fullName","active" FROM "BureauNotary" WHERE "id" = $1`,
+      [notaryId],
+    );
+    if (notary.rows.length === 0 || !notary.rows[0].active) {
+      return res.status(404).json({ error: "notary not found or inactive" });
+    }
+
+    const signedHash = crypto.createHash("sha256").update(cert.contentHash).digest("hex");
+    const sigId = "nsig-" + crypto.randomBytes(8).toString("hex");
+    await pool.query(
+      `INSERT INTO "BureauNotarySignature" ("id","notaryId","certId","signedHash","signature","status","requestedByUserId")
+       VALUES ($1,$2,$3,$4,'pending','pending',$5)`,
+      [sigId, notaryId, certId, signedHash, user.userId],
+    );
+    await pool.query(`UPDATE "IPCertificate" SET "notarySignatureId" = $1 WHERE "id" = $2`, [sigId, certId]);
+    res.status(201).json({ id: sigId, status: "pending", notaryId, notaryName: notary.rows[0].fullName });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/bureau/cert/:certId/notarize/status
+ * Returns current notarization status for a cert.
+ */
+bureauRouter.get("/cert/:certId/notarize/status", async (req, res) => {
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const { certId } = req.params;
+    const r = await pool.query(
+      `SELECT s."id", s."status", s."notaryId", s."signedHash", s."signedAt", s."revokedAt",
+              s."notaryRegistryRef", s."requestedByUserId",
+              n."fullName" as "notaryName", n."jurisdiction", n."publicKeyFingerprint"
+         FROM "BureauNotarySignature" s
+         JOIN "BureauNotary" n ON n."id" = s."notaryId"
+        WHERE s."certId" = $1
+        ORDER BY s."signedAt" DESC
+        LIMIT 1`,
+      [certId],
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: "no notarization request found" });
+    res.json(r.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/bureau/admin/cert/:certId/notarize/sign
+ * Admin-only: approve and sign a pending notarization request (demo uses Ed25519-like HMAC stub).
+ */
+bureauRouter.post("/admin/cert/:certId/notarize/sign", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const { certId } = req.params;
+    const registryRef = String(req.body?.registryRef || "").trim() || null;
+
+    const cert = await pool.query(
+      `SELECT "notarySignatureId","contentHash","title" FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (cert.rows.length === 0) return res.status(404).json({ error: "cert not found" });
+    const { notarySignatureId, contentHash } = cert.rows[0];
+    if (!notarySignatureId) return res.status(400).json({ error: "no pending notarization request" });
+
+    const sigRow = await pool.query(
+      `SELECT "id","status","signedHash","notaryId" FROM "BureauNotarySignature" WHERE "id" = $1`,
+      [notarySignatureId],
+    );
+    if (sigRow.rows.length === 0) return res.status(404).json({ error: "signature record not found" });
+    if (sigRow.rows[0].status !== "pending") {
+      return res.status(409).json({ error: "request is not in pending state", status: sigRow.rows[0].status });
+    }
+
+    const notary = await pool.query(
+      `SELECT "publicKeyEd25519","fullName" FROM "BureauNotary" WHERE "id" = $1`,
+      [sigRow.rows[0].notaryId],
+    );
+    // Demo: HMAC-SHA256 with notary public key as secret (real impl would use Ed25519 private key held by notary).
+    const demoSig = crypto.createHmac("sha256", notary.rows[0].publicKeyEd25519 || "demo-key")
+      .update(`${certId}:${contentHash}`)
+      .digest("hex");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `UPDATE "BureauNotarySignature"
+            SET "signature" = $1, "status" = 'signed', "signedAt" = NOW(), "notaryRegistryRef" = $2
+          WHERE "id" = $3`,
+        [demoSig, registryRef, notarySignatureId],
+      );
+      await client.query(
+        `UPDATE "IPCertificate"
+            SET "authorVerificationLevel" = 'notarized'
+          WHERE "id" = $1`,
+        [certId],
+      );
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
+    }
+    await logBureauAudit({
+      action: "admin.notarize.sign",
+      certId,
+      verificationId: notarySignatureId,
+      actor: a.email,
+      payload: { notaryName: notary.rows[0].fullName, registryRef },
+    });
+    res.json({ ok: true, signatureId: notarySignatureId, status: "signed" });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/bureau/admin/notary/seed
+ * Admin-only: seed demo notaries. Idempotent — skips rows with existing licenseNumber.
+ */
+bureauRouter.post("/admin/notary/seed", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  await ensureBureauTables();
+
+  const demoNotaries = [
+    {
+      id: "notary-demo-kz-01",
+      fullName: "Askar Bekzhanov",
+      licenseNumber: "KZ-NOTARY-2024-001",
+      jurisdiction: "KZ",
+      city: "Almaty",
+      contactEmail: "bekzhanov@demo.bureau.aevion.app",
+      monthlyVolumeLimit: 500,
+    },
+    {
+      id: "notary-demo-kz-02",
+      fullName: "Zarina Moldakhmetova",
+      licenseNumber: "KZ-NOTARY-2024-002",
+      jurisdiction: "KZ",
+      city: "Astana",
+      contactEmail: "moldakhmetova@demo.bureau.aevion.app",
+      monthlyVolumeLimit: 300,
+    },
+    {
+      id: "notary-demo-eu-01",
+      fullName: "Elena Petrov",
+      licenseNumber: "EU-NOTARY-2024-001",
+      jurisdiction: "EU",
+      city: "Tallinn",
+      contactEmail: "petrov@demo.bureau.aevion.app",
+      monthlyVolumeLimit: 200,
+    },
+  ];
+
+  const results: Array<{ id: string; skipped: boolean }> = [];
+  for (const n of demoNotaries) {
+    const exists = await pool.query(
+      `SELECT 1 FROM "BureauNotary" WHERE "licenseNumber" = $1`,
+      [n.licenseNumber],
+    );
+    if (exists.rows.length > 0) {
+      results.push({ id: n.id, skipped: true });
+      continue;
+    }
+    const pubKey = crypto.randomBytes(32).toString("hex");
+    const fingerprint = crypto.createHash("sha256").update(pubKey).digest("hex").slice(0, 16);
+    await pool.query(
+      `INSERT INTO "BureauNotary"
+         ("id","fullName","licenseNumber","jurisdiction","city","publicKeyEd25519","publicKeyFingerprint","contactEmail","contractSignedAt","monthlyVolumeLimit")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9)`,
+      [n.id, n.fullName, n.licenseNumber, n.jurisdiction, n.city, pubKey, fingerprint, n.contactEmail, n.monthlyVolumeLimit],
+    );
+    results.push({ id: n.id, skipped: false });
+  }
+  res.json({ ok: true, results });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// AIPB cross-product: lookup Bureau cert by QRight objectId.
+// Used by QRight object detail page to show cert status + upgrade CTA.
+// Public (no auth) — returns whatever public fields are safe.
+// ─────────────────────────────────────────────────────────────────────────
+bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async (req, res) => {
+  try {
+    await ensureBureauTables();
+    const qrightObjectId = String(req.params.qrightObjectId || "").trim();
+    if (!qrightObjectId) {
+      return res.status(400).json({ error: "qrightObjectId required" });
+    }
+    const r = await pool.query(
+      `SELECT "id","status","authorVerificationLevel","protectedAt"
+       FROM "IPCertificate"
+       WHERE "objectId" = $1 AND "status" != 'revoked'
+       ORDER BY "protectedAt" DESC
+       LIMIT 1`,
+      [qrightObjectId],
+    );
+    if (r.rowCount === 0) {
+      return res.status(404).json({
+        error: "no_cert_for_qright",
+        message: "This QRight object has no Bureau certificate yet.",
+        upgradeUrl: `/bureau?qrightObjectId=${encodeURIComponent(qrightObjectId)}`,
+      });
+    }
+    const row = r.rows[0] as {
+      id: string;
+      status: string;
+      authorVerificationLevel: string;
+      protectedAt: Date;
+    };
+    res.json({
+      certId: row.id,
+      status: row.status,
+      verificationLevel: row.authorVerificationLevel,
+      protectedAt: row.protectedAt,
+      viewUrl: `/bureau/cert/${row.id}`,
+      upgradeUrl: row.authorVerificationLevel === "anonymous"
+        ? `/bureau/upgrade/${row.id}`
+        : null,
+    });
+  } catch (err: unknown) {
+    console.error("[bureau] cert_for_qright_failed", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "lookup_failed" });
+  }
 });

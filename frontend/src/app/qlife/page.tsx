@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import BiomarkerForm from "./components/BiomarkerForm";
 import TrendCard from "./components/TrendCard";
 import PlanCard from "./components/PlanCard";
@@ -114,6 +115,23 @@ export default function QLifePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
+        <MvpConceptBoard
+          moduleId="qlife"
+          noun="concept/messages"
+          accent="rose"
+          sectionTitle="Longevity concept board"
+          sectionHint="Какие биомаркеры важнее для anti-aging? Какие протоколы стоит трекать?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / биомаркер / протокол", placeholder: "напр.: glucose continuous monitoring", required: true },
+            { key: "rationale", label: "Зачем это важно", type: "textarea", placeholder: "Какой механизм старения это адресует, источник" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </section>
     </main>
   );

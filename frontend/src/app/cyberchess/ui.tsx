@@ -24,6 +24,7 @@ export type BtnProps = {
   title?: string;
   ariaLabel?: string;
   style?: React.CSSProperties;
+  className?: string;
   children?: React.ReactNode;
 };
 
@@ -60,7 +61,7 @@ const variantStyle = (v: BtnVariant, active: boolean): React.CSSProperties => {
 };
 
 export function Btn({ variant = "secondary", size = "md", full, loading, disabled,
-  icon, iconRight, active, onClick, type = "button", title, ariaLabel, style, children }: BtnProps) {
+  icon, iconRight, active, onClick, type = "button", title, ariaLabel, style, className, children }: BtnProps) {
   const sz = BTN_SIZE[size];
   return (
     <button
@@ -69,7 +70,7 @@ export function Btn({ variant = "secondary", size = "md", full, loading, disable
       disabled={disabled || loading}
       title={title}
       aria-label={ariaLabel}
-      className="cc-focus-ring cc-touch"
+      className={`cc-focus-ring cc-touch${className ? ` ${className}` : ""}`}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         gap: sz.gap, padding: sz.pad, fontSize: sz.fs, fontWeight: 700,

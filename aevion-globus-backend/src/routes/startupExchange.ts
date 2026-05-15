@@ -537,3 +537,89 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
     createdAt: row.created_at,
   }, 201);
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+interface StartupXConceptMessage {
+  id: string;
+  payload: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+}
+
+const STARTUPX_CONCEPT_MAX = 200;
+const startupxConceptMessages: StartupXConceptMessage[] = [];
+
+startupExchangeRouter.get("/status", (_req: Request, res: Response) => {
+  res.json({
+    module: "startupx",
+    code: "STARTUPX",
+    status: "mvp",
+    description: "Startup ideas marketplace with investor-interest signals.",
+    endpoints: {
+      ideas: "/api/startupx/ideas",
+      stats: "/api/startupx/stats",
+      conceptMessages: "/api/startupx/concept/messages",
+      conceptStats: "/api/startupx/concept-stats",
+    },
+    conceptMessagesCount: startupxConceptMessages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+startupExchangeRouter.get("/concept/messages", (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+  const items = startupxConceptMessages.slice(0, limit);
+  res.json({ items, total: startupxConceptMessages.length, moduleId: "startupx", noun: "concept/messages" });
+});
+
+startupExchangeRouter.post("/concept/messages", postLimiter, (req: Request, res: Response) => {
+  try {
+    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
+    const payload = (body.payload && typeof body.payload === "object")
+      ? body.payload as Record<string, unknown>
+      : body;
+    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
+    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
+    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
+    const author = String(payload.author ?? "").trim().slice(0, 80);
+    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["startupx"];
+    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
+    const msg: StartupXConceptMessage = {
+      id: crypto.randomUUID(),
+      payload: { idea, rationale, author },
+      tags: tags.length ? tags : ["startupx"],
+      createdAt: new Date().toISOString(),
+    };
+    startupxConceptMessages.unshift(msg);
+    if (startupxConceptMessages.length > STARTUPX_CONCEPT_MAX) {
+      startupxConceptMessages.length = STARTUPX_CONCEPT_MAX;
+    }
+    return res.status(201).json(msg);
+  } catch (err: unknown) {
+    console.error("[startupx] concept_post_failed", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "concept_post_failed" });
+  }
+});
+
+startupExchangeRouter.get("/concept-stats", (_req: Request, res: Response) => {
+  const now = Date.now();
+  const sevenDays = 7 * 86_400_000;
+  const last7d = startupxConceptMessages.filter(
+    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
+  ).length;
+  const tagCounts = new Map<string, number>();
+  for (const m of startupxConceptMessages) {
+    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  }
+  const topTags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag, count]) => ({ tag, count }));
+  res.json({
+    moduleId: "startupx",
+    noun: "concept/messages",
+    total: startupxConceptMessages.length,
+    last7d,
+    topTags,
+  });
+});

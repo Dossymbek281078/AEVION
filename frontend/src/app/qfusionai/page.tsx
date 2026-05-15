@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import FusionPlayground, { type RouteResult } from "./components/FusionPlayground";
 import ProvidersPanel from "./components/ProvidersPanel";
 import RequestCard from "./components/RequestCard";
@@ -216,6 +217,23 @@ export default function QFusionAIPage() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
+        <MvpConceptBoard
+          moduleId="qfusionai"
+          noun="concept/messages"
+          accent="sky"
+          sectionTitle="Fusion routing concept board"
+          sectionHint="Какие критерии должен учитывать роутер при выборе AI-провайдера? Что важнее: latency, cost, quality?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / критерий", placeholder: "напр.: streaming-first routing", required: true },
+            { key: "rationale", label: "Зачем это критерий", type: "textarea", placeholder: "Какой use-case это разблокирует" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </section>
 
       {/* Footer */}

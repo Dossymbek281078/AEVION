@@ -11,6 +11,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { ensureQLifeTables, isQLifeDbReady, getQLifeDbError } from "../lib/ensureQLifeTables";
 import { rateLimit } from "../lib/rateLimit";
@@ -372,4 +373,91 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e?.message || "AI plan generation failed" });
   }
+});
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+interface QLifeConceptMessage {
+  id: string;
+  payload: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+}
+
+const QLIFE_CONCEPT_MAX = 200;
+const qlifeConceptMessages: QLifeConceptMessage[] = [];
+
+qlifeRouter.get("/status", readLimit, (_req: Request, res: Response) => {
+  res.json({
+    module: "qlife",
+    code: "QLIFE",
+    status: "mvp",
+    description: "Longevity & anti-aging: biomarkers, trends, AI plan + concept board.",
+    endpoints: {
+      health: "/api/qlife/health",
+      stats: "/api/qlife/stats",
+      biomarkers: "/api/qlife/biomarkers",
+      conceptMessages: "/api/qlife/concept/messages",
+      conceptStats: "/api/qlife/concept-stats",
+    },
+    conceptMessagesCount: qlifeConceptMessages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+qlifeRouter.get("/concept/messages", readLimit, (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+  const items = qlifeConceptMessages.slice(0, limit);
+  res.json({ items, total: qlifeConceptMessages.length, moduleId: "qlife", noun: "concept/messages" });
+});
+
+qlifeRouter.post("/concept/messages", writeLimit, (req: Request, res: Response) => {
+  try {
+    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
+    const payload = (body.payload && typeof body.payload === "object")
+      ? body.payload as Record<string, unknown>
+      : body;
+    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
+    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
+    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
+    const author = String(payload.author ?? "").trim().slice(0, 80);
+    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["qlife"];
+    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
+    const msg: QLifeConceptMessage = {
+      id: crypto.randomUUID(),
+      payload: { idea, rationale, author },
+      tags: tags.length ? tags : ["qlife"],
+      createdAt: new Date().toISOString(),
+    };
+    qlifeConceptMessages.unshift(msg);
+    if (qlifeConceptMessages.length > QLIFE_CONCEPT_MAX) {
+      qlifeConceptMessages.length = QLIFE_CONCEPT_MAX;
+    }
+    return res.status(201).json(msg);
+  } catch (err: unknown) {
+    console.error("[qlife] concept_post_failed", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "concept_post_failed" });
+  }
+});
+
+qlifeRouter.get("/concept-stats", readLimit, (_req: Request, res: Response) => {
+  const now = Date.now();
+  const sevenDays = 7 * 86_400_000;
+  const last7d = qlifeConceptMessages.filter(
+    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
+  ).length;
+  const tagCounts = new Map<string, number>();
+  for (const m of qlifeConceptMessages) {
+    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  }
+  const topTags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag, count]) => ({ tag, count }));
+  res.json({
+    moduleId: "qlife",
+    noun: "concept/messages",
+    total: qlifeConceptMessages.length,
+    last7d,
+    topTags,
+  });
 });

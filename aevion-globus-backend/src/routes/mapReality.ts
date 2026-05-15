@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { ensureMapRealityTables, isMapRealityDbReady } from "../lib/ensureMapRealityTables";
@@ -478,5 +479,92 @@ mapRealityRouter.get("/stats", async (_req: Request, res: Response) => {
     byCountry,
     topSignals,
     backend: "memory",
+  });
+});
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+interface MapRealityConceptMessage {
+  id: string;
+  payload: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+}
+
+const MAPREALITY_CONCEPT_MAX = 200;
+const mapRealityConceptMessages: MapRealityConceptMessage[] = [];
+
+mapRealityRouter.get("/status", (_req: Request, res: Response) => {
+  res.json({
+    module: "mapreality",
+    code: "MAPREALITY",
+    status: "mvp",
+    description: "AR-cartography: places overlaid with verified meta-signals (events, alerts, marks).",
+    endpoints: {
+      health: "/api/mapreality/health",
+      signals: "/api/mapreality/signals",
+      stats: "/api/mapreality/stats",
+      conceptMessages: "/api/mapreality/concept/messages",
+      conceptStats: "/api/mapreality/concept-stats",
+    },
+    conceptMessagesCount: mapRealityConceptMessages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mapRealityRouter.get("/concept/messages", (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+  const items = mapRealityConceptMessages.slice(0, limit);
+  res.json({ items, total: mapRealityConceptMessages.length, moduleId: "mapreality", noun: "concept/messages" });
+});
+
+mapRealityRouter.post("/concept/messages", submitLimiter, (req: Request, res: Response) => {
+  try {
+    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
+    const payload = (body.payload && typeof body.payload === "object")
+      ? body.payload as Record<string, unknown>
+      : body;
+    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
+    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
+    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
+    const author = String(payload.author ?? "").trim().slice(0, 80);
+    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["mapreality"];
+    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
+    const msg: MapRealityConceptMessage = {
+      id: crypto.randomUUID(),
+      payload: { idea, rationale, author },
+      tags: tags.length ? tags : ["mapreality"],
+      createdAt: new Date().toISOString(),
+    };
+    mapRealityConceptMessages.unshift(msg);
+    if (mapRealityConceptMessages.length > MAPREALITY_CONCEPT_MAX) {
+      mapRealityConceptMessages.length = MAPREALITY_CONCEPT_MAX;
+    }
+    return res.status(201).json(msg);
+  } catch (err: unknown) {
+    console.error("[mapreality] concept_post_failed", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "concept_post_failed" });
+  }
+});
+
+mapRealityRouter.get("/concept-stats", (_req: Request, res: Response) => {
+  const now = Date.now();
+  const sevenDays = 7 * 86_400_000;
+  const last7d = mapRealityConceptMessages.filter(
+    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
+  ).length;
+  const tagCounts = new Map<string, number>();
+  for (const m of mapRealityConceptMessages) {
+    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  }
+  const topTags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag, count]) => ({ tag, count }));
+  res.json({
+    moduleId: "mapreality",
+    noun: "concept/messages",
+    total: mapRealityConceptMessages.length,
+    last7d,
+    topTags,
   });
 });

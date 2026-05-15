@@ -13,7 +13,7 @@ const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
   (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:4001"
-    : "https://aevion-production-a70c.up.railway.app");
+    : "https://api.aevion.app");
 
 const cache = new Map<string, string>();
 

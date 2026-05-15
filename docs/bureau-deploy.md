@@ -66,7 +66,7 @@ The original Bureau endpoints (`/verify/start`, `/verify/status/:id`, `/upgrade/
 
 ## Deploy checklist
 
-1. Set `BUREAU_ADMIN_EMAILS=alice@aevion.com,bob@aevion.com` in Railway (lowercase).
+1. Set `BUREAU_ADMIN_EMAILS=alice@aevion.app,bob@aevion.app` in Railway (lowercase).
 2. Deploy — schema bootstraps on first request.
 3. Smoke (anon):
    - `GET /api/bureau/transparency` → counts.

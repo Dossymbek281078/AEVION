@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Husky 9 pre-commit hook for frontend-exchange.
+# Runs lint-staged on the staged files (eslint --fix on .ts/.tsx,
+# prettier-style autofix only). Bypass with `git commit --no-verify`.
+cd frontend && npx lint-staged

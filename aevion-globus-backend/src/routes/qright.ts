@@ -5,6 +5,7 @@ import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
+import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -277,6 +278,8 @@ function recordAudit(
 // Pure helpers (no DB / no IO) live in src/lib/qrightHelpers.ts so vitest
 // can exercise them in isolation. Imported here unchanged.
 import { readExpectedHash, timingSafeHexEq, refererHost } from "../lib/qrightHelpers";
+import { makeServiceCapture } from "../lib/sentry/platform";
+const captureQrightError = makeServiceCapture("qright");
 
 // Best-effort counter bump — fire-and-forget. Errors here must never break
 // the embed/badge response, since these endpoints are loaded by third parties.
@@ -393,11 +396,11 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       scope: "all",
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -441,11 +444,11 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
       items: result.rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -538,11 +541,11 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
       },
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -577,11 +580,11 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=60");
     res.json(row);
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -636,11 +639,11 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
     );
     res.send([header, ...rows].join("\r\n"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -747,11 +750,11 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
         : `/qright/object/${row.id}`,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -877,38 +880,76 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send(svgShell("AEVION QRIGHT", right, "#0d9488"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
 
 // 🔹 Создать объект
+// Length caps for free-tier registrations. Without these a single anonymous
+// POST could insert a 100MB description (limited only by express body
+// parser's 10MB cap). Caps are generous — a real work entry needs only a
+// few hundred chars at most.
+const QRIGHT_MAX_TITLE = 300;
+const QRIGHT_MAX_DESCRIPTION = 10_000;
+const QRIGHT_MAX_OWNER_NAME = 200;
+const QRIGHT_MAX_OWNER_EMAIL = 254; // RFC 3696
+const QRIGHT_MAX_LOCATION = 100;
+
+// Kind enum — matches what the frontend dropdowns ship and what
+// /admin/objects status filters expect. Restricting at API boundary stops
+// callers from polluting the DB with arbitrary kind strings.
+const QRIGHT_KINDS = new Set(["code", "text", "image", "music", "movie", "design", "other"]);
+
+function clampStr(v: unknown, max: number): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t) return null;
+  return t.length > max ? t.slice(0, max) : t;
+}
+
 qrightRouter.post("/objects", async (req, res) => {
   try {
-    const { title, description, kind, ownerName, ownerEmail, country, city } =
-      req.body;
+    const titleIn = clampStr(req.body?.title, QRIGHT_MAX_TITLE);
+    const descIn = clampStr(req.body?.description, QRIGHT_MAX_DESCRIPTION);
+    const kindIn = typeof req.body?.kind === "string" ? req.body.kind.trim().toLowerCase() : "";
 
-    if (!title || !description || !kind) {
+    if (!titleIn || !descIn || !kindIn) {
       return res.status(400).json({
         error: "title, description and kind required",
       });
     }
+    if (!QRIGHT_KINDS.has(kindIn)) {
+      return res.status(400).json({
+        error: "invalid_kind",
+        allowed: [...QRIGHT_KINDS],
+      });
+    }
 
-    const raw = JSON.stringify({ title, description, kind, country, city });
-    const contentHash = crypto
-      .createHash("sha256")
-      .update(raw)
-      .digest("hex");
+    const ownerNameIn = clampStr(req.body?.ownerName, QRIGHT_MAX_OWNER_NAME);
+    const ownerEmailIn = clampStr(req.body?.ownerEmail, QRIGHT_MAX_OWNER_EMAIL);
+    const countryIn = clampStr(req.body?.country, QRIGHT_MAX_LOCATION);
+    const cityIn = clampStr(req.body?.city, QRIGHT_MAX_LOCATION);
+
+    const raw = JSON.stringify({
+      title: titleIn,
+      description: descIn,
+      kind: kindIn,
+      country: countryIn,
+      city: cityIn,
+    });
+    const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
 
     await ensureQRightTable();
 
     const auth = verifyBearerOptional(req);
-    let resolvedOwnerName = ownerName ?? null;
-    let resolvedOwnerEmail = ownerEmail ?? null;
+    let resolvedOwnerName = ownerNameIn;
+    let resolvedOwnerEmail = ownerEmailIn;
     let resolvedOwnerUserId: string | null = null;
     if (auth) {
       await ensureUsersTable(pool);
@@ -919,8 +960,11 @@ qrightRouter.post("/objects", async (req, res) => {
       const row = u.rows?.[0];
       if (row) {
         resolvedOwnerUserId = row.id;
-        if (!resolvedOwnerName) resolvedOwnerName = row.name;
-        if (!resolvedOwnerEmail) resolvedOwnerEmail = row.email;
+        // Authenticated → trust the JWT identity over self-supplied fields.
+        // Stops authenticated users from claiming someone else's display
+        // name/email (the DB trust gradient: ownerUserId is the truth).
+        resolvedOwnerName = row.name;
+        resolvedOwnerEmail = row.email;
       }
     }
 
@@ -933,28 +977,32 @@ qrightRouter.post("/objects", async (req, res) => {
       `,
       [
         crypto.randomUUID(),
-        title,
-        description,
-        kind,
+        titleIn,
+        descIn,
+        kindIn,
         contentHash,
         resolvedOwnerName,
         resolvedOwnerEmail,
         resolvedOwnerUserId,
-        country || null,
-        city || null,
+        countryIn,
+        cityIn,
       ]
     );
 
     res.status(201).json(result.rows[0]);
-  } catch (err: any) {
-    res.status(500).json({
-      error: "DB error",
-      code: err.code,
-      name: err.name,
-      details: err.message,
-    });
+  } catch (err: unknown) {
+    // Don't echo Postgres internals (err.code, table names) to the wire —
+    // adversary could fingerprint schema or trigger DoS through specific
+    // malformed inputs that surface internal errors. Server log retains it.
+    captureQrightError(err, { route: "POST /objects" });
+    const msg = err instanceof Error ? err.message : "create_failed";
+    console.error("[QRight] POST /objects error:", msg);
+    res.status(500).json({ error: "create_failed" });
   }
 });
+
+// Exported for unit tests.
+export { clampStr as _qrightClampStr, QRIGHT_KINDS as _qrightKinds };
 
 // 🔹 Admin: list all objects with optional status/query filters
 qrightRouter.get("/admin/objects", async (req, res) => {
@@ -999,11 +1047,11 @@ qrightRouter.get("/admin/objects", async (req, res) => {
       items: result.rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1085,11 +1133,11 @@ qrightRouter.get("/admin/objects.csv", async (req, res) => {
     );
     res.send([header, ...rows].join("\r\n"));
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1203,11 +1251,11 @@ qrightRouter.post("/admin/revoke-bulk", async (req, res) => {
       reasonCode: reasonCodeRaw,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1280,11 +1328,11 @@ qrightRouter.post("/admin/revoke/:id", async (req, res) => {
       revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1350,11 +1398,11 @@ qrightRouter.get("/transparency", embedRateLimit, async (_req, res) => {
       })),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1413,11 +1461,11 @@ qrightRouter.get("/admin/audit", async (req, res) => {
       ),
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1478,11 +1526,11 @@ qrightRouter.get("/admin/sources", async (req, res) => {
       hosts: rows,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1576,11 +1624,11 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
       revokeReasonCode: updated.rows[0].revokeReasonCode,
     });
   } catch (err: any) {
+    captureQrightError(err, { route: "DB error" });
     res.status(500).json({
       error: "DB error",
       code: err.code,
       name: err.name,
-      details: err.message,
     });
   }
 });
@@ -1627,7 +1675,8 @@ qrightRouter.get("/webhooks", async (req, res) => {
       ),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    captureQrightError(err, { route: "DB error" });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1682,7 +1731,8 @@ qrightRouter.post("/webhooks", async (req, res) => {
       hint: "Store the secret now — it will not be shown again. Verify deliveries by recomputing HMAC-SHA256(secret, requestBody) and comparing against the X-AEVION-Signature header.",
     });
   } catch (err: any) {
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    captureQrightError(err, { route: "DB error" });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1705,7 +1755,8 @@ qrightRouter.delete("/webhooks/:id", async (req, res) => {
     }
     res.json({ id, deleted: true });
   } catch (err: any) {
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    captureQrightError(err, { route: "DB error" });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1740,7 +1791,8 @@ qrightRouter.patch("/webhooks/:id", async (req, res) => {
     }
     res.json({ id: result.rows[0].id, url: result.rows[0].url, updated: true });
   } catch (err: any) {
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    captureQrightError(err, { route: "DB error" });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1807,7 +1859,8 @@ qrightRouter.get("/webhooks/:id/deliveries", async (req, res) => {
       ),
     });
   } catch (err: any) {
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    captureQrightError(err, { route: "DB error" });
+    res.status(500).json({ error: "DB error", code: err.code });
   }
 });
 
@@ -1866,6 +1919,364 @@ qrightRouter.post("/webhooks/:id/retry/:deliveryId", async (req, res) => {
       error: result.error,
     });
   } catch (err: any) {
-    res.status(500).json({ error: "DB error", code: err.code, details: err.message });
+    captureQrightError(err, { route: "DB error" });
+    res.status(500).json({ error: "DB error", code: err.code });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// TIER 3 amplifier — index OG, sitemap, per-object RSS
+// (Per-object OG is already provided by frontend/.../opengraph-image.tsx
+//  so we don't duplicate it here.)
+// ─────────────────────────────────────────────────────────────────────────
+
+function qrEsc(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// 🔹 GET /og.svg — index card. Pulls live counters so a paste of /qright
+//    reflects current state.
+qrightRouter.get("/og.svg", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const totals = await pool.query(
+      `SELECT COUNT(*) AS "total", COUNT("revokedAt") AS "revoked" FROM "QRightObject"`
+    );
+    const t = totals.rows[0] as { total: string; revoked: string };
+    const total = Number(t.total) || 0;
+    const revoked = Number(t.revoked) || 0;
+    const active = total - revoked;
+    if (applyOgEtag(req, res, `qright-index-${total}-${active}-${revoked}`)) return;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="6" fill="url(#accent)"/>
+  <g font-family="Inter, system-ui, -apple-system, sans-serif" fill="#e2e8f0">
+    <text x="60" y="84" font-size="22" font-weight="700" fill="#94a3b8" letter-spacing="6">AEVION QRIGHT</text>
+    <text x="60" y="200" font-size="96" font-weight="900" letter-spacing="-2">${qrEsc(String(total))} registrations</text>
+    <text x="60" y="252" font-size="32" font-weight="600" fill="#cbd5e1">Independent IP registry — provable, instant, ownerless.</text>
+    <g transform="translate(60, 380)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <g>
+        <rect width="220" height="80" rx="14" fill="#0d9488" fill-opacity="0.15" stroke="#0d9488" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#5eead4">${qrEsc(String(active))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#a5f3fc">ACTIVE</text>
+      </g>
+      <g transform="translate(240, 0)">
+        <rect width="220" height="80" rx="14" fill="#dc2626" fill-opacity="0.15" stroke="#dc2626" stroke-width="2"/>
+        <text x="20" y="36" font-size="40" font-weight="900" fill="#fca5a5">${qrEsc(String(revoked))}</text>
+        <text x="20" y="64" font-size="14" font-weight="700" fill="#fecaca">REVOKED</text>
+      </g>
+    </g>
+    <text x="60" y="585" font-size="20" font-weight="700" fill="#64748b" font-family="ui-monospace, monospace">aevion.app / qright</text>
+  </g>
+</svg>`;
+
+    res.send(svg);
+  } catch (err: any) {
+    captureQrightError(err, { route: "index og" });
+    res.status(500).json({ error: "index og failed" });
+  }
+});
+
+// 🔹 GET /objects/:id/changelog.rss — RSS 2.0 of audit events for one
+//    QRight object. Sourced from QRightAuditLog with targetId === id.
+qrightRouter.get("/objects/:id/changelog.rss", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const id = String(req.params.id);
+    const limitRaw = parseInt(String(req.query.limit || "50"), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(200, limitRaw)) : 50;
+
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.app";
+    const selfUrl = `${proto}://${host}/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`;
+    const siteUrl = `${proto}://${host}/qright/object/${encodeURIComponent(id)}`;
+
+    const objRow = await pool.query(
+      `SELECT "title" FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [id]
+    );
+    const objTitle = objRow.rows[0]?.title || id;
+
+    const r = await pool.query(
+      `SELECT "id","actor","action","payload","at"
+       FROM "QRightAuditLog"
+       WHERE "targetId" = $1
+       ORDER BY "at" DESC
+       LIMIT $2`,
+      [id, limit]
+    );
+
+    const latestAt = r.rows[0]?.at;
+    const latestMs = latestAt instanceof Date ? latestAt.getTime() : (latestAt ? new Date(latestAt).getTime() : 0);
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qright-object-${id}-${r.rows.length}-${latestMs}`, { prefix: "rss" })) return;
+
+    function describe(row: any): string {
+      const p = row.payload || {};
+      const reason = p.reason ? ` — ${p.reason}` : "";
+      const actor = row.actor ? ` by ${row.actor}` : "";
+      switch (row.action) {
+        case "object.revoke":
+        case "admin.revoke":
+          return `Revoked${actor}${reason}`;
+        case "object.create":
+          return `Registered${actor}`;
+        default:
+          return `${row.action || "QRight event"}${actor}`;
+      }
+    }
+
+    const items = r.rows
+      .map((row: any) => {
+        const at = row.at instanceof Date ? row.at : new Date(row.at);
+        const pubDate = at.toUTCString();
+        const summary = describe(row);
+        const title = `${objTitle} — ${summary}`;
+        const guid = `aevion-qright-${row.id}`;
+        return `    <item>
+      <title>${qrEsc(title)}</title>
+      <link>${qrEsc(siteUrl)}</link>
+      <guid isPermaLink="false">${qrEsc(guid)}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${qrEsc(summary)}</description>
+    </item>`;
+      })
+      .join("\n");
+
+    const lastBuild = r.rows[0]
+      ? (r.rows[0].at instanceof Date ? r.rows[0].at : new Date(r.rows[0].at)).toUTCString()
+      : new Date().toUTCString();
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AEVION QRight · ${qrEsc(String(objTitle))} — events</title>
+    <link>${qrEsc(siteUrl)}</link>
+    <atom:link href="${qrEsc(selfUrl)}" rel="self" type="application/rss+xml" />
+    <description>Audit events for AEVION QRight object ${qrEsc(id)}.</description>
+    <language>en</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+${items}
+  </channel>
+</rss>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    captureQrightError(err, { route: "object rss" });
+    res.status(500).json({ error: "object rss failed" });
+  }
+});
+
+// 🔹 GET /sitemap.xml — sitemap for the QRight surface. Covers /qright,
+//    /qright/transparency, and a page per non-revoked object.
+qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
+  try {
+    await ensureQRightTable();
+    const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
+    const host = (req.headers.host as string) || "aevion.app";
+    const origin = `${proto}://${host}`;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const r = await pool.query(
+      `SELECT "id","createdAt"
+       FROM "QRightObject"
+       WHERE "revokedAt" IS NULL
+       ORDER BY "createdAt" DESC
+       LIMIT 5000`
+    );
+
+    const rows = r.rows as any[];
+    const latestSrc = rows[0]?.createdAt;
+    const latestMs = latestSrc instanceof Date ? latestSrc.getTime() : (latestSrc ? new Date(latestSrc).getTime() : 0);
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (applyEtag(req, res, `qright-${rows.length}-${latestMs}-${today}`, { prefix: "sitemap", maxAgeSec: 600 })) return;
+
+    const urls: string[] = [];
+    urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>`);
+    urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright/transparency</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>`);
+    for (const row of rows) {
+      const lastmodSrc = row.createdAt;
+      const lastmod = lastmodSrc
+        ? (lastmodSrc instanceof Date ? lastmodSrc.toISOString() : String(lastmodSrc)).slice(0, 10)
+        : today;
+      urls.push(`  <url>
+    <loc>${qrEsc(origin)}/qright/object/${qrEsc(String(row.id))}</loc>
+    <lastmod>${qrEsc(lastmod)}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`);
+    }
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join("\n")}
+</urlset>`;
+
+    res.send(xml);
+  } catch (err: any) {
+    captureQrightError(err, { route: "sitemap" });
+    res.status(500).json({ error: "sitemap failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// QRight Policies — usage rights / licenses / restrictions on protected works.
+// Working v1 milestone per CLAUDE.md (политики/экспорт/аудит).
+// ═════════════════════════════════════════════════════════════════════════
+
+const POLICY_TYPES = new Set(["license", "restriction", "attribution"]);
+const POLICY_SCOPES = new Set(["commercial", "non-commercial", "educational", "all"]);
+
+let policiesTableReady = false;
+async function ensurePoliciesTable(): Promise<void> {
+  if (policiesTableReady) return;
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "QRightPolicy" (
+      "id" TEXT PRIMARY KEY,
+      "objectId" TEXT NOT NULL,
+      "type" TEXT NOT NULL,
+      "scope" TEXT NOT NULL,
+      "termsText" TEXT NOT NULL,
+      "spdxId" TEXT,
+      "url" TEXT,
+      "validFrom" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "validUntil" TIMESTAMPTZ,
+      "revokedAt" TIMESTAMPTZ,
+      "createdBy" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QRightPolicy_object_idx" ON "QRightPolicy" ("objectId", "revokedAt");`);
+  policiesTableReady = true;
+}
+
+// GET /api/qright/objects/:id/policies — list active policies for an object.
+// Public — anyone can see how a work may be used.
+qrightRouter.get("/objects/:id/policies", embedRateLimit, async (req, res) => {
+  try {
+    await ensurePoliciesTable();
+    const objectId = String(req.params.id || "").trim();
+    if (!objectId) return res.status(400).json({ error: "id required" });
+    const pool = getPool();
+    const r = await pool.query(
+      `SELECT "id","type","scope","termsText","spdxId","url","validFrom","validUntil","createdAt"
+       FROM "QRightPolicy"
+       WHERE "objectId" = $1 AND "revokedAt" IS NULL
+         AND ("validUntil" IS NULL OR "validUntil" > NOW())
+       ORDER BY "createdAt" DESC`,
+      [objectId],
+    );
+    res.json({ objectId, policies: r.rows, total: r.rowCount });
+  } catch (err: any) {
+    captureQrightError(err, { route: "policies_list" });
+    res.status(500).json({ error: "policies_list_failed" });
+  }
+});
+
+// POST /api/qright/objects/:id/policies — add a policy. Owner-only.
+qrightRouter.post("/objects/:id/policies", async (req, res) => {
+  try {
+    await ensurePoliciesTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const objectId = String(req.params.id || "").trim();
+    if (!objectId) return res.status(400).json({ error: "objectId required" });
+
+    // Ownership check — only the QRight object owner can attach policies.
+    const pool = getPool();
+    const owner = await pool.query(
+      `SELECT "ownerUserId" FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
+      [objectId],
+    );
+    if (owner.rowCount === 0) return res.status(404).json({ error: "object_not_found" });
+    if ((owner.rows[0] as { ownerUserId: string | null }).ownerUserId !== auth.sub) {
+      return res.status(403).json({ error: "not_object_owner" });
+    }
+
+    const { type, scope, termsText, spdxId, url, validUntil } = req.body || {};
+    if (!POLICY_TYPES.has(type)) {
+      return res.status(400).json({ error: "invalid_type", allowed: Array.from(POLICY_TYPES) });
+    }
+    if (!POLICY_SCOPES.has(scope)) {
+      return res.status(400).json({ error: "invalid_scope", allowed: Array.from(POLICY_SCOPES) });
+    }
+    if (typeof termsText !== "string" || termsText.trim().length < 3 || termsText.length > 5000) {
+      return res.status(400).json({ error: "termsText must be 3..5000 chars" });
+    }
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO "QRightPolicy" ("id","objectId","type","scope","termsText","spdxId","url","validUntil","createdBy")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        id, objectId, type, scope, termsText.trim(),
+        spdxId ? String(spdxId).slice(0, 50) : null,
+        url ? String(url).slice(0, 500) : null,
+        validUntil ? new Date(validUntil) : null,
+        auth.sub,
+      ],
+    );
+    res.status(201).json({ id, objectId, type, scope });
+  } catch (err: any) {
+    captureQrightError(err, { route: "policies_create" });
+    res.status(500).json({ error: "policies_create_failed" });
+  }
+});
+
+// DELETE /api/qright/policies/:policyId — soft-revoke a policy. Owner-only.
+qrightRouter.delete("/policies/:policyId", async (req, res) => {
+  try {
+    await ensurePoliciesTable();
+    const auth = verifyBearerOptional(req);
+    if (!auth) return res.status(401).json({ error: "auth required" });
+    const policyId = String(req.params.policyId || "").trim();
+    if (!policyId) return res.status(400).json({ error: "policyId required" });
+    const pool = getPool();
+    // Ownership via createdBy + revoke if not already.
+    const r = await pool.query(
+      `UPDATE "QRightPolicy" SET "revokedAt" = NOW()
+       WHERE "id" = $1 AND "createdBy" = $2 AND "revokedAt" IS NULL
+       RETURNING "id"`,
+      [policyId, auth.sub],
+    );
+    if ((r.rowCount ?? 0) === 0) {
+      return res.status(404).json({ error: "policy_not_found_or_not_owner" });
+    }
+    res.json({ ok: true, revokedId: policyId });
+  } catch (err: any) {
+    captureQrightError(err, { route: "policies_revoke" });
+    res.status(500).json({ error: "policies_revoke_failed" });
   }
 });

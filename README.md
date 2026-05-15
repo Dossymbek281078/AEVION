@@ -42,3 +42,13 @@ npm run verify
 ## CI
 
 При push/PR в GitHub: workflow `.github/workflows/ci.yml` (параллельно backend + frontend build).
+
+## Recent updates (2026-05-14)
+
+Mega-session 2026-05-13 / 2026-05-14: 5 блоков, 32 агента, 45+ новых
+эндпоинтов, SDK `@aevion/catalog-client` 0.5 → 0.6, 14 planning landings
+под `/eta`, 5 Playwright E2E spec'ов, JSON-LD на 6 layout'ах.
+
+Подробности:
+- [`CHANGELOG.md`](./CHANGELOG.md) — release notes по блокам и эндпоинтам
+- [`docs/2026-05-14-session-summary.md`](./docs/2026-05-14-session-summary.md) — детальный per-block отчёт

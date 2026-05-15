@@ -1,6 +1,6 @@
 # @aevion/qcoreai-client
 
-TypeScript client for [AEVION QCoreAI](https://aevion.io/qcoreai) — a multi-agent LLM pipeline with sequential / parallel / debate strategies, mid-run human guidance, hard cost caps, run tagging and signed webhooks.
+TypeScript client for [AEVION QCoreAI](https://aevion.app/qcoreai) — a multi-agent LLM pipeline with sequential / parallel / debate strategies, mid-run human guidance, hard cost caps, run tagging and signed webhooks.
 
 Single-file SDK (~300 LOC). No runtime deps. Works in Node 18+ and modern browsers / Edge.
 
@@ -14,7 +14,7 @@ npm install @aevion/qcoreai-client
 import { QCoreClient } from "@aevion/qcoreai-client";
 
 const client = new QCoreClient({
-  baseUrl: "https://api.aevion.io",
+  baseUrl: "https://api.aevion.app",
   token: process.env.AEVION_TOKEN, // optional, required for owner endpoints
 });
 

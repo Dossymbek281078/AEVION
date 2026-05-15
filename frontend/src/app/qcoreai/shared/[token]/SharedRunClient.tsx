@@ -47,7 +47,7 @@ type SharedRun = {
 
 type SharedPayload = {
   session: { id: string; title: string; mode: string } | null;
-  run: SharedRun;
+  run: SharedRun & { clapCount?: number };
   messages: SharedMessage[];
 };
 
@@ -108,25 +108,81 @@ function fmtMoney(v: number | null | undefined) {
   return `$${v.toFixed(4)}`;
 }
 
+type CommentItem = { id: string; authorName: string; content: string; createdAt: string };
+
 export default function SharedRunClient() {
   const params = useParams();
   const token = typeof params?.token === "string" ? params.token : Array.isArray(params?.token) ? params.token[0] : "";
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentName, setCommentName] = useState("");
+  const [commentText, setCommentText] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [costBreakdown, setCostBreakdown] = useState<Array<{
+    role: string; stage: string | null; provider: string | null; model: string | null;
+    tokensIn: number | null; tokensOut: number | null; costUsd: number | null; durationMs: number | null;
+  }> | null>(null);
+  const [showCost, setShowCost] = useState(false);
+  const [clapCount, setClapCount] = useState<number>(0);
+  const [clapBusy, setClapBusy] = useState(false);
 
   useEffect(() => {
     if (!token) return;
     (async () => {
       try {
-        const res = await fetch(apiUrl(`/api/qcoreai/shared/${token}`));
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        const [runRes, cmRes] = await Promise.all([
+          fetch(apiUrl(`/api/qcoreai/shared/${token}`)),
+          fetch(apiUrl(`/api/qcoreai/shared/${token}/comments`)),
+        ]);
+        const data = await runRes.json();
+        if (!runRes.ok) throw new Error(data?.error || `HTTP ${runRes.status}`);
         setPayload(data as SharedPayload);
+        setClapCount(data?.run?.clapCount ?? 0);
+        const cmData = await cmRes.json().catch(() => ({}));
+        if (Array.isArray(cmData?.items)) setComments(cmData.items);
       } catch (e: any) {
         setError(e?.message || "Failed to load shared run");
       }
     })();
   }, [token]);
+
+  const handleClap = async () => {
+    if (clapBusy) return;
+    setClapBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/shared/${token}/clap`), { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data?.clapCount === "number") {
+        setClapCount(data.clapCount);
+      }
+    } catch {
+      // silent — clap is non-critical
+    } finally {
+      setClapBusy(false);
+    }
+  };
+
+  const submitComment = async () => {
+    const text = commentText.trim();
+    if (!text || commentBusy) return;
+    setCommentBusy(true);
+    try {
+      const res = await fetch(apiUrl(`/api/qcoreai/shared/${token}/comments`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authorName: commentName.trim() || "Anonymous", content: text }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      setComments((prev) => [...prev, data.comment]);
+      setCommentText("");
+    } catch (e: any) {
+      alert(e?.message || "Comment failed");
+    } finally {
+      setCommentBusy(false);
+    }
+  };
 
   if (error) {
     return (
@@ -363,7 +419,35 @@ export default function SharedRunClient() {
           <span>Exported from <b style={{ color: "#0f172a" }}>AEVION QCoreAI</b></span>
           <span>·</span>
           <span>Run started {new Date(run.startedAt).toLocaleString()}</span>
-          <span style={{ marginLeft: "auto" }}>
+          <button
+            onClick={handleClap}
+            disabled={clapBusy}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: "4px 10px", borderRadius: 8,
+              border: "1px solid rgba(124,58,237,0.25)",
+              background: "rgba(124,58,237,0.06)",
+              color: "#6d28d9", fontWeight: 700, fontSize: 11,
+              cursor: clapBusy ? "default" : "pointer",
+            }}
+            title="Clap for this run"
+          >
+            👏 {clapCount > 0 ? clapCount : "Clap"}
+          </button>
+          <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button
+              onClick={async () => {
+                if (!showCost && !costBreakdown) {
+                  const r = await fetch(apiUrl(`/api/qcoreai/runs/${run.id}/cost-breakdown`));
+                  const d = await r.json().catch(() => ({}));
+                  if (Array.isArray(d?.breakdown)) setCostBreakdown(d.breakdown);
+                }
+                setShowCost((v) => !v);
+              }}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "#6d28d9", fontWeight: 700, fontSize: 11 }}
+            >
+              {showCost ? "Hide" : "💲 Cost breakdown"}
+            </button>
             <a
               href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
               target="_blank" rel="noreferrer"
@@ -371,8 +455,91 @@ export default function SharedRunClient() {
             >
               ⬇ Download Markdown
             </a>
+            <a
+              href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=csv`}
+              download
+              style={{ color: "#0e7490", fontWeight: 700, textDecoration: "none", fontSize: 11 }}
+            >
+              ⬇ CSV
+            </a>
+            <button
+              onClick={() => {
+                const iframe = `<iframe src="${typeof window !== 'undefined' ? window.location.origin : ''}/qcoreai/embed/${typeof window !== 'undefined' ? window.location.pathname.split('/').pop() : ''}" width="100%" height="600" frameborder="0" style="border-radius:12px"></iframe>`;
+                navigator.clipboard.writeText(iframe).catch(() => {});
+                alert('Embed code copied to clipboard!');
+              }}
+              style={{ border: "none", background: "transparent", color: "#6d28d9", fontWeight: 700, fontSize: 11, cursor: "pointer" }}
+              title="Copy embed iframe code"
+            >
+              &lt;/&gt; Embed
+            </button>
           </span>
         </footer>
+        {showCost && costBreakdown && (
+          <div style={{ marginTop: 8, padding: "10px 14px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(124,58,237,0.12)", fontSize: 12 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6, color: "#0f172a" }}>Per-agent cost</div>
+            {costBreakdown.map((b, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4 }}>
+                <span style={{ fontWeight: 700, color: "#6d28d9", minWidth: 60 }}>{b.role}</span>
+                <span style={{ color: "#64748b" }}>{b.provider || ""} {b.model ? `· ${b.model.split("-").slice(0, 2).join("-")}` : ""}</span>
+                <span style={{ marginLeft: "auto", fontWeight: 700, color: "#0f172a" }}>
+                  {b.costUsd != null ? `$${b.costUsd.toFixed(5)}` : "—"}
+                </span>
+                <span style={{ color: "#94a3b8" }}>
+                  {((b.tokensIn ?? 0) + (b.tokensOut ?? 0)).toLocaleString()} tok
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Comments */}
+        <section style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>
+            Comments ({comments.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+            {comments.length === 0 && (
+              <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No comments yet. Be the first.</div>
+            )}
+            {comments.map((c) => (
+              <div key={c.id} style={{ padding: "10px 14px", borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{c.authorName}</span>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>{new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <div style={{ fontSize: 13, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{c.content}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", borderRadius: 12, background: "#fff", border: "1px solid #e2e8f0" }}>
+            <input
+              value={commentName}
+              onChange={(e) => setCommentName(e.target.value)}
+              placeholder="Your name (optional)"
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12 }}
+            />
+            <textarea
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Leave a comment…"
+              rows={3}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 12, resize: "vertical" }}
+            />
+            <button
+              onClick={submitComment}
+              disabled={!commentText.trim() || commentBusy}
+              style={{
+                alignSelf: "flex-end", padding: "7px 18px", borderRadius: 8,
+                background: commentText.trim() ? "#0e7490" : "#cbd5e1",
+                border: "none", color: "#fff", fontSize: 12, fontWeight: 700,
+                cursor: commentText.trim() ? "pointer" : "default",
+              }}
+            >
+              {commentBusy ? "Posting…" : "Post comment"}
+            </button>
+          </div>
+        </section>
       </div>
     </main>
   );

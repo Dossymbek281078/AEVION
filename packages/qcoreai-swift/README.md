@@ -1,6 +1,6 @@
 # QCoreAI for Swift
 
-Native Swift / iOS / macOS client for [AEVION QCoreAI](https://aevion.io/qcoreai) — a multi-agent LLM pipeline with sequential / parallel / debate strategies, eval harness, and a prompts library.
+Native Swift / iOS / macOS client for [AEVION QCoreAI](https://aevion.app/qcoreai) — a multi-agent LLM pipeline with sequential / parallel / debate strategies, eval harness, and a prompts library.
 
 Single-file SDK (~280 LOC). No third-party deps. Works on iOS 15+, macOS 12+, tvOS 15+, watchOS 8+.
 
@@ -22,7 +22,7 @@ Or in Xcode: **File → Add Package Dependencies** and paste the repo URL.
 import QCoreAI
 
 let client = QCoreClient(
-    baseUrl: "https://api.aevion.io",
+    baseUrl: "https://api.aevion.app",
     token: ProcessInfo.processInfo.environment["AEVION_TOKEN"]
 )
 

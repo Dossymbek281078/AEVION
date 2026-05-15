@@ -151,8 +151,8 @@ const OBJECT_RU: StringTable = {
 };
 
 const TABLES: Record<"transparency" | "object", Record<Lang, StringTable>> = {
-  transparency: { en: TRANSPARENCY_EN, ru: TRANSPARENCY_RU },
-  object: { en: OBJECT_EN, ru: OBJECT_RU },
+  transparency: { en: TRANSPARENCY_EN, ru: TRANSPARENCY_RU, kk: TRANSPARENCY_EN },
+  object: { en: OBJECT_EN, ru: OBJECT_RU, kk: OBJECT_EN },
 };
 
 // Tiny mustache-lite: replaces {key} tokens from `vars`. Missing tokens

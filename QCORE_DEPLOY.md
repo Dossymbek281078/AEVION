@@ -25,7 +25,7 @@ Trinity merge: ship 19 commits (7 V4 + 4 V5 + 8 V6) to `main` and turn on every 
 - [ ] **Squash & merge** → Delete branch
 - [ ] Railway → backend service → Deploy (forces `npm i` for the new `ws` dep)
 - [ ] Railway → frontend service → Deploy (new routes)
-- [ ] Smoke: `BASE=https://api.aevion.io node aevion-globus-backend/scripts/qcore-smoke.js`
+- [ ] Smoke: `BASE=https://api.aevion.app node aevion-globus-backend/scripts/qcore-smoke.js`
   Expect green for steps 1-16; SKIP_RUN=1 if you don't want to spend tokens on the actual `/multi-agent`.
 
 **Critical:** backend redeploy is required — V4 adds the `ws` package + a new `/api/qcoreai/ws` endpoint. Without redeploy WS clients will 502.
@@ -77,7 +77,7 @@ git push --force-with-lease
 - [ ] **Squash & merge** → Delete branch
 - [ ] Railway redeploy backend (DDL auto-bootstraps `QCorePrompt`)
 - [ ] Railway redeploy frontend (`/qcoreai/eval/[id]/compare`, `/qcoreai/prompts`, `/multi` updated)
-- [ ] Smoke (full run): `BASE=https://api.aevion.io node aevion-globus-backend/scripts/qcore-smoke.js`
+- [ ] Smoke (full run): `BASE=https://api.aevion.app node aevion-globus-backend/scripts/qcore-smoke.js`
   Expect 25 steps green; ~$0.05-$0.10 in tokens for the V1 run + V5 eval.
 
 ---
@@ -142,7 +142,7 @@ After each merge + redeploy, click through these manually:
 - [ ] Share any run → click `</> Embed` → paste `<iframe>` snippet in a sandbox HTML, see read-only widget
 - [ ] WS smoke (browser console):
   ```js
-  const ws = new WebSocket("wss://api.aevion.io/api/qcoreai/ws");
+  const ws = new WebSocket("wss://api.aevion.app/api/qcoreai/ws");
   ws.onmessage = e => console.log(e.data);
   ws.onopen = () => ws.send(JSON.stringify({type:"start", input:"hi", strategy:"sequential"}));
   ```

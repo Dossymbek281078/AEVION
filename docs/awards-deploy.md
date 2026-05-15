@@ -123,7 +123,7 @@ This is a brand-new module — no existing endpoints. Awards reads from Planet v
 
 ## Deploy checklist
 
-1. Set `AWARDS_ADMIN_EMAILS=alice@aevion.com,bob@aevion.com` in Railway (lowercase).
+1. Set `AWARDS_ADMIN_EMAILS=alice@aevion.app,bob@aevion.app` in Railway (lowercase).
 2. Deploy backend — schema bootstraps on first request (`ensureAwardsTables`).
 3. Smoke (anon):
    - `curl $HOST/api/awards/seasons` → `{ items: [] }` initially.

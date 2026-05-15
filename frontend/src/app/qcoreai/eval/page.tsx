@@ -34,6 +34,7 @@ function fmtDate(s: string) {
 
 export default function QCoreEvalListPage() {
   const [suites, setSuites] = useState<Suite[]>([]);
+  const [publicSuites, setPublicSuites] = useState<Suite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [authMissing, setAuthMissing] = useState(false);
@@ -49,6 +50,10 @@ export default function QCoreEvalListPage() {
     setError(null);
     try {
       const headers = bearerHeader();
+      // Load public suites regardless of auth.
+      fetch(apiUrl("/api/qcoreai/eval/suites/public"), { headers }).then((r) => r.json()).then((d) => {
+        if (Array.isArray(d.items)) setPublicSuites(d.items);
+      }).catch(() => {});
       if (!("Authorization" in headers)) {
         setAuthMissing(true);
         setLoading(false);
@@ -175,6 +180,27 @@ export default function QCoreEvalListPage() {
               }}
             >
               {createOpen ? "Close" : "+ New suite"}
+            </button>
+            <button
+              onClick={async () => {
+                const TEMPLATES = [
+                  { name: "Quality check", description: "Basic quality: length + coherence", cases: [
+                    { id: "q1", name: "Min length", input: "Explain quantum entanglement in simple terms.", judge: { type: "min_length", chars: 100 } },
+                    { id: "q2", name: "Contains key term", input: "What is entropy?", judge: { type: "contains", needle: "energy" } },
+                  ]},
+                ];
+                const tpl = TEMPLATES[0];
+                await fetch(apiUrl("/api/qcoreai/eval/suites"), {
+                  method: "POST", headers: { "Content-Type": "application/json", ...bearerHeader() },
+                  body: JSON.stringify({ name: tpl.name, description: tpl.description, strategy: "sequential", cases: tpl.cases }),
+                }).then(async (r) => {
+                  if (r.ok) { const d = await r.json(); setSuites((p) => [d.suite, ...p]); }
+                });
+              }}
+              title="Create a starter quality-check eval suite"
+              style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(124,58,237,0.3)", background: "rgba(124,58,237,0.08)", color: "#6d28d9", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              📋 Use template
             </button>
           </div>
         </div>
@@ -344,6 +370,40 @@ export default function QCoreEvalListPage() {
                 </div>
               </Link>
             ))}
+          </div>
+        )}
+
+        {/* V33 — Public eval suite gallery */}
+        {publicSuites.length > 0 && (
+          <div style={{ marginTop: 28 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", margin: "0 0 12px" }}>🌐 Community eval suites</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {publicSuites.map((s) => (
+                <div
+                  key={s.id}
+                  style={{
+                    padding: "14px 16px", borderRadius: 12,
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    background: "#f8fafc",
+                    display: "flex", gap: 12, alignItems: "center",
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{s.name}</div>
+                    {s.description && <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{s.description}</div>}
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                      {s.strategy} · {(s.cases || []).length} cases
+                    </div>
+                  </div>
+                  <Link
+                    href={`/qcoreai/eval/${s.id}`}
+                    style={{ padding: "5px 12px", borderRadius: 8, background: "rgba(124,58,237,0.08)", color: "#6d28d9", fontSize: 12, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}
+                  >
+                    View →
+                  </Link>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </ProductPageShell>

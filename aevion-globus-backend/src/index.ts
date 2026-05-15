@@ -74,6 +74,7 @@ import { voiceOfEarthRouter } from "./routes/voiceOfEarth";
 import { qeventsRouter } from "./routes/qevents";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
+import { qlifeRouter } from "./routes/qlife";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -532,6 +533,8 @@ app.use("/api/qevents", qeventsRouter);
 app.use("/api/deepsan", deepSanRouter);
 // QPersona — digital avatar profiles (persona CRUD, AI bio, public gallery)
 app.use("/api/qpersona", qpersonaRouter);
+// QLife — longevity & anti-aging (biomarker log, trends, AI plan)
+app.use("/api/qlife", qlifeRouter);
 
 // QPayNet — embedded payment infrastructure
 app.use("/api/qpaynet", qpaynetRouter);

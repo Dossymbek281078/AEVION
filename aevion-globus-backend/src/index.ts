@@ -497,6 +497,12 @@ app.use("/api/veilnetx", veilnetxRouter);
 app.use("/api/shadownet", shadownetRouter);
 app.use("/api/psyapp-deps", psyappDepsRouter);
 app.use("/api/lifebox", lifeboxRouter);
+// Wave 1/3/4 MVPs — mount BEFORE planning stubs so dedicated routes win.
+app.use("/api/mapreality", mapRealityRouter);
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
+app.use("/api/deepsan", deepSanRouter);
+app.use("/api/qpersona", qpersonaRouter);
+app.use("/api/qlife", qlifeRouter);
 
 // MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
 // the generic planning stubs so module-specific paths (e.g.

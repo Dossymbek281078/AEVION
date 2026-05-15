@@ -1516,6 +1516,45 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     if (f) importZipFile(f);
   };
 
+  const [fileTreeDragOver, setFileTreeDragOver] = useState(false);
+  const fileTreeDragDepth = useRef(0);
+
+  const isZipFile = (f: File) => {
+    if (!f) return false;
+    const t = (f.type || "").toLowerCase();
+    if (t === "application/zip" || t === "application/x-zip-compressed") return true;
+    return /\.zip$/i.test(f.name);
+  };
+
+  const onFileTreeDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    fileTreeDragDepth.current += 1;
+    setFileTreeDragOver(true);
+  };
+  const onFileTreeDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+  const onFileTreeDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    fileTreeDragDepth.current = Math.max(0, fileTreeDragDepth.current - 1);
+    if (fileTreeDragDepth.current === 0) setFileTreeDragOver(false);
+  };
+  const onFileTreeDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    fileTreeDragDepth.current = 0;
+    setFileTreeDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    if (!isZipFile(f)) {
+      setZipResult({ ok: false, text: `"${f.name}" is not a .zip` });
+      return;
+    }
+    importZipFile(f);
+  };
+
   // ── TTS Voice preview ────────────────────────────────────────────────────────
 
   const previewVoice = async (voice: string) => {
@@ -1912,7 +1951,27 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       {/* Main IDE area */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", height: showBuildLog ? "calc(100vh - 220px)" : "calc(100vh - 60px)" }}>
         {/* File tree — left sidebar */}
-        <div style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div
+          onDragEnter={onFileTreeDragEnter}
+          onDragOver={onFileTreeDragOver}
+          onDragLeave={onFileTreeDragLeave}
+          onDrop={onFileTreeDrop}
+          style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0, position: "relative" }}>
+          {fileTreeDragOver && (
+            <div style={{
+              position: "absolute", inset: 6, zIndex: 5, pointerEvents: "none",
+              border: "2px dashed #0d9488", borderRadius: 10,
+              background: "rgba(13,148,136,0.08)",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              gap: 6, color: "#0d9488", fontWeight: 700, fontSize: 13, textAlign: "center", padding: 14,
+            }}>
+              <span style={{ fontSize: 28, lineHeight: 1 }}>📦</span>
+              <span>Drop ZIP to import</span>
+              <span style={{ fontSize: 10, color: "#475569", fontWeight: 500 }}>
+                {zipOverwrite ? "Overwrites existing files" : "Skips existing files"}
+              </span>
+            </div>
+          )}
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Files</span>
             <div style={{ display: "flex", gap: 4 }}>

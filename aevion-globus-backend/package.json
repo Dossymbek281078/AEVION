@@ -25,6 +25,7 @@
     "smoke:qshield-prod": "node scripts/qshield-prod-smoke.js",
     "smoke:pricing-prod": "node scripts/pricing-prod-smoke.js",
     "smoke:qzone-prod": "node scripts/qzone-prod-smoke.js",
+    "smoke:rest-prod": "node scripts/aevion-rest-prod-smoke.js",
     "check:prod-env": "node scripts/check-prod-env.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",

@@ -756,11 +756,12 @@ describe("GET /api/devhub/agent/templates", () => {
     expect(r.status).toBe(200);
     expect(r.body.templates).toHaveLength(3);
     expect(r.body.templates.map((t: any) => t.id).sort()).toEqual(["blog", "dashboard", "landing"]);
-    // landing has 4 steps (code + image + tts + sfx)
+    // landing has 5 steps (code + image + tts + sfx + music)
     const landing = r.body.templates.find((t: any) => t.id === "landing");
-    expect(landing.steps).toHaveLength(4);
+    expect(landing.steps).toHaveLength(5);
     expect(landing.steps[0].type).toBe("code");
     expect(landing.steps[3].type).toBe("sfx");
+    expect(landing.steps[4].type).toBe("music");
   });
 });
 
@@ -1633,5 +1634,47 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(r.status).toBe(200);
     expect(r.body.results[0].savedAs).toBe("public/sfx-0.url.txt");
     expect(r.body.results[0].output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\//);
+  });
+
+  test("music step: R2 set → permanent CDN URL + lengthSeconds→music_length_ms", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 8192))
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "music", prompt: "Ambient synth pads", lengthSeconds: 30, saveAs: "public/bg.mp3.b64" }] });
+    expect(r.status).toBe(200);
+    expect(r.body.results[0].ok).toBe(true);
+    expect(r.body.results[0].savedAs).toBe("public/bg.url.txt"); // suffix rewritten
+    expect(r.body.results[0].output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\/.*\/music-0-/);
+    // ElevenLabs music endpoint called with body.music_length_ms = 30000
+    const elBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(elBody.prompt).toBe("Ambient synth pads");
+    expect(elBody.music_length_ms).toBe(30_000);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
+  });
+
+  test("music step: R2 missing → falls back to .mp3.b64 storage", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock.mockResolvedValueOnce(audioResp(200, 4096));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow`)
+      .send({ steps: [{ type: "music", prompt: "Lo-fi beats" }] });
+    expect(r.status).toBe(200);
+    expect(r.body.results[0].ok).toBe(true);
+    expect(r.body.results[0].savedAs).toBe("public/music-0.mp3.b64");
+    expect(r.body.results[0].output.url).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no R2 call
   });
 });

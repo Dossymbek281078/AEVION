@@ -2376,6 +2376,42 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
           try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
           results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
         }
+      } else if (type === "music") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const prompt = String(step.prompt || step.text || "");
+        if (!prompt) throw new Error("prompt required for music step");
+        const body: Record<string, unknown> = { prompt };
+        const lenSec = Number(step.lengthSeconds);
+        if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
+          body.music_length_ms = Math.round(lenSec * 1000);
+        }
+        const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await musicResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
       } else {
         results.push({ step: i, type, ok: false, error: `unknown step type: ${type}` });
       }
@@ -2405,6 +2441,7 @@ const AGENT_WORKFLOW_TEMPLATES = [
       { type: "image", prompt: "Futuristic abstract gradient, purple and teal, soft glow, hero background", size: "1792x1024", saveAs: "public/hero.url.txt" },
       { type: "tts", text: "Welcome to AEVION — the unified AI platform. Build, deploy, and scale your ideas in one place.", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
       { type: "sfx", text: "Subtle whoosh transition, modern UI sound", durationSeconds: 1.5, saveAs: "public/whoosh.mp3.b64" },
+      { type: "music", prompt: "Ambient electronic background, soft synth pads, hopeful, looped — for landing page hero", lengthSeconds: 30, saveAs: "public/landing-bg.mp3.b64" },
     ],
   },
   {

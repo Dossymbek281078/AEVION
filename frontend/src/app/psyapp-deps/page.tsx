@@ -1,283 +1,293 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import MvpConceptBoard from "@/components/MvpConceptBoard";
+import { apiUrl } from "@/lib/apiBase";
+import Onboarding from "./components/Onboarding";
+import StreakCounter from "./components/StreakCounter";
+import TriggerLog from "./components/TriggerLog";
+import SupportChat from "./components/SupportChat";
+import Affirmation from "./components/Affirmation";
 
-type RiskPoint = { day: number; score: number; label?: string; action?: string };
+type Addiction = "alcohol" | "smoking" | "other";
 
-const RISK_SERIES: RiskPoint[] = [
-  { day: 1, score: 22 },
-  { day: 2, score: 62, label: "Пиковая тревога", action: "Breathing exercise" },
-  { day: 3, score: 38 },
-  { day: 4, score: 48 },
-  { day: 5, score: 78, label: "Trigger zone", action: "Short call with mentor" },
-  { day: 6, score: 45, label: "Стабилизация", action: "Group chat" },
-  { day: 7, score: 28 },
-];
-
-const SEED_MESSAGES = [
-  { handle: "user-aa12", text: "Tough day yesterday, but 14 days clean now. Дышу — и держусь." },
-  { handle: "user-bb33", text: "Proud of you. Месяц назад был на том же месте. Сейчас 47 дней." },
-  { handle: "user-cc44", text: "Сегодня сорвался бы — открыл эту группу вместо приложения. Спасибо." },
-  { handle: "user-dd55", text: "Маленький шаг каждый день. Триггер-детектор подсказал в 19:00 — успел." },
-];
-
-const MILESTONES = [
-  { label: "1 день", progress: 100, note: "Первый день без — самый тяжёлый. Тело адаптируется." },
-  { label: "30 дней", progress: 64, note: "Месяц — новые нейронные связи. Старый паттерн ослабевает." },
-  { label: "90 дней", progress: 22, note: "Три месяца — статистически устойчивая ремиссия." },
-];
-
-function genHandle() {
-  const a = "abcdefghjkmnpqrstuvwxyz";
-  const r = () => a[Math.floor(Math.random() * a.length)];
-  const n = () => Math.floor(Math.random() * 9) + 1;
-  return `user-${r()}${r()}${n()}${n()}`;
+interface UserState {
+  alias: string;
+  addiction: Addiction;
+  started_at: string;
+  streak_start_at: string;
+  total_relapses: number;
 }
 
 export default function PsyAppDepsPage() {
-  const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState(SEED_MESSAGES);
-  const [hover, setHover] = useState<RiskPoint | null>(null);
+  const [alias, setAlias] = useState<string | null>(null);
+  const [user, setUser] = useState<UserState | null>(null);
+  const [streakDays, setStreakDays] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const jsonLd = useMemo(
-    () => ({
-      "@context": "https://schema.org",
-      "@type": "MedicalWebPage",
-      name: "PsyApp · Dependency Recovery",
-      about: {
-        "@type": "MedicalCondition",
-        name: "Substance and behavioral dependencies",
-        possibleTreatment: [
-          { "@type": "TherapeuticProcedure", name: "Behavioral trigger monitoring" },
-          { "@type": "TherapeuticProcedure", name: "Anonymous peer support" },
-        ],
-      },
-      audience: {
-        "@type": "PeopleAudience",
-        suggestedMinAge: 18,
-      },
-      isPartOf: { "@type": "WebSite", name: "AEVION" },
-    }),
-    []
-  );
+  // Hydrate alias from localStorage on mount.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("psyapp-deps-alias");
+      if (saved) setAlias(saved);
+    } catch {
+      // ignore — onboarding will run
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  function post() {
-    const t = draft.trim();
-    if (!t) return;
-    setMessages((m) => [{ handle: genHandle(), text: t }, ...m].slice(0, 20));
-    setDraft("");
+  const fetchUser = useCallback(async (a: string) => {
+    try {
+      const r = await fetch(apiUrl(`/api/psyapp-deps/users/${encodeURIComponent(a)}`), {
+        cache: "no-store",
+      });
+      const d = await r.json();
+      if (r.ok && d.ok && d.user) {
+        setUser(d.user as UserState);
+        setStreakDays(Number(d.streak_days ?? 0));
+      } else if (r.status === 404) {
+        // alias saved locally but server lost user — re-onboard
+        setUser(null);
+        try {
+          localStorage.removeItem("psyapp-deps-alias");
+        } catch {
+          // ignore
+        }
+        setAlias(null);
+      }
+    } catch {
+      // silent — server probably cold
+    }
+  }, []);
+
+  useEffect(() => {
+    if (alias) fetchUser(alias);
+  }, [alias, fetchUser]);
+
+  function handleStarted(newAlias: string) {
+    setAlias(newAlias);
   }
 
-  const W = 640;
-  const H = 200;
-  const PAD = 28;
-  const xs = (i: number) => PAD + (i * (W - PAD * 2)) / (RISK_SERIES.length - 1);
-  const ys = (v: number) => H - PAD - (v / 100) * (H - PAD * 2);
-  const path = RISK_SERIES.map((p, i) => `${i === 0 ? "M" : "L"}${xs(i)},${ys(p.score)}`).join(" ");
-  const area = `${path} L${xs(RISK_SERIES.length - 1)},${H - PAD} L${xs(0)},${H - PAD} Z`;
-  const thresholdY = ys(70);
+  function handleRelapse() {
+    if (alias) fetchUser(alias);
+  }
+
+  function handleSignOut() {
+    try {
+      localStorage.removeItem("psyapp-deps-alias");
+    } catch {
+      // ignore
+    }
+    setAlias(null);
+    setUser(null);
+    setStreakDays(0);
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-950 via-zinc-950 to-black text-zinc-100">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-
-      <header className="border-b border-rose-900/40 bg-black/40 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link href="/" className="text-sm text-rose-300 hover:text-rose-200">
-            ← AEVION · PsyApp · <span className="text-rose-500">RESEARCH</span>
+    <main style={styles.page}>
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
+          <Link href="/" style={styles.breadcrumb}>
+            <span style={styles.breadcrumbDim}>AEVION · </span>
+            <span style={styles.breadcrumbActive}>PsyApp · Recovery</span>
+            <span style={styles.mvpBadge}>MVP</span>
           </Link>
-          <span className="text-[10px] uppercase tracking-widest text-rose-400/70">демо · mock data</span>
+          <nav style={styles.nav}>
+            <Link href="/qgood" style={styles.navLink}>QGood</Link>
+            <Link href="/healthai" style={styles.navLink}>HealthAI</Link>
+            <Link href="/qlife" style={styles.navLink}>QLife</Link>
+            {user ? (
+              <button type="button" onClick={handleSignOut} style={styles.signOutBtn}>
+                Сменить псевдоним
+              </button>
+            ) : null}
+          </nav>
         </div>
       </header>
 
-      <section className="max-w-5xl mx-auto px-6 pt-16 pb-10">
-        <p className="text-xs uppercase tracking-[0.3em] text-rose-400/80">Addiction Recovery</p>
-        <h1 className="mt-3 text-4xl md:text-5xl font-semibold tracking-tight">
-          Out of the loop, <span className="text-rose-400">on purpose.</span>
+      {/* Hero */}
+      <section style={styles.hero}>
+        <p style={styles.heroEyebrow}>Помощь выхода из зависимостей</p>
+        <h1 style={styles.heroTitle}>
+          Ты сильнее.
+          <br />
+          <span style={styles.heroGradient}>Один день — это победа.</span>
         </h1>
-        <p className="mt-4 text-zinc-300 max-w-2xl leading-relaxed">
-          Платформа выхода из зависимостей (алкоголь · курение · ставки). Поведенческая триггер-детекция,
-          анонимная групповая поддержка и профилактика срывов. 18+. Не диагноз — поддержка.
+        <p style={styles.heroSub}>
+          Алкоголь, курение или другие зависимости — путь один: маленькие шаги, поддержка и
+          честность с собой. Без диагнозов, без осуждения, без следов.
         </p>
       </section>
 
-      <section className="max-w-5xl mx-auto px-6 pb-10">
-        <div className="rounded-2xl border border-rose-900/40 bg-black/40 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-rose-200">Trigger-детектор · 7 дней</h2>
-            <span className="text-[10px] uppercase tracking-widest text-rose-400/70">демо · mock data</span>
-          </div>
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Risk timeline">
-            <defs>
-              <linearGradient id="riskFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.55" />
-                <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.02" />
-              </linearGradient>
-            </defs>
-            <line x1={PAD} y1={thresholdY} x2={W - PAD} y2={thresholdY} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity="0.6" />
-            <text x={W - PAD} y={thresholdY - 6} textAnchor="end" fontSize="10" fill="#fca5a5">
-              threshold · 70
-            </text>
-            <path d={area} fill="url(#riskFill)" />
-            <path d={path} fill="none" stroke="#fb7185" strokeWidth="2" />
-            {RISK_SERIES.map((p, i) => {
-              const cx = xs(i);
-              const cy = ys(p.score);
-              const red = p.score >= 70;
-              return (
-                <g key={i} onMouseEnter={() => setHover(p)} onMouseLeave={() => setHover(null)}>
-                  <circle cx={cx} cy={cy} r={red ? 6 : 4} fill={red ? "#ef4444" : "#fb7185"} stroke="#0a0a0a" strokeWidth="2" />
-                  <text x={cx} y={H - 8} textAnchor="middle" fontSize="10" fill="#9ca3af">
-                    D{p.day}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-          <div className="mt-3 min-h-[44px] text-sm">
-            {hover ? (
-              <div className="rounded-lg border border-rose-700/40 bg-rose-950/50 px-3 py-2">
-                <span className="text-rose-200 font-medium">Day {hover.day} · risk {hover.score}</span>
-                {hover.label ? <span className="text-zinc-400"> · {hover.label}</span> : null}
-                {hover.action ? (
-                  <div className="text-xs text-rose-300/90 mt-1">Suggested: {hover.action}</div>
-                ) : null}
-              </div>
-            ) : (
-              <span className="text-zinc-500 text-xs">Наведите на точку — увидите рекомендуемое действие.</span>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="max-w-5xl mx-auto px-6 pb-10">
-        <div className="rounded-2xl border border-rose-900/40 bg-black/40 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-rose-200">Anonymous Group Support</h2>
-            <span className="text-[10px] uppercase tracking-widest text-rose-400/70">ephemeral handles · демо</span>
-          </div>
-          <div className="space-y-2 mb-4 max-h-72 overflow-y-auto">
-            {messages.map((m, i) => (
-              <div key={i} className="rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2">
-                <div className="text-[11px] text-rose-300/80 font-mono">{m.handle}</div>
-                <div className="text-sm text-zinc-200 mt-1">{m.text}</div>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && post()}
-              placeholder="Поделитесь анонимно"
-              className="flex-1 rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-2 text-sm placeholder:text-zinc-500 focus:outline-none focus:border-rose-500"
+      {/* Main flow */}
+      <section style={styles.section}>
+        {loading ? (
+          <div style={styles.placeholder}>Загружаю…</div>
+        ) : !user ? (
+          <Onboarding onStarted={handleStarted} />
+        ) : (
+          <div style={styles.dashboard}>
+            <StreakCounter
+              alias={user.alias}
+              addiction={user.addiction}
+              streakDays={streakDays}
+              totalRelapses={user.total_relapses}
+              startedAt={user.started_at}
+              onRelapse={handleRelapse}
             />
-            <button
-              onClick={post}
-              className="rounded-lg bg-rose-600 hover:bg-rose-500 px-4 py-2 text-sm font-medium"
-            >
-              Отправить
-            </button>
-          </div>
-          <p className="text-[11px] text-zinc-500 mt-3">
-            Handle генерируется случайно при каждой отправке. Без логина, без следа.
-          </p>
-        </div>
-      </section>
 
-      <section className="max-w-5xl mx-auto px-6 pb-10">
-        <h2 className="text-lg font-semibold text-rose-200 mb-4">Recovery Timeline</h2>
-        <div className="grid md:grid-cols-3 gap-4">
-          {MILESTONES.map((m) => (
-            <div key={m.label} className="rounded-2xl border border-rose-900/40 bg-black/40 p-5">
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-semibold text-rose-300">{m.label}</span>
-                <span className="text-xs text-zinc-400">{m.progress}%</span>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-zinc-800 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-rose-500 to-rose-300"
-                  style={{ width: `${m.progress}%` }}
-                />
-              </div>
-              <p className="mt-3 text-sm text-zinc-300 leading-relaxed">{m.note}</p>
+            <div style={styles.affirmationWrap}>
+              <Affirmation />
             </div>
-          ))}
-        </div>
 
-        <div className="mt-4 rounded-2xl border border-rose-900/40 bg-gradient-to-br from-rose-950/60 to-black p-5">
-          <div className="text-xs uppercase tracking-widest text-rose-400/80">Bridge → QGood</div>
-          <h3 className="mt-1 text-lg font-semibold">Когда поведенческий риск переходит в клинический</h3>
-          <p className="mt-2 text-sm text-zinc-300 leading-relaxed">
-            Если детектор фиксирует устойчивое превышение порога 70 более 48 часов — PsyApp предлагает
-            мост к QGood: clinical-grade поддержка, защищённый канал, профильный специалист. Решение —
-            всегда за вами.
-          </p>
-          <Link href="/qgood" className="inline-block mt-3 text-sm text-rose-300 hover:text-rose-200">
-            Перейти к QGood →
-          </Link>
-        </div>
+            <div style={styles.twoCol}>
+              <TriggerLog alias={user.alias} />
+              <SupportChat alias={user.alias} />
+            </div>
+          </div>
+        )}
       </section>
 
-      <section className="max-w-5xl mx-auto px-6 pb-10">
-        <div className="rounded-2xl border border-amber-700/40 bg-amber-950/30 p-5">
-          <p className="text-sm italic text-amber-200/90 leading-relaxed">
-            Не замена клинической помощи. При срочной нужде — обращайтесь к специалисту.
-            PsyApp — поддержка между сессиями, не диагноз и не терапия.
+      {/* Care reminder */}
+      <section style={styles.section}>
+        <div style={styles.careCard}>
+          <strong style={styles.careTitle}>Это поддержка, не лечение.</strong>
+          <p style={styles.careText}>
+            При тяжёлых симптомах (галлюцинации, тремор, мысли о самоповреждении) — обратись
+            к врачу или на горячую линию помощи. PsyApp идёт рядом, не вместо специалиста.
           </p>
         </div>
       </section>
 
-      <section className="max-w-5xl mx-auto px-6 pb-16">
-        <h2 className="text-sm uppercase tracking-widest text-zinc-400 mb-3">Связанные модули</h2>
-        <div className="grid md:grid-cols-3 gap-3">
-          <Link
-            href="/qgood"
-            className="rounded-xl border border-zinc-800 hover:border-rose-700 bg-black/40 p-4 transition"
-          >
-            <div className="text-rose-300 font-semibold">QGood</div>
-            <p className="text-xs text-zinc-400 mt-1">Clinical-grade mental health — куда эскалируется риск.</p>
-          </Link>
-          <Link
-            href="/healthai"
-            className="rounded-xl border border-zinc-800 hover:border-rose-700 bg-black/40 p-4 transition"
-          >
-            <div className="text-rose-300 font-semibold">HealthAI</div>
-            <p className="text-xs text-zinc-400 mt-1">Health-screener + триаж, фоновый сигнал биомаркеров.</p>
-          </Link>
-          <Link
-            href="/qlife"
-            className="rounded-xl border border-zinc-800 hover:border-rose-700 bg-black/40 p-4 transition"
-          >
-            <div className="text-rose-300 font-semibold">QLife</div>
-            <p className="text-xs text-zinc-400 mt-1">Personal OS, где PsyApp работает фоном.</p>
-          </Link>
-        </div>
-      </section>
-
-      <MvpConceptBoard
-        moduleId="psyapp-deps"
-        noun="assessments"
-        titleField="title"
-        summaryField="category"
-        accent="rose"
-        sectionTitle="Public assessment templates"
-        sectionHint="Анонимные шаблоны самопроверок от сообщества (без диагнозов). Для исследований и образовательных целей."
-        fields={[
-          { key: "title", label: "Название шаблона", required: true, placeholder: "Burnout self-check (workplace)" },
-          { key: "category", label: "Категория", required: true, placeholder: "burnout · anxiety · dependency · sleep" },
-          { key: "description", label: "Описание", type: "textarea", required: false, placeholder: "Когда применять, какие вопросы. Без клинических утверждений." },
-        ]}
-      />
-
-      <footer className="border-t border-rose-900/30 py-6 text-center text-[11px] text-zinc-500">
-        AEVION · PsyApp · RESEARCH · демо · mock data · 18+
+      <footer style={styles.footer}>
+        AEVION · PsyApp · Recovery MVP · 18+
       </footer>
-    </div>
+    </main>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#0d0a06",
+    color: "#f5ebd7",
+    fontFamily: "system-ui, -apple-system, sans-serif",
+  },
+  header: {
+    borderBottom: "1px solid #2a241c",
+    background: "rgba(13,10,6,0.9)",
+    backdropFilter: "blur(12px)",
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+  },
+  headerInner: {
+    maxWidth: 1100,
+    margin: "0 auto",
+    padding: "14px 20px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  breadcrumb: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    textDecoration: "none",
+    fontSize: 14,
+  },
+  breadcrumbDim: { color: "#7d6f54" },
+  breadcrumbActive: { color: "#9bd4a8", fontWeight: 700 },
+  mvpBadge: {
+    background: "rgba(63,111,79,0.2)",
+    border: "1px solid #3f6f4f",
+    borderRadius: 20,
+    color: "#9bd4a8",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    padding: "2px 8px",
+    textTransform: "uppercase",
+  },
+  nav: { display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" },
+  navLink: { color: "#9b8b6e", fontSize: 13, textDecoration: "none" },
+  signOutBtn: {
+    background: "transparent",
+    color: "#9b8b6e",
+    border: "1px solid #3a342c",
+    borderRadius: 20,
+    padding: "4px 12px",
+    fontSize: 12,
+    cursor: "pointer",
+  },
+
+  hero: { maxWidth: 1100, margin: "0 auto", padding: "48px 20px 32px" },
+  heroEyebrow: {
+    color: "#9bd4a8",
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.18em",
+    textTransform: "uppercase",
+    margin: "0 0 14px 0",
+  },
+  heroTitle: {
+    color: "#f5ebd7",
+    fontSize: "clamp(32px, 6vw, 56px)",
+    fontWeight: 800,
+    lineHeight: 1.1,
+    margin: "0 0 16px 0",
+    letterSpacing: "-0.02em",
+  },
+  heroGradient: {
+    background: "linear-gradient(135deg, #9bd4a8, #5b9d70)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    backgroundClip: "text",
+  },
+  heroSub: {
+    color: "#b8a98c",
+    fontSize: 16,
+    lineHeight: 1.6,
+    maxWidth: 640,
+    margin: 0,
+  },
+
+  section: { maxWidth: 1100, margin: "0 auto", padding: "0 20px 32px" },
+  placeholder: {
+    background: "#1a1510",
+    border: "1px solid #2a241c",
+    borderRadius: 16,
+    padding: 40,
+    textAlign: "center",
+    color: "#7d6f54",
+    fontStyle: "italic",
+  },
+  dashboard: { display: "flex", flexDirection: "column", gap: 20 },
+  affirmationWrap: { maxWidth: 720, margin: "0 auto", width: "100%" },
+  twoCol: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: 20,
+    alignItems: "start",
+  },
+
+  careCard: {
+    background: "rgba(180,140,80,0.08)",
+    border: "1px solid #5a4a2f",
+    borderRadius: 12,
+    padding: "16px 20px",
+  },
+  careTitle: { color: "#e8d29a", fontSize: 14, display: "block", marginBottom: 6 },
+  careText: { color: "#c4b48e", fontSize: 13, lineHeight: 1.6, margin: 0 },
+
+  footer: {
+    borderTop: "1px solid #2a241c",
+    padding: "24px 20px",
+    textAlign: "center",
+    color: "#7d6f54",
+    fontSize: 11,
+  },
+};

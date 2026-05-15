@@ -246,6 +246,9 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentResults, setAgentResults] = useState<Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }>>([]);
   const [agentSummary, setAgentSummary] = useState<{ totalSteps: number; successCount: number; failureCount: number } | null>(null);
+  const [agentStreaming, setAgentStreaming] = useState(true);
+  const [agentLiveStep, setAgentLiveStep] = useState<number | null>(null);
+  const [agentTemplates, setAgentTemplates] = useState<Array<{ id: string; name: string; description: string; steps: AgentStep[] }>>([]);
   const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
 
   // Templates
@@ -285,7 +288,77 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "payment">("tts");
+  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "clone" | "stt" | "drive" | "email" | "templates" | "builder" | "payment" | "sms" | "whatsapp" | "translate" | "bulk">("tts");
+
+  // DeepL bulk translate state (N files × M langs)
+  const BULK_LANG_OPTIONS = [
+    { code: "RU", name: "Русский" }, { code: "EN", name: "English" }, { code: "KK", name: "Қазақша" },
+    { code: "DE", name: "Deutsch" }, { code: "FR", name: "Français" }, { code: "ES", name: "Español" },
+    { code: "PT", name: "Português" }, { code: "IT", name: "Italiano" }, { code: "PL", name: "Polski" },
+    { code: "TR", name: "Türkçe" }, { code: "JA", name: "日本語" }, { code: "ZH", name: "中文" },
+  ];
+  const [bulkPaths, setBulkPaths] = useState<string[]>([]);
+  const [bulkLangs, setBulkLangs] = useState<string[]>(["RU", "EN"]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkResults, setBulkResults] = useState<Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; error?: string }>>([]);
+  const [bulkSummary, setBulkSummary] = useState<{ total: number; successCount: number; failureCount: number } | null>(null);
+
+  // Email template builder state
+  const [tplBuilderName, setTplBuilderName] = useState("");
+  const [tplBuilderSubject, setTplBuilderSubject] = useState("");
+  const [tplBuilderHtml, setTplBuilderHtml] = useState("<h1>Hello {{params.name}}</h1>\n<p>Welcome to AEVION.</p>");
+  const [tplBuilderSender, setTplBuilderSender] = useState("");
+  const [tplBuilderLoading, setTplBuilderLoading] = useState(false);
+  const [tplBuilderMsg, setTplBuilderMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // ZIP import state
+  const [zipImporting, setZipImporting] = useState(false);
+  const [zipOverwrite, setZipOverwrite] = useState(false);
+  const [zipResult, setZipResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const zipInputRef = useRef<HTMLInputElement | null>(null);
+
+  // DeepL translate state
+  const [trText, setTrText] = useState("");
+  const [trTarget, setTrTarget] = useState("RU");
+  const [trSource, setTrSource] = useState("");
+  const [trLoading, setTrLoading] = useState(false);
+  const [trResult, setTrResult] = useState<{ text: string; detectedSource: string } | null>(null);
+  const [trError, setTrError] = useState<string | null>(null);
+  // File translate
+  const [trFilePath, setTrFilePath] = useState("");
+  const [trFileLang, setTrFileLang] = useState("RU");
+  const [trFileLoading, setTrFileLoading] = useState(false);
+  const [trFileMsg, setTrFileMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Brevo email templates state
+  const [emailTemplates, setEmailTemplates] = useState<Array<{ id: number; name: string; subject: string; isActive: boolean }>>([]);
+  const [emailTemplatesLoading, setEmailTemplatesLoading] = useState(false);
+  const [emailTemplatesError, setEmailTemplatesError] = useState<string | null>(null);
+  const [tplSendTo, setTplSendTo] = useState("");
+  const [tplSendParams, setTplSendParams] = useState("");
+  const [tplSendingId, setTplSendingId] = useState<number | null>(null);
+  const [tplSendMsg, setTplSendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // TTS voice preview state
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+
+  // SMS state
+  const [smsRecipient, setSmsRecipient] = useState("");
+  const [smsContent, setSmsContent] = useState("");
+  const [smsSender, setSmsSender] = useState("AEVION");
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsMsg, setSmsMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // WhatsApp state
+  const [waContact, setWaContact] = useState("");
+  const [waTemplateId, setWaTemplateId] = useState("");
+  const [waParams, setWaParams] = useState("");
+  const [waLoading, setWaLoading] = useState(false);
+  const [waMsg, setWaMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Cloudflare Images upload state (per-DALL-E-result)
+  const [cfImgUploading, setCfImgUploading] = useState(false);
+  const [cfImgPermanentUrl, setCfImgPermanentUrl] = useState<string | null>(null);
 
   // DALL-E image state
   const [imgPrompt, setImgPrompt] = useState("");
@@ -909,6 +982,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     setImgLoading(true);
     setImgError(null);
     setImgResult(null);
+    setCfImgPermanentUrl(null);
     try {
       const r = await fetch(apiUrl("/api/devhub/media/image"), {
         method: "POST",
@@ -1012,11 +1086,88 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   // ── Agent workflow ───────────────────────────────────────────────────────────
 
+  const loadAgentTemplates = useCallback(async () => {
+    try {
+      const r = await fetch(apiUrl("/api/devhub/agent/templates"), { cache: "no-store" });
+      const d = await r.json();
+      setAgentTemplates(d.templates || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "agent" && agentTemplates.length === 0) loadAgentTemplates();
+  }, [activeTab, agentTemplates.length, loadAgentTemplates]);
+
+  const applyAgentTemplate = (tplId: string) => {
+    const tpl = agentTemplates.find((t) => t.id === tplId);
+    if (!tpl) return;
+    setAgentSteps(tpl.steps.map((s) => ({ ...s })));
+    setAgentResults([]);
+    setAgentSummary(null);
+    setAgentLiveStep(null);
+  };
+
   const runAgentWorkflow = async () => {
     if (!project || agentRunning || agentSteps.length === 0) return;
     setAgentRunning(true);
     setAgentResults([]);
     setAgentSummary(null);
+    setAgentLiveStep(null);
+
+    if (agentStreaming) {
+      // SSE streaming version
+      try {
+        const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/agent/workflow/stream`), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({ steps: agentSteps }),
+        });
+        if (!r.ok || !r.body) throw new Error(`stream failed (${r.status})`);
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        const accumulated: typeof agentResults = [];
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const e of events) {
+            if (!e.startsWith("data: ")) continue;
+            try {
+              const evt = JSON.parse(e.slice(6));
+              if (evt.type === "step-start") {
+                setAgentLiveStep(evt.index);
+              } else if (evt.type === "step-done") {
+                const step = agentSteps[evt.index];
+                accumulated.push({
+                  step: evt.index, type: step?.type || "unknown",
+                  ok: !!evt.ok, output: evt.output, error: evt.error, savedAs: evt.savedAs,
+                });
+                setAgentResults([...accumulated]);
+              } else if (evt.type === "complete") {
+                setAgentSummary({
+                  totalSteps: evt.totalSteps, successCount: evt.successCount, failureCount: evt.failureCount,
+                });
+                showToast(`Agent: ${evt.successCount}/${evt.totalSteps} steps ok`, evt.failureCount === 0 ? "success" : "error");
+              }
+            } catch { /* tolerate bad events */ }
+          }
+        }
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json();
+        setFiles(listData.files || []);
+      } catch (e: any) {
+        showToast(e?.message || "Stream failed", "error");
+      } finally {
+        setAgentRunning(false);
+        setAgentLiveStep(null);
+      }
+      return;
+    }
+
+    // Non-streaming fallback (whole response at end)
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/agent/workflow`), {
         method: "POST",
@@ -1027,7 +1178,6 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       if (!r.ok) throw new Error(d.error || "Workflow failed");
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
-      // Reload file tree
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       setFiles(listData.files || []);
@@ -1036,6 +1186,381 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       showToast(e?.message || "Workflow failed", "error");
     } finally {
       setAgentRunning(false);
+    }
+  };
+
+  // ── Brevo SMS ────────────────────────────────────────────────────────────────
+
+  const sendSms = async () => {
+    if (!smsRecipient.trim() || !smsContent.trim()) return;
+    setSmsLoading(true);
+    setSmsMsg(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/sms"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: smsRecipient.trim(),
+          content: smsContent,
+          sender: smsSender.trim() || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setSmsMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setSmsMsg({ ok: true, text: `SMS sent (${d.smsCount} segment${d.smsCount === 1 ? "" : "s"}, ref ${d.reference})` });
+        setSmsRecipient(""); setSmsContent("");
+      }
+    } catch (e: any) {
+      setSmsMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  // ── Brevo WhatsApp ───────────────────────────────────────────────────────────
+
+  const sendWhatsApp = async () => {
+    if (!waContact.trim() || !waTemplateId.trim()) return;
+    setWaLoading(true);
+    setWaMsg(null);
+    try {
+      let params: any = undefined;
+      if (waParams.trim()) {
+        try { params = JSON.parse(waParams); } catch {
+          setWaMsg({ ok: false, text: "params must be valid JSON object" });
+          setWaLoading(false);
+          return;
+        }
+      }
+      const r = await fetch(apiUrl("/api/devhub/media/whatsapp"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactNumber: waContact.trim(),
+          templateId: isNaN(Number(waTemplateId)) ? waTemplateId.trim() : Number(waTemplateId),
+          params,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setWaMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setWaMsg({ ok: true, text: `WhatsApp sent (msg ${d.messageId})` });
+        setWaContact(""); setWaTemplateId(""); setWaParams("");
+      }
+    } catch (e: any) {
+      setWaMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setWaLoading(false);
+    }
+  };
+
+  // ── DeepL translate ──────────────────────────────────────────────────────────
+
+  const translateText = async () => {
+    if (!trText.trim() || !trTarget.trim()) return;
+    setTrLoading(true);
+    setTrError(null);
+    setTrResult(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/translate"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: trText,
+          targetLang: trTarget,
+          ...(trSource.trim() ? { sourceLang: trSource.trim() } : {}),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTrError(d.error || "Translation failed");
+      } else {
+        setTrResult({ text: d.text, detectedSource: d.detectedSource });
+      }
+    } catch (e: any) {
+      setTrError(e?.message || "Translation failed");
+    } finally {
+      setTrLoading(false);
+    }
+  };
+
+  const translateProjectFile = async () => {
+    if (!project || !trFilePath.trim() || !trFileLang.trim()) return;
+    setTrFileLoading(true);
+    setTrFileMsg(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files/translate`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: trFilePath.trim(), targetLang: trFileLang.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTrFileMsg({ ok: false, text: d.error || "Translation failed" });
+      } else {
+        setTrFileMsg({ ok: true, text: `Translated to ${d.path} (${d.bytes} bytes)` });
+        // Reload file tree
+        const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
+        const listData = await listR.json();
+        setFiles(listData.files || []);
+      }
+    } catch (e: any) {
+      setTrFileMsg({ ok: false, text: e?.message || "Translation failed" });
+    } finally {
+      setTrFileLoading(false);
+    }
+  };
+
+  // ── Brevo email templates ────────────────────────────────────────────────────
+
+  const loadEmailTemplates = useCallback(async () => {
+    setEmailTemplatesLoading(true);
+    setEmailTemplatesError(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setEmailTemplatesError(d.error || "Failed to load templates");
+        setEmailTemplates([]);
+      } else {
+        setEmailTemplates(d.templates || []);
+      }
+    } catch (e: any) {
+      setEmailTemplatesError(e?.message || "Failed to load templates");
+    } finally {
+      setEmailTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "media" && mediaTab === "templates" && emailTemplates.length === 0 && !emailTemplatesError) {
+      loadEmailTemplates();
+    }
+  }, [activeTab, mediaTab, emailTemplates.length, emailTemplatesError, loadEmailTemplates]);
+
+  const sendByTemplate = async (templateId: number) => {
+    if (!tplSendTo.trim()) {
+      setTplSendMsg({ ok: false, text: "Recipient email required" });
+      return;
+    }
+    setTplSendingId(templateId);
+    setTplSendMsg(null);
+    try {
+      let params: any = undefined;
+      if (tplSendParams.trim()) {
+        try { params = JSON.parse(tplSendParams); } catch {
+          setTplSendMsg({ ok: false, text: "params must be valid JSON" });
+          setTplSendingId(null);
+          return;
+        }
+      }
+      const r = await fetch(apiUrl("/api/devhub/media/email-template-send"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId, to: tplSendTo.trim(), params }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTplSendMsg({ ok: false, text: d.error || "Send failed" });
+      } else {
+        setTplSendMsg({ ok: true, text: `Sent template #${templateId} (msg ${d.messageId})` });
+      }
+    } catch (e: any) {
+      setTplSendMsg({ ok: false, text: e?.message || "Send failed" });
+    } finally {
+      setTplSendingId(null);
+    }
+  };
+
+  // ── DeepL bulk translate ─────────────────────────────────────────────────────
+
+  const runBulkTranslate = async () => {
+    if (!project) return;
+    if (bulkPaths.length === 0) {
+      showToast("Select at least one file", "error");
+      return;
+    }
+    if (bulkLangs.length === 0) {
+      showToast("Select at least one target language", "error");
+      return;
+    }
+    if (bulkPaths.length * bulkLangs.length > 50) {
+      showToast("Max 50 translations per batch (files × langs)", "error");
+      return;
+    }
+    setBulkLoading(true);
+    setBulkResults([]);
+    setBulkSummary(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files/translate-bulk`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: bulkPaths, targetLangs: bulkLangs }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        showToast(d.error || "Bulk translate failed", "error");
+        return;
+      }
+      setBulkResults(d.results || []);
+      setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
+      if (d.successCount > 0) {
+        showToast(`Translated ${d.successCount} / ${d.total}`, "success");
+        await fetchProject();
+      } else {
+        showToast(`All ${d.total} translations failed`, "error");
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Bulk translate failed", "error");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const toggleBulkPath = (path: string) => {
+    setBulkPaths((prev) => prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]);
+  };
+  const toggleBulkLang = (lang: string) => {
+    setBulkLangs((prev) => prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]);
+  };
+
+  // ── Brevo template builder (create new SMTP template) ────────────────────────
+
+  const createEmailTemplate = async () => {
+    if (!tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()) {
+      setTplBuilderMsg({ ok: false, text: "Name, subject and HTML body are all required" });
+      return;
+    }
+    setTplBuilderLoading(true);
+    setTplBuilderMsg(null);
+    try {
+      const body: Record<string, unknown> = {
+        name: tplBuilderName.trim(),
+        subject: tplBuilderSubject.trim(),
+        htmlContent: tplBuilderHtml,
+      };
+      if (tplBuilderSender.trim()) body.senderEmail = tplBuilderSender.trim();
+      const r = await fetch(apiUrl("/api/devhub/media/email-template-create"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setTplBuilderMsg({ ok: false, text: d.error || "Template create failed" });
+        return;
+      }
+      setTplBuilderMsg({ ok: true, text: `Created template #${d.id} — "${d.name}"` });
+      // Refresh templates list if user already opened it
+      if (emailTemplates.length > 0) await loadEmailTemplates();
+    } catch (e: any) {
+      setTplBuilderMsg({ ok: false, text: e?.message || "Template create failed" });
+    } finally {
+      setTplBuilderLoading(false);
+    }
+  };
+
+  // ── ZIP import (symmetric to /export) ────────────────────────────────────────
+
+  const importZipFile = async (file: File) => {
+    if (!project) return;
+    if (file.size > 50 * 1024 * 1024) {
+      setZipResult({ ok: false, text: "ZIP too large (max 50 MB)" });
+      return;
+    }
+    setZipImporting(true);
+    setZipResult(null);
+    try {
+      const buf = await file.arrayBuffer();
+      // Convert to base64 without blowing the stack on large files
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+      }
+      const base64Zip = btoa(binary);
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/import-zip`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64Zip, overwrite: zipOverwrite }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setZipResult({ ok: false, text: d.error || "Import failed" });
+        return;
+      }
+      setZipResult({
+        ok: true,
+        text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
+      });
+      showToast(`Imported ${d.importedCount} file(s) from ${file.name}`, "success");
+      await fetchProject();
+    } catch (e: any) {
+      setZipResult({ ok: false, text: e?.message || "Import failed" });
+    } finally {
+      setZipImporting(false);
+      if (zipInputRef.current) zipInputRef.current.value = "";
+    }
+  };
+
+  const onZipInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) importZipFile(f);
+  };
+
+  // ── TTS Voice preview ────────────────────────────────────────────────────────
+
+  const previewVoice = async (voice: string) => {
+    if (previewingVoice) return;
+    setPreviewingVoice(voice);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/tts"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Hello! This is what I sound like.", voice }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error || `Preview error ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch (e: any) {
+      showToast(e?.message || "Preview failed", "error");
+    } finally {
+      setTimeout(() => setPreviewingVoice(null), 2500);
+    }
+  };
+
+  // ── Cloudflare Images upload (call from DALL-E result) ───────────────────────
+
+  const uploadImageToCloudflare = async (sourceUrl: string) => {
+    setCfImgUploading(true);
+    setCfImgPermanentUrl(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/upload-image"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        showToast(d.error || "Cloudflare upload failed", "error");
+      } else {
+        setCfImgPermanentUrl(d.url);
+        showToast("Image uploaded to permanent CDN", "success");
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Upload failed", "error");
+    } finally {
+      setCfImgUploading(false);
     }
   };
 
@@ -1225,6 +1750,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", display: "flex", flexDirection: "column" }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       {/* Top bar */}
       <div style={{ background: "#fff", borderBottom: "1px solid rgba(15,23,42,0.1)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>Back</Link>
@@ -1330,12 +1856,37 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
         <div style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Files</span>
-            <button
-              onClick={() => setShowNewFile(true)}
-              style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
-              title="New file"
-            >+</button>
+            <div style={{ display: "flex", gap: 4 }}>
+              <input ref={zipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }} onChange={onZipInputChange} />
+              <button
+                onClick={() => zipInputRef.current?.click()}
+                disabled={zipImporting || !project}
+                style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
+                title="Import ZIP (symmetric to export)"
+              >{zipImporting ? "..." : "📦"}</button>
+              <button
+                onClick={() => setShowNewFile(true)}
+                style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+                title="New file"
+              >+</button>
+            </div>
           </div>
+          {zipResult && (
+            <div style={{
+              padding: "6px 12px", fontSize: 11, lineHeight: 1.4,
+              background: zipResult.ok ? "#d1fae5" : "#fee2e2",
+              color: zipResult.ok ? "#065f46" : "#991b1b",
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6,
+            }}>
+              <span>{zipResult.text}</span>
+              <button onClick={() => setZipResult(null)}
+                style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontWeight: 700, fontSize: 14, lineHeight: 1 }}>×</button>
+            </div>
+          )}
+          <label style={{ padding: "4px 14px 6px", fontSize: 10, color: "#94a3b8", display: "flex", alignItems: "center", gap: 4 }}>
+            <input type="checkbox" checked={zipOverwrite} onChange={(e) => setZipOverwrite(e.target.checked)} style={{ width: 11, height: 11 }} />
+            ZIP overwrite existing
+          </label>
 
           {showNewFile && (
             <div style={{ padding: "8px 10px", borderBottom: "1px solid #f1f5f9" }}>
@@ -1686,7 +2237,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
                   <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
-                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "email", "payment"] as const).map((sub) => (
+                    {(["tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
@@ -1706,7 +2257,13 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                         : sub === "clone" ? "Clone"
                         : sub === "stt" ? "STT"
                         : sub === "drive" ? "Drive"
+                        : sub === "translate" ? "DeepL"
+                        : sub === "bulk" ? "Bulk i18n"
                         : sub === "email" ? "Email"
+                        : sub === "templates" ? "Templates"
+                        : sub === "builder" ? "Tpl Builder"
+                        : sub === "sms" ? "SMS"
+                        : sub === "whatsapp" ? "WhatsApp"
                         : "Pay"}
                       </button>
                     ))}
@@ -1717,15 +2274,31 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice</label>
-                        <select
-                          value={mediaTtsVoice}
-                          onChange={(e) => setMediaTtsVoice(e.target.value)}
-                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
-                        >
-                          {["Rachel", "Adam", "Antoni", "Arnold", "Bella", "Domi", "Elli", "Josh", "Sam"].map((v) => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <select
+                            value={mediaTtsVoice}
+                            onChange={(e) => setMediaTtsVoice(e.target.value)}
+                            style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
+                          >
+                            {["Rachel", "Adam", "Antoni", "Arnold", "Bella", "Domi", "Elli", "Josh", "Sam"].map((v) => (
+                              <option key={v} value={v}>{v}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => previewVoice(mediaTtsVoice)}
+                            disabled={!!previewingVoice}
+                            title="Preview voice with a short sample"
+                            style={{
+                              padding: "7px 12px", background: previewingVoice === mediaTtsVoice ? "#a5b4fc" : "#7c3aed",
+                              color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
+                              cursor: previewingVoice ? "not-allowed" : "pointer",
+                              display: "flex", alignItems: "center", gap: 4,
+                            }}
+                          >
+                            {previewingVoice === mediaTtsVoice ? "🔊" : "▶ Preview"}
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Text</label>
@@ -1821,16 +2394,36 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       {imgResult && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          <img src={cfImgPermanentUrl || imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
                               Revised prompt: {imgResult.revisedPrompt}
                             </div>
                           )}
-                          <a href={imgResult.url} target="_blank" rel="noopener noreferrer"
-                            style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
-                            Open full size →
-                          </a>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <a href={cfImgPermanentUrl || imgResult.url} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
+                              Open full size →
+                            </a>
+                            {!cfImgPermanentUrl && (
+                              <button
+                                onClick={() => uploadImageToCloudflare(imgResult.url)}
+                                disabled={cfImgUploading}
+                                title="OpenAI's image URL expires in ~1 hour. Upload to Cloudflare Images for a permanent CDN URL."
+                                style={{
+                                  padding: "4px 10px", background: "#f59e0b", color: "#fff",
+                                  border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                                }}
+                              >
+                                {cfImgUploading ? "Uploading..." : "→ Permanent CDN URL"}
+                              </button>
+                            )}
+                            {cfImgPermanentUrl && (
+                              <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>
+                                ✓ Permanent CDN
+                              </span>
+                            )}
+                          </div>
                         </div>
                       )}
                       <button
@@ -2106,6 +2699,420 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                     </div>
                   )}
 
+                  {/* DeepL Translate */}
+                  {mediaTab === "translate" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Translate text</div>
+                      <div>
+                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Text to translate..."
+                          rows={4}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Source (auto if empty)</label>
+                          <select value={trSource} onChange={(e) => setTrSource(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
+                            <option value="">Auto-detect</option>
+                            {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Target</label>
+                          <select value={trTarget} onChange={(e) => setTrTarget(e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
+                            {["EN", "RU", "DE", "FR", "ES", "IT", "JA", "KO", "ZH", "PT", "TR", "UK"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      {trError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {trError}
+                        </div>
+                      )}
+                      {trResult && (
+                        <div style={{ padding: "10px 12px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 11, color: "#0d9488", fontWeight: 700 }}>
+                            {trResult.detectedSource} → {trTarget}
+                          </div>
+                          <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{trResult.text}</div>
+                          <button onClick={() => navigator.clipboard.writeText(trResult.text)}
+                            style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy</button>
+                        </div>
+                      )}
+                      <button
+                        onClick={translateText}
+                        disabled={trLoading || !trText.trim()}
+                        style={{
+                          padding: "9px 18px", background: trLoading ? "#a5b4fc" : "#0066ff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (trLoading || !trText.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {trLoading ? "Translating..." : "Translate"}
+                      </button>
+
+                      {/* File translate */}
+                      <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Translate project file</div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <select value={trFilePath} onChange={(e) => setTrFilePath(e.target.value)}
+                            style={{ flex: 2, minWidth: 160, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace" }}>
+                            <option value="">— select file —</option>
+                            {files.map((f) => <option key={f.path} value={f.path}>{f.path}</option>)}
+                          </select>
+                          <select value={trFileLang} onChange={(e) => setTrFileLang(e.target.value)}
+                            style={{ flex: 1, minWidth: 80, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12 }}>
+                            {["RU", "EN", "DE", "FR", "ES", "IT", "JA", "ZH", "UK", "TR"].map((c) => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <button
+                            onClick={translateProjectFile}
+                            disabled={trFileLoading || !trFilePath.trim()}
+                            style={{ padding: "7px 14px", background: trFileLoading ? "#a5b4fc" : "#0066ff",
+                              color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
+                              cursor: (trFileLoading || !trFilePath.trim()) ? "not-allowed" : "pointer" }}>
+                            {trFileLoading ? "..." : "Translate file"}
+                          </button>
+                        </div>
+                        {trFileMsg && (
+                          <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 7, fontSize: 12,
+                            background: trFileMsg.ok ? "#d1fae5" : "#fee2e2",
+                            color: trFileMsg.ok ? "#065f46" : "#991b1b" }}>
+                            {trFileMsg.text}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code> (use :fx suffix for Free tier)
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DeepL Bulk translate — N files × M langs */}
+                  {mediaTab === "bulk" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Bulk i18n — translate many files into many languages
+                      </div>
+
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Files ({bulkPaths.length} selected)</label>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button type="button" onClick={() => setBulkPaths(files.map((f) => f.path))}
+                              style={{ padding: "3px 8px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                              All
+                            </button>
+                            <button type="button" onClick={() => setBulkPaths([])}
+                              style={{ padding: "3px 8px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, cursor: "pointer" }}>
+                              None
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 0", background: "#fff" }}>
+                          {files.length === 0 ? (
+                            <div style={{ padding: 12, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>No files in project</div>
+                          ) : (
+                            files.map((f) => (
+                              <label key={f.path} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontFamily: "monospace" }}>
+                                <input type="checkbox" checked={bulkPaths.includes(f.path)} onChange={() => toggleBulkPath(f.path)} />
+                                <span style={{ color: "#0f172a" }}>{f.path}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
+                          Target languages ({bulkLangs.length} selected)
+                        </label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {BULK_LANG_OPTIONS.map((opt) => {
+                            const on = bulkLangs.includes(opt.code);
+                            return (
+                              <button key={opt.code} type="button" onClick={() => toggleBulkLang(opt.code)}
+                                style={{
+                                  padding: "5px 10px", border: "1px solid " + (on ? "#0d9488" : "#e2e8f0"),
+                                  background: on ? "#0d9488" : "#fff", color: on ? "#fff" : "#475569",
+                                  borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                }}>
+                                {opt.code} · {opt.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 11, color: "#64748b" }}>
+                        Will produce <b>{bulkPaths.length * bulkLangs.length}</b> translations (limit 50/batch).
+                        Output files are saved next to originals with lang suffix: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>README.ru.md</code>.
+                      </div>
+
+                      <button onClick={runBulkTranslate}
+                        disabled={bulkLoading || bulkPaths.length === 0 || bulkLangs.length === 0 || bulkPaths.length * bulkLangs.length > 50}
+                        style={{
+                          padding: "10px 18px", background: bulkLoading ? "#a5b4fc" : "#0066ff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: bulkLoading ? "not-allowed" : "pointer",
+                        }}>
+                        {bulkLoading ? "Translating..." : `Translate ${bulkPaths.length} × ${bulkLangs.length}`}
+                      </button>
+
+                      {bulkSummary && (
+                        <div style={{
+                          padding: "10px 12px", borderRadius: 7,
+                          background: bulkSummary.failureCount === 0 ? "#d1fae5" : "#fef3c7",
+                          color: bulkSummary.failureCount === 0 ? "#065f46" : "#92400e",
+                          fontSize: 12, fontWeight: 600,
+                        }}>
+                          {bulkSummary.successCount} of {bulkSummary.total} translations OK
+                          {bulkSummary.failureCount > 0 && ` · ${bulkSummary.failureCount} failed`}
+                        </div>
+                      )}
+
+                      {bulkResults.length > 0 && (
+                        <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 7 }}>
+                          {bulkResults.map((r, idx) => (
+                            <div key={idx} style={{
+                              padding: "5px 10px", fontSize: 11, fontFamily: "monospace",
+                              borderBottom: idx < bulkResults.length - 1 ? "1px solid #f1f5f9" : "none",
+                              color: r.ok ? "#065f46" : "#991b1b",
+                              display: "flex", justifyContent: "space-between", gap: 8,
+                            }}>
+                              <span>{r.ok ? "✓" : "✗"} {r.path} → {r.targetLang}</span>
+                              <span style={{ color: "#64748b" }}>{r.outputPath || r.error}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>DEEPL_API_KEY</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo Email Templates */}
+                  {mediaTab === "templates" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Brevo SMTP templates</div>
+                        <button onClick={loadEmailTemplates}
+                          style={{ padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                          Refresh
+                        </button>
+                      </div>
+                      {emailTemplatesError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {emailTemplatesError}
+                        </div>
+                      )}
+                      {emailTemplatesLoading ? (
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading templates...</div>
+                      ) : emailTemplates.length === 0 && !emailTemplatesError ? (
+                        <div style={{ color: "#94a3b8", fontSize: 12 }}>No templates found</div>
+                      ) : (
+                        <>
+                          {/* Send config */}
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <input type="email" value={tplSendTo} onChange={(e) => setTplSendTo(e.target.value)} placeholder="recipient@example.com"
+                              style={{ flex: 2, minWidth: 160, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, boxSizing: "border-box" }} />
+                            <input value={tplSendParams} onChange={(e) => setTplSendParams(e.target.value)} placeholder='Params JSON {"name":"Alice"}'
+                              style={{ flex: 3, minWidth: 200, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", boxSizing: "border-box" }} />
+                          </div>
+                          {tplSendMsg && (
+                            <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 12,
+                              background: tplSendMsg.ok ? "#d1fae5" : "#fee2e2",
+                              color: tplSendMsg.ok ? "#065f46" : "#991b1b" }}>
+                              {tplSendMsg.text}
+                            </div>
+                          )}
+                          {/* Templates list */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                            {emailTemplates.map((t) => (
+                              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#f8fafc", borderRadius: 7 }}>
+                                <span style={{ width: 36, height: 36, borderRadius: 6, background: t.isActive ? "#d1fae5" : "#f1f5f9",
+                                  color: t.isActive ? "#065f46" : "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center",
+                                  fontSize: 12, fontWeight: 700 }}>#{t.id}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                                  <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.subject}</div>
+                                </div>
+                                <button
+                                  onClick={() => sendByTemplate(t.id)}
+                                  disabled={tplSendingId === t.id || !tplSendTo.trim()}
+                                  style={{ padding: "5px 10px",
+                                    background: tplSendingId === t.id ? "#fde68a" : (!tplSendTo.trim() ? "#e2e8f0" : "#0d9488"),
+                                    color: !tplSendTo.trim() ? "#94a3b8" : "#fff",
+                                    border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700,
+                                    cursor: (tplSendingId === t.id || !tplSendTo.trim()) ? "not-allowed" : "pointer" }}>
+                                  {tplSendingId === t.id ? "..." : "Send"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Manage templates at <a href="https://my.brevo.com/templates" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>my.brevo.com/templates</a>. Set `params` with template variables.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo Template Builder — create new SMTP template */}
+                  {mediaTab === "builder" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                        Create new email template
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template name</label>
+                        <input value={tplBuilderName} onChange={(e) => setTplBuilderName(e.target.value)} placeholder="welcome-v1"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Subject</label>
+                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Welcome to AEVION, {{params.name}}!"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender email (optional — falls back to BREVO_SENDER_EMAIL env)</label>
+                        <input value={tplBuilderSender} onChange={(e) => setTplBuilderSender(e.target.value)} placeholder="noreply@aevion.io"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>HTML body</label>
+                        <textarea value={tplBuilderHtml} onChange={(e) => setTplBuilderHtml(e.target.value)} rows={10}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+                          Variables: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>{`{{params.name}}`}</code>, <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>{`{{contact.EMAIL}}`}</code>
+                        </div>
+                      </div>
+                      {tplBuilderHtml.trim() && (
+                        <details style={{ border: "1px solid #e2e8f0", borderRadius: 7, padding: "6px 10px" }}>
+                          <summary style={{ fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>HTML preview</summary>
+                          <div style={{ marginTop: 8, padding: 10, background: "#fff", border: "1px solid #f1f5f9", borderRadius: 6, fontSize: 13 }}
+                            dangerouslySetInnerHTML={{ __html: tplBuilderHtml }} />
+                        </details>
+                      )}
+                      {tplBuilderMsg && (
+                        <div style={{
+                          padding: "8px 12px", borderRadius: 7, fontSize: 12,
+                          background: tplBuilderMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: tplBuilderMsg.ok ? "#065f46" : "#991b1b",
+                        }}>
+                          {tplBuilderMsg.text}
+                        </div>
+                      )}
+                      <button onClick={createEmailTemplate}
+                        disabled={tplBuilderLoading || !tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()}
+                        style={{
+                          padding: "10px 18px", background: tplBuilderLoading ? "#a5b4fc" : "#0066ff",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: tplBuilderLoading ? "not-allowed" : "pointer",
+                        }}>
+                        {tplBuilderLoading ? "Creating..." : "Create template"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code>, <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SENDER_EMAIL</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo SMS */}
+                  {mediaTab === "sms" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Recipient (E.164, e.g. +14155552671)</label>
+                        <input value={smsRecipient} onChange={(e) => setSmsRecipient(e.target.value)} placeholder="+14155552671"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender (alphanumeric, max 11 chars)</label>
+                        <input value={smsSender} onChange={(e) => setSmsSender(e.target.value)} placeholder="AEVION"
+                          maxLength={11}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
+                          Content ({smsContent.length}/612 chars, ~{Math.ceil(smsContent.length / 160)} segments)
+                        </label>
+                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Your verification code is 1234"
+                          rows={4} maxLength={612}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                      </div>
+                      {smsMsg && (
+                        <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
+                          background: smsMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: smsMsg.ok ? "#065f46" : "#991b1b" }}>
+                          {smsMsg.text}
+                        </div>
+                      )}
+                      <button
+                        onClick={sendSms}
+                        disabled={smsLoading || !smsRecipient.trim() || !smsContent.trim()}
+                        style={{
+                          padding: "9px 18px", background: smsLoading ? "#fcd34d" : "#f59e0b",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (smsLoading || !smsRecipient.trim() || !smsContent.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {smsLoading ? "Sending..." : "Send SMS"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_SMS_SENDER</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Brevo WhatsApp */}
+                  {mediaTab === "whatsapp" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Contact Number (E.164)</label>
+                        <input value={waContact} onChange={(e) => setWaContact(e.target.value)} placeholder="+14155552671"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template ID (approved WABA template)</label>
+                        <input value={waTemplateId} onChange={(e) => setWaTemplateId(e.target.value)} placeholder="42"
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template Params (JSON, optional)</label>
+                        <textarea value={waParams} onChange={(e) => setWaParams(e.target.value)} placeholder='{"name": "Alice", "code": "1234"}'
+                          rows={3}
+                          style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+                      </div>
+                      {waMsg && (
+                        <div style={{ padding: "8px 12px", borderRadius: 7, fontSize: 13,
+                          background: waMsg.ok ? "#d1fae5" : "#fee2e2",
+                          color: waMsg.ok ? "#065f46" : "#991b1b" }}>
+                          {waMsg.text}
+                        </div>
+                      )}
+                      <button
+                        onClick={sendWhatsApp}
+                        disabled={waLoading || !waContact.trim() || !waTemplateId.trim()}
+                        style={{
+                          padding: "9px 18px", background: waLoading ? "#86efac" : "#25D366",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (waLoading || !waContact.trim() || !waTemplateId.trim()) ? "not-allowed" : "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                        }}
+                      >
+                        <span style={{ fontSize: 14 }}>💬</span>
+                        {waLoading ? "Sending..." : "Send WhatsApp"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_API_KEY</code> + <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>BREVO_WHATSAPP_SENDER_ID</code>. Template must be pre-approved by WhatsApp.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Voice Clone */}
                   {mediaTab === "clone" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2244,16 +3251,66 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   <div style={{ padding: "10px 12px", background: "linear-gradient(90deg, #ecfeff 0%, #f0fdfa 100%)", borderRadius: 10, border: "1px solid #99f6e4" }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>🤖 Multi-step Agent</div>
                     <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Орchestrate code + image + voice in one workflow. One prompt → full app with hero image and voiceover.
+                      Orchestrate code + image + voice in one workflow. One prompt → full app with hero image and voiceover.
                     </div>
                   </div>
+
+                  {/* Templates picker */}
+                  {agentTemplates.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Quick start templates</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {agentTemplates.map((tpl) => (
+                          <button
+                            key={tpl.id}
+                            onClick={() => applyAgentTemplate(tpl.id)}
+                            disabled={agentRunning}
+                            title={tpl.description}
+                            style={{
+                              padding: "6px 12px", background: "#fff", border: "1px solid #99f6e4",
+                              borderRadius: 8, fontSize: 12, fontWeight: 700, color: "#0d9488", cursor: "pointer",
+                              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2,
+                            }}
+                          >
+                            <span>{tpl.name}</span>
+                            <span style={{ fontSize: 10, color: "#64748b", fontWeight: 500 }}>{tpl.steps.length} steps</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Streaming toggle */}
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#64748b", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={agentStreaming}
+                      onChange={(e) => setAgentStreaming(e.target.checked)}
+                      disabled={agentRunning}
+                    />
+                    Stream progress live (SSE) — see each step finish as it happens
+                  </label>
 
                   {/* Step list */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {agentSteps.map((step, i) => (
-                      <div key={i} style={{ padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff" }}>
+                      <div key={i} style={{
+                        padding: "10px 12px",
+                        border: `1px solid ${agentLiveStep === i ? "#f59e0b" : "#e2e8f0"}`,
+                        borderRadius: 8,
+                        background: agentLiveStep === i ? "#fffbeb" : "#fff",
+                        boxShadow: agentLiveStep === i ? "0 0 0 3px rgba(245, 158, 11, 0.15)" : "none",
+                        transition: "all 200ms",
+                      }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          <span style={{ width: 20, height: 20, borderRadius: 4, background: "#0d9488", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                          <span style={{
+                            width: 20, height: 20, borderRadius: 4,
+                            background: agentLiveStep === i ? "#f59e0b" : "#0d9488",
+                            color: "#fff", fontSize: 11, fontWeight: 700,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}>
+                            {agentLiveStep === i ? <span style={{ animation: "spin 1s linear infinite" }}>↻</span> : (i + 1)}
+                          </span>
                           <select value={step.type} onChange={(e) => updateAgentStep(i, { type: e.target.value as AgentStep["type"] })}
                             style={{ padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 12, fontWeight: 700 }}>
                             <option value="code">Code</option>

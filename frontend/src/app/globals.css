@@ -637,7 +637,7 @@ button:focus:not(:focus-visible) {
 
 @media (max-width: 768px) {
   /* Board container — fill viewport width on mobile */
-  [style*="min(calc(100vh - 160px)"] {
+  [style*="min(calc(100vh - 120px)"] {
     width: min(calc(100vw - 8px), calc(100vh - 180px)) !important;
   }
 
@@ -647,12 +647,35 @@ button:focus:not(:focus-visible) {
     gap: 8px !important;
   }
 
-  /* Right panel — full width below board */
+  /* Sidebar как drawer на мобайле */
   .cc-right-panel {
-    flex: unset !important;
-    min-width: unset !important;
-    max-width: unset !important;
-    width: 100% !important;
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 85vw !important;
+    max-width: 360px !important;
+    z-index: 300 !important;
+    background: var(--cc-surface1, #262421) !important;
+    border-left: 1px solid var(--cc-border, #3d3b39) !important;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.5) !important;
+    overflow-y: auto !important;
+    transform: translateX(100%) !important;
+    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+    padding: 16px 12px !important;
+  }
+  .cc-right-panel.open {
+    transform: translateX(0) !important;
+  }
+  /* Backdrop overlay */
+  .cc-right-panel-backdrop {
+    display: block !important;
+  }
+
+  .cc-game-btn {
+    min-height: 44px !important;
+    min-width: 80px !important;
+    font-size: 14px !important;
   }
 
   /* Media pane — hidden on mobile by default (too cramped) */
@@ -745,9 +768,25 @@ button:focus:not(:focus-visible) {
   .cc-coord-label {
     font-size: 8px !important;
   }
+
+  /* Mobile sidebar toggle — show on mobile */
+  .cc-mobile-sidebar-btn {
+    display: inline-flex !important;
+  }
+}
+
+.cc-right-panel-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 299;
 }
 
 @media (max-width: 480px) {
+  /* Eval bar — hide on very small screens to save horizontal space */
+  .cc-eval-bar { display: none !important; }
+
   /* Very small phones — hide rating badge text, keep number */
   .cc-rating-label { display: none; }
 
@@ -783,7 +822,7 @@ button:focus:not(:focus-visible) {
 /* Phone portrait: board takes 100% width, right panel becomes scrollable strip */
 @media (max-width: 600px) {
   /* Board max-width override — match screen exactly */
-  [style*="min(calc(100vh - 160px)"] {
+  [style*="min(calc(100vh - 120px)"] {
     width: calc(100vw - 8px) !important;
     max-width: calc(100vw - 8px) !important;
   }
@@ -800,12 +839,6 @@ button:focus:not(:focus-visible) {
     padding: 3px 7px !important;
   }
 
-  /* Right panel — cap height on phone so board still visible */
-  .cc-right-panel {
-    max-height: 45vh !important;
-    overflow-y: auto;
-  }
-
   /* Workspace toolbar chips — very compact */
   .cc-ws-chip { font-size: 9px !important; padding: 2px 5px !important; }
 
@@ -813,7 +846,7 @@ button:focus:not(:focus-visible) {
   .cc-controls-row { gap: 4px !important; flex-wrap: wrap !important; }
 }
 
-/* Landscape phone: board on left, right panel scrolls on right */
+/* Landscape phone: board on left, right panel is a drawer (same as portrait) */
 @media (max-width: 900px) and (orientation: landscape) {
   .cc-main-row {
     flex-direction: row !important;
@@ -821,12 +854,6 @@ button:focus:not(:focus-visible) {
     align-items: flex-start !important;
     gap: 8px !important;
     overflow-x: hidden;
-  }
-  .cc-right-panel {
-    flex: 0 0 260px !important;
-    max-height: 100vh !important;
-    overflow-y: auto;
-    width: 260px !important;
   }
 }
 

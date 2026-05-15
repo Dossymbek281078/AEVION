@@ -10,6 +10,7 @@ import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
+import { qtradeOfflineRouter } from "./routes/qtradeoffline";
 import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";

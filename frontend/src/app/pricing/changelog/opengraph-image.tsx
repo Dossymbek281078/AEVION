@@ -101,7 +101,7 @@ export default async function Image() {
             <Tag label="PROMO" color="#f9a8d4" />
             <Tag label="МОДУЛЬ" color="#7dd3fc" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/changelog</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/changelog</div>
         </div>
       </div>
     ),

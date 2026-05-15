@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     title: "AEVION Partners Portal",
     description: "Deal registration, pipeline и статус сделок.",
     type: "website",
-    url: "https://aevion.app/pricing/partners-portal",
+    url: "https://aevion.io/pricing/partners-portal",
     siteName: "AEVION",
   },
   alternates: {

@@ -146,7 +146,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Refund Policy */
     "refund.badge": "REFUND POLICY · ЧЁТКИЕ УСЛОВИЯ",
     "refund.title": "Политика возвратов AEVION",
-    "refund.subtitle": "Без юридического жаргона. Что возвращаем, когда, и как быстро. Если что-то непонятно — пишите billing@aevion.app.",
+    "refund.subtitle": "Без юридического жаргона. Что возвращаем, когда, и как быстро. Если что-то непонятно — пишите billing@aevion.io.",
     "refund.tldr.title": "TL;DR — ОСНОВНОЕ",
     "refund.tldr.p1": "14 дней money-back на любой платный тариф (Pro / Business) — без вопросов.",
     "refund.tldr.p2": "При даунгрейде — кредит за неиспользованное автоматически на счёте.",
@@ -191,7 +191,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.process.subtitle": "Стандартный процесс — обычно 5-10 рабочих дней. Без бумажных запросов.",
     "refund.process.day0": "ДЕНЬ 0",
     "refund.process.dayLabel": "ДНИ",
-    "refund.process.s1.title": "Запрос на billing@aevion.app",
+    "refund.process.s1.title": "Запрос на billing@aevion.io",
     "refund.process.s1.body": "Тема: «Refund request». В тексте — email аккаунта и причина (опционально). Автоответ с тикетом.",
     "refund.process.s2.title": "Подтверждение и расчёт",
     "refund.process.s2.body": "Customer Success подтверждает условия возврата (14 дней / прорейтинг / промо-условия) и выставляет сумму к возврату.",
@@ -280,7 +280,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "affiliate.faq.q3": "Когда происходят выплаты?",
     "affiliate.faq.a3": "Раз в месяц 5 числа. Минимальная выплата — $50 (накопительно). Если меньше — переносится на следующий месяц.",
     "affiliate.faq.q4": "Можно ли продвигать AEVION в платной рекламе?",
-    "affiliate.faq.a4": "Да, кроме брендовых ключевых слов («aevion», «aevion.app», и т.п.) — это запрещено для всех аффилиатов. Остальное — на ваше усмотрение.",
+    "affiliate.faq.a4": "Да, кроме брендовых ключевых слов («aevion», «aevion.io», и т.п.) — это запрещено для всех аффилиатов. Остальное — на ваше усмотрение.",
     "affiliate.faq.q5": "Что если клиент отменит подписку?",
     "affiliate.faq.a5": "Выплаты прекращаются с момента отмены. Если клиент возобновит подписку в течение 30 дней — он остаётся за вами. Возврат средств клиенту в первые 14 дней money-back — возврат комиссии.",
 
@@ -631,7 +631,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "refund.badge": "REFUND POLICY · CLEAR TERMS",
     "refund.title": "AEVION Refund Policy",
-    "refund.subtitle": "No legal jargon. What we refund, when, and how fast. If something's unclear — email billing@aevion.app.",
+    "refund.subtitle": "No legal jargon. What we refund, when, and how fast. If something's unclear — email billing@aevion.io.",
     "refund.tldr.title": "TL;DR — KEY POINTS",
     "refund.tldr.p1": "14-day money-back on any paid tier (Pro / Business) — no questions asked.",
     "refund.tldr.p2": "On downgrade — credit for unused time auto-applied to your account.",
@@ -676,7 +676,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.process.subtitle": "Standard process — usually 5-10 business days. No paper forms.",
     "refund.process.day0": "DAY 0",
     "refund.process.dayLabel": "DAYS",
-    "refund.process.s1.title": "Email billing@aevion.app",
+    "refund.process.s1.title": "Email billing@aevion.io",
     "refund.process.s1.body": "Subject: «Refund request». In body — account email and optional reason. Auto-reply with ticket ID.",
     "refund.process.s2.title": "Confirmation and amount",
     "refund.process.s2.body": "Customer Success confirms terms (14-day / pro-rated / promo conditions) and quotes the refund amount.",
@@ -762,7 +762,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "affiliate.faq.q3": "When are payouts?",
     "affiliate.faq.a3": "Monthly on the 5th. Minimum payout — $50 (cumulative). Below that — rolls over to next month.",
     "affiliate.faq.q4": "Can I run paid ads for AEVION?",
-    "affiliate.faq.a4": "Yes, except brand keywords (\"aevion\", \"aevion.app\", etc.) — those are off-limits for all affiliates. Everything else is your call.",
+    "affiliate.faq.a4": "Yes, except brand keywords (\"aevion\", \"aevion.io\", etc.) — those are off-limits for all affiliates. Everything else is your call.",
     "affiliate.faq.q5": "What if the customer cancels?",
     "affiliate.faq.a5": "Payouts stop on cancellation. If they resubscribe within 30 days — still yours. Refund within 14-day money-back — commission is reversed.",
 
@@ -1004,8 +1004,7 @@ const dict: Record<Lang, Record<string, string>> = {
 export function usePricingT() {
   const { lang } = useI18n();
   return (key: string, vars?: Record<string, string | number>): string => {
-    const safeL = (lang in dict ? lang : "en") as "en" | "ru";
-    const raw = dict[safeL][key] ?? dict.en[key] ?? key;
+    const raw = dict[lang][key] ?? dict.en[key] ?? key;
     if (!vars) return raw;
     return Object.keys(vars).reduce(
       (acc, k) => acc.replace(`{${k}}`, String(vars[k])),

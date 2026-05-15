@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "AEVION для образования",
     description: "Free Pro для студентов · Sponsorship для университетов · Hackathon аккаунты.",
     type: "website",
-    url: "https://aevion.app/pricing/edu",
+    url: "https://aevion.io/pricing/edu",
     siteName: "AEVION",
   },
   twitter: {

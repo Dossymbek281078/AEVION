@@ -22,6 +22,8 @@ import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
+import { pricingRouter } from "./routes/pricing";
+import { checkoutRouter } from "./routes/checkout";
 import { healthaiRouter } from "./routes/healthai";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
@@ -360,6 +362,7 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Aggregated metrics — admin token required" },
       },
       "/api/pricing/events/recent": {
+        get: { summary: "Last N events — admin token required" },
         get: { summary: "Last N events — admin token required (CSV filters: source,type,tier,industry,sid)" },
       },
       "/api/pricing/events/aggregate": {
@@ -388,6 +391,9 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/pricing/checkout/subscriptions/count": {
         get: { summary: "Total provisioned subscriptions count" },
+      },
+      "/api/pricing/roadmap": {
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
       },
       "/api/pricing/provisioning/history": {
         get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
@@ -439,6 +445,8 @@ app.use("/api/healthai", healthaiRouter);
 // ==========================
 // Pricing / GTM
 // ==========================
+app.use("/api/pricing", pricingRouter);
+app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);

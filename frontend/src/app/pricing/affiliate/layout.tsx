@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "AEVION Affiliate Program",
     description: "20% recurring lifetime · 60d cookie · payouts от $50 через Stripe Connect.",
     type: "website",
-    url: "https://aevion.app/pricing/affiliate",
+    url: "https://aevion.io/pricing/affiliate",
     siteName: "AEVION",
   },
   twitter: {

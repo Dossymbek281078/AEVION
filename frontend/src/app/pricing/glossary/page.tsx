@@ -355,7 +355,7 @@ export default function PricingGlossaryPage() {
           {tp("glossary.submit.subtitle")}
         </p>
         <a
-          href="mailto:hello@aevion.app?subject=Glossary%20term%20suggestion"
+          href="mailto:hello@aevion.io?subject=Glossary%20term%20suggestion"
           style={{
             display: "inline-block",
             padding: "8px 16px",
@@ -367,7 +367,7 @@ export default function PricingGlossaryPage() {
             textDecoration: "none",
           }}
         >
-          hello@aevion.app
+          hello@aevion.io
         </a>
       </section>
     </ProductPageShell>

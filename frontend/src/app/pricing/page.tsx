@@ -101,34 +101,6 @@ interface TrustPayload {
   badges: TrustBadge[];
 }
 
-type FaqCategory = "billing" | "plans" | "security" | "enterprise" | "data";
-
-interface FaqEntry {
-  id: string;
-  q: string;
-  a: string;
-  category: FaqCategory;
-  tags?: string[];
-}
-
-interface FaqCategoryMeta {
-  id: FaqCategory;
-  label: string;
-  count: number;
-}
-
-interface FaqPayload {
-  items: FaqEntry[];
-  total: number;
-  categories: FaqCategoryMeta[];
-}
-
-interface SocialProof {
-  teamsOnboard: number;
-  trend: { weekly: number; daily: number; weeklyPercentage: number };
-  captions: { headline: string; trendLabel: string; dailyLabel: string | null };
-}
-
 interface QuoteLine {
   kind: "tier" | "addon" | "seat" | "bundle";
   label: string;
@@ -210,9 +182,6 @@ export default function PricingPage() {
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
-  const [faq, setFaq] = useState<FaqPayload | null>(null);
-  const [faqCategory, setFaqCategory] = useState<FaqCategory | "all">("all");
-  const [socialProof, setSocialProof] = useState<SocialProof | null>(null);
 
   // Калькулятор сметы
   const [calcTier, setCalcTier] = useState<TierId>("pro");
@@ -323,18 +292,6 @@ export default function PricingPage() {
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled && j) setTrust(j);
-      })
-      .catch(() => {});
-    fetch(apiUrl("/api/pricing/faq"))
-      .then((r) => r.json())
-      .then((j: FaqPayload) => {
-        if (!cancelled && Array.isArray(j.items)) setFaq(j);
-      })
-      .catch(() => {});
-    fetch(apiUrl("/api/pricing/social-proof"))
-      .then((r) => r.json())
-      .then((j: SocialProof) => {
-        if (!cancelled && typeof j.teamsOnboard === "number") setSocialProof(j);
       })
       .catch(() => {});
     track({
@@ -473,59 +430,6 @@ export default function PricingPage() {
         >
           {tp(`hero.${heroPrefix}subtitle`)}
         </p>
-        {socialProof && (
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 10,
-              marginTop: 20,
-              padding: "8px 16px",
-              background: "rgba(13,148,136,0.08)",
-              border: "1px solid rgba(13,148,136,0.2)",
-              borderRadius: 999,
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#0f766e",
-            }}
-            title={
-              socialProof.captions.dailyLabel
-                ? `${socialProof.captions.trendLabel} · ${socialProof.captions.dailyLabel}`
-                : socialProof.captions.trendLabel
-            }
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: "#10b981",
-                animation: "pulse 2s ease-in-out infinite",
-                boxShadow: "0 0 0 0 rgba(16,185,129,0.4)",
-              }}
-            />
-            <span>
-              <strong style={{ color: "#0d9488", fontWeight: 900 }}>
-                {socialProof.teamsOnboard.toLocaleString("en-US")}
-              </strong>{" "}
-              команд уже на борту
-            </span>
-            {socialProof.trend.weekly > 0 && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#10b981",
-                  background: "rgba(16,185,129,0.12)",
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                }}
-              >
-                +{socialProof.trend.weekly} за неделю
-              </span>
-            )}
-          </div>
-        )}
       </section>
 
       {/* Trust numbers row */}
@@ -1774,136 +1678,81 @@ export default function PricingPage() {
         </h2>
         <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
           {tp("faq.subtitle")}{" "}
-          <a href="mailto:hello@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
-            hello@aevion.app
+          <a href="mailto:hello@aevion.io" style={{ color: "#0d9488", fontWeight: 700 }}>
+            hello@aevion.io
           </a>
           .
         </p>
-        {faq && faq.categories.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              flexWrap: "wrap",
-              marginBottom: 16,
-            }}
-          >
-            <button
-              onClick={() => setFaqCategory("all")}
+        <div>
+          {[
+            {
+              q: "Как считается биллинг при смене тарифа?",
+              a: "Пропорционально дням. При апгрейде — кредит за неиспользованное на старом тарифе автоматически зачитывается. При даунгрейде — кредит остаётся на счёте до следующего цикла.",
+            },
+            {
+              q: "Можно ли купить только один модуль без тарифа?",
+              a: "Любой add-on модуль покупается поверх Free тарифа. Получаете нужный модуль без переплаты за все остальные.",
+            },
+            {
+              q: "Что если хочется AI Suite + IP Suite вместе?",
+              a: "Берите Business — там оба контура включены без отдельных бандлов. Сэкономите ~$20/мес против покупки бандлов поверх Pro.",
+            },
+            {
+              q: "Поддерживается ли on-premise установка?",
+              a: "Только для Enterprise. Включает Docker / Kubernetes артефакты, runbook, аудит. Минимальный контракт — 12 мес.",
+            },
+            {
+              q: "Где хранятся данные?",
+              a: "По умолчанию — EU (Frankfurt) + RU/KZ зеркала для локализации. Для Enterprise — выбор региона или ваш VPC.",
+            },
+            {
+              q: "Есть ли образовательный тариф?",
+              a: "Free покрывает 95% студенческих сценариев. Для университетов и хакатонов — связывайтесь, делаем sponsorship-аккаунты.",
+            },
+            {
+              q: "Можно ли отменить и забрать данные?",
+              a: "Да. Экспорт всех ваших QRight-объектов и QSign-подписей в JSON/PDF — кнопка в личном кабинете. После отмены — 30 дней grace period, затем soft-delete с возможностью восстановления ещё 60 дней.",
+            },
+            {
+              q: "Чем AEVION лучше связки DocuSign + OpenAI + Stripe?",
+              a: "Единый аккаунт, единый биллинг, единый аудит. Одна подпись = одна запись в реестре, одна оплата — связана. Модули знают друг про друга: AI-агент видит подпись, подпись видит платёж, реестр видит всё.",
+            },
+          ].map((f, i) => (
+            <details
+              key={i}
               style={{
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 800,
-                borderRadius: 999,
-                border: faqCategory === "all" ? "1px solid #0d9488" : "1px solid rgba(15,23,42,0.12)",
-                background: faqCategory === "all" ? "rgba(13,148,136,0.1)" : "#fff",
-                color: faqCategory === "all" ? "#0d9488" : "#475569",
+                background: "#fff",
+                border: BORDER,
+                borderRadius: 10,
+                marginBottom: 8,
+                padding: "14px 18px",
                 cursor: "pointer",
               }}
             >
-              Все · {faq.total}
-            </button>
-            {faq.categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setFaqCategory(c.id)}
-                disabled={c.count === 0}
+              <summary
                 style={{
-                  padding: "6px 12px",
-                  fontSize: 12,
-                  fontWeight: 800,
-                  borderRadius: 999,
-                  border: faqCategory === c.id ? "1px solid #0d9488" : "1px solid rgba(15,23,42,0.12)",
-                  background: faqCategory === c.id ? "rgba(13,148,136,0.1)" : "#fff",
-                  color: faqCategory === c.id ? "#0d9488" : c.count === 0 ? "#cbd5e1" : "#475569",
-                  cursor: c.count === 0 ? "not-allowed" : "pointer",
-                }}
-              >
-                {c.label} · {c.count}
-              </button>
-            ))}
-          </div>
-        )}
-        <div>
-          {(faq?.items ?? [
-            // Fallback на случай, если backend не отвечает (graceful degradation).
-            { id: "f1", category: "billing" as FaqCategory, q: "Как считается биллинг при смене тарифа?", a: "Пропорционально дням. При апгрейде — кредит за неиспользованное на старом тарифе автоматически зачитывается. При даунгрейде — кредит остаётся на счёте до следующего цикла." },
-            { id: "f2", category: "plans" as FaqCategory, q: "Можно ли купить только один модуль без тарифа?", a: "Любой add-on модуль покупается поверх Free тарифа. Получаете нужный модуль без переплаты за все остальные." },
-            { id: "f3", category: "enterprise" as FaqCategory, q: "Поддерживается ли on-premise установка?", a: "Только для Enterprise. Включает Docker / Kubernetes артефакты, runbook, аудит. Минимальный контракт — 12 мес." },
-            { id: "f4", category: "security" as FaqCategory, q: "Где хранятся данные?", a: "По умолчанию — EU (Frankfurt) + RU/KZ зеркала для локализации. Для Enterprise — выбор региона или ваш VPC." },
-            { id: "f5", category: "data" as FaqCategory, q: "Можно ли отменить и забрать данные?", a: "Да. Экспорт всех ваших QRight-объектов и QSign-подписей в JSON/PDF — кнопка в личном кабинете." },
-          ])
-            .filter((f) => faqCategory === "all" || f.category === faqCategory)
-            .map((f) => (
-              <details
-                key={f.id}
-                style={{
-                  background: "#fff",
-                  border: BORDER,
-                  borderRadius: 10,
-                  marginBottom: 8,
-                  padding: "14px 18px",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  outline: "none",
                   cursor: "pointer",
                 }}
               >
-                <summary
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: "#0f172a",
-                    outline: "none",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <span>{f.q}</span>
-                  {faq && (
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 800,
-                        padding: "2px 6px",
-                        borderRadius: 4,
-                        background: "#f1f5f9",
-                        color: "#64748b",
-                        letterSpacing: "0.04em",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {f.category.toUpperCase()}
-                    </span>
-                  )}
-                </summary>
-                <p
-                  style={{
-                    margin: 0,
-                    marginTop: 10,
-                    fontSize: 13,
-                    color: "#475569",
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {f.a}
-                </p>
-              </details>
-            ))}
-          {faq && faq.items.filter((f) => faqCategory === "all" || f.category === faqCategory).length === 0 && (
-            <div
-              style={{
-                padding: 24,
-                textAlign: "center",
-                color: "#94a3b8",
-                fontSize: 13,
-                background: "#f8fafc",
-                borderRadius: 10,
-              }}
-            >
-              Нет вопросов в этой категории.
-            </div>
-          )}
+                {f.q}
+              </summary>
+              <p
+                style={{
+                  margin: 0,
+                  marginTop: 10,
+                  fontSize: 13,
+                  color: "#475569",
+                  lineHeight: 1.6,
+                }}
+              >
+                {f.a}
+              </p>
+            </details>
+          ))}
         </div>
       </section>
 

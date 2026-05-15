@@ -353,6 +353,11 @@ const MODULES: Module[] = [
   { id: "metro-stations",         category: "special",   href: "/smeta-trainer/drawings-practice/metro-stations",         icon: "🚇", title: "Метрополитен и станции",          subtitle: "Алматы Линия 1 11 ст. глубина 35 м, ТБМ Herrenknecht S-558 Ø6.66 м, СНиП 32-02", level: "L5", exercises: 4,  color: "indigo"  },
   { id: "tunnels-vehicle",        category: "special",   href: "/smeta-trainer/drawings-practice/tunnels-vehicle",        icon: "🚗", title: "Автомобильные тоннели",           subtitle: "Кокпекский 6 км, НАТМ, обделка B40, Jet-fan 28 шт, EU 2004/54/EC, СНиП 32-04", level: "L5", exercises: 4,  color: "zinc"    },
   { id: "tramway-light-rail",     category: "special",   href: "/smeta-trainer/drawings-practice/tramway-light-rail",     icon: "🚊", title: "Трамваи и LRT",                   subtitle: "Астана LRT 22 км, КС-160 750 В DC, рельсы Р65, Stadler Tango, СП 245.1326000", level: "L5", exercises: 4,  color: "teal"    },
+
+  // ── Спорт, культура, наука ──
+  { id: "arena-football",         category: "practice",  href: "/smeta-trainer/drawings-practice/arena-football",         icon: "⚽", title: "Футбольные арены",                subtitle: "Astana Arena 30 000 мест, UEFA Cat. 4, ретракт. крыша ПТФЭ, освещ. 2400 лк EBU HDR", level: "L5", exercises: 4,  color: "orange"  },
+  { id: "museum-archives",        category: "practice",  href: "/smeta-trainer/drawings-practice/museum-archives",        icon: "🏛️", title: "Музеи и фондохранилища",          subtitle: "Нац. музей РК 74 000 м², +18°C/RH 50%, HEPA F9, Inergen IG-541, ICOM/ISO 11799", level: "L5", exercises: 4,  color: "fuchsia" },
+  { id: "observatory-research",   category: "practice",  href: "/smeta-trainer/drawings-practice/observatory-research",   icon: "🔭", title: "Обсерватории и научные станции",  subtitle: "Тянь-Шань Цейсс-1000 d=1 м, купол Ø15 м, раздел. фундамент, IDA Dark Sky",        level: "L5", exercises: 4,  color: "blue"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

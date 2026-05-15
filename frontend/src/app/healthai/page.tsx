@@ -17,7 +17,7 @@ const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
   (typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:4001"
-    : "https://api.aevion.app");
+    : "https://aevion-production-a70c.up.railway.app");
 
 const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
@@ -383,6 +383,29 @@ const STR: Record<string, Record<Lang, string>> = {
     en: "✓ No active risk flags. Keep up the wellness routine.",
     ru: "✓ Активных рисков нет. Поддерживайте режим — отличная работа.",
   },
+  section_score: { en: "Wellness score", ru: "Wellness-оценка" },
+  score_band_excellent: { en: "Excellent", ru: "Отлично" },
+  score_band_good: { en: "Good", ru: "Хорошо" },
+  score_band_fair: { en: "Fair", ru: "Средне" },
+  score_band_low: { en: "Low", ru: "Низко" },
+  score_band_insufficient: { en: "Not enough data", ru: "Мало данных" },
+  score_weakest_label: { en: "Focus area:", ru: "Фокус:" },
+  score_streak_bonus: { en: "Streak bonus", ru: "Бонус за серию" },
+  score_pillar_sleep: { en: "Sleep", ru: "Сон" },
+  score_pillar_mood: { en: "Mood", ru: "Настроение" },
+  score_pillar_water: { en: "Water", ru: "Вода" },
+  score_pillar_exercise: { en: "Exercise", ru: "Активность" },
+  score_help: {
+    en: "Score combines last 7d averages across 4 pillars + tracking streak. Motivational only, not a diagnosis.",
+    ru: "Оценка комбинирует средние за 7 дней по 4 направлениям + серию логов. Мотивационная, не диагноз.",
+  },
+  section_hydration: { en: "Hydration coach", ru: "Гидратация" },
+  hydration_target: { en: "Daily target", ru: "Дневная норма" },
+  hydration_avg7d: { en: "7d avg", ru: "Среднее 7д" },
+  hydration_status_on_track: { en: "On track ✓", ru: "В норме ✓" },
+  hydration_status_below: { en: "Below target", ru: "Ниже нормы" },
+  hydration_status_well_below: { en: "Well below", ru: "Существенно ниже" },
+  hydration_status_no_data: { en: "Need data", ru: "Нужны данные" },
   symptoms: { en: "Symptoms", ru: "Симптомы" },
   severity_short: { en: "severity", ru: "тяжесть" },
   urg_self: { en: "Self-care", ru: "Самопомощь" },
@@ -509,6 +532,39 @@ type RisksResp = {
   avgMood7d: number | null;
 };
 
+type HydrationResp = {
+  targetL: number;
+  targetBaseL: number;
+  exerciseBonusL: number;
+  avgWater7d: number | null;
+  avgWater3d: number | null;
+  todayWaterL: number | null;
+  deficit7dL: number | null;
+  status: "on-track" | "below" | "well-below" | "no-data";
+  tips: string[];
+};
+
+type ScorePillar = { score: number | null; label: string };
+type ScoreResp = {
+  score: number;
+  band: "excellent" | "good" | "fair" | "low" | "insufficient";
+  streak: number;
+  streakBonus: number;
+  pillars: {
+    sleep: ScorePillar;
+    mood: ScorePillar;
+    water: ScorePillar;
+    exercise: ScorePillar;
+  };
+  weakest: {
+    pillar: "sleep" | "mood" | "water" | "exercise";
+    label: string;
+    score: number | null;
+  } | null;
+  knownPillarsCount: number;
+  logsCount: number;
+};
+
 const URGENCY_COLOR: Record<Match["urgency"], string> = {
   "self-care": "#5eead4",
   consult: "#fbbf24",
@@ -546,6 +602,8 @@ export default function HealthAIPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [trends, setTrends] = useState<Trends | null>(null);
   const [risks, setRisks] = useState<RisksResp | null>(null);
+  const [hydration, setHydration] = useState<HydrationResp | null>(null);
+  const [wellnessScore, setWellnessScore] = useState<ScoreResp | null>(null);
   const [population, setPopulation] = useState<{
     sample: number;
     usedBaseline: boolean;
@@ -558,22 +616,6 @@ export default function HealthAIPage() {
   const [lang, setLang] = useState<Lang>("en");
   const [notifPerm, setNotifPerm] = useState<"unsupported" | "default" | "granted" | "denied">("default");
   const [notifOptIn, setNotifOptIn] = useState(false);
-
-  // ── BMI Calculator widget ───────────────────────────────────────────────────
-  const LS_BMI = "aevion_health_bmi_v1";
-  const [bmiH, setBmiH] = useState("");
-  const [bmiW, setBmiW] = useState("");
-
-  // ── Visit streak widget ─────────────────────────────────────────────────────
-  const LS_STREAK = "aevion_health_streak_v1";
-  const [streakCount, setStreakCount] = useState(0);
-
-  // ── Daily mood widget ───────────────────────────────────────────────────────
-  const LS_MOOD = "aevion_health_mood_v1";
-  type MoodEntry = { date: string; rating: number };
-  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([]);
-  const [moodPick, setMoodPick] = useState<number>(3);
-
   type Referral = {
     id: string;
     name: string;
@@ -671,85 +713,6 @@ export default function HealthAIPage() {
     try {
       window.localStorage.setItem(LS_LOCALE, next);
     } catch {}
-  };
-
-  // ── BMI: restore from localStorage on mount ─────────────────────────────────
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(LS_BMI);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { h?: string; w?: string };
-        if (parsed.h) setBmiH(parsed.h);
-        if (parsed.w) setBmiW(parsed.w);
-      }
-    } catch {}
-  }, []);
-
-  const saveBmi = (h: string, w: string) => {
-    try {
-      window.localStorage.setItem(LS_BMI, JSON.stringify({ h, w }));
-    } catch {}
-  };
-
-  const bmiCalcValue = (() => {
-    const hN = parseFloat(bmiH);
-    const wN = parseFloat(bmiW);
-    if (!hN || !wN || hN <= 0) return null;
-    const m = hN / 100;
-    return Math.round((wN / (m * m)) * 10) / 10;
-  })();
-
-  const bmiCalcLabel = (() => {
-    if (bmiCalcValue === null) return null;
-    if (bmiCalcValue < 18.5) return { text: "Недостаток", color: "#7dd3fc" };
-    if (bmiCalcValue < 25) return { text: "Норма", color: "#5eead4" };
-    if (bmiCalcValue < 30) return { text: "Избыток", color: "#fbbf24" };
-    return { text: "Ожирение", color: "#f87171" };
-  })();
-
-  // ── Streak: calculate on mount ──────────────────────────────────────────────
-  useEffect(() => {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      const raw = window.localStorage.getItem(LS_STREAK);
-      let count = 1;
-      if (raw) {
-        const stored = JSON.parse(raw) as { lastDate?: string; count?: number };
-        if (stored.lastDate === today) {
-          count = stored.count ?? 1;
-        } else if (stored.lastDate === yesterday) {
-          count = (stored.count ?? 0) + 1;
-        } else {
-          count = 1;
-        }
-      }
-      window.localStorage.setItem(LS_STREAK, JSON.stringify({ lastDate: today, count }));
-      setStreakCount(count);
-    } catch {}
-  }, []);
-
-  // ── Mood: restore from localStorage on mount ────────────────────────────────
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(LS_MOOD);
-      if (raw) {
-        const arr = JSON.parse(raw) as MoodEntry[];
-        setMoodEntries(arr.slice(-7));
-      }
-    } catch {}
-  }, []);
-
-  const saveMoodEntry = (rating: number) => {
-    const today = new Date().toISOString().slice(0, 10);
-    setMoodEntries((prev) => {
-      const filtered = prev.filter((e) => e.date !== today);
-      const next = [...filtered, { date: today, rating }].slice(-7);
-      try {
-        window.localStorage.setItem(LS_MOOD, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
   };
 
   // Profile draft
@@ -918,6 +881,24 @@ export default function HealthAIPage() {
     } catch {}
   }, []);
 
+  const loadHydration = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/hydration/${profileId}`);
+      if (!r.ok) return;
+      const j = (await r.json()) as HydrationResp;
+      setHydration(j);
+    } catch {}
+  }, []);
+
+  const loadWellnessScore = useCallback(async (profileId: string) => {
+    try {
+      const r = await fetch(`${BACKEND}/api/healthai/score/${profileId}`);
+      if (!r.ok) return;
+      const j = (await r.json()) as ScoreResp;
+      setWellnessScore(j);
+    } catch {}
+  }, []);
+
   const loadReferrals = useCallback(
     async (opts?: { country?: string; specialty?: string; emergencyOnly?: boolean }) => {
       setReferralsLoading(true);
@@ -997,6 +978,8 @@ export default function HealthAIPage() {
             loadHistory(stored);
             loadTrends(stored);
             loadRisks(stored);
+            loadHydration(stored);
+            loadWellnessScore(stored);
             loadPopulation(stored);
             loadPhq9Last(stored);
             loadGad7Last(stored);
@@ -1019,7 +1002,7 @@ export default function HealthAIPage() {
         setTab(t);
       }
     } catch {}
-  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadPopulation, loadPhq9Last, loadGad7Last, loadFamily]);
+  }, [loadProfile, loadHistory, loadTrends, loadRisks, loadHydration, loadWellnessScore, loadPopulation, loadPhq9Last, loadGad7Last, loadFamily]);
 
   useEffect(() => {
     try {
@@ -1118,6 +1101,8 @@ export default function HealthAIPage() {
       void loadHistory(id);
       void loadTrends(id);
       void loadRisks(id);
+      void loadHydration(id);
+      void loadWellnessScore(id);
       void loadPopulation(id);
       void loadPhq9Last(id);
       void loadGad7Last(id);
@@ -1426,6 +1411,8 @@ export default function HealthAIPage() {
       void loadHistory(profileIdRef.current);
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
+      void loadHydration(profileIdRef.current);
+      void loadWellnessScore(profileIdRef.current);
       void loadPopulation(profileIdRef.current);
     } finally {
       setBusy(false);
@@ -1466,6 +1453,8 @@ export default function HealthAIPage() {
       // Освежаем тренды и риски.
       void loadTrends(profileIdRef.current);
       void loadRisks(profileIdRef.current);
+      void loadHydration(profileIdRef.current);
+      void loadWellnessScore(profileIdRef.current);
       void loadPopulation(profileIdRef.current);
       showToast(t("toast_logged", lang));
       setLogSleep("");
@@ -1528,34 +1517,6 @@ export default function HealthAIPage() {
           'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
       }}
     >
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "MedicalWebPage",
-            name: "AEVION HealthAI",
-            description:
-              "Personal AI Doctor: rule-based symptom triage, daily wellness log, BMI, trends, PHQ-9/GAD-7 screeners, weekly plan, cycle tracker. Not medical advice.",
-            url: "https://aevion.app/healthai",
-            audience: { "@type": "PeopleAudience", suggestedMinAge: 18 },
-            specialty: ["Primary Care", "Mental Health"],
-            lastReviewed: new Date().toISOString().slice(0, 10),
-            mainContentOfPage: {
-              "@type": "WebPageElement",
-              cssSelector: ".ha-wrap",
-            },
-            isAccessibleForFree: true,
-            disclaimer:
-              "HealthAI provides informational triage only and does not constitute medical advice, diagnosis, or treatment. Always consult a licensed healthcare provider.",
-            publisher: {
-              "@type": "Organization",
-              name: "AEVION",
-              url: "https://aevion.app",
-            },
-          }),
-        }}
-      />
       <style>{`
         @media (max-width: 720px) {
           .ha-wrap { padding: 12px 10px 60px !important; }
@@ -1681,258 +1642,6 @@ export default function HealthAIPage() {
             );
           })}
         </div>
-
-        {/* ── Quick-widget strip: BMI · Streak · Mood ─────────────────────── */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 12,
-            marginBottom: 18,
-          }}
-        >
-          {/* BMI Calculator */}
-          <div
-            style={{
-              background: "rgba(20,28,46,0.72)",
-              border: "1px solid rgba(120,160,220,0.22)",
-              borderRadius: 12,
-              padding: "12px 14px",
-              maxHeight: 150,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: "#7dd3fc",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              ИМТ калькулятор
-            </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
-              <input
-                type="number"
-                min={100}
-                max={250}
-                placeholder="Рост см"
-                value={bmiH}
-                onChange={(e) => {
-                  setBmiH(e.target.value);
-                  saveBmi(e.target.value, bmiW);
-                }}
-                style={{
-                  flex: 1,
-                  padding: "5px 8px",
-                  background: "rgba(14,22,38,0.8)",
-                  border: "1px solid rgba(120,160,220,0.25)",
-                  borderRadius: 6,
-                  color: "#e2e8f8",
-                  fontSize: 12,
-                  fontFamily: "inherit",
-                  outline: "none",
-                  minWidth: 0,
-                }}
-              />
-              <input
-                type="number"
-                min={20}
-                max={300}
-                placeholder="Вес кг"
-                value={bmiW}
-                onChange={(e) => {
-                  setBmiW(e.target.value);
-                  saveBmi(bmiH, e.target.value);
-                }}
-                style={{
-                  flex: 1,
-                  padding: "5px 8px",
-                  background: "rgba(14,22,38,0.8)",
-                  border: "1px solid rgba(120,160,220,0.25)",
-                  borderRadius: 6,
-                  color: "#e2e8f8",
-                  fontSize: 12,
-                  fontFamily: "inherit",
-                  outline: "none",
-                  minWidth: 0,
-                }}
-              />
-            </div>
-            {bmiCalcValue !== null && bmiCalcLabel !== null ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span
-                  style={{ fontSize: 22, fontWeight: 900, color: bmiCalcLabel.color }}
-                >
-                  {bmiCalcValue}
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: bmiCalcLabel.color,
-                    background: `${bmiCalcLabel.color}22`,
-                    borderRadius: 6,
-                    padding: "2px 7px",
-                  }}
-                >
-                  {bmiCalcLabel.text}
-                </span>
-              </div>
-            ) : (
-              <div style={{ fontSize: 11, color: "#64748b" }}>
-                Введите рост и вес
-              </div>
-            )}
-          </div>
-
-          {/* Visit Streak */}
-          <div
-            style={{
-              background: "rgba(20,28,46,0.72)",
-              border: "1px solid rgba(120,160,220,0.22)",
-              borderRadius: 12,
-              padding: "12px 14px",
-              maxHeight: 150,
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: "#7dd3fc",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              Посещаемость
-            </div>
-            <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
-              {streakCount >= 3 ? (
-                <div>
-                  <div style={{ fontSize: 28, fontWeight: 900, color: "#fb923c" }}>
-                    🔥 {streakCount} дней
-                  </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                    Отличный стрик — не прерывай!
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: "#fbbf24" }}>
-                    ☀ Заходи каждый день
-                  </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                    Стрик начнётся с 3 дней подряд
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Daily Mood */}
-          <div
-            style={{
-              background: "rgba(20,28,46,0.72)",
-              border: "1px solid rgba(120,160,220,0.22)",
-              borderRadius: 12,
-              padding: "12px 14px",
-              maxHeight: 150,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: "#7dd3fc",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                marginBottom: 6,
-              }}
-            >
-              Настроение сегодня
-            </div>
-            <select
-              value={moodPick}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                setMoodPick(v);
-                saveMoodEntry(v);
-              }}
-              style={{
-                width: "100%",
-                padding: "5px 8px",
-                background: "rgba(14,22,38,0.8)",
-                border: "1px solid rgba(120,160,220,0.25)",
-                borderRadius: 6,
-                color: "#e2e8f8",
-                fontSize: 12,
-                fontFamily: "inherit",
-                outline: "none",
-                marginBottom: 6,
-              }}
-            >
-              <option value={5}>Отлично 😄</option>
-              <option value={4}>Хорошо 🙂</option>
-              <option value={3}>Нормально 😐</option>
-              <option value={2}>Плохо 😔</option>
-              <option value={1}>Ужасно 😣</option>
-            </select>
-            {/* 7-bar mini chart */}
-            {moodEntries.length > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  gap: 3,
-                  height: 36,
-                }}
-              >
-                {(() => {
-                  const slots: Array<number | null> = Array(7).fill(null);
-                  const today = new Date();
-                  moodEntries.forEach((e) => {
-                    const diff = Math.round(
-                      (today.getTime() - new Date(e.date).getTime()) / 86400000,
-                    );
-                    if (diff >= 0 && diff < 7) slots[6 - diff] = e.rating;
-                  });
-                  return slots.map((r, i) => (
-                    <div
-                      key={i}
-                      title={r !== null ? `${r}/5` : "нет"}
-                      style={{
-                        flex: 1,
-                        height: r !== null ? `${(r / 5) * 100}%` : "10%",
-                        background:
-                          r === null
-                            ? "rgba(100,116,139,0.25)"
-                            : r >= 4
-                              ? "#5eead4"
-                              : r === 3
-                                ? "#fbbf24"
-                                : "#f87171",
-                        borderRadius: 3,
-                        minHeight: 4,
-                        transition: "height 0.3s",
-                      }}
-                    />
-                  ));
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
-        {/* ── end quick-widget strip ──────────────────────────────────────── */}
 
         {tab === "profile" ? (
           <Card>
@@ -2208,48 +1917,6 @@ export default function HealthAIPage() {
                 }}
               >
                 {t("btn_export_json", lang)}
-              </a>
-              <a
-                href="/healthai/screener"
-                style={{
-                  ...primaryBtn,
-                  background: "rgba(139,92,246,0.18)",
-                  borderColor: "rgba(139,92,246,0.45)",
-                  color: "#c4b5fd",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                }}
-              >
-                🧠 {lang === "en" ? "Mental Health Screener" : "Психологический скрининг"}
-              </a>
-              <a
-                href="/healthai/plan"
-                style={{
-                  ...primaryBtn,
-                  background: "rgba(20,184,166,0.18)",
-                  borderColor: "rgba(20,184,166,0.45)",
-                  color: "#5eead4",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                }}
-              >
-                📋 {lang === "en" ? "My Health Plan" : "Мой план здоровья"}
-              </a>
-              <a
-                href="/healthai/family"
-                style={{
-                  ...primaryBtn,
-                  background: "rgba(167,139,250,0.18)",
-                  borderColor: "rgba(167,139,250,0.45)",
-                  color: "#c4b5fd",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                }}
-              >
-                👨‍👩‍👧 {lang === "en" ? "Family" : "Семья"}
               </a>
             </div>
           </Card>
@@ -2639,6 +2306,12 @@ export default function HealthAIPage() {
               >
                 {t("risks_empty", lang)}
               </div>
+            ) : null}
+            {wellnessScore && wellnessScore.knownPillarsCount > 0 ? (
+              <ScoreCard score={wellnessScore} lang={lang} />
+            ) : null}
+            {hydration && hydration.status !== "no-data" ? (
+              <HydrationCard hydration={hydration} lang={lang} />
             ) : null}
             {population ? (
               <div
@@ -4131,6 +3804,219 @@ function RiskCard({ risk, lang }: { risk: Risk; lang: Lang }) {
       <div style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.55 }}>
         {risk.detail}
       </div>
+    </div>
+  );
+}
+
+const SCORE_BAND_COLOR: Record<ScoreResp["band"], string> = {
+  excellent: "#5eead4",
+  good: "#86efac",
+  fair: "#fbbf24",
+  low: "#f87171",
+  insufficient: "#94a3b8",
+};
+
+function ScoreCard({ score, lang }: { score: ScoreResp; lang: Lang }) {
+  const c = SCORE_BAND_COLOR[score.band];
+  const bandKey = `score_band_${score.band}` as const;
+  const pillars: Array<{ key: "sleep" | "mood" | "water" | "exercise"; data: ScorePillar }> = [
+    { key: "sleep", data: score.pillars.sleep },
+    { key: "mood", data: score.pillars.mood },
+    { key: "water", data: score.pillars.water },
+    { key: "exercise", data: score.pillars.exercise },
+  ];
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: 14,
+        background: "rgba(20,28,46,0.55)",
+        border: `1px solid ${c}55`,
+        borderRadius: 12,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10 }}>
+        <div
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            background: `${c}22`,
+            border: `2px solid ${c}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 22,
+            fontWeight: 800,
+            color: c,
+          }}
+        >
+          {score.score}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {t("section_score", lang)}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#e2e8f8" }}>
+            {t(bandKey, lang)}
+          </div>
+          {score.streakBonus > 0 ? (
+            <div style={{ fontSize: 11, color: "#fbbf24", marginTop: 2 }}>
+              {t("score_streak_bonus", lang)} +{score.streakBonus}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 6,
+          marginBottom: 8,
+        }}
+      >
+        {pillars.map(({ key, data }) => {
+          const pct = data.score != null ? Math.round((data.score / 25) * 100) : 0;
+          const barColor =
+            data.score == null
+              ? "#475569"
+              : data.score >= 20
+                ? "#5eead4"
+                : data.score >= 12
+                  ? "#fbbf24"
+                  : "#f87171";
+          return (
+            <div key={key} style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#94a3b8",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  marginBottom: 4,
+                }}
+              >
+                {t(`score_pillar_${key}`, lang)}
+              </div>
+              <div
+                style={{
+                  height: 6,
+                  borderRadius: 999,
+                  background: "rgba(120,160,220,0.18)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    height: "100%",
+                    background: barColor,
+                    transition: "width 200ms ease",
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 10, color: "#cbd5e1", marginTop: 3 }}>
+                {data.score != null ? `${data.score}/25` : "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {score.weakest ? (
+        <div style={{ fontSize: 12, color: "#cbd5e1", marginTop: 6 }}>
+          <span style={{ color: "#94a3b8" }}>{t("score_weakest_label", lang)} </span>
+          <strong style={{ color: "#fbbf24" }}>
+            {t(`score_pillar_${score.weakest.pillar}`, lang)}
+          </strong>
+        </div>
+      ) : null}
+      <div style={{ fontSize: 11, color: "#64748b", marginTop: 6, lineHeight: 1.5 }}>
+        {t("score_help", lang)}
+      </div>
+    </div>
+  );
+}
+
+const HYDRATION_STATUS_COLOR: Record<HydrationResp["status"], string> = {
+  "on-track": "#5eead4",
+  below: "#fbbf24",
+  "well-below": "#f87171",
+  "no-data": "#94a3b8",
+};
+
+function HydrationCard({ hydration, lang }: { hydration: HydrationResp; lang: Lang }) {
+  const c = HYDRATION_STATUS_COLOR[hydration.status];
+  const statusKey = `hydration_status_${hydration.status.replace(/-/g, "_")}` as const;
+  const pct =
+    hydration.avgWater7d != null
+      ? Math.min(120, Math.round((hydration.avgWater7d / hydration.targetL) * 100))
+      : 0;
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: 12,
+        background: "rgba(20,28,46,0.55)",
+        border: `1px solid ${c}55`,
+        borderRadius: 12,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {t("section_hydration", lang)}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: c }}>
+            {t(statusKey, lang)}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>{t("hydration_target", lang)}</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#e2e8f8" }}>
+            {hydration.targetL.toFixed(1)} L
+          </div>
+        </div>
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div
+          style={{
+            height: 8,
+            borderRadius: 999,
+            background: "rgba(120,160,220,0.18)",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.min(100, pct)}%`,
+              height: "100%",
+              background: c,
+              transition: "width 200ms ease",
+            }}
+          />
+        </div>
+        <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 4 }}>
+          {t("hydration_avg7d", lang)}:{" "}
+          <strong style={{ color: "#e2e8f8" }}>
+            {hydration.avgWater7d != null ? `${hydration.avgWater7d.toFixed(2)} L` : "—"}
+          </strong>{" "}
+          ({pct}%)
+        </div>
+      </div>
+      {hydration.tips.length > 0 ? (
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#cbd5e1", lineHeight: 1.55 }}>
+          {hydration.tips.map((tip, i) => (
+            <li key={i}>{tip}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

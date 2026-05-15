@@ -1,9 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
+import { PrismaClient } from "@prisma/client";
 import { verifyBearerOptional } from "../lib/authJwt";
-import { rateLimit } from "../lib/rateLimit";
-import { publicErrorCategory } from "./qcoreai";
-import { getPool } from "../lib/dbPool";
 
 /**
  * HealthAI v1 — Personal AI Doctor MVP.
@@ -30,19 +28,14 @@ type HealthProfile = {
   userId?: string | null;
   memberLabel?: string | null;
   age: number;
-  sex: "male" | "female" | "other";
-  heightCm?: number;
-  weightKg?: number;
+  sex: "M" | "F" | "other";
+  heightCm: number;
+  weightKg: number;
   conditions: string[];
   allergies: string[];
   medications: string[];
-  activityLevel?: string;
-  smoker?: boolean;
-  goals?: string[];
-  bmi?: number;
-  isNew?: boolean;
   createdAt: string;
-  updatedAt?: string;
+  updatedAt: string;
 };
 
 type CycleEntry = {
@@ -78,9 +71,6 @@ type DailyLog = {
   id: string;
   profileId: string;
   date: string;
-  metric?: string;
-  value?: number;
-  unit?: string;
   sleepHours?: number;
   moodScore?: number;
   weightKg?: number;
@@ -90,304 +80,380 @@ type DailyLog = {
   createdAt: string;
 };
 
-// ── Postgres-backed store (replaces in-memory Maps) ─────────────────────────
-// Tables are bootstrapped lazily on first request so a fresh Railway deploy
-// doesn't need a separate migration step.
+const profilesMem = new Map<string, HealthProfile>();
+const checksMem = new Map<string, SymptomCheck[]>();
+const logsMem = new Map<string, DailyLog[]>();
+const cyclesMem = new Map<string, CycleEntry[]>();
+const planSnapshotsMem = new Map<string, any[]>();
 
-const _pool = getPool();
-let _tablesReady = false;
+/**
+ * Hybrid store: Prisma если есть DATABASE_URL и таблицы доступны, иначе
+ * in-memory Maps. Init выполняется лениво при первом use, чтобы не
+ * падать на старте если БД ещё не готова.
+ */
+let prisma: PrismaClient | null = null;
+let useDb = false;
+let dbInitTried = false;
 
-async function ensureHealthaiTables(): Promise<void> {
-  if (_tablesReady) return;
-  await _pool.query(`
-    CREATE TABLE IF NOT EXISTS "hai_profiles" (
-      "id" TEXT PRIMARY KEY,
-      "userId" TEXT,
-      "memberLabel" TEXT,
-      "age" INTEGER NOT NULL,
-      "sex" TEXT NOT NULL,
-      "heightCm" DOUBLE PRECISION,
-      "weightKg" DOUBLE PRECISION,
-      "conditions" TEXT NOT NULL DEFAULT '[]',
-      "allergies" TEXT NOT NULL DEFAULT '[]',
-      "medications" TEXT NOT NULL DEFAULT '[]',
-      "activityLevel" TEXT,
-      "smoker" BOOLEAN NOT NULL DEFAULT FALSE,
-      "goalsJson" TEXT NOT NULL DEFAULT '[]',
-      "bmi" DOUBLE PRECISION,
-      "isNew" BOOLEAN NOT NULL DEFAULT TRUE,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+async function ensureDb() {
+  if (dbInitTried) return;
+  dbInitTried = true;
+  if (!process.env.DATABASE_URL) {
+    console.log("[HealthAI] DATABASE_URL absent — in-memory mode");
+    return;
+  }
+  try {
+    const p = new PrismaClient();
+    await p.healthProfile.findFirst();
+    prisma = p;
+    useDb = true;
+    console.log("[HealthAI] Prisma persistence enabled");
+  } catch (e) {
+    console.warn(
+      "[HealthAI] Prisma init failed, fallback in-memory:",
+      e instanceof Error ? e.message : e,
     );
-  `);
-  await _pool.query(`CREATE INDEX IF NOT EXISTS "hai_profiles_user_idx" ON "hai_profiles" ("userId");`);
-
-  await _pool.query(`
-    CREATE TABLE IF NOT EXISTS "hai_checks" (
-      "id" TEXT PRIMARY KEY,
-      "profileId" TEXT NOT NULL,
-      "symptoms" TEXT NOT NULL DEFAULT '[]',
-      "severity" INTEGER NOT NULL DEFAULT 1,
-      "durationH" DOUBLE PRECISION NOT NULL DEFAULT 0,
-      "notes" TEXT,
-      "matched" TEXT NOT NULL DEFAULT '[]',
-      "generic" TEXT NOT NULL DEFAULT '',
-      "disclaimer" TEXT NOT NULL DEFAULT '',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await _pool.query(`CREATE INDEX IF NOT EXISTS "hai_checks_profile_idx" ON "hai_checks" ("profileId", "createdAt" DESC);`);
-
-  await _pool.query(`
-    CREATE TABLE IF NOT EXISTS "hai_logs" (
-      "id" TEXT PRIMARY KEY,
-      "profileId" TEXT NOT NULL,
-      "date" TEXT NOT NULL,
-      "metric" TEXT,
-      "value" DOUBLE PRECISION,
-      "unit" TEXT,
-      "sleepHours" DOUBLE PRECISION,
-      "moodScore" INTEGER,
-      "weightKg" DOUBLE PRECISION,
-      "waterL" DOUBLE PRECISION,
-      "exerciseMin" INTEGER,
-      "notes" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE ("profileId", "date", "metric")
-    );
-  `);
-  await _pool.query(`CREATE INDEX IF NOT EXISTS "hai_logs_profile_idx" ON "hai_logs" ("profileId", "date" DESC);`);
-
-  await _pool.query(`
-    CREATE TABLE IF NOT EXISTS "hai_cycles" (
-      "id" TEXT PRIMARY KEY,
-      "profileId" TEXT NOT NULL,
-      "date" TEXT NOT NULL,
-      "flow" TEXT,
-      "symptoms" TEXT NOT NULL DEFAULT '[]',
-      "notes" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE ("profileId", "date")
-    );
-  `);
-  await _pool.query(`CREATE INDEX IF NOT EXISTS "hai_cycles_profile_idx" ON "hai_cycles" ("profileId", "date" DESC);`);
-
-  await _pool.query(`
-    CREATE TABLE IF NOT EXISTS "hai_plan_snapshots" (
-      "id" TEXT PRIMARY KEY,
-      "profileId" TEXT NOT NULL,
-      "plan" JSONB NOT NULL,
-      "bmi" DOUBLE PRECISION,
-      "avgSleep7d" DOUBLE PRECISION,
-      "avgMood7d" DOUBLE PRECISION,
-      "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await _pool.query(`CREATE INDEX IF NOT EXISTS "hai_snapshots_profile_idx" ON "hai_plan_snapshots" ("profileId", "generatedAt" DESC);`);
-
-  await _pool.query(`
-    CREATE TABLE IF NOT EXISTS "hai_screeners" (
-      "id" TEXT PRIMARY KEY,
-      "profileId" TEXT NOT NULL,
-      "type" TEXT NOT NULL,
-      "answers" TEXT NOT NULL DEFAULT '[]',
-      "score" INTEGER NOT NULL,
-      "severity" TEXT NOT NULL,
-      "dataJson" TEXT NOT NULL DEFAULT '{}',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
-  await _pool.query(`CREATE INDEX IF NOT EXISTS "hai_screeners_profile_idx" ON "hai_screeners" ("profileId", "createdAt" DESC);`);
-
-  _tablesReady = true;
+  }
 }
+void ensureDb();
 
-function parseArr(v: unknown): unknown[] {
-  if (Array.isArray(v)) return v;
-  if (typeof v === "string") { try { return JSON.parse(v); } catch { return []; } }
-  return [];
-}
-
-function rowToProfile(r: Record<string, unknown>): HealthProfile {
+function rowToProfile(r: any): HealthProfile {
   return {
-    id: r.id as string,
-    userId: (r.userId as string | null) ?? null,
-    memberLabel: (r.memberLabel as string | null) ?? null,
-    age: Number(r.age),
-    sex: r.sex as "male" | "female" | "other",
-    heightCm: r.heightCm != null ? Number(r.heightCm) : undefined,
-    weightKg: r.weightKg != null ? Number(r.weightKg) : undefined,
-    conditions: parseArr(r.conditions) as string[],
-    allergies: parseArr(r.allergies) as string[],
-    medications: parseArr(r.medications) as string[],
-    activityLevel: (r.activityLevel as string | null) ?? undefined,
-    smoker: Boolean(r.smoker),
-    goals: parseArr(r.goalsJson) as string[],
-    bmi: r.bmi != null ? Number(r.bmi) : undefined,
-    isNew: Boolean(r.isNew),
-    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : (r.createdAt as string),
+    id: r.id,
+    userId: r.userId ?? null,
+    memberLabel: r.memberLabel ?? null,
+    age: r.age,
+    sex: r.sex,
+    heightCm: r.heightCm,
+    weightKg: Number(r.weightKg),
+    conditions: r.conditions || [],
+    allergies: r.allergies || [],
+    medications: r.medications || [],
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    updatedAt:
+      r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+  };
+}
+
+function rowToCheck(r: any): SymptomCheck {
+  return {
+    id: r.id,
+    profileId: r.profileId,
+    symptoms: r.symptoms || [],
+    severity: r.severity,
+    durationH: Number(r.durationH),
+    notes: r.notes ?? undefined,
+    matched: typeof r.matched === "string" ? JSON.parse(r.matched) : r.matched,
+    generic: r.generic || "",
+    disclaimer: r.disclaimer || DISCLAIMER,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  };
+}
+
+function rowToCycle(r: any): CycleEntry {
+  return {
+    id: r.id,
+    profileId: r.profileId,
+    date: r.date,
+    flow: r.flow ?? undefined,
+    symptoms: r.symptoms || [],
+    notes: r.notes ?? undefined,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  };
+}
+
+function rowToLog(r: any): DailyLog {
+  return {
+    id: r.id,
+    profileId: r.profileId,
+    date: r.date,
+    sleepHours: r.sleepHours == null ? undefined : Number(r.sleepHours),
+    moodScore: r.moodScore ?? undefined,
+    weightKg: r.weightKg == null ? undefined : Number(r.weightKg),
+    waterL: r.waterL == null ? undefined : Number(r.waterL),
+    exerciseMin: r.exerciseMin ?? undefined,
+    notes: r.notes ?? undefined,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
   };
 }
 
 const store = {
   async getProfile(id: string): Promise<HealthProfile | null> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(`SELECT * FROM "hai_profiles" WHERE "id" = $1 LIMIT 1`, [id]);
-    return r.rowCount === 0 ? null : rowToProfile(r.rows[0] as Record<string, unknown>);
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.healthProfile.findUnique({ where: { id } });
+      return r ? rowToProfile(r) : null;
+    }
+    return profilesMem.get(id) || null;
   },
   async upsertProfile(p: HealthProfile): Promise<HealthProfile> {
-    await ensureHealthaiTables();
-    const bmi = p.heightCm && p.weightKg ? p.weightKg / ((p.heightCm / 100) ** 2) : null;
-    await _pool.query(
-      `INSERT INTO "hai_profiles" ("id","userId","memberLabel","age","sex","heightCm","weightKg",
-         "conditions","allergies","medications","activityLevel","smoker","goalsJson","bmi","isNew")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       ON CONFLICT ("id") DO UPDATE SET
-         "userId"=$2,"memberLabel"=$3,"age"=$4,"sex"=$5,"heightCm"=$6,"weightKg"=$7,
-         "conditions"=$8,"allergies"=$9,"medications"=$10,"activityLevel"=$11,
-         "smoker"=$12,"goalsJson"=$13,"bmi"=$14,"isNew"=FALSE`,
-      [p.id, p.userId ?? null, p.memberLabel ?? null, p.age, p.sex,
-       p.heightCm ?? null, p.weightKg ?? null,
-       JSON.stringify(p.conditions ?? []), JSON.stringify(p.allergies ?? []),
-       JSON.stringify(p.medications ?? []), p.activityLevel ?? null,
-       p.smoker ?? false, JSON.stringify(p.goals ?? []), bmi != null ? Math.round(bmi * 10) / 10 : null,
-       p.isNew ?? true],
-    );
-    return { ...p, bmi: bmi != null ? Math.round(bmi * 10) / 10 : undefined };
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.healthProfile.upsert({
+        where: { id: p.id },
+        update: {
+          userId: p.userId ?? null,
+          memberLabel: p.memberLabel ?? null,
+          age: p.age,
+          sex: p.sex,
+          heightCm: p.heightCm,
+          weightKg: p.weightKg,
+          conditions: p.conditions,
+          allergies: p.allergies,
+          medications: p.medications,
+        },
+        create: {
+          id: p.id,
+          userId: p.userId ?? null,
+          memberLabel: p.memberLabel ?? null,
+          age: p.age,
+          sex: p.sex,
+          heightCm: p.heightCm,
+          weightKg: p.weightKg,
+          conditions: p.conditions,
+          allergies: p.allergies,
+          medications: p.medications,
+        },
+      });
+      return rowToProfile(r);
+    }
+    profilesMem.set(p.id, p);
+    return p;
   },
   async listProfilesByUser(userId: string): Promise<HealthProfile[]> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(`SELECT * FROM "hai_profiles" WHERE "userId" = $1 ORDER BY "createdAt" ASC`, [userId]);
-    return (r.rows as Record<string, unknown>[]).map(rowToProfile);
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.healthProfile.findMany({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+      });
+      return rows.map(rowToProfile);
+    }
+    return Array.from(profilesMem.values()).filter((p) => p.userId === userId);
   },
   async deleteProfile(id: string): Promise<boolean> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(`DELETE FROM "hai_profiles" WHERE "id" = $1`, [id]);
-    return (r.rowCount ?? 0) > 0;
+    await ensureDb();
+    if (useDb && prisma) {
+      try {
+        await prisma.healthProfile.delete({ where: { id } });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return profilesMem.delete(id);
   },
   async getChecks(profileId: string, limit = 200): Promise<SymptomCheck[]> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(
-      `SELECT * FROM "hai_checks" WHERE "profileId" = $1 ORDER BY "createdAt" DESC LIMIT $2`,
-      [profileId, limit],
-    );
-    return (r.rows as Record<string, unknown>[]).map((row) => ({
-      id: row.id as string, profileId: row.profileId as string,
-      symptoms: parseArr(row.symptoms) as string[],
-      severity: Number(row.severity), durationH: Number(row.durationH),
-      notes: row.notes as string | undefined,
-      matched: parseArr(row.matched) as AdviceMatch[],
-      generic: row.generic as string, disclaimer: row.disclaimer as string,
-      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt as string),
-    }));
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.symptomCheck.findMany({
+        where: { profileId },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      return rows.map(rowToCheck);
+    }
+    return (checksMem.get(profileId) || []).slice(0, limit);
   },
   async addCheck(c: SymptomCheck): Promise<void> {
-    await ensureHealthaiTables();
-    await _pool.query(
-      `INSERT INTO "hai_checks" ("id","profileId","symptoms","severity","durationH","notes","matched","generic","disclaimer")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT ("id") DO NOTHING`,
-      [c.id, c.profileId, JSON.stringify(c.symptoms), c.severity, c.durationH, c.notes ?? null,
-       JSON.stringify(c.matched), c.generic, c.disclaimer],
-    );
+    await ensureDb();
+    if (useDb && prisma) {
+      await prisma.symptomCheck.create({
+        data: {
+          id: c.id,
+          profileId: c.profileId,
+          symptoms: c.symptoms,
+          severity: c.severity,
+          durationH: c.durationH,
+          notes: c.notes,
+          matched: c.matched as any,
+          generic: c.generic,
+          disclaimer: c.disclaimer,
+        },
+      });
+      return;
+    }
+    const list = checksMem.get(c.profileId) || [];
+    list.unshift(c);
+    if (list.length > 200) list.length = 200;
+    checksMem.set(c.profileId, list);
   },
   async getLogs(profileId: string, limit = 365): Promise<DailyLog[]> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(
-      `SELECT * FROM "hai_logs" WHERE "profileId" = $1 ORDER BY "date" DESC, "createdAt" DESC LIMIT $2`,
-      [profileId, limit],
-    );
-    return (r.rows as Record<string, unknown>[]).map((row) => ({
-      id: row.id as string, profileId: row.profileId as string, date: row.date as string,
-      metric: row.metric as string | undefined, value: row.value != null ? Number(row.value) : undefined,
-      unit: row.unit as string | undefined,
-      sleepHours: row.sleepHours != null ? Number(row.sleepHours) : undefined,
-      moodScore: row.moodScore != null ? Number(row.moodScore) : undefined,
-      weightKg: row.weightKg != null ? Number(row.weightKg) : undefined,
-      waterL: row.waterL != null ? Number(row.waterL) : undefined,
-      exerciseMin: row.exerciseMin != null ? Number(row.exerciseMin) : undefined,
-      notes: row.notes as string | undefined,
-      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt as string),
-    }));
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.healthDailyLog.findMany({
+        where: { profileId },
+        orderBy: { date: "desc" },
+        take: limit,
+      });
+      return rows.map(rowToLog);
+    }
+    return (logsMem.get(profileId) || []).slice(0, limit);
   },
   async upsertLog(l: DailyLog): Promise<DailyLog> {
-    await ensureHealthaiTables();
-    await _pool.query(
-      `INSERT INTO "hai_logs" ("id","profileId","date","metric","value","unit","sleepHours","moodScore","weightKg","waterL","exerciseMin","notes")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT ("profileId","date","metric") DO UPDATE SET
-         "value"=$5,"unit"=$6,"sleepHours"=$7,"moodScore"=$8,"weightKg"=$9,"waterL"=$10,"exerciseMin"=$11,"notes"=$12`,
-      [l.id, l.profileId, l.date, l.metric ?? null, l.value ?? null, l.unit ?? null,
-       l.sleepHours ?? null, l.moodScore ?? null, l.weightKg ?? null,
-       l.waterL ?? null, l.exerciseMin ?? null, l.notes ?? null],
-    );
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.healthDailyLog.upsert({
+        where: {
+          profileId_date: { profileId: l.profileId, date: l.date },
+        },
+        update: {
+          sleepHours: l.sleepHours,
+          moodScore: l.moodScore,
+          weightKg: l.weightKg,
+          waterL: l.waterL,
+          exerciseMin: l.exerciseMin,
+          notes: l.notes,
+        },
+        create: {
+          id: l.id,
+          profileId: l.profileId,
+          date: l.date,
+          sleepHours: l.sleepHours,
+          moodScore: l.moodScore,
+          weightKg: l.weightKg,
+          waterL: l.waterL,
+          exerciseMin: l.exerciseMin,
+          notes: l.notes,
+        },
+      });
+      return rowToLog(r);
+    }
+    const list = logsMem.get(l.profileId) || [];
+    const idx = list.findIndex((x) => x.date === l.date);
+    if (idx >= 0) list[idx] = l;
+    else list.unshift(l);
+    if (list.length > 365) list.length = 365;
+    logsMem.set(l.profileId, list);
     return l;
   },
   async getCycles(profileId: string, limit = 365): Promise<CycleEntry[]> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(
-      `SELECT * FROM "hai_cycles" WHERE "profileId" = $1 ORDER BY "date" DESC LIMIT $2`,
-      [profileId, limit],
-    );
-    return (r.rows as Record<string, unknown>[]).map((row) => ({
-      id: row.id as string, profileId: row.profileId as string, date: row.date as string,
-      flow: row.flow as string | undefined, symptoms: parseArr(row.symptoms) as string[],
-      notes: row.notes as string | undefined,
-      createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt as string),
-    }));
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.cycleEntry.findMany({
+        where: { profileId },
+        orderBy: { date: "desc" },
+        take: limit,
+      });
+      return rows.map(rowToCycle);
+    }
+    return (cyclesMem.get(profileId) || []).slice(0, limit);
   },
   async upsertCycle(c: CycleEntry): Promise<CycleEntry> {
-    await ensureHealthaiTables();
-    await _pool.query(
-      `INSERT INTO "hai_cycles" ("id","profileId","date","flow","symptoms","notes")
-       VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT ("profileId","date") DO UPDATE SET "flow"=$4,"symptoms"=$5,"notes"=$6`,
-      [c.id, c.profileId, c.date, c.flow ?? null, JSON.stringify(c.symptoms ?? []), c.notes ?? null],
-    );
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.cycleEntry.upsert({
+        where: { profileId_date: { profileId: c.profileId, date: c.date } },
+        update: { flow: c.flow, symptoms: c.symptoms, notes: c.notes },
+        create: {
+          id: c.id,
+          profileId: c.profileId,
+          date: c.date,
+          flow: c.flow,
+          symptoms: c.symptoms,
+          notes: c.notes,
+        },
+      });
+      return rowToCycle(r);
+    }
+    const list = cyclesMem.get(c.profileId) || [];
+    const idx = list.findIndex((x) => x.date === c.date);
+    if (idx >= 0) list[idx] = c;
+    else list.unshift(c);
+    cyclesMem.set(c.profileId, list);
     return c;
   },
-  async addPlanSnapshot(s: { id: string; profileId: string; plan: unknown; bmi?: number | null; avgSleep7d?: number | null; avgMood7d?: number | null; generatedAt: string }): Promise<void> {
-    await ensureHealthaiTables();
-    await _pool.query(
-      `INSERT INTO "hai_plan_snapshots" ("id","profileId","plan","bmi","avgSleep7d","avgMood7d","generatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT ("id") DO NOTHING`,
-      [s.id, s.profileId, JSON.stringify(s.plan), s.bmi ?? null, s.avgSleep7d ?? null, s.avgMood7d ?? null, s.generatedAt],
-    );
+  async addPlanSnapshot(s: {
+    id: string;
+    profileId: string;
+    plan: unknown;
+    bmi?: number | null;
+    avgSleep7d?: number | null;
+    avgMood7d?: number | null;
+    generatedAt: string;
+  }): Promise<void> {
+    await ensureDb();
+    if (useDb && prisma) {
+      await prisma.planSnapshot.create({
+        data: {
+          id: s.id,
+          profileId: s.profileId,
+          plan: s.plan as any,
+          bmi: s.bmi ?? null,
+          avgSleep7d: s.avgSleep7d ?? null,
+          avgMood7d: s.avgMood7d ?? null,
+          generatedAt: new Date(s.generatedAt),
+        },
+      });
+      return;
+    }
+    const list = planSnapshotsMem.get(s.profileId) || [];
+    list.unshift(s as any);
+    if (list.length > 50) list.length = 50;
+    planSnapshotsMem.set(s.profileId, list);
   },
-  async listPlanSnapshots(profileId: string, limit = 30): Promise<unknown[]> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(
-      `SELECT * FROM "hai_plan_snapshots" WHERE "profileId" = $1 ORDER BY "generatedAt" DESC LIMIT $2`,
-      [profileId, limit],
-    );
-    return (r.rows as Record<string, unknown>[]).map((row) => ({
-      id: row.id, profileId: row.profileId,
-      plan: typeof row.plan === "string" ? JSON.parse(row.plan) : row.plan,
-      bmi: row.bmi != null ? Number(row.bmi) : null,
-      avgSleep7d: row.avgSleep7d != null ? Number(row.avgSleep7d) : null,
-      avgMood7d: row.avgMood7d != null ? Number(row.avgMood7d) : null,
-      generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
-    }));
+  async listPlanSnapshots(profileId: string, limit = 30): Promise<any[]> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.planSnapshot.findMany({
+        where: { profileId },
+        orderBy: { generatedAt: "desc" },
+        take: limit,
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        profileId: r.profileId,
+        plan: r.plan,
+        bmi: r.bmi == null ? null : Number(r.bmi),
+        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
+        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
+        generatedAt:
+          r.generatedAt instanceof Date
+            ? r.generatedAt.toISOString()
+            : r.generatedAt,
+      }));
+    }
+    return (planSnapshotsMem.get(profileId) || []).slice(0, limit);
   },
-  async getPlanSnapshot(id: string): Promise<unknown | null> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(`SELECT * FROM "hai_plan_snapshots" WHERE "id" = $1 LIMIT 1`, [id]);
-    if (r.rowCount === 0) return null;
-    const row = r.rows[0] as Record<string, unknown>;
-    return {
-      id: row.id, profileId: row.profileId,
-      plan: typeof row.plan === "string" ? JSON.parse(row.plan) : row.plan,
-      bmi: row.bmi != null ? Number(row.bmi) : null,
-      avgSleep7d: row.avgSleep7d != null ? Number(row.avgSleep7d) : null,
-      avgMood7d: row.avgMood7d != null ? Number(row.avgMood7d) : null,
-      generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
-    };
+  async getPlanSnapshot(id: string): Promise<any | null> {
+    await ensureDb();
+    if (useDb && prisma) {
+      const r = await prisma.planSnapshot.findUnique({ where: { id } });
+      if (!r) return null;
+      return {
+        id: r.id,
+        profileId: r.profileId,
+        plan: r.plan,
+        bmi: r.bmi == null ? null : Number(r.bmi),
+        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
+        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
+        generatedAt:
+          r.generatedAt instanceof Date
+            ? r.generatedAt.toISOString()
+            : r.generatedAt,
+      };
+    }
+    for (const list of planSnapshotsMem.values()) {
+      const found = list.find((x) => x.id === id);
+      if (found) return found;
+    }
+    return null;
   },
   async allProfileIdsWithLogs(): Promise<string[]> {
-    await ensureHealthaiTables();
-    const r = await _pool.query(`SELECT DISTINCT "profileId" FROM "hai_logs"`);
-    return (r.rows as Record<string, unknown>[]).map((row) => row.profileId as string);
+    await ensureDb();
+    if (useDb && prisma) {
+      const rows = await prisma.healthDailyLog.groupBy({
+        by: ["profileId"],
+      });
+      return rows.map((r) => r.profileId);
+    }
+    return Array.from(logsMem.keys());
   },
 };
-
 
 const DISCLAIMER =
   "Это образовательный совет AI-помощника, а не медицинский диагноз. " +
@@ -542,8 +608,7 @@ function classifySymptoms(symptoms: string[]): {
   return { matched, generic };
 }
 
-function bmi(heightCm: number | undefined, weightKg: number | undefined): number {
-  if (!heightCm || !weightKg) return 0;
+function bmi(heightCm: number, weightKg: number): number {
   if (heightCm <= 0) return 0;
   const m = heightCm / 100;
   return Math.round((weightKg / (m * m)) * 10) / 10;
@@ -555,20 +620,17 @@ function round(n: number, decimals = 1): number {
 }
 
 healthaiRouter.get("/health", async (_req, res) => {
-  try {
-    await ensureHealthaiTables();
-    const r = await _pool.query(`SELECT COUNT(*) FROM "hai_profiles"`);
-    res.json({
-      status: "ok",
-      service: "AEVION HealthAI",
-      persistence: "postgres",
-      profilesCount: Number(r.rows[0].count),
-      rulesCount: ADVICE_RULES.length,
-      timestamp: nowIso(),
-    });
-  } catch {
-    res.json({ status: "ok", service: "AEVION HealthAI", persistence: "postgres", timestamp: nowIso() });
-  }
+  await ensureDb();
+  res.json({
+    status: "ok",
+    service: "AEVION HealthAI",
+    persistence: useDb ? "prisma" : "in-memory",
+    profilesCount: useDb && prisma
+      ? await prisma.healthProfile.count()
+      : profilesMem.size,
+    rulesCount: ADVICE_RULES.length,
+    timestamp: nowIso(),
+  });
 });
 
 healthaiRouter.post("/profile", async (req: Request, res: Response) => {
@@ -631,17 +693,17 @@ healthaiRouter.get("/profiles/me", async (req: Request, res: Response) => {
 healthaiRouter.delete("/profile/:id", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth-required" });
-  const profile = await store.getProfile(String(req.params.id));
+  const profile = await store.getProfile(req.params.id);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   if (profile.userId !== auth.sub) {
     return res.status(403).json({ error: "not-profile-owner" });
   }
-  const ok = await store.deleteProfile(String(req.params.id));
+  const ok = await store.deleteProfile(req.params.id);
   res.json({ ok });
 });
 
 healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {
-  const profile = await store.getProfile(String(req.params.id));
+  const profile = await store.getProfile(req.params.id);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   res.json({
     profile,
@@ -713,14 +775,14 @@ healthaiRouter.post("/log", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
-  const profileId = String(req.params.id);
+  const profileId = req.params.id;
   const cks = await store.getChecks(profileId, 20);
   const lgs = await store.getLogs(profileId, 90);
   res.json({ checks: cks, logs: lgs });
 });
 
 healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
-  const profileId = String(req.params.id);
+  const profileId = req.params.id;
   const lgs = await store.getLogs(profileId);
   if (lgs.length === 0) {
     return res.json({
@@ -882,23 +944,7 @@ async function callLlmGemini(
   return { advice: reply, model };
 }
 
-// Rate limit /check-llm to defend our LLM bills. Medical-AI calls are
-// expensive (long system prompt + structured response), and the endpoint
-// could be invoked in a tight loop by a buggy client or a hostile script
-// that gets hold of any user account. 10/min/IP is generous for real use
-// (a doctor consultation flow is 1-3 calls per session) but blocks abuse.
-const llmLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 10,
-  keyPrefix: "healthai:check-llm",
-  message: "rate_limit_exceeded: max 10 LLM checks per minute per IP",
-});
-
-const HEALTHAI_MAX_SYMPTOM_LEN = 200;
-const HEALTHAI_MAX_SYMPTOMS = 20;
-const HEALTHAI_MAX_NOTES = 2000;
-
-healthaiRouter.post("/check-llm", llmLimiter, async (req: Request, res: Response) => {
+healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
@@ -906,19 +952,9 @@ healthaiRouter.post("/check-llm", llmLimiter, async (req: Request, res: Response
   const profile = await store.getProfile(body.profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
-  // Cap symptoms array + each entry length. Without these caps an attacker
-  // with a valid profileId can pad the prompt to push token cost.
-  const symptomsRaw = Array.isArray(body.symptoms) ? body.symptoms : [];
-  const symptoms: string[] = symptomsRaw
-    .slice(0, HEALTHAI_MAX_SYMPTOMS)
-    .map((s: unknown) => String(s).trim().slice(0, HEALTHAI_MAX_SYMPTOM_LEN))
-    .filter(Boolean);
+  const symptoms = Array.isArray(body.symptoms) ? body.symptoms.map(String) : [];
   if (symptoms.length === 0) {
     return res.status(400).json({ error: "symptoms-empty" });
-  }
-  // Cap notes too — they get appended to the prompt verbatim.
-  if (typeof body.notes === "string" && body.notes.length > HEALTHAI_MAX_NOTES) {
-    body.notes = body.notes.slice(0, HEALTHAI_MAX_NOTES);
   }
   const lang =
     body.lang === "en" || body.lang === "ru" ? body.lang : "ru";
@@ -993,14 +1029,9 @@ healthaiRouter.post("/check-llm", llmLimiter, async (req: Request, res: Response
         disclaimer: DISCLAIMER,
       });
     } catch (e: any) {
-      // Server log keeps the full upstream error for debugging.
-      // Wire response gets a stable category to avoid leaking provider
-      // internals (API key prefixes, model URLs, etc).
-      const rawMsg = String(e?.message || e);
-      console.error(`[HealthAI] /check-llm provider=${name} error:`, rawMsg);
       tried.push({
         provider: name,
-        error: rawMsg === "not-configured" ? "not-configured" : publicErrorCategory(rawMsg),
+        error: String(e?.message || e),
       });
       // continue chain
     }
@@ -1062,7 +1093,7 @@ healthaiRouter.post("/import", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
-  const profileId = String(req.params.id);
+  const profileId = req.params.id;
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1204,6 +1235,225 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
 });
 
 /**
+ * Hydration coach — норма воды по весу (35 мл/кг для взрослых, +0.5л при
+ * exercise >=30мин/день за 7 дней), сравнение с фактом за последние 7 дней,
+ * подсказки. Безопасно: не диагноз, не подменяет врача.
+ */
+healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) => {
+  const profileId = req.params.profileId;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const lgs = await store.getLogs(profileId);
+  const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last7 = sorted.slice(-7);
+  const last3 = sorted.slice(-3);
+
+  const avg = (rows: DailyLog[], pick: (l: DailyLog) => number | undefined) => {
+    const vals = rows.map(pick).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  };
+
+  // База: 35 мл/кг, минимум 1.5л.
+  const baseMlPerKg = 35;
+  const targetBase = Math.max(1.5, (profile.weightKg * baseMlPerKg) / 1000);
+  const avgExercise = avg(last7, (l) => l.exerciseMin) ?? 0;
+  const exerciseBonus = avgExercise >= 30 ? 0.5 : 0;
+  const targetL = Math.round((targetBase + exerciseBonus) * 100) / 100;
+
+  const avgWater7 = avg(last7, (l) => l.waterL);
+  const avgWater3 = avg(last3, (l) => l.waterL);
+  const todayLog = sorted[sorted.length - 1];
+  const todayWater =
+    todayLog && todayLog.date === todayDate() ? (todayLog.waterL ?? null) : null;
+
+  const deficit7 =
+    avgWater7 != null ? Math.round((targetL - avgWater7) * 100) / 100 : null;
+
+  let status: "on-track" | "below" | "well-below" | "no-data" = "no-data";
+  if (avgWater7 == null) {
+    status = "no-data";
+  } else if (avgWater7 >= targetL * 0.95) {
+    status = "on-track";
+  } else if (avgWater7 >= targetL * 0.7) {
+    status = "below";
+  } else {
+    status = "well-below";
+  }
+
+  const tips: string[] = [];
+  if (status === "well-below") {
+    tips.push(
+      "Дефицит воды более 30% от нормы. Поставьте бутылку 0.5л на стол — допивайте каждые 2 часа.",
+    );
+    tips.push("Симптомы хронической дегидратации: усталость, головные боли, тёмная моча.");
+  } else if (status === "below") {
+    tips.push(
+      `До нормы не хватает ~${deficit7}л/день. Попробуйте стакан воды до каждого приёма пищи.`,
+    );
+  } else if (status === "on-track") {
+    tips.push("Норма соблюдается — поддерживайте ритм. При жаре или активности увеличивайте до +0.5л.");
+  } else {
+    tips.push("Залогируйте waterL за несколько дней, чтобы получить персональные рекомендации.");
+  }
+  if (avgExercise >= 30) {
+    tips.push("Регулярная активность учтена — целевой объём поднят на 0.5л.");
+  }
+
+  res.json({
+    targetL,
+    targetBaseL: Math.round(targetBase * 100) / 100,
+    exerciseBonusL: exerciseBonus,
+    avgWater7d: avgWater7 != null ? Math.round(avgWater7 * 100) / 100 : null,
+    avgWater3d: avgWater3 != null ? Math.round(avgWater3 * 100) / 100 : null,
+    todayWaterL: todayWater,
+    deficit7dL: deficit7,
+    status,
+    tips,
+    disclaimer: DISCLAIMER,
+  });
+});
+
+/**
+ * Wellness Score — агрегированный 0-100 балл по 4 столпам (sleep / mood /
+ * water / exercise) + streak bonus − risk penalty. Чисто rule-based,
+ * мотивационный (НЕ диагноз). Подсвечивает слабое звено для фокуса.
+ */
+healthaiRouter.get("/score/:profileId", async (req: Request, res: Response) => {
+  const profileId = req.params.profileId;
+  const profile = await store.getProfile(profileId);
+  if (!profile) return res.status(404).json({ error: "profile-not-found" });
+
+  const lgs = await store.getLogs(profileId);
+  const sorted = [...lgs].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const last7 = sorted.slice(-7);
+
+  const avg = (rows: DailyLog[], pick: (l: DailyLog) => number | undefined) => {
+    const vals = rows.map(pick).filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  };
+
+  // Каждый столп: 0-25 баллов.
+  const scoreSleep = (() => {
+    const v = avg(last7, (l) => l.sleepHours);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    // Нормально 7-9ч → 25; <5 или >11 → 0.
+    if (v >= 7 && v <= 9) return { score: 25, label: "optimal" };
+    if (v >= 6 && v < 7) return { score: 18, label: "low" };
+    if (v > 9 && v <= 10) return { score: 18, label: "high" };
+    if (v >= 5 && v < 6) return { score: 10, label: "deficit" };
+    return { score: 4, label: "critical" };
+  })();
+
+  const scoreMood = (() => {
+    const v = avg(last7, (l) => l.moodScore);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    // mood 0-10; >=7.5 → 25; <3 → 0.
+    if (v >= 7.5) return { score: 25, label: "great" };
+    if (v >= 6) return { score: 20, label: "good" };
+    if (v >= 4.5) return { score: 13, label: "neutral" };
+    if (v >= 3) return { score: 6, label: "low" };
+    return { score: 1, label: "very-low" };
+  })();
+
+  const scoreWater = (() => {
+    const v = avg(last7, (l) => l.waterL);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    const target = Math.max(1.5, (profile.weightKg * 35) / 1000);
+    const pct = v / target;
+    if (pct >= 0.95) return { score: 25, label: "on-target" };
+    if (pct >= 0.8) return { score: 19, label: "near" };
+    if (pct >= 0.6) return { score: 12, label: "below" };
+    return { score: 4, label: "well-below" };
+  })();
+
+  const scoreExercise = (() => {
+    const v = avg(last7, (l) => l.exerciseMin);
+    if (v == null) return { score: null as number | null, label: "no-data" };
+    // WHO: 150мин/неделю модерат → ~21мин/день.
+    if (v >= 30) return { score: 25, label: "active" };
+    if (v >= 20) return { score: 19, label: "moderate" };
+    if (v >= 10) return { score: 12, label: "light" };
+    if (v >= 5) return { score: 6, label: "minimal" };
+    return { score: 2, label: "sedentary" };
+  })();
+
+  // Streak bonus: 0-10 баллов (1 балл за каждые 3 дня).
+  let cur = 0;
+  let streak = 0;
+  let prevDate: Date | null = null;
+  for (const l of sorted) {
+    const d = new Date(l.date + "T00:00:00Z");
+    if (
+      prevDate &&
+      Math.abs(d.getTime() - prevDate.getTime()) === 24 * 3600 * 1000
+    ) {
+      cur += 1;
+    } else {
+      cur = 1;
+    }
+    if (cur > streak) streak = cur;
+    prevDate = d;
+  }
+  const streakBonus = Math.min(10, Math.floor(streak / 3));
+
+  // Если каких-то pillars нет данных — раскидываем "no-data" доли пропорционально.
+  const pillars = [scoreSleep, scoreMood, scoreWater, scoreExercise];
+  const knownPillars = pillars.filter((p) => p.score != null);
+  const knownSum = knownPillars.reduce((s, p) => s + (p.score ?? 0), 0);
+  // Если 4 столпа известны → max 100 (100 пилларов + streak 10, capped 100).
+  const pillarMax = knownPillars.length * 25;
+  const pillarsNormalized =
+    pillarMax > 0 ? Math.round((knownSum / pillarMax) * 90) : 0;
+  const totalRaw = pillarsNormalized + streakBonus;
+  const total = Math.min(100, Math.max(0, totalRaw));
+
+  // Слабое звено (для фокуса).
+  const weakest = knownPillars
+    .filter((p) => (p.score ?? 100) < 18)
+    .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+
+  let band: "excellent" | "good" | "fair" | "low" | "insufficient" = "insufficient";
+  if (knownPillars.length === 0) band = "insufficient";
+  else if (total >= 80) band = "excellent";
+  else if (total >= 60) band = "good";
+  else if (total >= 40) band = "fair";
+  else band = "low";
+
+  res.json({
+    score: total,
+    band,
+    streak,
+    streakBonus,
+    pillars: {
+      sleep: scoreSleep,
+      mood: scoreMood,
+      water: scoreWater,
+      exercise: scoreExercise,
+    },
+    weakest: weakest
+      ? {
+          pillar:
+            weakest === scoreSleep
+              ? "sleep"
+              : weakest === scoreMood
+                ? "mood"
+                : weakest === scoreWater
+                  ? "water"
+                  : "exercise",
+          label: weakest.label,
+          score: weakest.score,
+        }
+      : null,
+    knownPillarsCount: knownPillars.length,
+    logsCount: lgs.length,
+    disclaimer: DISCLAIMER,
+  });
+});
+
+/**
  * Cycle tracking — period log + predictions (avg cycle length из последних
  * 3 законченных циклов).
  */
@@ -1240,7 +1490,7 @@ healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
-  const profileId = String(req.params.profileId);
+  const profileId = req.params.profileId;
   const all = await store.getCycles(profileId);
   if (all.length === 0) {
     return res.json({
@@ -1394,7 +1644,7 @@ healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/phq9/:profileId",
   async (req: Request, res: Response) => {
-    const last = PHQ9_LAST.get(String(req.params.profileId));
+    const last = PHQ9_LAST.get(req.params.profileId);
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1475,7 +1725,7 @@ healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/gad7/:profileId",
   async (req: Request, res: Response) => {
-    const last = GAD7_LAST.get(String(req.params.profileId));
+    const last = GAD7_LAST.get(req.params.profileId);
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1503,7 +1753,7 @@ type GeneratedPlan = {
 };
 
 healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
-  const profileId = String(req.params.profileId);
+  const profileId = req.params.profileId;
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1692,31 +1942,28 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Response) => {
-  const list = await store.listPlanSnapshots(String(req.params.profileId));
+  const list = await store.listPlanSnapshots(req.params.profileId);
   res.json({
-    snapshots: list.map((s) => {
-      const snap = s as { id: string; generatedAt: string; bmi?: number; avgSleep7d?: number; avgMood7d?: number; plan?: { goals?: unknown[] } };
-      return {
-        id: snap.id,
-        generatedAt: snap.generatedAt,
-        bmi: snap.bmi,
-        avgSleep7d: snap.avgSleep7d,
-        avgMood7d: snap.avgMood7d,
-        goalsCount: Array.isArray(snap.plan?.goals) ? snap.plan.goals.length : 0,
-      };
-    }),
+    snapshots: list.map((s) => ({
+      id: s.id,
+      generatedAt: s.generatedAt,
+      bmi: s.bmi,
+      avgSleep7d: s.avgSleep7d,
+      avgMood7d: s.avgMood7d,
+      goalsCount: Array.isArray(s.plan?.goals) ? s.plan.goals.length : 0,
+    })),
   });
 });
 
 healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => {
-  const snap = await store.getPlanSnapshot(String(req.params.id));
+  const snap = await store.getPlanSnapshot(req.params.id);
   if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
   res.json(snap);
 });
 
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
-  const profileId = String(req.params.id);
+  const profileId = req.params.id;
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   const cks = await store.getChecks(profileId);
@@ -1750,7 +1997,7 @@ const POP_BASELINE = {
 };
 
 healthaiRouter.get("/population/:profileId", async (req, res) => {
-  const profileId = String(req.params.profileId);
+  const profileId = req.params.profileId;
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1944,7 +2191,7 @@ const DOCTOR_REFERRALS: DoctorReferral[] = [
     city: "*",
     specialty: "general",
     telemedicine: true,
-    url: "https://aevion.app/healthai/telehealth",
+    url: "https://aevion.com/healthai/telehealth",
   },
 ];
 
@@ -1991,163 +2238,4 @@ healthaiRouter.get("/leaderboard", async (_req, res) => {
   }
   board.sort((a, b) => b.streak - a.streak || b.logs - a.logs);
   res.json({ leaderboard: board.slice(0, 20) });
-});
-
-// GET /api/healthai/openapi.json — public OpenAPI 3.1 spec.
-healthaiRouter.options("/openapi.json", (_req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.status(204).end();
-});
-healthaiRouter.get("/openapi.json", (_req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  const base = (process.env.PUBLIC_BACKEND_URL ?? "https://api.aevion.app").replace(/\/$/, "");
-  res.json({
-    openapi: "3.1.0",
-    info: {
-      title: "AEVION HealthAI",
-      version: "3.0.0",
-      description:
-        "Personal AI Doctor API. Rule-based symptom triage, daily wellness log, BMI/trends, PHQ-9/GAD-7 screeners, weekly plan, cycle tracker, family profiles. NOT medical advice.",
-      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
-      license: { name: "Proprietary" },
-      "x-disclaimer":
-        "HealthAI provides informational triage only and does not constitute medical advice, diagnosis, or treatment. Always consult a licensed clinician.",
-    },
-    servers: [{ url: `${base}/api/healthai`, description: "Production" }],
-    tags: [
-      { name: "Profiles" },
-      { name: "Triage" },
-      { name: "Logs" },
-      { name: "Trends" },
-      { name: "Screeners", description: "Validated mental-health screeners (PHQ-9, GAD-7)" },
-      { name: "Plan" },
-      { name: "Cycle" },
-      { name: "Population", description: "Anon population stats" },
-      { name: "Public" },
-    ],
-    components: {
-      securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-      },
-      schemas: {
-        Error: { type: "object", properties: { error: { type: "string" } } },
-      },
-    },
-    security: [{ bearerAuth: [] }],
-    paths: {
-      "/health": {
-        get: {
-          tags: ["Public"],
-          summary: "Service health",
-          security: [],
-          responses: { "200": { description: "OK" } },
-        },
-      },
-      "/profile": {
-        post: { tags: ["Profiles"], summary: "Create or update profile", responses: { "200": { description: "OK" } } },
-      },
-      "/profiles/me": {
-        get: { tags: ["Profiles"], summary: "List my profiles (incl. family)", responses: { "200": { description: "OK" } } },
-      },
-      "/profile/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Profiles"], summary: "Get profile", responses: { "200": { description: "OK" } } },
-        delete: { tags: ["Profiles"], summary: "Delete profile + all data (GDPR)", responses: { "200": { description: "OK" } } },
-      },
-      "/check": {
-        post: {
-          tags: ["Triage"],
-          summary: "Rule-based symptom triage (deterministic, no LLM)",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  required: ["symptoms"],
-                  properties: {
-                    symptoms: { type: "array", items: { type: "string" } },
-                    profileId: { type: "string" },
-                  },
-                },
-              },
-            },
-          },
-          responses: { "200": { description: "OK — recommendations + flags" } },
-        },
-      },
-      "/check-llm": {
-        post: {
-          tags: ["Triage"],
-          summary: "AI-augmented triage (rate-limited, LLM-backed)",
-          responses: { "200": { description: "OK" }, "429": { description: "rate_limited" } },
-        },
-      },
-      "/log": {
-        post: {
-          tags: ["Logs"],
-          summary: "Daily wellness log entry (sleep, mood, energy, weight, etc.)",
-          responses: { "200": { description: "OK" } },
-        },
-      },
-      "/history/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Logs"], summary: "Log history for profile", responses: { "200": { description: "OK" } } },
-      },
-      "/trends/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Trends"], summary: "Aggregated trends + BMI", responses: { "200": { description: "OK" } } },
-      },
-      "/risks/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Trends"], summary: "Risk indicators (sleep deficit, weight trend, etc.)", responses: { "200": { description: "OK" } } },
-      },
-      "/screener/phq9": {
-        post: { tags: ["Screeners"], summary: "PHQ-9 depression screening", responses: { "200": { description: "OK — score + severity band" } } },
-      },
-      "/screener/gad7": {
-        post: { tags: ["Screeners"], summary: "GAD-7 anxiety screening", responses: { "200": { description: "OK — score + severity band" } } },
-      },
-      "/plan/{profileId}": {
-        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Plan"], summary: "Personalized weekly wellness plan", responses: { "200": { description: "OK" } } },
-      },
-      "/plan/history/{profileId}": {
-        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Plan"], summary: "Past weekly plans", responses: { "200": { description: "OK" } } },
-      },
-      "/cycle": {
-        post: { tags: ["Cycle"], summary: "Log menstrual cycle data", responses: { "200": { description: "OK" } } },
-      },
-      "/cycle/{profileId}": {
-        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Cycle"], summary: "Cycle history + predictions", responses: { "200": { description: "OK" } } },
-      },
-      "/population/{profileId}": {
-        parameters: [{ name: "profileId", in: "path", required: true, schema: { type: "string" } }],
-        get: {
-          tags: ["Population"],
-          summary: "Anonymous population context for the user's profile (age/sex/region cohort)",
-          responses: { "200": { description: "OK" } },
-        },
-      },
-      "/import": {
-        post: { tags: ["Logs"], summary: "Bulk-import logs (CSV/JSON)", responses: { "200": { description: "OK" } } },
-      },
-      "/export/{id}": {
-        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-        get: { tags: ["Logs"], summary: "Export profile + logs (GDPR data dump)", responses: { "200": { description: "OK" } } },
-      },
-      "/leaderboard": {
-        get: {
-          tags: ["Public"],
-          summary: "Anonymous streak leaderboard (top 20)",
-          security: [],
-          responses: { "200": { description: "OK" } },
-        },
-      },
-    },
-  });
 });

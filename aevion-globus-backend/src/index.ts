@@ -22,6 +22,7 @@ import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
+import { healthaiRouter } from "./routes/healthai";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
 import { provisioningRouter } from "./routes/provisioning";
@@ -433,6 +434,7 @@ app.use("/api/pipeline", pipelineRouter);
 app.use("/api/bureau", bureauRouter);
 app.use("/api/build", buildRouter);
 app.use("/api/coach", coachRouter);
+app.use("/api/healthai", healthaiRouter);
 
 // ==========================
 // Pricing / GTM

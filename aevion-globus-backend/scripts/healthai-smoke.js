@@ -1,181 +1,228 @@
 #!/usr/bin/env node
 /**
- * HealthAI smoke — end-to-end against a running backend.
- *
- * Covers: health · profile create · log metric · history · PHQ-9 ·
- *         GAD-7 · plan · population · risks · leaderboard · export ·
- *         AI check-llm (soft-check — needs ANTHROPIC_API_KEY)
+ * HealthAI smoke test — quick regression check для основных endpoints.
  *
  * Usage:
- *   node scripts/healthai-smoke.js
- *   BASE=http://127.0.0.1:4001 node scripts/healthai-smoke.js
+ *   BASE=http://localhost:4000 node scripts/healthai-smoke.js
  *
- * Exit 0 = all pass, exit 1 = at least one fail.
- * Requires Node 18+ (global fetch).
+ * По умолчанию BASE = http://localhost:4000. Скрипт создаёт временный
+ * профиль, пишет лог, тянет trends/risks/score/hydration и проверяет
+ * базовые инварианты. Exit code != 0 — что-то поломалось.
+ *
+ * Не требует БД: backend сам падает в in-memory mode если DATABASE_URL
+ * не сконфигурирован.
  */
 
-const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/+$/, "");
-const RUN = Date.now();
-const EMAIL = `healthai-smoke-${RUN}@aevion.test`;
-const PASSWORD = "smoke-pass-1234";
+const BASE = (process.env.BASE || "http://localhost:4000").replace(/\/$/, "");
+const PREFIX = "/api/healthai";
 
-let step = 0;
-let failed = 0;
-
-function ok(name, extra = "") {
-  step += 1;
-  console.log(`  ${String(step).padStart(2, "0")}  PASS  ${name}${extra ? "  " + extra : ""}`);
-}
-function fail(name, reason) {
-  step += 1;
-  failed += 1;
-  console.error(`  ${String(step).padStart(2, "0")}  FAIL  ${name}`);
-  console.error(`       ↳ ${reason}`);
-}
-function info(msg) {
-  step += 1;
-  console.log(`  ${String(step).padStart(2, "0")}  INFO  ${msg}`);
+const checks = [];
+function check(name, ok, detail) {
+  checks.push({ name, ok, detail });
+  const tag = ok ? "OK  " : "FAIL";
+  const msg = detail ? `${name} :: ${detail}` : name;
+  console.log(`[${tag}] ${msg}`);
 }
 
-async function call(method, path, { body, token } = {}) {
-  const headers = {};
-  if (body) headers["content-type"] = "application/json";
-  if (token) headers["authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${BASE}${path}`, {
+async function req(method, path, body) {
+  const r = await fetch(`${BASE}${PREFIX}${path}`, {
     method,
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  let json = null;
-  try { json = await res.json(); } catch { /**/ }
-  return { status: res.status, body: json };
+  let data = null;
+  try {
+    data = await r.json();
+  } catch {
+    /* ignore */
+  }
+  return { status: r.status, ok: r.ok, data };
 }
 
-async function run() {
-  console.log(`\nHealthAI smoke  BASE=${BASE}  email=${EMAIL}`);
-  console.log("─".repeat(60));
+async function main() {
+  console.log(`HealthAI smoke test → ${BASE}${PREFIX}`);
+  console.log("");
 
-  // ── Public endpoints ─────────────────────────────────────────
-  let r = await call("GET", "/api/healthai/health");
-  if (r.status === 200 && r.body?.status === "ok") ok("/health");
-  else fail("/health", `status=${r.status}`);
-
-  r = await call("GET", "/api/healthai/leaderboard");
-  if (r.status === 200 && Array.isArray(r.body?.leaderboard)) ok("/leaderboard", `n=${r.body.leaderboard.length}`);
-  else fail("/leaderboard", `status=${r.status}`);
-
-  r = await call("GET", "/api/healthai/openapi.json");
-  if (r.status === 200 && r.body?.openapi) ok("/openapi.json");
-  else fail("/openapi.json", `status=${r.status}`);
-
-  r = await call("GET", "/api/healthai/referrals");
-  if (r.status === 200) ok("/referrals");
-  else fail("/referrals", `status=${r.status}`);
-
-  // ── Auth ──────────────────────────────────────────────────────
-  r = await call("POST", "/api/auth/register", { body: { email: EMAIL, password: PASSWORD, name: "HAI Smoke" } });
-  const token = r.body?.token;
-  if (!token) { fail("auth register", "no token"); return; }
-  ok("auth register");
-
-  // ── Profile ───────────────────────────────────────────────────
-  r = await call("POST", "/api/healthai/profile", {
-    token,
-    body: { age: 30, sex: "male", heightCm: 180, weightKg: 80, activityLevel: "moderate", smoker: false, goals: ["weight_loss", "fitness"] },
-  });
-  const profileId = r.body?.profile?.id;
-  if (r.status === 200 && profileId) ok("POST /profile", `id=${profileId.slice(0, 12)}`);
-  else fail("POST /profile", `status=${r.status} body=${JSON.stringify(r.body).slice(0, 80)}`);
-
-  if (!profileId) {
-    await call("DELETE", "/api/auth/account", { token });
-    console.log(`\nTotal steps: ${step}, failed: ${failed}`);
-    process.exit(failed > 0 ? 1 : 0);
+  // 1) /health.
+  {
+    const r = await req("GET", "/health");
+    check(
+      "health endpoint",
+      r.ok && r.data && r.data.status === "ok",
+      `status=${r.status}, persistence=${r.data && r.data.persistence}`,
+    );
   }
 
-  r = await call("GET", "/api/healthai/profiles/me", { token });
-  if (r.status === 200 && Array.isArray(r.body?.profiles) && r.body.profiles.length >= 1) ok("GET /profiles/me", `n=${r.body.profiles.length}`);
-  else fail("GET /profiles/me", `status=${r.status}`);
+  // 2) Create profile.
+  let profileId = null;
+  {
+    const r = await req("POST", "/profile", {
+      age: 32,
+      sex: "M",
+      heightCm: 178,
+      weightKg: 75,
+      conditions: [],
+      allergies: [],
+      medications: [],
+      memberLabel: "smoke-test",
+    });
+    check(
+      "create profile",
+      r.ok && r.data && r.data.profile && r.data.profile.id,
+      `status=${r.status}, id=${r.data && r.data.profile && r.data.profile.id}`,
+    );
+    profileId = r.data && r.data.profile && r.data.profile.id;
+    if (r.data && typeof r.data.bmi === "number") {
+      const expectedBmi = Math.round((75 / (1.78 * 1.78)) * 10) / 10;
+      check(
+        "bmi calculation",
+        Math.abs(r.data.bmi - expectedBmi) < 0.5,
+        `got=${r.data.bmi}, expected=~${expectedBmi}`,
+      );
+    }
+  }
 
-  // ── Log metrics ───────────────────────────────────────────────
-  r = await call("POST", "/api/healthai/log", {
-    token,
-    body: { profileId, metric: "weight", value: 79.5, unit: "kg" },
-  });
-  if (r.status === 200 && r.body?.log?.id) ok("POST /log (weight)");
-  else fail("POST /log (weight)", `status=${r.status} body=${JSON.stringify(r.body).slice(0, 80)}`);
+  if (!profileId) {
+    console.log("Cannot continue without profileId — aborting.");
+    process.exit(1);
+  }
 
-  r = await call("POST", "/api/healthai/log", {
-    token,
-    body: { profileId, metric: "sleep", value: 7.5, unit: "h" },
-  });
-  if (r.status === 200 && r.body?.log?.id) ok("POST /log (sleep)");
-  else fail("POST /log (sleep)", `status=${r.status}`);
+  // 3) GET profile back.
+  {
+    const r = await req("GET", `/profile/${profileId}`);
+    check(
+      "fetch profile",
+      r.ok && r.data && r.data.profile && r.data.profile.id === profileId,
+      `status=${r.status}`,
+    );
+  }
 
-  // ── History & trends ──────────────────────────────────────────
-  r = await call("GET", `/api/healthai/history/${profileId}`, { token });
-  if (r.status === 200 && (r.body?.logs !== undefined || r.body?.checks !== undefined)) ok("GET /history/:id", `logs=${r.body?.logs?.length ?? 0}`);
-  else fail("GET /history/:id", `status=${r.status}`);
+  // 4) Symptom check.
+  {
+    const r = await req("POST", "/check", {
+      profileId,
+      symptoms: ["головная боль", "усталость"],
+      severity: 5,
+      durationH: 24,
+      notes: "smoke test",
+    });
+    check(
+      "symptom check",
+      r.ok && r.data && Array.isArray(r.data.matched) && r.data.disclaimer,
+      `status=${r.status}, matched=${r.data && r.data.matched && r.data.matched.length}`,
+    );
+  }
 
-  r = await call("GET", `/api/healthai/trends/${profileId}`, { token });
-  if (r.status === 200) ok("GET /trends/:id");
-  else fail("GET /trends/:id", `status=${r.status}`);
+  // 5) Log a few days backwards.
+  const today = new Date();
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(today.getTime() - i * 24 * 3600 * 1000);
+    const iso = d.toISOString().slice(0, 10);
+    const r = await req("POST", "/log", {
+      profileId,
+      date: iso,
+      sleepHours: 7 + (i % 2),
+      moodScore: 6 + (i % 3),
+      weightKg: 75,
+      waterL: 2.2,
+      exerciseMin: 30,
+    });
+    check(
+      `log day ${iso}`,
+      r.ok && r.data && r.data.log,
+      `status=${r.status}`,
+    );
+  }
 
-  // ── Screeners ─────────────────────────────────────────────────
-  r = await call("POST", "/api/healthai/screener/phq9", {
-    token,
-    body: { profileId, answers: [1, 0, 1, 0, 1, 0, 1, 0, 1] },
-  });
-  if (r.status === 200 && r.body?.score !== undefined) ok("POST /screener/phq9", `score=${r.body.score} severity=${r.body.severity}`);
-  else fail("POST /screener/phq9", `status=${r.status}`);
+  // 6) Trends.
+  {
+    const r = await req("GET", `/trends/${profileId}`);
+    const avg7d = r.data && r.data.avg7d;
+    check(
+      "trends has 7d averages",
+      r.ok && avg7d && avg7d.sleep != null && avg7d.mood != null,
+      `sleep=${avg7d && avg7d.sleep}, mood=${avg7d && avg7d.mood}, streak=${r.data && r.data.streak}`,
+    );
+  }
 
-  r = await call("POST", "/api/healthai/screener/gad7", {
-    token,
-    body: { profileId, answers: [1, 0, 1, 0, 1, 0, 1] },
-  });
-  if (r.status === 200 && r.body?.score !== undefined) ok("POST /screener/gad7", `score=${r.body.score}`);
-  else fail("POST /screener/gad7", `status=${r.status}`);
+  // 7) Risks.
+  {
+    const r = await req("GET", `/risks/${profileId}`);
+    check(
+      "risks endpoint",
+      r.ok && r.data && Array.isArray(r.data.risks) && typeof r.data.bmi === "number",
+      `status=${r.status}, total=${r.data && r.data.summary && r.data.summary.total}`,
+    );
+  }
 
-  // ── Risk assessment ───────────────────────────────────────────
-  r = await call("GET", `/api/healthai/risks/${profileId}`, { token });
-  if (r.status === 200 && (r.body?.risks !== undefined || r.body?.riskFactors !== undefined)) ok("GET /risks/:id");
-  else fail("GET /risks/:id", `status=${r.status} body=${JSON.stringify(r.body).slice(0, 80)}`);
+  // 8) Hydration (new).
+  {
+    const r = await req("GET", `/hydration/${profileId}`);
+    const okShape =
+      r.ok &&
+      r.data &&
+      typeof r.data.targetL === "number" &&
+      typeof r.data.targetBaseL === "number" &&
+      Array.isArray(r.data.tips) &&
+      ["on-track", "below", "well-below", "no-data"].includes(r.data.status);
+    check(
+      "hydration endpoint",
+      okShape,
+      `target=${r.data && r.data.targetL}L, avg7d=${r.data && r.data.avgWater7d}L, status=${r.data && r.data.status}`,
+    );
+    // Для 75кг ожидаем targetBase ≈ 2.625L (+ возможно exercise bonus).
+    if (r.data && typeof r.data.targetBaseL === "number") {
+      check(
+        "hydration target reasonable",
+        r.data.targetBaseL >= 1.5 && r.data.targetBaseL <= 5,
+        `targetBaseL=${r.data.targetBaseL}`,
+      );
+    }
+  }
 
-  // ── Wellness plan ─────────────────────────────────────────────
-  r = await call("GET", `/api/healthai/plan/${profileId}`, { token });
-  if (r.status === 200 && r.body?.plan !== undefined) ok("GET /plan/:profileId");
-  else fail("GET /plan/:profileId", `status=${r.status}`);
+  // 9) Wellness Score (new).
+  {
+    const r = await req("GET", `/score/${profileId}`);
+    const okShape =
+      r.ok &&
+      r.data &&
+      typeof r.data.score === "number" &&
+      r.data.score >= 0 &&
+      r.data.score <= 100 &&
+      ["excellent", "good", "fair", "low", "insufficient"].includes(r.data.band) &&
+      r.data.pillars &&
+      r.data.pillars.sleep &&
+      r.data.pillars.mood &&
+      r.data.pillars.water &&
+      r.data.pillars.exercise;
+    check(
+      "wellness score endpoint",
+      okShape,
+      `score=${r.data && r.data.score}/100, band=${r.data && r.data.band}, streak=${r.data && r.data.streak}`,
+    );
+  }
 
-  // ── Population comparison ─────────────────────────────────────
-  r = await call("GET", `/api/healthai/population/${profileId}`, { token });
-  if (r.status === 200) ok("GET /population/:profileId");
-  else fail("GET /population/:profileId", `status=${r.status}`);
+  // 10) Cleanup (best-effort).
+  {
+    const r = await req("DELETE", `/profile/${profileId}`);
+    check(
+      "cleanup profile",
+      r.ok || r.status === 404,
+      `status=${r.status}`,
+    );
+  }
 
-  // ── Export ────────────────────────────────────────────────────
-  r = await call("GET", `/api/healthai/export/${profileId}`, { token });
-  if (r.status === 200) ok("GET /export/:profileId");
-  else fail("GET /export/:profileId", `status=${r.status}`);
+  console.log("");
+  const passed = checks.filter((c) => c.ok).length;
+  const failed = checks.filter((c) => !c.ok).length;
+  console.log(`Result: ${passed} passed, ${failed} failed (${checks.length} total)`);
 
-  // ── AI check-llm (soft — needs ANTHROPIC_API_KEY) ────────────
-  r = await call("POST", "/api/healthai/check-llm", {
-    token,
-    body: { profileId, symptoms: ["headache", "fatigue"], durationH: 24, lang: "en" },
-  });
-  if (r.status === 200 && r.body?.advice) ok("POST /check-llm (AI)", `advice_len=${r.body.advice.length}`);
-  else if (r.status === 503 || (r.body?.error || "").includes("not configured")) info("/check-llm skipped — ANTHROPIC_API_KEY not set");
-  else fail("POST /check-llm (AI)", `status=${r.status} body=${JSON.stringify(r.body).slice(0, 80)}`);
-
-  // ── Cleanup ───────────────────────────────────────────────────
-  await call("DELETE", "/api/auth/account", { token });
-  ok("auth cleanup");
-
-  console.log("─".repeat(60));
-  console.log(`Total steps: ${step}, failed: ${failed}`);
+  if (failed > 0) {
+    process.exit(1);
+  }
 }
 
-run()
-  .catch((err) => {
-    failed += 1;
-    console.error("CRASH:", err.message);
-  })
-  .finally(() => process.exit(failed > 0 ? 1 : 0));
+main().catch((e) => {
+  console.error("Smoke test crashed:", e && e.message ? e.message : e);
+  process.exit(2);
+});

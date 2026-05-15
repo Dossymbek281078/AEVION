@@ -70,7 +70,6 @@
     "pdfkit": "^0.18.0",
     "pg": "^8.19.0",
     "qrcode": "^1.5.4",
-    "stripe": "^22.1.0"
     "secrets.js-grempe": "^2.0.0",
     "stripe": "^22.1.1",
     "web-push": "^3.6.7",

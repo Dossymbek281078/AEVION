@@ -76,6 +76,7 @@ import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
 import MusicPlayer from "./MusicPlayer";
 import AevionMiniHub from "./AevionMiniHub";
+import VoiceCoach from "./VoiceCoach";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -5087,9 +5088,9 @@ export default function CyberChessPage(){
           {label:"🧩 Пазлы",hint:"Решить тактику",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
           {label:"⚡ Puzzle Rush",hint:"Скоростной режим",onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
           {label:"🎲 Варианты",hint:"12 вариантов шахмат",onClick:()=>sShowVariants(true)},
-          {label:"📅 Daily",hint:"Дневной пазл",onClick:()=>{sTab("puzzles");if(dailyState&&PUZZLES[dailyState.idx])ldPz(dailyState.idx)}},
-          {label:"📚 Репертуар",hint:"Свои дебюты",onClick:()=>sRepertoireOpen(true)},
-          {label:"🏆 Турниры",hint:"Bracket + leaderboard",onClick:()=>sShowTournament(true)},
+          {label:"📅 Daily Puzzle",hint:"Пазл дня + streak + leaderboard",onClick:()=>{window.location.href="/cyberchess/daily"}},
+          {label:"📖 Репертуар v2",hint:"Свои дебюты — CRUD + drill + book stats",onClick:()=>{window.location.href="/cyberchess/repertoire"}},
+          {label:"🏆 Турниры v2",hint:"Bracket view + registration",onClick:()=>{window.location.href="/cyberchess/tournaments"}},
           {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
           {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
@@ -11318,6 +11319,12 @@ ${question.trim()}`;
       </div>
     )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    <VoiceCoach
+      enabled={!muted}
+      fen={game.fen()}
+      lastMove={lm ? {san: hist[hist.length-1] || "", from: lm.from, to: lm.to} : null}
+      eval={typeof evalCp === "number" ? {cp: evalCp, mate: evalMate || 0} : null}
+    />
     {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on

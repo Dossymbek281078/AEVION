@@ -15,6 +15,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import {
   ensureLifeBoxTables,
@@ -568,4 +569,90 @@ lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Resp
   } catch (e: any) {
     res.status(500).json({ ok: false, error: e?.message || "internal error" });
   }
+});
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+interface LifeBoxConceptMessage {
+  id: string;
+  payload: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+}
+
+const LIFEBOX_CONCEPT_MAX = 200;
+const lifeboxConceptMessages: LifeBoxConceptMessage[] = [];
+
+lifeboxRouter.get("/status", readLimit, (_req: Request, res: Response) => {
+  res.json({
+    module: "lifebox",
+    code: "LIFEBOX",
+    status: "mvp",
+    description: "Digital safe for future self: timed-release entries + concept board.",
+    endpoints: {
+      entries: "/api/lifebox/entries",
+      stats: "/api/lifebox/stats",
+      conceptMessages: "/api/lifebox/concept/messages",
+      conceptStats: "/api/lifebox/concept-stats",
+    },
+    conceptMessagesCount: lifeboxConceptMessages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+lifeboxRouter.get("/concept/messages", readLimit, (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+  const items = lifeboxConceptMessages.slice(0, limit);
+  res.json({ items, total: lifeboxConceptMessages.length, moduleId: "lifebox", noun: "concept/messages" });
+});
+
+lifeboxRouter.post("/concept/messages", writeLimit, (req: Request, res: Response) => {
+  try {
+    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
+    const payload = (body.payload && typeof body.payload === "object")
+      ? body.payload as Record<string, unknown>
+      : body;
+    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
+    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
+    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
+    const author = String(payload.author ?? "").trim().slice(0, 80);
+    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["lifebox"];
+    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
+    const msg: LifeBoxConceptMessage = {
+      id: crypto.randomUUID(),
+      payload: { idea, rationale, author },
+      tags: tags.length ? tags : ["lifebox"],
+      createdAt: new Date().toISOString(),
+    };
+    lifeboxConceptMessages.unshift(msg);
+    if (lifeboxConceptMessages.length > LIFEBOX_CONCEPT_MAX) {
+      lifeboxConceptMessages.length = LIFEBOX_CONCEPT_MAX;
+    }
+    return res.status(201).json(msg);
+  } catch (err: unknown) {
+    console.error("[lifebox] concept_post_failed", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "concept_post_failed" });
+  }
+});
+
+lifeboxRouter.get("/concept-stats", readLimit, (_req: Request, res: Response) => {
+  const now = Date.now();
+  const sevenDays = 7 * 86_400_000;
+  const last7d = lifeboxConceptMessages.filter(
+    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
+  ).length;
+  const tagCounts = new Map<string, number>();
+  for (const m of lifeboxConceptMessages) {
+    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  }
+  const topTags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag, count]) => ({ tag, count }));
+  res.json({
+    moduleId: "lifebox",
+    noun: "concept/messages",
+    total: lifeboxConceptMessages.length,
+    last7d,
+    topTags,
+  });
 });

@@ -442,7 +442,17 @@ describe("POST /api/devhub/media/voice-clone (ElevenLabs)", () => {
     expect(r.status).toBe(400);
   });
 
-  test("calls /v1/voices/add with multipart body + returns voiceId", async () => {
+  test("400 when confirm:true is missing (preview-first gate)", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone")
+      .send({ name: "My Voice", sampleBase64: Buffer.from("x").toString("base64") });
+    expect(r.status).toBe(400);
+    expect(r.body.needsConfirm).toBe(true);
+    expect(r.body.error).toMatch(/preview first/);
+  });
+
+  test("calls /v1/voices/add with multipart body + returns voiceId (with confirm:true)", async () => {
     process.env.ELEVENLABS_API_KEY = "fake";
     fetchMock.mockResolvedValueOnce(jsonResp(200, {
       voice_id: "voice-abc-123",
@@ -456,6 +466,7 @@ describe("POST /api/devhub/media/voice-clone (ElevenLabs)", () => {
         description: "Test voice",
         sampleBase64: Buffer.from("fake-audio").toString("base64"),
         mimeType: "audio/mpeg",
+        confirm: true,
       });
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
@@ -465,6 +476,63 @@ describe("POST /api/devhub/media/voice-clone (ElevenLabs)", () => {
     const headers = (fetchMock.mock.calls[0][1] as any).headers;
     expect(headers["xi-api-key"]).toBe("fake");
     expect(headers["Content-Type"]).toMatch(/multipart\/form-data; boundary=/);
+  });
+});
+
+describe("POST /api/devhub/media/voice-clone/preview (ElevenLabs)", () => {
+  test("400 missing sampleBase64", async () => {
+    const r = await request(makeApp()).post("/api/devhub/media/voice-clone/preview").send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("503 when API key missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone/preview")
+      .send({ sampleBase64: Buffer.from("x").toString("base64") });
+    expect(r.status).toBe(503);
+  });
+
+  test("clones temp voice → TTS → deletes voice → returns audio/mpeg", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { voice_id: "temp-voice-xyz" })) // POST /voices/add
+      .mockResolvedValueOnce(audioResp(200, 4096)) // POST /text-to-speech/temp-voice-xyz
+      .mockResolvedValueOnce(jsonResp(200, {}));   // DELETE /voices/temp-voice-xyz
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone/preview")
+      .send({ sampleBase64: Buffer.from("audio").toString("base64"), previewText: "Hi from AEVION" });
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/audio\/mpeg/);
+    expect(r.headers["x-aevion-preview-bytes"]).toBe("4096");
+    expect(r.body.length).toBe(4096);
+
+    // 1st call: clone
+    expect(fetchMock.mock.calls[0][0]).toContain("/v1/voices/add");
+    // 2nd: TTS with the temp voice
+    expect(fetchMock.mock.calls[1][0]).toContain("/text-to-speech/temp-voice-xyz");
+    const ttsBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
+    expect(ttsBody.text).toBe("Hi from AEVION");
+    // 3rd: delete
+    expect(fetchMock.mock.calls[2][0]).toContain("/v1/voices/temp-voice-xyz");
+    expect((fetchMock.mock.calls[2][1] as any).method).toBe("DELETE");
+  });
+
+  test("cleans up temp voice when preview TTS fails", async () => {
+    process.env.ELEVENLABS_API_KEY = "fake";
+    fetchMock
+      .mockResolvedValueOnce(jsonResp(200, { voice_id: "temp-doomed" }))
+      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "tts boom", json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) } as any)
+      .mockResolvedValueOnce(jsonResp(200, {})); // cleanup DELETE attempt
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/voice-clone/preview")
+      .send({ sampleBase64: Buffer.from("x").toString("base64") });
+    expect(r.status).toBe(500);
+    expect(r.body.error).toMatch(/Preview TTS failed/);
+    // The DELETE cleanup is best-effort and fire-and-forget; just confirm we got at least the 2 calls
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(fetchMock.mock.calls[1][0]).toContain("/text-to-speech/temp-doomed");
   });
 });
 
@@ -1676,5 +1744,90 @@ describe("Agent workflow audio step → auto-upload to R2", () => {
     expect(r.body.results[0].savedAs).toBe("public/music-0.mp3.b64");
     expect(r.body.results[0].output.url).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1); // no R2 call
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 25. SSE stream — audio steps (tts/sfx/music) parity with non-stream auto-R2
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("SSE /agent/workflow/stream — audio auto-R2 parity", () => {
+  async function createProj(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "StreamP", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  function parseSseEvents(body: string): any[] {
+    return body.split("\n\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)));
+  }
+
+  test("tts in stream: R2 set → step-done emits url + .url.txt savedAs", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 2048))
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "tts", text: "Hi", voice: "Rachel" }] });
+    expect(r.status).toBe(200);
+    const events = parseSseEvents(r.text);
+    const done = events.find((e) => e.type === "step-done" && e.index === 0);
+    expect(done.ok).toBe(true);
+    expect(done.savedAs).toBe("public/voice-0.url.txt");
+    expect(done.output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\//);
+  });
+
+  test("music in stream: R2 set → step-done emits url + lengthSeconds→music_length_ms", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    setR2Env();
+    process.env.CLOUDFLARE_R2_PUBLIC_URL = "https://cdn.aevion.test";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock
+      .mockResolvedValueOnce(audioResp(200, 16384))
+      .mockResolvedValueOnce(jsonResp(200, {}));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "music", prompt: "Ambient", lengthSeconds: 60, saveAs: "public/bg.mp3.b64" }] });
+    expect(r.status).toBe(200);
+    const events = parseSseEvents(r.text);
+    const start = events.find((e) => e.type === "step-start" && e.index === 0);
+    const done = events.find((e) => e.type === "step-done" && e.index === 0);
+    expect(start.stepType).toBe("music");
+    expect(done.ok).toBe(true);
+    expect(done.savedAs).toBe("public/bg.url.txt");
+    expect(done.output.url).toMatch(/^https:\/\/cdn\.aevion\.test\/audio\/.*\/music-0-/);
+    const elBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(elBody.music_length_ms).toBe(60_000);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.elevenlabs.io/v1/music/compose");
+  });
+
+  test("music in stream: R2 missing → step-done emits bytes only (no url)", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProj(app);
+
+    fetchMock.mockResolvedValueOnce(audioResp(200, 1024));
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({ steps: [{ type: "music", prompt: "Chill jazz" }] });
+    expect(r.status).toBe(200);
+    const events = parseSseEvents(r.text);
+    const done = events.find((e) => e.type === "step-done" && e.index === 0);
+    expect(done.ok).toBe(true);
+    expect(done.savedAs).toBe("public/music-0.mp3.b64");
+    expect(done.output.url).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -196,6 +196,13 @@ function TypingDots() {
   );
 }
 
+interface Persona {
+  id: string;
+  name: string;
+  emoji: string;
+  systemPrompt: string;
+}
+
 export default function QAIPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -208,6 +215,7 @@ export default function QAIPage() {
   const [activePersona, setActivePersona] = useState<string>("assistant");
   const [usage, setUsage] = useState<Usage | null>(null);
   const [sessionTotalTokens, setSessionTotalTokens] = useState<number>(0);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -255,6 +263,7 @@ export default function QAIPage() {
   }, []);
 
   // Auto-scroll on new content
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming, streamingText]);
@@ -394,6 +403,7 @@ export default function QAIPage() {
       } else {
         setError(err?.message || "Streaming error");
       }
+
     } finally {
       setStreaming(false);
       setStreamingText("");
@@ -405,6 +415,7 @@ export default function QAIPage() {
   const stopStreaming = useCallback(() => {
     abortControllerRef.current?.abort();
   }, []);
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -695,6 +706,7 @@ export default function QAIPage() {
           <div className="flex-shrink-0 border-t border-slate-800 bg-slate-900 px-6 py-4">
             <div className="mx-auto flex max-w-3xl items-end gap-2">
               <div className="relative flex-1">
+
                 <textarea
                   ref={textareaRef}
                   value={input}
@@ -749,6 +761,7 @@ export default function QAIPage() {
                   </span>
                 )}
               </span>
+
             </div>
           </div>
         </main>

@@ -20,6 +20,16 @@ interface Post {
   createdAt: string;
 }
 
+interface Story {
+  id: string;
+  userId: string;
+  content: string;
+  mediaUrl: string | null;
+  viewCount: number;
+  expiresAt: string;
+  createdAt: string;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function bearerHeader(): HeadersInit {
@@ -363,6 +373,12 @@ export default function QSocialPage() {
   const [error, setError] = useState("");
   const currentUserId = getAuthSub();
 
+  // Stories state
+  const [stories, setStories] = useState<Story[]>([]);
+  const [viewingStory, setViewingStory] = useState<Story | null>(null);
+  const [createStoryOpen, setCreateStoryOpen] = useState(false);
+  const [newStoryContent, setNewStoryContent] = useState("");
+
   // Notifications
   const [notifications, setNotifications] = useState<{ id: string; type: string; message: string; read: boolean; createdAt: string }[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -452,6 +468,33 @@ export default function QSocialPage() {
   useEffect(() => {
     if (activeDmUserId) fetchDmThread(activeDmUserId);
   }, [activeDmUserId]);
+
+  // Fetch stories on mount
+  useEffect(() => {
+    fetch(apiUrl("/api/qsocial/stories?limit=20"), { headers: bearerHeader() })
+      .then((r) => r.json())
+      .then((d) => { if (d.stories) setStories(d.stories); })
+      .catch(() => {});
+  }, []);
+
+  async function handleCreateStory() {
+    if (!newStoryContent.trim()) return;
+    try {
+      const resp = await fetch(apiUrl("/api/qsocial/stories"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...bearerHeader() },
+        body: JSON.stringify({ content: newStoryContent.trim() }),
+      });
+      if (resp.ok) {
+        const d = await resp.json() as { story: Story };
+        setStories((prev) => [d.story, ...prev]);
+        setNewStoryContent("");
+        setCreateStoryOpen(false);
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   async function handleLike(postId: string) {
     if (!currentUserId) return;
@@ -569,6 +612,57 @@ export default function QSocialPage() {
                 </button>
               )}
             </div>
+
+            {/* Stories row */}
+            <div style={{ display: "flex", gap: 12, overflowX: "auto", padding: "0 0 12px", marginBottom: 16, scrollbarWidth: "none" }}>
+              <div style={{ flexShrink: 0, width: 80, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}
+                onClick={() => setCreateStoryOpen(true)}>
+                <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg, #0d9488, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff" }}>+</div>
+                <span style={{ fontSize: 11, color: "#64748b", textAlign: "center" }}>История</span>
+              </div>
+              {stories.map((s) => (
+                <div key={s.id} style={{ flexShrink: 0, width: 80, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}
+                  onClick={() => {
+                    setViewingStory(s);
+                    fetch(apiUrl(`/api/qsocial/stories/${s.id}/view`), { method: "POST", headers: bearerHeader() }).catch(() => {});
+                  }}>
+                  <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg, #f59e0b, #ef4444)", border: "3px solid #0d9488", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, overflow: "hidden" }}>
+                    {s.mediaUrl ? <img src={s.mediaUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} /> : "📸"}
+                  </div>
+                  <span style={{ fontSize: 11, color: "#475569", textAlign: "center", maxWidth: 72, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {s.userId?.slice(0, 8) || "User"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Story viewer modal */}
+            {viewingStory && (
+              <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                onClick={() => setViewingStory(null)}>
+                <div style={{ background: "#1e293b", borderRadius: 16, padding: 24, maxWidth: 360, width: "90%", color: "#fff" }}
+                  onClick={(e) => e.stopPropagation()}>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>{viewingStory.userId?.slice(0, 8)} &bull; история</div>
+                  <div style={{ fontSize: 14, lineHeight: 1.6 }}>{viewingStory.content}</div>
+                  {viewingStory.mediaUrl && <img src={viewingStory.mediaUrl} alt="" style={{ width: "100%", borderRadius: 8, marginTop: 12 }} />}
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 12 }}>👁 {viewingStory.viewCount} просмотров</div>
+                  <button onClick={() => setViewingStory(null)} style={{ marginTop: 12, padding: "6px 16px", borderRadius: 8, background: "#475569", color: "#fff", border: "none", cursor: "pointer", fontSize: 13 }}>Закрыть</button>
+                </div>
+              </div>
+            )}
+
+            {/* Create story form */}
+            {createStoryOpen && (
+              <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16, marginBottom: 16, boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "#1e293b", marginBottom: 10 }}>Создать историю</div>
+                <textarea value={newStoryContent} onChange={(e) => setNewStoryContent(e.target.value)} placeholder="Что хотите рассказать? (исчезнет через 24ч)" rows={3}
+                  style={{ width: "100%", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 12px", fontSize: 13, resize: "vertical", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button onClick={handleCreateStory} disabled={!newStoryContent.trim()} style={{ padding: "7px 16px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Опубликовать</button>
+                  <button onClick={() => { setCreateStoryOpen(false); setNewStoryContent(""); }} style={{ padding: "7px 16px", background: "#f1f5f9", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>Отмена</button>
+                </div>
+              </div>
+            )}
 
             {/* DM tab */}
             {tab === "dm" && (

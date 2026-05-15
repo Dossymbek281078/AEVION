@@ -348,6 +348,11 @@ const MODULES: Module[] = [
   { id: "refineries-oil",         category: "special",   href: "/smeta-trainer/drawings-practice/refineries-oil",         icon: "🛢️", title: "Нефтеперерабатывающие заводы",    subtitle: "АНПЗ 6 млн т/год, ЭЛОУ-АВТ-6 H=60 м, ATEX 0/1/2, факел H=80 м, ПУЭ 7.3", level: "L5", exercises: 4,  color: "stone"   },
   { id: "lng-plants",             category: "special",   href: "/smeta-trainer/drawings-practice/lng-plants",             icon: "🧊", title: "СПГ-заводы и терминалы",          subtitle: "2 млн т/год, C3MR Air Products, Full Containment Ø80 м −162°C, NFPA 59A", level: "L5", exercises: 4,  color: "cyan"    },
   { id: "wind-solar-farms",       category: "special",   href: "/smeta-trainer/drawings-practice/wind-solar-farms",       icon: "🌬️", title: "ВЭС и СЭС (ВИЭ)",                 subtitle: "Жанатас 100 МВт, V150-5 МВт башня 120 м, JinkoSolar 550 Вт, IEC 61400-24",  level: "L5", exercises: 4,  color: "lime"    },
+
+  // ── Городской транспорт: метро, тоннели, LRT ──
+  { id: "metro-stations",         category: "special",   href: "/smeta-trainer/drawings-practice/metro-stations",         icon: "🚇", title: "Метрополитен и станции",          subtitle: "Алматы Линия 1 11 ст. глубина 35 м, ТБМ Herrenknecht S-558 Ø6.66 м, СНиП 32-02", level: "L5", exercises: 4,  color: "indigo"  },
+  { id: "tunnels-vehicle",        category: "special",   href: "/smeta-trainer/drawings-practice/tunnels-vehicle",        icon: "🚗", title: "Автомобильные тоннели",           subtitle: "Кокпекский 6 км, НАТМ, обделка B40, Jet-fan 28 шт, EU 2004/54/EC, СНиП 32-04", level: "L5", exercises: 4,  color: "zinc"    },
+  { id: "tramway-light-rail",     category: "special",   href: "/smeta-trainer/drawings-practice/tramway-light-rail",     icon: "🚊", title: "Трамваи и LRT",                   subtitle: "Астана LRT 22 км, КС-160 750 В DC, рельсы Р65, Stadler Tango, СП 245.1326000", level: "L5", exercises: 4,  color: "teal"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

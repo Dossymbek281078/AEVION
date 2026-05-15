@@ -509,6 +509,54 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   </div>;
 });
 
+/* ─── BottomNav ─── */
+function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute,surface1,border}:{
+  setup:boolean; tab:string;
+  onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void;
+  brand:string; textMute:string; surface1:string; border:string;
+}){
+  const activeTab = setup ? "play"
+    : tab === "puzzles" ? "puzzles"
+    : tab === "analysis" ? "analysis"
+    : tab === "coach" ? "coach"
+    : "play";
+  const items=[
+    {id:"play",    icon:"▶", label:"Играть",  action:onPlay},
+    {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles},
+    {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
+    {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
+    {id:"profile", icon:"👤",label:"Профиль", action:()=>{}},
+  ];
+  return(
+    <div style={{
+      position:"sticky",bottom:0,zIndex:100,
+      background:surface1,borderTop:`1px solid ${border}`,
+      display:"flex",justifyContent:"space-around",alignItems:"stretch",
+      padding:"0 0 max(0px, env(safe-area-inset-bottom))",
+      backdropFilter:"blur(10px)",
+    }}>
+      {items.map(item=>{
+        const active=activeTab===item.id;
+        return(
+          <button key={item.id} onClick={item.action}
+            style={{
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
+              padding:"10px 16px 8px",border:"none",background:"transparent",
+              borderTop:active?`2px solid ${brand}`:"2px solid transparent",
+              color:active?brand:textMute,cursor:"pointer",fontSize:10,fontWeight:800,
+              letterSpacing:0.3,flex:1,
+            }}
+            onMouseEnter={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=brand}}
+            onMouseLeave={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=textMute}}>
+            <span style={{fontSize:20}}>{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
@@ -678,6 +726,7 @@ export default function CyberChessPage(){
     try{const raw=localStorage.getItem(BB_KEY);return raw?JSON.parse(raw):[];}catch{return[];}
   });
   useEffect(()=>{try{localStorage.setItem(BB_KEY,JSON.stringify(blunderBook.slice(0,50)))}catch{}},[blunderBook]);
+  const[mobileSidebarOpen,sMobileSidebarOpen]=useState(false);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
@@ -799,6 +848,7 @@ export default function CyberChessPage(){
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
+  const[showQuickSetupModal,sShowQuickSetupModal]=useState(false);
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
   // entire palette at render time; all ~720 CC.* references pick it up automatically.
@@ -3782,6 +3832,21 @@ export default function CyberChessPage(){
           style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,
             borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:14}}
         >⛶</button>
+        {/* Mobile sidebar toggle — visible only on mobile via CSS */}
+        <button
+          onClick={()=>sMobileSidebarOpen(v=>!v)}
+          title="Открыть боковую панель"
+          aria-label="Toggle sidebar"
+          style={{
+            padding:"6px 10px",minHeight:36,minWidth:36,
+            border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
+            background:mobileSidebarOpen?CC.brandSoft:CC.surface1,
+            color:mobileSidebarOpen?CC.brand:"inherit",
+            cursor:"pointer",fontSize:18,fontWeight:700,
+            display:"none",alignItems:"center",justifyContent:"center",
+          }}
+          className="cc-mobile-sidebar-btn"
+        >☰</button>
       </div>}
 
       {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.
@@ -4804,7 +4869,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
+            width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)",
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -4826,7 +4891,7 @@ export default function CyberChessPage(){
             const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
-            const bw="min(calc(100vh - 160px),calc(100vw * 0.6),900px)";
+            const bw="min(calc(100vh - 120px),calc(100vw * 0.62),1000px)";
             const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
               const name=isAI?al.name+" AI":"Вы";
               const elo=isAI?al.elo:rat;
@@ -4882,7 +4947,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -4901,7 +4966,7 @@ export default function CyberChessPage(){
               const pipStyle=(side:"W"|"B"):React.CSSProperties=>side==="W"
                 ? {background:"#f8fafc",color:CC.text,border:`1px solid ${CC.border}`}
                 : {background:"#1e293b",color:"#fff"};
-              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:32}}>
+              return(<div className="cc-eval-bar" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:32}}>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(topSide)}}>{topSide}</div>
                 <div style={{width:28,flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${CC.borderStrong}`,background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.15)"}}>
                   {whiteTop?<>
@@ -5139,7 +5204,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Нижняя player row (свой игрок) — chess.com style */}
           {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
@@ -5152,7 +5217,7 @@ export default function CyberChessPage(){
             const myLow=pT.time<30000&&on&&!over;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
-              width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
+              width:"min(calc(100vh - 120px),calc(100vw * 0.62),1000px)",
               padding:"5px 0",marginTop:2,gap:8,
               borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
               paddingLeft:6,transition:"border-color 200ms",
@@ -5364,9 +5429,9 @@ export default function CyberChessPage(){
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
           {on&&!over&&!setup&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
-            <Btn size="md" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
-            <Btn size="md" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
-            <Btn size="md" variant="secondary" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
+            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
+            <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("No moves","error");return}
               if(think){showToast("AI думает — подожди","error");return}
               const needChessy=tab==="play"&&!hotseat;
@@ -5393,7 +5458,10 @@ export default function CyberChessPage(){
 
         {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
             and media pane get more breathing room. */}
-        {wsShowRight&&<div className="cc-right-panel" style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
+        {wsShowRight&&<>
+          {/* Mobile backdrop */}
+          {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
@@ -7907,7 +7975,8 @@ ${question.trim()}`;
           {tab==="play"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:13,color:T.dim}}>{s.l}</div></div>)}
           </div>}
-        </div>}
+        </div>
+        </>}
       </div>}
 
       {promo&&<div className="cc-backdrop" style={{display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sPromo(null)}>
@@ -10862,36 +10931,14 @@ ${question.trim()}`;
 
     </ProductPageShell>
     {/* Bottom navigation — фиксированный нижний бар на мобайле, tab-bar на десктопе */}
-    {!streamerMode && (
-      <div style={{
-        position:"sticky", bottom:0, zIndex:100,
-        background:CC.surface1, borderTop:`1px solid ${CC.border}`,
-        display:"flex", justifyContent:"space-around", alignItems:"center",
-        padding:"8px 0 max(8px, env(safe-area-inset-bottom))",
-        backdropFilter:"blur(10px)",
-      }}>
-        {[
-          {icon:"▶", label:"Играть", action:()=>{sSetup(true);sTab("play")}},
-          {icon:"🧩", label:"Пазлы", action:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}},
-          {icon:"📊", label:"Анализ", action:()=>{sTab("analysis");sSetup(false)}},
-          {icon:"🎓", label:"Коуч", action:()=>{sTab("coach");sSetup(false)}},
-          {icon:"👤", label:"Профиль", action:()=>{/* открыть stats/profile */}},
-        ].map((item) => (
-          <button key={item.label} onClick={item.action}
-            style={{
-              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-              padding:"6px 16px", border:"none", background:"transparent",
-              color:CC.textDim, cursor:"pointer", fontSize:9, fontWeight:800,
-              letterSpacing:0.3,
-            }}
-            onMouseEnter={e=>(e.currentTarget.style.color=CC.brand)}
-            onMouseLeave={e=>(e.currentTarget.style.color=CC.textDim)}>
-            <span style={{fontSize:18}}>{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
-    )}
+    {!streamerMode&&<BottomNav
+      setup={setup} tab={tab}
+      onPlay={()=>sShowQuickSetupModal(true)}
+      onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
+      onAnalysis={()=>{sTab("analysis");sSetup(false)}}
+      onCoach={()=>{sTab("coach");sSetup(false)}}
+      brand={CC.brand} textMute={CC.textMute} surface1={CC.surface1} border={CC.border}
+    />}
     {/* ─── Post-game overlay ─── */}
     {over&&!setup&&showGameOver&&!on&&(()=>{
       const isWin=over.includes("win")||over.includes("Win")||over.includes("победа")||over.includes("Победа");
@@ -10937,6 +10984,46 @@ ${question.trim()}`;
         </div>
       );
     })()}
+    {showQuickSetupModal && (
+      <div style={{
+        position:"fixed", inset:0, zIndex:600,
+        background:"rgba(10,8,5,0.8)", backdropFilter:"blur(4px)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        padding:16,
+      }} onClick={()=>sShowQuickSetupModal(false)}>
+        <div onClick={e=>e.stopPropagation()} style={{
+          background:"#1e1c19", border:"1px solid #3d3b39",
+          borderRadius:16, padding:24, width:"100%", maxWidth:480,
+          boxShadow:"0 24px 64px rgba(0,0,0,0.6)",
+        }}>
+          <h2 style={{margin:"0 0 20px",fontSize:20,fontWeight:900,color:"#bababa"}}>⚡ Новая партия</h2>
+          {/* Time control chips — compact row */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:900,color:"#5d5b59",letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:8}}>Контроль времени</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {["1+0","2+1","3+0","5+0","10+0","15+10"].map(tc=>(
+                <button key={tc} style={{
+                  padding:"6px 12px", borderRadius:8,
+                  border:"1px solid #3d3b39", background:"#262421",
+                  color:"#bababa", cursor:"pointer", fontSize:13, fontWeight:700,
+                }}>{tc}</button>
+              ))}
+            </div>
+          </div>
+          {/* Quick Start */}
+          <button onClick={()=>{newG(); sShowQuickSetupModal(false);}} style={{
+            width:"100%", padding:"14px", borderRadius:10,
+            background:"#759900", border:"none", color:"#fff",
+            fontSize:16, fontWeight:900, cursor:"pointer",
+            boxShadow:"0 4px 16px rgba(117,153,0,0.4)",
+          }}>▶ Играть</button>
+          <button onClick={()=>sShowQuickSetupModal(false)} style={{
+            display:"block", margin:"12px auto 0", background:"none",
+            border:"none", color:"#5d5b59", cursor:"pointer", fontSize:13,
+          }}>Расширенные настройки →</button>
+        </div>
+      </div>
+    )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
     {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.

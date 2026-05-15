@@ -303,6 +303,11 @@ const MODULES: Module[] = [
   { id: "sports-fields",          category: "practice",  href: "/smeta-trainer/drawings-practice/sports-fields",          icon: "⚽", title: "Спортивные поля и гольф",         subtitle: "FIFA 105×68, IAAF Mondotrack, ITF корты, USGA 18 лунок",          level: "L4", exercises: 4,  color: "emerald" },
   { id: "nuclear-radiation",      category: "special",   href: "/smeta-trainer/drawings-practice/nuclear-radiation",      icon: "☢️", title: "Атомные и радиационные объекты", subtitle: "АЭС Балхаш ВВЭР-1200, бункеры LINAC, КАЭН РК, НРБ-99",          level: "L5", exercises: 4,  color: "red"     },
   { id: "coast-protection",       category: "special",   href: "/smeta-trainer/drawings-practice/coast-protection",       icon: "🌊", title: "Берегоукрепление и намыв",        subtitle: "Тетраподы 2-25 т, габионы Maccaferri, землесос, Каспий",          level: "L5", exercises: 4,  color: "cyan"    },
+
+  // ── Агро, тоннели, нефтехимия ──
+  { id: "agro-greenhouses",       category: "special",   href: "/smeta-trainer/drawings-practice/agro-greenhouses",       icon: "🌱", title: "Агрокомплексы и теплицы",         subtitle: "Venlo 6-7 м, гидропоника, РГС-хранилища, элеваторы SCAFCO",       level: "L4", exercises: 4,  color: "lime"    },
+  { id: "tunneling-works",        category: "special",   href: "/smeta-trainer/drawings-practice/tunneling-works",        icon: "🚇", title: "Тоннелепроходка",                 subtitle: "TBM EPB, НАТМ, микротоннели, метро Алматы 11.3 км",               level: "L5", exercises: 4,  color: "slate"   },
+  { id: "petrochemical-objects",  category: "special",   href: "/smeta-trainer/drawings-practice/petrochemical-objects",  icon: "⚗️", title: "Нефтехимия и НПЗ",                subtitle: "4 НПЗ РК, РВС 50000 м³, факелы H=120 м, эстакады, FGP $45 млрд", level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

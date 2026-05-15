@@ -539,6 +539,7 @@ export default function CyberChessPage(){
   const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
+  const[showGameOver,sShowGameOver]=useState(false);
   const[hist,sHist]=useState<string[]>([]);
   const[think,sThink]=useState(false);
   const[capW,sCapW]=useState<string[]>([]);
@@ -2006,6 +2007,9 @@ export default function CyberChessPage(){
       showToast(`📊 CPI: ${Math.round(newState.cpi)} (${sign}${Math.round(last.delta)})`,"info");
     }catch{/* CPI is strictly optional — never break the game-end flow */}
   },[over,pCol,tc.ini,showToast]);
+
+  /* ── Show game-over overlay when over is set ── */
+  useEffect(()=>{if(over){sShowGameOver(true)}},[over]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -3750,6 +3754,34 @@ export default function CyberChessPage(){
           aria-label="Music player"
           style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
         >🎵</button>
+        {/* Stream sidebar toggle — 📺 открывает/закрывает медиа-панель с YT/Twitch */}
+        <button
+          onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
+          title={wsPreset==="stream"?"Скрыть стрим-панель":"📺 Открыть стрим-панель (YT/Twitch)"}
+          style={{
+            padding:"6px 10px",minHeight:36,minWidth:36,
+            border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
+            borderRadius:RADIUS.md,
+            background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
+            color:wsPreset==="stream"?CC.brand:"inherit",
+            cursor:"pointer",fontSize:15,fontWeight:700,
+            display:"inline-flex",alignItems:"center",justifyContent:"center",
+            transition:`all 150ms`,
+          }}
+        >📺</button>
+        <button
+          onClick={()=>{
+            const el=document.documentElement;
+            if(!document.fullscreenElement){
+              el.requestFullscreen?.().catch(()=>{});
+            }else{
+              document.exitFullscreen?.().catch(()=>{});
+            }
+          }}
+          title="Полноэкранный режим (F11)"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,
+            borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:14}}
+        >⛶</button>
       </div>}
 
       {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.
@@ -3959,7 +3991,6 @@ export default function CyberChessPage(){
             {/* Формат + Time chips — компактная одна строка с pill-переключателем категории */}
             <div>
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Формат</span>
                 {/* Pill row of 4 small format chips */}
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {(["Bullet","Blitz","Rapid","Custom"] as const).map(c=>{
@@ -4250,78 +4281,14 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
-          {/* ─── DAILY hub: Daily Variant Challenge + Daily Puzzle side-by-side ─── */}
-          {(dailyVariantInfo||(dailyState&&PUZZLES[dailyState.idx]))&&(()=>{
-            const hours=24-new Date().getHours();
-            return <Card padding={0} elevation="sm" style={{overflow:"hidden",animation:"fadeInUp 0.4s ease-out"}}>
-              {/* Slim header — emoji + label + countdown all on one ~24px row */}
-              <div style={{padding:"4px 12px",
-                background:"linear-gradient(90deg,#fef3c7,#fde68a,#fef3c7)",
-                borderBottom:`1px solid ${CC.border}`,
-                display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:14}}>☀</span>
-                <span style={{fontSize:10,fontWeight:900,color:"#78350f",letterSpacing:1,textTransform:"uppercase" as const}}>Daily</span>
-                <span style={{fontSize:10,color:"#92400e",fontWeight:700,opacity:0.75}}>{new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"short"})}</span>
-                <div style={{flex:1}}/>
-                <span style={{fontSize:10,color:"#92400e",fontWeight:700,opacity:0.75}}>осталось {hours}ч</span>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:dailyVariantInfo&&(dailyState&&PUZZLES[dailyState.idx])?"1fr 1fr":"1fr",gap:0}}>
-                {dailyVariantInfo&&(()=>{
-                  const dv=dailyVariantInfo;
-                  const meta=VARIANTS.find(v=>v.id===dv.variant);
-                  if(!meta)return null;
-                  const done=dv.played&&dv.won;
-                  return <button onClick={()=>{
-                    sVariant(dv.variant);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
-                    if(dv.variant==="asymmetric")sManualArmyFen("");
-                    setTimeout(()=>newG(),50);
-                    showToast(`☀ Daily Challenge: ${meta.name}`,"info");
-                  }} className="cc-focus-ring"
-                    style={{padding:SPACE[3],
-                      border:"none",borderRight:dailyState&&PUZZLES[dailyState.idx]?`1px solid ${CC.border}`:"none",
-                      background:done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
-                      cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[2],
-                      transition:`all ${MOTION.base} ${MOTION.ease}`}}
-                    onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=done?"linear-gradient(135deg,#dcfce7,#a7f3d0)":"linear-gradient(135deg,#ede9fe,#ddd6fe)"}
-                    onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background=done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)"}>
-                    <div style={{fontSize:30,lineHeight:1,flexShrink:0}}>{done?"✅":meta.emoji}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:9,fontWeight:900,color:done?"#065f46":"#5b21b6",letterSpacing:0.8,textTransform:"uppercase" as const}}>{done?"Variant решён":"Variant Challenge"}</div>
-                      <div style={{fontSize:13,fontWeight:900,color:CC.text,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{meta.name}</div>
-                      <div style={{fontSize:10,color:CC.textDim,marginTop:1}}>{done?"завтра new":"+50 Chessy"}</div>
-                    </div>
-                    {!done&&<Badge tone="accent" size="sm">▶</Badge>}
-                  </button>;
-                })()}
-                {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
-                  const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
-                  return <button onClick={loadDailyPuzzle}
-                    className="cc-focus-ring"
-                    style={{padding:SPACE[3],border:"none",
-                      background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
-                      cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[2],
-                      transition:`all ${MOTION.base} ${MOTION.ease}`}}
-                    onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=solved?"linear-gradient(135deg,#dcfce7,#a7f3d0)":"linear-gradient(135deg,#fef3c7,#fde68a)"}
-                    onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background=solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)"}>
-                    <div style={{fontSize:30,lineHeight:1,flexShrink:0}}>{solved?"✅":"🧩"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:9,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:0.8,textTransform:"uppercase" as const}}>{solved?"Пазл решён":"Пазл дня"}</div>
-                      <div style={{fontSize:13,fontWeight:900,color:CC.text,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Лучший ход"} · {pz.r}</div>
-                      <div style={{fontSize:10,color:CC.textDim,marginTop:1}}>{solved?"завтра new":"+50 Chessy"}</div>
-                    </div>
-                    {!solved&&<Badge tone="gold" size="sm">▶</Badge>}
-                  </button>;
-                })()}
-              </div>
-            </Card>;
-          })()}
+          {/* Daily hub убран с главной — доступен через chip "Daily" в дашборде */}
 
           {/* ─── DASHBOARDS: 3 крупные плитки сгруппированные по смыслу.
                  1. ИГРА: что и как играть (варианты, hotseat, турниры)
                  2. ТРЕНИРОВКА: упражнения для роста (координаты, эндшпиль, личность, editor)
                  3. АНАЛИЗ & СТРИМ: разбор партий + создание контента
               ─── */}
-          {(()=>{
+          {false&&(()=>{
             type DashId="play"|"learn"|"meta";
             const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
               {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · P2P · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
@@ -4370,7 +4337,7 @@ export default function CyberChessPage(){
                   const QUICK:VariantId[]=["standard","fischer960","atomic","kingofthehill","threecheck","crazyhouse"];
                   const dailyV=dailyVariantInfo?.variant;
                   const tiles:VariantId[]=[...QUICK];
-                  if(dailyV&&!QUICK.includes(dailyV))tiles.push(dailyV);
+                  if(dailyV&&!QUICK.includes(dailyV as VariantId))tiles.push(dailyV as VariantId);
                   return <div style={{marginBottom:SPACE[3]}}>
                     <div style={{fontSize:10,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textDim,marginBottom:SPACE[1]}}>⚡ Быстрый выбор варианта</div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(96px,1fr))",gap:6}}>
@@ -4453,7 +4420,7 @@ export default function CyberChessPage(){
                   </button>
                   <button onClick={()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🧠</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Личность</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedQuizResult?`Твой архетип — ${QUIZ_PLAYERS[savedQuizResult.result.topId].name}`:"10 вопросов · твой шахматный архетип"}</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedQuizResult?.result?.topId?`Твой архетип — ${QUIZ_PLAYERS[savedQuizResult!.result.topId].name}`:"10 вопросов · твой шахматный архетип"}</div>
                   </button>
                   <button onClick={()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>♟</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Editor</span></div>
@@ -10894,6 +10861,82 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
+    {/* Bottom navigation — фиксированный нижний бар на мобайле, tab-bar на десктопе */}
+    {!streamerMode && (
+      <div style={{
+        position:"sticky", bottom:0, zIndex:100,
+        background:CC.surface1, borderTop:`1px solid ${CC.border}`,
+        display:"flex", justifyContent:"space-around", alignItems:"center",
+        padding:"8px 0 max(8px, env(safe-area-inset-bottom))",
+        backdropFilter:"blur(10px)",
+      }}>
+        {[
+          {icon:"▶", label:"Играть", action:()=>{sSetup(true);sTab("play")}},
+          {icon:"🧩", label:"Пазлы", action:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}},
+          {icon:"📊", label:"Анализ", action:()=>{sTab("analysis");sSetup(false)}},
+          {icon:"🎓", label:"Коуч", action:()=>{sTab("coach");sSetup(false)}},
+          {icon:"👤", label:"Профиль", action:()=>{/* открыть stats/profile */}},
+        ].map((item) => (
+          <button key={item.label} onClick={item.action}
+            style={{
+              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+              padding:"6px 16px", border:"none", background:"transparent",
+              color:CC.textDim, cursor:"pointer", fontSize:9, fontWeight:800,
+              letterSpacing:0.3,
+            }}
+            onMouseEnter={e=>(e.currentTarget.style.color=CC.brand)}
+            onMouseLeave={e=>(e.currentTarget.style.color=CC.textDim)}>
+            <span style={{fontSize:18}}>{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+    )}
+    {/* ─── Post-game overlay ─── */}
+    {over&&!setup&&showGameOver&&!on&&(()=>{
+      const isWin=over.includes("win")||over.includes("Win")||over.includes("победа")||over.includes("Победа");
+      const isDraw=over.includes("ничья")||over.includes("Ничья")||over.includes("Draw")||over.includes("draw");
+      const isLoss=!isWin&&!isDraw;
+      return(
+        <div style={{
+          position:"fixed",inset:0,zIndex:500,
+          background:isWin
+            ?"radial-gradient(ellipse at center, rgba(117,153,0,0.92) 0%, rgba(15,13,10,0.97) 70%)"
+            :isDraw
+            ?"radial-gradient(ellipse at center, rgba(100,100,100,0.92) 0%, rgba(15,13,10,0.97) 70%)"
+            :"radial-gradient(ellipse at center, rgba(200,40,40,0.88) 0%, rgba(15,13,10,0.97) 70%)",
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          backdropFilter:"blur(3px)",
+          animation:"cc-board-enter 400ms ease-out both",
+        }}>
+          <div style={{fontSize:80,marginBottom:16,animation:"pop 600ms cubic-bezier(0.34,1.56,0.64,1) both"}}>
+            {isWin?"🏆":isDraw?"🤝":"💀"}
+          </div>
+          <div style={{fontSize:36,fontWeight:900,color:"#fff",marginBottom:8,letterSpacing:0.5}}>
+            {isWin?"Победа!":isDraw?"Ничья":"Поражение"}
+          </div>
+          <div style={{fontSize:16,color:"rgba(255,255,255,0.75)",marginBottom:24}}>{over}</div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center"}}>
+            <button onClick={()=>{sShowGameOver(false);sSetup(true);sOn(false);}} style={{
+              padding:"12px 28px",borderRadius:12,border:"none",
+              background:"#759900",color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer",
+              boxShadow:"0 4px 16px rgba(117,153,0,0.5)",
+            }}>▶ Новая игра</button>
+            <button onClick={()=>{sShowGameOver(false);sTab("analysis");sShowAnal(true);}} style={{
+              padding:"12px 24px",borderRadius:12,border:"2px solid rgba(255,255,255,0.3)",
+              background:"transparent",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",
+            }}>📊 Анализ</button>
+            <button onClick={()=>sShowGameOver(false)} style={{
+              padding:"12px 20px",borderRadius:12,border:"1px solid rgba(255,255,255,0.2)",
+              background:"transparent",color:"rgba(255,255,255,0.5)",fontSize:13,cursor:"pointer",
+            }}>✕ Закрыть</button>
+          </div>
+          <div style={{marginTop:24,fontSize:13,color:"rgba(255,255,255,0.5)"}}>
+            {hist.length} ходов · {tc.ini>0?tc.name:"без таймера"}
+          </div>
+        </div>
+      );
+    })()}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
     {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import Onboarding from "./components/Onboarding";
 import StreakCounter from "./components/StreakCounter";
 import TriggerLog from "./components/TriggerLog";
@@ -158,6 +159,23 @@ export default function PsyAppDepsPage() {
             к врачу или на горячую линию помощи. PsyApp идёт рядом, не вместо специалиста.
           </p>
         </div>
+      </section>
+
+      <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 32px" }}>
+        <MvpConceptBoard
+          moduleId="psyapp-deps"
+          noun="concept/messages"
+          accent="sky"
+          sectionTitle="Recovery concept board"
+          sectionHint="Что реально помогало в выходе из зависимости? Какие триггеры опаснее всего?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / практика / триггер", placeholder: "напр.: HALT-чек перед срывом", required: true },
+            { key: "rationale", label: "Что это даёт", type: "textarea", placeholder: "Как это работает, личный опыт" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </section>
 
       <footer style={styles.footer}>

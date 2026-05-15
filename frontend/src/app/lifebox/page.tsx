@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import CapsuleForm, { type CategoryOption } from "./components/CapsuleForm";
 import CapsuleCard, { type CapsulePreview } from "./components/CapsuleCard";
 import CapsuleReader from "./components/CapsuleReader";
@@ -325,6 +326,23 @@ export default function LifeBoxPage() {
           onClose={() => { setReader(null); setReaderContent(null); setReaderError(null); }}
         />
       )}
+
+      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
+        <MvpConceptBoard
+          moduleId="lifebox"
+          noun="concept/messages"
+          accent="emerald"
+          sectionTitle="LifeBox concept board"
+          sectionHint="Какие категории time-locked капсул нужны? Что вы записали бы себе через 10 лет?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / категория", placeholder: "напр.: 'фото-капсула для детей через 18 лет'", required: true },
+            { key: "rationale", label: "Зачем это нужно", type: "textarea", placeholder: "Почему именно time-lock, какая ценность" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
+      </section>
 
       <footer style={{
         borderTop: `1px solid ${palette.gold}20`, padding: "30px 24px",

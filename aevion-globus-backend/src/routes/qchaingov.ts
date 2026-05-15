@@ -473,7 +473,7 @@ qchaingovRouter.get("/status", readLimit, (_req, res) => {
   res.json({
     module: "qchaingov",
     code: "QCHAINGOV",
-    status: "in_progress",
+    status: "mvp",
     description: "DAO governance — identity-bound proposals, votes, transparent execution.",
     endpoints: {
       health: "/api/qchaingov/health",

@@ -293,6 +293,11 @@ const MODULES: Module[] = [
   { id: "drilling-blasting",      category: "special",   href: "/smeta-trainer/drawings-practice/drilling-blasting",      icon: "💥", title: "Взрывные и буровые работы",       subtitle: "ЭСН Сб.36, ANFO/эмульсии, паспорт БВР, лицензия МЧС",          level: "L5", exercises: 4,  color: "stone"   },
   { id: "industrial-floors",      category: "finishing", href: "/smeta-trainer/drawings-practice/industrial-floors",      icon: "🏭", title: "Промышленные полы детально",      subtitle: "Топпинг, эпоксидные, ПУ, ММА — нагрузки 5-50 т/м²",              level: "L4", exercises: 4,  color: "zinc"    },
   { id: "logistics-terminals",    category: "practice",  href: "/smeta-trainer/drawings-practice/logistics-terminals",    icon: "📦", title: "Логистические центры и терминалы",  subtitle: "Склады A/B/C, стеллажи Mecalux, доки DOK, ESFR, X-dock",          level: "L5", exercises: 4,  color: "orange"  },
+
+  // ── Карьеры, кессоны, зоопарки ──
+  { id: "mining-quarry",          category: "special",   href: "/smeta-trainer/drawings-practice/mining-quarry",          icon: "⛏️", title: "Горнодобывающие работы",          subtitle: "Карьеры, ЭКГ-12/15/20, БелАЗ 75710, рекультивация СНиП 3.06-12",  level: "L5", exercises: 4,  color: "stone"   },
+  { id: "caisson-works",          category: "special",   href: "/smeta-trainer/drawings-practice/caisson-works",          icon: "🌊", title: "Кессонные работы",                subtitle: "Опускные колодцы, шпунт Larssen, ВПТ, ЭСН Сб.45 водолазы",        level: "L5", exercises: 4,  color: "blue"    },
+  { id: "zoo-aquarium",           category: "practice",  href: "/smeta-trainer/drawings-practice/zoo-aquarium",           icon: "🐅", title: "Зоопарки и аквариумы",            subtitle: "EAZA/WAZA нормы, акрил 100-300 мм, LSS, климат-зоны",            level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

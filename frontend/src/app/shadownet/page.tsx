@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ThreatModelSelector from "./components/ThreatModelSelector";
 import RoutingSimulator from "./components/RoutingSimulator";
 import PrivacyScore from "./components/PrivacyScore";
@@ -248,6 +249,23 @@ export default function ShadowNetPage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
+        <MvpConceptBoard
+          moduleId="shadownet"
+          noun="concept/messages"
+          accent="teal"
+          sectionTitle="Privacy network concept board"
+          sectionHint="Какие threat models не покрыты? Какие protocols стоит симулировать?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / threat / protocol", placeholder: "напр.: квантовая угроза для текущих ciphers", required: true },
+            { key: "rationale", label: "Почему это важно", type: "textarea", placeholder: "Какие attack-vectors это закрывает" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </section>
     </main>
   );

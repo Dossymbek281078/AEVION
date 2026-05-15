@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import LanguageSelector, { type KidsLang } from "./components/LanguageSelector";
 import LessonCard, { type LessonSummary } from "./components/LessonCard";
 import LessonDetail from "./components/LessonDetail";
@@ -327,6 +328,23 @@ export default function KidsAiContentPage() {
           </div>
         ))
       )}
+
+      <section style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 32px" }}>
+        <MvpConceptBoard
+          moduleId="kids-ai-content"
+          noun="concept/messages"
+          accent="rose"
+          sectionTitle="Kids learning concept board"
+          sectionHint="Какие темы для детских уроков нужны? Какие safe-defaults важны для разных возрастов?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея урока / темы", placeholder: "напр.: финансовая грамотность 7-9 лет", required: true },
+            { key: "rationale", label: "Почему это важно", type: "textarea", placeholder: "Что ребёнок поймёт после этого урока" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "родитель / педагог / anon" },
+          ]}
+        />
+      </section>
 
       <footer
         style={{

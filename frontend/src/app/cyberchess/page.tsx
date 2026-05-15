@@ -75,6 +75,7 @@ import WorkspaceToolbar from "./WorkspaceToolbar";
 import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
 import MusicPlayer from "./MusicPlayer";
+import AevionMiniHub from "./AevionMiniHub";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -509,6 +510,54 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   </div>;
 });
 
+/* ─── BottomNav ─── */
+function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute,surface1,border}:{
+  setup:boolean; tab:string;
+  onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void;
+  brand:string; textMute:string; surface1:string; border:string;
+}){
+  const activeTab = setup ? "play"
+    : tab === "puzzles" ? "puzzles"
+    : tab === "analysis" ? "analysis"
+    : tab === "coach" ? "coach"
+    : "play";
+  const items=[
+    {id:"play",    icon:"▶", label:"Играть",  action:onPlay},
+    {id:"puzzles", icon:"🧩",label:"Пазлы",   action:onPuzzles},
+    {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
+    {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
+    {id:"profile", icon:"👤",label:"Профиль", action:()=>{}},
+  ];
+  return(
+    <div style={{
+      position:"sticky",bottom:0,zIndex:100,
+      background:surface1,borderTop:`1px solid ${border}`,
+      display:"flex",justifyContent:"space-around",alignItems:"stretch",
+      padding:"0 0 max(0px, env(safe-area-inset-bottom))",
+      backdropFilter:"blur(10px)",
+    }}>
+      {items.map(item=>{
+        const active=activeTab===item.id;
+        return(
+          <button key={item.id} onClick={item.action}
+            style={{
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,
+              padding:"10px 16px 8px",border:"none",background:"transparent",
+              borderTop:active?`2px solid ${brand}`:"2px solid transparent",
+              color:active?brand:textMute,cursor:"pointer",fontSize:10,fontWeight:800,
+              letterSpacing:0.3,flex:1,
+            }}
+            onMouseEnter={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=brand}}
+            onMouseLeave={e=>{if(!active)(e.currentTarget as HTMLButtonElement).style.color=textMute}}>
+            <span style={{fontSize:20}}>{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ═══ Component ═══ */
 export default function CyberChessPage(){
   const{showToast}=useToast();
@@ -539,6 +588,7 @@ export default function CyberChessPage(){
   const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
+  const[showGameOver,sShowGameOver]=useState(false);
   const[hist,sHist]=useState<string[]>([]);
   const[think,sThink]=useState(false);
   const[capW,sCapW]=useState<string[]>([]);
@@ -677,6 +727,7 @@ export default function CyberChessPage(){
     try{const raw=localStorage.getItem(BB_KEY);return raw?JSON.parse(raw):[];}catch{return[];}
   });
   useEffect(()=>{try{localStorage.setItem(BB_KEY,JSON.stringify(blunderBook.slice(0,50)))}catch{}},[blunderBook]);
+  const[mobileSidebarOpen,sMobileSidebarOpen]=useState(false);
   const[refiningAnalysis,sRefiningAnalysis]=useState(false);
   const[editorPiece,sEditorPiece]=useState<{type:"p"|"n"|"b"|"r"|"q"|"k";color:"w"|"b"}|null>(null);
   const[editorTurn,sEditorTurn]=useState<"w"|"b">("w");
@@ -798,6 +849,7 @@ export default function CyberChessPage(){
   const[showHelp,sShowHelp]=useState(false);
   const[showSettings,sShowSettings]=useState(false);
   const[showMusicPlayer,sShowMusicPlayer]=useState(false);
+  const[showQuickSetupModal,sShowQuickSetupModal]=useState(false);
   // Color theme (light/dark) — separate from boardTheme. Persists to localStorage
   // key aevion_chess_color_theme_v1. The shadowed `CC` const below switches the
   // entire palette at render time; all ~720 CC.* references pick it up automatically.
@@ -1645,9 +1697,10 @@ export default function CyberChessPage(){
 
   // Когда true — следующий апдейт lm (свой ход юзера) НЕ запускает slide-animation.
   // Юзер только что сам перетащил/щёлкнул — анимация лишь добавляет восприятия лага.
+  // fromUser=false (AI/P2P/Ghost) — НЕ ставим skip → slide-animation играет 180ms.
   const skipNextAnimRef=useRef(false);
-  const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n")=>{
-    skipNextAnimRef.current=true;
+  const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n",fromUser:boolean=true)=>{
+    if(fromUser)skipNextAnimRef.current=true;
     const p=game.get(from);if(!p)return false;
     // ── OPENING TRAINER — верификация хода против скрипта дебюта ──
     if(openingDrill){
@@ -2006,6 +2059,9 @@ export default function CyberChessPage(){
       showToast(`📊 CPI: ${Math.round(newState.cpi)} (${sign}${Math.round(last.delta)})`,"info");
     }catch{/* CPI is strictly optional — never break the game-end flow */}
   },[over,pCol,tc.ini,showToast]);
+
+  /* ── Show game-over overlay when over is set ── */
+  useEffect(()=>{if(over){sShowGameOver(true)}},[over]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -2686,7 +2742,7 @@ export default function CyberChessPage(){
       if(msg.t==="mv"){
         const f=msg.uci.slice(0,2) as Square,t=msg.uci.slice(2,4) as Square;
         const pr=msg.uci[4] as any||undefined;
-        exec(f,t,pr);
+        exec(f,t,pr,false);
       }else if(msg.t==="hello"){sP2pOpponentName((msg as any).name||"Оппонент")}
       else if(msg.t==="resign"){sOver(`${p2pOpponentName} сдался — Вы победили!`);sOn(false)}
       else if(msg.t==="draw-accept"){sOver("Ничья (договорились)");sOn(false)}
@@ -2816,7 +2872,7 @@ export default function CyberChessPage(){
             if(game.fen()!==fenAtTrigger){sThink(false);return}
             const c=new Chess(fenAtTrigger);
             const mv=c.move(preferred);
-            if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+            if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any,false);
           }catch{}
           sThink(false);
         },Math.max(500,delay*0.6));
@@ -2834,7 +2890,7 @@ export default function CyberChessPage(){
               if(game.fen()!==fenAtTrigger){sThink(false);return}
               const c=new Chess(fenAtTrigger);
               const mv=c.move(bookSan);
-              if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any);
+              if(mv)exec(mv.from as Square,mv.to as Square,mv.promotion as any,false);
             }catch{}
             sThink(false);
           },Math.max(700,delay*0.7));
@@ -2858,7 +2914,7 @@ export default function CyberChessPage(){
             const top=evals.slice(0,Math.min(5,evals.length)).map(e=>e.m);
             const ck2=new Chess(fenAtTrigger);
             const pick=pickGhostStyleMove(activeGhost,ck2,top);
-            if(pick)exec(pick.from as Square,pick.to as Square,pick.promotion as any);
+            if(pick)exec(pick.from as Square,pick.to as Square,pick.promotion as any,false);
           }catch{}
           sThink(false);
         },delay);
@@ -2885,7 +2941,7 @@ export default function CyberChessPage(){
             const scored=allowed.map(m=>{c.move(m);const s=ev(c)*(c.turn()==="w"?-1:1);c.undo();return{m,s:s+(Math.random()-0.5)*30}});
             scored.sort((a,b)=>b.s-a.s);
             const b=scored[0].m;
-            exec(b.from as Square,b.to as Square,b.promotion as any);
+            exec(b.from as Square,b.to as Square,b.promotion as any,false);
           }
         }catch{}
         sThink(false);
@@ -2895,7 +2951,7 @@ export default function CyberChessPage(){
     if(useSF&&sfR.current?.ready()){
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
-        try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any)}catch{}
+        try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any,false)}catch{}
         sThink(false);
       }),delay);
       return()=>clearTimeout(t);
@@ -2903,7 +2959,7 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>{
       try{if(game.fen()!==fenAtTrigger){sThink(false);return}
         const c=new Chess(fenAtTrigger);const b=best(c,lv.depth,lv.rand);
-        if(b)exec(b.from as Square,b.to as Square,b.promotion as any);
+        if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);
       }catch{}
       sThink(false);
     },delay);
@@ -3653,6 +3709,12 @@ export default function CyberChessPage(){
 
         <div style={{flex:1}}/>
 
+        {/* AEVION ecosystem mini-hub — переход в другие продукты без покидания CyberChess */}
+        <AevionMiniHub
+          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+          text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
+        />
+
         {/* Rating badge */}
         <div style={{
           display:"flex",alignItems:"center",gap:SPACE[2],padding:"4px 12px 4px 4px",
@@ -3750,6 +3812,49 @@ export default function CyberChessPage(){
           aria-label="Music player"
           style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:16,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center"}}
         >🎵</button>
+        {/* Stream sidebar toggle — 📺 открывает/закрывает медиа-панель с YT/Twitch */}
+        <button
+          onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
+          title={wsPreset==="stream"?"Скрыть стрим-панель":"📺 Открыть стрим-панель (YT/Twitch)"}
+          style={{
+            padding:"6px 10px",minHeight:36,minWidth:36,
+            border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
+            borderRadius:RADIUS.md,
+            background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
+            color:wsPreset==="stream"?CC.brand:"inherit",
+            cursor:"pointer",fontSize:15,fontWeight:700,
+            display:"inline-flex",alignItems:"center",justifyContent:"center",
+            transition:`all 150ms`,
+          }}
+        >📺</button>
+        <button
+          onClick={()=>{
+            const el=document.documentElement;
+            if(!document.fullscreenElement){
+              el.requestFullscreen?.().catch(()=>{});
+            }else{
+              document.exitFullscreen?.().catch(()=>{});
+            }
+          }}
+          title="Полноэкранный режим (F11)"
+          style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,
+            borderRadius:RADIUS.md,background:CC.surface1,cursor:"pointer",fontSize:14}}
+        >⛶</button>
+        {/* Mobile sidebar toggle — visible only on mobile via CSS */}
+        <button
+          onClick={()=>sMobileSidebarOpen(v=>!v)}
+          title="Открыть боковую панель"
+          aria-label="Toggle sidebar"
+          style={{
+            padding:"6px 10px",minHeight:36,minWidth:36,
+            border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
+            background:mobileSidebarOpen?CC.brandSoft:CC.surface1,
+            color:mobileSidebarOpen?CC.brand:"inherit",
+            cursor:"pointer",fontSize:18,fontWeight:700,
+            display:"none",alignItems:"center",justifyContent:"center",
+          }}
+          className="cc-mobile-sidebar-btn"
+        >☰</button>
       </div>}
 
       {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.
@@ -3959,7 +4064,6 @@ export default function CyberChessPage(){
             {/* Формат + Time chips — компактная одна строка с pill-переключателем категории */}
             <div>
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Формат</span>
                 {/* Pill row of 4 small format chips */}
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {(["Bullet","Blitz","Rapid","Custom"] as const).map(c=>{
@@ -4250,78 +4354,14 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
-          {/* ─── DAILY hub: Daily Variant Challenge + Daily Puzzle side-by-side ─── */}
-          {(dailyVariantInfo||(dailyState&&PUZZLES[dailyState.idx]))&&(()=>{
-            const hours=24-new Date().getHours();
-            return <Card padding={0} elevation="sm" style={{overflow:"hidden",animation:"fadeInUp 0.4s ease-out"}}>
-              {/* Slim header — emoji + label + countdown all on one ~24px row */}
-              <div style={{padding:"4px 12px",
-                background:"linear-gradient(90deg,#fef3c7,#fde68a,#fef3c7)",
-                borderBottom:`1px solid ${CC.border}`,
-                display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:14}}>☀</span>
-                <span style={{fontSize:10,fontWeight:900,color:"#78350f",letterSpacing:1,textTransform:"uppercase" as const}}>Daily</span>
-                <span style={{fontSize:10,color:"#92400e",fontWeight:700,opacity:0.75}}>{new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"short"})}</span>
-                <div style={{flex:1}}/>
-                <span style={{fontSize:10,color:"#92400e",fontWeight:700,opacity:0.75}}>осталось {hours}ч</span>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:dailyVariantInfo&&(dailyState&&PUZZLES[dailyState.idx])?"1fr 1fr":"1fr",gap:0}}>
-                {dailyVariantInfo&&(()=>{
-                  const dv=dailyVariantInfo;
-                  const meta=VARIANTS.find(v=>v.id===dv.variant);
-                  if(!meta)return null;
-                  const done=dv.played&&dv.won;
-                  return <button onClick={()=>{
-                    sVariant(dv.variant);sHotseat(false);sRivalMode(false);sCloneMode(false);sGhostMode(false);sTab("play");
-                    if(dv.variant==="asymmetric")sManualArmyFen("");
-                    setTimeout(()=>newG(),50);
-                    showToast(`☀ Daily Challenge: ${meta.name}`,"info");
-                  }} className="cc-focus-ring"
-                    style={{padding:SPACE[3],
-                      border:"none",borderRight:dailyState&&PUZZLES[dailyState.idx]?`1px solid ${CC.border}`:"none",
-                      background:done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
-                      cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[2],
-                      transition:`all ${MOTION.base} ${MOTION.ease}`}}
-                    onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=done?"linear-gradient(135deg,#dcfce7,#a7f3d0)":"linear-gradient(135deg,#ede9fe,#ddd6fe)"}
-                    onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background=done?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)"}>
-                    <div style={{fontSize:30,lineHeight:1,flexShrink:0}}>{done?"✅":meta.emoji}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:9,fontWeight:900,color:done?"#065f46":"#5b21b6",letterSpacing:0.8,textTransform:"uppercase" as const}}>{done?"Variant решён":"Variant Challenge"}</div>
-                      <div style={{fontSize:13,fontWeight:900,color:CC.text,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{meta.name}</div>
-                      <div style={{fontSize:10,color:CC.textDim,marginTop:1}}>{done?"завтра new":"+50 Chessy"}</div>
-                    </div>
-                    {!done&&<Badge tone="accent" size="sm">▶</Badge>}
-                  </button>;
-                })()}
-                {dailyState&&PUZZLES[dailyState.idx]&&(()=>{
-                  const pz=PUZZLES[dailyState.idx];const solved=dailyState.solved;
-                  return <button onClick={loadDailyPuzzle}
-                    className="cc-focus-ring"
-                    style={{padding:SPACE[3],border:"none",
-                      background:solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)",
-                      cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:SPACE[2],
-                      transition:`all ${MOTION.base} ${MOTION.ease}`}}
-                    onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.background=solved?"linear-gradient(135deg,#dcfce7,#a7f3d0)":"linear-gradient(135deg,#fef3c7,#fde68a)"}
-                    onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.background=solved?"linear-gradient(135deg,#f0fdf4,#ecfdf5)":"linear-gradient(135deg,#fffbeb,#fef3c7)"}>
-                    <div style={{fontSize:30,lineHeight:1,flexShrink:0}}>{solved?"✅":"🧩"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:9,fontWeight:900,color:solved?"#065f46":"#92400e",letterSpacing:0.8,textTransform:"uppercase" as const}}>{solved?"Пазл решён":"Пазл дня"}</div>
-                      <div style={{fontSize:13,fontWeight:900,color:CC.text,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{pz.side==="w"?"⚪":"⚫"} {pz.goal==="Mate"?`Мат в ${pz.mateIn}`:"Лучший ход"} · {pz.r}</div>
-                      <div style={{fontSize:10,color:CC.textDim,marginTop:1}}>{solved?"завтра new":"+50 Chessy"}</div>
-                    </div>
-                    {!solved&&<Badge tone="gold" size="sm">▶</Badge>}
-                  </button>;
-                })()}
-              </div>
-            </Card>;
-          })()}
+          {/* Daily hub убран с главной — доступен через chip "Daily" в дашборде */}
 
           {/* ─── DASHBOARDS: 3 крупные плитки сгруппированные по смыслу.
                  1. ИГРА: что и как играть (варианты, hotseat, турниры)
                  2. ТРЕНИРОВКА: упражнения для роста (координаты, эндшпиль, личность, editor)
                  3. АНАЛИЗ & СТРИМ: разбор партий + создание контента
               ─── */}
-          {(()=>{
+          {false&&(()=>{
             type DashId="play"|"learn"|"meta";
             const dashes:{id:DashId;icon:string;title:string;hint:string;tint:string;ring:string;active:number}[]=[
               {id:"play", icon:"🎮",title:"Игра",         hint:"12 вариантов · Hotseat · P2P · Ghost Duel", tint:"linear-gradient(135deg,#dbeafe,#bfdbfe)",ring:"#3b82f6",active:(variant!=="standard"?1:0)+(hotseat?1:0)+(p2pMode?1:0)+(ghostDuelMode?1:0)},
@@ -4370,7 +4410,7 @@ export default function CyberChessPage(){
                   const QUICK:VariantId[]=["standard","fischer960","atomic","kingofthehill","threecheck","crazyhouse"];
                   const dailyV=dailyVariantInfo?.variant;
                   const tiles:VariantId[]=[...QUICK];
-                  if(dailyV&&!QUICK.includes(dailyV))tiles.push(dailyV);
+                  if(dailyV&&!QUICK.includes(dailyV as VariantId))tiles.push(dailyV as VariantId);
                   return <div style={{marginBottom:SPACE[3]}}>
                     <div style={{fontSize:10,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textDim,marginBottom:SPACE[1]}}>⚡ Быстрый выбор варианта</div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(96px,1fr))",gap:6}}>
@@ -4453,7 +4493,7 @@ export default function CyberChessPage(){
                   </button>
                   <button onClick={()=>{sShowQuiz(true);sQuizAnswers([]);sQuizResult(null)}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🧠</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Личность</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedQuizResult?`Твой архетип — ${QUIZ_PLAYERS[savedQuizResult.result.topId].name}`:"10 вопросов · твой шахматный архетип"}</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>{savedQuizResult?.result?.topId?`Твой архетип — ${QUIZ_PLAYERS[savedQuizResult!.result.topId].name}`:"10 вопросов · твой шахматный архетип"}</div>
                   </button>
                   <button onClick={()=>{sShowEditor(true);sEditorBoard(edStart());sEditorErrors([])}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>♟</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Editor</span></div>
@@ -4837,7 +4877,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
+            width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -4859,7 +4899,7 @@ export default function CyberChessPage(){
             const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
-            const bw="min(calc(100vh - 160px),calc(100vw * 0.6),900px)";
+            const bw="min(calc(100vh - 120px),calc(100vw * 0.62),1400px)";
             const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
               const name=isAI?al.name+" AI":"Вы";
               const elo=isAI?al.elo:rat;
@@ -4915,7 +4955,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -4934,7 +4974,7 @@ export default function CyberChessPage(){
               const pipStyle=(side:"W"|"B"):React.CSSProperties=>side==="W"
                 ? {background:"#f8fafc",color:CC.text,border:`1px solid ${CC.border}`}
                 : {background:"#1e293b",color:"#fff"};
-              return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:32}}>
+              return(<div className="cc-eval-bar" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,width:32}}>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(topSide)}}>{topSide}</div>
                 <div style={{width:28,flex:1,borderRadius:8,overflow:"hidden",border:`1px solid ${CC.borderStrong}`,background:"#1e293b",position:"relative",display:"flex",flexDirection:"column",boxShadow:"inset 0 2px 4px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.15)"}}>
                   {whiteTop?<>
@@ -5172,7 +5212,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Нижняя player row (свой игрок) — chess.com style */}
           {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
@@ -5185,7 +5225,7 @@ export default function CyberChessPage(){
             const myLow=pT.time<30000&&on&&!over;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
-              width:"min(calc(100vh - 160px),calc(100vw * 0.6),900px)",
+              width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",
               padding:"5px 0",marginTop:2,gap:8,
               borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
               paddingLeft:6,transition:"border-color 200ms",
@@ -5397,9 +5437,9 @@ export default function CyberChessPage(){
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
           {on&&!over&&!setup&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
-            <Btn size="md" variant="danger" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
-            <Btn size="md" variant="gold" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
-            <Btn size="md" variant="secondary" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
+            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
+            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
+            <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("No moves","error");return}
               if(think){showToast("AI думает — подожди","error");return}
               const needChessy=tab==="play"&&!hotseat;
@@ -5426,7 +5466,10 @@ export default function CyberChessPage(){
 
         {/* Right panel — hidden in Focus workspace (board only). Narrowed (was 440/380/720) so the board
             and media pane get more breathing room. */}
-        {wsShowRight&&<div className="cc-right-panel" style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
+        {wsShowRight&&<>
+          {/* Mobile backdrop */}
+          {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
@@ -6106,8 +6149,8 @@ export default function CyberChessPage(){
               the avatar block above, so no need to repeat it here. */}
           {on&&!setup&&(tab==="play"||tab==="coach"||tab==="analysis")&&(currentOpening||tab==="analysis")&&<div style={{
             padding:"6px 10px",borderRadius:7,
-            background:currentOpening?"linear-gradient(90deg,#ecfdf5,#f0fdf4)":T.surface,
-            border:`1px solid ${currentOpening?"#a7f3d0":T.border}`,
+            background:currentOpening?"rgba(16,185,129,0.10)":T.surface,
+            border:`1px solid ${currentOpening?"rgba(16,185,129,0.35)":T.border}`,
             display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,flexWrap:"wrap",
           }}>
             {currentOpening&&hist.length>0&&<>
@@ -6116,7 +6159,7 @@ export default function CyberChessPage(){
                 background:CC.brand,color:"#fff",
                 fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.8,
               }}>{currentOpening.eco}</span>
-              <span style={{fontSize:12,fontWeight:800,color:"#065f46"}} title={currentOpening.desc}>{currentOpening.name}</span>
+              <span style={{fontSize:12,fontWeight:800,color:T.accent}} title={currentOpening.desc}>{currentOpening.name}</span>
             </>}
             {tab==="analysis"&&<>
               <span style={{flex:1}}/>
@@ -6384,10 +6427,10 @@ export default function CyberChessPage(){
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>
                 Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
                 {currentOpening&&hist.length>0&&hist.length<=30&&<span style={{
-                  marginLeft:4,fontSize:10,fontWeight:700,color:"#059669",
+                  marginLeft:4,fontSize:10,fontWeight:700,color:T.accent,
                   letterSpacing:0.3,textTransform:"none" as const,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:130,
-                  padding:"1px 6px",borderRadius:RADIUS.full,background:"rgba(5,150,105,0.10)",
+                  padding:"1px 6px",borderRadius:RADIUS.full,background:"rgba(16,185,129,0.10)",
                 }} title={currentOpening.name}>{currentOpening.eco} · {currentOpening.name}</span>}
                 {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
               </span>
@@ -7940,7 +7983,8 @@ ${question.trim()}`;
           {tab==="play"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
             {[{v:sts.w,l:"W",c:T.accent},{v:sts.l,l:"L",c:T.danger},{v:sts.d,l:"D",c:T.dim}].map(s=><div key={s.l} style={{padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.border}`,textAlign:"center"}}><div style={{fontSize:16,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:13,color:T.dim}}>{s.l}</div></div>)}
           </div>}
-        </div>}
+        </div>
+        </>}
       </div>}
 
       {promo&&<div className="cc-backdrop" style={{display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sPromo(null)}>
@@ -10894,6 +10938,100 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
+    {/* Bottom navigation — фиксированный нижний бар на мобайле, tab-bar на десктопе */}
+    {!streamerMode&&<BottomNav
+      setup={setup} tab={tab}
+      onPlay={()=>sShowQuickSetupModal(true)}
+      onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
+      onAnalysis={()=>{sTab("analysis");sSetup(false)}}
+      onCoach={()=>{sTab("coach");sSetup(false)}}
+      brand={CC.brand} textMute={CC.textMute} surface1={CC.surface1} border={CC.border}
+    />}
+    {/* ─── Post-game overlay ─── */}
+    {over&&!setup&&showGameOver&&!on&&(()=>{
+      const isWin=over.includes("win")||over.includes("Win")||over.includes("победа")||over.includes("Победа");
+      const isDraw=over.includes("ничья")||over.includes("Ничья")||over.includes("Draw")||over.includes("draw");
+      const isLoss=!isWin&&!isDraw;
+      return(
+        <div style={{
+          position:"fixed",inset:0,zIndex:500,
+          background:isWin
+            ?"radial-gradient(ellipse at center, rgba(117,153,0,0.92) 0%, rgba(15,13,10,0.97) 70%)"
+            :isDraw
+            ?"radial-gradient(ellipse at center, rgba(100,100,100,0.92) 0%, rgba(15,13,10,0.97) 70%)"
+            :"radial-gradient(ellipse at center, rgba(200,40,40,0.88) 0%, rgba(15,13,10,0.97) 70%)",
+          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          backdropFilter:"blur(3px)",
+          animation:"cc-board-enter 400ms ease-out both",
+        }}>
+          <div style={{fontSize:80,marginBottom:16,animation:"pop 600ms cubic-bezier(0.34,1.56,0.64,1) both"}}>
+            {isWin?"🏆":isDraw?"🤝":"💀"}
+          </div>
+          <div style={{fontSize:36,fontWeight:900,color:"#fff",marginBottom:8,letterSpacing:0.5}}>
+            {isWin?"Победа!":isDraw?"Ничья":"Поражение"}
+          </div>
+          <div style={{fontSize:16,color:"rgba(255,255,255,0.75)",marginBottom:24}}>{over}</div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center"}}>
+            <button onClick={()=>{sShowGameOver(false);sSetup(true);sOn(false);}} style={{
+              padding:"12px 28px",borderRadius:12,border:"none",
+              background:"#759900",color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer",
+              boxShadow:"0 4px 16px rgba(117,153,0,0.5)",
+            }}>▶ Новая игра</button>
+            <button onClick={()=>{sShowGameOver(false);sTab("analysis");sShowAnal(true);}} style={{
+              padding:"12px 24px",borderRadius:12,border:"2px solid rgba(255,255,255,0.3)",
+              background:"transparent",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",
+            }}>📊 Анализ</button>
+            <button onClick={()=>sShowGameOver(false)} style={{
+              padding:"12px 20px",borderRadius:12,border:"1px solid rgba(255,255,255,0.2)",
+              background:"transparent",color:"rgba(255,255,255,0.5)",fontSize:13,cursor:"pointer",
+            }}>✕ Закрыть</button>
+          </div>
+          <div style={{marginTop:24,fontSize:13,color:"rgba(255,255,255,0.5)"}}>
+            {hist.length} ходов · {tc.ini>0?tc.name:"без таймера"}
+          </div>
+        </div>
+      );
+    })()}
+    {showQuickSetupModal && (
+      <div style={{
+        position:"fixed", inset:0, zIndex:600,
+        background:"rgba(10,8,5,0.8)", backdropFilter:"blur(4px)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        padding:16,
+      }} onClick={()=>sShowQuickSetupModal(false)}>
+        <div onClick={e=>e.stopPropagation()} style={{
+          background:"#1e1c19", border:"1px solid #3d3b39",
+          borderRadius:16, padding:24, width:"100%", maxWidth:480,
+          boxShadow:"0 24px 64px rgba(0,0,0,0.6)",
+        }}>
+          <h2 style={{margin:"0 0 20px",fontSize:20,fontWeight:900,color:"#bababa"}}>⚡ Новая партия</h2>
+          {/* Time control chips — compact row */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:900,color:"#5d5b59",letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:8}}>Контроль времени</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {["1+0","2+1","3+0","5+0","10+0","15+10"].map(tc=>(
+                <button key={tc} style={{
+                  padding:"6px 12px", borderRadius:8,
+                  border:"1px solid #3d3b39", background:"#262421",
+                  color:"#bababa", cursor:"pointer", fontSize:13, fontWeight:700,
+                }}>{tc}</button>
+              ))}
+            </div>
+          </div>
+          {/* Quick Start */}
+          <button onClick={()=>{newG(); sShowQuickSetupModal(false);}} style={{
+            width:"100%", padding:"14px", borderRadius:10,
+            background:"#759900", border:"none", color:"#fff",
+            fontSize:16, fontWeight:900, cursor:"pointer",
+            boxShadow:"0 4px 16px rgba(117,153,0,0.4)",
+          }}>▶ Играть</button>
+          <button onClick={()=>sShowQuickSetupModal(false)} style={{
+            display:"block", margin:"12px auto 0", background:"none",
+            border:"none", color:"#5d5b59", cursor:"pointer", fontSize:13,
+          }}>Расширенные настройки →</button>
+        </div>
+      </div>
+    )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
     {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.

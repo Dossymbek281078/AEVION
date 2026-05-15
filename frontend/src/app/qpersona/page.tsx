@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import PersonaCard from "./components/PersonaCard";
 import CreatePersonaForm from "./components/CreatePersonaForm";
 import AvatarDisplay from "./components/AvatarDisplay";
@@ -303,6 +304,23 @@ export default function QPersonaPage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 40px" }}>
+        <MvpConceptBoard
+          moduleId="qpersona"
+          noun="concept/messages"
+          accent="violet"
+          sectionTitle="Persona ideas board"
+          sectionHint="Какие сигналы должны формировать цифровую персону? Какие верифицируемые источники?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / сигнал", placeholder: "напр.: верифицированный коммит в open-source", required: true },
+            { key: "rationale", label: "Зачем это в персоне", type: "textarea", placeholder: "Кому это полезно, как это измеряется" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </section>
     </main>
   );

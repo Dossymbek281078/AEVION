@@ -313,6 +313,31 @@ const MODULES: Module[] = [
   { id: "gas-processing-plants",  category: "special",   href: "/smeta-trainer/drawings-practice/gas-processing-plants",  icon: "🔥", title: "ГПЗ — газоперераб. заводы",       subtitle: "KPO Карачаганак, ТШО FGP, процесс Клауса, аминовая очистка",      level: "L5", exercises: 4,  color: "orange"  },
   { id: "main-pipelines",         category: "special",   href: "/smeta-trainer/drawings-practice/main-pipelines",         icon: "🛢️", title: "Магистральные трубопроводы",      subtitle: "КТК Тенгиз-Новороссийск, Туркм.-Китай, СКЗ, 400 млн тг/км",       level: "L5", exercises: 4,  color: "stone"   },
   { id: "airports-terminals",     category: "practice",  href: "/smeta-trainer/drawings-practice/airports-terminals",     icon: "✈️", title: "Аэропорты и терминалы",          subtitle: "ICAO Code 4F, ВПП 4500 м, ILS Cat III, Алматы AAA, Астана NQZ",   level: "L5", exercises: 4,  color: "sky"     },
+
+  // ── Ж/д, морпорты, электростанции ──
+  { id: "railways-stations",      category: "special",   href: "/smeta-trainer/drawings-practice/railways-stations",      icon: "🚂", title: "Железные дороги и вокзалы",       subtitle: "Колея 1520, Р65, Ш1, ВСМ Алматы-Астана 1200 км, 25 кВ AC",        level: "L5", exercises: 4,  color: "slate"   },
+  { id: "seaports-harbors",       category: "special",   href: "/smeta-trainer/drawings-practice/seaports-harbors",       icon: "⚓", title: "Морские и речные порты",          subtitle: "Актау 10 млн т, STS-краны, Liebherr LHM 600, TEU, дноуглубление", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "power-plants",           category: "special",   href: "/smeta-trainer/drawings-practice/power-plants",           icon: "⚡", title: "Электростанции (ТЭЦ/ГЭС/ВЭС/СЭС)", subtitle: "Экибастуз ГРЭС-1 4000 МВт, Мойнакская ГЭС, СЭС 330 млн тг/МВт",   level: "L5", exercises: 4,  color: "yellow"  },
+
+  // ── Плотины, ПС, шахты ──
+  { id: "dams-hydrostructures",   category: "special",   href: "/smeta-trainer/drawings-practice/dams-hydrostructures",   icon: "🌊", title: "Плотины и гидротехника",          subtitle: "Бухтарма H=90 м, Капшагай 28 км³, Tainter gate, КИА, СН РК 3.04-13", level: "L5", exercises: 4,  color: "blue"    },
+  { id: "substations-power",      category: "utilities", href: "/smeta-trainer/drawings-practice/substations-power",      icon: "⚡", title: "Подстанции 110-1150 кВ",          subtitle: "KEGOC ПС 500/1150 кВ, КРУЭ ABB/Siemens, РЗА SIPROTEC",            level: "L5", exercises: 4,  color: "amber"   },
+  { id: "mine-shafts-underground",category: "special",   href: "/smeta-trainer/drawings-practice/mine-shafts-underground",icon: "⛏️", title: "Шахты и подземные выработки",     subtitle: "Стволы Ø6-8 м H=1000 м, СВП-22/27/33, ПБ 03-553, Караганда",      level: "L5", exercises: 4,  color: "stone"   },
+
+  // ── Цемент, металлургия, текстиль ──
+  { id: "cement-plants",          category: "special",   href: "/smeta-trainer/drawings-practice/cement-plants",          icon: "🏭", title: "Цементные заводы",                subtitle: "Карагандацемент 2.5 млн т, вращающаяся печь Ø5×75 м, клинкер 1450°C", level: "L5", exercises: 4,  color: "stone"   },
+  { id: "metallurgy-plants",      category: "special",   href: "/smeta-trainer/drawings-practice/metallurgy-plants",      icon: "🔥", title: "Металлургические заводы",         subtitle: "АО АрселорМиттал Темиртау 5 млн т стали, конвертер LD 250 т, ДП-9", level: "L5", exercises: 4,  color: "red"     },
+  { id: "textile-factories",      category: "special",   href: "/smeta-trainer/drawings-practice/textile-factories",      icon: "🧵", title: "Текстильные фабрики",             subtitle: "Шымкент 50 млрд тг, прядение/ткачество, цех 144×72 м, кондиционирование", level: "L5", exercises: 4,  color: "rose"    },
+
+  // ── АПК: зерно, мясо, молоко ──
+  { id: "elevators-granaries",    category: "special",   href: "/smeta-trainer/drawings-practice/elevators-granaries",    icon: "🌾", title: "Элеваторы и зернохранилища",      subtitle: "Силосы Ø6 м H=30 м, 50 тыс. т Костанай, СН РК 3.04-13, аспирация ПБ В-IIa", level: "L5", exercises: 4,  color: "yellow"  },
+  { id: "meat-processing",        category: "special",   href: "/smeta-trainer/drawings-practice/meat-processing",        icon: "🥩", title: "Мясокомбинаты и пищепром",        subtitle: "50 т/смену Караганда, СанПиН 4.01-001-2024, шок -35°C, R717 NH₃ ПБ 09-595", level: "L5", exercises: 4,  color: "red"     },
+  { id: "dairy-plants",           category: "special",   href: "/smeta-trainer/drawings-practice/dairy-plants",           icon: "🥛", title: "Молочные заводы",                 subtitle: "200 т/сутки, HTST 72°C/UHT 135°C, Tetra Pak, CIP-мойка, БПК₅ 3000→6 мг/л", level: "L5", exercises: 4,  color: "sky"     },
+
+  // ── Коммерческая недвижимость: банки, ТРЦ, отели ──
+  { id: "banks-branches",         category: "special",   href: "/smeta-trainer/drawings-practice/banks-branches",         icon: "🏦", title: "Банковские отделения",            subtitle: "Halyk/Kaspi/ForteBank, хранилище кл. III ГОСТ Р 50862, бронестекло Б3", level: "L5", exercises: 4,  color: "emerald" },
+  { id: "shopping-malls",         category: "special",   href: "/smeta-trainer/drawings-practice/shopping-malls",         icon: "🛍️", title: "Торгово-развлекательные центры",  subtitle: "Mega/Esentai 50 000 м² GLA, эскалаторы Schindler, СН РК 2.02-15 Ф3.1",  level: "L5", exercises: 4,  color: "violet"  },
+  { id: "hotels-resorts",         category: "special",   href: "/smeta-trainer/drawings-practice/hotels-resorts",         icon: "🏨", title: "Гостиницы 5★ и курорты",          subtitle: "Ritz-Carlton/Rixos, СП РК 3.02-08, Rw≥52 дБ, СПА, банкетные залы",      level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { SubmitIdeaForm } from "./components/SubmitIdeaForm";
 import { IdeaCard, type Idea } from "./components/IdeaCard";
 import { InterestModal } from "./components/InterestModal";
@@ -318,6 +319,23 @@ export default function StartupExchangePage() {
               и сохраняет его как content-hash. Это та же схема, что использует QRight, — позже идею можно перенести в QRight-реестр без переподписи.
             </div>
           </div>
+        </div>
+
+        <div style={{ marginTop: 32 }}>
+          <MvpConceptBoard
+            moduleId="startupx"
+            noun="concept/messages"
+            accent="amber"
+            sectionTitle="Founder ↔ investor concept board"
+            sectionHint="Что должно быть в стартап-маркетплейсе? Какие сигналы важны инвесторам?"
+            titleField="idea"
+            summaryField="rationale"
+            fields={[
+              { key: "idea", label: "Идея / фича", placeholder: "напр.: AI-скоринг team-fit к нише", required: true },
+              { key: "rationale", label: "Почему это закроет gap", type: "textarea", placeholder: "Что не дают существующие платформы" },
+              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            ]}
+          />
         </div>
       </ProductPageShell>
 

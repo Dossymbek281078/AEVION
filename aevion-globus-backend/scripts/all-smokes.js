@@ -83,6 +83,13 @@ const SMOKES = [
   { name: "healthai-prod", script: "healthai-prod-smoke.js", readOnly: true },
   // QShield + QRight PROD — 15 read-only checks (Shamir health, QRight objects, auth gates).
   { name: "qshield-prod", script: "qshield-prod-smoke.js", readOnly: true },
+  // QZone PROD — 15 checks: QAI personas+sessions+chat, DevHub, QSocial, QMedia (qzone-block5).
+  { name: "qzone-prod", script: "qzone-prod-smoke.js", readOnly: true },
+  // Pricing PROD — 15 checks: FAQ, social-proof, provisioning, category filter.
+  { name: "pricing-prod", script: "pricing-prod-smoke.js", readOnly: true },
+  // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
+  // Closes the prod-surface gap for modules without their own *-prod-smoke.
+  { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.
@@ -124,6 +131,13 @@ const SMOKES = [
   { name: "deepsan", script: "deepsan-smoke.js", readOnly: false },
   { name: "qpersona", script: "qpersona-smoke.js", readOnly: false },
   { name: "qfusionai", script: "qfusionai-smoke.js", readOnly: false },
+  // Wave 4 MVPs (2026-05-15) — qlife/qgood.
+  { name: "qlife", script: "qlife-smoke.js", readOnly: false },
+  { name: "qgood", script: "qgood-smoke.js", readOnly: false },
+  // Wave 5 MVPs (2026-05-15) — lifebox/psyapp-deps/shadownet.
+  { name: "lifebox", script: "lifebox-smoke.js", readOnly: false },
+  { name: "psyapp-deps", script: "psyapp-deps-smoke.js", readOnly: false },
+  { name: "shadownet", script: "shadownet-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

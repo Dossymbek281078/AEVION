@@ -2,6 +2,7 @@
 
 import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import Filters, { LangFilter, MoodFilter } from "./components/Filters";
 import StatsBar, { Stats } from "./components/StatsBar";
 import TrackCard, { Track } from "./components/TrackCard";
@@ -395,6 +396,23 @@ export default function VoiceOfEarthPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
+        <MvpConceptBoard
+          moduleId="voe"
+          noun="concept/messages"
+          accent="teal"
+          sectionTitle="Voice of Earth concept board"
+          sectionHint="Какие языки/традиции должны быть представлены? Как верифицировать происхождение трека?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / язык / традиция", placeholder: "напр.: горловое пение народов Алтая", required: true },
+            { key: "rationale", label: "Зачем это в каталоге", type: "textarea", placeholder: "Культурный контекст, источник, носители" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </section>
 
       <footer style={footerStyle}>

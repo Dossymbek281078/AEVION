@@ -188,9 +188,9 @@ export const projects: GlobusProject[] = [
     code: "QLIFE",
     name: "QLife — Longevity & Anti-Aging",
     description:
-      "Система персональной антистареющей программы: биомаркеры, анализы, генетика и план действий.",
+      "Антистарение MVP 2026-05-15 — биомаркеры (BP/weight/sleep/VO2max/HRV/glucose/stress), weekly trends, AI longevity plan via QCoreAI. /api/qlife.",
     kind: "product",
-    status: "idea",
+    status: "in_progress",
     priority: 2,
     tags: ["health", "longevity", "anti-aging"],
     createdAt: now,
@@ -203,9 +203,9 @@ export const projects: GlobusProject[] = [
     code: "QGOOD",
     name: "QGood — Psychology & Mental Health",
     description:
-      "Психологическое приложение с ИИ-собеседником, офлайн-режимом и глубокой персонализацией.",
+      "Психо-MVP 2026-05-15 — mood log (1-10 + emotion), AI therapist chat, 5 exercises (breathing/grounding/gratitude/body-scan/reframe), 7-day trend. /api/qgood.",
     kind: "product",
-    status: "idea",
+    status: "in_progress",
     priority: 2,
     tags: ["psychology", "mental-health", "ai"],
     createdAt: now,

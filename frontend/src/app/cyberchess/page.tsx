@@ -344,6 +344,45 @@ function pc(t:PieceSymbol,c:ChessColor){return PM[`${c}${t}`]||"?"}
 /* ═══ Theme ═══ */
 const T={bg:"#f3f4f6",surface:"#fff",border:"#e5e7eb",text:"#111827",dim:"#6b7280",accent:"#059669",gold:"#d97706",danger:"#dc2626",blue:"#2563eb",purple:"#7c3aed",sel:"rgba(5,150,105,0.45)",valid:"rgba(5,150,105,0.35)",cap:"rgba(220,38,38,0.35)",last:"rgba(217,119,6,0.50)",chk:"rgba(220,38,38,0.55)",pm:"rgba(37,99,235,0.35)",pmS:"rgba(37,99,235,0.5)"};
 
+// ══════ Фоновые темы приложения ══════
+type BgPreset = {id:string;name:string;emoji:string;css?:string;desc:string};
+const BG_PRESETS: BgPreset[] = [
+  {id:"none",        name:"Без фона",     emoji:"⬛", desc:"Стандартный цвет темы"},
+  // Абстрактные градиенты
+  {id:"midnight",    name:"Midnight",     emoji:"🌌", desc:"Тёмно-синяя ночь",
+    css:"radial-gradient(ellipse at top,#1a1a3e 0%,#0a0a1a 60%,#000 100%)"},
+  {id:"aurora",      name:"Аврора",       emoji:"🌈", desc:"Северное сияние",
+    css:"linear-gradient(135deg,#0d0d2b 0%,#1a1a4e 30%,#0d3b2e 60%,#0d2b0d 100%)"},
+  {id:"forest",      name:"Лес",          emoji:"🌲", desc:"Тёмный лес",
+    css:"radial-gradient(ellipse at bottom,#0f2010 0%,#0a1a0a 50%,#050a05 100%)"},
+  {id:"ocean",       name:"Океан",        emoji:"🌊", desc:"Глубокий океан",
+    css:"linear-gradient(180deg,#001428 0%,#002050 40%,#000e28 100%)"},
+  {id:"sunset",      name:"Закат",        emoji:"🌅", desc:"Оранжевый закат",
+    css:"linear-gradient(180deg,#1a0a00 0%,#3d1400 30%,#1a0a0a 70%,#0a0505 100%)"},
+  {id:"chess-marble",name:"Мрамор",       emoji:"🏛", desc:"Белый мрамор",
+    css:"repeating-linear-gradient(45deg,#f5f5f5 0%,#e8e8e8 1px,#f5f5f5 2px,#f0f0f0 3px)"},
+  // Флаги стран (CSS-only приближение)
+  {id:"flag-kz",     name:"Казахстан",    emoji:"🇰🇿", desc:"Флаг РК",
+    css:"linear-gradient(180deg,#00AFCA 0%,#00AFCA 100%)"},
+  {id:"flag-ru",     name:"Россия",       emoji:"🇷🇺", desc:"Флаг России",
+    css:"linear-gradient(180deg,#fff 0%,#fff 33%,#0039A6 33%,#0039A6 66%,#D52B1E 66%,#D52B1E 100%)"},
+  {id:"flag-us",     name:"США",          emoji:"🇺🇸", desc:"Флаг США",
+    css:"repeating-linear-gradient(180deg,#B22234 0px,#B22234 12px,#fff 12px,#fff 24px)"},
+  {id:"flag-de",     name:"Германия",     emoji:"🇩🇪", desc:"Флаг Германии",
+    css:"linear-gradient(180deg,#000 0%,#000 33%,#DD0000 33%,#DD0000 66%,#FFCE00 66%,#FFCE00 100%)"},
+  {id:"flag-fr",     name:"Франция",      emoji:"🇫🇷", desc:"Флаг Франции",
+    css:"linear-gradient(90deg,#002395 33%,#fff 33%,#fff 66%,#ED2939 66%)"},
+  {id:"flag-gb",     name:"Великобритания",emoji:"🇬🇧", desc:"Флаг Великобритании",
+    css:"radial-gradient(ellipse at center,#012169 0%,#C8102E 50%,#012169 100%)"},
+  // Шахматные клубы / атмосфера
+  {id:"club-wood",   name:"Деревянный клуб",emoji:"🪵", desc:"Тёплый дуб",
+    css:"repeating-linear-gradient(90deg,#3d2b1f 0px,#4a3428 8px,#3d2b1f 16px,#352418 24px)"},
+  {id:"club-luxury", name:"Элитный клуб", emoji:"💎", desc:"Чёрный + золото",
+    css:"linear-gradient(135deg,#0a0a0a 0%,#1a1400 50%,#0a0a0a 100%)"},
+  {id:"club-modern", name:"Современный",  emoji:"🏙", desc:"Серый минимализм",
+    css:"linear-gradient(135deg,#1a1a1a 0%,#2d2d2d 50%,#1a1a1a 100%)"},
+];
+
 type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string;premium?:string};
 const BOARD_THEMES: BoardTheme[] = [
   {name:"Classic",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
@@ -765,6 +804,9 @@ export default function CyberChessPage(){
   // Default: dark (как lichess). Пользователь переключает в Settings.
   const[themeMode,sThemeMode]=useState<"light"|"dark">(()=>{try{const v=localStorage.getItem("aevion_chess_color_theme_v1");return v==="light"?"light":"dark"}catch{return"dark"}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_color_theme_v1",themeMode)}catch{}},[themeMode]);
+  // Фоновое изображение для приложения — preset id или data: URL пользовательского
+  const[bgPreset,sBgPreset]=useState<string>(()=>{try{return localStorage.getItem("cc_bg_preset_v1")||"none"}catch{return"none"}});
+  useEffect(()=>{try{localStorage.setItem("cc_bg_preset_v1",bgPreset)}catch{}},[bgPreset]);
   // Active palette — shadows the imported CC_LIGHT so every existing CC.* lookup
   // in this component reads the active theme. Top-level helpers above the
   // component still see CC_LIGHT via the import alias (kept for backwards compat
@@ -3510,7 +3552,15 @@ export default function CyberChessPage(){
     </main>);
   }
 
-  return(<main suppressHydrationWarning style={{background:CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column"}}>
+  // Фон: если выбран preset или custom — накладываем с полупрозрачным overlay
+  const bgStyle: React.CSSProperties = bgPreset==="none"||!bgPreset ? {} : bgPreset.startsWith("data:")||bgPreset.startsWith("blob:") ? {
+    backgroundImage:`url(${bgPreset})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
+  } : BG_PRESETS.find(p=>p.id===bgPreset)?.css ? {
+    backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
+  } : {};
+  const hasBg=bgPreset!=="none"&&!!bgPreset;
+  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
+    {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth><AevionTicker/>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
@@ -10302,6 +10352,63 @@ ${question.trim()}`;
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🌗 Внешний вид</div>
             <Row label="Тёмная тема" desc="Тёмный фон, светлый текст. Темы доски и набор фигур не меняются." checked={themeMode==="dark"} onChange={()=>{sThemeMode(m=>m==="dark"?"light":"dark");showToast(themeMode==="dark"?"Светлая тема":"Тёмная тема","info")}}/>
+            {/* Фоновое изображение */}
+            <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:4}}>🖼 Фон приложения</div>
+              <div style={{fontSize:12,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.4}}>
+                Сейчас: <b style={{color:CC.text}}>{BG_PRESETS.find(p=>p.id===bgPreset)?.emoji||"📷"} {bgPreset.startsWith("data:")||bgPreset.startsWith("blob:")?"Свой фон":(BG_PRESETS.find(p=>p.id===bgPreset)?.name||"Без фона")}</b>
+              </div>
+              {/* Группы пресетов */}
+              {[
+                {label:"Без фона / Абстрактные",ids:["none","midnight","aurora","forest","ocean","sunset","chess-marble"]},
+                {label:"🏳 Флаги стран",ids:["flag-kz","flag-ru","flag-us","flag-de","flag-fr","flag-gb"]},
+                {label:"♟ Шахматные клубы",ids:["club-wood","club-luxury","club-modern"]},
+              ].map(group=><div key={group.label} style={{marginBottom:SPACE[2]}}>
+                <div style={{fontSize:9,fontWeight:900,color:CC.textMute,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>{group.label}</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                  {BG_PRESETS.filter(p=>group.ids.includes(p.id)).map(p=>{
+                    const sel=bgPreset===p.id;
+                    return <button key={p.id}
+                      onClick={()=>{sBgPreset(p.id);showToast(`${p.emoji} ${p.name}`,"info")}}
+                      title={p.desc}
+                      style={{
+                        padding:"5px 9px",borderRadius:RADIUS.full,
+                        border:sel?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:sel?CC.brandSoft:CC.surface2,
+                        color:sel?CC.brand:CC.textDim,
+                        cursor:"pointer",fontSize:12,fontWeight:sel?800:600,
+                        display:"flex",alignItems:"center",gap:4,
+                        transition:`all 150ms`,
+                      }}>
+                      <span>{p.emoji}</span><span style={{fontSize:10}}>{p.name}</span>
+                    </button>;
+                  })}
+                </div>
+              </div>)}
+              {/* Загрузить свой */}
+              <div style={{marginTop:SPACE[2]}}>
+                <div style={{fontSize:9,fontWeight:900,color:CC.textMute,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:4}}>Свой фон</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  <label style={{padding:"6px 12px",borderRadius:RADIUS.full,border:`1px dashed ${CC.border}`,background:CC.surface2,color:CC.textDim,cursor:"pointer",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:5}}>
+                    📁 Загрузить с компьютера
+                    <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
+                      const f=e.target.files?.[0];if(!f)return;
+                      const reader=new FileReader();
+                      reader.onload=()=>{
+                        const url=reader.result as string;
+                        sBgPreset(url);
+                        try{localStorage.setItem("cc_bg_preset_v1",url)}catch{showToast("Фото слишком большое для сохранения","error")}
+                        showToast("📁 Фон загружен","success");
+                      };
+                      reader.readAsDataURL(f);
+                      e.target.value="";
+                    }}/>
+                  </label>
+                  {(bgPreset.startsWith("data:")||bgPreset.startsWith("blob:"))&&<button onClick={()=>{sBgPreset("none");showToast("Фон убран","info")}} style={{padding:"6px 10px",borderRadius:RADIUS.full,border:`1px solid ${CC.danger}`,background:"transparent",color:CC.danger,cursor:"pointer",fontSize:11,fontWeight:700}}>✕ Убрать</button>}
+                </div>
+                <div style={{fontSize:10,color:CC.textMute,marginTop:4}}>JPG/PNG/WebP · фон применяется только в CyberChess</div>
+              </div>
+            </div>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>

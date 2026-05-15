@@ -32,6 +32,9 @@ import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
+import cyberchessTournamentsRouter from "./routes/cyberchessTournaments";
+import cyberchessDailyRouter from "./routes/cyberchessDaily";
+import cyberchessVoiceCoachRouter from "./routes/cyberchessVoiceCoach";
 import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
@@ -419,6 +422,9 @@ app.use("/api/qright", qrightRouter);
 app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
+app.use("/api/cyberchess-tournaments", cyberchessTournamentsRouter);
+app.use("/api/cyberchess-daily", cyberchessDailyRouter);
+app.use("/api/cyberchess-voice-coach", cyberchessVoiceCoachRouter);
 app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================

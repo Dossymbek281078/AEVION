@@ -480,13 +480,52 @@ export interface QMediaTrendingResponse {
   [key: string]: unknown;
 }
 
+// ── v0.8 QMedia videos ──────────────────────────────────────────────────────
+
+export interface QMediaVideo {
+  id: string;
+  userId?: string;
+  title: string;
+  description?: string | null;
+  url?: string | null;
+  thumbnailUrl?: string | null;
+  duration?: number;
+  viewCount?: number;
+  isPublic?: boolean;
+  category?: string;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface QMediaVideosResponse {
+  total?: number;
+  items: QMediaVideo[];
+  [key: string]: unknown;
+}
+
+export interface QMediaPlayResult {
+  ok?: boolean;
+  /** Backend currently returns `playCount`; SDK aliases as `plays` for forward-compat. */
+  playCount?: number;
+  plays?: number;
+  [key: string]: unknown;
+}
+
 export interface CoachSession {
   id: string;
+  ownerKey?: string;
   title?: string;
+  topic?: string;
+  startingFen?: string;
   startedAt?: string;
   endedAt?: string | null;
+  durationSec?: number;
   durationMin?: number;
-  topic?: string;
+  notes?: string;
+  messageCount?: number;
+  goalsLinked?: string[];
   summary?: string;
   [key: string]: unknown;
 }
@@ -502,7 +541,11 @@ export interface CoachGoal {
   id: string;
   title: string;
   description?: string;
+  /** Legacy v0.7 field. Server now returns `targetDate`. */
   dueDate?: string | null;
+  /** v0.8: matches backend's `/api/coach/goals` (post-Bearer migration). */
+  targetDate?: string | null;
+  sessionId?: string | null;
   completed?: boolean;
   completedAt?: string | null;
   createdAt?: string;
@@ -517,18 +560,53 @@ export interface CoachGoalsResponse {
   [key: string]: unknown;
 }
 
+/**
+ * v0.7 input shape — kept for back-compat (`createGoal` accepts either).
+ * Prefer `CoachGoalInput` for new code.
+ * @deprecated since 0.8.0 — use `CoachGoalInput`.
+ */
 export interface CoachGoalCreateInput {
   title: string;
   description?: string;
+  /** v0.7 field — backend now uses `targetDate`. SDK still forwards both for transition. */
   dueDate?: string;
 }
 
+/**
+ * v0.8 input shape for `coach.createGoal`. Matches backend
+ * `POST /api/coach/goals` after Bearer migration (block 7).
+ */
+export interface CoachGoalInput {
+  title: string;
+  description?: string;
+  /** ISO 8601 (date or datetime). */
+  targetDate?: string;
+  /** Optional link to an existing coach session — must belong to caller. */
+  sessionId?: string;
+}
+
+/**
+ * v0.7 response shape — kept for back-compat (`completeGoal` may return either).
+ * Prefer `{ goal }` (v0.8 backend shape) for new code.
+ * @deprecated since 0.8.0 — backend now returns `{ goal }`.
+ */
 export interface CoachGoalCompleteResponse {
   ok: boolean;
   goalId: string;
   completed: boolean;
   completedAt?: string;
   [key: string]: unknown;
+}
+
+export interface CoachSessionStartInput {
+  topic: string;
+  /** Optional FEN string (≤120 chars) — chess starting position. */
+  fen?: string;
+}
+
+export interface CoachSessionEndInput {
+  notes?: string;
+  messageCount?: number;
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -573,9 +651,9 @@ export class AevionCatalog {
   readonly qcoreai: QCoreAIClient;
   /** Multichat (multi-provider presets + provider status) sub-client (v0.7). */
   readonly multichat: MultichatClient;
-  /** QMedia (recommendations / trending / tracks) sub-client (v0.7). */
+  /** QMedia (recommendations / trending / tracks / videos / play) sub-client (v0.7, extended in v0.8). */
   readonly qmedia: QMediaClient;
-  /** Coach (sessions + goals) sub-client (v0.7). */
+  /** Coach (sessions + goals — full mutation API) sub-client (v0.7, extended in v0.8). */
   readonly coach: CoachClient;
 
   constructor(config: AevionCatalogConfig = {}) {
@@ -1221,9 +1299,70 @@ export class QMediaClient {
     return this._root._request<QMediaTrendingResponse>("GET", "/api/qmedia/trending");
   }
 
-  /** GET /api/qmedia/tracks — full tracks listing. */
-  tracks(): Promise<QMediaTracksResponse> {
-    return this._root._request<QMediaTracksResponse>("GET", "/api/qmedia/tracks");
+  /**
+   * GET /api/qmedia/tracks — public tracks listing (v0.8 adds optional filters).
+   *
+   * Backend clamps `limit` to 1..50. SDK mirrors that.
+   * No args → identical to v0.7 behaviour.
+   */
+  tracks(opts: { limit?: number; genre?: string; q?: string } = {}): Promise<QMediaTracksResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(50, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    if (opts.genre) query.genre = opts.genre;
+    if (opts.q) query.q = opts.q;
+    return this._root._request<QMediaTracksResponse>("GET", "/api/qmedia/tracks", { query });
+  }
+
+  /**
+   * GET /api/qmedia/videos?limit=N&category=&q= — public videos listing (v0.8).
+   *
+   * Backend clamps `limit` to 1..50; SDK mirrors the clamp client-side.
+   * `category` / `q` are server-side filters identical to /tracks.
+   */
+  videos(opts: { limit?: number; offset?: number; category?: string; q?: string } = {}): Promise<QMediaVideosResponse> {
+    const query: Record<string, string | number | undefined> = {};
+    if (opts.limit != null) {
+      const n = Math.max(1, Math.min(50, Math.floor(opts.limit)));
+      query.limit = n;
+    }
+    if (opts.offset != null) {
+      const n = Math.max(0, Math.floor(opts.offset));
+      query.offset = n;
+    }
+    if (opts.category) query.category = opts.category;
+    if (opts.q) query.q = opts.q;
+    return this._root._request<QMediaVideosResponse>("GET", "/api/qmedia/videos", { query });
+  }
+
+  /**
+   * POST /api/qmedia/tracks/:id/play — record a play for a track (v0.8).
+   *
+   * Server returns `{ playCount }`; SDK normalises to `{ ok: true, plays }`
+   * (also passes through original `playCount`) so callers can rely on a
+   * consistent shape going forward.
+   */
+  async recordPlay(trackId: string): Promise<QMediaPlayResult> {
+    if (!trackId || !/^[a-z0-9-]+$/i.test(trackId)) {
+      throw new Error(`QMedia.recordPlay invalid trackId: '${trackId}'`);
+    }
+    const raw = await this._root._request<QMediaPlayResult>(
+      "POST",
+      `/api/qmedia/tracks/${trackId}/play`,
+    );
+    const plays =
+      typeof raw?.plays === "number"
+        ? raw.plays
+        : typeof raw?.playCount === "number"
+          ? raw.playCount
+          : undefined;
+    return {
+      ok: true,
+      ...raw,
+      ...(plays != null ? { plays, playCount: plays } : {}),
+    };
   }
 }
 
@@ -1236,6 +1375,72 @@ export class CoachClient {
     return this._root._request<CoachSessionsResponse>("GET", "/api/coach/sessions");
   }
 
+  /** GET /api/coach/sessions/:id — single session detail. (v0.8) */
+  getSession(sessionId: string): Promise<{ session: CoachSession }> {
+    if (!sessionId || sessionId.trim().length === 0) {
+      throw new Error(`Coach.getSession missing sessionId`);
+    }
+    return this._root._request<{ session: CoachSession }>(
+      "GET",
+      `/api/coach/sessions/${encodeURIComponent(sessionId)}`,
+    );
+  }
+
+  /**
+   * POST /api/coach/sessions/start — start a coaching session. (v0.8)
+   *
+   * Body: `{ topic, fen? }`. Returns `{ session }`. SDK unwraps and returns
+   * the bare `CoachSession` so call-sites stay flat.
+   */
+  async startSession(input: CoachSessionStartInput): Promise<CoachSession> {
+    if (!input || typeof input.topic !== "string" || input.topic.trim().length === 0) {
+      throw new Error("Coach.startSession missing topic");
+    }
+    const body: { topic: string; startingFen?: string } = { topic: input.topic.trim() };
+    if (input.fen !== undefined) {
+      if (typeof input.fen !== "string" || input.fen.length > 120) {
+        throw new Error(`Coach.startSession invalid fen (must be string ≤120 chars)`);
+      }
+      body.startingFen = input.fen.trim();
+    }
+    const r = await this._root._request<{ session: CoachSession }>(
+      "POST",
+      "/api/coach/sessions/start",
+      { body },
+    );
+    return r.session;
+  }
+
+  /**
+   * POST /api/coach/sessions/:id/end — end an active session. (v0.8)
+   *
+   * Body: `{ notes?, messageCount? }`. Returns `{ session }`. SDK unwraps.
+   */
+  async endSession(sessionId: string, input: CoachSessionEndInput = {}): Promise<CoachSession> {
+    if (!sessionId || sessionId.trim().length === 0) {
+      throw new Error("Coach.endSession missing sessionId");
+    }
+    const body: CoachSessionEndInput = {};
+    if (input.notes !== undefined) {
+      if (typeof input.notes !== "string") {
+        throw new Error("Coach.endSession notes must be a string");
+      }
+      body.notes = input.notes;
+    }
+    if (input.messageCount !== undefined) {
+      if (typeof input.messageCount !== "number" || !Number.isFinite(input.messageCount) || input.messageCount < 0) {
+        throw new Error("Coach.endSession messageCount must be a non-negative number");
+      }
+      body.messageCount = Math.floor(input.messageCount);
+    }
+    const r = await this._root._request<{ session: CoachSession }>(
+      "POST",
+      `/api/coach/sessions/${encodeURIComponent(sessionId)}/end`,
+      { body },
+    );
+    return r.session;
+  }
+
   /** GET /api/coach/goals?completed=true|false — list goals. */
   goals(opts: { completed?: boolean } = {}): Promise<CoachGoalsResponse> {
     const query: Record<string, string | number | undefined> = {};
@@ -1245,33 +1450,84 @@ export class CoachClient {
     return this._root._request<CoachGoalsResponse>("GET", "/api/coach/goals", { query });
   }
 
-  /** POST /api/coach/goals — create a new goal. */
-  createGoal(input: CoachGoalCreateInput): Promise<CoachGoal> {
+  /**
+   * POST /api/coach/goals — create a new goal.
+   *
+   * **Breaking change in v0.8:**
+   *  - Input field renamed `dueDate` → `targetDate` (backend rename after Bearer
+   *    migration in block 7). Legacy `dueDate` is still accepted on input and
+   *    forwarded as `targetDate` for one-version transition; this fallback will
+   *    be removed in v0.9.
+   *  - Return type changed: `CoachGoal` → `{ goal: CoachGoal }`.
+   *  - Adds optional `sessionId` to link a goal to an existing coach session.
+   */
+  createGoal(
+    input: CoachGoalInput | CoachGoalCreateInput,
+  ): Promise<{ goal: CoachGoal }> {
     if (!input || typeof input.title !== "string" || input.title.trim().length === 0) {
       throw new Error("Coach.createGoal missing title");
     }
-    const body: CoachGoalCreateInput = { title: input.title };
+    const body: { title: string; description?: string; targetDate?: string; sessionId?: string } = {
+      title: input.title.trim(),
+    };
     if (input.description !== undefined) body.description = input.description;
-    if (input.dueDate !== undefined) {
-      if (!/^\d{4}-\d{2}-\d{2}/.test(input.dueDate)) {
+
+    // Prefer v0.8 `targetDate`, fall back to v0.7 `dueDate`.
+    const target =
+      "targetDate" in input && input.targetDate !== undefined
+        ? input.targetDate
+        : "dueDate" in input && input.dueDate !== undefined
+          ? input.dueDate
+          : undefined;
+    if (target !== undefined) {
+      if (typeof target !== "string" || Number.isNaN(Date.parse(target))) {
         throw new Error(
-          `Coach.createGoal invalid dueDate '${input.dueDate}', expected ISO YYYY-MM-DD[...]`,
+          `Coach.createGoal invalid targetDate '${target}', expected ISO 8601`,
         );
       }
-      body.dueDate = input.dueDate;
+      body.targetDate = target;
     }
-    return this._root._request<CoachGoal>("POST", "/api/coach/goals", { body });
+
+    if ("sessionId" in input && input.sessionId !== undefined) {
+      if (typeof input.sessionId !== "string" || input.sessionId.trim().length === 0) {
+        throw new Error(`Coach.createGoal invalid sessionId`);
+      }
+      body.sessionId = input.sessionId;
+    }
+
+    return this._root._request<{ goal: CoachGoal }>("POST", "/api/coach/goals", { body });
   }
 
-  /** POST /api/coach/goals/:id/complete — mark a goal as completed. */
-  completeGoal(goalId: string): Promise<CoachGoalCompleteResponse> {
-    if (!goalId || !/^[a-z0-9-]+$/i.test(goalId)) {
-      throw new Error(`Coach.completeGoal invalid goalId: '${goalId}'`);
+  /**
+   * POST /api/coach/goals/:id/complete — mark a goal as completed.
+   *
+   * **Breaking change in v0.8:** return type changed from
+   * `CoachGoalCompleteResponse` to `{ goal: CoachGoal }`. Idempotent.
+   */
+  async completeGoal(goalId: string): Promise<{ goal: CoachGoal }> {
+    if (!goalId || goalId.trim().length === 0) {
+      throw new Error(`Coach.completeGoal missing goalId`);
     }
-    return this._root._request<CoachGoalCompleteResponse>(
+    return this._root._request<{ goal: CoachGoal }>(
       "POST",
-      `/api/coach/goals/${goalId}/complete`,
+      `/api/coach/goals/${encodeURIComponent(goalId)}/complete`,
     );
+  }
+
+  /**
+   * DELETE /api/coach/goals/:id — remove a goal. (v0.8)
+   *
+   * Backend returns 204 No Content; SDK normalises to `{ ok: true }`.
+   */
+  async deleteGoal(goalId: string): Promise<{ ok: boolean }> {
+    if (!goalId || goalId.trim().length === 0) {
+      throw new Error(`Coach.deleteGoal missing goalId`);
+    }
+    await this._root._request<unknown>(
+      "DELETE",
+      `/api/coach/goals/${encodeURIComponent(goalId)}`,
+    );
+    return { ok: true };
   }
 }
 
@@ -1484,18 +1740,52 @@ export const getQMediaTrending = () => _default.qmedia.trending();
 /** Convenience: QMedia full tracks listing. */
 export const getQMediaTracks = () => _default.qmedia.tracks();
 
+/** Convenience: QMedia public videos listing (v0.8). */
+export const getQMediaVideos = (opts?: { limit?: number; offset?: number }) =>
+  _default.qmedia.videos(opts);
+
+/** Convenience: record a play for a QMedia track (v0.8). */
+export const recordQMediaPlay = (trackId: string) =>
+  _default.qmedia.recordPlay(trackId);
+
 /** Convenience: current user's coach sessions. */
 export const getMyCoachSessions = () => _default.coach.sessions();
+
+/** Convenience: single coach session detail (v0.8). */
+export const getCoachSession = (sessionId: string) =>
+  _default.coach.getSession(sessionId);
+
+/** Convenience: start a coach session (v0.8). */
+export const startCoachSession = (input: CoachSessionStartInput) =>
+  _default.coach.startSession(input);
+
+/** Convenience: end a coach session (v0.8). */
+export const endCoachSession = (sessionId: string, input?: CoachSessionEndInput) =>
+  _default.coach.endSession(sessionId, input);
 
 /** Convenience: current user's coach goals. */
 export const getMyCoachGoals = (opts?: { completed?: boolean }) =>
   _default.coach.goals(opts);
 
-/** Convenience: create a new coach goal. */
-export const createCoachGoal = (input: CoachGoalCreateInput) =>
+/**
+ * Convenience: create a new coach goal.
+ *
+ * **v0.8 breaking change:** returns `{ goal: CoachGoal }` (was `CoachGoal`)
+ * and accepts `targetDate`/`sessionId`. Legacy `dueDate` still accepted on
+ * input until v0.9.
+ */
+export const createCoachGoal = (input: CoachGoalInput | CoachGoalCreateInput) =>
   _default.coach.createGoal(input);
 
-/** Convenience: mark a coach goal as completed. */
+/**
+ * Convenience: mark a coach goal as completed.
+ *
+ * **v0.8 breaking change:** returns `{ goal: CoachGoal }` (was
+ * `{ ok, goalId, completed, completedAt }`).
+ */
 export const completeCoachGoal = (goalId: string) => _default.coach.completeGoal(goalId);
+
+/** Convenience: delete a coach goal (v0.8). */
+export const deleteCoachGoal = (goalId: string) => _default.coach.deleteGoal(goalId);
 
 export default AevionCatalog;

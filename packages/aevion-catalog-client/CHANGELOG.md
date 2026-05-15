@@ -2,6 +2,122 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.8.0] — 2026-05-14
+
+### Added — QMedia
+
+- `qmedia.videos({ limit?, offset? })` → `GET /api/qmedia/videos` — public
+  videos listing. `limit` clamped 1..50 client-side to mirror the server.
+- `qmedia.recordPlay(trackId)` → `POST /api/qmedia/tracks/:id/play` — record a
+  play for a track. SDK normalises the server response (`{ playCount }`) into
+  `{ ok: true, plays, playCount }` so callers get a stable shape going
+  forward.
+
+### Added — Coach (full mutation API)
+
+Coach sub-client now mirrors the post-Bearer-migration backend at
+`aevion-globus-backend/src/routes/coach.ts`:
+
+- `coach.startSession({ topic, fen? })` → `POST /api/coach/sessions/start`.
+  Returns the bare `CoachSession` (server returns `{ session }`, SDK unwraps
+  it).
+- `coach.endSession(id, { notes?, messageCount? })` → `POST
+  /api/coach/sessions/:id/end`. Returns the bare `CoachSession`.
+- `coach.getSession(id)` → `GET /api/coach/sessions/:id` → `{ session }`.
+- `coach.deleteGoal(id)` → `DELETE /api/coach/goals/:id`. Normalises the 204
+  response to `{ ok: true }`.
+
+### Added — convenience exports
+
+`getQMediaVideos`, `recordQMediaPlay`, `getCoachSession`,
+`startCoachSession`, `endCoachSession`, `deleteCoachGoal`.
+
+### Added — types
+
+`QMediaVideo`, `QMediaVideosResponse`, `QMediaPlayResult`, `CoachGoalInput`,
+`CoachSessionStartInput`, `CoachSessionEndInput`. Extended `CoachSession` and
+`CoachGoal` with backend-shipping fields: `topic`, `startingFen`,
+`messageCount`, `goalsLinked`, `targetDate`, `sessionId`.
+
+### Changed — Coach (breaking)
+
+- **`coach.createGoal(input)`** — input shape changed: field `dueDate` is
+  renamed `targetDate`, with new optional `sessionId`. Legacy `dueDate` is
+  still accepted on input for one version and forwarded to the backend as
+  `targetDate`; this fallback will be removed in v0.9.
+- **`coach.createGoal(input)`** — return type changed: `Promise<CoachGoal>` →
+  `Promise<{ goal: CoachGoal }>` (matches backend post-Bearer-migration).
+- **`coach.completeGoal(id)`** — return type changed:
+  `Promise<{ ok, goalId, completed, completedAt }>` →
+  `Promise<{ goal: CoachGoal }>`.
+- `CoachGoal.dueDate` — still typed for back-compat (read legacy data), but
+  new code should read `targetDate`.
+
+### Migration
+
+```ts
+// v0.7
+const goal = await cat.coach.createGoal({ title: "x", dueDate: "2026-06-01" });
+console.log(goal.id);
+
+// v0.8
+const { goal } = await cat.coach.createGoal({
+  title: "x",
+  targetDate: "2026-06-01",
+});
+console.log(goal.id);
+
+// v0.7
+const r = await cat.coach.completeGoal("g1");
+if (r.completed) { /* ... */ }
+
+// v0.8
+const { goal } = await cat.coach.completeGoal("g1");
+if (goal.completed) { /* ... */ }
+```
+
+## [0.7.0] — 2026-05-14
+
+### Added — four more typed sub-clients
+
+All four share the parent `AevionCatalog` `baseUrl`, `fetch`, and `headers` config:
+
+- **QCoreAI** (`cat.qcoreai`)
+  - `providers()` — GET `/api/qcoreai/providers`
+  - `health()`    — GET `/api/qcoreai/health`
+  - `chat({ provider, model, messages })` — POST `/api/qcoreai/chat`
+- **Multichat** (`cat.multichat`)
+  - `providerStatus()` — GET `/api/multichat/provider-status`
+  - `presets()`        — GET `/api/multichat/presets`
+  - `launchPreset(id)` — POST `/api/multichat/presets/:id/launch`
+- **QMedia** (`cat.qmedia`)
+  - `recommendations({ limit? })` — GET `/api/qmedia/recommendations`
+  - `trending()`                  — GET `/api/qmedia/trending`
+  - `tracks()`                    — GET `/api/qmedia/tracks`
+- **Coach** (`cat.coach`)
+  - `sessions()` — GET `/api/coach/sessions`
+  - `goals({ completed? })` — GET `/api/coach/goals`
+  - `createGoal({ title, description?, dueDate? })` — POST `/api/coach/goals`
+  - `completeGoal(id)` — POST `/api/coach/goals/:id/complete`
+
+### Added — convenience exports
+
+`getQCoreAIProviders`, `getQCoreAIHealth`, `qcoreaiChat`,
+`getMultichatPresets`, `getMultichatProviderStatus`, `launchMultichatPreset`,
+`getQMediaRecommendations`, `getQMediaTrending`, `getQMediaTracks`,
+`getMyCoachSessions`, `getMyCoachGoals`, `createCoachGoal`,
+`completeCoachGoal`.
+
+### Packaging
+
+- `package.json` now declares `module`, `exports` (dual CJS/ESM-style resolver
+  entrypoints pointing at the same CJS build), `sideEffects: false`,
+  `publishConfig.access = "public"`, `homepage`, `bugs`.
+- `files` whitelist extended to include `CHANGELOG.md` and `LICENSE`.
+- `prepublishOnly` now runs **build + test** (was build only).
+- `.npmignore` expanded with `coverage/`, `.vitest/`, `*.tgz`, editor dirs.
+- New `PUBLISH-CHECKLIST.md` — single-page operator checklist.
+
 ## [0.6.0] — 2026-05-14
 
 ### Added — module sub-clients

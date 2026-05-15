@@ -1,16 +1,28 @@
 {
   "name": "@aevion/catalog-client",
-  "version": "0.7.0",
-  "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges. Zero deps.",
+  "version": "0.8.0",
+  "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges, plus typed sub-clients for QStore, QLearn, QEvents, DevHub, Planet, QCoreAI, Multichat, QMedia, Coach. Zero deps.",
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && npm run test:run",
     "test": "vitest",
     "test:run": "vitest run",
     "dry-publish": "npm publish --dry-run --access public",
@@ -22,15 +34,36 @@
     "module-registry",
     "discovery",
     "typescript",
-    "sdk"
+    "sdk",
+    "qstore",
+    "qlearn",
+    "qevents",
+    "devhub",
+    "qcoreai",
+    "multichat",
+    "qmedia",
+    "coach",
+    "planet",
+    "client",
+    "api-client",
+    "zero-deps"
   ],
-  "author": "AEVION",
+  "author": "AEVION <hello@aevion.app>",
   "license": "MIT",
+  "homepage": "https://github.com/Dossymbek281078/AEVION/tree/main/packages/aevion-catalog-client#readme",
+  "bugs": {
+    "url": "https://github.com/Dossymbek281078/AEVION/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Dossymbek281078/AEVION.git",
     "directory": "packages/aevion-catalog-client"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
   "engines": {
     "node": ">=18"
   },

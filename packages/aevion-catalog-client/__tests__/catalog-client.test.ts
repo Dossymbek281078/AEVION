@@ -1299,13 +1299,17 @@ describe("AevionCatalog.coach (v0.7)", () => {
     );
   });
 
-  it("createGoal({ title, description, dueDate }) → POST with JSON body", async () => {
+  it("createGoal accepts legacy { title, description, dueDate } and forwards as targetDate (v0.8 transition)", async () => {
+    // v0.8: backend renamed dueDate → targetDate. SDK still accepts legacy
+    // dueDate for one transition release.
     const created = {
-      id: "g1",
-      title: "Ship v0.7",
-      description: "Add 4 sub-clients",
-      dueDate: "2026-06-01",
-      completed: false,
+      goal: {
+        id: "g1",
+        title: "Ship v0.7",
+        description: "Add 4 sub-clients",
+        targetDate: "2026-06-01",
+        completed: false,
+      },
     };
     const { cat, fetchMock } = makeClient({ body: created });
     const r = await cat.coach.createGoal({
@@ -1322,7 +1326,7 @@ describe("AevionCatalog.coach (v0.7)", () => {
     expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
       title: "Ship v0.7",
       description: "Add 4 sub-clients",
-      dueDate: "2026-06-01",
+      targetDate: "2026-06-01",
     });
     expect(r).toEqual(created);
   });
@@ -1333,20 +1337,22 @@ describe("AevionCatalog.coach (v0.7)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("createGoal with invalid dueDate throws synchronously", () => {
+  it("createGoal with invalid (legacy) dueDate throws synchronously", () => {
     const { cat, fetchMock } = makeClient({ body: {} });
     expect(() =>
       cat.coach.createGoal({ title: "x", dueDate: "tomorrow" }),
-    ).toThrow(/invalid dueDate/);
+    ).toThrow(/invalid targetDate/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("completeGoal(id) → POST /api/coach/goals/:id/complete", async () => {
+  it("completeGoal(id) → POST /api/coach/goals/:id/complete (v0.8 returns { goal })", async () => {
     const body = {
-      ok: true,
-      goalId: "g1",
-      completed: true,
-      completedAt: "2026-05-14T10:00:00Z",
+      goal: {
+        id: "g1",
+        title: "ship",
+        completed: true,
+        completedAt: "2026-05-14T10:00:00Z",
+      },
     };
     const { cat, fetchMock } = makeClient({ body });
     const r = await cat.coach.completeGoal("g1");
@@ -1355,13 +1361,13 @@ describe("AevionCatalog.coach (v0.7)", () => {
     );
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.method).toBe("POST");
-    expect(r.completed).toBe(true);
-    expect(r.goalId).toBe("g1");
+    expect(r.goal.completed).toBe(true);
+    expect(r.goal.id).toBe("g1");
   });
 
-  it("completeGoal('') throws on invalid goalId", async () => {
+  it("completeGoal('') throws on missing goalId", async () => {
     const { cat, fetchMock } = makeClient({ body: {} });
-    await expect(cat.coach.completeGoal("")).rejects.toThrow(/invalid goalId/);
+    await expect(cat.coach.completeGoal("")).rejects.toThrow(/missing goalId/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -1389,5 +1395,316 @@ describe("AevionCatalog v0.7 shared infra", () => {
     expect(h.Authorization).toBe("Bearer v07-token");
     expect(h["X-User-Id"]).toBe("u7");
     expect(h.Accept).toBe("application/json");
+  });
+});
+
+// ── v0.8: QMedia videos + recordPlay ───────────────────────────────────────
+
+describe("AevionCatalog.qmedia v0.8 — videos + recordPlay", () => {
+  it("videos() with no opts → GET /api/qmedia/videos (no query)", async () => {
+    const body = { total: 0, items: [] };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.videos();
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/qmedia/videos");
+    expect(r.items).toEqual([]);
+  });
+
+  it("videos({ limit: 20 }) → ?limit=20", async () => {
+    const body = {
+      total: 1,
+      items: [
+        { id: "v1", title: "Tutorial", category: "tutorial", viewCount: 42 },
+      ],
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.qmedia.videos({ limit: 20 });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/videos?limit=20",
+    );
+    expect(r.items[0].id).toBe("v1");
+    expect(r.items[0].viewCount).toBe(42);
+  });
+
+  it("videos({ limit: 999 }) clamps to ?limit=50 (matches backend)", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.qmedia.videos({ limit: 999 });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/videos?limit=50",
+    );
+  });
+
+  it("videos({ limit: 10, offset: 20 }) → ?limit=10&offset=20", async () => {
+    const { cat, fetchMock } = makeClient({ body: { total: 0, items: [] } });
+    await cat.qmedia.videos({ limit: 10, offset: 20 });
+    const url = urlFrom(fetchMock);
+    expect(url).toContain("limit=10");
+    expect(url).toContain("offset=20");
+  });
+
+  it("recordPlay(id) → POST /api/qmedia/tracks/:id/play, normalises playCount → plays", async () => {
+    const { cat, fetchMock } = makeClient({ body: { playCount: 7 } });
+    const r = await cat.qmedia.recordPlay("t1");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/qmedia/tracks/t1/play",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(r.ok).toBe(true);
+    expect(r.plays).toBe(7);
+    expect(r.playCount).toBe(7);
+  });
+
+  it("recordPlay('') throws synchronously on invalid trackId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.qmedia.recordPlay("")).rejects.toThrow(/invalid trackId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── v0.8: Coach mutation API ───────────────────────────────────────────────
+
+describe("AevionCatalog.coach v0.8 — startSession", () => {
+  it("startSession({ topic }) → POST /api/coach/sessions/start, returns bare session", async () => {
+    const body = {
+      session: {
+        id: "s-100",
+        ownerKey: "user-1",
+        topic: "Sicilian defence",
+        startedAt: "2026-05-14T08:00:00Z",
+        messageCount: 0,
+        goalsLinked: [],
+      },
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const session = await cat.coach.startSession({ topic: "Sicilian defence" });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/sessions/start",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      topic: "Sicilian defence",
+    });
+    expect(session.id).toBe("s-100");
+    expect(session.topic).toBe("Sicilian defence");
+  });
+
+  it("startSession({ topic, fen }) → forwards fen as startingFen", async () => {
+    const body = { session: { id: "s-101", topic: "endgame", startingFen: "8/8/8/8/4k3/8/8/4K3 w - - 0 1" } };
+    const { cat, fetchMock } = makeClient({ body });
+    await cat.coach.startSession({
+      topic: "endgame",
+      fen: "8/8/8/8/4k3/8/8/4K3 w - - 0 1",
+    });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      topic: "endgame",
+      startingFen: "8/8/8/8/4k3/8/8/4K3 w - - 0 1",
+    });
+  });
+
+  it("startSession({ topic: '' }) rejects with missing topic", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.coach.startSession({ topic: "" })).rejects.toThrow(
+      /missing topic/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("AevionCatalog.coach v0.8 — endSession", () => {
+  it("endSession(id, { notes, messageCount }) → POST /sessions/:id/end, returns bare session", async () => {
+    const body = {
+      session: {
+        id: "s-200",
+        topic: "openings",
+        startedAt: "2026-05-14T08:00:00Z",
+        endedAt: "2026-05-14T08:30:00Z",
+        durationSec: 1800,
+        notes: "Solid recap",
+        messageCount: 12,
+      },
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const session = await cat.coach.endSession("s-200", {
+      notes: "Solid recap",
+      messageCount: 12,
+    });
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/sessions/s-200/end",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      notes: "Solid recap",
+      messageCount: 12,
+    });
+    expect(session.endedAt).toBe("2026-05-14T08:30:00Z");
+    expect(session.messageCount).toBe(12);
+  });
+
+  it("endSession with negative messageCount rejects", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(
+      cat.coach.endSession("s-201", { messageCount: -1 }),
+    ).rejects.toThrow(/messageCount/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("endSession('') rejects with missing sessionId", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.coach.endSession("", {})).rejects.toThrow(
+      /missing sessionId/,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("AevionCatalog.coach v0.8 — createGoal (BREAKING)", () => {
+  it("createGoal({ title, targetDate, sessionId }) → POST returns { goal }", async () => {
+    const body = {
+      goal: {
+        id: "g-100",
+        title: "Reach 1600 ELO",
+        targetDate: "2026-09-01",
+        sessionId: "s-100",
+        completed: false,
+        createdAt: "2026-05-14T08:00:00Z",
+      },
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.createGoal({
+      title: "Reach 1600 ELO",
+      targetDate: "2026-09-01",
+      sessionId: "s-100",
+    });
+    expect(urlFrom(fetchMock)).toBe("https://api.aevion.app/api/coach/goals");
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String((init as { body?: string })?.body))).toEqual({
+      title: "Reach 1600 ELO",
+      targetDate: "2026-09-01",
+      sessionId: "s-100",
+    });
+    expect(r.goal.id).toBe("g-100");
+    expect(r.goal.targetDate).toBe("2026-09-01");
+  });
+
+  it("createGoal accepts legacy dueDate and forwards as targetDate", async () => {
+    const body = { goal: { id: "g-101", title: "Legacy goal", targetDate: "2026-06-01", completed: false } };
+    const { cat, fetchMock } = makeClient({ body });
+    await cat.coach.createGoal({ title: "Legacy goal", dueDate: "2026-06-01" });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const sent = JSON.parse(String((init as { body?: string })?.body));
+    expect(sent.targetDate).toBe("2026-06-01");
+    expect(sent.dueDate).toBeUndefined();
+  });
+
+  it("createGoal with invalid targetDate throws synchronously", () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    expect(() =>
+      cat.coach.createGoal({ title: "x", targetDate: "not-a-date" }),
+    ).toThrow(/invalid targetDate/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("createGoal returns { goal } even when backend wraps response", async () => {
+    const body = { goal: { id: "g-200", title: "Minimal", completed: false } };
+    const { cat } = makeClient({ body });
+    const r = await cat.coach.createGoal({ title: "Minimal" });
+    expect(r).toHaveProperty("goal");
+    expect(r.goal.id).toBe("g-200");
+  });
+});
+
+describe("AevionCatalog.coach v0.8 — completeGoal (BREAKING)", () => {
+  it("completeGoal(id) → POST returns { goal }", async () => {
+    const body = {
+      goal: {
+        id: "g-300",
+        title: "Done thing",
+        completed: true,
+        completedAt: "2026-05-14T10:00:00Z",
+      },
+    };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.completeGoal("g-300");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals/g-300/complete",
+    );
+    expect(r.goal.completed).toBe(true);
+    expect(r.goal.id).toBe("g-300");
+  });
+
+  it("completeGoal preserves URL-encoded ids with special chars", async () => {
+    const body = { goal: { id: "g/weird", title: "x", completed: true } };
+    const { cat, fetchMock } = makeClient({ body });
+    await cat.coach.completeGoal("g/weird");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/goals/g%2Fweird/complete",
+    );
+  });
+});
+
+describe("AevionCatalog.coach v0.8 — deleteGoal + getSession", () => {
+  it("deleteGoal(id) → DELETE returns { ok: true } even when server returns 204", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 204,
+      json: async () => {
+        throw new Error("no body");
+      },
+      text: async () => "",
+    } as unknown as Response));
+    const cat = new AevionCatalog({ fetch: fetchMock as unknown as typeof fetch });
+    const r = await cat.coach.deleteGoal("g-400");
+    const call = fetchMock.mock.calls[0];
+    expect(String(call?.[0])).toBe(
+      "https://api.aevion.app/api/coach/goals/g-400",
+    );
+    const init = call?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe("DELETE");
+    expect(r).toEqual({ ok: true });
+  });
+
+  it("deleteGoal('') throws synchronously", async () => {
+    const { cat, fetchMock } = makeClient({ body: {} });
+    await expect(cat.coach.deleteGoal("")).rejects.toThrow(/missing goalId/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getSession(id) → GET /api/coach/sessions/:id → { session }", async () => {
+    const body = { session: { id: "s-500", topic: "tactics", messageCount: 4 } };
+    const { cat, fetchMock } = makeClient({ body });
+    const r = await cat.coach.getSession("s-500");
+    expect(urlFrom(fetchMock)).toBe(
+      "https://api.aevion.app/api/coach/sessions/s-500",
+    );
+    expect(r.session.id).toBe("s-500");
+    expect(r.session.topic).toBe("tactics");
+  });
+});
+
+describe("AevionCatalog v0.8 shared infra", () => {
+  it("v0.8 Coach + QMedia methods exist on sub-clients", () => {
+    const { cat } = makeClient({ body: {} });
+    expect(typeof cat.qmedia.videos).toBe("function");
+    expect(typeof cat.qmedia.recordPlay).toBe("function");
+    expect(typeof cat.coach.startSession).toBe("function");
+    expect(typeof cat.coach.endSession).toBe("function");
+    expect(typeof cat.coach.getSession).toBe("function");
+    expect(typeof cat.coach.deleteGoal).toBe("function");
+  });
+
+  it("config.headers is forwarded to v0.8 endpoints", async () => {
+    const fetchMock = mockFetch({ body: { total: 0, items: [] } });
+    const cat = new AevionCatalog({
+      fetch: fetchMock as unknown as typeof fetch,
+      headers: { Authorization: "Bearer v08-token" },
+    });
+    await cat.qmedia.videos({ limit: 5 });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const h = (init?.headers as Record<string, string>) ?? {};
+    expect(h.Authorization).toBe("Bearer v08-token");
   });
 });

@@ -2,9 +2,17 @@
 
 Typed TypeScript client for the AEVION Hub catalog API. Zero dependencies. Node 18+ / modern browsers.
 
+## Install
+
 ```bash
 npm install @aevion/catalog-client
+# or
+pnpm add @aevion/catalog-client
+# or
+yarn add @aevion/catalog-client
 ```
+
+Requirements: Node.js `>=18` (native `fetch`) or a modern browser. TypeScript types are bundled — no `@types/...` needed.
 
 ## Quick start
 

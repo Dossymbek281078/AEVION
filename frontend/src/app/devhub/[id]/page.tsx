@@ -274,7 +274,34 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [githubMsg, setGithubMsg] = useState<string | null>(null);
 
   // ElevenLabs / Media state
-  const [mediaTab, setMediaTab] = useState<"tts" | "email" | "payment">("tts");
+  const [mediaTab, setMediaTab] = useState<"tts" | "image" | "sfx" | "music" | "email" | "payment">("tts");
+
+  // DALL-E image state
+  const [imgPrompt, setImgPrompt] = useState("");
+  const [imgSize, setImgSize] = useState("1024x1024");
+  const [imgQuality, setImgQuality] = useState<"standard" | "hd">("standard");
+  const [imgStyle, setImgStyle] = useState<"vivid" | "natural">("vivid");
+  const [imgLoading, setImgLoading] = useState(false);
+  const [imgResult, setImgResult] = useState<{ url: string; revisedPrompt?: string | null } | null>(null);
+  const [imgError, setImgError] = useState<string | null>(null);
+
+  // SFX state
+  const [sfxText, setSfxText] = useState("");
+  const [sfxDuration, setSfxDuration] = useState("3");
+  const [sfxLoading, setSfxLoading] = useState(false);
+  const [sfxUrl, setSfxUrl] = useState<string | null>(null);
+  const [sfxError, setSfxError] = useState<string | null>(null);
+
+  // Music state
+  const [musicPrompt, setMusicPrompt] = useState("");
+  const [musicLengthSec, setMusicLengthSec] = useState("30");
+  const [musicLoading, setMusicLoading] = useState(false);
+  const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const [musicError, setMusicError] = useState<string | null>(null);
+
+  // Domain auto-setup state
+  const [domainSetupLoading, setDomainSetupLoading] = useState(false);
+  const [domainSetupMsg, setDomainSetupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [mediaTtsText, setMediaTtsText] = useState("");
   const [mediaTtsVoice, setMediaTtsVoice] = useState("Rachel");
   const [mediaTtsLoading, setMediaTtsLoading] = useState(false);
@@ -842,6 +869,114 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     }
   };
 
+  // ── DALL-E image helper ──────────────────────────────────────────────────────
+
+  const generateImage = async () => {
+    if (!imgPrompt.trim()) return;
+    setImgLoading(true);
+    setImgError(null);
+    setImgResult(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/image"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: imgPrompt.trim(), size: imgSize, quality: imgQuality, style: imgStyle }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setImgError(d.error || "Image generation failed");
+      } else {
+        setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
+      }
+    } catch (e: any) {
+      setImgError(e?.message || "Image generation failed");
+    } finally {
+      setImgLoading(false);
+    }
+  };
+
+  // ── ElevenLabs SFX helper ────────────────────────────────────────────────────
+
+  const generateSfx = async () => {
+    if (!sfxText.trim()) return;
+    setSfxLoading(true);
+    setSfxError(null);
+    setSfxUrl(null);
+    try {
+      const dur = parseFloat(sfxDuration);
+      const r = await fetch(apiUrl("/api/devhub/media/sfx"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: sfxText.trim(),
+          ...(Number.isFinite(dur) && dur > 0 ? { durationSeconds: dur } : {}),
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error || `SFX error ${r.status}`);
+      }
+      const blob = await r.blob();
+      setSfxUrl(URL.createObjectURL(blob));
+    } catch (e: any) {
+      setSfxError(e?.message || "SFX generation failed");
+    } finally {
+      setSfxLoading(false);
+    }
+  };
+
+  // ── ElevenLabs Music helper ──────────────────────────────────────────────────
+
+  const generateMusic = async () => {
+    if (!musicPrompt.trim()) return;
+    setMusicLoading(true);
+    setMusicError(null);
+    setMusicUrl(null);
+    try {
+      const sec = parseFloat(musicLengthSec);
+      const r = await fetch(apiUrl("/api/devhub/media/music"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: musicPrompt.trim(),
+          ...(Number.isFinite(sec) && sec > 0 ? { musicLengthMs: Math.round(sec * 1000) } : {}),
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        throw new Error(d?.error || `Music error ${r.status}`);
+      }
+      const blob = await r.blob();
+      setMusicUrl(URL.createObjectURL(blob));
+    } catch (e: any) {
+      setMusicError(e?.message || "Music compose failed");
+    } finally {
+      setMusicLoading(false);
+    }
+  };
+
+  // ── Cloudflare domain auto-setup ─────────────────────────────────────────────
+
+  const autoSetupDomain = async () => {
+    if (!project) return;
+    setDomainSetupLoading(true);
+    setDomainSetupMsg(null);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/auto-setup`), { method: "POST" });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        const fallback = d?.manualInstruction ? `${d.error}. ${d.manualInstruction}` : (d.error || "Setup failed");
+        setDomainSetupMsg({ ok: false, text: fallback });
+      } else {
+        setDomainSetupMsg({ ok: true, text: `DNS ${d.action}: ${d.domain} → ${d.cname}` });
+      }
+    } catch (e: any) {
+      setDomainSetupMsg({ ok: false, text: e?.message || "Setup failed" });
+    } finally {
+      setDomainSetupLoading(false);
+    }
+  };
+
   // ── ElevenLabs TTS helper ────────────────────────────────────────────────────
 
   const generateTts = async () => {
@@ -1353,20 +1488,21 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
               {activeTab === "media" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {/* Sub-tabs */}
-                  <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8 }}>
-                    {(["tts", "email", "payment"] as const).map((sub) => (
+                  <div style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
+                    {(["tts", "image", "sfx", "music", "email", "payment"] as const).map((sub) => (
                       <button
                         key={sub}
                         onClick={() => setMediaTab(sub)}
                         style={{
-                          flex: 1, padding: "6px 10px", border: "none",
+                          flex: "1 1 auto", padding: "6px 8px", border: "none",
                           background: mediaTab === sub ? "#fff" : "transparent",
                           color: mediaTab === sub ? "#0d9488" : "#64748b",
-                          borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          whiteSpace: "nowrap",
                           boxShadow: mediaTab === sub ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                         }}
                       >
-                        {sub === "tts" ? "ElevenLabs TTS" : sub === "email" ? "Brevo Email" : "Stripe Pay"}
+                        {sub === "tts" ? "TTS" : sub === "image" ? "DALL-E" : sub === "sfx" ? "SFX" : sub === "music" ? "Music" : sub === "email" ? "Email" : "Pay"}
                       </button>
                     ))}
                   </div>
@@ -1425,6 +1561,194 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                         Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DALL-E 3 Image */}
+                  {mediaTab === "image" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Prompt</label>
+                        <textarea
+                          value={imgPrompt}
+                          onChange={(e) => setImgPrompt(e.target.value)}
+                          placeholder="A serene mountain landscape at golden hour, photorealistic..."
+                          rows={3}
+                          style={{
+                            width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
+                            borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ flex: 2, minWidth: 140 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Size</label>
+                          <select value={imgSize} onChange={(e) => setImgSize(e.target.value)}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
+                            <option value="1024x1024">Square (1024)</option>
+                            <option value="1792x1024">Landscape (1792×1024)</option>
+                            <option value="1024x1792">Portrait (1024×1792)</option>
+                          </select>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 100 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Quality</label>
+                          <select value={imgQuality} onChange={(e) => setImgQuality(e.target.value as "standard" | "hd")}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
+                            <option value="standard">Standard</option>
+                            <option value="hd">HD</option>
+                          </select>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 100 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Style</label>
+                          <select value={imgStyle} onChange={(e) => setImgStyle(e.target.value as "vivid" | "natural")}
+                            style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
+                            <option value="vivid">Vivid</option>
+                            <option value="natural">Natural</option>
+                          </select>
+                        </div>
+                      </div>
+                      {imgError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {imgError}
+                        </div>
+                      )}
+                      {imgResult && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={imgResult.url} alt="generated" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          {imgResult.revisedPrompt && (
+                            <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
+                              Revised prompt: {imgResult.revisedPrompt}
+                            </div>
+                          )}
+                          <a href={imgResult.url} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
+                            Open full size →
+                          </a>
+                        </div>
+                      )}
+                      <button
+                        onClick={generateImage}
+                        disabled={imgLoading || !imgPrompt.trim()}
+                        style={{
+                          padding: "9px 18px", background: imgLoading ? "#a5b4fc" : "#10a37f",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (imgLoading || !imgPrompt.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {imgLoading ? "Generating..." : "Generate Image"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>OPENAI_API_KEY</code>. Powered by DALL-E 3.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ElevenLabs SFX */}
+                  {mediaTab === "sfx" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>SFX Description</label>
+                        <textarea
+                          value={sfxText}
+                          onChange={(e) => setSfxText(e.target.value)}
+                          placeholder="Heavy rain on a metal roof with distant thunder"
+                          rows={3}
+                          style={{
+                            width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
+                            borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Duration (seconds, 0.5–22)</label>
+                        <input
+                          type="number"
+                          min="0.5" max="22" step="0.5"
+                          value={sfxDuration}
+                          onChange={(e) => setSfxDuration(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      {sfxError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {sfxError}
+                        </div>
+                      )}
+                      {sfxUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <audio controls src={sfxUrl} style={{ width: "100%" }} />
+                          <a href={sfxUrl} download="sfx.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Download MP3</a>
+                        </div>
+                      )}
+                      <button
+                        onClick={generateSfx}
+                        disabled={sfxLoading || !sfxText.trim()}
+                        style={{
+                          padding: "9px 18px", background: sfxLoading ? "#fcd34d" : "#f59e0b",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (sfxLoading || !sfxText.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {sfxLoading ? "Generating..." : "Generate SFX"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ElevenLabs Music */}
+                  {mediaTab === "music" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Music Prompt</label>
+                        <textarea
+                          value={musicPrompt}
+                          onChange={(e) => setMusicPrompt(e.target.value)}
+                          placeholder="Lo-fi hip-hop, mellow piano, soft beats, 80 BPM..."
+                          rows={3}
+                          style={{
+                            width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
+                            borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Length (seconds, 10–300)</label>
+                        <input
+                          type="number"
+                          min="10" max="300" step="5"
+                          value={musicLengthSec}
+                          onChange={(e) => setMusicLengthSec(e.target.value)}
+                          style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      {musicError && (
+                        <div style={{ padding: "8px 12px", background: "#fee2e2", color: "#991b1b", borderRadius: 7, fontSize: 13 }}>
+                          {musicError}
+                        </div>
+                      )}
+                      {musicUrl && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <audio controls src={musicUrl} style={{ width: "100%" }} />
+                          <a href={musicUrl} download="music.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>Download MP3</a>
+                        </div>
+                      )}
+                      <button
+                        onClick={generateMusic}
+                        disabled={musicLoading || !musicPrompt.trim()}
+                        style={{
+                          padding: "9px 18px", background: musicLoading ? "#c4b5fd" : "#8b5cf6",
+                          color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+                          cursor: (musicLoading || !musicPrompt.trim()) ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {musicLoading ? "Composing..." : "Compose Music"}
+                      </button>
+                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>ELEVENLABS_API_KEY</code>. Max 5 min.
                       </div>
                     </div>
                   )}
@@ -1610,6 +1934,34 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       placeholder="myapp.example.com"
                       style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                     />
+                    {project?.customDomain && (
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <button
+                          onClick={autoSetupDomain}
+                          disabled={domainSetupLoading}
+                          style={{
+                            alignSelf: "flex-start", padding: "6px 12px",
+                            background: domainSetupLoading ? "#fde68a" : "#f59e0b",
+                            color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 12,
+                            cursor: domainSetupLoading ? "not-allowed" : "pointer",
+                            display: "flex", alignItems: "center", gap: 6,
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.97 16.95L10 13.87V7h2v5.76l4.03 2.49-1.06 1.7zM12 3a9 9 0 109 9 9 9 0 00-9-9z"/></svg>
+                          {domainSetupLoading ? "Configuring..." : "Auto-setup DNS (Cloudflare)"}
+                        </button>
+                        {domainSetupMsg && (
+                          <div style={{
+                            padding: "6px 10px", borderRadius: 6, fontSize: 12,
+                            background: domainSetupMsg.ok ? "#d1fae5" : "#fee2e2",
+                            color: domainSetupMsg.ok ? "#065f46" : "#991b1b",
+                            wordBreak: "break-word",
+                          }}>
+                            {domainSetupMsg.text}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={saveSettings}

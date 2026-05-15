@@ -1862,6 +1862,220 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
   }
 });
 
+// POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
+devhubRouter.post("/media/image", async (req, res) => {
+  const { prompt, size = "1024x1024", quality = "standard", style = "vivid" } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "prompt required" });
+  }
+  if (prompt.trim().length > 4000) {
+    return res.status(400).json({ error: "prompt too long (max 4000 chars)" });
+  }
+  const validSizes = ["1024x1024", "1792x1024", "1024x1792"];
+  if (!validSizes.includes(size)) {
+    return res.status(400).json({ error: `size must be one of ${validSizes.join(", ")}` });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "OpenAI not configured — set OPENAI_API_KEY",
+      setupUrl: "https://platform.openai.com/api-keys",
+    });
+  }
+
+  try {
+    const r = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: prompt.trim(),
+        n: 1,
+        size,
+        quality: quality === "hd" ? "hd" : "standard",
+        style: style === "natural" ? "natural" : "vivid",
+        response_format: "url",
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `DALL-E error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { data: Array<{ url: string; revised_prompt?: string }> };
+    const first = data.data?.[0];
+    if (!first?.url) return res.status(500).json({ error: "no image returned" });
+    res.json({ ok: true, url: first.url, revisedPrompt: first.revised_prompt || null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Image generation failed" });
+  }
+});
+
+// POST /api/devhub/media/sfx — ElevenLabs sound effect
+devhubRouter.post("/media/sfx", async (req, res) => {
+  const { text, durationSeconds, promptInfluence } = req.body || {};
+  if (!text || typeof text !== "string" || !text.trim()) {
+    return res.status(400).json({ error: "text (sfx description) required" });
+  }
+  if (text.trim().length > 1000) {
+    return res.status(400).json({ error: "text too long (max 1000 chars)" });
+  }
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+      setupUrl: "https://elevenlabs.io/api",
+    });
+  }
+
+  const body: Record<string, unknown> = { text: text.trim() };
+  const dur = Number(durationSeconds);
+  if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
+  const inf = Number(promptInfluence);
+  if (Number.isFinite(inf) && inf >= 0 && inf <= 1) body.prompt_influence = inf;
+
+  try {
+    const r = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `ElevenLabs SFX error: ${errText.slice(0, 300)}` });
+    }
+    const audioBuffer = Buffer.from(await r.arrayBuffer());
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", audioBuffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(audioBuffer);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "SFX generation failed" });
+  }
+});
+
+// POST /api/devhub/media/music — ElevenLabs music compose
+devhubRouter.post("/media/music", async (req, res) => {
+  const { prompt, musicLengthMs } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "prompt (music description) required" });
+  }
+  if (prompt.trim().length > 2000) {
+    return res.status(400).json({ error: "prompt too long (max 2000 chars)" });
+  }
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "ElevenLabs not configured — set ELEVENLABS_API_KEY",
+      setupUrl: "https://elevenlabs.io/api",
+    });
+  }
+
+  const body: Record<string, unknown> = { prompt: prompt.trim() };
+  const len = Number(musicLengthMs);
+  if (Number.isFinite(len) && len >= 10_000 && len <= 300_000) {
+    body.music_length_ms = Math.round(len);
+  }
+
+  try {
+    const r = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `ElevenLabs Music error: ${errText.slice(0, 300)}` });
+    }
+    const audioBuffer = Buffer.from(await r.arrayBuffer());
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", audioBuffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    res.send(audioBuffer);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Music compose failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/domain/auto-setup — Cloudflare DNS CNAME
+devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) {
+    return res.status(404).json({ error: "project not found" });
+  }
+  if (!project.customDomain) {
+    return res.status(400).json({ error: "project has no customDomain set" });
+  }
+
+  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
+  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
+  if (!cfToken || !cfZoneId) {
+    return res.status(503).json({
+      error: "Cloudflare not configured — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID",
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+      manualInstruction: `Add CNAME ${project.customDomain} → devhub.aevion.app`,
+    });
+  }
+
+  const target = "devhub.aevion.app";
+  const domain = project.customDomain;
+
+  try {
+    const listResp = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${encodeURIComponent(domain)}`,
+      { headers: { Authorization: `Bearer ${cfToken}`, Accept: "application/json" } }
+    );
+    if (!listResp.ok) {
+      const t = await listResp.text();
+      return res.status(listResp.status).json({ error: `Cloudflare list error: ${t.slice(0, 300)}` });
+    }
+    const listData = await listResp.json() as { result: Array<{ id: string; content: string }> };
+    const existing = listData.result?.[0];
+
+    if (existing) {
+      if (existing.content === target) {
+        return res.json({ ok: true, action: "already-configured", domain, cname: target, recordId: existing.id });
+      }
+      const upResp = await fetch(
+        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existing.id}`,
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "CNAME", name: domain, content: target, ttl: 1, proxied: true }),
+        }
+      );
+      if (!upResp.ok) {
+        const t = await upResp.text();
+        return res.status(upResp.status).json({ error: `Cloudflare update error: ${t.slice(0, 300)}` });
+      }
+      return res.json({ ok: true, action: "updated", domain, cname: target, recordId: existing.id });
+    }
+
+    const createResp = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "CNAME", name: domain, content: target, ttl: 1, proxied: true }),
+      }
+    );
+    if (!createResp.ok) {
+      const t = await createResp.text();
+      return res.status(createResp.status).json({ error: `Cloudflare create error: ${t.slice(0, 300)}` });
+    }
+    const created = await createResp.json() as { result: { id: string } };
+    res.json({ ok: true, action: "created", domain, cname: target, recordId: created.result.id });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Domain setup failed" });
+  }
+});
+
 // POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
 devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
   const auth = verifyBearerOptional(req);

@@ -83,6 +83,8 @@ const SMOKES = [
   { name: "healthai-prod", script: "healthai-prod-smoke.js", readOnly: true },
   // QShield + QRight PROD — 15 read-only checks (Shamir health, QRight objects, auth gates).
   { name: "qshield-prod", script: "qshield-prod-smoke.js", readOnly: true },
+  // Pricing PROD — 15 checks: FAQ, social-proof, provisioning, category filter.
+  { name: "pricing-prod", script: "pricing-prod-smoke.js", readOnly: true },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.

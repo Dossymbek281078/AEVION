@@ -23,6 +23,7 @@
     "smoke:qsign-prod": "node scripts/qsign-prod-smoke.js",
     "smoke:healthai-prod": "node scripts/healthai-prod-smoke.js",
     "smoke:qshield-prod": "node scripts/qshield-prod-smoke.js",
+    "smoke:pricing-prod": "node scripts/pricing-prod-smoke.js",
     "check:prod-env": "node scripts/check-prod-env.js",
     "qsign-v2:gen-prod-secrets": "node scripts/qsign-v2-gen-prod-secrets.js",
     "veilnetx:doctor": "node scripts/veilnetx-chain-doctor.js",

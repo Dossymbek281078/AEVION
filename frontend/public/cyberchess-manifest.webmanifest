@@ -1,0 +1,107 @@
+{
+  "name": "AEVION CyberChess",
+  "short_name": "CyberChess",
+  "description": "Шахматы AEVION — играй онлайн или офлайн против AI",
+  "start_url": "/cyberchess",
+  "scope": "/cyberchess",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0e1a",
+  "theme_color": "#10b981",
+  "lang": "ru",
+  "dir": "ltr",
+  "categories": ["games", "entertainment", "education"],
+  "icons": [
+    {
+      "src": "/icons/cyberchess.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/cyberchess-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/cyberchess-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/cyberchess-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/cyberchess-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/cyberchess-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Играть",
+      "short_name": "Play",
+      "description": "Быстрая игра против AI или онлайн",
+      "url": "/cyberchess/play",
+      "icons": [
+        {
+          "src": "/icons/cyberchess-shortcut-play.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Пазлы",
+      "short_name": "Puzzles",
+      "description": "Тактические пазлы",
+      "url": "/cyberchess/puzzles",
+      "icons": [
+        {
+          "src": "/icons/cyberchess-shortcut-puzzles.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Тренер",
+      "short_name": "Coach",
+      "description": "AI-тренер и разбор партий",
+      "url": "/cyberchess/coach",
+      "icons": [
+        {
+          "src": "/icons/cyberchess-shortcut-coach.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Ежедневное",
+      "short_name": "Daily",
+      "description": "Ежедневная задача",
+      "url": "/cyberchess/daily",
+      "icons": [
+        {
+          "src": "/icons/cyberchess-shortcut-daily.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
+}

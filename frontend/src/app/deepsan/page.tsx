@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import StatsBar from "./components/StatsBar";
 import TaskCard, { type Task, type Priority } from "./components/TaskCard";
 import AddTaskForm from "./components/AddTaskForm";
@@ -529,6 +530,23 @@ export default function DeepSanPage() {
           {toast}
         </div>
       )}
+
+      <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
+        <MvpConceptBoard
+          moduleId="deepsan"
+          noun="concept/messages"
+          accent="emerald"
+          sectionTitle="Anti-chaos concept board"
+          sectionHint="Какие практики реально снижают хаос? Что должен делать таймер, чтобы помочь сфокусироваться?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / практика", placeholder: "напр.: 90-min ultradian блоки вместо 25-min Pomodoro", required: true },
+            { key: "rationale", label: "Зачем это работает", type: "textarea", placeholder: "Какой механизм / исследование / личный опыт" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
+      </section>
     </main>
   );
 }

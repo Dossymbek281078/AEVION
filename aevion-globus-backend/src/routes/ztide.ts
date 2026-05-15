@@ -377,7 +377,7 @@ ztideRouter.get("/status", readLimit, (_req, res) => {
   res.json({
     module: "z-tide",
     code: "Z-TIDE",
-    status: "in_progress",
+    status: "mvp",
     description:
       "Adaptive social-economic coordination — energy/emotion-anchored contribution scoring.",
     endpoints: {

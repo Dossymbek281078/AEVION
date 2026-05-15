@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -553,6 +554,23 @@ export default function QNewsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        <div style={{ marginTop: 32 }}>
+          <MvpConceptBoard
+            moduleId="qnews"
+            noun="concept/messages"
+            accent="amber"
+            sectionTitle="QNews concept board"
+            sectionHint="Какие отрасли + источники должен покрывать агрегатор? Какие AI-функции нужны?"
+            titleField="idea"
+            summaryField="rationale"
+            fields={[
+              { key: "idea", label: "Идея / источник / фича", placeholder: "напр.: дайджест по 5 ключевым нишам каждое утро", required: true },
+              { key: "rationale", label: "Зачем это нужно", type: "textarea", placeholder: "Какую боль информационного перегруза решает" },
+              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            ]}
+          />
         </div>
       </ProductPageShell>
     </>

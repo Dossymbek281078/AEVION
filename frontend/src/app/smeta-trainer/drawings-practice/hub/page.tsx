@@ -338,6 +338,31 @@ const MODULES: Module[] = [
   { id: "banks-branches",         category: "special",   href: "/smeta-trainer/drawings-practice/banks-branches",         icon: "🏦", title: "Банковские отделения",            subtitle: "Halyk/Kaspi/ForteBank, хранилище кл. III ГОСТ Р 50862, бронестекло Б3", level: "L5", exercises: 4,  color: "emerald" },
   { id: "shopping-malls",         category: "special",   href: "/smeta-trainer/drawings-practice/shopping-malls",         icon: "🛍️", title: "Торгово-развлекательные центры",  subtitle: "Mega/Esentai 50 000 м² GLA, эскалаторы Schindler, СН РК 2.02-15 Ф3.1",  level: "L5", exercises: 4,  color: "violet"  },
   { id: "hotels-resorts",         category: "special",   href: "/smeta-trainer/drawings-practice/hotels-resorts",         icon: "🏨", title: "Гостиницы 5★ и курорты",          subtitle: "Ritz-Carlton/Rixos, СП РК 3.02-08, Rw≥52 дБ, СПА, банкетные залы",      level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── Медицина и образование ──
+  { id: "hospitals-clinics",      category: "practice",  href: "/smeta-trainer/drawings-practice/hospitals-clinics",      icon: "🏥", title: "Больницы и клиники",              subtitle: "РКБ Алматы 600 коек, ОРИТ 18 м²/койка, O₂ 540 л/мин, ОП Класс «А» ISO 5", level: "L5", exercises: 4,  color: "rose"    },
+  { id: "schools-modern",         category: "practice",  href: "/smeta-trainer/drawings-practice/schools-modern",         icon: "🏫", title: "Современные школы",               subtitle: "ШГ-1500, СП РК 3.02-04, спортзал 18×30×7, актовый 600 мест, СанПиН 4.01-007", level: "L5", exercises: 4,  color: "sky"     },
+  { id: "universities-campuses",  category: "practice",  href: "/smeta-trainer/drawings-practice/universities-campuses",  icon: "🎓", title: "Университеты и кампусы",          subtitle: "Назарбаев Универс. 152 га, BSL-3 лаборатории, амфитеатр 500 мест, бассейн 50 м", level: "L5", exercises: 4,  color: "violet"  },
+
+  // ── ТЭК: нефтехимия, СПГ, ВИЭ ──
+  { id: "refineries-oil",         category: "special",   href: "/smeta-trainer/drawings-practice/refineries-oil",         icon: "🛢️", title: "Нефтеперерабатывающие заводы",    subtitle: "АНПЗ 6 млн т/год, ЭЛОУ-АВТ-6 H=60 м, ATEX 0/1/2, факел H=80 м, ПУЭ 7.3", level: "L5", exercises: 4,  color: "stone"   },
+  { id: "lng-plants",             category: "special",   href: "/smeta-trainer/drawings-practice/lng-plants",             icon: "🧊", title: "СПГ-заводы и терминалы",          subtitle: "2 млн т/год, C3MR Air Products, Full Containment Ø80 м −162°C, NFPA 59A", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "wind-solar-farms",       category: "special",   href: "/smeta-trainer/drawings-practice/wind-solar-farms",       icon: "🌬️", title: "ВЭС и СЭС (ВИЭ)",                 subtitle: "Жанатас 100 МВт, V150-5 МВт башня 120 м, JinkoSolar 550 Вт, IEC 61400-24",  level: "L5", exercises: 4,  color: "lime"    },
+
+  // ── Городской транспорт: метро, тоннели, LRT ──
+  { id: "metro-stations",         category: "special",   href: "/smeta-trainer/drawings-practice/metro-stations",         icon: "🚇", title: "Метрополитен и станции",          subtitle: "Алматы Линия 1 11 ст. глубина 35 м, ТБМ Herrenknecht S-558 Ø6.66 м, СНиП 32-02", level: "L5", exercises: 4,  color: "indigo"  },
+  { id: "tunnels-vehicle",        category: "special",   href: "/smeta-trainer/drawings-practice/tunnels-vehicle",        icon: "🚗", title: "Автомобильные тоннели",           subtitle: "Кокпекский 6 км, НАТМ, обделка B40, Jet-fan 28 шт, EU 2004/54/EC, СНиП 32-04", level: "L5", exercises: 4,  color: "zinc"    },
+  { id: "tramway-light-rail",     category: "special",   href: "/smeta-trainer/drawings-practice/tramway-light-rail",     icon: "🚊", title: "Трамваи и LRT",                   subtitle: "Астана LRT 22 км, КС-160 750 В DC, рельсы Р65, Stadler Tango, СП 245.1326000", level: "L5", exercises: 4,  color: "teal"    },
+
+  // ── Спорт, культура, наука ──
+  { id: "arena-football",         category: "practice",  href: "/smeta-trainer/drawings-practice/arena-football",         icon: "⚽", title: "Футбольные арены",                subtitle: "Astana Arena 30 000 мест, UEFA Cat. 4, ретракт. крыша ПТФЭ, освещ. 2400 лк EBU HDR", level: "L5", exercises: 4,  color: "orange"  },
+  { id: "museum-archives",        category: "practice",  href: "/smeta-trainer/drawings-practice/museum-archives",        icon: "🏛️", title: "Музеи и фондохранилища",          subtitle: "Нац. музей РК 74 000 м², +18°C/RH 50%, HEPA F9, Inergen IG-541, ICOM/ISO 11799", level: "L5", exercises: 4,  color: "fuchsia" },
+  { id: "observatory-research",   category: "practice",  href: "/smeta-trainer/drawings-practice/observatory-research",   icon: "🔭", title: "Обсерватории и научные станции",  subtitle: "Тянь-Шань Цейсс-1000 d=1 м, купол Ø15 м, раздел. фундамент, IDA Dark Sky",        level: "L5", exercises: 4,  color: "blue"    },
+
+  // ── Экстремальные климатические зоны ──
+  { id: "permafrost-objects",     category: "special",   href: "/smeta-trainer/drawings-practice/permafrost-objects",     icon: "❄️", title: "Объекты на вечной мерзлоте",      subtitle: "Сваи Long Yang, термосифоны СВВ-25 (CO₂), проветр. подполье H=1.5 м, СНиП 2.02.04", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "desert-objects",         category: "special",   href: "/smeta-trainer/drawings-practice/desert-objects",         icon: "🏜️", title: "Объекты в пустынной зоне",        subtitle: "Кызылкум +45°C, «русло-катушка» водосбор, Cool Roof, защита от «Афганец», СП РК 4.04", level: "L5", exercises: 4,  color: "yellow"  },
+  { id: "mountain-resort",        category: "special",   href: "/smeta-trainer/drawings-practice/mountain-resort",        icon: "🎿", title: "Горнолыжные курорты",             subtitle: "Чимбулак 6-кр. Doppelmayr D-LINE, TechnoAlpin TR-V, галереи Daher, EN 1907",       level: "L5", exercises: 4,  color: "emerald" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

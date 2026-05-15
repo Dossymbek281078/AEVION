@@ -1,39 +1,71 @@
-import type { NextRequest } from "next/server";
-
-// Health endpoint для uptime monitoring и smoke-тестов. Edge runtime →
-// near-zero latency. Возвращает {ok, version, ts, env, runtime}.
-// HEAD also supported для cheap pings.
-
-export const runtime = "edge";
-export const dynamic = "force-dynamic";
+import { store } from "../payments/v1/_lib";
+import { kvBackend } from "../payments/v1/_persist";
 
 const STARTED_AT = Date.now();
 
-function payload() {
-  return {
-    ok: true,
-    service: "aevion-frontend-exchange",
-    version: process.env.NEXT_PUBLIC_APP_VERSION || "dev",
-    env: process.env.NODE_ENV || "unknown",
-    runtime: "edge",
-    ts: Date.now(),
-    uptimeMs: Date.now() - STARTED_AT,
-  };
-}
+export function GET() {
+  const now = Date.now();
+  const uptimeMs = now - STARTED_AT;
+  const memUsed =
+    typeof process !== "undefined" && process.memoryUsage
+      ? Math.round(process.memoryUsage().rss / 1024 / 1024)
+      : null;
 
-export async function GET(_req: NextRequest) {
-  return new Response(JSON.stringify(payload()), {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
+  const surfaces = [
+    { name: "links", count: store.links.size, ok: true },
+    { name: "checkouts", count: store.checkouts.size, ok: true },
+    { name: "subscriptions", count: store.subscriptions.size, ok: true },
+    { name: "webhooks", count: store.webhooks.size, ok: true },
+    { name: "settlements", count: store.settlements.size, ok: true },
+    {
+      name: "idempotency_cache",
+      count: store.idempotency.size,
+      ok: store.idempotency.size < 5000,
     },
-  });
+  ];
+
+  const allOk = surfaces.every((s) => s.ok);
+
+  return Response.json(
+    {
+      status: allOk ? "ok" : "degraded",
+      timestamp: now,
+      iso: new Date(now).toISOString(),
+      uptime_ms: uptimeMs,
+      uptime_human: formatUptime(uptimeMs),
+      version: "v1.3",
+      runtime: typeof process !== "undefined" ? process.version : "edge",
+      memory_rss_mb: memUsed,
+      persistence: kvBackend(),
+      surfaces,
+    },
+    {
+      headers: {
+        "cache-control": "no-store",
+        "access-control-allow-origin": "*",
+      },
+    }
+  );
 }
 
-export async function HEAD() {
+function formatUptime(ms: number) {
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+export function OPTIONS() {
   return new Response(null, {
-    status: 200,
-    headers: { "cache-control": "no-store" },
+    status: 204,
+    headers: {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, OPTIONS",
+    },
   });
 }

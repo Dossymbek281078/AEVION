@@ -1,0 +1,11 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.cron-reconcile"
+  },
+  "deploy": {
+    "startCommand": "node scripts/qpaynet-reconcile.mjs",
+    "restartPolicyType": "NEVER"
+  }
+}

@@ -5,4 +5,14 @@ node_modules
 # Локальные JSON-стора MVP (QTrade и др.)
 .aevion-data/
 
+# Pricing leads + analytics events + newsletter + subscriptions (PII / IP)
+data/leads.jsonl
+data/events.jsonl
+data/newsletter.jsonl
+data/subscriptions.jsonl
+data/affiliate.jsonl
+data/partners.jsonl
+data/edu.jsonl
+data/partner-deals.jsonl
+
 /src/generated/prisma

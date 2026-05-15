@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://aevion.io";
+const SITE = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://aevion.app";
 
 export const metadata: Metadata = {
   title: "AEVION QTrade — биржа",

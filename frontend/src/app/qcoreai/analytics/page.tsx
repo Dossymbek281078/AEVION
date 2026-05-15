@@ -1,0 +1,1001 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ProductPageShell } from "@/components/ProductPageShell";
+import { Wave1Nav } from "@/components/Wave1Nav";
+import { apiUrl } from "@/lib/apiBase";
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Types
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type Analytics = {
+  scope: "mine" | "anonymous";
+  runs: number;
+  sessions: number;
+  messages: number;
+  totals: { tokensIn: number; tokensOut: number; costUsd: number; durationMs: number };
+  byStrategy: Array<{ strategy: string; runs: number; costUsd: number; tokens: number; avgDurationMs: number }>;
+  byProvider: Array<{ provider: string; calls: number; costUsd: number; tokensIn: number; tokensOut: number }>;
+  byModel: Array<{ provider: string; model: string; calls: number; costUsd: number; tokens: number }>;
+  recent: Array<{ sessionId: string; runId: string; strategy: string | null; costUsd: number | null; totalDurationMs: number | null; startedAt: string; title: string }>;
+};
+
+const STRAT_COLORS: Record<string, string> = {
+  sequential: "#0d9488",
+  parallel: "#4338ca",
+  debate: "#7c3aed",
+};
+
+const PROVIDER_COLORS: Record<string, string> = {
+  anthropic: "#d97706",
+  openai: "#10a37f",
+  gemini: "#4285f4",
+  deepseek: "#0ea5e9",
+  grok: "#ef4444",
+};
+
+const providerLabel: Record<string, string> = {
+  anthropic: "Claude",
+  openai: "GPT",
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+  grok: "Grok",
+};
+
+const prettyModel = (m: string) => {
+  const map: Record<string, string> = {
+    "claude-sonnet-4-20250514": "Claude Sonnet 4",
+    "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
+    "gpt-4o": "GPT-4o",
+    "gpt-4o-mini": "GPT-4o Mini",
+    "gpt-4-turbo": "GPT-4 Turbo",
+    "gemini-2.5-flash": "Gemini 2.5 Flash",
+    "gemini-2.0-flash-001": "Gemini 2.0 Flash",
+    "gemini-1.5-pro": "Gemini 1.5 Pro",
+    "deepseek-chat": "DeepSeek Chat",
+    "deepseek-reasoner": "DeepSeek Reasoner",
+    "grok-3": "Grok 3",
+    "grok-3-mini": "Grok 3 Mini",
+  };
+  return map[m] || m;
+};
+
+function bearerHeader(): HeadersInit {
+  try {
+    const t = typeof window !== "undefined" ? localStorage.getItem("aevion_auth_token_v1") : null;
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch { return {}; }
+}
+
+function fmtDur(ms: number | null | undefined) {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
+}
+
+function fmtMoney(v: number | null | undefined, precision = 4) {
+  if (v == null || !isFinite(v)) return "—";
+  if (v === 0) return "$0";
+  if (v < 0.0001) return "<$0.0001";
+  if (v >= 100) return `$${v.toFixed(2)}`;
+  return `$${v.toFixed(precision)}`;
+}
+
+function fmtNum(v: number | null | undefined) {
+  if (v == null) return "—";
+  return v.toLocaleString();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Page
+   ═══════════════════════════════════════════════════════════════════════ */
+
+type TimeseriesPoint = { date: string; runs: number; costUsd: number };
+type TagCount = { tag: string; count: number };
+
+export default function QCoreAnalyticsPage() {
+  const [data, setData] = useState<Analytics | null>(null);
+  const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
+  const [topTags, setTopTags] = useState<TagCount[]>([]);
+  const [topSessions, setTopSessions] = useState<Array<{ id: string; title: string; runCount: number; totalCostUsd: number; totalDurationMs: number }>>([]);
+  const [tagCosts, setTagCosts] = useState<Array<{ tag: string; runs: number; totalCostUsd: number; avgCostUsd: number }>>([]);
+  const [providerLatency, setProviderLatency] = useState<Array<{ provider: string; avgDurationMs: number; minDurationMs: number; maxDurationMs: number; calls: number }>>([]);
+  const [goal, setGoal] = useState<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null>(null);
+  // V65 — advanced analytics
+  const [cohorts, setCohorts] = useState<Array<{ week: string; sessionsCreated: number; runsWeek0: number; runsWeek1: number; runsWeek2: number }>>([]);
+  const [topHours, setTopHours] = useState<Array<{ hour: number; runs: number; avgCostUsd: number; efficiency: number }>>([]);
+  const [runQuality, setRunQuality] = useState<{ brief: number; standard: number; detailed: number; avgLengthByStrategy: Array<{ strategy: string; avgLength: number }> } | null>(null);
+  const [goalEdit, setGoalEdit] = useState(false);
+  const [goalRuns, setGoalRuns] = useState("");
+  const [goalCost, setGoalCost] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setError(null);
+    try {
+      const [aRes, tsRes, tagRes, sessRes, tagCostRes] = await Promise.all([
+        fetch(apiUrl("/api/qcoreai/analytics"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/timeseries?days=30"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/tags?limit=15"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/sessions?days=7&limit=5"), { headers: bearerHeader() }),
+        fetch(apiUrl("/api/qcoreai/analytics/by-tag?limit=15"), { headers: bearerHeader() }),
+      ]);
+      const json = await aRes.json();
+      if (!aRes.ok) throw new Error(json?.error || `HTTP ${aRes.status}`);
+      setData(json);
+      const tsJson = await tsRes.json().catch(() => ({}));
+      if (Array.isArray(tsJson?.items)) setTimeseries(tsJson.items);
+      const tagJson = await tagRes.json().catch(() => ({}));
+      if (Array.isArray(tagJson?.items)) setTopTags(tagJson.items);
+      const sessJson = await sessRes.json().catch(() => ({}));
+      if (Array.isArray(sessJson?.items)) setTopSessions(sessJson.items);
+      const tagCostJson = await tagCostRes.json().catch(() => ({}));
+      if (Array.isArray(tagCostJson?.items)) setTagCosts(tagCostJson.items);
+
+      // Provider latency
+      try {
+        const latRes = await fetch(apiUrl("/api/qcoreai/analytics/provider-latency"), { headers: bearerHeader() });
+        const latData = await latRes.json().catch(() => ({}));
+        if (Array.isArray(latData?.items)) setProviderLatency(latData.items);
+      } catch { /* non-critical */ }
+
+      // Load analytics goals
+      try {
+        const gRes = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { headers: bearerHeader() });
+        const gData = await gRes.json().catch(() => ({}));
+        if (gData?.goal) setGoal(gData.goal);
+      } catch { /* non-critical */ }
+
+      // V65 — advanced analytics
+      try {
+        const [cRes, hRes, qRes] = await Promise.all([
+          fetch(apiUrl("/api/qcoreai/analytics/cohorts"), { headers: bearerHeader() }),
+          fetch(apiUrl("/api/qcoreai/analytics/top-hours"), { headers: bearerHeader() }),
+          fetch(apiUrl("/api/qcoreai/analytics/run-quality"), { headers: bearerHeader() }),
+        ]);
+        const cData = await cRes.json().catch(() => ({}));
+        if (Array.isArray(cData?.cohorts)) setCohorts(cData.cohorts);
+        const hData = await hRes.json().catch(() => ({}));
+        if (Array.isArray(hData?.hours)) setTopHours(hData.hours);
+        const qData = await qRes.json().catch(() => ({}));
+        if (qData?.brief !== undefined) setRunQuality(qData);
+      } catch { /* non-critical */ }
+    } catch (e: any) {
+      setError(e?.message || "Failed to load analytics");
+    }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  /* Linear regression on the last min(14, n) days to project the next 7 days. */
+  const forecast = useMemo(() => {
+    const tail = timeseries.slice(-14);
+    if (tail.length < 2) return null;
+    const xs = tail.map((_, i) => i);
+    const ys = tail.map((p) => p.costUsd);
+    const n = xs.length;
+    const sumX = xs.reduce((a, b) => a + b, 0);
+    const sumY = ys.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((acc, x, i) => acc + x * ys[i], 0);
+    const sumXX = xs.reduce((acc, x) => acc + x * x, 0);
+    const denom = n * sumXX - sumX * sumX;
+    if (denom === 0) return null;
+    const slope = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    const next7Total = Array.from({ length: 7 }, (_, k) =>
+      Math.max(0, intercept + slope * (n + k))
+    ).reduce((a, b) => a + b, 0);
+    const monthlyRunRate = next7Total > 0 ? next7Total * (30 / 7) : 0;
+    return { slope, intercept, next7Total, monthlyRunRate };
+  }, [timeseries]);
+
+  const maxStrategyRuns = useMemo(() => {
+    if (!data) return 1;
+    return Math.max(1, ...data.byStrategy.map((s) => s.runs));
+  }, [data]);
+
+  const maxProviderCalls = useMemo(() => {
+    if (!data) return 1;
+    return Math.max(1, ...data.byProvider.map((s) => s.calls));
+  }, [data]);
+
+  return (
+    <main>
+      <ProductPageShell maxWidth={1100}>
+        <Wave1Nav />
+
+        {/* Hero */}
+        <div
+          style={{
+            borderRadius: 20, overflow: "hidden", marginBottom: 16,
+            background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #3730a3 100%)",
+            color: "#fff", padding: "28px 28px 22px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div
+              style={{
+                width: 48, height: 48, borderRadius: 14,
+                background: "linear-gradient(135deg, #f59e0b, #ef4444)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontWeight: 900, fontSize: 14,
+              }}
+            >
+              📊
+            </div>
+            <div style={{ flex: 1 }}>
+              <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>
+                QCoreAI · Analytics
+              </h1>
+              <p style={{ margin: "4px 0 0", fontSize: 13, opacity: 0.78 }}>
+                Runs, cost, tokens and strategy mix — {data?.scope === "mine" ? "your sessions" : "anonymous sessions"}.
+              </p>
+            </div>
+            <Link
+              href="/qcoreai/multi"
+              style={{
+                padding: "8px 14px", borderRadius: 10,
+                background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
+                color: "#fff", fontSize: 12, fontWeight: 700, textDecoration: "none",
+              }}
+            >
+              ← Back to multi-agent
+            </Link>
+            <a
+              href={apiUrl("/api/qcoreai/analytics/export?days=30")}
+              download="qcoreai-analytics-30d.csv"
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.15)",
+                color: "#fff", textDecoration: "none",
+              }}
+            >
+              ↓ Export CSV
+            </a>
+          </div>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              color: "#b91c1c", background: "rgba(239,68,68,0.06)",
+              border: "1px solid rgba(239,68,68,0.2)",
+              borderRadius: 10, padding: "8px 12px", fontSize: 12, marginBottom: 12,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {!data ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#64748b" }}>Loading…</div>
+        ) : data.runs === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#64748b", background: "#fff", borderRadius: 14, border: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>No runs yet.</div>
+            Head to <Link href="/qcoreai/multi" style={{ color: "#0e7490", fontWeight: 700 }}>multi-agent</Link> and start a pipeline — analytics will show up here.
+          </div>
+        ) : (
+          <>
+            {/* Top tiles */}
+            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginBottom: 18 }}>
+              <Tile label="Runs" value={fmtNum(data.runs)} accent="#0d9488" />
+              <Tile label="Sessions" value={fmtNum(data.sessions)} accent="#4338ca" />
+              <Tile label="Messages" value={fmtNum(data.messages)} accent="#0ea5e9" />
+              <Tile label="Tokens" value={fmtNum(data.totals.tokensIn + data.totals.tokensOut)} accent="#f59e0b" sub={`${fmtNum(data.totals.tokensIn)} in · ${fmtNum(data.totals.tokensOut)} out`} />
+              <Tile label="Cost" value={fmtMoney(data.totals.costUsd)} accent="#7c3aed" />
+              <Tile label="Compute time" value={fmtDur(data.totals.durationMs)} accent="#ef4444" />
+              {timeseries.length > 0 && (() => {
+                // Calculate active-day streak from timeseries
+                const today = new Date().toISOString().slice(0, 10);
+                let streak = 0;
+                const sorted = [...timeseries].sort((a, b) => b.date.localeCompare(a.date));
+                let expected = today;
+                for (const pt of sorted) {
+                  if (pt.date === expected && pt.runs > 0) {
+                    streak++;
+                    const d = new Date(expected);
+                    d.setDate(d.getDate() - 1);
+                    expected = d.toISOString().slice(0, 10);
+                  } else break;
+                }
+                return streak > 0 ? <Tile label="Day streak 🔥" value={`${streak}d`} accent="#f97316" sub={streak >= 7 ? "Week streak!" : streak >= 30 ? "Month streak!" : "Keep going"} /> : null;
+              })()}
+            </section>
+
+            {/* Monthly goals */}
+            {data && (
+              <div style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.1)", background: "#fff", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>🎯 Monthly goals</span>
+                  <button onClick={() => { setGoalEdit((v) => !v); if (!goalEdit) { setGoalRuns(goal?.monthlyRuns?.toString() || ""); setGoalCost(goal?.monthlyCostUsd?.toString() || ""); } }} style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6, border: "1px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", color: "#475569" }}>
+                    {goalEdit ? "Cancel" : goal ? "Edit" : "+ Set goals"}
+                  </button>
+                </div>
+                {goalEdit ? (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <label style={{ fontSize: 10, color: "#64748b", display: "block", marginBottom: 2 }}>Monthly runs target</label>
+                      <input type="number" value={goalRuns} onChange={(e) => setGoalRuns(e.target.value)} min={0} placeholder="e.g. 100" style={{ width: 100, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10, color: "#64748b", display: "block", marginBottom: 2 }}>Monthly cost target ($)</label>
+                      <input type="number" value={goalCost} onChange={(e) => setGoalCost(e.target.value)} min={0} step={0.1} placeholder="e.g. 5.00" style={{ width: 100, padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }} />
+                    </div>
+                    <button onClick={async () => {
+                      const body = { monthlyRuns: goalRuns ? parseInt(goalRuns) : null, monthlyCostUsd: goalCost ? parseFloat(goalCost) : null };
+                      const res = await fetch(apiUrl("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: { "Content-Type": "application/json", ...bearerHeader() }, body: JSON.stringify(body) });
+                      const d = await res.json().catch(() => ({}));
+                      if (d.goal) { setGoal(d.goal); setGoalEdit(false); }
+                    }} style={{ alignSelf: "flex-end", padding: "5px 14px", borderRadius: 6, border: "none", background: "#0f172a", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                  </div>
+                ) : goal ? (
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                    {goal.monthlyRuns && (
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#475569", marginBottom: 4 }}>
+                          <span>Runs</span>
+                          <span style={{ fontWeight: 700 }}>{data.runs} / {goal.monthlyRuns}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: data.runs >= goal.monthlyRuns ? "#10b981" : "#3b82f6", width: `${Math.min(100, Math.round((data.runs / goal.monthlyRuns) * 100))}%` }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{Math.round((data.runs / goal.monthlyRuns) * 100)}%</div>
+                      </div>
+                    )}
+                    {goal.monthlyCostUsd && (
+                      <div style={{ flex: 1, minWidth: 120 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#475569", marginBottom: 4 }}>
+                          <span>Cost</span>
+                          <span style={{ fontWeight: 700 }}>{fmtMoney(data.totals.costUsd)} / ${goal.monthlyCostUsd.toFixed(2)}</span>
+                        </div>
+                        <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9" }}>
+                          <div style={{ height: "100%", borderRadius: 3, background: data.totals.costUsd >= goal.monthlyCostUsd ? "#ef4444" : "#10b981", width: `${Math.min(100, Math.round((data.totals.costUsd / goal.monthlyCostUsd) * 100))}%` }} />
+                        </div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{Math.round((data.totals.costUsd / goal.monthlyCostUsd) * 100)}%</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Set monthly run count and cost goals to track your usage against targets.</p>
+                )}
+              </div>
+            )}
+
+            {/* Cost over time + 7-day forecast */}
+            {timeseries.length > 0 && (
+              <Section title="Cost over time">
+                <CostTimeseriesChart points={timeseries} forecast={forecast} />
+                {forecast && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#475569" }}>
+                    Linear projection on last {Math.min(14, timeseries.length)} days:{" "}
+                    <strong style={{ color: "#0f172a" }}>{fmtMoney(forecast.next7Total, 4)}</strong> next 7d ·{" "}
+                    <strong style={{ color: "#0f172a" }}>{fmtMoney(forecast.monthlyRunRate, 2)}</strong> per month at this rate
+                    {forecast.slope > 0 && <span style={{ marginLeft: 8, color: "#dc2626" }}>↑ trending up</span>}
+                    {forecast.slope < 0 && <span style={{ marginLeft: 8, color: "#16a34a" }}>↓ trending down</span>}
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {/* Activity heatmap (last 12 weeks) */}
+            {timeseries.length > 0 && (
+              <Section title="Activity heatmap">
+                {(() => {
+                  const today = new Date();
+                  const weeks = 12;
+                  const cells: Array<{ date: string; runs: number; cost: number }> = [];
+                  for (let i = weeks * 7 - 1; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(d.getDate() - i);
+                    const dateStr = d.toISOString().slice(0, 10);
+                    const pt = timeseries.find((p) => p.date === dateStr);
+                    cells.push({ date: dateStr, runs: pt?.runs ?? 0, cost: pt?.costUsd ?? 0 });
+                  }
+                  const maxRuns = Math.max(1, ...cells.map((c) => c.runs));
+                  return (
+                    <div>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${weeks}, 1fr)`, gap: 2 }}>
+                        {Array.from({ length: weeks }, (_, w) => (
+                          <div key={w} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {cells.slice(w * 7, w * 7 + 7).map((c) => {
+                              const intensity = c.runs === 0 ? 0 : Math.max(0.15, c.runs / maxRuns);
+                              return (
+                                <div
+                                  key={c.date}
+                                  title={`${c.date}: ${c.runs} run${c.runs !== 1 ? "s" : ""} · ${c.cost > 0 ? `$${c.cost.toFixed(4)}` : "$0"}`}
+                                  style={{
+                                    width: "100%", aspectRatio: "1",
+                                    borderRadius: 2,
+                                    background: c.runs === 0 ? "#f1f5f9" : `rgba(124,58,237,${intensity})`,
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 6, fontSize: 10, color: "#94a3b8", alignItems: "center" }}>
+                        <span>Less</span>
+                        {[0, 0.2, 0.5, 0.8, 1].map((v) => (
+                          <div key={v} style={{ width: 10, height: 10, borderRadius: 2, background: v === 0 ? "#f1f5f9" : `rgba(124,58,237,${v})` }} />
+                        ))}
+                        <span>More</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
+            {/* Top tags chart */}
+            {topTags.length > 0 && (
+              <Section title="Top tags">
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {topTags.map((t) => {
+                    const max = Math.max(1, ...topTags.map((x) => x.count));
+                    const pct = (t.count / max) * 100;
+                    return (
+                      <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div
+                          style={{
+                            width: 140,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: "#0f766e",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={t.tag}
+                        >
+                          {t.tag}
+                        </div>
+                        <div style={{ flex: 1, height: 14, background: "rgba(13,148,136,0.08)", borderRadius: 999, overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: `${pct}%`,
+                              height: "100%",
+                              background: "linear-gradient(90deg, #0d9488, #0f766e)",
+                              borderRadius: 999,
+                            }}
+                          />
+                        </div>
+                        <div style={{ width: 40, textAlign: "right", fontSize: 12, color: "#0f172a", fontWeight: 700 }}>
+                          {t.count}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
+
+            {/* Strategy breakdown */}
+            <Section title="By strategy">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                {data.byStrategy.map((s) => (
+                  <div
+                    key={s.strategy}
+                    style={{
+                      padding: 14, borderRadius: 12,
+                      background: "#fff",
+                      border: `1px solid ${(STRAT_COLORS[s.strategy] || "#64748b")}33`,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <span
+                        style={{
+                          padding: "2px 8px", borderRadius: 999,
+                          background: `${STRAT_COLORS[s.strategy] || "#64748b"}1f`,
+                          color: STRAT_COLORS[s.strategy] || "#334155",
+                          fontSize: 11, fontWeight: 800, textTransform: "capitalize",
+                          border: `1px solid ${STRAT_COLORS[s.strategy] || "#94a3b8"}55`,
+                        }}
+                      >
+                        {s.strategy}
+                      </span>
+                      <span style={{ marginLeft: "auto", fontWeight: 900, fontSize: 18, color: "#0f172a" }}>{s.runs}</span>
+                    </div>
+                    <Bar value={s.runs} max={maxStrategyRuns} color={STRAT_COLORS[s.strategy] || "#64748b"} />
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 8, display: "flex", justifyContent: "space-between" }}>
+                      <span>{fmtMoney(s.costUsd)}</span>
+                      <span>{fmtNum(s.tokens)} tok</span>
+                      <span>~{fmtDur(s.avgDurationMs)}</span>
+                    </div>
+                    {s.runs > 0 && (
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 6, display: "flex", justifyContent: "space-between" }}>
+                        <span>avg cost/run: {fmtMoney(s.costUsd / s.runs)}</span>
+                        <span>avg {fmtNum(Math.round(s.tokens / s.runs))} tok/run</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+
+            {/* Provider breakdown */}
+            <Section title="By provider">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {data.byProvider.map((p) => {
+                  const color = PROVIDER_COLORS[p.provider] || "#64748b";
+                  return (
+                    <div key={p.provider} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 100, fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
+                        {providerLabel[p.provider] || p.provider}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <Bar value={p.calls} max={maxProviderCalls} color={color} />
+                      </div>
+                      <div style={{ width: 60, textAlign: "right", fontSize: 12, color: "#334155" }}>{p.calls}</div>
+                      <div style={{ width: 90, textAlign: "right", fontSize: 12, color: "#64748b" }}>{fmtNum(p.tokensIn + p.tokensOut)}</div>
+                      <div style={{ width: 84, textAlign: "right", fontSize: 12, color: "#0f172a", fontWeight: 700 }}>{fmtMoney(p.costUsd)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+
+            {/* Provider latency */}
+            {providerLatency.length > 0 && (
+              <Section title="Provider latency (avg ms/call)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(() => {
+                    const maxAvg = Math.max(...providerLatency.map((p) => p.avgDurationMs));
+                    return providerLatency.map((p) => (
+                      <div key={p.provider} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <span style={{ minWidth: 80, fontSize: 12, fontWeight: 700, color: PROVIDER_COLORS[p.provider] || "#475569" }}>{providerLabel[p.provider] || p.provider}</span>
+                        <div style={{ flex: 1 }}>
+                          <Bar value={p.avgDurationMs} max={maxAvg} color={PROVIDER_COLORS[p.provider] || "#475569"} height={6} />
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#0f172a", minWidth: 60, textAlign: "right" }}>{Math.round(p.avgDurationMs)}ms</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 40 }}>{p.calls} calls</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8", minWidth: 60 }}>{Math.round(p.minDurationMs)}–{Math.round(p.maxDurationMs)}ms</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </Section>
+            )}
+
+            {/* Model breakdown table */}
+            {/* Duration distribution histogram */}
+            {data.recent.length >= 5 && (
+              <Section title="Duration distribution">
+                {(() => {
+                  const durations = data.recent.filter((r) => r.totalDurationMs).map((r) => r.totalDurationMs!);
+                  if (durations.length < 3) return null;
+                  const BUCKETS = [0, 2000, 5000, 10000, 20000, 60000, Infinity];
+                  const labels = ["<2s", "2-5s", "5-10s", "10-20s", "20-60s", ">60s"];
+                  const counts = new Array(BUCKETS.length - 1).fill(0);
+                  for (const d of durations) {
+                    for (let i = 0; i < BUCKETS.length - 1; i++) {
+                      if (d >= BUCKETS[i] && d < BUCKETS[i + 1]) { counts[i]++; break; }
+                    }
+                  }
+                  const maxCount = Math.max(1, ...counts);
+                  return (
+                    <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 80 }}>
+                      {counts.map((cnt, i) => (
+                        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 9, color: "#94a3b8" }}>{cnt}</span>
+                          <div style={{ width: "100%", height: Math.max(2, (cnt / maxCount) * 60), background: cnt > 0 ? "#4338ca" : "#f1f5f9", borderRadius: "3px 3px 0 0" }} />
+                          <span style={{ fontSize: 9, color: "#94a3b8", textAlign: "center" }}>{labels[i]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
+            <Section title="Top models">
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, background: "#fff", borderRadius: 10, overflow: "hidden" }}>
+                  <thead>
+                    <tr style={{ background: "#f8fafc", textAlign: "left" }}>
+                      <th style={thStyle}>Model</th>
+                      <th style={thStyle}>Provider</th>
+                      <th style={{ ...thStyle, textAlign: "right" }}>Calls</th>
+                      <th style={{ ...thStyle, textAlign: "right" }}>Tokens</th>
+                      <th style={{ ...thStyle, textAlign: "right" }}>Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byModel.map((m, i) => (
+                      <tr key={`${m.provider}-${m.model}`} style={{ background: i % 2 ? "#fafbfc" : "#fff" }}>
+                        <td style={{ ...tdStyle, fontWeight: 700, color: "#0f172a" }}>{prettyModel(m.model)}</td>
+                        <td style={tdStyle}>{providerLabel[m.provider] || m.provider}</td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{fmtNum(m.calls)}</td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{fmtNum(m.tokens)}</td>
+                        <td style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>{fmtMoney(m.costUsd)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+
+            {/* Recent runs */}
+            <Section title="Recent runs">
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {data.recent.map((r) => (
+                  <Link
+                    key={r.runId}
+                    href={`/qcoreai/multi`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "90px 1fr 110px 90px 90px",
+                      gap: 10, alignItems: "center",
+                      padding: "8px 12px", borderRadius: 10,
+                      background: "#fff", border: "1px solid #e2e8f0",
+                      textDecoration: "none", color: "#0f172a",
+                      fontSize: 12,
+                    }}
+                  >
+                    <span
+                      style={{
+                        padding: "2px 8px", borderRadius: 999,
+                        background: `${STRAT_COLORS[r.strategy || "sequential"] || "#64748b"}1f`,
+                        color: STRAT_COLORS[r.strategy || "sequential"] || "#334155",
+                        fontWeight: 800, fontSize: 10, textAlign: "center",
+                        border: `1px solid ${STRAT_COLORS[r.strategy || "sequential"] || "#94a3b8"}55`,
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {r.strategy || "sequential"}
+                    </span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{r.title}</span>
+                    <span style={{ color: "#64748b" }}>{new Date(r.startedAt).toLocaleString()}</span>
+                    <span style={{ textAlign: "right", color: "#64748b" }}>{fmtDur(r.totalDurationMs)}</span>
+                    <span style={{ textAlign: "right", fontWeight: 700 }}>{fmtMoney(r.costUsd)}</span>
+                  </Link>
+                ))}
+              </div>
+            </Section>
+
+            {/* Per-tag cost breakdown */}
+            {tagCosts.length > 0 && (
+              <Section title="Cost by tag">
+                {(() => {
+                  const maxCost = Math.max(...tagCosts.map((t) => t.totalCostUsd));
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {tagCosts.map((t) => (
+                        <div key={t.tag} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <span style={{ minWidth: 90, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>#{t.tag}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ height: 6, borderRadius: 3, background: "#f1f5f9", overflow: "hidden" }}>
+                              <div style={{ height: "100%", borderRadius: 3, background: "#7c3aed", width: maxCost > 0 ? `${(t.totalCostUsd / maxCost) * 100}%` : "0%" }} />
+                            </div>
+                          </div>
+                          <span style={{ width: 40, textAlign: "right", fontSize: 11, color: "#64748b" }}>{t.runs}r</span>
+                          <span style={{ width: 80, textAlign: "right", fontSize: 11, fontWeight: 700, color: "#0f172a" }}>{fmtMoney(t.totalCostUsd)}</span>
+                          <span style={{ width: 70, textAlign: "right", fontSize: 10, color: "#94a3b8" }}>{fmtMoney(t.avgCostUsd)}/run</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </Section>
+            )}
+
+            {/* Top sessions by cost (7-day window) */}
+            {topSessions.length > 0 && (
+              <Section title="Top sessions (7d by cost)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {topSessions.map((s) => (
+                    <Link
+                      key={s.id}
+                      href="/qcoreai/multi"
+                      style={{
+                        display: "flex", gap: 10, alignItems: "center",
+                        padding: "8px 12px", borderRadius: 10,
+                        background: "#fff", border: "1px solid #e2e8f0",
+                        textDecoration: "none", color: "#0f172a", fontSize: 12,
+                      }}
+                    >
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{s.title}</span>
+                      <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{s.runCount} run{s.runCount !== 1 ? "s" : ""}</span>
+                      <span style={{ fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
+                        {s.totalCostUsd > 0 ? `$${s.totalCostUsd.toFixed(4)}` : "—"}
+                      </span>
+                      <Link
+                        href={`/qcoreai/compare?a=${s.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ fontSize: 10, color: "#4338ca", fontWeight: 700, textDecoration: "none" }}
+                      >
+                        ⚖️
+                      </Link>
+                    </Link>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* V65 — Cohort retention mini-grid */}
+            {cohorts.length > 0 && (
+              <Section title="Cohort retention (12 weeks)">
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...thStyle, textAlign: "left" }}>Week</th>
+                        <th style={thStyle}>Sessions</th>
+                        <th style={thStyle}>Runs W0</th>
+                        <th style={thStyle}>Runs W1</th>
+                        <th style={thStyle}>Runs W2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohorts.map((c) => {
+                        const maxRuns = Math.max(1, c.runsWeek0, c.runsWeek1, c.runsWeek2);
+                        const cellBg = (v: number) => {
+                          const pct = v / maxRuns;
+                          if (pct > 0.7) return "#0d9488";
+                          if (pct > 0.4) return "#34d399";
+                          if (pct > 0.1) return "#a7f3d0";
+                          return "#f1f5f9";
+                        };
+                        const cellColor = (v: number) => (v / maxRuns > 0.4 ? "#fff" : "#374151");
+                        return (
+                          <tr key={c.week}>
+                            <td style={{ ...tdStyle, fontWeight: 700 }}>{c.week}</td>
+                            <td style={{ ...tdStyle, textAlign: "center" }}>{c.sessionsCreated}</td>
+                            {[c.runsWeek0, c.runsWeek1, c.runsWeek2].map((v, i) => (
+                              <td key={i} style={{ ...tdStyle, textAlign: "center", background: cellBg(v), color: cellColor(v), fontWeight: 700, borderRadius: 4 }}>{v}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Section>
+            )}
+
+            {/* V65 — Top productive hours */}
+            {topHours.length > 0 && (
+              <Section title="Top productive hours (30d)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {topHours.map((h) => {
+                    const maxRuns = Math.max(1, ...topHours.map((x) => x.runs));
+                    const label = `${h.hour}:00–${h.hour + 1}:00`;
+                    return (
+                      <div key={h.hour} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <span style={{ minWidth: 80, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{label}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ height: 8, borderRadius: 4, background: "#f1f5f9", overflow: "hidden" }}>
+                            <div style={{ height: "100%", borderRadius: 4, background: "#4338ca", width: `${(h.runs / maxRuns) * 100}%` }} />
+                          </div>
+                        </div>
+                        <span style={{ width: 40, textAlign: "right", fontSize: 11, color: "#64748b" }}>{h.runs}r</span>
+                        <span style={{ width: 80, textAlign: "right", fontSize: 11, fontWeight: 700, color: "#0f172a" }}>{h.avgCostUsd > 0 ? `$${h.avgCostUsd.toFixed(4)}` : "—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
+
+            {/* V65 — Run quality distribution donut */}
+            {runQuality && (runQuality.brief + runQuality.standard + runQuality.detailed) > 0 && (
+              <Section title="Output quality distribution">
+                {(() => {
+                  const total = runQuality.brief + runQuality.standard + runQuality.detailed;
+                  const pctB = total > 0 ? (runQuality.brief / total) * 100 : 0;
+                  const pctS = total > 0 ? (runQuality.standard / total) * 100 : 0;
+                  const pctD = total > 0 ? (runQuality.detailed / total) * 100 : 0;
+                  const segments = [
+                    { label: "Brief (<500)", pct: pctB, count: runQuality.brief, color: "#f59e0b" },
+                    { label: "Standard (500-2k)", pct: pctS, count: runQuality.standard, color: "#0d9488" },
+                    { label: "Detailed (>2k)", pct: pctD, count: runQuality.detailed, color: "#4338ca" },
+                  ];
+                  return (
+                    <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+                      {/* CSS-based bar */}
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ height: 20, borderRadius: 10, overflow: "hidden", display: "flex" }}>
+                          {segments.map((s) => s.pct > 0 && (
+                            <div key={s.label} style={{ width: `${s.pct}%`, background: s.color, transition: "width 0.3s" }} title={`${s.label}: ${s.count}`} />
+                          ))}
+                        </div>
+                      </div>
+                      {/* Legend */}
+                      <div style={{ display: "flex", gap: 16 }}>
+                        {segments.map((s) => (
+                          <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color }} />
+                            <span style={{ fontSize: 12, color: "#374151" }}>{s.label}: <strong>{s.count}</strong> ({pctB > 0 || pctS > 0 || pctD > 0 ? `${s.pct.toFixed(0)}%` : "0%"})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                {runQuality.avgLengthByStrategy.length > 0 && (
+                  <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {runQuality.avgLengthByStrategy.map((s) => (
+                      <span key={s.strategy} style={{ fontSize: 12, background: "#f1f5f9", borderRadius: 6, padding: "3px 10px", color: "#374151" }}>
+                        {s.strategy}: avg {s.avgLength.toLocaleString()} chars
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            )}
+          </>
+        )}
+      </ProductPageShell>
+    </main>
+  );
+}
+
+const thStyle: React.CSSProperties = {
+  padding: "8px 12px",
+  fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em",
+  color: "#475569", fontWeight: 800,
+  borderBottom: "1px solid #e2e8f0",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "8px 12px",
+  color: "#334155",
+  borderBottom: "1px solid #f1f5f9",
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Tiles
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function Tile({ label, value, accent, sub }: { label: string; value: string; accent: string; sub?: string }) {
+  return (
+    <div
+      style={{
+        padding: 14, borderRadius: 12,
+        background: "#fff", border: `1px solid ${accent}33`,
+        boxShadow: `0 1px 4px ${accent}0f`,
+      }}
+    >
+      <div style={{ fontSize: 10, fontWeight: 800, color: accent, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", marginTop: 4, letterSpacing: "-0.02em" }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+        {title}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Bar({ value, max, color, height = 8 }: { value: number; max: number; color: string; height?: number }) {
+  const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 2;
+  return (
+    <div style={{ height, background: "#f1f5f9", borderRadius: 999, overflow: "hidden" }}>
+      <div
+        style={{
+          width: `${pct}%`,
+          height: "100%",
+          background: `linear-gradient(90deg, ${color}, ${color}cc)`,
+          borderRadius: 999,
+          transition: "width 0.3s",
+        }}
+      />
+    </div>
+  );
+}
+
+function CostTimeseriesChart({
+  points,
+  forecast,
+}: {
+  points: TimeseriesPoint[];
+  forecast: { slope: number; intercept: number; next7Total: number; monthlyRunRate: number } | null;
+}) {
+  const W = 700;
+  const H = 180;
+  const PAD_L = 36;
+  const PAD_R = 8;
+  const PAD_T = 8;
+  const PAD_B = 28;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const projected = forecast
+    ? Array.from({ length: 7 }, (_, k) => Math.max(0, forecast.intercept + forecast.slope * (points.length + k)))
+    : [];
+  const allCosts = [...points.map((p) => p.costUsd), ...projected];
+  const maxCost = Math.max(0.0001, ...allCosts);
+  const total = points.length + projected.length;
+
+  const xFor = (i: number) => PAD_L + (total <= 1 ? 0 : (i / (total - 1)) * innerW);
+  const yFor = (cost: number) => PAD_T + innerH - (cost / maxCost) * innerH;
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${xFor(i)} ${yFor(p.costUsd)}`).join(" ");
+  const projPath = projected.length > 0
+    ? `M ${xFor(points.length - 1)} ${yFor(points[points.length - 1].costUsd)}` +
+      projected.map((c, k) => ` L ${xFor(points.length + k)} ${yFor(c)}`).join("")
+    : "";
+
+  // Y-axis ticks (3 levels)
+  const yTicks = [0, maxCost / 2, maxCost];
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg width={W} height={H} role="img" aria-label="Cost over time" style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", display: "block", minWidth: W }}>
+        {/* Grid */}
+        {yTicks.map((v, i) => (
+          <g key={i}>
+            <line x1={PAD_L} x2={W - PAD_R} y1={yFor(v)} y2={yFor(v)} stroke="#f1f5f9" strokeWidth={1} />
+            <text x={PAD_L - 4} y={yFor(v) + 3} fontSize={9} fill="#94a3b8" textAnchor="end">
+              ${v.toFixed(v < 0.01 ? 4 : 2)}
+            </text>
+          </g>
+        ))}
+        {/* Forecast region */}
+        {projected.length > 0 && (
+          <rect
+            x={xFor(points.length - 1)}
+            y={PAD_T}
+            width={W - PAD_R - xFor(points.length - 1)}
+            height={innerH}
+            fill="rgba(124,58,237,0.04)"
+          />
+        )}
+        {/* Cost line */}
+        <path d={linePath} fill="none" stroke="#0d9488" strokeWidth={2} />
+        {/* Forecast line (dashed) */}
+        {projPath && (
+          <path d={projPath} fill="none" stroke="#7c3aed" strokeWidth={2} strokeDasharray="4 4" />
+        )}
+        {/* Points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={xFor(i)} cy={yFor(p.costUsd)} r={2.5} fill="#0d9488">
+            <title>{`${p.date}: ${p.runs} runs · $${p.costUsd.toFixed(4)}`}</title>
+          </circle>
+        ))}
+        {/* X-axis labels (first, mid, last + forecast end) */}
+        {points.length > 0 && (
+          <>
+            <text x={xFor(0)} y={H - 10} fontSize={9} fill="#64748b" textAnchor="start">
+              {points[0].date.slice(5)}
+            </text>
+            {points.length > 2 && (
+              <text x={xFor(Math.floor((points.length - 1) / 2))} y={H - 10} fontSize={9} fill="#64748b" textAnchor="middle">
+                {points[Math.floor((points.length - 1) / 2)].date.slice(5)}
+              </text>
+            )}
+            <text x={xFor(points.length - 1)} y={H - 10} fontSize={9} fill="#64748b" textAnchor="middle">
+              {points[points.length - 1].date.slice(5)}
+            </text>
+            {projected.length > 0 && (
+              <text x={xFor(total - 1)} y={H - 10} fontSize={9} fill="#7c3aed" textAnchor="end" fontWeight={700}>
+                +7d
+              </text>
+            )}
+          </>
+        )}
+        {/* Legend */}
+        <g transform={`translate(${PAD_L}, ${PAD_T + 4})`}>
+          <line x1={0} x2={14} y1={0} y2={0} stroke="#0d9488" strokeWidth={2} />
+          <text x={18} y={3} fontSize={10} fill="#475569">Actual</text>
+          {projPath && (
+            <>
+              <line x1={62} x2={76} y1={0} y2={0} stroke="#7c3aed" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={80} y={3} fontSize={10} fill="#475569">Forecast</text>
+            </>
+          )}
+        </g>
+      </svg>
+    </div>
+  );
+}

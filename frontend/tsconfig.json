@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@aevion/catalog-client": ["../packages/aevion-catalog-client/src/index"],
+      "@aevion/catalog-client/*": ["../packages/aevion-catalog-client/src/*"]
     }
   },
   "include": [
@@ -31,5 +33,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "src/components/__tests__", "**/*.test.ts", "**/*.test.tsx"]
 }

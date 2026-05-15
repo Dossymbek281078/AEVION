@@ -10,7 +10,6 @@ import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { initSentry } from "./lib/qsignV2/sentry";
 import { qtradeRouter } from "./routes/qtrade";
-import { qtradeOfflineRouter } from "./routes/qtradeoffline";
 import { authRouter } from "./routes/auth";
 import { authOauthRouter } from "./routes/authOauth";
 import { planetComplianceRouter } from "./routes/planetCompliance";
@@ -79,7 +78,7 @@ import { qeventsRouter } from "./routes/qevents";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
-import { lifeboxRouter } from "./routes/lifebox";
+import { psyappDepsRouter } from "./routes/psyappDeps";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -452,6 +451,7 @@ app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
+app.use("/api/psyapp-deps", psyappDepsRouter);
 app.use("/api/qmaskcard", qmaskcardRouter);
 app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
 app.use("/api/ztide", ztideRouter);
@@ -498,11 +498,6 @@ app.use("/api/qfusionai", qfusionaiRouter);
 
 // VeilNetX — privacy proxy pre-launch status + waitlist
 app.use("/api/veilnetx", veilnetxRouter);
-
-// LifeBox — time-locked capsules: digital safe for your future self.
-// Mounted BEFORE planning stubs so /api/lifebox/* uses our real routes,
-// not the generic /status + /waitlist stub.
-app.use("/api/lifebox", lifeboxRouter);
 
 // MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
 // the generic planning stubs so module-specific paths (e.g.

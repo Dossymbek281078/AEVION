@@ -12,8 +12,8 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { ensureQPersonaTables, isQPersonaDbReady, getQPersonaDbError } from "../lib/ensureQPersonaTables";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
@@ -380,15 +380,6 @@ qpersonaRouter.post("/personas/:alias/ai-bio", aiLimit, async (req: Request, res
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────
-interface QPersonaConceptMessage {
-  id: string;
-  payload: Record<string, unknown>;
-  tags: string[];
-  createdAt: string;
-}
-
-const QPERSONA_CONCEPT_MAX = 200;
-const qpersonaConceptMessages: QPersonaConceptMessage[] = [];
 
 qpersonaRouter.get("/status", readLimit, (_req: Request, res: Response) => {
   res.json({
@@ -403,65 +394,8 @@ qpersonaRouter.get("/status", readLimit, (_req: Request, res: Response) => {
       conceptMessages: "/api/qpersona/concept/messages",
       conceptStats: "/api/qpersona/concept-stats",
     },
-    conceptMessagesCount: qpersonaConceptMessages.length,
     timestamp: new Date().toISOString(),
   });
 });
 
-qpersonaRouter.get("/concept/messages", readLimit, (req: Request, res: Response) => {
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
-  const items = qpersonaConceptMessages.slice(0, limit);
-  res.json({ items, total: qpersonaConceptMessages.length, moduleId: "qpersona", noun: "concept/messages" });
-});
-
-qpersonaRouter.post("/concept/messages", writeLimit, (req: Request, res: Response) => {
-  try {
-    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
-    const payload = (body.payload && typeof body.payload === "object")
-      ? body.payload as Record<string, unknown>
-      : body;
-    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
-    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
-    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
-    const author = String(payload.author ?? "").trim().slice(0, 80);
-    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["qpersona"];
-    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
-    const msg: QPersonaConceptMessage = {
-      id: crypto.randomUUID(),
-      payload: { idea, rationale, author },
-      tags: tags.length ? tags : ["qpersona"],
-      createdAt: new Date().toISOString(),
-    };
-    qpersonaConceptMessages.unshift(msg);
-    if (qpersonaConceptMessages.length > QPERSONA_CONCEPT_MAX) {
-      qpersonaConceptMessages.length = QPERSONA_CONCEPT_MAX;
-    }
-    return res.status(201).json(msg);
-  } catch (err: unknown) {
-    console.error("[qpersona] concept_post_failed", err instanceof Error ? err.message : err);
-    return res.status(500).json({ error: "concept_post_failed" });
-  }
-});
-
-qpersonaRouter.get("/concept-stats", readLimit, (_req: Request, res: Response) => {
-  const now = Date.now();
-  const sevenDays = 7 * 86_400_000;
-  const last7d = qpersonaConceptMessages.filter(
-    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
-  ).length;
-  const tagCounts = new Map<string, number>();
-  for (const m of qpersonaConceptMessages) {
-    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-  }
-  const topTags = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([tag, count]) => ({ tag, count }));
-  res.json({
-    moduleId: "qpersona",
-    noun: "concept/messages",
-    total: qpersonaConceptMessages.length,
-    last7d,
-    topTags,
-  });
-});
+mountConceptBoard({ router: qpersonaRouter, moduleId: "qpersona", defaultTag: "qpersona", readLimit, writeLimit });

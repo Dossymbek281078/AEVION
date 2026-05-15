@@ -318,6 +318,11 @@ const MODULES: Module[] = [
   { id: "railways-stations",      category: "special",   href: "/smeta-trainer/drawings-practice/railways-stations",      icon: "🚂", title: "Железные дороги и вокзалы",       subtitle: "Колея 1520, Р65, Ш1, ВСМ Алматы-Астана 1200 км, 25 кВ AC",        level: "L5", exercises: 4,  color: "slate"   },
   { id: "seaports-harbors",       category: "special",   href: "/smeta-trainer/drawings-practice/seaports-harbors",       icon: "⚓", title: "Морские и речные порты",          subtitle: "Актау 10 млн т, STS-краны, Liebherr LHM 600, TEU, дноуглубление", level: "L5", exercises: 4,  color: "cyan"    },
   { id: "power-plants",           category: "special",   href: "/smeta-trainer/drawings-practice/power-plants",           icon: "⚡", title: "Электростанции (ТЭЦ/ГЭС/ВЭС/СЭС)", subtitle: "Экибастуз ГРЭС-1 4000 МВт, Мойнакская ГЭС, СЭС 330 млн тг/МВт",   level: "L5", exercises: 4,  color: "yellow"  },
+
+  // ── Плотины, ПС, шахты ──
+  { id: "dams-hydrostructures",   category: "special",   href: "/smeta-trainer/drawings-practice/dams-hydrostructures",   icon: "🌊", title: "Плотины и гидротехника",          subtitle: "Бухтарма H=90 м, Капшагай 28 км³, Tainter gate, КИА, СН РК 3.04-13", level: "L5", exercises: 4,  color: "blue"    },
+  { id: "substations-power",      category: "utilities", href: "/smeta-trainer/drawings-practice/substations-power",      icon: "⚡", title: "Подстанции 110-1150 кВ",          subtitle: "KEGOC ПС 500/1150 кВ, КРУЭ ABB/Siemens, РЗА SIPROTEC",            level: "L5", exercises: 4,  color: "amber"   },
+  { id: "mine-shafts-underground",category: "special",   href: "/smeta-trainer/drawings-practice/mine-shafts-underground",icon: "⛏️", title: "Шахты и подземные выработки",     subtitle: "Стволы Ø6-8 м H=1000 м, СВП-22/27/33, ПБ 03-553, Караганда",      level: "L5", exercises: 4,  color: "stone"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

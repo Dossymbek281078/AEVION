@@ -9,7 +9,7 @@ export const QSIGN_V2_OPENAPI = {
   openapi: "3.0.3",
   info: {
     title: "AEVION QSign v2",
-    version: "2.0.0",
+    version: "2.1.0",
     description:
       "Tamper-evident JSON signature platform: RFC 8785 canonicalization, " +
       "HMAC-SHA256 + Ed25519 hybrid + post-quantum-ready Dilithium preview slot, " +
@@ -47,11 +47,15 @@ export const QSIGN_V2_OPENAPI = {
       },
       DilithiumPreview: {
         type: "object",
+        description:
+          "Dilithium block. mode='preview' (default): SHA-512 fingerprint in `digest` — slot reservation, NOT a real PQ signature. mode='real' (when QSIGN_DILITHIUM_V1_SEED is set on the server): actual ML-DSA-65 (FIPS 204) signature in `signature` + `publicKey` for offline verification.",
         properties: {
           algo: { type: "string", enum: ["ML-DSA-65"] },
           kid: { type: "string" },
-          mode: { type: "string", enum: ["preview"] },
-          digest: { type: "string", description: "SHA-512 fingerprint of canonical||kid (NOT a real PQ signature)" },
+          mode: { type: "string", enum: ["preview", "real"] },
+          digest: { type: "string", description: "Preview mode only: SHA-512 fingerprint of canonical||kid (128 hex chars). NOT a real PQ signature." },
+          signature: { type: "string", description: "Real mode only: ML-DSA-65 signature in hex (~6618 chars)." },
+          publicKey: { type: "string", description: "Real mode only: ML-DSA-65 public key in hex (~3904 chars). Use to verify the signature offline." },
           valid: { type: "boolean", nullable: true },
           note: { type: "string" },
         },

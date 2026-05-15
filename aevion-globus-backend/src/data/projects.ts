@@ -147,7 +147,7 @@ export const projects: GlobusProject[] = [
     description:
       "Privacy proxy network MVP 2026-05-15 — pre-launch status surface, waitlist with email-hash dedupe, principles + threat model, in-memory concept board. /api/veilnetx.",
     kind: "experiment",
-    status: "in_progress",
+    status: "mvp",
     priority: 2,
     tags: ["crypto", "privacy", "network"],
     createdAt: now,
@@ -203,9 +203,9 @@ export const projects: GlobusProject[] = [
     code: "QGOOD",
     name: "QGood — Psychology & Mental Health",
     description:
-      "Психо-MVP 2026-05-15 — mood log (1-10 + emotion), AI therapist chat, 5 exercises (breathing/grounding/gratitude/body-scan/reframe), 7-day trend. /api/qgood.",
+      "Психо-MVP 2026-05-15 — mood log (1-10 + emotion), AI therapist chat, 5 exercises (breathing/grounding/gratitude/body-scan/reframe), 7-day trend + concept board. /api/qgood.",
     kind: "product",
-    status: "in_progress",
+    status: "mvp",
     priority: 2,
     tags: ["psychology", "mental-health", "ai"],
     createdAt: now,
@@ -216,9 +216,9 @@ export const projects: GlobusProject[] = [
     code: "PSYAPP",
     name: "PsyApp — Dependencies Exit",
     description:
-      "Выход из зависимостей MVP 2026-05-15 — streak tracker (alcohol/smoking), trigger log с intensity 1-10, AI support via QCoreAI, 10 RU affirmations. /api/psyapp-deps.",
+      "Выход из зависимостей MVP 2026-05-15 — streak tracker (alcohol/smoking), trigger log с intensity 1-10, AI support via QCoreAI, 10 RU affirmations + concept board. /api/psyapp-deps.",
     kind: "product",
-    status: "in_progress",
+    status: "mvp",
     priority: 3,
     tags: ["addiction", "recovery", "psychology", "ai"],
     createdAt: now,
@@ -289,9 +289,9 @@ export const projects: GlobusProject[] = [
     code: "DEEPSAN",
     name: "DeepSan — Anti-chaos App",
     description:
-      "Антихаос: Kanban задач (Todo/InProgress/Done) + Pomodoro фокус-таймер + сессии + stats. MVP 2026-05-14 — /api/deepsan.",
+      "Антихаос: Kanban задач (Todo/InProgress/Done) + Pomodoro фокус-таймер + сессии + stats + concept board. MVP 2026-05-15 — /api/deepsan.",
     kind: "product",
-    status: "in_progress",
+    status: "mvp",
     priority: 3,
     tags: ["productivity", "focus"],
     createdAt: now,
@@ -317,7 +317,7 @@ export const projects: GlobusProject[] = [
     description:
       "Adaptive social-economic coordination MVP 2026-05-15 — contribution events (10 kinds × 12 source modules), decayed tide score, 7-rank ladder (Seedling→Ocean), leaderboard, in-memory concept board. /api/ztide.",
     kind: "experiment",
-    status: "in_progress",
+    status: "mvp",
     priority: 4,
     tags: ["currency", "concept"],
     createdAt: now,
@@ -382,7 +382,7 @@ export const projects: GlobusProject[] = [
     description:
       "DAO governance MVP 2026-05-15 — proposals + 3 vote modes (yes-no, ranked, weighted), tally execution with quorum, citizen-proposed concept board. /api/qchaingov.",
     kind: "experiment",
-    status: "in_progress",
+    status: "mvp",
     priority: 4,
     tags: ["dao", "governance"],
     createdAt: now,

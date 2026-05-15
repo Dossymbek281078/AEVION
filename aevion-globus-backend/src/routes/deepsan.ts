@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "node:crypto";
 import rateLimit from "express-rate-limit";
 import { getPool } from "../lib/dbPool";
 import { ensureDeepSanTables, isDeepSanDbReady } from "../lib/ensureDeepSanTables";
@@ -408,5 +409,92 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
     doneTasks: tasks.filter((t) => t.done).length,
     totalFocusMin,
     streakDays: streak,
+  });
+});
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+interface DeepSanConceptMessage {
+  id: string;
+  payload: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+}
+
+const DEEPSAN_CONCEPT_MAX = 200;
+const deepsanConceptMessages: DeepSanConceptMessage[] = [];
+
+deepSanRouter.get("/status", limiter, (_req: Request, res: Response) => {
+  res.json({
+    module: "deepsan",
+    code: "DEEPSAN",
+    status: "mvp",
+    description: "Anti-chaos: Kanban + Pomodoro + focus sessions + concept board.",
+    endpoints: {
+      tasks: "/api/deepsan/tasks",
+      sessions: "/api/deepsan/sessions",
+      stats: "/api/deepsan/stats",
+      conceptMessages: "/api/deepsan/concept/messages",
+      conceptStats: "/api/deepsan/concept-stats",
+    },
+    conceptMessagesCount: deepsanConceptMessages.length,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+deepSanRouter.get("/concept/messages", limiter, (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
+  const items = deepsanConceptMessages.slice(0, limit);
+  res.json({ items, total: deepsanConceptMessages.length, moduleId: "deepsan", noun: "concept/messages" });
+});
+
+deepSanRouter.post("/concept/messages", limiter, (req: Request, res: Response) => {
+  try {
+    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
+    const payload = (body.payload && typeof body.payload === "object")
+      ? body.payload as Record<string, unknown>
+      : body;
+    const idea = String(payload.idea ?? payload.title ?? "").trim().slice(0, 200);
+    if (!idea) return res.status(400).json({ error: "missing_field", field: "idea" });
+    const rationale = String(payload.rationale ?? payload.summary ?? "").trim().slice(0, 800);
+    const author = String(payload.author ?? "").trim().slice(0, 80);
+    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["deepsan"];
+    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
+    const msg: DeepSanConceptMessage = {
+      id: crypto.randomUUID(),
+      payload: { idea, rationale, author },
+      tags: tags.length ? tags : ["deepsan"],
+      createdAt: new Date().toISOString(),
+    };
+    deepsanConceptMessages.unshift(msg);
+    if (deepsanConceptMessages.length > DEEPSAN_CONCEPT_MAX) {
+      deepsanConceptMessages.length = DEEPSAN_CONCEPT_MAX;
+    }
+    return res.status(201).json(msg);
+  } catch (err: unknown) {
+    console.error("[deepsan] concept_post_failed", err instanceof Error ? err.message : err);
+    return res.status(500).json({ error: "concept_post_failed" });
+  }
+});
+
+deepSanRouter.get("/concept-stats", limiter, (_req: Request, res: Response) => {
+  const now = Date.now();
+  const sevenDays = 7 * 86_400_000;
+  const last7d = deepsanConceptMessages.filter(
+    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
+  ).length;
+  const tagCounts = new Map<string, number>();
+  for (const m of deepsanConceptMessages) {
+    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  }
+  const topTags = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([tag, count]) => ({ tag, count }));
+  res.json({
+    moduleId: "deepsan",
+    noun: "concept/messages",
+    total: deepsanConceptMessages.length,
+    last7d,
+    topTags,
   });
 });

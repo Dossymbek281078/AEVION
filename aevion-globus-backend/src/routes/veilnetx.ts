@@ -116,6 +116,7 @@ veilnetxRouter.get("/status", async (_req, res) => {
   const count = await getWaitlistCount();
   res.json({
     module: "veilnetx",
+    status: "mvp",
     phase: PHASE,
     eta: ETA,
     version: VERSION,

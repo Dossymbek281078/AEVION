@@ -308,6 +308,11 @@ const MODULES: Module[] = [
   { id: "agro-greenhouses",       category: "special",   href: "/smeta-trainer/drawings-practice/agro-greenhouses",       icon: "🌱", title: "Агрокомплексы и теплицы",         subtitle: "Venlo 6-7 м, гидропоника, РГС-хранилища, элеваторы SCAFCO",       level: "L4", exercises: 4,  color: "lime"    },
   { id: "tunneling-works",        category: "special",   href: "/smeta-trainer/drawings-practice/tunneling-works",        icon: "🚇", title: "Тоннелепроходка",                 subtitle: "TBM EPB, НАТМ, микротоннели, метро Алматы 11.3 км",               level: "L5", exercises: 4,  color: "slate"   },
   { id: "petrochemical-objects",  category: "special",   href: "/smeta-trainer/drawings-practice/petrochemical-objects",  icon: "⚗️", title: "Нефтехимия и НПЗ",                subtitle: "4 НПЗ РК, РВС 50000 м³, факелы H=120 м, эстакады, FGP $45 млрд", level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── ГПЗ, магистрали, аэропорты ──
+  { id: "gas-processing-plants",  category: "special",   href: "/smeta-trainer/drawings-practice/gas-processing-plants",  icon: "🔥", title: "ГПЗ — газоперераб. заводы",       subtitle: "KPO Карачаганак, ТШО FGP, процесс Клауса, аминовая очистка",      level: "L5", exercises: 4,  color: "orange"  },
+  { id: "main-pipelines",         category: "special",   href: "/smeta-trainer/drawings-practice/main-pipelines",         icon: "🛢️", title: "Магистральные трубопроводы",      subtitle: "КТК Тенгиз-Новороссийск, Туркм.-Китай, СКЗ, 400 млн тг/км",       level: "L5", exercises: 4,  color: "stone"   },
+  { id: "airports-terminals",     category: "practice",  href: "/smeta-trainer/drawings-practice/airports-terminals",     icon: "✈️", title: "Аэропорты и терминалы",          subtitle: "ICAO Code 4F, ВПП 4500 м, ILS Cat III, Алматы AAA, Астана NQZ",   level: "L5", exercises: 4,  color: "sky"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

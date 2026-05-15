@@ -504,6 +504,30 @@ export default function QTradeOfflinePage() {
 
   return (
     <main style={pageStyle}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "AEVION QTradeOffline",
+            applicationCategory: "FinanceApplication",
+            operatingSystem: "Web, iOS, Android",
+            description:
+              "Offline-first P2P AEV transfers signed with ECDSA P-256, batch-synced when online. For low-bandwidth, embargoed, and conflict-zone use.",
+            url: "https://aevion.app/qtradeoffline",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+            featureList: [
+              "Offline ECDSA P-256 signing",
+              "Batch sync when online",
+              "Wallet register + history",
+              "Public leaderboard",
+              "Tamper-evident audit trail",
+            ],
+            publisher: { "@type": "Organization", name: "AEVION", url: "https://aevion.app" },
+          }),
+        }}
+      />
       <header style={headerStyle}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em" }}>

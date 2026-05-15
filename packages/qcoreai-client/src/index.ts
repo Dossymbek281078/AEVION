@@ -1,0 +1,2329 @@
+/**
+ * @aevion/qcoreai-client — TypeScript client for AEVION QCoreAI multi-agent.
+ * @version v1.0.0-rc.1
+ *
+ * Single-file SDK that wraps the public HTTP API:
+ *   - POST /api/qcoreai/multi-agent             (SSE streaming pipeline)
+ *   - POST /api/qcoreai/runs/:id/refine         (one-pass surgical edit)
+ *   - GET  /api/qcoreai/search?q=...            (substring/tags)
+ *   - GET  /api/qcoreai/tags?limit=...          (top tags)
+ *   - PATCH /api/qcoreai/runs/:id/tags          (replace tags)
+ *   - GET  /api/qcoreai/analytics               (KPIs)
+ *   - GET  /api/qcoreai/analytics/timeseries    (daily cost/runs buckets)
+ *   - PUT/GET/DELETE /api/qcoreai/me/webhook    (per-user webhook config)
+ *
+ * Plus utilities for webhook receivers (HMAC verification).
+ *
+ * @example
+ * ```ts
+ * import { QCoreClient } from "@aevion/qcoreai-client";
+ *
+ * const client = new QCoreClient({
+ *   baseUrl: "https://api.aevion.app",
+ *   token: process.env.AEVION_TOKEN,
+ * });
+ *
+ * // 1. Sync — collect the entire stream into a final answer.
+ * const { finalContent, runId, totalCostUsd } = await client.runSync({
+ *   input: "Compare Postgres vs DynamoDB for an event-sourced ledger.",
+ *   strategy: "sequential",
+ * });
+ *
+ * // 2. Stream — yield each orchestrator event as it arrives.
+ * for await (const evt of client.runStream({ input: "...", strategy: "debate" })) {
+ *   if (evt.type === "agent_chunk") process.stdout.write(evt.delta);
+ *   if (evt.type === "run_complete") console.log("\nDONE", evt.totalCostUsd);
+ * }
+ *
+ * // 3. Refine an existing run.
+ * await client.refine(runId, "Add a TL;DR at the top.");
+ *
+ * // 4. Tag and search.
+ * await client.setTags(runId, ["investor-deck", "ledger-research"]);
+ * const hits = await client.search("ledger");
+ * ```
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Public types — mirror the server's OrchestratorEvent + REST payloads.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export type Strategy = "sequential" | "parallel" | "debate";
+export type AgentRole = "analyst" | "writer" | "critic";
+export type ConfigRoleId = "analyst" | "writer" | "writerB" | "critic";
+
+export type AgentOverride = {
+  provider?: string;
+  model?: string;
+  temperature?: number;
+};
+
+export type RunOptions = {
+  /** User prompt. Required. */
+  input: string;
+  /** Pipeline strategy. Defaults to "sequential". */
+  strategy?: Strategy;
+  /** Per-role provider/model/temperature overrides. */
+  overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+  /**
+   * Per-role custom system prompts. Either reference a saved prompt by id
+   * (must be owned or public) or pass content inline. Wins over the role's
+   * default prompt when present.
+   */
+  promptOverrides?: Partial<Record<ConfigRoleId, { promptId?: string; content?: string }>>;
+  /** Number of critic→writer revision rounds in sequential. 0..2, default 0. */
+  maxRevisions?: number;
+  /** Reuse an existing session (multi-turn context). */
+  sessionId?: string;
+  /** QRight object IDs to attach as tool context. */
+  attachmentIds?: string[];
+  /** Per-run hard budget (USD). Run gets status="capped" if crossed. */
+  maxCostUsd?: number;
+  /** Run tags (drives /tags chip strip and /search). */
+  tags?: string[];
+  /** V7-T: continue an existing run in a thread — passes full thread context as history. */
+  continueFromRunId?: string;
+};
+
+export type OrchestratorEvent =
+  | { type: "session"; sessionId: string; runId: string }
+  | { type: "qright_attached"; items: Array<{ id: string; title: string; kind: string }> }
+  | { type: "agent_start"; role: AgentRole; stage: string; instance?: string; provider: string; model: string }
+  | { type: "agent_chunk"; role: AgentRole; stage: string; instance?: string; delta: string }
+  | { type: "agent_end"; role: AgentRole; stage: string; instance?: string; tokensIn: number | null; tokensOut: number | null; durationMs: number; costUsd: number | null; content: string }
+  | { type: "verdict"; approved: boolean; feedback: string }
+  | { type: "guidance_applied"; nextRole: string; nextStage: string; text: string }
+  | { type: "cost_cap_set"; capUsd: number }
+  | { type: "cost_cap_hit"; spentUsd: number; capUsd: number }
+  | { type: "run_complete"; finalContent: string; status: "done" | "stopped" | "error" | "capped"; totalDurationMs: number; totalCostUsd: number }
+  | { type: "error"; message: string };
+
+export type SearchHit = {
+  runId: string;
+  sessionId: string;
+  sessionTitle: string;
+  strategy: string | null;
+  status: string;
+  startedAt: string;
+  totalCostUsd: number | null;
+  preview: string;
+  matched: "input" | "final" | "title" | "tag";
+};
+
+export type RunSyncResult = {
+  runId: string;
+  sessionId: string;
+  finalContent: string;
+  status: "done" | "stopped" | "error" | "capped";
+  totalDurationMs: number;
+  totalCostUsd: number;
+  budgetExceeded?: { spentUsd: number; capUsd: number };
+  events: OrchestratorEvent[];
+};
+
+/* ─── Eval harness types ──────────────────────────────────────────────── */
+
+export type EvalJudge =
+  | { type: "contains"; needle: string; caseSensitive?: boolean }
+  | { type: "not_contains"; needle: string; caseSensitive?: boolean }
+  | { type: "equals"; expected: string; caseSensitive?: boolean; trim?: boolean }
+  | { type: "regex"; pattern: string; flags?: string }
+  | { type: "min_length"; chars: number }
+  | { type: "max_length"; chars: number }
+  | { type: "llm_judge"; rubric: string; provider?: string; model?: string; passThreshold?: number };
+
+export type EvalCase = {
+  id: string;
+  name?: string;
+  input: string;
+  judge: EvalJudge;
+  weight?: number;
+};
+
+export type EvalSuite = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  strategy: Strategy;
+  overrides: Partial<Record<ConfigRoleId, AgentOverride>>;
+  cases: EvalCase[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EvalCaseResult = {
+  caseId: string;
+  caseName: string;
+  passed: boolean;
+  judgeKind: string;
+  reason: string;
+  output: string;
+  costUsd: number;
+  durationMs: number;
+  error?: string;
+};
+
+export type EvalRun = {
+  id: string;
+  suiteId: string;
+  ownerUserId: string;
+  status: "running" | "done" | "error" | "aborted";
+  score: number | null;
+  totalCases: number;
+  passedCases: number;
+  totalCostUsd: number;
+  results: EvalCaseResult[];
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type Prompt = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  role: string;
+  content: string;
+  version: number;
+  parentPromptId: string | null;
+  isPublic: boolean;
+  importCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/* ─── V7 types ────────────────────────────────────────────────────────── */
+
+export type Template = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  input: string;
+  strategy: Strategy;
+  overrides: Partial<Record<ConfigRoleId, AgentOverride>>;
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ThreadRun = {
+  id: string;
+  userInput: string;
+  finalContent: string | null;
+  status: string;
+  strategy: string | null;
+  totalCostUsd: number | null;
+  startedAt: string;
+  parentRunId: string | null;
+  threadId: string | null;
+};
+
+export type Thread = {
+  threadId: string;
+  runs: ThreadRun[];
+};
+
+export type BatchRunSummary = {
+  id: string;
+  userInput: string;
+  status: string;
+  totalCostUsd: number | null;
+  finalContentPreview: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+export type Batch = {
+  id: string;
+  ownerUserId: string;
+  strategy: Strategy;
+  overrides: Partial<Record<ConfigRoleId, AgentOverride>>;
+  status: "running" | "done" | "error";
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  totalCostUsd: number;
+  inputs: string[];
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type BatchDetail = {
+  batch: Batch;
+  runs: BatchRunSummary[];
+};
+
+export type PipelineStep = {
+  role: string;
+  name?: string;
+  systemPrompt?: string;
+  provider?: string;
+  model?: string;
+  temperature?: number;
+};
+
+export type Pipeline = {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  description: string | null;
+  steps: PipelineStep[];
+  isPublic: boolean;
+  useCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClientOptions = {
+  /** Base URL of the AEVION backend, e.g. "https://api.aevion.app". */
+  baseUrl: string;
+  /** Optional bearer JWT — required for owner-scoped endpoints (runs, tags, webhook). */
+  token?: string;
+  /** Default fetch implementation (Node ≥18 has global fetch). */
+  fetch?: typeof fetch;
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   QCoreClient — the main entry point.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export class QCoreClient {
+  private baseUrl: string;
+  private token?: string;
+  private fetchImpl: typeof fetch;
+
+  constructor(opts: ClientOptions) {
+    this.baseUrl = opts.baseUrl.replace(/\/$/, "");
+    this.token = opts.token;
+    this.fetchImpl = opts.fetch || (globalThis as any).fetch;
+    if (!this.fetchImpl) {
+      throw new Error("@aevion/qcoreai-client: no fetch implementation found. Pass `fetch` in ClientOptions or run on Node 18+.");
+    }
+  }
+
+  /** Convenience setter — useful when token is fetched async after construction. */
+  setToken(token: string | undefined): void {
+    this.token = token;
+  }
+
+  private url(path: string): string {
+    return `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+
+  private headers(extra?: HeadersInit): HeadersInit {
+    const h: Record<string, string> = { "Content-Type": "application/json" };
+    if (this.token) h["Authorization"] = `Bearer ${this.token}`;
+    if (extra) Object.assign(h, extra);
+    return h;
+  }
+
+  /** Buffer the entire SSE stream into a single result object. */
+  async runSync(opts: RunOptions): Promise<RunSyncResult> {
+    const events: OrchestratorEvent[] = [];
+    let runId = "";
+    let sessionId = "";
+    let finalContent = "";
+    let status: RunSyncResult["status"] = "done";
+    let totalCostUsd = 0;
+    let totalDurationMs = 0;
+    let budgetExceeded: RunSyncResult["budgetExceeded"];
+
+    for await (const evt of this.runStream(opts)) {
+      events.push(evt);
+      if (evt.type === "session") {
+        runId = evt.runId;
+        sessionId = evt.sessionId;
+      } else if (evt.type === "run_complete") {
+        finalContent = evt.finalContent;
+        status = evt.status;
+        totalCostUsd = evt.totalCostUsd;
+        totalDurationMs = evt.totalDurationMs;
+      } else if (evt.type === "cost_cap_hit") {
+        budgetExceeded = { spentUsd: evt.spentUsd, capUsd: evt.capUsd };
+      } else if (evt.type === "error") {
+        status = "error";
+      }
+    }
+    return { runId, sessionId, finalContent, status, totalDurationMs, totalCostUsd, budgetExceeded, events };
+  }
+
+  /** Async-iterate the SSE stream; yields each OrchestratorEvent. */
+  async *runStream(opts: RunOptions): AsyncGenerator<OrchestratorEvent> {
+    const body = JSON.stringify({
+      input: opts.input,
+      strategy: opts.strategy || "sequential",
+      overrides: opts.overrides,
+      promptOverrides: opts.promptOverrides,
+      maxRevisions: opts.maxRevisions,
+      sessionId: opts.sessionId,
+      qrightAttachmentIds: opts.attachmentIds,
+      maxCostUsd: opts.maxCostUsd,
+      tags: opts.tags,
+      continueFromRunId: opts.continueFromRunId,
+    });
+
+    const res = await this.fetchImpl(this.url("/api/qcoreai/multi-agent"), {
+      method: "POST",
+      headers: this.headers({ Accept: "text/event-stream" }),
+      body,
+    });
+
+    if (!res.ok || !res.body) {
+      const msg = await safeError(res);
+      throw new Error(`runStream failed: ${msg}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let nlIdx: number;
+        // SSE: events are separated by \n\n (or \r\n\r\n).
+        while ((nlIdx = indexOfDoubleNewline(buffer)) !== -1) {
+          const raw = buffer.slice(0, nlIdx);
+          buffer = buffer.slice(nlIdx).replace(/^[\r\n]+/, "");
+          const dataLines = raw.split(/\r?\n/).filter((l) => l.startsWith("data: "));
+          if (dataLines.length === 0) continue;
+          const payload = dataLines.map((l) => l.slice(6)).join("\n");
+          if (!payload.trim()) continue;
+          try {
+            const evt = JSON.parse(payload) as OrchestratorEvent;
+            yield evt;
+          } catch {
+            // Ignore malformed events.
+          }
+        }
+      }
+    } finally {
+      try { reader.releaseLock(); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Open a WebSocket duplex run. Yields the same OrchestratorEvent stream
+   * as `runStream`, but lets the caller `interject` mid-run guidance on
+   * the same connection. Server endpoint: `/api/qcoreai/ws`.
+   *
+   * Requires `globalThis.WebSocket` (Node 22+ has it natively; older Node
+   * needs the `ws` package — pass it via `opts.WebSocketImpl`). Browsers
+   * have it always.
+   *
+   * @example
+   * ```ts
+   * const session = client.runWS({ input: "Plan a 30-day onboarding", strategy: "debate" });
+   * setTimeout(() => session.interject("Add a TL;DR"), 3000);
+   * for await (const evt of session.events) {
+   *   if (evt.type === "chunk") process.stdout.write(evt.text);
+   * }
+   * ```
+   */
+  runWS(opts: RunOptions & { WebSocketImpl?: typeof WebSocket }): {
+    events: AsyncGenerator<OrchestratorEvent>;
+    interject: (text: string) => void;
+    stop: () => void;
+    close: () => void;
+  } {
+    const WS: any = opts.WebSocketImpl || (globalThis as any).WebSocket;
+    if (!WS) {
+      throw new Error("@aevion/qcoreai-client: no WebSocket implementation. Pass WebSocketImpl in opts (e.g. `import { WebSocket } from 'ws'`).");
+    }
+    const wsUrl = (this.baseUrl.replace(/^http/, "ws")) +
+      "/api/qcoreai/ws" +
+      (this.token ? `?token=${encodeURIComponent(this.token)}` : "");
+    const ws = new WS(wsUrl);
+
+    const queue: OrchestratorEvent[] = [];
+    let resolveNext: (() => void) | null = null;
+    let closed = false;
+    let openSent = false;
+
+    const startMsg = {
+      type: "start",
+      input: opts.input,
+      strategy: opts.strategy || "sequential",
+      overrides: opts.overrides,
+      maxRevisions: opts.maxRevisions,
+      sessionId: opts.sessionId,
+      maxCostUsd: opts.maxCostUsd,
+    };
+
+    ws.addEventListener("open", () => {
+      openSent = true;
+      ws.send(JSON.stringify(startMsg));
+    });
+    ws.addEventListener("message", (ev: MessageEvent) => {
+      try {
+        const evt = JSON.parse(typeof ev.data === "string" ? ev.data : "") as OrchestratorEvent;
+        queue.push(evt);
+      } catch { /* ignore non-JSON */ }
+      if (resolveNext) { resolveNext(); resolveNext = null; }
+    });
+    const finish = () => {
+      closed = true;
+      if (resolveNext) { resolveNext(); resolveNext = null; }
+    };
+    ws.addEventListener("close", finish);
+    ws.addEventListener("error", finish);
+
+    const events = (async function* (): AsyncGenerator<OrchestratorEvent> {
+      while (!closed || queue.length > 0) {
+        if (queue.length > 0) {
+          yield queue.shift() as OrchestratorEvent;
+          continue;
+        }
+        if (closed) break;
+        await new Promise<void>((r) => { resolveNext = r; });
+      }
+    })();
+
+    return {
+      events,
+      interject: (text: string) => {
+        if (ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ type: "interject", text }));
+      },
+      stop: () => {
+        if (ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ type: "stop" }));
+      },
+      close: () => {
+        try { ws.close(); } catch { /* ignore */ }
+        finish();
+      },
+    };
+  }
+
+  /** One-pass surgical edit on top of an already-finished run. */
+  async refine(runId: string, instruction: string, opts?: { provider?: string; model?: string; temperature?: number }): Promise<{
+    content: string;
+    runTotalCostUsd: number | null;
+    runTotalDurationMs: number | null;
+    costUsd: number | null;
+    durationMs: number;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/refine`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ instruction, ...(opts || {}) }),
+    });
+    if (!res.ok) throw new Error(`refine failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return {
+      content: data.content,
+      runTotalCostUsd: data.runTotalCostUsd ?? null,
+      runTotalDurationMs: data.runTotalDurationMs ?? null,
+      costUsd: data.costUsd ?? null,
+      durationMs: data.durationMs ?? 0,
+    };
+  }
+
+  /** Replace a run's tags. Owner-only. Server normalizes (trim, dedupe, cap 16x32). */
+  async setTags(runId: string, tags: string[]): Promise<string[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/tags`), {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify({ tags }),
+    });
+    if (!res.ok) throw new Error(`setTags failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.tags || [];
+  }
+
+  /** Substring search across the user's runs (input/final/title/tags). */
+  async search(query: string, limit = 30): Promise<SearchHit[]> {
+    const url = this.url(`/api/qcoreai/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+    const res = await this.fetchImpl(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`search failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Top tags across the user's runs, sorted by count. */
+  async topTags(limit = 20): Promise<Array<{ tag: string; count: number }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/tags?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`topTags failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Daily run+cost timeseries (powers cost forecasting). */
+  async timeseries(days = 30): Promise<Array<{ date: string; runs: number; costUsd: number }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/analytics/timeseries?days=${days}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`timeseries failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Set the per-user run.completed webhook. */
+  async setUserWebhook(url: string, secret?: string): Promise<{ url: string; hasSecret: boolean }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/webhook`), {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify({ url, secret }),
+    });
+    if (!res.ok) throw new Error(`setUserWebhook failed: ${await safeError(res)}`);
+    return await res.json();
+  }
+
+  /** Agent marketplace — publish a saved preset to the public catalog. */
+  async sharePreset(opts: {
+    name: string;
+    description?: string;
+    strategy?: Strategy;
+    overrides?: Record<string, AgentOverride>;
+    isPublic?: boolean;
+  }): Promise<{ id: string; importCount: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/presets/share`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`sharePreset failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return { id: data.preset?.id, importCount: data.preset?.importCount ?? 0 };
+  }
+
+  /** Browse public presets, optional substring filter. */
+  async browsePresets(query?: string, limit = 30): Promise<Array<{
+    id: string;
+    ownerUserId: string;
+    name: string;
+    description: string | null;
+    strategy: string;
+    overrides: any;
+    importCount: number;
+    createdAt: string;
+    updatedAt: string;
+  }>> {
+    const url = query
+      ? this.url(`/api/qcoreai/presets/public?q=${encodeURIComponent(query)}&limit=${limit}`)
+      : this.url(`/api/qcoreai/presets/public?limit=${limit}`);
+    const res = await this.fetchImpl(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`browsePresets failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Import a public preset — bumps importCount, returns the preset row. */
+  async importPreset(id: string): Promise<{
+    id: string; name: string; strategy: string; overrides: any; description: string | null;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/presets/${encodeURIComponent(id)}/import`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`importPreset failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.preset;
+  }
+
+  /** Owner-only delete on a shared preset. */
+  async deletePreset(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/presets/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deletePreset failed: ${await safeError(res)}`);
+  }
+
+  /** Disable the user's webhook. */
+  async deleteUserWebhook(): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/webhook`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteUserWebhook failed: ${await safeError(res)}`);
+  }
+
+  /* ─── Eval harness ───────────────────────────────────────────────────── */
+
+  /** Create a new eval suite. */
+  async createEvalSuite(opts: {
+    name: string;
+    description?: string | null;
+    strategy?: Strategy;
+    overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+    cases?: EvalCase[];
+  }): Promise<EvalSuite> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/eval/suites"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.suite;
+  }
+
+  /** List the caller's eval suites (most recently updated first). */
+  async listEvalSuites(limit = 50): Promise<EvalSuite[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listEvalSuites failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Fetch one suite (owner-only). */
+  async getEvalSuite(id: string): Promise<EvalSuite> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.suite;
+  }
+
+  /** Update a suite (any subset of fields). */
+  async updateEvalSuite(
+    id: string,
+    patch: { name?: string; description?: string | null; strategy?: Strategy; overrides?: Partial<Record<ConfigRoleId, AgentOverride>>; cases?: EvalCase[] }
+  ): Promise<EvalSuite> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.suite;
+  }
+
+  /** Delete a suite + its run history. */
+  async deleteEvalSuite(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteEvalSuite failed: ${await safeError(res)}`);
+  }
+
+  /**
+   * Kick off an async eval run. Resolves immediately with the in-flight
+   * EvalRun row — poll `getEvalRun` until status !== "running".
+   */
+  async runEvalSuite(
+    suiteId: string,
+    opts: { concurrency?: number; perCaseMaxCostUsd?: number } = {}
+  ): Promise<EvalRun> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(suiteId)}/run`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`runEvalSuite failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.run;
+  }
+
+  /** Poll one eval run for progress / final results. */
+  async getEvalRun(id: string): Promise<EvalRun> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/runs/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getEvalRun failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.run;
+  }
+
+  /** History of a suite's runs (newest first). Drives the regression chart. */
+  async listSuiteRuns(suiteId: string, limit = 30): Promise<EvalRun[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/eval/suites/${encodeURIComponent(suiteId)}/runs?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listSuiteRuns failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /* ─── Prompts library (V6-P) ─────────────────────────────────────────── */
+
+  /** Create a new prompt. Defaults role="writer", isPublic=false, version=1. */
+  async createPrompt(opts: {
+    name: string;
+    content: string;
+    role?: string;
+    description?: string | null;
+    parentPromptId?: string | null;
+    isPublic?: boolean;
+  }): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/prompts"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createPrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /** List the caller's prompts (most recently updated first). */
+  async listPrompts(limit = 100): Promise<Prompt[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listPrompts failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Browse public prompts shared by other users. No auth required. */
+  async listPublicPrompts(query?: string, limit = 30): Promise<Prompt[]> {
+    const params = new URLSearchParams();
+    if (query) params.set("q", query);
+    params.set("limit", String(limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/public?${params.toString()}`));
+    if (!res.ok) throw new Error(`listPublicPrompts failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Fetch a single prompt (own or public). */
+  async getPrompt(id: string): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getPrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /** Get all versions in a prompt's chain (ancestors + descendants). */
+  async getPromptVersions(id: string): Promise<Prompt[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}/versions`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getPromptVersions failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Update prompt metadata (name/description/role/isPublic). Content is immutable — fork to edit. */
+  async updatePrompt(
+    id: string,
+    patch: { name?: string; description?: string | null; role?: string; isPublic?: boolean }
+  ): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updatePrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /** Delete one prompt version (other versions in the chain remain). */
+  async deletePrompt(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deletePrompt failed: ${await safeError(res)}`);
+  }
+
+  /**
+   * Fork a prompt — your own prompts get a new version in the chain;
+   * other users' public prompts get a fresh root copy in your library.
+   */
+  async forkPrompt(parentId: string, opts: { content?: string; name?: string } = {}): Promise<Prompt> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompts/${encodeURIComponent(parentId)}/fork`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`forkPrompt failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.prompt;
+  }
+
+  /* ─── V7-T: Threading ─────────────────────────────────────────────────── */
+
+  /**
+   * Fetch the full conversation thread for a run (root + all replies, ordered oldest→newest).
+   * @example
+   * ```ts
+   * const thread = await client.getThread(runId);
+   * console.log(`Thread has ${thread.runs.length} turns`);
+   * ```
+   */
+  async getThread(runId: string): Promise<Thread> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/thread`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getThread failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V7-Tmpl: Templates ───────────────────────────────────────────────── */
+
+  /** Create a named template from an input + strategy + overrides bundle. */
+  async createTemplate(opts: {
+    name: string;
+    input: string;
+    description?: string | null;
+    strategy?: Strategy;
+    overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+    isPublic?: boolean;
+  }): Promise<Template> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/templates"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /** List the caller's own templates (most recently updated first). */
+  async listTemplates(limit = 50): Promise<Template[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listTemplates failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Browse community public templates (sorted by useCount desc). */
+  async listPublicTemplates(query?: string, limit = 30): Promise<Template[]> {
+    const p = new URLSearchParams();
+    if (query) p.set("q", query);
+    p.set("limit", String(limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/public?${p}`));
+    if (!res.ok) throw new Error(`listPublicTemplates failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /** Fetch a template by id. Throws 403 if it's private and not yours. */
+  async getTemplate(id: string): Promise<Template> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /** Update template metadata. Owner-only. */
+  async updateTemplate(
+    id: string,
+    patch: Partial<Pick<Template, "name" | "description" | "input" | "strategy" | "overrides" | "isPublic">>
+  ): Promise<Template> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /** Delete a template. Owner-only. */
+  async deleteTemplate(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteTemplate failed: ${await safeError(res)}`);
+  }
+
+  /** Apply a template (increments useCount). Returns updated template. */
+  async useTemplate(id: string): Promise<Template> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/templates/${encodeURIComponent(id)}/use`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`useTemplate failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.template;
+  }
+
+  /* ─── V7-B: Batch runs ─────────────────────────────────────────────────── */
+
+  /**
+   * Submit N prompts as a batch. Runs execute asynchronously (up to 5 parallel).
+   * Returns immediately with batchId — poll with `getBatch` or use `waitForBatch`.
+   * @example
+   * ```ts
+   * const { batchId } = await client.createBatch({
+   *   inputs: ["Summarise X", "Compare Y vs Z", "Critique this: …"],
+   *   strategy: "sequential",
+   * });
+   * const result = await client.waitForBatch(batchId);
+   * console.log(`Done: ${result.batch.completedRuns}/${result.batch.totalRuns} runs`);
+   * ```
+   */
+  async createBatch(opts: {
+    inputs: string[];
+    strategy?: Strategy;
+    overrides?: Partial<Record<ConfigRoleId, AgentOverride>>;
+    maxCostUsd?: number;
+  }): Promise<{ batchId: string; sessionId: string; totalRuns: number; runIds: string[] }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/batch"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createBatch failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get current batch status and per-run summaries. */
+  async getBatch(id: string): Promise<BatchDetail> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/batch/${encodeURIComponent(id)}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getBatch failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List the caller's recent batches. */
+  async listBatches(limit = 30): Promise<Batch[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/batches?limit=${limit}`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`listBatches failed: ${await safeError(res)}`);
+    const data = await res.json();
+    return data.items || [];
+  }
+
+  /**
+   * Poll until a batch finishes (status = "done" | "error") or timeout.
+   * Polls every `pollMs` (default 3000ms).
+   */
+  async waitForBatch(
+    id: string,
+    opts: { pollMs?: number; timeoutMs?: number } = {}
+  ): Promise<BatchDetail> {
+    const pollMs = Math.max(500, opts.pollMs ?? 3000);
+    const timeoutMs = opts.timeoutMs ?? 600_000;
+    const deadline = Date.now() + timeoutMs;
+    let cur = await this.getBatch(id);
+    while (cur.batch.status === "running") {
+      if (Date.now() > deadline) throw new Error(`waitForBatch timed out after ${timeoutMs}ms`);
+      await new Promise((r) => setTimeout(r, pollMs));
+      cur = await this.getBatch(id);
+    }
+    return cur;
+  }
+
+  /**
+   * Convenience helper: kick off a run and resolve once it's complete (or
+   * the timeout elapses). Polls every `pollMs` (default 1500). Throws if
+   * the run errors out.
+   */
+  async runEvalSuiteAndWait(
+    suiteId: string,
+    opts: { concurrency?: number; perCaseMaxCostUsd?: number; pollMs?: number; timeoutMs?: number } = {}
+  ): Promise<EvalRun> {
+    const initial = await this.runEvalSuite(suiteId, {
+      concurrency: opts.concurrency,
+      perCaseMaxCostUsd: opts.perCaseMaxCostUsd,
+    });
+    const pollMs = Math.max(250, opts.pollMs ?? 1500);
+    const timeoutMs = opts.timeoutMs ?? 300_000;
+    const deadline = Date.now() + timeoutMs;
+    let cur = initial;
+    while (cur.status === "running") {
+      if (Date.now() > deadline) throw new Error(`runEvalSuiteAndWait timed out after ${timeoutMs}ms`);
+      await new Promise((r) => setTimeout(r, pollMs));
+      cur = await this.getEvalRun(cur.id);
+    }
+    if (cur.status === "error") throw new Error(`eval run failed: ${cur.errorMessage || "unknown"}`);
+    return cur;
+  }
+
+  /* ─── V8: cost breakdown + analytics export + comments + workspaces ── */
+
+  /** Get per-agent cost breakdown for a run. */
+  async getRunCostBreakdown(runId: string): Promise<{
+    breakdown: Array<{ role: string; stage: string | null; provider: string | null; model: string | null; tokensIn: number | null; tokensOut: number | null; costUsd: number | null; durationMs: number | null }>;
+    totalCostUsd: number;
+    totalTokensIn: number;
+    totalTokensOut: number;
+    byProvider: Record<string, { calls: number; costUsd: number; tokensIn: number; tokensOut: number }>;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/cost-breakdown`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunCostBreakdown failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get public comments on a shared run (by share token). No auth. */
+  async getSharedRunComments(token: string): Promise<Array<{ id: string; authorName: string; content: string; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/shared/${encodeURIComponent(token)}/comments`));
+    if (!res.ok) throw new Error(`getSharedRunComments failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Post a public comment on a shared run. No auth required. */
+  async postSharedRunComment(token: string, content: string, authorName?: string): Promise<{ id: string; authorName: string; content: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/shared/${encodeURIComponent(token)}/comments`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, authorName: authorName || "Anonymous" }),
+    });
+    if (!res.ok) throw new Error(`postSharedRunComment failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.comment;
+  }
+
+  /** Get monthly spend summary (spentUsd, limitUsd, pct, alerting, exceeded). */
+  async getSpendSummary(): Promise<{ spentUsd: number; limitUsd: number | null; alertAt: number; pct: number | null; alerting: boolean; exceeded: boolean }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/spend-summary"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getSpendSummary failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Set monthly spend limit (USD). */
+  async setSpendLimit(monthlyLimitUsd: number, alertAt = 0.8): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/spend-limit"), {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify({ monthlyLimitUsd, alertAt }),
+    });
+    if (!res.ok) throw new Error(`setSpendLimit failed: ${await safeError(res)}`);
+  }
+
+  /** Bulk delete runs (owner-scoped, up to 100 IDs). Returns count deleted. */
+  async deleteRunsBulk(runIds: string[]): Promise<number> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/runs/bulk"), {
+      method: "DELETE",
+      headers: this.headers(),
+      body: JSON.stringify({ runIds }),
+    });
+    if (!res.ok) throw new Error(`deleteRunsBulk failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.deleted ?? 0;
+  }
+
+  /** Create a workspace. */
+  async createWorkspace(name: string, description?: string | null): Promise<{ id: string; name: string; description: string | null; ownerId: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/workspaces"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ name, description }),
+    });
+    if (!res.ok) throw new Error(`createWorkspace failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.workspace;
+  }
+
+  /** List the caller's workspaces. */
+  async listWorkspaces(): Promise<Array<{ id: string; name: string; description: string | null; ownerId: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/workspaces"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listWorkspaces failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Create a scheduled batch. */
+  async createScheduledBatch(opts: {
+    name: string;
+    inputs: string[];
+    strategy?: "sequential" | "parallel" | "debate";
+    schedule?: "once" | "hourly" | "daily" | "weekly";
+    nextRunAt?: string;
+  }): Promise<{ id: string; name: string; schedule: string; nextRunAt: string | null }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/schedules"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createScheduledBatch failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.schedule;
+  }
+
+  /** List the caller's scheduled batches. */
+  async listScheduledBatches(): Promise<Array<{ id: string; name: string; schedule: string; nextRunAt: string | null; lastRunAt: string | null; enabled: boolean }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/schedules"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listScheduledBatches failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Trigger a scheduled batch immediately. */
+  async runScheduleNow(scheduleId: string): Promise<{ batchId: string; runIds: string[] }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/schedules/${encodeURIComponent(scheduleId)}/run-now`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`runScheduleNow failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V12: Notebook ────────────────────────────────────────────────── */
+
+  /**
+   * Save a snippet from a run to the notebook.
+   * @example
+   * ```ts
+   * const snippet = await client.saveSnippet({
+   *   runId, role: "final", content: finalContent,
+   *   annotation: "Key insight for investor deck", tags: ["investor", "insight"],
+   * });
+   * ```
+   */
+  async saveSnippet(opts: {
+    runId: string;
+    role?: string;
+    content: string;
+    annotation?: string | null;
+    tags?: string[];
+  }): Promise<{ id: string; runId: string; role: string; content: string; annotation: string | null; tags: string[]; pinned: boolean; createdAt: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`saveSnippet failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.snippet;
+  }
+
+  /** List the caller's notebook snippets with optional filters. */
+  async listSnippets(opts?: { q?: string; tag?: string; pinned?: boolean; limit?: number }): Promise<Array<{ id: string; runId: string; role: string; content: string; annotation: string | null; tags: string[]; pinned: boolean; createdAt: string }>> {
+    const p = new URLSearchParams();
+    if (opts?.q) p.set("q", opts.q);
+    if (opts?.tag) p.set("tag", opts.tag);
+    if (opts?.pinned !== undefined) p.set("pinned", String(opts.pinned));
+    if (opts?.limit) p.set("limit", String(opts.limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook?${p}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listSnippets failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Update a notebook snippet's annotation, tags, or pin state. */
+  async updateSnippet(id: string, patch: { annotation?: string | null; tags?: string[]; pinned?: boolean }): Promise<{ id: string; pinned: boolean; annotation: string | null; tags: string[] }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/${encodeURIComponent(id)}`), {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`updateSnippet failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.snippet;
+  }
+
+  /** Delete a notebook snippet. */
+  async deleteSnippet(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`deleteSnippet failed: ${await safeError(res)}`);
+  }
+
+  /** Get the tag cloud for the caller's notebook. */
+  async notebookTagCloud(): Promise<Array<{ tag: string; count: number }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/tags"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`notebookTagCloud failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /* ─── V12: Session export ──────────────────────────────────────────── */
+
+  /**
+   * Export all runs in a session as a Markdown string.
+   * Useful for archival, documentation, or LLM context injection.
+   */
+  async exportSessionMarkdown(sessionId: string): Promise<string> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/export?format=md`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`exportSessionMarkdown failed: ${await safeError(res)}`);
+    return res.text();
+  }
+
+  /**
+   * Export all runs in a session as a structured JSON object.
+   */
+  async exportSessionJson(sessionId: string): Promise<{ session: object; runs: Array<{ run: object; messages: object[] }> }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/export?format=json`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`exportSessionJson failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V17: ratings + merge ─────────────────────────────────────────── */
+
+  /**
+   * Rate a run with thumbs up (1) or thumbs down (-1).
+   * @example
+   * ```ts
+   * const { summary } = await client.rateRun(runId, 1);
+   * console.log(`+${summary.thumbsUp} 👍  -${summary.thumbsDown} 👎`);
+   * ```
+   */
+  async rateRun(runId: string, rating: 1 | -1, note?: string): Promise<{ rating: { rating: number; note: string | null }; summary: { thumbsUp: number; thumbsDown: number; total: number } }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/rate`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ rating, note }),
+    });
+    if (!res.ok) throw new Error(`rateRun failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get caller's rating + aggregate for a run. */
+  async getRunRating(runId: string): Promise<{ mine: { rating: number; note: string | null } | null; summary: { thumbsUp: number; thumbsDown: number; total: number } }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/rating`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunRating failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List top-rated runs sorted by score (thumbsUp - thumbsDown). */
+  async listTopRatedRuns(limit = 20): Promise<Array<{ runId: string; thumbsUp: number; thumbsDown: number; score: number }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/ratings/top?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listTopRatedRuns failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Merge all runs from sourceSessionId into targetSessionId (then deletes source). */
+  async mergeSessions(targetSessionId: string, sourceSessionId: string): Promise<{ ok: boolean; moved: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(targetSessionId)}/merge`), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ sourceSessionId }),
+    });
+    if (!res.ok) throw new Error(`mergeSessions failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Simple single-provider chat (no multi-agent pipeline). */
+  async chat(messages: Array<{ role: string; content: string }>, opts?: { provider?: string; model?: string }): Promise<{ reply: string; provider: string; model: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/chat"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ messages, ...opts }),
+    });
+    if (!res.ok) throw new Error(`chat failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V20: Custom pipelines ────────────────────────────────────────── */
+
+  /** Create a custom multi-step agent pipeline. */
+  async createPipeline(opts: { name: string; description?: string | null; steps: PipelineStep[]; isPublic?: boolean }): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/pipelines"), { method: "POST", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`createPipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** List own pipelines. */
+  async listPipelines(): Promise<Pipeline[]> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/pipelines"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listPipelines failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Browse public pipelines. */
+  async listPublicPipelines(query?: string, limit = 20): Promise<Pipeline[]> {
+    const p = new URLSearchParams();
+    if (query) p.set("q", query);
+    p.set("limit", String(limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/public?${p}`));
+    if (!res.ok) throw new Error(`listPublicPipelines failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Get pipeline by id. */
+  async getPipeline(id: string): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getPipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** Update pipeline. Owner-only. */
+  async updatePipeline(id: string, patch: { name?: string; description?: string | null; steps?: PipelineStep[]; isPublic?: boolean }): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}`), { method: "PATCH", headers: this.headers(), body: JSON.stringify(patch) });
+    if (!res.ok) throw new Error(`updatePipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** Delete pipeline. Owner-only. */
+  async deletePipeline(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}`), { method: "DELETE", headers: this.headers() });
+    if (!res.ok) throw new Error(`deletePipeline failed: ${await safeError(res)}`);
+  }
+
+  /** Apply pipeline (bumps useCount). */
+  async usePipeline(id: string): Promise<Pipeline> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/pipelines/${encodeURIComponent(id)}/use`), { method: "POST", headers: this.headers() });
+    if (!res.ok) throw new Error(`usePipeline failed: ${await safeError(res)}`);
+    return (await res.json()).pipeline;
+  }
+
+  /** Archive a session (soft-delete). */
+  async archiveSession(sessionId: string, archive = true): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/archive`), { method: "PATCH", headers: this.headers(), body: JSON.stringify({ archive }) });
+    if (!res.ok) throw new Error(`archiveSession failed: ${await safeError(res)}`);
+  }
+
+  /** List archived sessions. */
+  async listArchivedSessions(): Promise<Array<{ id: string; title: string; updatedAt: string; archivedAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/sessions/archived"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listArchivedSessions failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Set agent persona (custom name/emoji for a role). */
+  async setPersona(roleId: string, persona: { name: string; emoji?: string; color?: string }): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/personas/${encodeURIComponent(roleId)}`), { method: "PUT", headers: this.headers(), body: JSON.stringify(persona) });
+    if (!res.ok) throw new Error(`setPersona failed: ${await safeError(res)}`);
+  }
+
+  /** Get all agent personas. */
+  async listPersonas(): Promise<Array<{ roleId: string; name: string; emoji: string | null; color: string | null }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/personas"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listPersonas failed: ${await safeError(res)}`);
+    return (await res.json()).personas || [];
+  }
+
+  /* ─── V22: collections + insights + retry ──────────────────────────── */
+
+  /** Create a notebook collection. */
+  async createNotebookCollection(opts: { name: string; description?: string | null; color?: string | null }): Promise<{ id: string; name: string; description: string | null; color: string | null }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/collections"), { method: "POST", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`createNotebookCollection failed: ${await safeError(res)}`);
+    return (await res.json()).collection;
+  }
+
+  /** List notebook collections. */
+  async listNotebookCollections(): Promise<Array<{ id: string; name: string; description: string | null; color: string | null }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/collections"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listNotebookCollections failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Assign a snippet to a collection (null to remove). */
+  async assignSnippetToCollection(snippetId: string, collectionId: string | null): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/${encodeURIComponent(snippetId)}/collection`), { method: "PATCH", headers: this.headers(), body: JSON.stringify({ collectionId }) });
+    if (!res.ok) throw new Error(`assignSnippetToCollection failed: ${await safeError(res)}`);
+  }
+
+  /** Get run insights: agent costs, strategy ratings, hourly cost patterns. */
+  async getRunInsights(): Promise<{
+    topAgentCosts: Array<{ role: string; avgCostUsd: number; totalCostUsd: number; calls: number; avgDurationMs: number }>;
+    strategyRatings: Array<{ strategy: string; avgRating: number; runs: number; avgCostUsd: number }>;
+    avgCostByHour: Array<{ hour: number; avgCostUsd: number; runs: number }>;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/insights"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunInsights failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Retry a failed webhook event. */
+  async retryWebhook(event: string): Promise<{ ok: boolean; sentTo: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/webhook/retry"), { method: "POST", headers: this.headers(), body: JSON.stringify({ event }) });
+    if (!res.ok) throw new Error(`retryWebhook failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Get webhook delivery log. */
+  async getWebhookLog(limit = 50): Promise<Array<{ id: string; event: string; statusCode: number | null; durationMs: number | null; error: string | null; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/webhook/log?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getWebhookLog failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  /** Set analytics goal (monthly run count and/or cost target). */
+  async setAnalyticsGoal(opts: { monthlyRuns?: number | null; monthlyCostUsd?: number | null }): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/analytics-goal"), { method: "PUT", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`setAnalyticsGoal failed: ${await safeError(res)}`);
+  }
+
+  /** Get analytics goal. */
+  async getAnalyticsGoal(): Promise<{ monthlyRuns: number | null; monthlyCostUsd: number | null } | null> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/analytics-goal"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getAnalyticsGoal failed: ${await safeError(res)}`);
+    return (await res.json()).goal;
+  }
+
+  /* ─── V31: annotations, search, suggestions, follow-up, workspace pin ─ */
+
+  /** List annotations for a specific run. */
+  async listAnnotations(runId: string): Promise<Array<{ id: string; runId: string; messageRole: string; messageIdx: number; note: string; color: string; createdAt: string; updatedAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/annotations`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listAnnotations failed: ${await safeError(res)}`);
+    return (await res.json()).annotations || [];
+  }
+
+  /** Create an annotation on a specific run message. */
+  async createAnnotation(runId: string, opts: { note: string; messageRole?: string; messageIdx?: number; color?: string }): Promise<{ id: string; runId: string; note: string; color: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/annotations`), {
+      method: "POST", headers: this.headers(),
+      body: JSON.stringify({ messageRole: "final", messageIdx: 0, color: "yellow", ...opts }),
+    });
+    if (!res.ok) throw new Error(`createAnnotation failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Update an annotation's note or color. */
+  async updateAnnotation(annotationId: string, opts: { note: string; color?: string }): Promise<{ id: string; note: string; color: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/annotations/${encodeURIComponent(annotationId)}`), { method: "PATCH", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`updateAnnotation failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Delete an annotation. */
+  async deleteAnnotation(annotationId: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/annotations/${encodeURIComponent(annotationId)}`), { method: "DELETE", headers: this.headers() });
+    if (!res.ok) throw new Error(`deleteAnnotation failed: ${await safeError(res)}`);
+  }
+
+  /** List all annotations across all runs for the current user. */
+  async listAllAnnotations(limit = 50): Promise<Array<{ id: string; runId: string; note: string; color: string; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/annotations?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listAllAnnotations failed: ${await safeError(res)}`);
+    return (await res.json()).annotations || [];
+  }
+
+  /** Full-text search across sessions and runs. */
+  async globalSearch(query: string, limit = 20): Promise<Array<{ type: "session" | "run"; id: string; sessionId?: string; snippet: string; title?: string | null; createdAt: string }>> {
+    const p = new URLSearchParams({ q: query, limit: String(limit) });
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/search?${p}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`globalSearch failed: ${await safeError(res)}`);
+    return (await res.json()).results || [];
+  }
+
+  /** Get AI-generated follow-up prompt suggestions for a session. */
+  async getSuggestions(sessionId: string): Promise<string[]> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/suggest`), { method: "POST", headers: this.headers() });
+    if (!res.ok) throw new Error(`getSuggestions failed: ${await safeError(res)}`);
+    return (await res.json()).suggestions || [];
+  }
+
+  /** Create a follow-up run from an existing run's final answer. */
+  async followUp(runId: string, prompt: string, opts?: { strategy?: string; overrides?: Record<string, unknown> }): Promise<{ run: { id: string; sessionId: string; userInput: string; status: string }; sourceRunId: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/follow-up`), {
+      method: "POST", headers: this.headers(),
+      body: JSON.stringify({ prompt, ...(opts || {}) }),
+    });
+    if (!res.ok) throw new Error(`followUp failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Pin/unpin a session within a workspace (owner-only). Pass null to unpin. */
+  async pinWorkspaceSession(workspaceId: string, sessionId: string, pinOrder: number | null): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/workspaces/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/pin`), {
+      method: "PATCH", headers: this.headers(),
+      body: JSON.stringify({ pinOrder }),
+    });
+    if (!res.ok) throw new Error(`pinWorkspaceSession failed: ${await safeError(res)}`);
+  }
+
+  /* ─── V35 — Presence + Notebook QA + Widget v2 ───────────────────────── */
+
+  /**
+   * Heartbeat ping for session presence. Call every ~20 s to indicate the
+   * current user is viewing the session. Returns the current online count.
+   */
+  async pingPresence(sessionId: string): Promise<{ sessionId: string; onlineCount: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/presence/ping`), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+    });
+    if (!res.ok) throw new Error(`pingPresence failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List users currently online in a session (those who pinged in the last 30 s). */
+  async getPresence(sessionId: string): Promise<{ sessionId: string; onlineCount: number; users: Array<{ userId: string; lastSeenMs: number }> }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/presence`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getPresence failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Ask a question about the user's saved notebook snippets.
+   * The server loads the latest N snippets, builds a context prompt, and
+   * calls the configured AI provider. Falls back gracefully when empty.
+   */
+  async notebookQA(question: string, limit = 10): Promise<{ answer: string; snippetsUsed: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/qa"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ question, limit }),
+    });
+    if (!res.ok) throw new Error(`notebookQA failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V36 — Usage dashboard + Plan limits ────────────────────────────── */
+
+  /**
+   * Get the calling user's usage for the current calendar month plus their
+   * plan limits. Always returns a valid structure — uses in-memory fallback
+   * when the DB is unavailable.
+   */
+  async getUsage(): Promise<{
+    thisMonth: { runs: number; costUsd: number; sessions: number };
+    limits: { runs: number | null; costUsd: number | null };
+    planName: string;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/usage"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getUsage failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Fetch the calling user's current plan and its limits. */
+  async getPlan(): Promise<{
+    plan: "free" | "pro" | "enterprise";
+    limits: { runs: number; costUsd: number; description: string };
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/plan"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getPlan failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V37 — Bulk session ops + run siblings ──────────────────────────── */
+
+  /**
+   * Delete multiple sessions at once (owner-only per session).
+   * Returns a count of successfully deleted sessions and a list of per-id errors.
+   */
+  async bulkDeleteSessions(sessionIds: string[]): Promise<{ deleted: number; errors: string[] }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/sessions/bulk-delete"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ sessionIds }),
+    });
+    if (!res.ok) throw new Error(`bulkDeleteSessions failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Archive or unarchive multiple sessions at once (owner-only per session).
+   * Pass archive=true to archive, false to unarchive.
+   */
+  async bulkArchiveSessions(sessionIds: string[], archive = true): Promise<{ updated: number; archive: boolean; errors: string[] }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/sessions/bulk-archive"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ sessionIds, archive }),
+    });
+    if (!res.ok) throw new Error(`bulkArchiveSessions failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Get other runs in the same session as a given run (siblings).
+   * Useful for comparison UI — see what other strategies were tried.
+   */
+  async getRunSiblings(runId: string, limit = 20): Promise<{ runId: string; sessionId: string; siblings: unknown[]; total: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${encodeURIComponent(runId)}/siblings?limit=${limit}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunSiblings failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * Execute a synchronous run via the widget embed endpoint.
+   * No auth — uses an API key (env-based or shared preset id as key).
+   * Returns the final content without streaming.
+   */
+  async widgetRun(apiKey: string, input: string, strategy?: "sequential" | "parallel" | "debate"): Promise<{ runId: string; sessionId: string; finalContent: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/widget/run"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey, input, strategy }),
+    });
+    if (!res.ok) throw new Error(`widgetRun failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /* ─── V39: Organizations ─────────────────────────────────────────────── */
+
+  /** Create a new organization owned by the authenticated user. */
+  async createOrg(name: string): Promise<{ id: string; name: string; ownerId: string; plan: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/orgs"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`createOrg failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.org;
+  }
+
+  /** List organizations owned by the authenticated user. */
+  async listOrgs(): Promise<Array<{ id: string; name: string; plan: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/orgs"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listOrgs failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items;
+  }
+
+  /** Add a member to an organization (owner only). */
+  async addOrgMember(orgId: string, userId: string, role = "member"): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/orgs/${encodeURIComponent(orgId)}/members`), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ userId, role }),
+    });
+    if (!res.ok) throw new Error(`addOrgMember failed: ${await safeError(res)}`);
+  }
+
+  /** Remove a member from an organization (owner only). */
+  async removeOrgMember(orgId: string, userId: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/orgs/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`), {
+      method: "DELETE", headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`removeOrgMember failed: ${await safeError(res)}`);
+  }
+
+  /** List members of an organization (member or owner can call). */
+  async listOrgMembers(orgId: string): Promise<Array<{ userId: string; role: string; joinedAt: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/orgs/${encodeURIComponent(orgId)}/members`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listOrgMembers failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.members;
+  }
+
+  /* ─── V40: Cost optimization ─────────────────────────────────────────── */
+
+  /** Analyze run history and return cost-saving suggestions. */
+  async getOptimizationTips(): Promise<Array<{ type: string; title: string; description: string; estimatedSavingPct: number }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/optimize-costs"), {
+      method: "POST", headers: { "Content-Type": "application/json", ...this.headers() },
+    });
+    if (!res.ok) throw new Error(`getOptimizationTips failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.suggestions;
+  }
+
+  /** Get daily cost data with 7-day rolling average for the last N days. */
+  async getCostTrend(days = 30): Promise<Array<{ date: string; costUsd: number; rollingAvg7d: number }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/cost-trend?days=${days}`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getCostTrend failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.points;
+  }
+
+  /* ─── V41: Webhook stats ──────────────────────────────────────────────── */
+
+  /** Get webhook delivery statistics for the last 30 days. */
+  async getWebhookStats(): Promise<{ total: number; successRate: number; avgLatencyMs: number; errorCount: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/webhook/stats"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getWebhookStats failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List all supported webhook event types. */
+  async listWebhookEventTypes(): Promise<Array<{ name: string; description: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/webhook/events"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listWebhookEventTypes failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.events;
+  }
+
+  // V43: API keys
+  async createApiKey(opts: { name: string; expiresInDays?: number }): Promise<{ id: string; key: string; keyPrefix: string; name: string; createdAt: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/api-keys"), { method: "POST", headers: this.headers(), body: JSON.stringify(opts) });
+    if (!res.ok) throw new Error(`createApiKey failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  async listApiKeys(): Promise<Array<{ id: string; name: string; keyPrefix: string; lastUsedAt: string | null; expiresAt: string | null; createdAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/api-keys"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listApiKeys failed: ${await safeError(res)}`);
+    return (await res.json()).items || [];
+  }
+
+  async deleteApiKey(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/api-keys/${encodeURIComponent(id)}`), { method: "DELETE", headers: this.headers() });
+    if (!res.ok) throw new Error(`deleteApiKey failed: ${await safeError(res)}`);
+  }
+
+  // V45: run claps
+  async clapRun(shareToken: string): Promise<{ clapCount: number }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/shared/${encodeURIComponent(shareToken)}/clap`), { method: "POST" });
+    if (!res.ok) throw new Error(`clapRun failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V47: AI summaries
+  async generateSessionSummary(sessionId: string): Promise<{ summary: string; sessionId: string; generatedAt: string }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/ai-summary`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`generateSessionSummary failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  async getSessionSummary(sessionId: string): Promise<{ summary: string; generatedAt: string } | null> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/ai-summary`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getSessionSummary failed: ${await safeError(res)}`);
+    const d = await res.json();
+    if (!d.summary) return null;
+    return { summary: d.summary, generatedAt: d.generatedAt };
+  }
+
+  // V48: timeline
+  async getSessionTimeline(sessionId: string): Promise<Array<{ runId: string; startedAt: string; durationMs: number | null; costUsd: number | null; strategy: string | null; status: string }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${encodeURIComponent(sessionId)}/timeline`), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getSessionTimeline failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.points || [];
+  }
+
+  // V49: rate limits
+  async getRateLimits(): Promise<Array<{ bucket: string; count: number; limit: number; remaining: number; resetAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/rate-limits"), {
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`getRateLimits failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.rateLimits || [];
+  }
+
+  // V50: smoke
+  async smoke(): Promise<{ ok: boolean; checks: Record<string, boolean>; version: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/smoke"));
+    if (!res.ok) throw new Error(`smoke failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V51: prompt chains
+
+  /** Create a new prompt chain (multi-step sequence). */
+  async createPromptChain(opts: {
+    name: string;
+    description?: string;
+    steps: Array<{ inputTemplate: string; strategy?: string; useOutputOf?: number }>;
+    isPublic?: boolean;
+  }): Promise<{ id: string; name: string; description: string | null; steps: Array<{ inputTemplate: string; strategy?: string; useOutputOf?: number }>; runCount: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/prompt-chains"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createPromptChain failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.chain;
+  }
+
+  /** List the current user's prompt chains. */
+  async listPromptChains(): Promise<Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    steps: Array<{ inputTemplate: string; strategy?: string; useOutputOf?: number }>;
+    runCount: number;
+    isPublic: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/prompt-chains"));
+    if (!res.ok) throw new Error(`listPromptChains failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Execute a prompt chain and get step-by-step results. */
+  async runPromptChain(chainId: string): Promise<{
+    chainId: string;
+    results: Array<{ stepIndex: number; runId: string; sessionId: string; finalContent: string }>;
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompt-chains/${chainId}/run`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (!res.ok) throw new Error(`runPromptChain failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Delete a prompt chain (owner only). */
+  async deletePromptChain(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/prompt-chains/${id}`), { method: "DELETE" });
+    if (!res.ok) throw new Error(`deletePromptChain failed: ${await safeError(res)}`);
+  }
+
+  // V53: notebook AI features
+
+  /** Get AI-suggested tags for a snippet's content. */
+  async autoTagSnippet(content: string): Promise<string[]> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/notebook/auto-tag"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error(`autoTagSnippet failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.tags || [];
+  }
+
+  /** Get an AI summary of all snippets in a notebook collection. */
+  async getCollectionSummary(collectionId: string): Promise<{
+    summary: string;
+    snippetCount: number;
+    tags: string[];
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/notebook/collections/${collectionId}/summary`));
+    if (!res.ok) throw new Error(`getCollectionSummary failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V54: user stats
+
+  /** Get comprehensive stats for the current user. */
+  async getMyStats(): Promise<{
+    totalSessions: number;
+    totalRuns: number;
+    totalCostUsd: number;
+    totalTokensIn: number;
+    totalTokensOut: number;
+    avgCostPerRun: number;
+    mostUsedStrategy: string;
+    mostUsedProvider: string;
+    joinedAt: string | null;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/stats"));
+    if (!res.ok) throw new Error(`getMyStats failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.stats;
+  }
+
+  // V55: session invites
+
+  /** Create a read-only invite link for a session. */
+  async createSessionInvite(
+    sessionId: string,
+    opts?: { role?: string; expiresInDays?: number }
+  ): Promise<{ id: string; token: string; role: string; expiresAt: string | null }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${sessionId}/invites`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts ?? {}),
+    });
+    if (!res.ok) throw new Error(`createSessionInvite failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** List all active invite links for a session (owner only). */
+  async listSessionInvites(
+    sessionId: string
+  ): Promise<Array<{ id: string; token: string; role: string; usedCount: number; expiresAt: string | null }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/sessions/${sessionId}/invites`));
+    if (!res.ok) throw new Error(`listSessionInvites failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.invites ?? [];
+  }
+
+  /** Delete a session invite (owner only). */
+  async deleteSessionInvite(sessionId: string, inviteId: string): Promise<void> {
+    const res = await this.fetchImpl(
+      this.url(`/api/qcoreai/sessions/${sessionId}/invites/${inviteId}`),
+      { method: "DELETE" }
+    );
+    if (!res.ok) throw new Error(`deleteSessionInvite failed: ${await safeError(res)}`);
+  }
+
+  /** Resolve an invite token — checks validity and returns session info. */
+  async resolveInvite(
+    token: string
+  ): Promise<{ sessionId: string; role: string; valid: boolean }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/invites/${token}`));
+    if (!res.ok) throw new Error(`resolveInvite failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V56: audit log
+
+  /** Get the current user's action history. */
+  async getAuditLog(
+    limit?: number
+  ): Promise<Array<{ id: string; action: string; resourceType: string | null; resourceId: string | null; createdAt: string }>> {
+    const qs = limit ? `?limit=${limit}` : "";
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/audit-log${qs}`));
+    if (!res.ok) throw new Error(`getAuditLog failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.entries ?? [];
+  }
+
+  // V57: benchmarks
+
+  /** Get model benchmark comparison data (speed, quality, cost scores). */
+  async getBenchmarks(): Promise<{
+    models: Array<{
+      provider: string;
+      model: string;
+      speedScore: number;
+      qualityScore: number;
+      costScore: number;
+      contextWindow: number;
+    }>;
+    lastUpdated: string;
+    note: string;
+  }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/benchmarks"));
+    if (!res.ok) throw new Error(`getBenchmarks failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V59: AI Memory
+
+  /** Add a memory entry that persists across sessions. Pinned memories are injected into the analyst. */
+  async addMemory(
+    content: string,
+    opts?: { category?: string; pinned?: boolean }
+  ): Promise<{ id: string; content: string; category: string; pinned: boolean }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/memories"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, ...opts }),
+    });
+    if (!res.ok) throw new Error(`addMemory failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.memory;
+  }
+
+  /** List memories for the authenticated user. */
+  async listMemories(
+    opts?: { category?: string; pinned?: boolean; limit?: number }
+  ): Promise<Array<{ id: string; content: string; category: string; pinned: boolean; createdAt: string }>> {
+    const p = new URLSearchParams();
+    if (opts?.category) p.set("category", opts.category);
+    if (opts?.pinned !== undefined) p.set("pinned", String(opts.pinned));
+    if (opts?.limit) p.set("limit", String(opts.limit));
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/memories${p.size ? "?" + p : ""}`));
+    if (!res.ok) throw new Error(`listMemories failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.memories ?? [];
+  }
+
+  /** Delete a memory by id. */
+  async deleteMemory(id: string): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/memories/${encodeURIComponent(id)}`), {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(`deleteMemory failed: ${await safeError(res)}`);
+  }
+
+  /** Extract memories from a completed run's output. Non-blocking — server fires-and-forgets. */
+  async extractMemoriesFromRun(runId: string): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/memories/extract"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId }),
+    });
+    if (!res.ok) throw new Error(`extractMemoriesFromRun failed: ${await safeError(res)}`);
+  }
+
+  // V60: Template suggestions
+
+  /** Get AI-powered template suggestions based on your run history. */
+  async suggestTemplates(): Promise<Array<{ name: string; description: string; input: string; strategy: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/templates/suggest"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) throw new Error(`suggestTemplates failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.suggestions ?? [];
+  }
+
+  // V61: Provider health
+
+  /** Check live status of all configured providers. Results cached server-side for 60s. */
+  async checkProviderHealth(): Promise<Array<{ id: string; name: string; status: string; latencyMs: number; checkedAt: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/providers/health"));
+    if (!res.ok) throw new Error(`checkProviderHealth failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.providers ?? [];
+  }
+
+  // V63: A/B tests
+
+  /** Create a new A/B test comparing two prompt variants. */
+  async createAbTest(opts: { name: string; promptA: string; promptB: string; strategy?: string }): Promise<{ id: string; name: string }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/ab-tests"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify(opts),
+    });
+    if (!res.ok) throw new Error(`createAbTest failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.test;
+  }
+
+  /** List all A/B tests for the authenticated user. */
+  async listAbTests(): Promise<Array<{ id: string; name: string; runsA: number; runsB: number; avgCostA: number; avgCostB: number }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/ab-tests"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listAbTests failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.items || [];
+  }
+
+  /** Run both variants of an A/B test back-to-back and return side-by-side results. */
+  async runAbTest(testId: string): Promise<{
+    testId: string;
+    variantA: { runId: string; finalContent: string; costUsd: number };
+    variantB: { runId: string; finalContent: string; costUsd: number };
+  }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/ab-tests/${encodeURIComponent(testId)}/run`), {
+      method: "POST",
+      headers: this.headers(),
+    });
+    if (!res.ok) throw new Error(`runAbTest failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // V64: User settings
+
+  /** Retrieve all user settings as a key-value record. */
+  async getUserSettings(): Promise<Record<string, any>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/settings"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getUserSettings failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.settings || {};
+  }
+
+  /** Set a user setting by key. */
+  async setUserSetting(key: string, value: any): Promise<void> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/me/settings/${encodeURIComponent(key)}`), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ value }),
+    });
+    if (!res.ok) throw new Error(`setUserSetting failed: ${await safeError(res)}`);
+  }
+
+  // V65: Advanced analytics
+
+  /** Weekly cohort analysis — sessions created per week and run counts in W0/W1/W2. */
+  async getCohortAnalysis(): Promise<{ cohorts: Array<{ week: string; sessionsCreated: number; runsWeek0: number; runsWeek1: number }> }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/analytics/cohorts"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getCohortAnalysis failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /** Run output quality distribution — brief / standard / detailed buckets. */
+  async getRunQuality(): Promise<{ brief: number; standard: number; detailed: number }> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/analytics/run-quality"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRunQuality failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // ─── V67: Run branching ──────────────────────────────────────────────────
+
+  /**
+   * Create a conditional branch from an existing run.
+   * Triggers a new run in the same session with `alternativeInput` and the
+   * given `strategy`. Returns both the branch record and the new run stub.
+   *
+   * @example
+   * ```ts
+   * const { branch, run } = await client.createRunBranch(runId, {
+   *   reason: "Try debate strategy instead",
+   *   alternativeInput: "What are the trade-offs of SQL vs NoSQL?",
+   *   strategy: "debate",
+   * });
+   * console.log("New run:", run.id, "in session:", run.sessionId);
+   * ```
+   */
+  async createRunBranch(
+    runId: string,
+    opts: { reason: string; alternativeInput: string; strategy?: string }
+  ): Promise<{ branch: { id: string }; run: { id: string; sessionId: string } }> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${runId}/branch`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ reason: opts.reason, alternativeInput: opts.alternativeInput, strategy: opts.strategy }),
+    });
+    if (!res.ok) throw new Error(`createRunBranch failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  /**
+   * List all branches created from a run.
+   */
+  async listRunBranches(runId: string): Promise<Array<{ id: string; branchReason: string; status: string; resultRunId: string | null }>> {
+    const res = await this.fetchImpl(this.url(`/api/qcoreai/runs/${runId}/branches`), { headers: this.headers() });
+    if (!res.ok) throw new Error(`listRunBranches failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.branches ?? [];
+  }
+
+  // ─── V68: Export ─────────────────────────────────────────────────────────
+
+  /**
+   * Export a full session as a JSON bundle (session + runs + annotations + bookmarks).
+   * Auth required; owner only.
+   *
+   * @example
+   * ```ts
+   * const bundle = await client.exportSessionBundle(sessionId, { includeMessages: true });
+   * fs.writeFileSync(`session-${sessionId}.json`, JSON.stringify(bundle, null, 2));
+   * ```
+   */
+  async exportSessionBundle(sessionId: string, opts?: { includeMessages?: boolean }): Promise<any> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/export/session-bundle"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ sessionId, includeMessages: opts?.includeMessages ?? false }),
+    });
+    if (!res.ok) throw new Error(`exportSessionBundle failed: ${await safeError(res)}`);
+    return res.json();
+  }
+
+  // ─── V69: Smart routing rules ────────────────────────────────────────────
+
+  /**
+   * Save auto-routing preferences. Rules are applied automatically in the
+   * multi-agent handler when no explicit provider/model override is set.
+   * Conditions: `short_input` | `long_input` | `code_task` | `creative_task`.
+   *
+   * @example
+   * ```ts
+   * await client.saveRoutingRules([
+   *   { condition: "code_task", preferProvider: "anthropic", preferModel: "claude-sonnet-4-5" },
+   *   { condition: "long_input", preferProvider: "openai", preferModel: "gpt-4o" },
+   * ]);
+   * ```
+   */
+  async saveRoutingRules(
+    rules: Array<{ condition: string; preferProvider: string; preferModel: string }>
+  ): Promise<void> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/routing-rules"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.headers() },
+      body: JSON.stringify({ rules }),
+    });
+    if (!res.ok) throw new Error(`saveRoutingRules failed: ${await safeError(res)}`);
+  }
+
+  /**
+   * Retrieve the current smart routing rules for the authenticated user.
+   */
+  async getRoutingRules(): Promise<Array<{ condition: string; preferProvider: string; preferModel: string }>> {
+    const res = await this.fetchImpl(this.url("/api/qcoreai/me/routing-rules"), { headers: this.headers() });
+    if (!res.ok) throw new Error(`getRoutingRules failed: ${await safeError(res)}`);
+    const d = await res.json();
+    return d.rules ?? [];
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Webhook receiver helpers — HMAC verification.
+   The server signs every webhook body with HMAC-SHA256 using the secret
+   you set via PUT /me/webhook. Headers:
+     - X-QCore-Signature: hex-encoded HMAC
+     - X-QCore-Origin: "env" | "user"
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Constant-time HMAC verification for QCoreAI run.completed webhooks.
+ * Pass the raw request body (Buffer or string), the provided signature
+ * header, and your shared secret. Returns true if the signature matches.
+ *
+ * Works in both Node and Edge — uses Web Crypto SubtleCrypto.
+ *
+ * @example
+ * ```ts
+ * import { verifyWebhookHmac } from "@aevion/qcoreai-client";
+ *
+ * app.post("/qcore-webhook", express.raw({ type: "*\/*" }), async (req, res) => {
+ *   const ok = await verifyWebhookHmac(
+ *     req.body,
+ *     req.headers["x-qcore-signature"],
+ *     process.env.QCORE_WEBHOOK_SECRET!
+ *   );
+ *   if (!ok) return res.status(401).end();
+ *   const evt = JSON.parse(req.body.toString("utf8"));
+ *   console.log("run.completed", evt.runId, evt.status, evt.totalCostUsd);
+ *   res.json({ ok: true });
+ * });
+ * ```
+ */
+export async function verifyWebhookHmac(
+  rawBody: string | Uint8Array,
+  signature: string | string[] | undefined,
+  secret: string
+): Promise<boolean> {
+  if (!signature || Array.isArray(signature)) return false;
+  if (!secret) return false;
+
+  const encoder = new TextEncoder();
+  const bodyBytes = typeof rawBody === "string" ? encoder.encode(rawBody) : new Uint8Array(rawBody);
+  const keyBytes = encoder.encode(secret);
+
+  const subtle = (globalThis.crypto as Crypto | undefined)?.subtle;
+  if (!subtle) {
+    throw new Error("@aevion/qcoreai-client: Web Crypto SubtleCrypto unavailable. Use Node 18+ or a modern runtime.");
+  }
+
+  // Copy into fresh ArrayBuffers to satisfy strict BufferSource typing
+  // (rules out SharedArrayBuffer in some lib.dom configurations).
+  const keyBuf = new Uint8Array(keyBytes).buffer;
+  const bodyBuf = new Uint8Array(bodyBytes).buffer;
+
+  const key = await subtle.importKey(
+    "raw",
+    keyBuf,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sigBytes = await subtle.sign("HMAC", key, bodyBuf);
+  const expected = bytesToHex(new Uint8Array(sigBytes));
+
+  // Constant-time compare to prevent timing oracles.
+  return constantTimeEqual(expected, signature.toLowerCase().trim());
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Internals
+   ═══════════════════════════════════════════════════════════════════════ */
+
+async function safeError(res: Response): Promise<string> {
+  try {
+    const j = await res.json();
+    return j?.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
+function indexOfDoubleNewline(s: string): number {
+  const a = s.indexOf("\n\n");
+  const b = s.indexOf("\r\n\r\n");
+  if (a === -1) return b;
+  if (b === -1) return a;
+  return Math.min(a, b);
+}
+
+function bytesToHex(buf: Uint8Array): string {
+  let out = "";
+  for (let i = 0; i < buf.length; i++) {
+    out += buf[i].toString(16).padStart(2, "0");
+  }
+  return out;
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}

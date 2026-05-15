@@ -1,0 +1,35 @@
+# Source — published artefact is dist/ only
+src/
+__tests__/
+examples/
+*.test.ts
+*.spec.ts
+
+# Build artefacts
+*.tsbuildinfo
+.vitest/
+coverage/
+.nyc_output/
+
+# Local dev
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+*.log
+*.tgz
+
+# Config / meta
+tsconfig.json
+vitest.config.ts
+.github/
+.gitignore
+.editorconfig
+.eslintrc*
+.prettierrc*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

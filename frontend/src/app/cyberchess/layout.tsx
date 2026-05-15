@@ -17,6 +17,20 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/cyberchess-icon-192.svg" }],
   },
+  openGraph: {
+    title: "CyberChess — AI-коуч, CPI рейтинг, 12 вариантов",
+    description:
+      "AI-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. Обходит lichess + chess.com системно.",
+    type: "website",
+    siteName: "AEVION CyberChess",
+    url: "/cyberchess",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CyberChess — лучший AI-коуч в шахматах",
+    description:
+      "CPI рейтинг по 11 факторам · 12 вариантов · 5800+ пазлов · Game DNA · live-комментарии. От AEVION.",
+  },
 };
 
 export const viewport: Viewport = {

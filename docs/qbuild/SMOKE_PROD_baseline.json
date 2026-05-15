@@ -1,0 +1,514 @@
+{
+  "run": 1778221604380,
+  "base": "https://aevion.app/api-backend",
+  "steps": 21,
+  "failed": 0,
+  "calls": [
+    {
+      "method": "GET",
+      "path": "/api/build/health",
+      "status": 200,
+      "durMs": 1351,
+      "response": {
+        "success": true,
+        "data": {
+          "service": "qbuild",
+          "status": "ok",
+          "statuses": {
+            "project": [
+              "OPEN",
+              "IN_PROGRESS",
+              "DONE"
+            ],
+            "vacancy": [
+              "OPEN",
+              "CLOSED"
+            ],
+            "application": [
+              "PENDING",
+              "ACCEPTED",
+              "REJECTED"
+            ],
+            "role": [
+              "CLIENT",
+              "CONTRACTOR",
+              "WORKER",
+              "ADMIN"
+            ]
+          },
+          "vacancies": 2,
+          "candidates": 1,
+          "projects": 2,
+          "timestamp": "2026-05-08T06:26:45.492Z"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/stats",
+      "status": 200,
+      "durMs": 816,
+      "response": {
+        "success": true,
+        "data": {
+          "vacancies": {
+            "open": 2,
+            "total": 2
+          },
+          "candidates": 1,
+          "projects": {
+            "total": 2,
+            "open": 2
+          },
+          "applications": {
+            "total": 2,
+            "accepted": 2,
+            "acceptRate": 100
+          },
+          "trials": {
+            "total": 0,
+            "approved": 0
+          },
+          "cashback": {
+            "totalAev": 0,
+            "entries": 0
+          },
+          "timestamp": "2026-05-08T06:26:46.326Z"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/vacancies?limit=5",
+      "status": 200,
+      "durMs": 403,
+      "response": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "9d76005a-ae1b-40d0-b742-60aa36b129b5",
+              "projectId": "2dad9b21-d8d4-49a2-a1cf-b2f33a0c988a",
+              "title": "Smoke welder 1778221255645",
+              "description": "MIG/MAG welder for steel structure assembly. Day shift, hot meals provided.",
+              "salary": 4500,
+              "status": "OPEN",
+              "createdAt": "2026-05-08T06:21:01.541Z",
+              "skillsJson": "[\"MIG/MAG welding\",\"Steel structures\"]",
+              "projectTitle": "Smoke project 1778221255645",
+              "projectStatus": "OPEN",
+              "projectCity": "Astana",
+              "clientId": "646d0819-cd80-41c2-bacd-541ebbb6247b",
+              "applicationsCount": 1,
+              "boostUntil": null,
+              "skills": [
+                "MIG/MAG welding",
+                "Steel structures"
+              ]
+            },
+            {
+              "id": "1a25869e-48b3-4bea-b5ed-d2993f201009",
+              "projectId": "9a72a46f-cef7-49f0-9444-e640680a36e8",
+              "title": "Smoke welder 1778219378383",
+              "description": "MIG/MAG welder for steel structure assembly. Day shift, hot meals provided.",
+              "salary": 4500,
+              "status": "OPEN",
+              "createdAt": "2026-05-08T05:49:43.101Z",
+              "skillsJson": "[\"MIG/MAG welding\",\"Steel structures\"]",
+              "projectTitle": "Smoke project 1778219378383",
+              "projectStatus": "OPEN",
+              "projectCity": "Astana",
+              "clientId": "71c9e340-e283-41d1-9f7c-4a0ede25aa0c",
+              "applicationsCount": 1,
+              "boostUntil": null,
+              "skills": [
+                "MIG/MAG welding",
+                "Steel structures"
+              ]
+            }
+          ],
+          "total": 2
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register",
+      "status": 201,
+      "durMs": 532,
+      "response": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5N2ZjNmYzZS1iMDc4LTQzNzQtYmE2My1hOTM1MzhiM2RhNzEiLCJlbWFpbCI6InNtb2tlLWNsaWVudCsxNzc4MjIxNjA0MzgwQGFldmlvbi50ZXN0Iiwicm9sZSI6IlVTRVIiLCJzaWQiOiIzZTNhOWY1YS1jZTA0LTRhYzAtOWNjMS1lMTg2M2Y0ZWQwYWIiLCJpYXQiOjE3NzgyMjE2MDcsImV4cCI6MTc3ODgyNjQwN30.pr7x5w9rTeCdLvCCz3fVi-029Hl5xUPKanDR9J6Bkvk",
+        "sessionId": "3e3a9f5a-ce04-4ac0-9cc1-e1863f4ed0ab",
+        "user": {
+          "id": "97fc6f3e-b078-4374-ba63-a93538b3da71",
+          "email": "smoke-client+1778221604380@aevion.test",
+          "name": "Smoke Client",
+          "role": "USER"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register",
+      "status": 201,
+      "durMs": 398,
+      "response": {
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NDZlMjdhYS1kYjc5LTQ3NGYtOGRjZS02YjdmMmRhOTNjNzQiLCJlbWFpbCI6InNtb2tlLXdvcmtlcisxNzc4MjIxNjA0MzgwQGFldmlvbi50ZXN0Iiwicm9sZSI6IlVTRVIiLCJzaWQiOiI1MTlhMTIxMS00YmNkLTQxY2QtOGQzNS1jNGI1ODNmY2FiMDQiLCJpYXQiOjE3NzgyMjE2MDcsImV4cCI6MTc3ODgyNjQwN30.tYYXyHjWxBq1QqbrnNE7cJpPKo2RjyMXvyZTunWorxQ",
+        "sessionId": "519a1211-4bcd-41cd-8d35-c4b583fcab04",
+        "user": {
+          "id": "646e27aa-db79-474f-8dce-6b7f2da93c74",
+          "email": "smoke-worker+1778221604380@aevion.test",
+          "name": "Smoke Worker",
+          "role": "USER"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/build/profiles",
+      "status": 201,
+      "durMs": 508,
+      "response": {
+        "success": true,
+        "data": {
+          "id": "382bb115-f0c9-4071-b30c-40a1e9358b11",
+          "userId": "646e27aa-db79-474f-8dce-6b7f2da93c74",
+          "name": "Smoke Worker",
+          "phone": null,
+          "city": null,
+          "description": null,
+          "buildRole": "WORKER",
+          "createdAt": "2026-05-08T06:26:48.105Z",
+          "updatedAt": "2026-05-08T06:26:48.105Z",
+          "title": "Welder, day shift",
+          "summary": "5y commercial welding, certified to 30mm carbon steel.",
+          "skillsJson": "[\"MIG/MAG welding\",\"Steel structures\"]",
+          "languagesJson": "[]",
+          "salaryMin": null,
+          "salaryMax": null,
+          "salaryCurrency": "RUB",
+          "availability": null,
+          "experienceYears": 5,
+          "photoUrl": null,
+          "openToWork": true,
+          "verifiedAt": null,
+          "verifiedReason": null,
+          "certificationsJson": "[]",
+          "portfolioJson": "[]",
+          "achievementsJson": "[]",
+          "driversLicense": null,
+          "shiftPreference": null,
+          "availabilityType": null,
+          "readyFromDate": null,
+          "preferredLocationsJson": "[]",
+          "toolsOwnedJson": "[]",
+          "medicalCheckValid": false,
+          "medicalCheckUntil": null,
+          "safetyTrainingValid": false,
+          "safetyTrainingUntil": null,
+          "introVideoUrl": null,
+          "availableNow": false,
+          "availableUntil": null,
+          "skills": [
+            "MIG/MAG welding",
+            "Steel structures"
+          ],
+          "languages": [],
+          "certifications": [],
+          "portfolio": [],
+          "achievements": [],
+          "preferredLocations": [],
+          "toolsOwned": []
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/build/projects",
+      "status": 201,
+      "durMs": 309,
+      "response": {
+        "success": true,
+        "data": {
+          "id": "b0bd07e1-d012-45ff-b11e-18da78b6bf68",
+          "title": "Smoke project 1778221604380",
+          "description": "Industrial welding project on AEVION QBuild prod smoke.",
+          "budget": 50000,
+          "status": "OPEN",
+          "city": "Astana",
+          "clientId": "97fc6f3e-b078-4374-ba63-a93538b3da71",
+          "createdAt": "2026-05-08T06:26:48.449Z",
+          "updatedAt": "2026-05-08T06:26:48.449Z"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/build/vacancies",
+      "status": 201,
+      "durMs": 497,
+      "response": {
+        "success": true,
+        "data": {
+          "id": "d5696797-66b4-4670-bca7-46c50964e825",
+          "projectId": "b0bd07e1-d012-45ff-b11e-18da78b6bf68",
+          "title": "Smoke welder 1778221604380",
+          "description": "MIG/MAG welder for steel structure assembly. Day shift, hot meals provided.",
+          "salary": 4500,
+          "status": "OPEN",
+          "createdAt": "2026-05-08T06:26:48.916Z",
+          "skillsJson": "[\"MIG/MAG welding\",\"Steel structures\"]",
+          "city": null,
+          "salaryCurrency": "RUB",
+          "questionsJson": "[]",
+          "viewCount": 0,
+          "skills": [
+            "MIG/MAG welding",
+            "Steel structures"
+          ],
+          "questions": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/vacancies/d5696797-66b4-4670-bca7-46c50964e825",
+      "status": 200,
+      "durMs": 928,
+      "response": {
+        "success": true,
+        "data": {
+          "id": "d5696797-66b4-4670-bca7-46c50964e825",
+          "projectId": "b0bd07e1-d012-45ff-b11e-18da78b6bf68",
+          "title": "Smoke welder 1778221604380",
+          "description": "MIG/MAG welder for steel structure assembly. Day shift, hot meals provided.",
+          "salary": 4500,
+          "status": "OPEN",
+          "createdAt": "2026-05-08T06:26:48.916Z",
+          "skillsJson": "[\"MIG/MAG welding\",\"Steel structures\"]",
+          "city": null,
+          "salaryCurrency": "RUB",
+          "questionsJson": "[]",
+          "viewCount": 0,
+          "projectTitle": "Smoke project 1778221604380",
+          "projectStatus": "OPEN",
+          "clientId": "97fc6f3e-b078-4374-ba63-a93538b3da71",
+          "boostUntil": null,
+          "skills": [
+            "MIG/MAG welding",
+            "Steel structures"
+          ],
+          "questions": []
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/build/applications",
+      "status": 201,
+      "durMs": 309,
+      "response": {
+        "success": true,
+        "data": {
+          "id": "2c7cd572-ebeb-4f45-b19a-e006887fff9e",
+          "vacancyId": "d5696797-66b4-4670-bca7-46c50964e825",
+          "userId": "646e27aa-db79-474f-8dce-6b7f2da93c74",
+          "message": "Готов выходить с понедельника, опыт MIG 5 лет.",
+          "status": "PENDING",
+          "createdAt": "2026-05-08T06:26:50.177Z",
+          "updatedAt": "2026-05-08T06:26:50.177Z",
+          "answersJson": "[]",
+          "aiScoresJson": null,
+          "aiScoreOverall": null,
+          "referredByUserId": null,
+          "rejectReason": null
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/applications/by-vacancy/d5696797-66b4-4670-bca7-46c50964e825",
+      "status": 200,
+      "durMs": 316,
+      "response": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "id": "2c7cd572-ebeb-4f45-b19a-e006887fff9e",
+              "vacancyId": "d5696797-66b4-4670-bca7-46c50964e825",
+              "userId": "646e27aa-db79-474f-8dce-6b7f2da93c74",
+              "message": "Готов выходить с понедельника, опыт MIG 5 лет.",
+              "status": "PENDING",
+              "createdAt": "2026-05-08T06:26:50.177Z",
+              "updatedAt": "2026-05-08T06:26:50.177Z",
+              "answersJson": "[]",
+              "aiScoresJson": null,
+              "aiScoreOverall": null,
+              "referredByUserId": null,
+              "rejectReason": null,
+              "email": "smoke-worker+1778221604380@aevion.test",
+              "applicantName": "Smoke Worker",
+              "applicantCity": null,
+              "applicantSkillsJson": "[\"MIG/MAG welding\",\"Steel structures\"]",
+              "applicantHeadline": "Welder, day shift",
+              "applicantExperienceYears": 5,
+              "applicantSkills": [
+                "MIG/MAG welding",
+                "Steel structures"
+              ],
+              "matchScore": 100,
+              "matchedSkills": [
+                "MIG/MAG welding",
+                "Steel structures"
+              ]
+            }
+          ],
+          "total": 1
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/build/applications/2c7cd572-ebeb-4f45-b19a-e006887fff9e/label",
+      "status": 404,
+      "durMs": 406,
+      "response": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot PATCH /api/build/applications/2c7cd572-ebeb-4f45-b19a-e006887fff9e/label</pre>\n</body>\n</html>\n"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/build/applications/2c7cd572-ebeb-4f45-b19a-e006887fff9e",
+      "status": 200,
+      "durMs": 297,
+      "response": {
+        "success": true,
+        "data": {
+          "id": "2c7cd572-ebeb-4f45-b19a-e006887fff9e",
+          "vacancyId": "d5696797-66b4-4670-bca7-46c50964e825",
+          "userId": "646e27aa-db79-474f-8dce-6b7f2da93c74",
+          "message": "Готов выходить с понедельника, опыт MIG 5 лет.",
+          "status": "ACCEPTED",
+          "createdAt": "2026-05-08T06:26:50.177Z",
+          "updatedAt": "2026-05-08T06:26:51.209Z",
+          "answersJson": "[]",
+          "aiScoresJson": null,
+          "aiScoreOverall": null,
+          "referredByUserId": null,
+          "rejectReason": null,
+          "hireOrder": {
+            "id": "08d7bea9-7c2c-4e05-8b14-6b07c9b82438",
+            "userId": "97fc6f3e-b078-4374-ba63-a93538b3da71",
+            "kind": "HIRE_FEE",
+            "ref": "2c7cd572-ebeb-4f45-b19a-e006887fff9e",
+            "amount": 540,
+            "currency": "RUB",
+            "status": "PENDING",
+            "metaJson": "{\"applicationId\":\"2c7cd572-ebeb-4f45-b19a-e006887fff9e\",\"vacancyId\":\"d5696797-66b4-4670-bca7-46c50964e825\",\"candidateId\":\"646e27aa-db79-474f-8dce-6b7f2da93c74\",\"salary\":4500,\"hireFeeBps\":1200,\"tierKey\":\"DEFAULT\"}",
+            "createdAt": "2026-05-08T06:26:51.216Z"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/stats/weekly",
+      "status": 404,
+      "durMs": 611,
+      "response": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/build/stats/weekly</pre>\n</body>\n</html>\n"
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/applications/mine/pipeline",
+      "status": 404,
+      "durMs": 314,
+      "response": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/build/applications/mine/pipeline</pre>\n</body>\n</html>\n"
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/applications/mine/interviews",
+      "status": 404,
+      "durMs": 301,
+      "response": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/build/applications/mine/interviews</pre>\n</body>\n</html>\n"
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/stats/leaderboard",
+      "status": 200,
+      "durMs": 409,
+      "response": {
+        "success": true,
+        "data": {
+          "items": [
+            {
+              "userId": "646d0819-cd80-41c2-bacd-541ebbb6247b",
+              "name": "—",
+              "city": null,
+              "photoUrl": null,
+              "hires": 1,
+              "tierKey": "DEFAULT",
+              "tierLabel": "Default",
+              "avgRating": null,
+              "reviewCount": 0
+            },
+            {
+              "userId": "71c9e340-e283-41d1-9f7c-4a0ede25aa0c",
+              "name": "—",
+              "city": null,
+              "photoUrl": null,
+              "hires": 1,
+              "tierKey": "DEFAULT",
+              "tierLabel": "Default",
+              "avgRating": null,
+              "reviewCount": 0
+            },
+            {
+              "userId": "97fc6f3e-b078-4374-ba63-a93538b3da71",
+              "name": "—",
+              "city": null,
+              "photoUrl": null,
+              "hires": 1,
+              "tierKey": "DEFAULT",
+              "tierLabel": "Default",
+              "avgRating": null,
+              "reviewCount": 0
+            }
+          ],
+          "total": 3,
+          "kind": "employer"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/build/public/rss/vacancies.xml",
+      "status": 404,
+      "durMs": 313,
+      "response": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /api/build/public/rss/vacancies.xml</pre>\n</body>\n</html>\n"
+    },
+    {
+      "method": "GET",
+      "path": "/sitemap.xml",
+      "status": 404,
+      "durMs": 314,
+      "response": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /sitemap.xml</pre>\n</body>\n</html>\n"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/account",
+      "status": 200,
+      "durMs": 301,
+      "response": {
+        "deleted": true
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/auth/account",
+      "status": 200,
+      "durMs": 552,
+      "response": {
+        "deleted": true
+      }
+    }
+  ]
+}

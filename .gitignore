@@ -13,6 +13,18 @@ dist/
 **/dist/
 build/
 **/build/
+# QBuild product source dirs (collide with the broad **/build/ rule above —
+# these are TS/TSX modules under our own src tree, not output artifacts).
+!aevion-globus-backend/src/lib/build/
+!aevion-globus-backend/src/lib/build/**
+!aevion-globus-backend/src/routes/build/
+!aevion-globus-backend/src/routes/build/**
+!frontend/src/lib/build/
+!frontend/src/lib/build/**
+!frontend/src/components/build/
+!frontend/src/components/build/**
+!frontend/src/app/build/
+!frontend/src/app/build/**
 
 # Environment variables - NEVER commit secrets
 .env
@@ -39,6 +51,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # Puzzle artifacts (generated locally)
 frontend/public/puzzles-fixed.json
@@ -48,3 +61,5 @@ frontend/public/puzzles-report.json
 *_backup.tsx
 *_backup.ts
 page_v*_backup.*
+# Claude Code local settings
+.claude/

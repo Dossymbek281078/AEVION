@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { getBackendOrigin } from "@/lib/apiBase";
-import { LangSwitch } from "@/lib/i18n";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
@@ -49,6 +49,7 @@ export function SiteHeader() {
             { href: "/awards", label: "Awards" },
             { href: "/bank", label: "Bank" },
             { href: "/cyberchess", label: "Chess" },
+            { href: "/pricing", label: "Pricing" },
           ].map((x) => (
             <Link key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               {x.label}
@@ -58,7 +59,7 @@ export function SiteHeader() {
             API
           </a>
           <div style={{ marginLeft: 4 }}>
-            <LangSwitch />
+            <LanguageSwitcher />
           </div>
         </div>
       </div>

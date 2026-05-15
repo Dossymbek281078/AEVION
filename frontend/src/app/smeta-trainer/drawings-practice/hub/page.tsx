@@ -333,6 +333,11 @@ const MODULES: Module[] = [
   { id: "elevators-granaries",    category: "special",   href: "/smeta-trainer/drawings-practice/elevators-granaries",    icon: "🌾", title: "Элеваторы и зернохранилища",      subtitle: "Силосы Ø6 м H=30 м, 50 тыс. т Костанай, СН РК 3.04-13, аспирация ПБ В-IIa", level: "L5", exercises: 4,  color: "yellow"  },
   { id: "meat-processing",        category: "special",   href: "/smeta-trainer/drawings-practice/meat-processing",        icon: "🥩", title: "Мясокомбинаты и пищепром",        subtitle: "50 т/смену Караганда, СанПиН 4.01-001-2024, шок -35°C, R717 NH₃ ПБ 09-595", level: "L5", exercises: 4,  color: "red"     },
   { id: "dairy-plants",           category: "special",   href: "/smeta-trainer/drawings-practice/dairy-plants",           icon: "🥛", title: "Молочные заводы",                 subtitle: "200 т/сутки, HTST 72°C/UHT 135°C, Tetra Pak, CIP-мойка, БПК₅ 3000→6 мг/л", level: "L5", exercises: 4,  color: "sky"     },
+
+  // ── Коммерческая недвижимость: банки, ТРЦ, отели ──
+  { id: "banks-branches",         category: "special",   href: "/smeta-trainer/drawings-practice/banks-branches",         icon: "🏦", title: "Банковские отделения",            subtitle: "Halyk/Kaspi/ForteBank, хранилище кл. III ГОСТ Р 50862, бронестекло Б3", level: "L5", exercises: 4,  color: "emerald" },
+  { id: "shopping-malls",         category: "special",   href: "/smeta-trainer/drawings-practice/shopping-malls",         icon: "🛍️", title: "Торгово-развлекательные центры",  subtitle: "Mega/Esentai 50 000 м² GLA, эскалаторы Schindler, СН РК 2.02-15 Ф3.1",  level: "L5", exercises: 4,  color: "violet"  },
+  { id: "hotels-resorts",         category: "special",   href: "/smeta-trainer/drawings-practice/hotels-resorts",         icon: "🏨", title: "Гостиницы 5★ и курорты",          subtitle: "Ritz-Carlton/Rixos, СП РК 3.02-08, Rw≥52 дБ, СПА, банкетные залы",      level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

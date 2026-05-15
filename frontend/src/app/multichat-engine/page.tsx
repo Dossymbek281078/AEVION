@@ -14,7 +14,7 @@ import { useI18n, type Lang } from "@/lib/i18n";
  * the global dictionary in src/lib/i18n.tsx.
  * ────────────────────────────────────────────────────────────── */
 
-const MC_STRINGS: Record<Lang, Record<string, string>> = {
+const MC_STRINGS: Partial<Record<Lang, Record<string, string>>> = {
   en: {
     "mc.badge": "Multichat Engine · Live",
     "mc.title.a": "Parallel agents,",
@@ -307,7 +307,7 @@ const MC_STRINGS: Record<Lang, Record<string, string>> = {
 
 function makeMcT(lang: Lang) {
   return (key: string, vars?: Record<string, string | number>): string => {
-    let raw = MC_STRINGS[lang][key] ?? MC_STRINGS.en[key] ?? key;
+    let raw = MC_STRINGS[lang]?.[key] ?? MC_STRINGS.en?.[key] ?? key;
     if (vars) {
       for (const [k, v] of Object.entries(vars)) {
         raw = raw.split(`{${k}}`).join(String(v));

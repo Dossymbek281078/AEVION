@@ -107,9 +107,10 @@ export default function CoachPage() {
   }, []);
 
   // Build auth headers for fetch. Memoized so refresh callbacks stay stable.
-  const authHeaders = useMemo<HeadersInit>(() => {
-    if (!authToken) return {};
-    return { Authorization: `Bearer ${authToken}` };
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const h: Record<string, string> = {};
+    if (authToken) h.Authorization = `Bearer ${authToken}`;
+    return h;
   }, [authToken]);
 
   const authHeadersJson = useMemo<Record<string, string>>(() => {

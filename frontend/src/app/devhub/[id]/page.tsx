@@ -297,8 +297,20 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
     { code: "PT", name: "Português" }, { code: "IT", name: "Italiano" }, { code: "PL", name: "Polski" },
     { code: "TR", name: "Türkçe" }, { code: "JA", name: "日本語" }, { code: "ZH", name: "中文" },
   ];
+  const BULK_PRESETS = [
+    { label: "🌍 Wide reach", codes: ["RU", "EN", "KK", "DE", "FR", "ES"] },
+    { label: "📰 Blog", codes: ["RU", "EN", "KK"] },
+    { label: "📚 Docs", codes: ["RU", "EN", "KK", "DE", "JA", "ZH"] },
+    { label: "🇰🇿 KZ trio", codes: ["RU", "EN", "KK"] },
+  ];
   const [bulkPaths, setBulkPaths] = useState<string[]>([]);
-  const [bulkLangs, setBulkLangs] = useState<string[]>(["RU", "EN"]);
+  const [bulkLangs, setBulkLangs] = useState<string[]>(() => {
+    try {
+      const saved = typeof window !== "undefined" && localStorage.getItem("devhub-bulk-lang-preset");
+      if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) return parsed; }
+    } catch { /* ignore */ }
+    return ["RU", "EN"];
+  });
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkResults, setBulkResults] = useState<Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; error?: string }>>([]);
   const [bulkSummary, setBulkSummary] = useState<{ total: number; successCount: number; failureCount: number } | null>(null);
@@ -1427,8 +1439,16 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const toggleBulkPath = (path: string) => {
     setBulkPaths((prev) => prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]);
   };
+  const applyBulkLangPreset = (codes: string[]) => {
+    setBulkLangs(codes);
+    try { localStorage.setItem("devhub-bulk-lang-preset", JSON.stringify(codes)); } catch { /* ignore */ }
+  };
   const toggleBulkLang = (lang: string) => {
-    setBulkLangs((prev) => prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]);
+    setBulkLangs((prev) => {
+      const next = prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang];
+      try { localStorage.setItem("devhub-bulk-lang-preset", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   };
 
   // ── Brevo template builder (create new SMTP template) ────────────────────────
@@ -2944,9 +2964,27 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                       </div>
 
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>
-                          Target languages ({bulkLangs.length} selected)
-                        </label>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>
+                            Target languages ({bulkLangs.length} selected)
+                          </label>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {BULK_PRESETS.map((preset) => {
+                              const active = preset.codes.length === bulkLangs.length && preset.codes.every((c) => bulkLangs.includes(c));
+                              return (
+                                <button key={preset.label} type="button" onClick={() => applyBulkLangPreset(preset.codes)}
+                                  style={{
+                                    padding: "3px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                    border: "1px solid " + (active ? "#0d9488" : "#e2e8f0"),
+                                    background: active ? "#0d9488" : "#f8fafc",
+                                    color: active ? "#fff" : "#64748b", borderRadius: 5, whiteSpace: "nowrap",
+                                  }}>
+                                  {preset.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {BULK_LANG_OPTIONS.map((opt) => {
                             const on = bulkLangs.includes(opt.code);

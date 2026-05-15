@@ -168,7 +168,7 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | **block 7+8 (8 agents + cherry-picks + BOM-strip 109 files) done** | 2026-05-14 block-8 done |
+| _free_ | — | **prod-ready audit done 2026-05-15.** Railway build unblocked (devhub Buffer fix + cyberchessDaily params.id). 10 smoke scripts aligned to real API shapes (commit 40f6fd8f). **На завтра:** финальный smoke-run 12 модулей, довести до зелёного. | 2026-05-15 17:40 UTC+5 |
 
 ### Завершено 2026-05-14 (parallel block 7+8)
 

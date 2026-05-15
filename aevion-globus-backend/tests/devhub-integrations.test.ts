@@ -736,3 +736,233 @@ describe("Per-project GitHub token override", () => {
     expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer fallback-server-token");
   });
 });
+
+afterEach(() => {
+  for (const key of ["CLOUDFLARE_ACCOUNT_ID", "BREVO_SMS_SENDER", "BREVO_WHATSAPP_SENDER_ID"]) {
+    delete process.env[key];
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 12. Agent workflow templates
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("GET /api/devhub/agent/templates", () => {
+  test("returns 3 templates with steps", async () => {
+    const r = await request(makeApp()).get("/api/devhub/agent/templates");
+    expect(r.status).toBe(200);
+    expect(r.body.templates).toHaveLength(3);
+    expect(r.body.templates.map((t: any) => t.id).sort()).toEqual(["blog", "dashboard", "landing"]);
+    // landing has 4 steps (code + image + tts + sfx)
+    const landing = r.body.templates.find((t: any) => t.id === "landing");
+    expect(landing.steps).toHaveLength(4);
+    expect(landing.steps[0].type).toBe("code");
+    expect(landing.steps[3].type).toBe("sfx");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 13. Agent workflow SSE streaming
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/projects/:id/agent/workflow/stream", () => {
+  async function createProject(app: express.Express) {
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "T", stack: "next" });
+    return cr.body.project.id;
+  }
+
+  test("400 when steps empty", async () => {
+    const app = makeApp();
+    const id = await createProject(app);
+    const r = await request(app).post(`/api/devhub/projects/${id}/agent/workflow/stream`).send({ steps: [] });
+    expect(r.status).toBe(400);
+  });
+
+  test("streams start + per-step + complete events", async () => {
+    process.env.ELEVENLABS_API_KEY = "el-fake";
+    const app = makeApp();
+    const id = await createProject(app);
+
+    fetchMock.mockResolvedValueOnce(audioResp(200, 1024)); // TTS step
+
+    const r = await request(app)
+      .post(`/api/devhub/projects/${id}/agent/workflow/stream`)
+      .send({
+        steps: [
+          { type: "code", prompt: "hello page", saveAs: "pages/index.tsx" },
+          { type: "tts", text: "hi there", voice: "Rachel" },
+        ],
+      });
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/text\/event-stream/);
+
+    // Parse SSE events from response text
+    const events = r.text.split("\n\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)));
+
+    expect(events[0]).toMatchObject({ type: "start", totalSteps: 2 });
+    expect(events[1]).toMatchObject({ type: "step-start", index: 0, stepType: "code" });
+    expect(events[2]).toMatchObject({ type: "step-done", index: 0, ok: true });
+    expect(events[3]).toMatchObject({ type: "step-start", index: 1, stepType: "tts" });
+    expect(events[4]).toMatchObject({ type: "step-done", index: 1, ok: true });
+    expect(events[events.length - 1]).toMatchObject({
+      type: "complete", totalSteps: 2, successCount: 2, failureCount: 0,
+    });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 14. Brevo SMS
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/sms (Brevo)", () => {
+  test("503 when BREVO_API_KEY missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/sms")
+      .send({ recipient: "+14155552671", content: "hi" });
+    expect(r.status).toBe(503);
+  });
+
+  test("400 on invalid phone (not E.164)", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/sms")
+      .send({ recipient: "555-0123", content: "hi" });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/E.164/);
+  });
+
+  test("400 when content > 612 chars", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/sms")
+      .send({ recipient: "+14155552671", content: "x".repeat(613) });
+    expect(r.status).toBe(400);
+  });
+
+  test("calls Brevo SMS API with sender + recipient", async () => {
+    process.env.BREVO_API_KEY = "brevo-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, {
+      reference: "ref-123", messageId: 999, smsCount: 1,
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/sms")
+      .send({ recipient: "+14155552671", content: "Test SMS", sender: "MyApp" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, reference: "ref-123", smsCount: 1 });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.sender).toBe("MyApp");
+    expect(body.recipient).toBe("+14155552671");
+    expect(body.type).toBe("transactional");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 15. Brevo WhatsApp
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/whatsapp (Brevo)", () => {
+  test("503 when API key missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/whatsapp")
+      .send({ contactNumber: "+14155552671", templateId: 1 });
+    expect(r.status).toBe(503);
+  });
+
+  test("503 when sender ID missing", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/whatsapp")
+      .send({ contactNumber: "+14155552671", templateId: 1 });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/BREVO_WHATSAPP_SENDER_ID/);
+  });
+
+  test("400 on missing templateId", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    process.env.BREVO_WHATSAPP_SENDER_ID = "sender-123";
+    const r = await request(makeApp())
+      .post("/api/devhub/media/whatsapp")
+      .send({ contactNumber: "+14155552671" });
+    expect(r.status).toBe(400);
+  });
+
+  test("calls Brevo WhatsApp API + strips leading +", async () => {
+    process.env.BREVO_API_KEY = "fake";
+    process.env.BREVO_WHATSAPP_SENDER_ID = "sender-abc";
+    fetchMock.mockResolvedValueOnce(jsonResp(201, { messageId: "wa-msg-1" }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/whatsapp")
+      .send({ contactNumber: "+14155552671", templateId: 42, params: { name: "Alice" } });
+    expect(r.status).toBe(200);
+    expect(r.body.messageId).toBe("wa-msg-1");
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
+    expect(body.senderNumberId).toBe("sender-abc");
+    expect(body.contactNumbers).toEqual(["14155552671"]); // no +
+    expect(body.templateId).toBe(42);
+    expect(body.params).toEqual({ name: "Alice" });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 16. Cloudflare Images upload
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("POST /api/devhub/media/upload-image (Cloudflare Images)", () => {
+  test("400 when neither sourceUrl nor base64", async () => {
+    const r = await request(makeApp()).post("/api/devhub/media/upload-image").send({});
+    expect(r.status).toBe(400);
+  });
+
+  test("503 when env missing", async () => {
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-image")
+      .send({ sourceUrl: "https://example.com/x.png" });
+    expect(r.status).toBe(503);
+    expect(r.body.error).toMatch(/CLOUDFLARE/);
+  });
+
+  test("uploads from sourceUrl + returns permanent URL", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      result: {
+        id: "cf-img-123",
+        variants: ["https://imagedelivery.net/abc/cf-img-123/public"],
+        uploaded: "2026-05-15T00:00:00Z",
+      },
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-image")
+      .send({ sourceUrl: "https://oai.example/dalle.png" });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      ok: true,
+      imageId: "cf-img-123",
+      url: "https://imagedelivery.net/abc/cf-img-123/public",
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain("acc-fake/images/v1");
+    expect((fetchMock.mock.calls[0][1] as any).headers.Authorization).toBe("Bearer cf-fake");
+  });
+
+  test("uploads from base64", async () => {
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      result: { id: "cf-img-b64", variants: ["https://imagedelivery.net/x/cf-img-b64/public"], uploaded: "now" },
+    }));
+
+    const r = await request(makeApp())
+      .post("/api/devhub/media/upload-image")
+      .send({
+        base64: Buffer.from("fake-png-bytes").toString("base64"),
+        mimeType: "image/png",
+      });
+    expect(r.status).toBe(200);
+    expect(r.body.imageId).toBe("cf-img-b64");
+  });
+});

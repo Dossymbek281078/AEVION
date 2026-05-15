@@ -2367,6 +2367,326 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
   });
 });
 
+// ── Agent workflow templates ────────────────────────────────────────────────
+const AGENT_WORKFLOW_TEMPLATES = [
+  {
+    id: "landing",
+    name: "Landing page",
+    description: "Hero + headline + CTA + voiceover + sound effect",
+    steps: [
+      { type: "code", prompt: "Modern landing page: hero section with headline, subheadline, and CTA button. Tailwind, dark theme.", saveAs: "pages/index.tsx" },
+      { type: "image", prompt: "Futuristic abstract gradient, purple and teal, soft glow, hero background", size: "1792x1024", saveAs: "public/hero.url.txt" },
+      { type: "tts", text: "Welcome to AEVION — the unified AI platform. Build, deploy, and scale your ideas in one place.", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+      { type: "sfx", text: "Subtle whoosh transition, modern UI sound", durationSeconds: 1.5, saveAs: "public/whoosh.mp3.b64" },
+    ],
+  },
+  {
+    id: "blog",
+    name: "Blog post",
+    description: "Article with header image + audio narration",
+    steps: [
+      { type: "code", prompt: "Blog post page with title, date, hero image, and markdown article body in Next.js", saveAs: "pages/post.tsx" },
+      { type: "image", prompt: "Editorial illustration, flat design, vibrant colors, abstract concept", size: "1024x1024", saveAs: "public/article-hero.url.txt" },
+      { type: "tts", text: "Welcome to our weekly article. Today, we explore the future of AI-assisted development.", voice: "Adam", saveAs: "public/narration.mp3.b64" },
+    ],
+  },
+  {
+    id: "dashboard",
+    name: "Analytics dashboard",
+    description: "Stats cards + chart + onboarding voice",
+    steps: [
+      { type: "code", prompt: "Analytics dashboard: 4 stat cards (users, revenue, sessions, conversion) + bar chart of last 7 days. Mock data, light theme.", saveAs: "pages/dashboard.tsx" },
+      { type: "image", prompt: "Minimal dashboard UI mockup, light theme, clean typography", size: "1024x1024", saveAs: "public/dashboard-preview.url.txt" },
+      { type: "tts", text: "Your dashboard is ready. Track users, revenue, and conversion in real time.", voice: "Bella", saveAs: "public/dashboard-intro.mp3.b64" },
+    ],
+  },
+];
+
+// GET /api/devhub/agent/templates
+devhubRouter.get("/agent/templates", (_req, res) => {
+  res.json({ templates: AGENT_WORKFLOW_TEMPLATES });
+});
+
+// POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
+devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { steps } = req.body || {};
+  if (!Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: "steps array required" });
+  if (steps.length > 20) return res.status(400).json({ error: "max 20 steps per workflow" });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const emit = (event: any) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
+  };
+
+  emit({ type: "start", totalSteps: steps.length });
+
+  let okCount = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const type = String(step?.type || "");
+    emit({ type: "step-start", index: i, stepType: type });
+
+    try {
+      if (type === "code") {
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for code step");
+        const stack = String(step.stack || project.stack);
+        const targetFile = step.saveAs ? String(step.saveAs) : undefined;
+        const files = await generateCodeWithAI(prompt, stack, targetFile);
+        for (const gf of files) {
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: gf.path,
+            content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); }
+          catch {
+            const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === gf.path);
+            if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
+            else memFiles.set(f.id, f);
+          }
+        }
+        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path) } });
+        okCount++;
+      } else if (type === "image") {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for image step");
+        const dResp = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "dall-e-3", prompt, n: 1, size: step.size || "1024x1024", response_format: "url" }),
+        });
+        if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
+        const d = await dResp.json() as { data: Array<{ url: string }> };
+        const url = d.data?.[0]?.url;
+        if (!url) throw new Error("no image url returned");
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: url, language: detectLanguage(savedAs), updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        emit({ type: "step-done", index: i, ok: true, output: { url }, savedAs });
+        okCount++;
+      } else if (type === "tts") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for tts step");
+        const VOICE_IDS: Record<string, string> = {
+          Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
+          Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
+        };
+        const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+        });
+        if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        okCount++;
+      } else if (type === "sfx") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for sfx step");
+        const body: Record<string, unknown> = { text };
+        const dur = Number(step.durationSeconds);
+        if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
+        const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        okCount++;
+      } else {
+        emit({ type: "step-done", index: i, ok: false, error: `unknown step type: ${type}` });
+      }
+    } catch (e: any) {
+      emit({ type: "step-done", index: i, ok: false, error: e?.message || "step failed" });
+    }
+  }
+
+  emit({ type: "complete", totalSteps: steps.length, successCount: okCount, failureCount: steps.length - okCount });
+  res.end();
+});
+
+// POST /api/devhub/media/sms — Brevo transactional SMS
+devhubRouter.post("/media/sms", async (req, res) => {
+  const { recipient, content, sender } = req.body || {};
+  if (!recipient || typeof recipient !== "string") return res.status(400).json({ error: "recipient (E.164 phone) required" });
+  if (!/^\+\d{6,18}$/.test(recipient.trim())) return res.status(400).json({ error: "recipient must be E.164 format (e.g. +14155552671)" });
+  if (!content || typeof content !== "string") return res.status(400).json({ error: "content required" });
+  if (content.length > 612) return res.status(400).json({ error: "content too long (max 612 chars, 4 SMS segments)" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "Brevo not configured — set BREVO_API_KEY",
+      setupUrl: "https://app.brevo.com/settings/keys/api",
+    });
+  }
+
+  const senderName = (typeof sender === "string" && sender.trim()) ? sender.trim().slice(0, 11) : (process.env.BREVO_SMS_SENDER || "AEVION");
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        type: "transactional",
+        sender: senderName,
+        recipient: recipient.trim(),
+        content: content.slice(0, 612),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo SMS error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({
+      ok: true,
+      reference: (data as any)?.reference ?? null,
+      messageId: (data as any)?.messageId ?? null,
+      smsCount: (data as any)?.smsCount ?? null,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "SMS send failed" });
+  }
+});
+
+// POST /api/devhub/media/whatsapp — Brevo WhatsApp template message
+devhubRouter.post("/media/whatsapp", async (req, res) => {
+  const { contactNumber, templateId, params } = req.body || {};
+  if (!contactNumber || typeof contactNumber !== "string") return res.status(400).json({ error: "contactNumber (E.164 phone) required" });
+  if (!/^\+?\d{6,18}$/.test(contactNumber.trim())) return res.status(400).json({ error: "contactNumber must be E.164 format" });
+  if (!templateId || (typeof templateId !== "string" && typeof templateId !== "number")) return res.status(400).json({ error: "templateId required (approved WABA template)" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+  }
+
+  const senderNumberId = process.env.BREVO_WHATSAPP_SENDER_ID;
+  if (!senderNumberId) {
+    return res.status(503).json({
+      error: "Brevo WhatsApp sender not configured — set BREVO_WHATSAPP_SENDER_ID",
+      setupUrl: "https://app.brevo.com/whatsapp",
+    });
+  }
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/whatsapp/sendMessage", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        senderNumberId,
+        contactNumbers: [contactNumber.trim().replace(/^\+/, "")],
+        templateId: Number(templateId) || templateId,
+        ...(params && typeof params === "object" ? { params } : {}),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo WhatsApp error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "WhatsApp send failed" });
+  }
+});
+
+// POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)
+// Body: { sourceUrl?: string } OR { base64: string, mimeType?: string }
+devhubRouter.post("/media/upload-image", async (req, res) => {
+  const { sourceUrl, base64, mimeType = "image/png" } = req.body || {};
+  if (!sourceUrl && !base64) {
+    return res.status(400).json({ error: "sourceUrl or base64 required" });
+  }
+
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) {
+    return res.status(503).json({
+      error: "Cloudflare Images not configured — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID",
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  try {
+    // Cloudflare Images API: multipart form, "url" OR "file" field
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+
+    if (sourceUrl) {
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="url"\r\n\r\n${String(sourceUrl)}\r\n`);
+    } else {
+      const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpg") || mimeType.includes("jpeg") ? "jpg" : "bin";
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="upload.${ext}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+      parts.push(Buffer.from(base64, "base64"));
+      push(`\r\n`);
+    }
+    push(`--${boundary}--\r\n`);
+    const body = Buffer.concat(parts);
+
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Cloudflare Images error: ${errText.slice(0, 400)}` });
+    }
+    const data = await r.json() as { result?: { id: string; variants: string[]; uploaded: string } };
+    if (!data.result?.id) {
+      return res.status(500).json({ error: "no image id returned from Cloudflare" });
+    }
+    res.json({
+      ok: true,
+      imageId: data.result.id,
+      url: data.result.variants?.[0] || null,
+      variants: data.result.variants || [],
+      uploaded: data.result.uploaded,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Image upload failed" });
+  }
+});
+
 // POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
 devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
   const auth = verifyBearerOptional(req);

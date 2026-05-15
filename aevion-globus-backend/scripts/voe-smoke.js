@@ -32,13 +32,13 @@ async function run() {
   console.log("\n2. List tracks (all)");
   const all = await req("GET", "/api/voice-of-earth/tracks?limit=20");
   assert("GET /tracks → 200", all.status === 200, String(all.status));
-  assert("data is array", Array.isArray(all.body?.data));
-  assert("seed loaded (≥ 8 tracks)", (all.body?.data?.length ?? 0) >= 8);
+  assert("data is array", Array.isArray(all.body?.items));
+  assert("seed loaded (≥ 8 tracks)", (all.body?.items?.length ?? 0) >= 8);
 
   console.log("\n3. Filter by language");
   const en = await req("GET", "/api/voice-of-earth/tracks?lang=en");
   assert("GET /tracks?lang=en → 200", en.status === 200, String(en.status));
-  const enItems = en.body?.data ?? [];
+  const enItems = en.body?.items ?? [];
   assert("all EN tracks have language=en", enItems.every(t => t.language === "en"));
 
   console.log("\n4. Submit track");
@@ -51,7 +51,7 @@ async function run() {
     mood: "hopeful",
   });
   assert("POST /tracks → 200 or 201", [200, 201].includes(sub.status), String(sub.status));
-  const track = sub.body?.data;
+  const track = sub.body?.track;
   assert("track.id present", !!track?.id, JSON.stringify(sub.body).slice(0, 200));
   assert("track.votes === 0", track?.votes === 0);
 
@@ -61,7 +61,7 @@ async function run() {
   if (trackId) {
     const single = await req("GET", `/api/voice-of-earth/tracks/${trackId}`);
     assert("GET /tracks/:id → 200", single.status === 200, String(single.status));
-    assert("track.lyrics present", typeof single.body?.data?.lyrics === "string");
+    assert("track.lyrics present", typeof single.body?.track?.lyrics === "string");
   }
 
   console.log("\n6. Vote");
@@ -69,7 +69,7 @@ async function run() {
     const voter = `voter-${Date.now()}`;
     const v1 = await req("POST", `/api/voice-of-earth/tracks/${trackId}/vote`, { voterAlias: voter });
     assert("POST /vote → 200 or 201", [200, 201].includes(v1.status), String(v1.status));
-    assert("votes incremented", (v1.body?.data?.votes ?? 0) >= 1);
+    assert("votes incremented", (v1.body?.votes ?? 0) >= 1);
 
     const v2 = await req("POST", `/api/voice-of-earth/tracks/${trackId}/vote`, { voterAlias: voter });
     assert("duplicate vote → 409", v2.status === 409, String(v2.status));
@@ -78,10 +78,10 @@ async function run() {
   console.log("\n7. Stats");
   const stats = await req("GET", "/api/voice-of-earth/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));
-  assert("stats.total >= 8", (stats.body?.data?.total ?? 0) >= 8);
-  assert("byLanguage present", typeof stats.body?.data?.byLanguage === "object");
-  assert("byMood present", typeof stats.body?.data?.byMood === "object");
-  assert("topTracks is array", Array.isArray(stats.body?.data?.topTracks));
+  assert("stats.total >= 8", (stats.body?.total ?? 0) >= 8);
+  assert("byLanguage present", typeof stats.body?.byLanguage === "object");
+  assert("byMood present", typeof stats.body?.byMood === "object");
+  assert("topTracks is array", Array.isArray(stats.body?.topTracks));
 
   console.log(`\nVoice of Earth: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

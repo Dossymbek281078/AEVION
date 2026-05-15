@@ -21,7 +21,7 @@ async function run() {
 
   const h = await req("GET", "/api/shadownet/health");
   assert("health → 200", h.status === 200, String(h.status));
-  assert("ok true", h.body?.ok === true);
+  assert("ok true", h.body?.success === true);
 
   const tm = await req("GET", "/api/shadownet/threat-models");
   assert("GET /threat-models → 200", tm.status === 200);

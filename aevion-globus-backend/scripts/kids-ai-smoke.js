@@ -32,22 +32,22 @@ async function run() {
   console.log("\n2. List lessons (all)");
   const all = await req("GET", "/api/kids-ai/lessons?limit=20");
   assert("GET /lessons → 200", all.status === 200, String(all.status));
-  assert("data is array", Array.isArray(all.body?.data));
-  assert("at least 1 lesson", (all.body?.data?.length ?? 0) >= 1);
+  assert("data is array", Array.isArray(all.body?.lessons));
+  assert("at least 1 lesson", (all.body?.lessons?.length ?? 0) >= 1);
 
   console.log("\n3. Filter by language");
   const ru = await req("GET", "/api/kids-ai/lessons?lang=ru&limit=10");
   assert("GET /lessons?lang=ru → 200", ru.status === 200, String(ru.status));
-  const ruItems = ru.body?.data ?? [];
+  const ruItems = ru.body?.lessons ?? [];
   assert("all ru lessons have language=ru", ruItems.every(l => l.language === "ru"));
 
   console.log("\n4. Single lesson");
-  const lessons = all.body?.data ?? [];
+  const lessons = all.body?.lessons ?? [];
   const firstId = lessons[0]?.id;
   if (firstId) {
     const single = await req("GET", `/api/kids-ai/lessons/${firstId}`);
     assert("GET /lessons/:id → 200", single.status === 200, String(single.status));
-    assert("lesson has content_md", typeof single.body?.data?.content_md === "string");
+    assert("lesson has content_md", typeof single.body?.lesson?.content_md === "string");
   } else {
     console.log("  (skipped — no lessons)");
   }
@@ -61,18 +61,18 @@ async function run() {
       score: 85,
     });
     assert("POST /progress → 200 or 201", [200, 201].includes(prog.status), String(prog.status));
-    assert("progress recorded", prog.body?.success === true);
+    assert("progress recorded", !!(prog.body?.progress?.id));
 
     const get = await req("GET", `/api/kids-ai/progress/${alias}`);
     assert("GET /progress/:alias → 200", get.status === 200, String(get.status));
-    assert("progress has items", Array.isArray(get.body?.data));
+    assert("progress has items", Array.isArray(get.body?.progress));
   }
 
   console.log("\n6. Stats");
   const stats = await req("GET", "/api/kids-ai/stats");
   assert("GET /stats → 200", stats.status === 200, String(stats.status));
-  assert("stats.total >= 1", (stats.body?.data?.total ?? 0) >= 1);
-  assert("stats.languages present", typeof stats.body?.data?.languages === "number");
+  assert("stats.total >= 1", (stats.body?.totalLessons ?? 0) >= 1);
+  assert("stats.languages present", typeof stats.body?.languages === "number");
 
   console.log("\n7. Ask AI (stub check)");
   if (firstId) {

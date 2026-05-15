@@ -21,7 +21,7 @@ async function run() {
 
   const h = await req("GET", "/api/deepsan/health");
   assert("health → 200", h.status === 200, String(h.status));
-  assert("ok true", h.body?.ok === true);
+  assert("ok true", h.body?.success === true);
 
   const tag = `smoke-${Date.now()}`;
   const t = await req("POST", "/api/deepsan/tasks", { title: `Smoke task ${tag}`, priority: "high" });
@@ -49,7 +49,7 @@ async function run() {
 
   const stats = await req("GET", "/api/deepsan/stats");
   assert("GET /stats → 200", stats.status === 200);
-  assert("stats.total >= 0", typeof (stats.body?.data?.total ?? stats.body?.total) === "number");
+  assert("stats.total >= 0", typeof stats.body?.data?.totalTasks === "number");
 
   console.log(`\nDeepSan: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

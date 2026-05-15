@@ -31,7 +31,7 @@ async function run() {
 
   const list = await req("GET", `/api/qlife/biomarkers?type=weight_kg&userId=${userId}&limit=10`);
   assert("GET /biomarkers → 200", list.status === 200);
-  assert("data array", Array.isArray(list.body?.data ?? list.body));
+  assert("data array", Array.isArray(list.body?.biomarkers ?? list.body));
 
   const trends = await req("GET", `/api/qlife/biomarkers/trends?userId=${userId}`);
   assert("GET /trends → 200", trends.status === 200);

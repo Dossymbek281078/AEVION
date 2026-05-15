@@ -25,7 +25,7 @@ async function run() {
 
   const cats = await req("GET", "/api/lifebox/categories");
   assert("GET /categories → 200", cats.status === 200);
-  const cList = cats.body?.data ?? cats.body;
+  const cList = cats.body?.categories ?? [];
   assert("≥ 5 categories", Array.isArray(cList) && cList.length >= 5);
 
   const alias = `smoke-${Date.now()}`;
@@ -35,7 +35,7 @@ async function run() {
     category: "future_self", unlock_at: futureDate,
   });
   assert("POST /capsules → 200/201", [200,201].includes(cap.status), String(cap.status));
-  const capsule = cap.body?.data ?? cap.body;
+  const capsule = cap.body?.capsule ?? cap.body;
   assert("capsule.id present", !!capsule?.id);
   assert("content hidden when locked", !capsule?.content || capsule?.locked === true);
 

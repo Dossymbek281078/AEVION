@@ -29,7 +29,7 @@ async function run() {
 
   const user = await req("GET", `/api/psyapp-deps/users/${alias}`);
   assert("GET /users/:alias → 200", user.status === 200);
-  assert("addiction matches", (user.body?.data?.addiction ?? user.body?.addiction) === "smoking");
+  assert("addiction matches", user.body?.user?.addiction === "smoking");
 
   const trigger = await req("POST", "/api/psyapp-deps/triggers", {
     alias, trigger_type: "craving", intensity: 7, note: "Smoke test", copedHow: "deep breathing",
@@ -38,11 +38,11 @@ async function run() {
 
   const triggers = await req("GET", `/api/psyapp-deps/triggers/${alias}`);
   assert("GET /triggers/:alias → 200", triggers.status === 200);
-  assert("triggers is array", Array.isArray(triggers.body?.data ?? triggers.body));
+  assert("triggers is array", Array.isArray(triggers.body?.triggers));
 
   const affirm = await req("GET", "/api/psyapp-deps/affirmations");
   assert("GET /affirmations → 200", affirm.status === 200);
-  const aList = affirm.body?.data ?? affirm.body;
+  const aList = affirm.body?.affirmations ?? [];
   assert("≥ 5 affirmations", Array.isArray(aList) && aList.length >= 5);
 
   const stats = await req("GET", "/api/psyapp-deps/stats");

@@ -30,22 +30,22 @@ async function run() {
     links: [], avatarPrompt: "blue tech robot",
   });
   assert("POST /personas → 200/201", [200,201].includes(create.status), String(create.status));
-  assert("persona.alias", create.body?.data?.alias === alias || create.body?.alias === alias);
+  assert("persona.alias", create.body?.persona?.alias === alias);
 
   const get = await req("GET", `/api/qpersona/personas/${alias}`);
   assert("GET /personas/:alias → 200", get.status === 200);
-  assert("displayName matches", (get.body?.data?.display_name ?? get.body?.displayName) === "Smoke Test User");
+  assert("displayName matches", get.body?.persona?.display_name === "Smoke Test User");
 
   const list = await req("GET", "/api/qpersona/personas?limit=5");
   assert("GET /personas → 200", list.status === 200);
-  assert("list is array", Array.isArray(list.body?.data ?? list.body?.personas ?? list.body));
+  assert("list is array", Array.isArray(list.body?.personas));
 
   const patch = await req("PATCH", `/api/qpersona/personas/${alias}`, { bio: "Updated bio" });
   assert("PATCH /personas/:alias → 200", patch.status === 200);
 
   const stats = await req("GET", "/api/qpersona/stats");
   assert("GET /stats → 200", stats.status === 200);
-  assert("stats.total >= 1", (stats.body?.data?.total ?? stats.body?.total ?? 0) >= 1);
+  assert("stats.total >= 1", (stats.body?.total ?? 0) >= 1);
 
   console.log(`\nQPersona: ${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

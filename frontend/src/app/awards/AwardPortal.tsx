@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 type RecentArtifact = {
   id: string;
@@ -109,6 +110,7 @@ function SkeletonStatsCard() {
 }
 
 export function AwardPortal({ variant }: { variant: "music" | "film" }) {
+  const { t } = useI18n();
   const isMusic = variant === "music";
   const [stats, setStats] = useState<PlanetStats | null>(null);
   const [statsErr, setStatsErr] = useState<string | null>(null);
@@ -204,11 +206,9 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
   const prefix = isMusic ? "aevion_award_music" : "aevion_award_film";
   const oppositeAwardsHref = isMusic ? "/awards/film" : "/awards/music";
 
-  const title = isMusic ? "AEVION Music Awards" : "AEVION Film Awards";
-  const tag = isMusic ? "Like the Grammys — for AI and digital music" : "Like the Oscars — for AI and digital cinema";
-  const body = isMusic
-    ? "Отдельная витрина премии для музыкальных работ: подача через Planet (тип music), сертификат compliance и votesание участников экосистемы."
-    : "Отдельная витрина премии для кино и видео: подача через Planet (тип movie), сертификат compliance и votesание участников экосистемы.";
+  const title = isMusic ? t("awardsPortal.title.music") : t("awardsPortal.title.film");
+  const tag = isMusic ? t("awardsPortal.tag.music") : t("awardsPortal.tag.film");
+  const body = isMusic ? t("awardsPortal.body.music") : t("awardsPortal.body.film");
 
   return (
     <main style={{ padding: 0, minHeight: "100vh", background: "#0f172a" }}>
@@ -235,7 +235,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               marginBottom: 16,
             }}
           >
-            Planet Awards · MVP
+            {t("awardsPortal.kicker")}
           </div>
           <h1
             style={{
@@ -263,19 +263,20 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
             }}
           >
             {statsErr ? (
-              <span style={{ opacity: 0.85 }}>Planet stats unavailable ({statsErr}).</span>
+              <span style={{ opacity: 0.85 }}>{t("awardsPortal.stats.unavailable", { err: statsErr })}</span>
             ) : stats ? (
               <>
-                <div style={{ fontWeight: 800, marginBottom: 8, color: accent }}>Planet Ecosystem (live)</div>
+                <div style={{ fontWeight: 800, marginBottom: 8, color: accent }}>{t("awardsPortal.stats.live")}</div>
                 <div>
-                  Participants with active symbol (quorum <strong>Y</strong>):{" "}
+                  {t("awardsPortal.stats.participants.before")} <strong>Y</strong>
+                  {t("awardsPortal.stats.participants.after")}{" "}
                   <strong style={{ fontSize: 18 }}>{stats.eligibleParticipants}</strong>
                 </div>
                 <div style={{ marginTop: 6, opacity: 0.9 }}>
-                  Unique voters (all time): <strong>{stats.distinctVotersAllTime}</strong>
+                  {t("awardsPortal.stats.voters")} <strong>{stats.distinctVotersAllTime}</strong>
                 </div>
                 <div style={{ marginTop: 6, opacity: 0.85, fontSize: 13 }}>
-                  Certified artifact versions (all Planet): {stats.certifiedArtifactVersions}
+                  {t("awardsPortal.stats.certified")} {stats.certifiedArtifactVersions}
                 </div>
                 <div
                   style={{
@@ -293,7 +294,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                       padding: "8px 10px",
                     }}
                   >
-                    <div style={{ fontSize: 11, opacity: 0.75 }}>Track: submissions</div>
+                    <div style={{ fontSize: 11, opacity: 0.75 }}>{t("awardsPortal.stats.track.submissions")}</div>
                     <div style={{ marginTop: 2, fontWeight: 900, fontSize: 18 }}>{stats.awardSubmissions}</div>
                   </div>
                   <div
@@ -304,7 +305,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                       padding: "8px 10px",
                     }}
                   >
-                    <div style={{ fontSize: 11, opacity: 0.75 }}>Track: certified</div>
+                    <div style={{ fontSize: 11, opacity: 0.75 }}>{t("awardsPortal.stats.track.certified")}</div>
                     <div style={{ marginTop: 2, fontWeight: 900, fontSize: 18 }}>{stats.awardCertified}</div>
                   </div>
                 </div>
@@ -318,13 +319,13 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                   }}
                 >
                   <div style={{ fontWeight: 800, marginBottom: 6, color: accent }}>
-                    This award track (productKey prefix)
+                    {t("awardsPortal.stats.trackTitle")}
                   </div>
-                  Submissions: <strong>{stats.awardSubmissions}</strong>
+                  {t("awardsPortal.stats.submissionsLabel")} <strong>{stats.awardSubmissions}</strong>
                   {" · "}
-                  Certified: <strong>{stats.awardCertified}</strong>
+                  {t("awardsPortal.stats.certifiedLabel")} <strong>{stats.awardCertified}</strong>
                   <div style={{ marginTop: 4, opacity: 0.8, fontSize: 12 }}>
-                    API filter:{" "}
+                    {t("awardsPortal.stats.apiFilter")}{" "}
                     <code style={{ color: "#e2e8f0" }}>
                       ?productKeyPrefix={prefix}
                     </code>
@@ -346,7 +347,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 boxShadow: "0 8px 28px rgba(0,0,0,0.25)",
               }}
             >
-              Submit work to Planet →
+              {t("awardsPortal.cta.submit")}
             </Link>
             <Link
               href="/auth"
@@ -357,7 +358,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 border: "1px solid rgba(255,255,255,0.35)",
               }}
             >
-              Sign in (token required)
+              {t("awardsPortal.cta.signin")}
             </Link>
             <Link
               href={oppositeAwardsHref}
@@ -368,7 +369,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 border: "1px solid rgba(255,255,255,0.25)",
               }}
             >
-              {isMusic ? "Film Awards →" : "Music Awards →"}
+              {isMusic ? t("awardsPortal.cta.toFilm") : t("awardsPortal.cta.toMusic")}
             </Link>
             <Link
               href="/awards"
@@ -379,7 +380,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                 border: "1px solid rgba(255,255,255,0.25)",
               }}
             >
-              Awards hub →
+              {t("awardsPortal.cta.hub")}
             </Link>
           </div>
         </div>
@@ -395,7 +396,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
         }}
       >
         <h2 style={{ color: "#f8fafc", fontSize: 17, fontWeight: 800, margin: "0 0 12px" }}>
-          How to submit: 3 steps
+          {t("awardsPortal.steps.title")}
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           <article
@@ -406,10 +407,10 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               padding: "12px 12px 10px",
             }}
           >
-            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 1</div>
-            <div style={{ marginTop: 4, fontWeight: 800 }}>Sign in via Auth</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>{t("awardsPortal.steps.s1.kicker")}</div>
+            <div style={{ marginTop: 4, fontWeight: 800 }}>{t("awardsPortal.steps.s1.title")}</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
-              You need a participant token to submit artifacts and verify later.
+              {t("awardsPortal.steps.s1.body")}
             </p>
           </article>
           <article
@@ -420,10 +421,10 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               padding: "12px 12px 10px",
             }}
           >
-            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 2</div>
-            <div style={{ marginTop: 4, fontWeight: 800 }}>Send в Planet</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>{t("awardsPortal.steps.s2.kicker")}</div>
+            <div style={{ marginTop: 4, fontWeight: 800 }}>{t("awardsPortal.steps.s2.title")}</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
-              Выберите тип <code>{artifactType}</code>, укажите продуктовый ключ и пройдите compliance.
+              {t("awardsPortal.steps.s2.body.before")} <code>{artifactType}</code>{t("awardsPortal.steps.s2.body.after")}
             </p>
           </article>
           <article
@@ -434,15 +435,15 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               padding: "12px 12px 10px",
             }}
           >
-            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>Step 3</div>
-            <div style={{ marginTop: 4, fontWeight: 800 }}>Проверить публичную карточку</div>
+            <div style={{ fontSize: 12, color: accent, fontWeight: 800 }}>{t("awardsPortal.steps.s3.kicker")}</div>
+            <div style={{ marginTop: 4, fontWeight: 800 }}>{t("awardsPortal.steps.s3.title")}</div>
             <p style={{ margin: "6px 0 0", fontSize: 13, opacity: 0.86, lineHeight: 1.55 }}>
-              После сертификации artifact появляется в этой ленте и доступен по публичной ссылке.
+              {t("awardsPortal.steps.s3.body")}
             </p>
           </article>
         </div>
         <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-          Быстрый фильтр Planet: <code style={{ color: "#e2e8f0" }}>?type={artifactType}</code> и{" "}
+          {t("awardsPortal.steps.filter.before")} <code style={{ color: "#e2e8f0" }}>?type={artifactType}</code> {t("awardsPortal.steps.filter.and")}{" "}
           <code style={{ color: "#e2e8f0" }}>?productKeyPrefix={prefix}</code>
         </div>
       </section>
@@ -458,20 +459,19 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
         }}
       >
         <h2 style={{ color: "#f8fafc", fontSize: 17, fontWeight: 800, margin: "0 0 8px" }}>
-          Leaderboard и лента (certifiedные работы трека)
+          {t("awardsPortal.lb.title")}
         </h2>
         <p style={{ margin: "0 0 16px", fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>
-          Сортировка и агрегаты votes из API{" "}
-          <code style={{ color: "#cbd5e1" }}>?sort=rating|votes|created</code>. Coverage — доля от Y (участники с
-          активным символом Planet).
+          {t("awardsPortal.lb.intro.before")}{" "}
+          <code style={{ color: "#cbd5e1" }}>?sort=rating|votes|created</code>{t("awardsPortal.lb.intro.after")}
         </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {(
             [
-              { key: "rating" as const, label: "По среднему баллу" },
-              { key: "votes" as const, label: "По числу votes" },
-              { key: "created" as const, label: "Свежие" },
+              { key: "rating" as const, label: t("awardsPortal.lb.sort.rating") },
+              { key: "votes" as const, label: t("awardsPortal.lb.sort.votes") },
+              { key: "created" as const, label: t("awardsPortal.lb.sort.created") },
             ] as const
           ).map((opt) => (
             <button
@@ -500,7 +500,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
 
         {recentErr ? (
           <p style={{ margin: "0 0 12px", fontSize: 13, color: "#fca5a5" }}>
-            Лента недоступна: {recentErr}
+            {t("awardsPortal.lb.feedErr")} {recentErr}
           </p>
         ) : null}
 
@@ -511,8 +511,7 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
 
         {stats && !statsErr && !recentErr && recent.length === 0 ? (
           <p style={{ margin: 0, fontSize: 14, opacity: 0.85, lineHeight: 1.6 }}>
-            Пока нет опубликованных сертификатов с префиксом productKey для этой премии. Подайте работу через Planet —
-            после прохождения compliance она появится здесь.
+            {t("awardsPortal.lb.empty")}
           </p>
         ) : null}
 
@@ -529,10 +528,10 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
               <thead>
                 <tr style={{ textAlign: "left", color: "#94a3b8", fontSize: 11 }}>
                   <th style={{ padding: "10px 12px", fontWeight: 800 }}>#</th>
-                  <th style={{ padding: "10px 12px", fontWeight: 800 }}>Работа</th>
-                  <th style={{ padding: "10px 12px", fontWeight: 800 }}>Ср. балл</th>
-                  <th style={{ padding: "10px 12px", fontWeight: 800 }}>Голосов</th>
-                  <th style={{ padding: "10px 12px", fontWeight: 800, minWidth: 100 }}>Coverage</th>
+                  <th style={{ padding: "10px 12px", fontWeight: 800 }}>{t("awardsPortal.lb.col.work")}</th>
+                  <th style={{ padding: "10px 12px", fontWeight: 800 }}>{t("awardsPortal.lb.col.avg")}</th>
+                  <th style={{ padding: "10px 12px", fontWeight: 800 }}>{t("awardsPortal.lb.col.votes")}</th>
+                  <th style={{ padding: "10px 12px", fontWeight: 800, minWidth: 100 }}>{t("awardsPortal.lb.col.coverage")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -572,12 +571,12 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
                             textDecoration: "none",
                           }}
                         >
-                          {row.submissionTitle || "Untitled"}
+                          {row.submissionTitle || t("awardsPortal.lb.row.untitled")}
                         </Link>
                         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 4 }}>
                           v{row.versionNo ?? "?"} ·{" "}
                           <Link href={`/planet/artifact/${row.id}`} style={{ color: "#94a3b8" }}>
-                            карточка
+                            {t("awardsPortal.lb.row.card")}
                           </Link>
                         </div>
                       </td>
@@ -634,14 +633,14 @@ export function AwardPortal({ variant }: { variant: "music" | "film" }) {
       </section>
 
       <section style={{ padding: "32px 24px 48px", maxWidth: 720, margin: "0 auto", color: "#cbd5e1" }}>
-        <h2 style={{ color: "#f8fafc", fontSize: 18, fontWeight: 800, marginBottom: 12 }}>Как это связано с Planet</h2>
+        <h2 style={{ color: "#f8fafc", fontSize: 18, fontWeight: 800, marginBottom: 12 }}>{t("awardsPortal.ctx.title")}</h2>
         <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.7, fontSize: 15 }}>
-          <li>Один backend и один контур votes для музыки и кино — различаются тип artifactа и витрина.</li>
-          <li>Итоги votesания в перспективе показываются в контексте числа участников Planet (см. AEVION_AWARDS_SPEC).</li>
-          <li>Бренды премий — собственные AEVION; формулировки «как Грэмми / Оскар» — про подачу, не про чужие ТЗ.</li>
+          <li>{t("awardsPortal.ctx.b1")}</li>
+          <li>{t("awardsPortal.ctx.b2")}</li>
+          <li>{t("awardsPortal.ctx.b3")}</li>
         </ul>
         <p style={{ marginTop: 20, fontSize: 14, opacity: 0.85 }}>
-          Документация: <code style={{ color: "#94a3b8" }}>AEVION_AWARDS_SPEC.md</code>,{" "}
+          {t("awardsPortal.ctx.docs")} <code style={{ color: "#94a3b8" }}>AEVION_AWARDS_SPEC.md</code>,{" "}
           <code style={{ color: "#94a3b8" }}>AEVION_PLANET_CONCEPT.md</code>
         </p>
       </section>

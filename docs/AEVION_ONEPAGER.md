@@ -1,0 +1,70 @@
+﻿# AEVION
+**Операционная система доверия для эпохи ИИ-контента**
+*Seed round · $5M · 2026*
+
+---
+
+## Проблема
+ИИ ежедневно генерирует миллиарды единиц контента. Граница между оригинальным творчеством и копией исчезла. Чтобы доказать авторство, проверить качество и получить роялти, создатель сегодня вынужден жонглировать **4 разорванными платформами** (создание, регистрация, мониторинг, выплаты).
+
+## Решение
+**Один pipeline в одном UI:** `register → sign → certify → vote → earn`.
+- **QRight** — реестр IP с SHA-256 + временной меткой.
+- **QSign v2** — подпись **ML-DSA-65** (NIST FIPS 204, постквантовая криптография).
+- **Bureau** — сертификат, готовый к юр. оформлению.
+- **Planet** — compliance: валидаторы → evidenceRoot → Merkle snapshot голосов.
+- **AEVION Bank** — автоматические роялти в AEC.
+- **AI Trust Oracle** — B2B API «оригинален ли этот контент» для TikTok/Spotify/YouTube.
+
+## Что уже есть (на 2026-05-06)
+- **14 production-модулей** в `main`, из них **9 — Tier 2** (webhooks, embed, revoke, transparency, admin, audit, тесты, SDK).
+- **Уникальные техактивы:** ML-DSA-65 (постквантовая подпись), Quantum Shield (Shamir 2-of-3 + Ed25519).
+- **Платный E2E-flow на проде:** Stripe → Bureau cert → Trust Graph edge → AEC reward (Bronze 50 / Silver 150 / Gold 500 / Platinum 1000). Daily smoke 24/24 в GitHub Actions.
+- **Public API quotas live:** 4 tier (Developer $0 / Build $49 / Scale $249 / Enterprise) с публичной страницей `aevion.app/pricing/api-pricing` и machine-readable mirror [`/api/quotas`](https://aevion.app/api-backend/api/quotas). Контракт для B2B sales опубликован.
+- **Velocity:** 114 merged PR за 30 дней, 561 коммит за 30 дней.
+- **Live прод:** `aevion.app` (Vercel) + `api-backend` на Railway · **Repo:** `github.com/Dossymbek281078/AEVION`.
+- **Mobile SDK** для QCoreAI: Kotlin + Swift.
+
+## Рынок
+- **TAM $340 B** = IP-лицензирование $180 B + creator economy $104 B + цифровые платежи $56 B.
+- **SAM $48 B** = трансграничный IP + цифровые музыка/кино + платежи создателям.
+
+## Бизнес-модель → $1.8 B оценка
+
+| Поток | Y1 | Y2 | Y3 |
+|---|---:|---:|---:|
+| Подписки платформы | $2 M | $15 M | $45 M |
+| Транзакционные комиссии | $0.5 M | $8 M | $35 M |
+| Trust Oracle API | $1 M | $12 M | $40 M |
+| Сертификаты | $0.5 M | $5 M | $20 M |
+| CyberChess premium | $0.2 M | $3 M | $15 M |
+| Awards / спонсоры | $0.1 M | $2 M | $10 M |
+| AI Studio | — | $5 M | $15 M |
+| **ARR** | **$4.3 M** | **$50 M** | **$180 M** |
+
+При **10× мультипликаторе** (консервативно: Snowflake 15–20×, Palantir 18×) → **$1.8 B на год 3**.
+
+## 6 барьеров копирования
+1. **Trust Graph** — данные накапливаются с первой подписи; 30 лет у FICO, 10 у Google.
+2. **Атомарные транзакции** в один клик vs 4 платформы у конкурентов.
+3. **Постквантовая крипта на витрине** — нет ни у кого из B2C-конкурентов.
+4. **AI Trust Oracle** — аналог Clearbit ($150 M ARR), больший TAM.
+5. **Creator-economy lock-in** — заработок + история = высокая стоимость переключения.
+6. **Super-app** — 29 модулей кросс-продают друг друга. WeChat, но глобально.
+
+## Запрос
+**$5 M seed** · 40% команда (10 разработчиков) · 25% user acquisition · 20% юр+compliance · 15% runway.
+
+## Live status (для проверки в любой момент)
+- **`aevion.app/launch-status`** — live dashboard: backend health, 29 модулей с тиром, public API контракт, ссылка на daily smoke в GitHub Actions. Auto-refresh каждые 60 сек.
+
+## Демо для инвестора (10 минут)
+1. **`aevion.app/qright`** — регистрируем кусок контента → SHA-256 + timestamp.
+2. **`aevion.app/qsign`** — подписываем ML-DSA-65, проверяем подпись через verify.
+3. **`aevion.app/bureau`** — заявка на сертификат, оплата тест-картой `4242 4242 4242 4242` → cert выдан.
+4. **`aevion.app/bureau`** → Trust Graph → claim AEC reward → токены в кошельке.
+5. **`aevion.app/awards`** + **`aevion.app/planet`** — голосование валидаторов + evidenceRoot.
+6. **`aevion.app/bank`** — кошелёк, история транзакций, AEC баланс.
+
+## Контакты
+`aevion.app` · `github.com/Dossymbek281078/AEVION` · *(добавить email/Telegram)*

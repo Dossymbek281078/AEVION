@@ -1,4 +1,4 @@
-# AEVION — Production Deployment Guide
+﻿# AEVION — Production Deployment Guide
 
 ## From Demo to Real Product: Step by Step
 
@@ -10,7 +10,7 @@
 1. Go to https://www.namecheap.com
 2. Search for `aevion.app`
 3. If available — buy ($12-15/year)
-4. If taken — try: `aevion.io`, `aevion.co`, `getaevion.com`, `useaevion.com`
+4. If taken — try: `aevion.app`, `aevion.co`, `getaevion.app`, `useaevion.app`
 
 ### Option B: Google Domains
 1. Go to https://domains.google.com
@@ -33,7 +33,7 @@
 7. Wait 5-30 minutes for DNS propagation
 8. Vercel auto-provisions SSL certificate
 
-After this: `https://aevion.app` will show your site instead of `aevion.vercel.app`
+After this: `https://aevion.app` will show your site instead of `aevion.app`
 
 ---
 

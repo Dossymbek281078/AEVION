@@ -1,0 +1,142 @@
+[
+  {
+    "slug": "akmola",
+    "region": "Акмолинская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "aktobe",
+    "region": "Актюбинская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "almaty-obl",
+    "region": "Алматинская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "atyrau",
+    "region": "Атырауская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "vko",
+    "region": "Восточно-казахстанская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "almaty",
+    "region": "город Алматы",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "astana",
+    "region": "город Астана",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "shymkent",
+    "region": "город Шымкент",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "zhambyl",
+    "region": "Жамбылская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "zko",
+    "region": "Западно-казахстанская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "karaganda",
+    "region": "Карагандинская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "kostanay",
+    "region": "Костанайская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "kyzylorda",
+    "region": "Кызылординская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "mangystau",
+    "region": "Мангистауская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "abay",
+    "region": "область Абай",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "zhetysu",
+    "region": "область Жетiсу",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "ulytau",
+    "region": "область Ұлытау",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "pavlodar",
+    "region": "Павлодарская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "sko",
+    "region": "Северо-казахстанская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  },
+  {
+    "slug": "turkestan",
+    "region": "Туркестанская область",
+    "rows": 2427,
+    "machines": 1646,
+    "size_kb": 404
+  }
+]

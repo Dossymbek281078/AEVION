@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
@@ -19,18 +20,305 @@ model QRightObject {
   city         String?
   createdAt    DateTime @default(now())
 }
+
 model QuantumShield {
-  id          String   @id @default(uuid())
-  objectId    String?
-  objectTitle String?
-  algorithm   String   @default("Shamir's Secret Sharing + Ed25519")
-  threshold   Int      @default(2)
-  totalShards Int      @default(3)
-  shards      String
-  signature   String?
-  publicKey   String?
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  objectId       String?
+  objectTitle    String?
+  algorithm      String   @default("Shamir's Secret Sharing + Ed25519")
+  threshold      Int      @default(2)
+  totalShards    Int      @default(3)
+  shards         String
+  signature      String?
+  publicKey      String?
+  status         String   @default("active")
+  legacy         Boolean  @default(false)
+  hmacKeyVersion Int      @default(1) @map("hmac_key_version")
+  createdAt      DateTime @default(now())
+}
+
+/// QCoreAI multi-agent persistence.
+/// NOTE: runtime uses raw SQL via pg Pool (see lib/ensureQCoreTables.ts).
+/// This schema block documents the shape for tooling / future migrations.
+
+model QCoreSession {
+  id        String   @id @default(uuid())
+  userId    String?
+  title     String   @default("New session")
+  mode      String   @default("multi-agent")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model QCoreRun {
+  id              String    @id @default(uuid())
+  sessionId       String
+  userInput       String
+  status          String    @default("pending")
+  error           String?
+  agentConfig     Json?
+  strategy        String?
+  finalContent    String?
+  totalDurationMs Int?
+  totalCostUsd    Float?
+  shareToken      String?   @unique
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+
+  @@index([sessionId, startedAt(sort: Desc)])
+}
+
+model QCoreMessage {
+  id         String   @id @default(uuid())
+  runId      String
+  role       String
+  stage      String?
+  instance   String?
+  provider   String?
+  model      String?
+  content    String
+  tokensIn   Int?
+  tokensOut  Int?
+  durationMs Int?
+  costUsd    Float?
+  ordering   Int
+  createdAt  DateTime @default(now())
+
+  @@index([runId, ordering])
+}
+
+/// Per-user webhook config for run.completed deliveries. One row per JWT sub.
+/// URL is mandatory; secret is optional (HMAC-SHA256 of the body when present).
+/// Falls back to env QCORE_WEBHOOK_URL when no row exists for the run's user.
+model QCoreUserWebhook {
+  userId    String   @id
+  url       String
+  secret    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =====================================================================
+// QSign v2 — Unique Digital Signature Platform
+// RFC 8785 (JCS) canonicalization + HMAC-SHA256 + Ed25519 (hook: Dilithium3 in v2.1)
+// Rotation: overlap window via status + retiredAt, kid-scoped verification.
+// Keys stored as references to env vars (secretRef) for MVP. KMS adapter — v2.2+.
+// =====================================================================
+
+model QSignKey {
+  id         String    @id @default(uuid())
+  kid        String    @unique                         // stable public identifier, e.g. "qsign-hmac-v1"
+  algo       String                                    // "HMAC-SHA256" | "Ed25519"
+  publicKey  String?                                   // hex-encoded Ed25519 public key; null for HMAC
+  secretRef  String                                    // env var name resolved at runtime
+  status     String    @default("active")              // "active" | "retired"
+  notes      String?
+  createdAt  DateTime  @default(now())
+  retiredAt  DateTime?
+
+  @@index([status])
+}
+
+model QSignSignature {
+  id                 String    @id @default(uuid())
+  hmacKid            String
+  ed25519Kid         String?
+  payloadCanonical   String                             // RFC 8785 JCS stringified payload
+  payloadHash        String                             // sha256 hex of payloadCanonical
+  signatureHmac      String
+  signatureEd25519   String?
+  signatureDilithium String?                            // placeholder for v2.1
+  algoVersion        String    @default("qsign-v2.0")
+  issuerUserId       String?
+  issuerEmail        String?
+  geoLat             Float?
+  geoLng             Float?
+  geoSource          String?                            // "ip" | "gps" | null
+  geoCountry         String?
+  geoCity            String?
+  createdAt          DateTime  @default(now())
+  revokedAt          DateTime?
+
+  @@index([payloadHash])
+  @@index([issuerUserId])
+  @@index([createdAt])
+}
+
+model QSignRevocation {
+  id                String   @id @default(uuid())
+  signatureId       String   @unique
+  reason            String
+  causalSignatureId String?
+  revokerUserId     String?
+  revokedAt         DateTime @default(now())
+}
+
+model QSignWebhook {
+  id          String    @id @default(uuid())
+  ownerUserId String                                    // owner of subscription; only events on their own sigs fire
+  url         String                                    // delivery target — must be https in prod, http in dev
+  secret      String                                    // HMAC-SHA256 over body, sent in X-QSign-Signature header
+  events      String                                    // comma-separated subset of "sign,revoke"
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  lastFiredAt DateTime?
+  lastStatus  Int?
+  lastError   String?
+
+  @@index([ownerUserId])
+  @@index([active])
+}
+
+// ── AEV native token ─────────────────────────────────────────────────
+// Snapshot wallet keyed on deviceId (anonymous) либо userId (authed).
+// Source-of-record для cross-device sync. Frontend держит copy в
+// localStorage, периодически syncит сюда. Append-only ledger ниже —
+// audit trail для каждого mint/spend.
+
+model AevWallet {
+  id                  String   @id @default(uuid())
+  deviceId            String   @unique
+  userId              String?
+  balance             Float    @default(0)
+  lifetimeMined       Float    @default(0)
+  lifetimeSpent       Float    @default(0)
+  globalSupplyMined   Float    @default(0)
+  dividendsClaimed    Float    @default(0)
+  modesPlay           Boolean  @default(true)
+  modesCompute        Boolean  @default(false)
+  modesStewardship    Boolean  @default(true)
+  startTs             DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  ledger              AevLedgerEntry[]
+
+  @@index([userId])
+}
+
+model AevLedgerEntry {
+  id          String     @id @default(uuid())
+  walletId    String
+  wallet      AevWallet  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  kind        String     // "mint" | "spend"
+  amount      Float
+  sourceKind  String?    // "play" | "compute" | "stewardship" | "streak" | etc.
+  sourceModule String?   // "cyberchess" | "qsign" | "qright" | "qtrade" | ...
+  sourceAction String?   // RATE_CARD action key (e.g. "cyberchess_win_easy")
+  reason      String?    // human-readable description
+  balanceAfter Float
+  ts          DateTime   @default(now())
+
+  @@index([walletId, ts])
+  @@index([sourceModule])
+}
+
+// ── AI-тренажёр сметного дела РК (smeta-trainer) ─────────────────────
+// Прогресс студентов курса «Сметное дело в РК» (5 уровней).
+// Ключевание по deviceId (anonymous) либо userId (если авторизован).
+// Frontend держит копию в localStorage (useProgress.ts) — БД нужна для
+// cross-device sync, leaderboard'ов и аналитики курса для куратора.
+
+model SmetaStudent {
+  id          String           @id @default(uuid())
+  deviceId    String           @unique
+  userId      String?
+  displayName String?          // как студент представился
+  group       String?          // учебная группа / поток
+  startedAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  progress    SmetaProgress[]
+  attempts    SmetaAttempt[]
+
+  @@index([userId])
+  @@index([group])
+}
+
+model SmetaProgress {
+  id           String       @id @default(uuid())
+  studentId    String
+  student      SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level        Int          // 1..5 (соответствует LEVELS в frontend/lib/levels.ts)
+  status       String       // "open" | "in-progress" | "done"
+  score        Int?         // 0..100 для уровней с тестами
+  completedAt  DateTime?
+  attemptsCnt  Int          @default(0) // сколько раз заходил/сдавал
+  lastVisitAt  DateTime     @default(now())
+
+  @@unique([studentId, level])
+  @@index([level, score])
+}
+
+model SmetaAttempt {
+  id        String       @id @default(uuid())
+  studentId String
+  student   SmetaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  level     Int
+  kind      String       // "quiz" | "exercise" | "lsr-submit"
+  score     Int?         // 0..100
+  payload   String?      // JSON: ответы / снимок ЛСР / детали попытки
+  feedback  String?      // ответ AI-советника / комментарий куратора
+  ts        DateTime     @default(now())
+
+  @@index([studentId, ts])
+  @@index([level, ts])
+}
+
+model ChessPuzzle {
+  id       String  @id                     // lichess puzzle ID or "gen_xxx"
+  fen      String                           // position FEN (player to move)
+  sol      String                           // UCI moves JSON array string
+  name     String                           // human-readable name
+  rating   Int     @default(1200)
+  theme    String  @default("Тактика")
+  phase    String  @default("Middlegame")
+  side     String  @default("w")            // w|b
+  goal     String  @default("Best move")    // Mate|Best move
+  mateIn   Int?                             // null if not a mate puzzle
+  createdAt DateTime @default(now())
+
+  @@index([rating])
+  @@index([theme])
+  @@index([goal, mateIn])
+}
+
+// ── CyberChess CPI (Chess Performance Index) ─────────────────────────
+// Per-user multi-factor rating state used by /cyberchess/cpi/leaderboard.
+// 11 factors + overall composite. Idempotent upsert via POST /upsert,
+// public read via GET /leaderboard. One row per userId — keyed by id.
+// displayName lookup is best-effort against auth (not joined here).
+
+model CyberchessCpiState {
+  userId           String   @id
+  displayName      String?
+  overall          Float    @default(0)
+  accuracy         Float    @default(0)
+  tactics          Float    @default(0)
+  endgame          Float    @default(0)
+  timing           Float    @default(0)
+  aggression       Float    @default(0)
+  timeControl      Float    @default(0)
+  opening          Float    @default(0)
+  defense          Float    @default(0)
+  consistency      Float    @default(0)
+  endgameTechnique Float    @default(0)
+  psychology       Float    @default(0)
+  gamesPlayed      Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  @@index([overall(sort: Desc)])
+  @@index([accuracy(sort: Desc)])
+  @@index([tactics(sort: Desc)])
+  @@index([endgame(sort: Desc)])
+  @@index([timing(sort: Desc)])
+  @@index([aggression(sort: Desc)])
+  @@index([timeControl(sort: Desc)])
+  @@index([opening(sort: Desc)])
+  @@index([defense(sort: Desc)])
+  @@index([consistency(sort: Desc)])
+  @@index([endgameTechnique(sort: Desc)])
+  @@index([psychology(sort: Desc)])
 }
 
 // ============ HealthAI ============

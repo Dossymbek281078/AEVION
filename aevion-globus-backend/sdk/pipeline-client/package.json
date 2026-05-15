@@ -1,0 +1,47 @@
+{
+  "name": "@aevion/pipeline-client",
+  "version": "1.0.0",
+  "description": "TypeScript client for AEVION IP Pipeline — protect (Shamir 2-of-3 + Ed25519 + HMAC + OpenTimestamps), verify, reconstruct, certificates, witness retrieval, bundle export.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.ts",
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "aevion",
+    "pipeline",
+    "ip-protection",
+    "ed25519",
+    "shamir",
+    "opentimestamps",
+    "bitcoin-anchor",
+    "ipfs-cid"
+  ],
+  "homepage": "https://aevion.com/pipeline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dossymbek281078/AEVION.git",
+    "directory": "aevion-globus-backend/sdk/pipeline-client"
+  },
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck"
+  }
+}

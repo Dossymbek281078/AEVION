@@ -12,6 +12,7 @@ const PIPELINE_STEPS: Step[] = [
   { id: "auth", label: "Auth", href: "/auth" },
   { id: "qright", label: "QRight", href: "/qright" },
   { id: "qsign", label: "QSign", href: "/qsign" },
+  { id: "qshield", label: "Shield", href: "/quantum-shield" },
   { id: "bureau", label: "Bureau", href: "/bureau" },
   { id: "planet", label: "Planet", href: "/planet" },
 ];

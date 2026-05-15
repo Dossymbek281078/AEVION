@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+/**
+ * Fintech Weekly Report — generates a markdown report summarizing the
+ * last 7 days of fintech activity. Designed to be run weekly via cron
+ * and emailed / posted to Slack / appended to a status page.
+ *
+ * Usage:
+ *   node scripts/fintech-weekly-report.mjs > report.md
+ *   BASE=http://localhost:4001 node scripts/fintech-weekly-report.mjs
+ *
+ * Output:
+ *   Markdown to stdout. Use shell redirection to capture.
+ */
+
+const BASE = (process.env.BASE || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
+
+async function fetchJson(path) {
+  try {
+    const r = await fetch(`${BASE}${path}`, {
+      signal: AbortSignal.timeout(6000),
+      headers: { Accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    return await r.json().catch(() => null);
+  } catch { return null; }
+}
+
+function fmt(v) {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "number" && v >= 1000) return v.toLocaleString("en-US");
+  return String(v);
+}
+
+function fmtMoney(cents) {
+  if (cents === null || cents === undefined) return "—";
+  const d = cents / 100;
+  if (d >= 1_000_000) return `$${(d / 1_000_000).toFixed(2)}M`;
+  if (d >= 1_000) return `$${(d / 1_000).toFixed(1)}K`;
+  return `$${d.toFixed(2)}`;
+}
+
+async function main() {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 86400000);
+  const dateStr = (d) => d.toISOString().slice(0, 10);
+
+  const [
+    veilHead, veilStats,
+    qgoodStats, qgoodCamp,
+    ztideLb,
+    qchainProps,
+  ] = await Promise.all([
+    fetchJson("/api/veilnetx-ledger/head"),
+    fetchJson("/api/veilnetx-ledger/stats"),
+    fetchJson("/api/qgood/stats"),
+    fetchJson("/api/qgood/campaigns"),
+    fetchJson("/api/ztide/leaderboard"),
+    fetchJson("/api/qchaingov/proposals?status=active"),
+  ]);
+
+  // Compose markdown report
+  let md = "";
+  md += `# AEVION Fintech Weekly Report\n\n`;
+  md += `**Period:** ${dateStr(weekAgo)} → ${dateStr(now)}  \n`;
+  md += `**Generated:** ${now.toISOString()}  \n`;
+  md += `**Backend:** \`${BASE}\`\n\n`;
+  md += `---\n\n`;
+
+  // VeilNetX
+  md += `## 🌀 VeilNetX Settlement\n\n`;
+  md += `- **Chain length:** ${fmt(veilHead?.length ?? veilStats?.total)}  \n`;
+  md += `- **Head hash:** \`${veilHead?.hash?.slice(0, 16) ?? "—"}…\`  \n`;
+  if (veilStats?.byModule) {
+    md += `- **By module:**\n`;
+    for (const [mod, count] of Object.entries(veilStats.byModule)) {
+      md += `  - \`${mod}\`: ${fmt(count)}\n`;
+    }
+  }
+  md += `\n`;
+
+  // QGood
+  md += `## 💚 QGood Charity\n\n`;
+  md += `- **Total raised:** ${fmtMoney(qgoodStats?.total_raised_cents)}  \n`;
+  md += `- **Active campaigns:** ${fmt(qgoodCamp?.campaigns?.length)}  \n`;
+  if (qgoodCamp?.campaigns?.length) {
+    md += `- **Top by raised:**\n`;
+    const top = [...(qgoodCamp.campaigns || [])]
+      .sort((a, b) => (b.raised_cents || 0) - (a.raised_cents || 0))
+      .slice(0, 3);
+    for (const c of top) {
+      md += `  - **${c.title || "(untitled)"}**: ${fmtMoney(c.raised_cents)} / ${fmtMoney(c.goal_cents)}\n`;
+    }
+  }
+  md += `\n`;
+
+  // Z-Tide
+  md += `## 🌊 Z-Tide Reputation\n\n`;
+  if (ztideLb?.entries?.length) {
+    md += `- **Leaderboard size:** ${fmt(ztideLb.entries.length)}  \n`;
+    md += `- **Top 5:**\n`;
+    for (const e of ztideLb.entries.slice(0, 5)) {
+      const name = e.username || (e.userId?.slice(0, 8) ?? "unknown");
+      md += `  - **${name}** — score ${fmt(e.score)} (rank: ${e.rank || "—"})\n`;
+    }
+  } else {
+    md += `- _No leaderboard data available_\n`;
+  }
+  md += `\n`;
+
+  // QChainGov
+  md += `## 🗳 QChainGov Governance\n\n`;
+  md += `- **Active proposals:** ${fmt(qchainProps?.proposals?.length)}  \n`;
+  if (qchainProps?.proposals?.length) {
+    md += `- **Currently open:**\n`;
+    for (const p of qchainProps.proposals.slice(0, 5)) {
+      md += `  - **${p.title || "(untitled)"}** — ${fmt(p.votesFor)} for / ${fmt(p.votesAgainst)} against\n`;
+    }
+  }
+  md += `\n`;
+
+  // Health summary
+  md += `## 🩺 Health Summary\n\n`;
+  md += `| Module | Status |\n|---|---|\n`;
+  md += `| VeilNetX | ${veilHead || veilStats ? "✅ Up" : "❌ Down"} |\n`;
+  md += `| QGood | ${qgoodStats || qgoodCamp ? "✅ Up" : "❌ Down"} |\n`;
+  md += `| Z-Tide | ${ztideLb ? "✅ Up" : "❌ Down"} |\n`;
+  md += `| QChainGov | ${qchainProps ? "✅ Up" : "❌ Down"} |\n`;
+  md += `\n`;
+
+  // Links
+  md += `## Resources\n\n`;
+  md += `- Live dashboard: ${BASE.replace("api.aevion.app", "aevion.app").replace(/\/$/, "")}/fintech/dashboard\n`;
+  md += `- Status page: ${BASE.replace("api.aevion.app", "aevion.app").replace(/\/$/, "")}/fintech/status\n`;
+  md += `- Architecture: ${BASE.replace("api.aevion.app", "aevion.app").replace(/\/$/, "")}/fintech/whitepaper\n`;
+  md += `- API docs: ${BASE.replace("api.aevion.app", "aevion.app").replace(/\/$/, "")}/developers/fintech\n`;
+  md += `\n`;
+
+  md += `---\n*Auto-generated by \`fintech-weekly-report.mjs\` — pipe to email/slack/file.*\n`;
+
+  console.log(md);
+}
+
+main().catch(e => {
+  console.error(`Error: ${e.message}`);
+  process.exit(1);
+});

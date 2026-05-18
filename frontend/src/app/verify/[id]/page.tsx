@@ -105,6 +105,7 @@ export default function VerifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
+  const aevMinted = 0; // mintAevBureauVerify removed — function was never defined
 
   useEffect(() => {
     if (!certId) return;
@@ -119,9 +120,6 @@ export default function VerifyPage() {
           return;
         }
         setData(json as VerifyData);
-        // AEV mint: успешная Bureau-верификация (deduped per-cert per-session)
-        const aev = mintAevBureauVerify(certId);
-        if (aev > 0) setAevMinted(aev);
       } catch {
         setError("Failed to connect to verification server");
       } finally {

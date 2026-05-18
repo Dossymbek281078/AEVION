@@ -82,6 +82,7 @@ import { qeventsRouter } from "./routes/qevents";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
+import { revenueRouter } from "./routes/revenue";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -559,6 +560,9 @@ app.use("/api/build/social", qsocialRouter);
 app.use("/api/qsocial", qsocialRouter);
 // QEvents — events platform (RSVP, create, attend)
 app.use("/api/qevents", qeventsRouter);
+
+// Revenue Hub — centralized monetization: Stripe + YouTube + Twitch per app
+app.use("/api/revenue", revenueRouter);
 
 // DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
 app.use("/api/deepsan", deepSanRouter);

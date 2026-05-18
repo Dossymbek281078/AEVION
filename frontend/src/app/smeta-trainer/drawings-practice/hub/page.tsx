@@ -433,6 +433,11 @@ const MODULES: Module[] = [
   { id: "glamping-eco-tourism",   category: "practice",  href: "/smeta-trainer/drawings-practice/glamping-eco-tourism",   icon: "⛺", title: "Глэмпинги и эко-отели",           subtitle: "Charyn Canyon 20 юнитов, off-grid СЭС+LiFePO₄, Phoenix Composting, GSTC", level: "L5", exercises: 4,  color: "emerald" },
   { id: "art-conservatory",       category: "practice",  href: "/smeta-trainer/drawings-practice/art-conservatory",       icon: "🎼", title: "Консерватории муз./художеств.",   subtitle: "Курмангазы 18 000 м² 4 фак., shoebox концертн. зал RT60 1.8 с, Steinway D",  level: "L5", exercises: 4,  color: "violet"  },
   { id: "planetarium-science",    category: "practice",  href: "/smeta-trainer/drawings-practice/planetarium-science",    icon: "🪐", title: "Планетарии и научные музеи",      subtitle: "Алматы Ø22 м tilt 30°, 6× Carl Zeiss VELVET 4K HDR Laser, Dolby Atmos, IPS",   level: "L5", exercises: 4,  color: "blue"    },
+
+  // ── IT-инфраструктура и образование 2.0 ──
+  { id: "tech-park-incubator",    category: "practice",  href: "/smeta-trainer/drawings-practice/tech-park-incubator",    icon: "💻", title: "Технопарки и IT-инкубаторы",      subtitle: "Astana Hub 26 000 м², фальшпол 250 мм + 2600 Floor Box, WELL v2 Platinum, Stratasys F900", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "coworking-flex-office",  category: "practice",  href: "/smeta-trainer/drawings-practice/coworking-flex-office",  icon: "🏢", title: "Коворкинги и гибкие офисы",       subtitle: "Multispace Алматы 280 мест, Framery O phone booths, VLAN per tenant, ANSI/ASA S12.60",  level: "L5", exercises: 4,  color: "orange"  },
+  { id: "edutech-school-modern",  category: "practice",  href: "/smeta-trainer/drawings-practice/edutech-school-modern",  icon: "🎓", title: "EduTech-школы IB/Cambridge",      subtitle: "Quantum Алматы 800 учащ., 48 Promethean ActivPanel 75 inch, Stratasys F123 STEM, IB World",  level: "L5", exercises: 4,  color: "blue"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

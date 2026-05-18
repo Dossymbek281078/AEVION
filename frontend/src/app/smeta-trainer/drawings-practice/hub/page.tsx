@@ -368,6 +368,11 @@ const MODULES: Module[] = [
   { id: "seismic-isolation",      category: "structure", href: "/smeta-trainer/drawings-practice/seismic-isolation",      icon: "🌐", title: "Сейсмоизоляция зданий",           subtitle: "Алматы 9-10 баллов, LRB Bridgestone + FPS + viscous damper, СН РК 2.03-30 + ASCE 7-22", level: "L5", exercises: 4,  color: "red"     },
   { id: "super-tall-buildings",   category: "structure", href: "/smeta-trainer/drawings-practice/super-tall-buildings",   icon: "🏙️", title: "Сверхвысотные здания 200+ м",     subtitle: "Abu Dhabi Plaza 320 м/88 эт., Outrigger + ядро C80, TMD 500 т, мегаколонны Ø2000 мм",  level: "L5", exercises: 4,  color: "sky"     },
   { id: "seismic-isolation-bridges", category: "structure", href: "/smeta-trainer/drawings-practice/seismic-isolation-bridges", icon: "🌉", title: "Сейсмостойкие мосты",          subtitle: "БАКАД эстакады, LRB Mageba + Taylor demper + Cable Restrainer, AASHTO LRFD Bridge", level: "L5", exercises: 4,  color: "slate"   },
+
+  // ── Гидротехнические сооружения и аквакультура ──
+  { id: "canals-irrigation",      category: "utilities", href: "/smeta-trainer/drawings-practice/canals-irrigation",      icon: "💧", title: "Магистральные каналы",            subtitle: "БАК 168 км Q=85 м³/с, Сатпаева 458 км, облицовка PCC C25/30 W6 F300, СНиП 2.06.03", level: "L5", exercises: 4,  color: "blue"    },
+  { id: "caspian-ports",          category: "utilities", href: "/smeta-trainer/drawings-practice/caspian-ports",          icon: "⚓", title: "Каспийские морпорты",             subtitle: "Актау 10 млн т, больверк Larssen 32, защита от колебаний Каспия ±3 м, СНиП 2.06.04", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "aquaculture-farms",      category: "utilities", href: "/smeta-trainer/drawings-practice/aquaculture-farms",      icon: "🐟", title: "Аквакультура и рыбоводство",      subtitle: "RAS 200 т осётра/год, Wedeco УФ + озон, биофильтр K1, FAO Biosecurity",            level: "L5", exercises: 4,  color: "teal"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

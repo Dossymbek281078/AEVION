@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { fideConfidenceInterval, nearestAnchor, RATING_ANCHORS } from "./ratingCalibration";
 
 /**
  * Player Stats Dashboard — visual summary накопленной статистики игрока.
@@ -28,7 +29,7 @@ type SavedGame = {
 
 type Stats = { w: number; l: number; d: number };
 
-type Tab = "overview" | "openings" | "timing" | "trend";
+type Tab = "overview" | "openings" | "timing" | "trend" | "calibration";
 
 type Props = {
   open: boolean;
@@ -199,6 +200,7 @@ export default function PlayerStatsDashboard({
             ["openings", "Дебюты"],
             ["timing", "Время"],
             ["trend", "Тренд"],
+            ["calibration", "FIDE"],
           ] as [Tab, string][]).map(([id, label]) => {
             const active = tab === id;
             return (
@@ -397,6 +399,72 @@ export default function PlayerStatsDashboard({
               </div>
             </>
           )}
+
+          {tab === "calibration" && (() => {
+            const ci = fideConfidenceInterval(rating, metrics.total);
+            const anchor = nearestAnchor(rating);
+            return (
+              <>
+                <div style={{
+                  padding: 20, borderRadius: 12,
+                  background: `linear-gradient(135deg, ${surface2}, rgba(167,139,250,0.05))`,
+                  border: `1px solid ${border}`,
+                  marginBottom: 16,
+                  textAlign: "center" as const,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: textDim, letterSpacing: 0.6, textTransform: "uppercase" as const, marginBottom: 6 }}>
+                    Ваша оценка по FIDE-шкале
+                  </div>
+                  <div style={{ fontSize: 40, fontWeight: 900, color: brand, lineHeight: 1, marginBottom: 6 }}>
+                    {anchor.badge} {ci.fide}
+                  </div>
+                  <div style={{ fontSize: 13, color: text, fontWeight: 800, marginBottom: 4 }}>
+                    {anchor.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: textDim, fontFamily: "ui-monospace, monospace" }}>
+                    диапазон: {ci.low}–{ci.high} · по {ci.samples} партиям
+                  </div>
+                  <div style={{ fontSize: 11, color: textDim, marginTop: 10, lineHeight: 1.4 }}>
+                    {anchor.desc}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11, fontWeight: 800, color: textDim, marginBottom: 8, letterSpacing: 0.4, textTransform: "uppercase" as const }}>
+                  Шкала AEVION ↔ FIDE
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {RATING_ANCHORS.map(a => {
+                    const isMe = a.title === anchor.title;
+                    return (
+                      <div key={a.title} style={{
+                        padding: "6px 12px", borderRadius: 6,
+                        background: isMe ? `${brand}15` : surface2,
+                        border: `1px solid ${isMe ? brand : border}`,
+                        display: "flex", alignItems: "center", gap: 10,
+                      }}>
+                        <span style={{ fontSize: 16, width: 28, textAlign: "center" as const }}>{a.badge}</span>
+                        <span style={{ flex: 1, fontSize: 11, fontWeight: isMe ? 900 : 700, color: isMe ? brand : text }}>
+                          {a.title}
+                        </span>
+                        <span style={{ fontSize: 10, color: textDim, fontFamily: "ui-monospace, monospace" }}>
+                          AEV {a.internal}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: isMe ? brand : textMute, minWidth: 60, textAlign: "right" as const, fontFamily: "ui-monospace, monospace" }}>
+                          FIDE {a.fide}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={{ fontSize: 10, color: textMute, marginTop: 12, lineHeight: 1.5, padding: "8px 12px", background: surface2, borderRadius: 6 }}>
+                  Калибровка приблизительная — построена на anchor-точках уровней.
+                  По мере набора партий (100+) оценка стабилизируется до ±50 ELO.
+                  Полная калибровка через CPI factor regression появится после corpus dataset.
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

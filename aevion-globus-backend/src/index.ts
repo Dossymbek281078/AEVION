@@ -35,6 +35,7 @@ import { cyberchessRouter } from "./routes/cyberchess";
 import cyberchessTournamentsRouter from "./routes/cyberchessTournaments";
 import cyberchessDailyRouter from "./routes/cyberchessDaily";
 import cyberchessVoiceCoachRouter from "./routes/cyberchessVoiceCoach";
+import cyberchessSpectatorRouter from "./routes/cyberchessSpectator";
 import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
@@ -429,6 +430,7 @@ app.use("/api/cyberchess", cyberchessRouter);
 app.use("/api/cyberchess-tournaments", cyberchessTournamentsRouter);
 app.use("/api/cyberchess-daily", cyberchessDailyRouter);
 app.use("/api/cyberchess-voice-coach", cyberchessVoiceCoachRouter);
+app.use("/api/cyberchess-spectator", cyberchessSpectatorRouter);
 app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================

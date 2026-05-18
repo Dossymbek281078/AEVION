@@ -1186,6 +1186,41 @@ export default function CyberChessPage(){
   // Achievement panel + auto-detect newly-unlocked from catalog
   const[showAchievements,sShowAchievements]=useState(false);
   const[showStatsDashboard,sShowStatsDashboard]=useState(false);
+  // Spectator publish: когда true — игрок публикует свою партию через POST /publish
+  const[spectatorPublish,sSpectatorPublish]=useState<boolean>(()=>{
+    try{return localStorage.getItem("cc_spectator_publish_v1")==="1"}catch{return false}
+  });
+  useEffect(()=>{try{localStorage.setItem("cc_spectator_publish_v1",spectatorPublish?"1":"0")}catch{}},[spectatorPublish]);
+  const spectatorGameIdRef=useRef<string|null>(null);
+  // Publish current state на каждое изменение позиции/хода (если on && spectatorPublish)
+  useEffect(()=>{
+    if(!spectatorPublish||!on||setup)return;
+    const payload={
+      gameId:spectatorGameIdRef.current||undefined,
+      hostName:(typeof window!=="undefined"?(localStorage.getItem("aevion_user_display_name")||"Anon"):"Anon"),
+      fen:game.fen(),
+      hist,
+      evalCp:typeof evalCp==="number"?evalCp:undefined,
+      evalMate:typeof evalMate==="number"?evalMate:undefined,
+      lastSan:hist[hist.length-1],
+      aiLevel:lv.name,
+      rating:rat,
+      result:over||undefined,
+    };
+    fetch("/api/cyberchess-spectator/publish",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),
+    }).then(r=>r.ok?r.json():null).then(d=>{
+      if(d?.gameId)spectatorGameIdRef.current=d.gameId;
+    }).catch(()=>{});
+  },[spectatorPublish,on,setup,bk,over]);
+  // On disable — отозвать стрим из registry
+  useEffect(()=>{
+    if(spectatorPublish||!spectatorGameIdRef.current)return;
+    const id=spectatorGameIdRef.current;
+    spectatorGameIdRef.current=null;
+    fetch(`/api/cyberchess-spectator/${id}`,{method:"DELETE"}).catch(()=>{});
+  },[spectatorPublish]);
   // Avatar emoji picker (shop v2 — owned.avatar_emoji)
   const[avatarEmoji,sAvatarEmoji]=useState<string>(()=>{
     try{return localStorage.getItem("cc_avatar_emoji_v1")||"👤"}catch{return "👤"}
@@ -5079,7 +5114,9 @@ export default function CyberChessPage(){
           {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
           {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
           {label:"🏆 Достижения",hint:"Каталог + прогресс",onClick:()=>sShowAchievements(true)},
-          {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время",onClick:()=>sShowStatsDashboard(true)},
+          {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время, FIDE",onClick:()=>sShowStatsDashboard(true)},
+          {label:spectatorPublish?"📡 Стрим ON":"📡 Стрим",hint:spectatorPublish?"Партия публикуется зрителям — клик чтобы остановить":"Включить стрим партии для зрителей",onClick:()=>sSpectatorPublish(v=>!v)},
+          {label:"👀 Смотреть",hint:"Открыть hub live-партий других игроков",onClick:()=>{window.location.href="/cyberchess/spectator"}},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
         ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
           style={{

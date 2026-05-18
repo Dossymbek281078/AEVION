@@ -81,6 +81,7 @@ import TurnClock from "./TurnClock";
 import AchievementPanel from "./AchievementPanel";
 import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import PlayerStatsDashboard from "./PlayerStatsDashboard";
+import AvatarPicker from "./AvatarPicker";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -1185,6 +1186,12 @@ export default function CyberChessPage(){
   // Achievement panel + auto-detect newly-unlocked from catalog
   const[showAchievements,sShowAchievements]=useState(false);
   const[showStatsDashboard,sShowStatsDashboard]=useState(false);
+  // Avatar emoji picker (shop v2 — owned.avatar_emoji)
+  const[avatarEmoji,sAvatarEmoji]=useState<string>(()=>{
+    try{return localStorage.getItem("cc_avatar_emoji_v1")||"👤"}catch{return "👤"}
+  });
+  useEffect(()=>{try{localStorage.setItem("cc_avatar_emoji_v1",avatarEmoji)}catch{}},[avatarEmoji]);
+  const[showAvatarPicker,sShowAvatarPicker]=useState(false);
   // ── Counters для achievements (variantsTried / coachUsed / ecosystemVisits / loginStreak) ──
   const[coachUsedCount,sCoachUsedCount]=useState<number>(()=>{
     try{return parseInt(localStorage.getItem("cc_coach_used_v1")||"0")||0}catch{return 0}
@@ -5132,11 +5139,15 @@ export default function CyberChessPage(){
               }}>
                 {/* Avatar + name + rank */}
                 <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
-                  <div style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+                  <div
+                    onClick={!isAI&&chessy.owned.avatar_emoji?()=>sShowAvatarPicker(true):undefined}
+                    title={!isAI&&chessy.owned.avatar_emoji?"Сменить аватар":undefined}
+                    style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
                     background:isAI?al.color+"22":"rgba(255,255,255,0.08)",
                     border:`1px solid ${isAI?al.color+"44":CC.border}`,
-                    fontSize:16,flexShrink:0}}>
-                    {isAI?"🤖":"👤"}
+                    fontSize:16,flexShrink:0,
+                    cursor:!isAI&&chessy.owned.avatar_emoji?"pointer":"default"}}>
+                    {isAI?"🤖":avatarEmoji}
                   </div>
                   <div style={{minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -11358,6 +11369,14 @@ ${question.trim()}`;
       context={achContext}
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
+    />
+    <AvatarPicker
+      open={showAvatarPicker}
+      onClose={()=>sShowAvatarPicker(false)}
+      current={avatarEmoji}
+      onSelect={(e)=>{sAvatarEmoji(e);showToast(`🎭 Аватар: ${e}`,"success")}}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} brand={CC.brand}
     />
     <PlayerStatsDashboard
       open={showStatsDashboard}

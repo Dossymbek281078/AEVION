@@ -31,8 +31,8 @@ const MODULES = [
   { id: "qpersona",         noun: "personas",   create: { name: "Smoke",   traits: ["test"], blueprint: "x" } },
   { id: "voice-of-earth",   noun: "feeds",      create: { location: "Test", metric: "pm2.5", observation: "x" } },
   { id: "deepsan",          noun: "runs",       create: { facility: "TestF", method: "uv",   } },
-  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke",  body: "Anon test body" } },
-  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, label: "Smoke",  year: 2026, occasion: "test" } },
+  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke", body: "Anon test body", ciphertext: "c2lnbmVkLXNtb2tlLXRlc3Q=" } },
+  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", year: 2026, occasion: "test" } },
 ];
 
 let passed = 0; let failed = 0;
@@ -51,7 +51,8 @@ async function exercise(m) {
 
   // 1. list
   let r = await req("GET", `/api/${m.id}/${m.noun}?limit=3`);
-  if (r.status === 200 && Array.isArray(r.body?.items)) ok(`GET /api/${m.id}/${m.noun}`, `total=${r.body.total}`);
+  const listArr = r.body?.items ?? r.body?.[m.noun] ?? r.body;
+  if (r.status === 200 && Array.isArray(listArr)) ok(`GET /api/${m.id}/${m.noun}`, `total=${r.body?.total ?? listArr.length}`);
   else { fail(`list /${m.noun}`, `${r.status}`); return; }
 
   // 2. create

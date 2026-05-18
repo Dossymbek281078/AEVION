@@ -398,6 +398,11 @@ const MODULES: Module[] = [
   { id: "landfill-tbo",           category: "process",   href: "/smeta-trainer/drawings-practice/landfill-tbo",           icon: "🗑️", title: "Полигоны ТБО (захоронение)",      subtitle: "Кеңқарасу 350 000 т/год, HDPE 2 мм + GCL Bentofix, биогаз КГЭС, EU 1999/31/EC", level: "L5", exercises: 4,  color: "lime"    },
   { id: "incinerator-plants",     category: "process",   href: "/smeta-trainer/drawings-practice/incinerator-plants",     icon: "🔥", title: "Мусоросжигание Waste-to-Energy",  subtitle: "Шымкент Veolia 500 т/сут, Martin grate +850°C×2 с, ESP+SCR+AC, EU IED Annex VI", level: "L5", exercises: 4,  color: "orange"  },
   { id: "recycling-plants",       category: "process",   href: "/smeta-trainer/drawings-practice/recycling-plants",       icon: "♻️", title: "Мусоросортировка MRF",            subtitle: "Алматы 500 т/сут, Tomra Autosort 5 NIR + Sutco BRT + Macpresse, EU 2008/98/EC",  level: "L5", exercises: 4,  color: "teal"    },
+
+  // ── Спорт-вода / велотрек / медиа ──
+  { id: "aquatic-center",         category: "practice",  href: "/smeta-trainer/drawings-practice/aquatic-center",         icon: "🏊", title: "Олимпийские аква-центры FINA",    subtitle: "Almaty Aquatics, 50×25 м + 10-м вышка, Vidrepur мозаика, 3300 м³/ч, FINA FR-2.2", level: "L5", exercises: 4,  color: "cyan"    },
+  { id: "velodrome-track",        category: "practice",  href: "/smeta-trainer/drawings-practice/velodrome-track",        icon: "🚴", title: "Крытые велотреки UCI",            subtitle: "Сарыарка 250 м, виражи R=23 м банк. 42°, Балтийск. сосна + Канадск. клён, UCI Tier 1", level: "L5", exercises: 4,  color: "sky"     },
+  { id: "tv-radio-studio",        category: "practice",  href: "/smeta-trainer/drawings-practice/tv-radio-studio",        icon: "📺", title: "Теле- и радиостудии",             subtitle: "Хабар Астана, Room-in-Room Rw=65 дБ, Arri SkyPanel, бесшумная HVAC NR≤25, EBU 3253", level: "L5", exercises: 4,  color: "fuchsia" },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

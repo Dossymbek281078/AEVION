@@ -388,6 +388,11 @@ const MODULES: Module[] = [
   { id: "ice-rink-arenas",        category: "special",   href: "/smeta-trainer/drawings-practice/ice-rink-arenas",        icon: "⛸️", title: "Ледовые арены",                   subtitle: "Барыс Арена 12 000 мест, IIHF 60×30 м, R717 NH₃ 1.2 МВт, ПБ 09-595, IIAR", level: "L5", exercises: 4,  color: "sky"     },
   { id: "logistics-warehouse",    category: "special",   href: "/smeta-trainer/drawings-practice/logistics-warehouse",    icon: "📦", title: "Склады класса А+ FEDIA",          subtitle: "Хоргос DAMU 100 000 м², ВРС 12 м, Jungheinrich + AS/RS, ESFR-спринклер, FEM 9.831", level: "L5", exercises: 4,  color: "zinc"    },
   { id: "highway-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/highway-construction",   icon: "🛣️", title: "Магистрали и автобаны",           subtitle: "БАКАД 66 км, А1+ЩМА-15 SBS 210 мм, AASHTO LRFD + Superpave, СН РК 3.03-09",         level: "L5", exercises: 4,  color: "stone"   },
+
+  // ── Оборона и стратегические объекты ──
+  { id: "military-airbase",       category: "special",   href: "/smeta-trainer/drawings-practice/military-airbase",       icon: "✈️", title: "Военные аэродромы",               subtitle: "Жетыген Су-30СМ, ВПП 3500×60 B45 фибра, HAS бункеры, STANAG 3680 + ICAO 4F", level: "L5", exercises: 4,  color: "green"   },
+  { id: "radar-stations",         category: "special",   href: "/smeta-trainer/drawings-practice/radar-stations",         icon: "📡", title: "РЛС и узлы связи",                subtitle: "Дарьял-У/П-18, антенна Ø11 м H=30 м, radome FRP, MIL-STD-188-125-1 EMP",  level: "L5", exercises: 4,  color: "violet"  },
+  { id: "strategic-fuel-storage", category: "special",   href: "/smeta-trainer/drawings-practice/strategic-fuel-storage", icon: "⛽", title: "Стратегические нефтехранилища",   subtitle: "Атасу-Алашанькоу 500 000 т, 30 РВС-20000 понтон, AFFF + Boilover NFPA 30", level: "L5", exercises: 4,  color: "orange"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

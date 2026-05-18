@@ -9,9 +9,9 @@ export const projects: GlobusProject[] = [
     code: "GLOBUS",
     name: "AEVION Globus",
     description:
-      "Центральная карта и портал экосистемы AEVION: реестр проектов, статусы, интеграции.",
+      "Центральная карта и портал экосистемы AEVION: реестр 29 проектов, 3D-карта, маркеры по странам, статусы, интеграции.",
     kind: "core",
-    status: "launched",
+    status: "live",
     priority: 1,
     tags: ["core", "portal", "registry"],
     createdAt: now,

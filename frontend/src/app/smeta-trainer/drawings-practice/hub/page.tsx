@@ -418,6 +418,11 @@ const MODULES: Module[] = [
   { id: "kindergarten-detsad",    category: "practice",  href: "/smeta-trainer/drawings-practice/kindergarten-detsad",    icon: "🧸", title: "Детские сады ДДУ",                subtitle: "ПДОП-150 мест Минпросвещ., 6 групп, KOMPAN + EPDM площадки, СанПиН РК 4.01-010", level: "L5", exercises: 4,  color: "yellow"  },
   { id: "circus-amphitheater",    category: "practice",  href: "/smeta-trainer/drawings-practice/circus-amphitheater",    icon: "🎪", title: "Цирки и амфитеатры",              subtitle: "Алматинский Гос. Цирк 2000 мест, манеж Ø13 м, Trafostore 24 лебёдки, FII",       level: "L5", exercises: 4,  color: "purple"  },
   { id: "cinema-multiplex",       category: "practice",  href: "/smeta-trainer/drawings-practice/cinema-multiplex",       icon: "🎬", title: "Мультиплексы и кинотеатры",       subtitle: "Chaplin 14 залов + IMAX Laser dual, Christie CP4440-RGB, Dolby Atmos 64-кан., DCI", level: "L5", exercises: 4,  color: "red"     },
+
+  // ── Здравоохранение и сервис ──
+  { id: "maternity-perinatal",    category: "practice",  href: "/smeta-trainer/drawings-practice/maternity-perinatal",    icon: "🤱", title: "Перинатальные центры и роддома",  subtitle: "РНЦМД Астана 350 коек, NICU III Drager Babyleo, операц. ISO 5, Code Pink Joint Comm", level: "L5", exercises: 4,  color: "pink"    },
+  { id: "spa-wellness",           category: "practice",  href: "/smeta-trainer/drawings-practice/spa-wellness",           icon: "🌿", title: "СПА-курорты и термальные центры", subtitle: "Sary-Agash +60°C минер., 3 термальных бассейна, кедровые бочки, ESPA + DIN EN 15288",  level: "L5", exercises: 4,  color: "teal"    },
+  { id: "veterinary-clinics",     category: "practice",  href: "/smeta-trainer/drawings-practice/veterinary-clinics",     icon: "🐾", title: "Ветеринарные клиники 24/7",       subtitle: "Vetlife Алматы 3000 м², PetCT Toshiba + IDEXX лаб., AAHA + OIE biosafety zoonoses",  level: "L5", exercises: 4,  color: "lime"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -383,6 +383,11 @@ const MODULES: Module[] = [
   { id: "desalination-plants",    category: "special",   href: "/smeta-trainer/drawings-practice/desalination-plants",    icon: "🌊", title: "Опреснительные станции SWRO",     subtitle: "МАЭК Актау 50 000 м³/сутки, Toray TM820V + ERI PX-300, NSF 61, WHO Guidelines", level: "L5", exercises: 4,  color: "blue"    },
   { id: "glass-factories",        category: "special",   href: "/smeta-trainer/drawings-practice/glass-factories",        icon: "🪟", title: "Стекольные заводы Float Glass",   subtitle: "Astana Glass 600 т/сут, печь Sorg + Float Bath Sn 50×7 м +1100°C, Pilkington", level: "L5", exercises: 4,  color: "lime"    },
   { id: "pharma-plants",          category: "special",   href: "/smeta-trainer/drawings-practice/pharma-plants",          icon: "💊", title: "Фармацевтические заводы GMP",     subtitle: "Химфарм Шымкент, классы A/B/C/D ISO 14644, HEPA H14, EU GMP Annex 1, WHO TRS 957", level: "L5", exercises: 4,  color: "slate"   },
+
+  // ── Лёд, склад, магистраль ──
+  { id: "ice-rink-arenas",        category: "special",   href: "/smeta-trainer/drawings-practice/ice-rink-arenas",        icon: "⛸️", title: "Ледовые арены",                   subtitle: "Барыс Арена 12 000 мест, IIHF 60×30 м, R717 NH₃ 1.2 МВт, ПБ 09-595, IIAR", level: "L5", exercises: 4,  color: "sky"     },
+  { id: "logistics-warehouse",    category: "special",   href: "/smeta-trainer/drawings-practice/logistics-warehouse",    icon: "📦", title: "Склады класса А+ FEDIA",          subtitle: "Хоргос DAMU 100 000 м², ВРС 12 м, Jungheinrich + AS/RS, ESFR-спринклер, FEM 9.831", level: "L5", exercises: 4,  color: "zinc"    },
+  { id: "highway-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/highway-construction",   icon: "🛣️", title: "Магистрали и автобаны",           subtitle: "БАКАД 66 км, А1+ЩМА-15 SBS 210 мм, AASHTO LRFD + Superpave, СН РК 3.03-09",         level: "L5", exercises: 4,  color: "stone"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

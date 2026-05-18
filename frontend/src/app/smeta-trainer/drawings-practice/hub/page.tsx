@@ -363,6 +363,11 @@ const MODULES: Module[] = [
   { id: "permafrost-objects",     category: "special",   href: "/smeta-trainer/drawings-practice/permafrost-objects",     icon: "❄️", title: "Объекты на вечной мерзлоте",      subtitle: "Сваи Long Yang, термосифоны СВВ-25 (CO₂), проветр. подполье H=1.5 м, СНиП 2.02.04", level: "L5", exercises: 4,  color: "cyan"    },
   { id: "desert-objects",         category: "special",   href: "/smeta-trainer/drawings-practice/desert-objects",         icon: "🏜️", title: "Объекты в пустынной зоне",        subtitle: "Кызылкум +45°C, «русло-катушка» водосбор, Cool Roof, защита от «Афганец», СП РК 4.04", level: "L5", exercises: 4,  color: "yellow"  },
   { id: "mountain-resort",        category: "special",   href: "/smeta-trainer/drawings-practice/mountain-resort",        icon: "🎿", title: "Горнолыжные курорты",             subtitle: "Чимбулак 6-кр. Doppelmayr D-LINE, TechnoAlpin TR-V, галереи Daher, EN 1907",       level: "L5", exercises: 4,  color: "emerald" },
+
+  // ── Сейсмостойкое и высотное строительство ──
+  { id: "seismic-isolation",      category: "structure", href: "/smeta-trainer/drawings-practice/seismic-isolation",      icon: "🌐", title: "Сейсмоизоляция зданий",           subtitle: "Алматы 9-10 баллов, LRB Bridgestone + FPS + viscous damper, СН РК 2.03-30 + ASCE 7-22", level: "L5", exercises: 4,  color: "red"     },
+  { id: "super-tall-buildings",   category: "structure", href: "/smeta-trainer/drawings-practice/super-tall-buildings",   icon: "🏙️", title: "Сверхвысотные здания 200+ м",     subtitle: "Abu Dhabi Plaza 320 м/88 эт., Outrigger + ядро C80, TMD 500 т, мегаколонны Ø2000 мм",  level: "L5", exercises: 4,  color: "sky"     },
+  { id: "seismic-isolation-bridges", category: "structure", href: "/smeta-trainer/drawings-practice/seismic-isolation-bridges", icon: "🌉", title: "Сейсмостойкие мосты",          subtitle: "БАКАД эстакады, LRB Mageba + Taylor demper + Cable Restrainer, AASHTO LRFD Bridge", level: "L5", exercises: 4,  color: "slate"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

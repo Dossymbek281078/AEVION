@@ -373,6 +373,11 @@ const MODULES: Module[] = [
   { id: "canals-irrigation",      category: "utilities", href: "/smeta-trainer/drawings-practice/canals-irrigation",      icon: "💧", title: "Магистральные каналы",            subtitle: "БАК 168 км Q=85 м³/с, Сатпаева 458 км, облицовка PCC C25/30 W6 F300, СНиП 2.06.03", level: "L5", exercises: 4,  color: "blue"    },
   { id: "caspian-ports",          category: "utilities", href: "/smeta-trainer/drawings-practice/caspian-ports",          icon: "⚓", title: "Каспийские морпорты",             subtitle: "Актау 10 млн т, больверк Larssen 32, защита от колебаний Каспия ±3 м, СНиП 2.06.04", level: "L5", exercises: 4,  color: "cyan"    },
   { id: "aquaculture-farms",      category: "utilities", href: "/smeta-trainer/drawings-practice/aquaculture-farms",      icon: "🐟", title: "Аквакультура и рыбоводство",      subtitle: "RAS 200 т осётра/год, Wedeco УФ + озон, биофильтр K1, FAO Biosecurity",            level: "L5", exercises: 4,  color: "teal"    },
+
+  // ── Космос, связь, гос. безопасность ──
+  { id: "space-launch-facility",  category: "special",   href: "/smeta-trainer/drawings-practice/space-launch-facility",  icon: "🚀", title: "Космодромы и стартовые комплексы", subtitle: "Байтерек/Байконур, газоход B60 H=30 м, бункер ЛКЗ 6 м, Roscosmos РД-13", level: "L5", exercises: 4,  color: "violet"  },
+  { id: "telecom-tower",          category: "special",   href: "/smeta-trainer/drawings-practice/telecom-tower",          icon: "📡", title: "Телебашни и радиовышки",          subtitle: "Кок-Тобе 372 м, решётка 420 т 80 мкм цинк, FAA L-810/L-864, FCC OET-65",   level: "L5", exercises: 4,  color: "zinc"    },
+  { id: "government-akimat",      category: "special",   href: "/smeta-trainer/drawings-practice/government-akimat",      icon: "🏛️", title: "Парламент, Акиматы и гос. здания", subtitle: "Парламент РК 56 000 м², SCIF TEMPEST экран, ANSI/ASIS PCS, Anti-Ram болларды", level: "L5", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

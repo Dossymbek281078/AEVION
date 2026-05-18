@@ -378,6 +378,11 @@ const MODULES: Module[] = [
   { id: "space-launch-facility",  category: "special",   href: "/smeta-trainer/drawings-practice/space-launch-facility",  icon: "🚀", title: "Космодромы и стартовые комплексы", subtitle: "Байтерек/Байконур, газоход B60 H=30 м, бункер ЛКЗ 6 м, Roscosmos РД-13", level: "L5", exercises: 4,  color: "violet"  },
   { id: "telecom-tower",          category: "special",   href: "/smeta-trainer/drawings-practice/telecom-tower",          icon: "📡", title: "Телебашни и радиовышки",          subtitle: "Кок-Тобе 372 м, решётка 420 т 80 мкм цинк, FAA L-810/L-864, FCC OET-65",   level: "L5", exercises: 4,  color: "zinc"    },
   { id: "government-akimat",      category: "special",   href: "/smeta-trainer/drawings-practice/government-akimat",      icon: "🏛️", title: "Парламент, Акиматы и гос. здания", subtitle: "Парламент РК 56 000 м², SCIF TEMPEST экран, ANSI/ASIS PCS, Anti-Ram болларды", level: "L5", exercises: 4,  color: "red"     },
+
+  // ── Спец. технологические объекты ──
+  { id: "desalination-plants",    category: "special",   href: "/smeta-trainer/drawings-practice/desalination-plants",    icon: "🌊", title: "Опреснительные станции SWRO",     subtitle: "МАЭК Актау 50 000 м³/сутки, Toray TM820V + ERI PX-300, NSF 61, WHO Guidelines", level: "L5", exercises: 4,  color: "blue"    },
+  { id: "glass-factories",        category: "special",   href: "/smeta-trainer/drawings-practice/glass-factories",        icon: "🪟", title: "Стекольные заводы Float Glass",   subtitle: "Astana Glass 600 т/сут, печь Sorg + Float Bath Sn 50×7 м +1100°C, Pilkington", level: "L5", exercises: 4,  color: "lime"    },
+  { id: "pharma-plants",          category: "special",   href: "/smeta-trainer/drawings-practice/pharma-plants",          icon: "💊", title: "Фармацевтические заводы GMP",     subtitle: "Химфарм Шымкент, классы A/B/C/D ISO 14644, HEPA H14, EU GMP Annex 1, WHO TRS 957", level: "L5", exercises: 4,  color: "slate"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

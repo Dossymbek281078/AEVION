@@ -591,6 +591,14 @@ export default function CyberChessPage(){
   const[over,sOver]=useState<string|null>(null);
   const[showGameOver,sShowGameOver]=useState(false);
   const[hist,sHist]=useState<string[]>([]);
+  // Persist live game (SAN history + FEN) to localStorage on every move —
+  // /cyberchess/repertoire reads it for AutoDetect ECO + Lichess real stats.
+  useEffect(()=>{
+    try{
+      const fen=game.fen();
+      localStorage.setItem("cc_live_game_v1", JSON.stringify({hist, fen, t: Date.now()}));
+    }catch{}
+  },[hist, game, bk]);
   const[think,sThink]=useState(false);
   const[capW,sCapW]=useState<string[]>([]);
   const[capB,sCapB]=useState<string[]>([]);

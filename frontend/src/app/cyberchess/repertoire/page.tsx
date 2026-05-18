@@ -17,6 +17,7 @@ import {
   saveRepertoire,
   successRate,
 } from "../openingRepertoireData";
+import { sanToUci } from "../sanToUci";
 
 const COLORS = {
   bg: "#0b0414",
@@ -42,6 +43,25 @@ export default function RepertoirePage() {
   const [mode, setMode] = useState<Mode>("manage");
   const [branches, setBranches] = useState<RepertoireBranch[]>([]);
   const [refreshTick, setRefreshTick] = useState(0);
+  // Live game state from /cyberchess (written to localStorage `cc_live_game_v1`
+  // by page.tsx on every move). Передаём в OpeningRepertoire для AutoDetect ECO
+  // + real Lichess stats по текущей позиции.
+  const [liveFen, setLiveFen] = useState<string | undefined>(undefined);
+  const [liveUci, setLiveUci] = useState<string[] | undefined>(undefined);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("cc_live_game_v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { hist?: string[]; fen?: string; t?: number };
+      // Stale > 24h — ignore (юзер не в активной партии).
+      if (parsed?.t && Date.now() - parsed.t > 24 * 3600 * 1000) return;
+      if (parsed?.fen) setLiveFen(parsed.fen);
+      if (parsed?.hist && parsed.hist.length > 0) {
+        const uci = sanToUci(parsed.hist);
+        if (uci.length > 0) setLiveUci(uci);
+      }
+    } catch {}
+  }, []);
 
   // Reload from storage when mode flips back to manage (after import etc.)
   useEffect(() => {
@@ -90,7 +110,13 @@ export default function RepertoirePage() {
       </div>
 
       {mode === "manage" && (
-        <OpeningRepertoire open={true} onClose={() => {}} fullPage={true} />
+        <OpeningRepertoire
+          open={true}
+          onClose={() => {}}
+          fullPage={true}
+          currentFen={liveFen}
+          currentUciMoves={liveUci}
+        />
       )}
 
       {mode === "search" && (

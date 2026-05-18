@@ -1702,9 +1702,12 @@ export default function CyberChessPage(){
   // getting throttled. The `stop()` call in the live-eval cleanup (plus stop at start
   // of SF.eval, see class) is enough to abort a stale search without worker recycling.
 
-  // Auto-evaluate each move in analysis tab — progressive: fast pass (d10), then refine (d18)
+  // Realtime move quality — progressive eval (d8 fast pass всегда, d18 refine только в analysis/coach).
+  // Phase 1 (d8) даёт badges в moves list почти мгновенно после каждого хода юзера/AI.
   useEffect(()=>{
-    if((tab!=="analysis"&&tab!=="coach")||!sfR.current?.ready()||hist.length===0)return;
+    if(!sfR.current?.ready()||hist.length===0)return;
+    // Skip realtime в setup или пока партия не началась
+    if(setup&&tab==="play")return;
     let cancelled=false;
 
     const evalAt=(fen:string,depth:number):Promise<{cp:number;mate:number}>=>{
@@ -1749,7 +1752,9 @@ export default function CyberChessPage(){
         }
       }
       // PHASE 2: Refine with depth 18 (slower but much more accurate, 50-100% progress)
+      // Только в analysis/coach tab — не тратим CPU во время play.
       if(cancelled)return;
+      if(tab!=="analysis"&&tab!=="coach"){sAnalysisProgress(100);return;}
       const results2=[...(analysis.length>=hist.length?analysis:[])];
       if(results2.length<hist.length)return; // wait for phase 1 to complete
       sRefiningAnalysis(true);
@@ -6727,7 +6732,8 @@ export default function CyberChessPage(){
                   const isActivePair=wIsBrowsed||bIsBrowsed||wIsPreview||bIsPreview;
                   const wEval=analysis[wIdx];const bEval=analysis[bIdx];
                   const wQ=wEval?.quality;const bQ=bEval?.quality;
-                  const qIcon=(q?:string)=>q==="blunder"?"??":q==="mistake"?"?":q==="inacc"?"?!":q==="great"?"!":"";
+                  // Realtime quality badges — выразительные emoji + цвет per category
+                  const qIcon=(q?:string)=>q==="blunder"?"💀":q==="mistake"?"❌":q==="inacc"?"⚠":q==="great"?"⭐":"";
                   const qColor=(q?:string)=>q==="blunder"?T.danger:q==="mistake"?"#ea580c":q==="inacc"?"#ca8a04":q==="great"?T.accent:"";
                   // Hover-scrub: snapshot canonical state on first enter, then preview.
                   // Click promotes preview to canonical (browseIdx) and clears the snapshot.

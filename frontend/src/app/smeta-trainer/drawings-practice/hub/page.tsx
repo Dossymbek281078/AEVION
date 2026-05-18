@@ -428,6 +428,11 @@ const MODULES: Module[] = [
   { id: "national-library",       category: "practice",  href: "/smeta-trainer/drawings-practice/national-library",       icon: "📚", title: "Национальные библиотеки",         subtitle: "НАБ РК Foster 30 000 м², 1.5 млн томов, Bruynzeel Compactus + РГС O₂=3%, ISO 11799",  level: "L5", exercises: 4,  color: "indigo"  },
   { id: "ski-resort-snow",        category: "practice",  href: "/smeta-trainer/drawings-practice/ski-resort-snow",        icon: "⛷️", title: "Лыжные трамплины и биатлон",      subtitle: "Алатау K-90/K-125, Profiltex охлаждаемый Inrun, биатлон 30 мишеней Megalink ESA, FIS+IBU", level: "L5", exercises: 4,  color: "sky"     },
   { id: "summer-camp",            category: "practice",  href: "/smeta-trainer/drawings-practice/summer-camp",            icon: "⛺", title: "Детские оздоровит. лагеря",       subtitle: "Балдаурен Боровое 600 мест, 4 корпуса × 150 детей, ФОК+эстрада, СанПиН РК 4.01-015",   level: "L5", exercises: 4,  color: "lime"    },
+
+  // ── Туризм, культура, наука-2 ──
+  { id: "glamping-eco-tourism",   category: "practice",  href: "/smeta-trainer/drawings-practice/glamping-eco-tourism",   icon: "⛺", title: "Глэмпинги и эко-отели",           subtitle: "Charyn Canyon 20 юнитов, off-grid СЭС+LiFePO₄, Phoenix Composting, GSTC", level: "L5", exercises: 4,  color: "emerald" },
+  { id: "art-conservatory",       category: "practice",  href: "/smeta-trainer/drawings-practice/art-conservatory",       icon: "🎼", title: "Консерватории муз./художеств.",   subtitle: "Курмангазы 18 000 м² 4 фак., shoebox концертн. зал RT60 1.8 с, Steinway D",  level: "L5", exercises: 4,  color: "violet"  },
+  { id: "planetarium-science",    category: "practice",  href: "/smeta-trainer/drawings-practice/planetarium-science",    icon: "🪐", title: "Планетарии и научные музеи",      subtitle: "Алматы Ø22 м tilt 30°, 6× Carl Zeiss VELVET 4K HDR Laser, Dolby Atmos, IPS",   level: "L5", exercises: 4,  color: "blue"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

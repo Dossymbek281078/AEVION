@@ -303,6 +303,7 @@ const MODULES: Module[] = [
   // ── Спорт, атом, берегоукрепление ──
   { id: "sports-fields",          category: "practice",  href: "/smeta-trainer/drawings-practice/sports-fields",          icon: "⚽", title: "Спортивные поля и гольф",         subtitle: "FIFA 105×68, IAAF Mondotrack, ITF корты, USGA 18 лунок",          level: "L4", exercises: 4,  color: "emerald" },
   { id: "nuclear-radiation",      category: "special",   href: "/smeta-trainer/drawings-practice/nuclear-radiation",      icon: "☢️", title: "Атомные и радиационные объекты", subtitle: "АЭС Балхаш ВВЭР-1200, бункеры LINAC, КАЭН РК, НРБ-99",          level: "L5", exercises: 4,  color: "red"     },
+  { id: "cyclotron-medical-research", category: "special", href: "/smeta-trainer/drawings-practice/cyclotron-medical-research", icon: "⚛️", title: "Циклотроны и мед. изотопы",      subtitle: "ИЯФ Cyclone 18/9 IBA, F-18 FDG для ПЭТ/КТ, бункер ρ=3.5 т/м³, IAEA TRS-471", level: "L5", exercises: 4,  color: "indigo"  },
   { id: "coast-protection",       category: "special",   href: "/smeta-trainer/drawings-practice/coast-protection",       icon: "🌊", title: "Берегоукрепление и намыв",        subtitle: "Тетраподы 2-25 т, габионы Maccaferri, землесос, Каспий",          level: "L5", exercises: 4,  color: "cyan"    },
 
   // ── Агро, тоннели, нефтехимия ──
@@ -360,6 +361,7 @@ const MODULES: Module[] = [
   { id: "arena-football",         category: "practice",  href: "/smeta-trainer/drawings-practice/arena-football",         icon: "⚽", title: "Футбольные арены",                subtitle: "Astana Arena 30 000 мест, UEFA Cat. 4, ретракт. крыша ПТФЭ, освещ. 2400 лк EBU HDR", level: "L5", exercises: 4,  color: "orange"  },
   { id: "museum-archives",        category: "practice",  href: "/smeta-trainer/drawings-practice/museum-archives",        icon: "🏛️", title: "Музеи и фондохранилища",          subtitle: "Нац. музей РК 74 000 м², +18°C/RH 50%, HEPA F9, Inergen IG-541, ICOM/ISO 11799", level: "L5", exercises: 4,  color: "fuchsia" },
   { id: "observatory-research",   category: "practice",  href: "/smeta-trainer/drawings-practice/observatory-research",   icon: "🔭", title: "Обсерватории и научные станции",  subtitle: "Тянь-Шань Цейсс-1000 d=1 м, купол Ø15 м, раздел. фундамент, IDA Dark Sky",        level: "L5", exercises: 4,  color: "blue"    },
+  { id: "seismology-station",     category: "special",   href: "/smeta-trainer/drawings-practice/seismology-station",     icon: "🌍", title: "Сейсмостанции IMS CTBTO",          subtitle: "КНДЦ Курчатов, Streckeisen STS-2 360s, гранитный бункер 8 м, hyper-array, GPS ±10 нс", level: "L5", exercises: 4,  color: "zinc"    },
 
   // ── Экстремальные климатические зоны ──
   { id: "permafrost-objects",     category: "special",   href: "/smeta-trainer/drawings-practice/permafrost-objects",     icon: "❄️", title: "Объекты на вечной мерзлоте",      subtitle: "Сваи Long Yang, термосифоны СВВ-25 (CO₂), проветр. подполье H=1.5 м, СНиП 2.02.04", level: "L5", exercises: 4,  color: "cyan"    },
@@ -446,6 +448,7 @@ const MODULES: Module[] = [
   { id: "stock-exchange-fintech", category: "special",   href: "/smeta-trainer/drawings-practice/stock-exchange-fintech", icon: "📈", title: "Биржи и финтех-центры",           subtitle: "AIX/KASE 240 Bloomberg Terminal, Tier IV co-location, Dark Fiber NYSE/LSE, MiFID II",  level: "L5", exercises: 4,  color: "emerald" },
   { id: "stadium-large-football", category: "special",   href: "/smeta-trainer/drawings-practice/stadium-large-football", icon: "🏟️", title: "Большие стадионы 50 000+ мест",   subtitle: "Asgard 50 000 bowl, ETFE крыша 25 000 м², Desso GrassMaster + подогрев, FIFA Cat 4", level: "L5", exercises: 4,  color: "orange"  },
   { id: "research-lab-bsl4",      category: "special",   href: "/smeta-trainer/drawings-practice/research-lab-bsl4",      icon: "🦠", title: "BSL-4 лаборатории макс. биозащ.",  subtitle: "КНИИОИ Алматы, suit lab −30 Па тройн. HEPA H14, Trelleborg pos-pressure, ВОЗ 4th ed", level: "L5", exercises: 4,  color: "red"     },
+  { id: "agriculture-research-institute", category: "special", href: "/smeta-trainer/drawings-practice/agriculture-research-institute", icon: "🌱", title: "Агро-НИИ + генбанки растений",   subtitle: "КазНИИЗР Алмалыбак 7000 сортов, Venlo 1 га Priva, генбанк −18/−180 °C 6000 м³, FAO ITPGRFA", level: "L5", exercises: 4,  color: "lime"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

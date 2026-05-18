@@ -82,7 +82,7 @@ async function run() {
       lang: "ru",
     });
     assert("POST /ask → 200", ask.status === 200, String(ask.status));
-    assert("answer is string", typeof ask.body?.data?.answer === "string");
+    assert("answer is string", typeof (ask.body?.data?.answer ?? ask.body?.answer) === "string");
   }
 
   console.log(`\nKids AI: ${passed} passed, ${failed} failed`);

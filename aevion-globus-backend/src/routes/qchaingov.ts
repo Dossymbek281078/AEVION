@@ -35,6 +35,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
 
@@ -455,19 +456,6 @@ qchaingovRouter.get("/stats", readLimit, async (_req, res) => {
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────
-// Lightweight in-memory feed of citizen-proposed governance topics so the
-// QChainGov landing page can demonstrate "anyone can suggest an initiative"
-// without going through full proposal lifecycle (which requires auth + DB).
-
-interface QChainGovConceptMessage {
-  id: string;
-  payload: Record<string, unknown>;
-  tags: string[];
-  createdAt: string;
-}
-
-const QCHAINGOV_CONCEPT_MAX = 200;
-const qchaingovConceptMessages: QChainGovConceptMessage[] = [];
 
 qchaingovRouter.get("/status", readLimit, (_req, res) => {
   res.json({
@@ -482,65 +470,15 @@ qchaingovRouter.get("/status", readLimit, (_req, res) => {
       conceptMessages: "/api/qchaingov/concept/messages",
       conceptStats: "/api/qchaingov/concept-stats",
     },
-    conceptMessagesCount: qchaingovConceptMessages.length,
     timestamp: new Date().toISOString(),
   });
 });
 
-qchaingovRouter.get("/concept/messages", readLimit, (req, res) => {
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
-  const items = qchaingovConceptMessages.slice(0, limit);
-  res.json({ items, total: qchaingovConceptMessages.length, moduleId: "qchaingov", noun: "concept/messages" });
-});
-
-qchaingovRouter.post("/concept/messages", writeLimit, (req, res) => {
-  try {
-    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
-    const payload = (body.payload && typeof body.payload === "object")
-      ? body.payload as Record<string, unknown>
-      : body;
-    const topic = String(payload.topic ?? payload.title ?? "").trim().slice(0, 200);
-    if (!topic) return res.status(400).json({ error: "missing_field", field: "topic" });
-    const motivation = String(payload.motivation ?? payload.summary ?? "").trim().slice(0, 800);
-    const category = String(payload.category ?? "social").trim().slice(0, 40);
-    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : [category, "qchaingov"];
-    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
-    const msg: QChainGovConceptMessage = {
-      id: crypto.randomUUID(),
-      payload: { topic, motivation, category },
-      tags: tags.length ? tags : ["qchaingov"],
-      createdAt: new Date().toISOString(),
-    };
-    qchaingovConceptMessages.unshift(msg);
-    if (qchaingovConceptMessages.length > QCHAINGOV_CONCEPT_MAX) {
-      qchaingovConceptMessages.length = QCHAINGOV_CONCEPT_MAX;
-    }
-    res.status(201).json(msg);
-  } catch (err: unknown) {
-    console.error("[qchaingov] concept_post_failed", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "concept_post_failed" });
-  }
-});
-
-qchaingovRouter.get("/concept-stats", readLimit, (_req, res) => {
-  const now = Date.now();
-  const sevenDays = 7 * 86_400_000;
-  const last7d = qchaingovConceptMessages.filter(
-    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
-  ).length;
-  const tagCounts = new Map<string, number>();
-  for (const m of qchaingovConceptMessages) {
-    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-  }
-  const topTags = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([tag, count]) => ({ tag, count }));
-  res.json({
-    moduleId: "qchaingov",
-    noun: "concept/messages",
-    total: qchaingovConceptMessages.length,
-    last7d,
-    topTags,
-  });
+mountConceptBoard({
+  router: qchaingovRouter,
+  moduleId: "qchaingov",
+  defaultTag: "qchaingov",
+  fieldMap: { idea: "topic", rationale: "motivation", extraFields: ["category"] },
+  readLimit,
+  writeLimit,
 });

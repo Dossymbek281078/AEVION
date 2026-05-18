@@ -10,6 +10,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID, createHash } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 
 export const veilnetxRouter = Router();
 
@@ -166,75 +167,13 @@ veilnetxRouter.post("/waitlist", waitlistLimiter, async (req: Request, res: Resp
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────
-// Anonymous, in-memory feed of privacy-related concept signals (use-cases,
-// threat hypotheticals, feature wishes). Stored without auth because the
-// whole point of VeilNetX is no-identity-required; capped to stay bounded.
 
-interface VeilNetXConceptMessage {
-  id: string;
-  payload: Record<string, unknown>;
-  tags: string[];
-  createdAt: string;
-}
-
-const VEILNETX_CONCEPT_MAX = 200;
-const veilnetxConceptMessages: VeilNetXConceptMessage[] = [];
-
-veilnetxRouter.get("/concept/messages", async (req, res) => {
-  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 100);
-  const items = veilnetxConceptMessages.slice(0, limit);
-  res.json({ items, total: veilnetxConceptMessages.length, moduleId: "veilnetx", noun: "concept/messages" });
-});
-
-veilnetxRouter.post("/concept/messages", waitlistLimiter, async (req, res) => {
-  try {
-    const body = (req.body && typeof req.body === "object") ? req.body as Record<string, unknown> : {};
-    const payload = (body.payload && typeof body.payload === "object")
-      ? body.payload as Record<string, unknown>
-      : body;
-    const useCase = String(payload.useCase ?? payload.title ?? "").trim().slice(0, 200);
-    if (!useCase) return res.status(400).json({ error: "missing_field", field: "useCase" });
-    const threatModel = String(payload.threatModel ?? payload.summary ?? "").trim().slice(0, 800);
-    const tagsRaw = Array.isArray(payload.tags) ? payload.tags : ["veilnetx", "privacy"];
-    const tags = tagsRaw.map((t) => String(t).trim().slice(0, 30)).filter(Boolean).slice(0, 6);
-    const msg: VeilNetXConceptMessage = {
-      id: randomUUID(),
-      payload: { useCase, threatModel },
-      tags: tags.length ? tags : ["veilnetx"],
-      createdAt: new Date().toISOString(),
-    };
-    veilnetxConceptMessages.unshift(msg);
-    if (veilnetxConceptMessages.length > VEILNETX_CONCEPT_MAX) {
-      veilnetxConceptMessages.length = VEILNETX_CONCEPT_MAX;
-    }
-    res.status(201).json(msg);
-  } catch (err: unknown) {
-    console.error("[veilnetx] concept_post_failed", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "concept_post_failed" });
-  }
-});
-
-veilnetxRouter.get("/concept-stats", (_req, res) => {
-  const now = Date.now();
-  const sevenDays = 7 * 86_400_000;
-  const last7d = veilnetxConceptMessages.filter(
-    (m) => now - new Date(m.createdAt).getTime() <= sevenDays,
-  ).length;
-  const tagCounts = new Map<string, number>();
-  for (const m of veilnetxConceptMessages) {
-    for (const t of m.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-  }
-  const topTags = Array.from(tagCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([tag, count]) => ({ tag, count }));
-  res.json({
-    moduleId: "veilnetx",
-    noun: "concept/messages",
-    total: veilnetxConceptMessages.length,
-    last7d,
-    topTags,
-  });
+mountConceptBoard({
+  router: veilnetxRouter,
+  moduleId: "veilnetx",
+  defaultTag: "veilnetx",
+  fieldMap: { idea: "useCase", rationale: "threatModel" },
+  writeLimit: waitlistLimiter,
 });
 
 veilnetxRouter.options("/openapi.json", (_req, res) => {

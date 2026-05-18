@@ -8479,6 +8479,20 @@ ${question.trim()}`;
         {id:"puzzle_boost",name:"Пазл-буст ⚡",desc:"Следующие 10 пазлов с двойным Chessy-бонусом",cost:30,kind:"action",onBuy:()=>{
           sChessy(c=>({...c,owned:{...c.owned,puzzle_boost:true}}));sShowShop(false);showToast("⚡ Пазл-буст активирован на 10 пазлов!","success");
         }},
+        // ── Shop v2 (2026-05-18) ──
+        {id:"hint_pack_5",name:"Пакет подсказок ×5",desc:"5 ghost-подсказок на любые партии (счётчик хранится в профиле)",cost:60,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,hints_left:((c.ach as Record<string,number>).hints_left||0)+5}}));sShowShop(false);showToast("✨ +5 подсказок добавлено","success");
+        }},
+        {id:"hint_pack_10",name:"Пакет подсказок ×10",desc:"10 ghost-подсказок (выгоднее, чем ×5)",cost:100,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,hints_left:((c.ach as Record<string,number>).hints_left||0)+10}}));sShowShop(false);showToast("✨ +10 подсказок добавлено","success");
+        }},
+        {id:"time_boost_30",name:"Time boost +30s ⏱",desc:"Следующая партия начинается с +30 секунд на твоих часах",cost:20,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,time_boost:30}}));sShowShop(false);showToast("⏱ +30s забронированы на следующую партию","success");
+        }},
+        {id:"chessy_double_1g",name:"Chessy x2 (1 партия) 💰",desc:"Следующая партия — двойной Chessy reward",cost:25,kind:"action",onBuy:()=>{
+          sChessy(c=>({...c,ach:{...c.ach,chessy_double:1}}));sShowShop(false);showToast("💰 Chessy x2 активирован на следующую партию","success");
+        }},
+        {id:"avatar_emoji",name:"Custom Emoji аватар 🎭",desc:"Выбери любой emoji вместо стандартной 👤 иконки",cost:45,kind:"unlock"},
       ];
       const purchaseUnlock=(id:string,cost:number,name:string)=>{
         if(chessy.owned[id]){showToast("Уже куплено","info");return}
@@ -8605,6 +8619,31 @@ ${question.trim()}`;
           </div>
           <div style={{fontSize:11,color:"#94a3b8",marginTop:SPACE[2],lineHeight:1.5}}>
             💡 AEV — нативный токен AEVION. Можно заработать в QTrade, CyberChess (победы/пазлы), QShield, или купить за фиат через QPayNet.
+          </div>
+        </div>
+
+        {/* Daily login streak widget — показывает текущий streak + сколько до next bonus */}
+        <div style={{
+          marginBottom:SPACE[3],padding:`${SPACE[3]}px ${SPACE[4]}px`,
+          borderRadius:RADIUS.md,
+          background:"linear-gradient(135deg,rgba(217,119,6,0.10),rgba(252,211,77,0.05))",
+          border:"1px solid rgba(252,211,77,0.35)",
+          display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap" as const,
+        }}>
+          <div style={{fontSize:24}}>📅</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:900,color:CC.text}}>Ежедневный стрик</div>
+            <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>
+              День {chessy.streak||1} подряд · следующий вход = +{Math.min(50,10+((chessy.streak||0)+1)*5)} Chessy
+            </div>
+          </div>
+          <div style={{display:"flex",gap:3}}>
+            {Array.from({length:7}).map((_,i)=>(
+              <div key={i} style={{
+                width:14,height:14,borderRadius:3,
+                background:i<(chessy.streak||0)%7?"#f59e0b":"rgba(255,255,255,0.08)",
+              }}/>
+            ))}
           </div>
         </div>
 

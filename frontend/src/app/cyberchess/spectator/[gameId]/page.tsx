@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use as reactUse } from "react";
 import Link from "next/link";
+import SpectatorChat from "../../SpectatorChat";
 
 const T = {
   bg: "#0a0e1a",
@@ -647,6 +648,21 @@ export default function SpectatorViewerPage(props: Props) {
                 </div>
               )}
             </div>
+
+            {/* Chat */}
+            {gameId && (
+              <SpectatorChat
+                gameId={gameId}
+                hostName={state.hostName}
+                isHost={false}
+                surface1={T.surface}
+                surface2={T.surfaceAlt}
+                border={T.border}
+                text={T.text}
+                textDim={T.textDim}
+                brand={T.accent}
+              />
+            )}
 
             {/* Spectator notice */}
             <div

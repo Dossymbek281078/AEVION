@@ -7,6 +7,11 @@
 // Persistence: data/cyberchess-tournaments.json (sync, lazy-loaded). If
 // the directory is missing and can't be created, falls back to in-memory
 // with graceful no-op writes.
+//
+// Real-player extension: tournaments may set `realPlayers: true` to opt
+// into turn-by-turn pairing driven by the matchmaking module. The new
+// POST /:id/queue-match endpoint produces pairings for the next round
+// based on previous round results. Default behaviour is unchanged.
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
@@ -47,6 +52,9 @@ export interface BracketMatch {
   // for swiss/RR — references player ids; for single-elim — display names
   whitePlayerId?: string | null;
   blackPlayerId?: string | null;
+  // real-player extension: when tournament.realPlayers === true the
+  // scheduler can attach a live matchmaking match id here.
+  liveMatchId?: string | null;
 }
 
 export interface BracketRound {
@@ -74,6 +82,8 @@ export interface Tournament {
   registeredUserIds: string[]; // duplicate-check
   roster: Player[]; // active player roster (for swiss/RR)
   rounds: BracketRound[]; // all generated rounds so far
+  // real-player extension (default false → legacy behaviour preserved)
+  realPlayers?: boolean;
 }
 
 // ── persistence layer ──────────────────────────────────────────────
@@ -122,6 +132,10 @@ function initStore(): void {
   const loaded = tryLoadFromDisk();
   if (loaded && loaded.length > 0) {
     TOURNAMENTS = loaded;
+    // backfill new fields on legacy persisted data
+    for (const t of TOURNAMENTS) {
+      if (typeof t.realPlayers === "undefined") t.realPlayers = false;
+    }
     return;
   }
   TOURNAMENTS = buildSeedFixtures();
@@ -161,6 +175,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
+    realPlayers: false,
   };
 
   const elim2: Tournament = {
@@ -179,6 +194,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
+    realPlayers: false,
   };
 
   // --- swiss #1 (8-player, 5 rounds) ---
@@ -210,6 +226,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: swissRoster1,
     rounds: [],
+    realPlayers: false,
   };
   // generate first round so /next-round and /standings have data
   swiss1.rounds = [
@@ -254,6 +271,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: swissRoster2,
     rounds: [],
+    realPlayers: false,
   };
 
   // --- round-robin #1 (8-player) ---
@@ -284,6 +302,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: rrRoster1,
     rounds: buildRoundRobinSchedule(rr1RosterToIds(rrRoster1), "classic-rr-may"),
+    realPlayers: false,
   };
 
   // --- round-robin #2 (6-player rapid) ---
@@ -312,6 +331,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: rrRoster2,
     rounds: buildRoundRobinSchedule(rr1RosterToIds(rrRoster2), "rapid-rr-mini"),
+    realPlayers: false,
   };
 
   // --- extras kept from legacy mock list (single elim) ---
@@ -330,6 +350,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
+    realPlayers: false,
   };
   const elimLegacy4: Tournament = {
     id: "bullet-storm-7",
@@ -346,6 +367,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: [],
+    realPlayers: false,
   };
   const elimLegacy5: Tournament = {
     id: "veterans-cup",
@@ -362,6 +384,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: [],
+    realPlayers: false,
   };
   const elimLegacy6: Tournament = {
     id: "winter-arena-12",
@@ -378,6 +401,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: buildLegacyElimRounds(),
+    realPlayers: false,
   };
   const elimLegacy7: Tournament = {
     id: "newbies-rapid",
@@ -394,6 +418,7 @@ function buildSeedFixtures(): Tournament[] {
     registeredUserIds: [],
     roster: [],
     rounds: [],
+    realPlayers: false,
   };
 
   return [
@@ -765,6 +790,7 @@ router.get("/list", (req: Request, res: Response): void => {
     description: t.description,
     swissRounds: t.swissRounds,
     currentRound: t.currentRound,
+    realPlayers: !!t.realPlayers,
   }));
   res.json({ ok: true, count: slim.length, tournaments: slim });
 });
@@ -920,6 +946,139 @@ router.post("/:id/result", (req: Request, res: Response): void => {
     updatedStatus: t.status,
     currentRound: t.currentRound,
   });
+});
+
+// POST /:id/queue-match — turn-by-turn pairing for real-player tournaments.
+//
+// Behaviour:
+//  - If tournament.realPlayers !== true → 409, no-op (legacy preserved).
+//  - Looks at the most recently completed round's results (or the empty
+//    roster for round 1) and produces pairings for the next round:
+//      * swiss → pairSwissRound on roster
+//      * round_robin → next scheduled round already exists in t.rounds
+//      * single_elimination → winners of previous round are paired in order
+//  - Returns the next round's matches with placeholder liveMatchId (the
+//    matchmaking module is responsible for spinning up live matches
+//    keyed to bracket match id; this endpoint does NOT call it).
+router.post("/:id/queue-match", (req: Request, res: Response): void => {
+  const t = TOURNAMENTS.find((x) => x.id === req.params.id);
+  if (!t) {
+    res.status(404).json({ ok: false, error: "tournament_not_found", id: req.params.id });
+    return;
+  }
+  if (!t.realPlayers) {
+    res
+      .status(409)
+      .json({ ok: false, error: "not_a_real_player_tournament", hint: "set realPlayers: true to enable" });
+    return;
+  }
+
+  const lastRound = t.rounds[t.rounds.length - 1];
+  const allLastDone = lastRound ? lastRound.matches.every((m) => m.status === "done") : true;
+
+  // Swiss: pair next round from current roster scores
+  if (t.format === "swiss") {
+    if (lastRound && !allLastDone) {
+      res.status(409).json({ ok: false, error: "previous_round_in_progress", round: lastRound.round });
+      return;
+    }
+    const totalRounds = t.swissRounds ?? 5;
+    const nextRoundNo = (lastRound?.round ?? 0) + 1;
+    if (nextRoundNo > totalRounds) {
+      t.status = "finished";
+      tryWriteToDisk();
+      res.json({ ok: true, finished: true, tournamentId: t.id });
+      return;
+    }
+    const next = pairSwissRound(t.roster, nextRoundNo, t.rounds).map((m, i) => ({
+      ...m,
+      id: `${t.id}-r${nextRoundNo}-${i + 1}`,
+      liveMatchId: null as string | null,
+    }));
+    t.rounds.push({ name: `Тур ${nextRoundNo}`, round: nextRoundNo, matches: next });
+    t.currentRound = nextRoundNo;
+    tryWriteToDisk();
+    res.json({
+      ok: true,
+      tournamentId: t.id,
+      round: nextRoundNo,
+      matches: next,
+    });
+    return;
+  }
+
+  // Round-robin: full schedule already exists — surface the next pending round
+  if (t.format === "round_robin") {
+    const pending = t.rounds.find((r) => r.matches.some((m) => m.status === "scheduled"));
+    if (!pending) {
+      t.status = "finished";
+      tryWriteToDisk();
+      res.json({ ok: true, finished: true, tournamentId: t.id });
+      return;
+    }
+    // mark liveMatchId field as null placeholder for clients
+    for (const m of pending.matches) {
+      if (typeof m.liveMatchId === "undefined") m.liveMatchId = null;
+    }
+    t.currentRound = pending.round;
+    tryWriteToDisk();
+    res.json({
+      ok: true,
+      tournamentId: t.id,
+      round: pending.round,
+      matches: pending.matches,
+    });
+    return;
+  }
+
+  // Single elimination: pair winners of last round
+  if (t.format === "single_elimination") {
+    if (!lastRound) {
+      res.status(409).json({ ok: false, error: "no_rounds_yet" });
+      return;
+    }
+    if (!allLastDone) {
+      res.status(409).json({ ok: false, error: "previous_round_in_progress", round: lastRound.round });
+      return;
+    }
+    const winners: string[] = [];
+    for (const m of lastRound.matches) {
+      if (m.winner === "white" && m.white) winners.push(m.white);
+      else if (m.winner === "black" && m.black) winners.push(m.black);
+    }
+    if (winners.length < 2) {
+      t.status = "finished";
+      tryWriteToDisk();
+      res.json({ ok: true, finished: true, tournamentId: t.id, champion: winners[0] ?? null });
+      return;
+    }
+    const nextRoundNo = lastRound.round + 1;
+    const matches: BracketMatch[] = [];
+    for (let i = 0; i < winners.length; i += 2) {
+      matches.push({
+        id: `${t.id}-r${nextRoundNo}-${i / 2 + 1}`,
+        round: nextRoundNo,
+        white: winners[i],
+        black: winners[i + 1] ?? null,
+        whiteScore: null,
+        blackScore: null,
+        status: "scheduled",
+        liveMatchId: null,
+      });
+    }
+    t.rounds.push({ name: `Тур ${nextRoundNo}`, round: nextRoundNo, matches });
+    t.currentRound = nextRoundNo;
+    tryWriteToDisk();
+    res.json({
+      ok: true,
+      tournamentId: t.id,
+      round: nextRoundNo,
+      matches,
+    });
+    return;
+  }
+
+  res.status(400).json({ ok: false, error: "unsupported_format", format: t.format });
 });
 
 export default router;

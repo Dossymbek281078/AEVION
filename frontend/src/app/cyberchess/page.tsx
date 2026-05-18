@@ -82,6 +82,9 @@ import AchievementPanel from "./AchievementPanel";
 import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import AvatarPicker from "./AvatarPicker";
+import FideCalibrationPanel from "./FideCalibrationPanel";
+import { calibrateFromGames } from "./ratingCalibration";
+import AiPersonalityPicker from "./AiPersonalityPicker";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -1227,6 +1230,8 @@ export default function CyberChessPage(){
   });
   useEffect(()=>{try{localStorage.setItem("cc_avatar_emoji_v1",avatarEmoji)}catch{}},[avatarEmoji]);
   const[showAvatarPicker,sShowAvatarPicker]=useState(false);
+  const[showFidePanel,sShowFidePanel]=useState(false);
+  const[showAiPersonalityPicker,sShowAiPersonalityPicker]=useState(false);
   // ── Counters для achievements (variantsTried / coachUsed / ecosystemVisits / loginStreak) ──
   const[coachUsedCount,sCoachUsedCount]=useState<number>(()=>{
     try{return parseInt(localStorage.getItem("cc_coach_used_v1")||"0")||0}catch{return 0}
@@ -5117,6 +5122,10 @@ export default function CyberChessPage(){
           {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время, FIDE",onClick:()=>sShowStatsDashboard(true)},
           {label:spectatorPublish?"📡 Стрим ON":"📡 Стрим",hint:spectatorPublish?"Партия публикуется зрителям — клик чтобы остановить":"Включить стрим партии для зрителей",onClick:()=>sSpectatorPublish(v=>!v)},
           {label:"👀 Смотреть",hint:"Открыть hub live-партий других игроков",onClick:()=>{window.location.href="/cyberchess/spectator"}},
+          {label:"🎞 Replays",hint:"Архив завершённых трансляций (50 LRU)",onClick:()=>{window.location.href="/cyberchess/replays"}},
+          {label:"🤝 Найти соперника",hint:"Real-player matchmaking — очередь по рейтингу + time control",onClick:()=>{window.location.href="/cyberchess/matchmaking"}},
+          {label:"📐 FIDE-оценка",hint:"CPI regression + factor breakdown + slider explorer",onClick:()=>sShowFidePanel(true)},
+          {label:"🎭 Стиль AI",hint:"Magnus/Hikaru/Tal/Karpov/...10 personalities",onClick:()=>sShowAiPersonalityPicker(true)},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
         ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
           style={{
@@ -11414,6 +11423,19 @@ ${question.trim()}`;
       onSelect={(e)=>{sAvatarEmoji(e);showToast(`🎭 Аватар: ${e}`,"success")}}
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} brand={CC.brand}
+    />
+    <FideCalibrationPanel
+      open={showFidePanel}
+      onClose={()=>sShowFidePanel(false)}
+      initialMetrics={calibrateFromGames(savedGames)}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
+    />
+    <AiPersonalityPicker
+      open={showAiPersonalityPicker}
+      onClose={()=>sShowAiPersonalityPicker(false)}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />
     <PlayerStatsDashboard
       open={showStatsDashboard}

@@ -14,7 +14,7 @@ async function get(path,expect=200){const r=await fetch(`${BASE}${path}`,{signal
   await check("GET /api/qstore/products returns array", async()=>{const d=await get("/api/qstore/products");return Array.isArray(d.items||d.products||d);});
   await check("GET /api/qstore/products?limit=5 returns ≤5", async()=>{const d=await get("/api/qstore/products?limit=5");const arr=d.items||d.products||d;return Array.isArray(arr)&&arr.length<=5;});
   await check("GET /api/qstore/products/bad → 404", async()=>{await get("/api/qstore/products/nonexistent_xyz",404);return true;});
-  await check("GET /api/qstore/me/orders requires auth (401)", async()=>{await get("/api/qstore/me/orders",401);return true;});
+  await check("GET /api/qstore/me/purchases requires auth (401)", async()=>{await get("/api/qstore/me/purchases",401);return true;});
   console.log(`\n${pass+fail} checks — ${pass} passed, ${fail} failed\n`);
   process.exit(fail>0?1:0);
 })();

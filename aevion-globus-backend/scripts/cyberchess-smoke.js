@@ -12,7 +12,7 @@
  *   BACKEND_URL=https://aevion.app/api-backend node scripts/cyberchess-smoke.js
  */
 
-const BASE = (process.argv[2] ?? process.env.BACKEND_URL ?? "http://localhost:4001").replace(/\/+$/, "");
+const BASE = (process.argv[2] ?? process.env.BASE ?? process.env.BACKEND_URL ?? "http://localhost:4001").replace(/\/+$/, "");
 const DEVICE = `chess-smoke-${Date.now()}`;
 
 let passed = 0;

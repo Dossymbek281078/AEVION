@@ -1325,3 +1325,54 @@ pricingRouter.get("/healthz", (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// ── GET /api/pricing/faq ─────────────────────────────────────────────────────
+const PRICING_FAQ = [
+  { id: "faq-01", q: "What is included in the Starter plan?", a: "Core platform access with up to 3 users, AI quota 1k calls/month, QSign basic.", category: "plans" },
+  { id: "faq-02", q: "Can I upgrade mid-month?", a: "Yes. Upgrading applies pro-rated billing instantly.", category: "billing" },
+  { id: "faq-03", q: "Do you offer annual discounts?", a: "Annual billing saves 20% across all tiers.", category: "billing" },
+  { id: "faq-04", q: "Is there a free trial?", a: "14-day free trial on Growth and above. No credit card required.", category: "plans" },
+  { id: "faq-05", q: "What payment methods do you accept?", a: "Visa, Mastercard, Kaspi, QR code (QazQR), wire transfer.", category: "billing" },
+  { id: "faq-06", q: "Can I cancel any time?", a: "Yes. Monthly plans cancel end-of-period; annual plans follow 30-day notice.", category: "billing" },
+  { id: "faq-07", q: "What does Enterprise include?", a: "Unlimited seats, SLA 99.9%, dedicated Railway cluster, custom domain, SSO, on-prem option.", category: "enterprise" },
+  { id: "faq-08", q: "Is there a minimum commitment for Enterprise?", a: "12-month contract minimum, custom pricing via quote request.", category: "enterprise" },
+  { id: "faq-09", q: "How does per-seat pricing work?", a: "Each named user counts as a seat. Guest/viewer roles are free.", category: "plans" },
+  { id: "faq-10", q: "What SLA guarantees exist?", a: "Growth: 99.5% uptime. Enterprise: 99.9% with penalty credits.", category: "enterprise" },
+  { id: "faq-11", q: "Can I add modules à la carte?", a: "Yes. Module add-ons are available on any paid tier.", category: "plans" },
+  { id: "faq-12", q: "Are my data and keys stored securely?", a: "Keys are encrypted at rest (AES-256). AEVION never stores plaintext secrets.", category: "enterprise" },
+];
+
+pricingRouter.get("/faq", (req, res) => {
+  const cat = typeof req.query.category === "string" ? req.query.category.trim().toLowerCase() : null;
+  const items = cat ? PRICING_FAQ.filter((f) => f.category === cat) : PRICING_FAQ;
+  const byCategory = PRICING_FAQ.reduce((acc: Record<string, number>, f) => {
+    acc[f.category] = (acc[f.category] || 0) + 1;
+    return acc;
+  }, {});
+  const categories = Object.entries(byCategory).map(([id, count]) => ({
+    id,
+    label: id.charAt(0).toUpperCase() + id.slice(1),
+    count,
+  }));
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.json({ ok: true, items, total: items.length, categories });
+});
+
+// ── GET /api/pricing/social-proof ───────────────────────────────────────────
+pricingRouter.get("/social-proof", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.json({
+    ok: true,
+    teamsOnboard: 47,
+    usersServed: 312,
+    countriesReached: 8,
+    avgRating: 4.8,
+    generatedAt: new Date().toISOString(),
+    breakdown: {
+      startups: 21,
+      agencies: 14,
+      enterprises: 8,
+      individuals: 4,
+    },
+  });
+});

@@ -10,7 +10,7 @@
  *   BACKEND_URL=https://aevion.app/api-backend node scripts/smeta-trainer-smoke.js
  */
 
-const BASE = (process.argv[2] ?? process.env.BACKEND_URL ?? "http://localhost:4001").replace(/\/+$/, "");
+const BASE = (process.argv[2] ?? process.env.BASE ?? process.env.BACKEND_URL ?? "http://localhost:4001").replace(/\/+$/, "");
 
 let passed = 0;
 let failed = 0;

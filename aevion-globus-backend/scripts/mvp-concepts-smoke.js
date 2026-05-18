@@ -31,8 +31,8 @@ const MODULES = [
   { id: "qpersona",         noun: "personas",   create: { name: "Smoke",   traits: ["test"], blueprint: "x" } },
   { id: "voice-of-earth",   noun: "feeds",      create: { location: "Test", metric: "pm2.5", observation: "x" } },
   { id: "deepsan",          noun: "runs",       create: { facility: "TestF", method: "uv",   } },
-  { id: "shadownet",        noun: "posts",      create: { title: "Smoke",  body: "Anon test body" } },
-  { id: "lifebox",          noun: "capsules",   create: { label: "Smoke",  year: 2026,    occasion: "test" } },
+  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke",  body: "Anon test body" } },
+  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, label: "Smoke",  year: 2026, occasion: "test" } },
 ];
 
 let passed = 0; let failed = 0;

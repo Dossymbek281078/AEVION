@@ -6,7 +6,7 @@
  *   TEST_JWT env var enables auth-required tests
  */
 
-const BASE = process.argv[2] ?? process.env.BACKEND_URL ?? "http://localhost:4001";
+const BASE = process.argv[2] ?? process.env.BASE ?? process.env.BACKEND_URL ?? "http://localhost:4001";
 const JWT  = process.env.TEST_JWT ?? "";
 
 let passed = 0;

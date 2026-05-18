@@ -28,11 +28,11 @@ const MODULES = [
   { id: "kids-ai-content",  noun: "items",      create: { topic: "Smoke",  ageRange: "6-8", summary: "test" } },
   { id: "qlife",            noun: "prompts",    create: { prompt: "Smoke prompt", rationale: "test" } },
   { id: "psyapp-deps",      noun: "assessments",create: { title: "Smoke",  category: "test" } },
-  { id: "qpersona",         noun: "personas",   create: { name: "Smoke",   traits: ["test"], blueprint: "x" } },
+  { id: "qpersona",         noun: "personas",   create: { alias: `sm${Date.now()}`, name: "Smoke", traits: ["test"], blueprint: "x" } },
   { id: "voice-of-earth",   noun: "feeds",      create: { location: "Test", metric: "pm2.5", observation: "x" } },
   { id: "deepsan",          noun: "runs",       create: { facility: "TestF", method: "uv",   } },
-  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke", body: "Anon test body", ciphertext: "c2lnbmVkLXNtb2tlLXRlc3Q=" } },
-  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", year: 2026, occasion: "test" } },
+  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke", body: "Anon test body", ciphertext: "c2lnbmVkLXNtb2tlLXRlc3Q=", iv: "smoke-iv-aevion" } },
+  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", content: "Test capsule content", year: 2026, occasion: "test" } },
 ];
 
 let passed = 0; let failed = 0;

@@ -90,6 +90,10 @@ initSentry();
 const app = express();
 const PORT = process.env.PORT || 4001;
 
+// Railway sits behind a reverse proxy — trust the first hop so that
+// express-rate-limit reads the real client IP from X-Forwarded-For.
+app.set("trust proxy", 1);
+
 app.use(cors());
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
 // Plain JSON payloads everywhere else stay tiny — limit is just a ceiling.

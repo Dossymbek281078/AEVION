@@ -106,7 +106,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа для покупок и переводов без интернета: офлайн-операции, верификация, защита.",
     kind: "product",
-    status: "planning",
+    status: "mvp",
     priority: 1,
     tags: ["payments", "offline", "fintech"],
     createdAt: now,

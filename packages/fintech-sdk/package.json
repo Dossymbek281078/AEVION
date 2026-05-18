@@ -6,7 +6,9 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -26,10 +28,18 @@
     "hmac"
   ],
   "license": "MIT",
+  "author": "AEVION (Dossymbek)",
+  "homepage": "https://github.com/Dossymbek281078/AEVION/tree/main/packages/fintech-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Dossymbek281078/AEVION/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Dossymbek281078/AEVION",
     "directory": "packages/fintech-sdk"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18"

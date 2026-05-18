@@ -32,7 +32,7 @@ const MODULES = [
   { id: "voice-of-earth",   noun: "feeds",      create: { location: "Test", metric: "pm2.5", observation: "x" } },
   { id: "deepsan",          noun: "runs",       create: { facility: "TestF", method: "uv",   } },
   { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke", body: "Anon test body", ciphertext: "c2lnbmVkLXNtb2tlLXRlc3Q=", iv: "smoke-iv-aevion" } },
-  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", content: "Test capsule content", year: 2026, occasion: "test" } },
+  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", content: "Test capsule content", category: "knowledge", year: 2026, occasion: "test" } },
 ];
 
 let passed = 0; let failed = 0;

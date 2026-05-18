@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 import type { Signal } from "./SignalCard";
 
 export type FilterCategory = "all" | "need" | "event" | "request";

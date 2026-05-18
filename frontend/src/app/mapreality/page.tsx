@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { SignalForm } from "./components/SignalForm";
 import { SignalCard, type Signal } from "./components/SignalCard";
@@ -56,7 +57,7 @@ export default function MapRealityPage() {
       if (filters.category !== "all") params.set("category", filters.category);
       if (filters.country) params.set("country", filters.country);
       params.set("limit", "50");
-      const r = await fetch(`/api/mapreality/signals?${params}`, { cache: "no-store" });
+      const r = await fetch(apiUrl(`/api/mapreality/signals?${params}`), { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = (await r.json()) as { signals: Signal[]; total: number };
       setSignals(data.signals ?? []);

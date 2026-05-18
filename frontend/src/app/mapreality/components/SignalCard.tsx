@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 
 export type Signal = {
   id: number;
@@ -75,7 +76,7 @@ export function SignalCard({
     setBusy(true);
     setMsg(null);
     try {
-      const r = await fetch(`/api/mapreality/signals/${signal.id}/support`, {
+      const r = await fetch(apiUrl(`/api/mapreality/signals/${signal.id}/support`), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ supporterAlias: alias }),

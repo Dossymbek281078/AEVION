@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 
 type Category = "need" | "event" | "request";
 
@@ -71,7 +72,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       if (lat) body.lat = Number(lat);
       if (lng) body.lng = Number(lng);
 
-      const r = await fetch("/api/mapreality/signals", {
+      const r = await fetch(apiUrl("/api/mapreality/signals"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

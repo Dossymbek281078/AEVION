@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiUrl } from "@/lib/apiBase";
 
 export type StatsData = {
   total: number;
@@ -22,7 +23,7 @@ export function StatsBar({ refreshKey }: { refreshKey: number }) {
     let cancelled = false;
     async function load() {
       try {
-        const r = await fetch("/api/mapreality/stats", { cache: "no-store" });
+        const r = await fetch(apiUrl("/api/mapreality/stats"), { cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = (await r.json()) as StatsData;
         if (!cancelled) setStats(data);

@@ -403,6 +403,11 @@ const MODULES: Module[] = [
   { id: "aquatic-center",         category: "practice",  href: "/smeta-trainer/drawings-practice/aquatic-center",         icon: "🏊", title: "Олимпийские аква-центры FINA",    subtitle: "Almaty Aquatics, 50×25 м + 10-м вышка, Vidrepur мозаика, 3300 м³/ч, FINA FR-2.2", level: "L5", exercises: 4,  color: "cyan"    },
   { id: "velodrome-track",        category: "practice",  href: "/smeta-trainer/drawings-practice/velodrome-track",        icon: "🚴", title: "Крытые велотреки UCI",            subtitle: "Сарыарка 250 м, виражи R=23 м банк. 42°, Балтийск. сосна + Канадск. клён, UCI Tier 1", level: "L5", exercises: 4,  color: "sky"     },
   { id: "tv-radio-studio",        category: "practice",  href: "/smeta-trainer/drawings-practice/tv-radio-studio",        icon: "📺", title: "Теле- и радиостудии",             subtitle: "Хабар Астана, Room-in-Room Rw=65 дБ, Arri SkyPanel, бесшумная HVAC NR≤25, EBU 3253", level: "L5", exercises: 4,  color: "fuchsia" },
+
+  // ── Медицина и АПК-инфраструктура ──
+  { id: "dental-clinics",         category: "special",   href: "/smeta-trainer/drawings-practice/dental-clinics",         icon: "🦷", title: "Стоматологич. клиники премиум",   subtitle: "Damen Dental 6 каб., A-dec 500 + КТ NewTom 5G, ISO 8 для имплантологии, СанПиН 4.01-007", level: "L5", exercises: 4,  color: "pink"    },
+  { id: "poultry-farms",          category: "special",   href: "/smeta-trainer/drawings-practice/poultry-farms",          icon: "🐔", title: "Птицефабрики (бройлеры)",         subtitle: "Шымкент-Кус 500 000 гол/год, Big Dutchman, климат 32→20°C, BSL птичий грипп",          level: "L5", exercises: 4,  color: "yellow"  },
+  { id: "fruit-cold-storage",     category: "special",   href: "/smeta-trainer/drawings-practice/fruit-cold-storage",     icon: "🍎", title: "Плодоовощехранилища РГС ULO",     subtitle: "Алматинский Сад 5000 т, ULO O₂=1.5%/CO₂=2%, Janny MT, DCA HarvestWatch, FAO ISO 8328", level: "L5", exercises: 4,  color: "amber"   },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

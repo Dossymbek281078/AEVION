@@ -1180,13 +1180,59 @@ export default function CyberChessPage(){
   },[showToast]);
   // Achievement panel + auto-detect newly-unlocked from catalog
   const[showAchievements,sShowAchievements]=useState(false);
+  // ── Counters для achievements (variantsTried / coachUsed / ecosystemVisits / loginStreak) ──
+  const[coachUsedCount,sCoachUsedCount]=useState<number>(()=>{
+    try{return parseInt(localStorage.getItem("cc_coach_used_v1")||"0")||0}catch{return 0}
+  });
+  useEffect(()=>{try{localStorage.setItem("cc_coach_used_v1",String(coachUsedCount))}catch{}},[coachUsedCount]);
+  // +1 каждый раз когда юзер переключается на coach tab (debounce — не считать переключения внутри одной сессии за <60s)
+  const lastCoachAtRef=useRef<number>(0);
+  useEffect(()=>{
+    if(tab==="coach"){
+      const now=Date.now();
+      if(now-lastCoachAtRef.current>60000){
+        lastCoachAtRef.current=now;
+        sCoachUsedCount(c=>c+1);
+      }
+    }
+  },[tab]);
+  const[ecosystemVisits,sEcosystemVisits]=useState<string[]>(()=>{
+    try{const r=localStorage.getItem("cc_ecosystem_visits_v1");return r?JSON.parse(r) as string[]:[]}catch{return []}
+  });
+  useEffect(()=>{try{localStorage.setItem("cc_ecosystem_visits_v1",JSON.stringify(ecosystemVisits))}catch{}},[ecosystemVisits]);
+  const trackEcosystemVisit=useCallback((productId:string)=>{
+    sEcosystemVisits(v=>v.includes(productId)?v:[...v,productId]);
+  },[]);
+  const[loginStreak,sLoginStreak]=useState<number>(0);
+  useEffect(()=>{
+    try{
+      const raw=localStorage.getItem("cc_login_streak_v1");
+      const today=new Date().toISOString().slice(0,10);
+      const parsed=raw?JSON.parse(raw) as {streak:number;lastDay:string}:null;
+      if(!parsed){
+        localStorage.setItem("cc_login_streak_v1",JSON.stringify({streak:1,lastDay:today}));
+        sLoginStreak(1);return;
+      }
+      if(parsed.lastDay===today){sLoginStreak(parsed.streak);return;}
+      // Yesterday? → streak+1. Older → reset to 1.
+      const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+      const newStreak=parsed.lastDay===yesterday?parsed.streak+1:1;
+      localStorage.setItem("cc_login_streak_v1",JSON.stringify({streak:newStreak,lastDay:today}));
+      sLoginStreak(newStreak);
+    }catch{sLoginStreak(1)}
+  },[]);
   const achContext=useMemo(()=>({
     totalGames, totalWins: sts.w,
     pzSolvedCount, pzBestStreak: 0,
     rushBestScore: 0,
     rating: rat,
+    variantsTried: Object.keys(variantStats||{}).filter(v=>v!=="standard").length,
+    coachUsed: coachUsedCount,
+    repertoireBranches: repertoire?.entries?.length||0,
+    ecosystemVisits: ecosystemVisits.length,
+    loginStreak,
     lifetimeChessy: chessy.lifetime,
-  }),[totalGames, sts.w, pzSolvedCount, rat, chessy.lifetime]);
+  }),[totalGames, sts.w, pzSolvedCount, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime]);
   useEffect(()=>{
     const newly=findNewlyUnlocked(chessy.ach,achContext);
     for(const a of newly){
@@ -3925,6 +3971,7 @@ export default function CyberChessPage(){
 
         {/* AEVION ecosystem mini-hub — переход в другие продукты без покидания CyberChess */}
         <AevionMiniHub
+          onVisit={trackEcosystemVisit}
           surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
           text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
         />

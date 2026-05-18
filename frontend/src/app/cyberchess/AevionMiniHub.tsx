@@ -23,6 +23,7 @@ const PRODUCTS: Product[] = [
 ];
 
 type Props = {
+  onVisit?: (productId: string) => void;
   surface1: string;
   surface2: string;
   border: string;
@@ -32,7 +33,7 @@ type Props = {
   brand: string;
 };
 
-export default function AevionMiniHub({ surface1, surface2, border, text, textDim, textMute, brand }: Props) {
+export default function AevionMiniHub({ onVisit, surface1, surface2, border, text, textDim, textMute, brand }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -97,6 +98,7 @@ export default function AevionMiniHub({ surface1, surface2, border, text, textDi
           </div>
           {PRODUCTS.map(p => (
             <a key={p.id} href={p.href} role="menuitem"
+              onClick={() => onVisit?.(p.id)}
               style={{
                 display: "flex", alignItems: "center", gap: 10,
                 padding: "8px 10px", borderRadius: 8,

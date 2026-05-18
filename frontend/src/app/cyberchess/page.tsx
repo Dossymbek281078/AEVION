@@ -77,6 +77,7 @@ import WorkspaceDock from "./WorkspaceDock";
 import MusicPlayer from "./MusicPlayer";
 import AevionMiniHub from "./AevionMiniHub";
 import VoiceCoach from "./VoiceCoach";
+import TurnClock from "./TurnClock";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -5126,21 +5127,15 @@ export default function CyberChessPage(){
                     </div>
                   </div>
                 </div>
-                {/* Clock */}
-                {tc.ini>0&&<div style={{
-                  fontSize:20,fontWeight:900,fontFamily:"ui-monospace,monospace",letterSpacing:-0.5,
-                  color:lowTime?"#e04040":isActive?CC.brand:CC.textMute,
-                  background:isActive?"rgba(255,255,255,0.04)":"transparent",
-                  padding:"4px 10px",borderRadius:6,
-                  animation:lowTime&&isActive?"cc-clock-pulse 1s ease-in-out infinite":undefined,
-                  transition:"color 300ms",
-                }}>{fmt(time)}</div>}
+                {/* Realtime turn clock — circular ring + sub-second tick + 3-color zones */}
+                {tc.ini>0&&<TurnClock time={time} ini={tc.ini} isActive={isActive} brand={CC.brand} textMute={CC.textMute}/>}
               </div>;
             };
             // Верхняя строка (противник) + нижняя (игрок)
             const topIsAI=pCol==="w"; // белые играют снизу
-            const aiLow=aT.time<30000&&on&&!over;
-            const myLow=pT.time<30000&&on&&!over;
+            // lowTime threshold: 30 секунд (не 30000 — был bug с миллисекундами)
+            const aiLow=aT.time<30&&on&&!over;
+            const myLow=pT.time<30&&on&&!over;
             return <div style={{display:"flex",flexDirection:"column",gap:1,marginBottom:4}}>
               {topIsAI
                 ?<PRow isAI={true} time={aT.time} isActive={game.turn()===aiC&&on&&!over} lowTime={aiLow} captures={capW} advantage={bMat-wMat>0?bMat-wMat:0}/>

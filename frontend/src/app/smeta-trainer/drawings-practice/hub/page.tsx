@@ -244,6 +244,7 @@ const MODULES: Module[] = [
 
   // ── Реставрация, модули, восстановление ──
   { id: "historical-monuments",   category: "special",   href: "/smeta-trainer/drawings-practice/historical-monuments",   icon: "🏛️", title: "Реставрация памятников",          subtitle: "СНиП РК 1.04-25, ЮНЕСКО, Ясави, Венецианская хартия 1964",     level: "L5", exercises: 4,  color: "amber"   },
+  { id: "religious-mosque",       category: "special",   href: "/smeta-trainer/drawings-practice/religious-mosque",       icon: "🕌", title: "Мечети и религ. комплексы",       subtitle: "Хазрет Султан 5000 верующих, купол Ø24 H=40, 4 минарета 70 м, СНиП 31-06, османский канон", level: "L5", exercises: 4,  color: "amber"   },
   { id: "modular-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/modular-construction",   icon: "🧩", title: "Модульное и быстровозводимое",    subtitle: "6 типов (контейнер/SIP/3D-печать/LSF), вдвое быстрее монолита",  level: "L4", exercises: 4,  color: "cyan"    },
   { id: "post-disaster-recon",    category: "practice",  href: "/smeta-trainer/drawings-practice/post-disaster-recon",    icon: "🆘", title: "Послеаварийное восстановление",    subtitle: "Паводки 2024, ЗРК №188-V, Build Back Better, 6 типов ЧС РК",   level: "L5", exercises: 4,  color: "red"     },
 
@@ -313,6 +314,7 @@ const MODULES: Module[] = [
   { id: "gas-processing-plants",  category: "special",   href: "/smeta-trainer/drawings-practice/gas-processing-plants",  icon: "🔥", title: "ГПЗ — газоперераб. заводы",       subtitle: "KPO Карачаганак, ТШО FGP, процесс Клауса, аминовая очистка",      level: "L5", exercises: 4,  color: "orange"  },
   { id: "main-pipelines",         category: "special",   href: "/smeta-trainer/drawings-practice/main-pipelines",         icon: "🛢️", title: "Магистральные трубопроводы",      subtitle: "КТК Тенгиз-Новороссийск, Туркм.-Китай, СКЗ, 400 млн тг/км",       level: "L5", exercises: 4,  color: "stone"   },
   { id: "airports-terminals",     category: "practice",  href: "/smeta-trainer/drawings-practice/airports-terminals",     icon: "✈️", title: "Аэропорты и терминалы",          subtitle: "ICAO Code 4F, ВПП 4500 м, ILS Cat III, Алматы AAA, Астана NQZ",   level: "L5", exercises: 4,  color: "sky"     },
+  { id: "simulator-training-center", category: "special", href: "/smeta-trainer/drawings-practice/simulator-training-center", icon: "🎮", title: "Авиа-тренажёрные центры",       subtitle: "Air Astana FTC 4× CAE 7000XR FFS Level D, A320+B737+B767, EASA Part-FCL + FAA Part 142", level: "L5", exercises: 4,  color: "sky"     },
 
   // ── Ж/д, морпорты, электростанции ──
   { id: "railways-stations",      category: "special",   href: "/smeta-trainer/drawings-practice/railways-stations",      icon: "🚂", title: "Железные дороги и вокзалы",       subtitle: "Колея 1520, Р65, Ш1, ВСМ Алматы-Астана 1200 км, 25 кВ AC",        level: "L5", exercises: 4,  color: "slate"   },
@@ -387,6 +389,7 @@ const MODULES: Module[] = [
   // ── Лёд, склад, магистраль ──
   { id: "ice-rink-arenas",        category: "special",   href: "/smeta-trainer/drawings-practice/ice-rink-arenas",        icon: "⛸️", title: "Ледовые арены",                   subtitle: "Барыс Арена 12 000 мест, IIHF 60×30 м, R717 NH₃ 1.2 МВт, ПБ 09-595, IIAR", level: "L5", exercises: 4,  color: "sky"     },
   { id: "logistics-warehouse",    category: "special",   href: "/smeta-trainer/drawings-practice/logistics-warehouse",    icon: "📦", title: "Склады класса А+ FEDIA",          subtitle: "Хоргос DAMU 100 000 м², ВРС 12 м, Jungheinrich + AS/RS, ESFR-спринклер, FEM 9.831", level: "L5", exercises: 4,  color: "zinc"    },
+  { id: "bonded-warehouse-ftz",   category: "special",   href: "/smeta-trainer/drawings-practice/bonded-warehouse-ftz",   icon: "🛃", title: "Бондированные склады СЭЗ (FTZ)",  subtitle: "Хоргос ICBC 50 000 м², ТК ЕАЭС ст. 155-162, e-seal + АИС «Астана-1», WCO Kyoto", level: "L5", exercises: 4,  color: "zinc"    },
   { id: "highway-construction",   category: "special",   href: "/smeta-trainer/drawings-practice/highway-construction",   icon: "🛣️", title: "Магистрали и автобаны",           subtitle: "БАКАД 66 км, А1+ЩМА-15 SBS 210 мм, AASHTO LRFD + Superpave, СН РК 3.03-09",         level: "L5", exercises: 4,  color: "stone"   },
 
   // ── Оборона и стратегические объекты ──

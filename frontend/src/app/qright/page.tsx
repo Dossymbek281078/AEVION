@@ -441,8 +441,6 @@ export default function QRightPage() {
       setResult(data as PipelineResult);
       setStep("done");
       showToast("Your work is now protected!", "success");
-      const aev = mintAevQRight();
-      if (aev > 0) setTimeout(() => showToast(`◆ +${aev.toFixed(2)} AEV · QRight · право зарегистрировано`, "success"), 700);
     } catch (e) {
       timers.forEach(clearTimeout);
       setErr((e as Error).message);

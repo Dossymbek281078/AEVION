@@ -77,6 +77,8 @@ const SMOKES = [
   { name: "qtrade-prod", script: "qtrade-prod-smoke.js", readOnly: true },
   // Bureau PROD — 15 read-only checks for IP Bureau (health, transparency, notaries, auth gates).
   { name: "bureau-prod", script: "bureau-prod-smoke.js", readOnly: true },
+  // QRight PROD — 26 checks: health, objects CRUD, CSV export, transparency, badge SVG, embed, policies, RSS changelog.
+  { name: "qright-prod", script: "qright-prod-smoke.js", readOnly: false },
   // QSign PROD — 15 read-only checks for QSign v2 (ML-DSA/Ed25519/HMAC) + legacy deprecation.
   { name: "qsign-prod", script: "qsign-prod-smoke.js", readOnly: true },
   // HealthAI PROD — 15 read-only checks (health, referrals, empty-series graceful, auth gates).

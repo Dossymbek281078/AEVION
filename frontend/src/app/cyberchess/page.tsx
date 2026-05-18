@@ -1178,6 +1178,9 @@ export default function CyberChessPage(){
       return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
     });
   },[showToast]);
+  // Shop v2: consume time_boost — moved BELOW useTimer declarations (see ниже)
+  const timeBoostAppliedRef=useRef<number>(0);
+
   // Achievement panel + auto-detect newly-unlocked from catalog
   const[showAchievements,sShowAchievements]=useState(false);
   // ── Counters для achievements (variantsTried / coachUsed / ecosystemVisits / loginStreak) ──
@@ -1366,6 +1369,19 @@ export default function CyberChessPage(){
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
   const pT=useTimer(tc.ini,tc.inc,on&&myT&&!over&&tc.ini>0,()=>{sOver("Time out");snd("x")});
   const aT=useTimer(tc.ini,tc.inc,on&&!myT&&!over&&tc.ini>0,()=>{sOver("AI timed out — you win!");snd("x")});
+
+  // Shop v2: consume time_boost on game start — applies +Ns to user's clock
+  // once per purchase. Triggered at game start when ach.time_boost > 0.
+  useEffect(()=>{
+    if(setup||!on||hist.length>0)return;
+    const boost=(chessy.ach as Record<string,number>).time_boost||0;
+    if(boost<=0)return;
+    if(timeBoostAppliedRef.current===bk)return;
+    timeBoostAppliedRef.current=bk;
+    pT.setTime(pT.time+boost);
+    sChessy(c=>({...c,ach:{...c.ach,time_boost:0}}));
+    showToast(`⏱ +${boost}s времени применено`,"success");
+  },[setup,on,hist.length,bk,chessy.ach,pT,showToast]);
   // "Your turn" board glow — fires for ~700ms when AI just moved.
   // Suppressed during hotseat/p2p (those use other cues), and on first myT.
   const prevMyTRef=useRef(myT);
@@ -2067,11 +2083,17 @@ export default function CyberChessPage(){
           if(w){
             const nr=Math.min(3000,rat+Math.max(5,Math.round((lv.elo-rat)*0.1+15)));sRat(nr);svR(nr);
             const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);showToast(`+${nr-rat} rating`,"success");
-            // Chessy reward: scale by AI difficulty × time category
+            // Chessy reward: scale by AI difficulty × time category × shop bonus
             const aiMul=[0.2,0.5,1,1.5,2.5,4][aiI]||1;
             const timeMul=tc.ini<=0?1:Math.max(0.5,Math.min(3,tc.ini/300));
-            const reward=Math.max(5,Math.round(10*aiMul*timeMul));
-            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}`);bumpDaily("game")},400);
+            const baseReward=Math.max(5,Math.round(10*aiMul*timeMul));
+            // Apply Chessy×2 boost (shop v2 item, consumed once)
+            const doubleActive=(chessy.ach as Record<string,number>).chessy_double>0;
+            const reward=doubleActive?baseReward*2:baseReward;
+            if(doubleActive){
+              sChessy(c=>({...c,ach:{...c.ach,chessy_double:0}}));
+            }
+            setTimeout(()=>{addChessy(reward,`победа над ${lv.name}${doubleActive?" 💰x2":""}`);bumpDaily("game")},400);
             // Achievements
             const newWinCount=sts.w+1;
             setTimeout(()=>{
@@ -8457,10 +8479,31 @@ ${question.trim()}`;
         {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
         {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
         {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
-        {id:"hint_ghost",name:isPro?"Ghost-подсказка ✨":"Ghost-подсказка",desc:isPro?"Pro: бесплатные подсказки. На 3 секунды увидишь лучший ход на доске.":"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)",cost:isPro?0:15,kind:"action",disabled:!on||!!over,onBuy:()=>{
+        {id:"hint_ghost",
+          name:(()=>{
+            const left=(chessy.ach as Record<string,number>).hints_left||0;
+            if(left>0)return `Ghost-подсказка 💎 (${left} в пакете)`;
+            return isPro?"Ghost-подсказка ✨":"Ghost-подсказка";
+          })(),
+          desc:(()=>{
+            const left=(chessy.ach as Record<string,number>).hints_left||0;
+            if(left>0)return `У тебя ${left} подсказок из пакета — бесплатно. На 3 секунды увидишь лучший ход на доске.`;
+            return isPro?"Pro: бесплатные подсказки. На 3 секунды увидишь лучший ход на доске.":"На 3 секунды увидишь лучший ход прямо на доске (разовое использование в текущей партии)";
+          })(),
+          cost:(()=>{
+            const left=(chessy.ach as Record<string,number>).hints_left||0;
+            if(left>0)return 0; // используем из пакета
+            return isPro?0:15;
+          })(),
+          kind:"action",disabled:!on||!!over,onBuy:()=>{
           if(!sfR.current?.ready()){showToast("Stockfish не готов","error");return}
+          // Consume from pack first (if any)
+          const left=(chessy.ach as Record<string,number>).hints_left||0;
+          if(left>0){
+            sChessy(c=>({...c,ach:{...c.ach,hints_left:left-1}}));
+          }
           sShowShop(false);
-          showToast("🧠 Считаю подсказку...","info");
+          showToast(left>0?`🧠 Считаю подсказку (осталось ${left-1})...`:"🧠 Считаю подсказку...","info");
           sfR.current.go(game.fen(),12,(f,t)=>{
             if(!f||!t){showToast("Не нашёл хода","error");return}
             sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);

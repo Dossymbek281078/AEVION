@@ -408,6 +408,11 @@ const MODULES: Module[] = [
   { id: "dental-clinics",         category: "special",   href: "/smeta-trainer/drawings-practice/dental-clinics",         icon: "🦷", title: "Стоматологич. клиники премиум",   subtitle: "Damen Dental 6 каб., A-dec 500 + КТ NewTom 5G, ISO 8 для имплантологии, СанПиН 4.01-007", level: "L5", exercises: 4,  color: "pink"    },
   { id: "poultry-farms",          category: "special",   href: "/smeta-trainer/drawings-practice/poultry-farms",          icon: "🐔", title: "Птицефабрики (бройлеры)",         subtitle: "Шымкент-Кус 500 000 гол/год, Big Dutchman, климат 32→20°C, BSL птичий грипп",          level: "L5", exercises: 4,  color: "yellow"  },
   { id: "fruit-cold-storage",     category: "special",   href: "/smeta-trainer/drawings-practice/fruit-cold-storage",     icon: "🍎", title: "Плодоовощехранилища РГС ULO",     subtitle: "Алматинский Сад 5000 т, ULO O₂=1.5%/CO₂=2%, Janny MT, DCA HarvestWatch, FAO ISO 8328", level: "L5", exercises: 4,  color: "amber"   },
+
+  // ── Магистральные ВОС, ТЭЦ, изотопы ──
+  { id: "water-purification-large", category: "utilities", href: "/smeta-trainer/drawings-practice/water-purification-large", icon: "💧", title: "Магистральные ВОС муниципальные", subtitle: "Аккуль Алматы 500 000 м³/сут, DAF+UF Memcor+RO+УФ Wedeco, WHO 4th ed + AWWA",     level: "L5", exercises: 4,  color: "blue"    },
+  { id: "district-heating",         category: "utilities", href: "/smeta-trainer/drawings-practice/district-heating",         icon: "🔥", title: "ТЭЦ и магистральная теплосеть",   subtitle: "Алматы ТЭЦ-1 380 МВт+1200 Гкал/ч, Babcock&Wilcox+SST-700, Ø1500 EN 13941",   level: "L5", exercises: 4,  color: "red"     },
+  { id: "isotope-medical",          category: "utilities", href: "/smeta-trainer/drawings-practice/isotope-medical",          icon: "⚛️", title: "Циклотроны и изотопы (PET)",      subtitle: "ИЯФ Алматы Cyclone-30 IBA 30 МэВ, F-18/Ga-68, BPE+Heavy Concrete, IAEA SSG-46", level: "L5", exercises: 4,  color: "violet"  },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

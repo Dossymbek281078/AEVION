@@ -44,7 +44,7 @@ export function Filters({
         const { latitude, longitude } = pos.coords;
         try {
           const r = await fetch(
-            `/api/mapreality/signals/nearby?lat=${latitude}&lng=${longitude}&radius=50&limit=20`,
+            apiUrl(`/api/mapreality/signals/nearby?lat=${latitude}&lng=${longitude}&radius=50&limit=20`),
             { cache: "no-store" },
           );
           if (!r.ok) throw new Error(`HTTP ${r.status}`);

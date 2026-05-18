@@ -83,6 +83,10 @@ const SMOKES = [
   { name: "qsign-prod", script: "qsign-prod-smoke.js", readOnly: true },
   // HealthAI PROD — 15 read-only checks (health, referrals, empty-series graceful, auth gates).
   { name: "healthai-prod", script: "healthai-prod-smoke.js", readOnly: true },
+  // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
+  { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
+  // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.
+  { name: "qchaingov-prod", script: "qchaingov-prod-smoke.js", readOnly: true },
   // QShield + QRight PROD — 15 read-only checks (Shamir health, QRight objects, auth gates).
   { name: "qshield-prod", script: "qshield-prod-smoke.js", readOnly: true },
   // QZone PROD — 15 checks: QAI personas+sessions+chat, DevHub, QSocial, QMedia (qzone-block5).

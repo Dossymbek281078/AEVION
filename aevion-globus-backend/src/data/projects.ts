@@ -130,9 +130,9 @@ export const projects: GlobusProject[] = [
     code: "QMASKCARD",
     name: "QMaskCard — Protected Bank Card",
     description:
-      "Банковская карта с виртуальными копиями, защищёнными транзакциями и антифрод-механикой.",
+      "Віртуальні карти-маски: ліміти (день/місяць), авторизація зарядів, anti-fraud decline, 14 активних масок у проді, 14/14 prod smoke ✅.",
     kind: "product",
-    status: "idea",
+    status: "live",
     priority: 2,
     tags: ["card", "security", "fintech"],
     createdAt: now,

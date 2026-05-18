@@ -413,6 +413,11 @@ const MODULES: Module[] = [
   { id: "water-purification-large", category: "utilities", href: "/smeta-trainer/drawings-practice/water-purification-large", icon: "💧", title: "Магистральные ВОС муниципальные", subtitle: "Аккуль Алматы 500 000 м³/сут, DAF+UF Memcor+RO+УФ Wedeco, WHO 4th ed + AWWA",     level: "L5", exercises: 4,  color: "blue"    },
   { id: "district-heating",         category: "utilities", href: "/smeta-trainer/drawings-practice/district-heating",         icon: "🔥", title: "ТЭЦ и магистральная теплосеть",   subtitle: "Алматы ТЭЦ-1 380 МВт+1200 Гкал/ч, Babcock&Wilcox+SST-700, Ø1500 EN 13941",   level: "L5", exercises: 4,  color: "red"     },
   { id: "isotope-medical",          category: "utilities", href: "/smeta-trainer/drawings-practice/isotope-medical",          icon: "⚛️", title: "Циклотроны и изотопы (PET)",      subtitle: "ИЯФ Алматы Cyclone-30 IBA 30 МэВ, F-18/Ga-68, BPE+Heavy Concrete, IAEA SSG-46", level: "L5", exercises: 4,  color: "violet"  },
+
+  // ── Образование, цирк, кино ──
+  { id: "kindergarten-detsad",    category: "practice",  href: "/smeta-trainer/drawings-practice/kindergarten-detsad",    icon: "🧸", title: "Детские сады ДДУ",                subtitle: "ПДОП-150 мест Минпросвещ., 6 групп, KOMPAN + EPDM площадки, СанПиН РК 4.01-010", level: "L5", exercises: 4,  color: "yellow"  },
+  { id: "circus-amphitheater",    category: "practice",  href: "/smeta-trainer/drawings-practice/circus-amphitheater",    icon: "🎪", title: "Цирки и амфитеатры",              subtitle: "Алматинский Гос. Цирк 2000 мест, манеж Ø13 м, Trafostore 24 лебёдки, FII",       level: "L5", exercises: 4,  color: "purple"  },
+  { id: "cinema-multiplex",       category: "practice",  href: "/smeta-trainer/drawings-practice/cinema-multiplex",       icon: "🎬", title: "Мультиплексы и кинотеатры",       subtitle: "Chaplin 14 залов + IMAX Laser dual, Christie CP4440-RGB, Dolby Atmos 64-кан., DCI", level: "L5", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

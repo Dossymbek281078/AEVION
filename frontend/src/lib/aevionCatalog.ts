@@ -13,7 +13,10 @@
  * `paths` alias, so the `@aevion/catalog-client` import below resolves
  * to the package's TS source.
  */
-import { AevionCatalog } from "@aevion/catalog-client";
+// Relative import to workspace package — Turbopack prod build не резолвит
+// bare specifier `@aevion/catalog-client` через file:../ npm dep + symlink.
+// Используем явный путь к built dist (package main).
+import { AevionCatalog } from "../../../packages/aevion-catalog-client/dist/index.js";
 import { getApiBase } from "@/lib/apiBase";
 
 /** Default unauthenticated client. Cheap to construct; created once. */

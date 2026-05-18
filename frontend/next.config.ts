@@ -16,7 +16,9 @@ const backendProxyTarget =
 // При `npm run build` из каталога `frontend` `process.cwd()` — корень приложения.
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.resolve(process.cwd()),
+    // Monorepo root — без этого Turbopack ограничивает резолюцию
+    // папкой frontend/ и не видит `../packages/aevion-catalog-client/`.
+    root: path.resolve(process.cwd(), ".."),
   },
 
   async headers() {

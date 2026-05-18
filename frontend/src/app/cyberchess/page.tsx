@@ -2312,64 +2312,12 @@ export default function CyberChessPage(){
     }
   },[totalGames,pzSolvedCount,dailyGoals,addChessy,showToast]);
 
-  /* ── Chess Vision: трекет фаз ── */
-  const startVisionRound=useCallback(()=>{
-    if(PUZZLES.length===0){showToast("Пазлы ещё грузятся…","info");return}
-    // Pick random puzzle from filtered list (use easier ones for vision: rating <= 1500)
-    const candidates=PUZZLES.filter(p=>p.r<=1500&&p.sol.length>=1);
-    const pool=candidates.length>0?candidates:PUZZLES;
-    const pz=pool[Math.floor(Math.random()*pool.length)];
-    sVisionPuzzle(pz);sVisionAnswer("");sVisionResult("idle");
-    sVisionPhase("countdown");sVisionCountdown(3);
-  },[PUZZLES,showToast]);
-  // Countdown 3..2..1 → show
-  useEffect(()=>{
-    if(!showVision||visionPhase!=="countdown")return;
-    if(visionCountdown<=0){sVisionPhase("show");return}
-    const t=setTimeout(()=>sVisionCountdown(c=>c-1),700);
-    return()=>clearTimeout(t);
-  },[showVision,visionPhase,visionCountdown]);
-  // Show → hidden after visionShowMs
-  useEffect(()=>{
-    if(!showVision||visionPhase!=="show")return;
-    const t=setTimeout(()=>sVisionPhase("hidden"),visionShowMs);
-    return()=>clearTimeout(t);
-  },[showVision,visionPhase,visionShowMs]);
-  const submitVisionAnswer=useCallback(()=>{
-    if(!visionPuzzle)return;
-    const expectedUci=visionPuzzle.sol[0]||"";
-    const ans=visionAnswer.trim();
-    if(!ans){showToast("Введи ход","error");return}
-    // Try matching as SAN first, then UCI
-    let isCorrect=false;
-    try{
-      const c=new Chess(visionPuzzle.fen);
-      const m=c.move(ans);
-      if(m){
-        const playedUci=`${m.from}${m.to}${m.promotion||""}`;
-        isCorrect=playedUci===expectedUci||playedUci.slice(0,4)===expectedUci.slice(0,4);
-      }
-    }catch{}
-    if(!isCorrect){
-      // Try as UCI directly
-      const compact=ans.replace(/\s+/g,"").toLowerCase();
-      if(compact===expectedUci||compact.slice(0,4)===expectedUci.slice(0,4))isCorrect=true;
-    }
-    sVisionResult(isCorrect?"correct":"wrong");
-    sVisionPhase("answered");
-    sVisionScore(s=>({right:s.right+(isCorrect?1:0),total:s.total+1}));
-    if(isCorrect){
-      const newStreak=visionStreak+1;
-      sVisionStreak(newStreak);
-      if(newStreak>visionBest){sVisionBest(newStreak);try{localStorage.setItem("aevion_vision_best_v1",String(newStreak))}catch{}}
-      const reward=Math.min(15,2+Math.floor(newStreak/3));
-      addChessy(reward,`🧠 Vision · streak ${newStreak}`);
-      snd("check");
-    }else{
-      sVisionStreak(0);
-      snd("capture");
-    }
-  },[visionPuzzle,visionAnswer,visionStreak,visionBest,addChessy,showToast]);
+  /* ── Chess Vision: REMOVED 2026-05-18 — feature была вырезана наполовину
+     (handlers ссылались на never-declared state: showVision, visionPuzzle и т.д.,
+     UI компонент отсутствовал). Если возрождать — нужны: state set
+     (showVision, visionPuzzle, visionAnswer, visionResult, visionPhase,
+     visionCountdown, visionShowMs, visionStreak, visionBest, visionScore) +
+     полноценный modal с board overlay для memorize-then-recall тренировки. ── */
 
   /* ── AI Story Mode: generate + voice-narrate the finished game ── */
   const generateStory=useCallback(():string=>{

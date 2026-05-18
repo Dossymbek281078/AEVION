@@ -393,6 +393,11 @@ const MODULES: Module[] = [
   { id: "military-airbase",       category: "special",   href: "/smeta-trainer/drawings-practice/military-airbase",       icon: "✈️", title: "Военные аэродромы",               subtitle: "Жетыген Су-30СМ, ВПП 3500×60 B45 фибра, HAS бункеры, STANAG 3680 + ICAO 4F", level: "L5", exercises: 4,  color: "green"   },
   { id: "radar-stations",         category: "special",   href: "/smeta-trainer/drawings-practice/radar-stations",         icon: "📡", title: "РЛС и узлы связи",                subtitle: "Дарьял-У/П-18, антенна Ø11 м H=30 м, radome FRP, MIL-STD-188-125-1 EMP",  level: "L5", exercises: 4,  color: "violet"  },
   { id: "strategic-fuel-storage", category: "special",   href: "/smeta-trainer/drawings-practice/strategic-fuel-storage", icon: "⛽", title: "Стратегические нефтехранилища",   subtitle: "Атасу-Алашанькоу 500 000 т, 30 РВС-20000 понтон, AFFF + Boilover NFPA 30", level: "L5", exercises: 4,  color: "orange"  },
+
+  // ── Экология и обращение с отходами ──
+  { id: "landfill-tbo",           category: "process",   href: "/smeta-trainer/drawings-practice/landfill-tbo",           icon: "🗑️", title: "Полигоны ТБО (захоронение)",      subtitle: "Кеңқарасу 350 000 т/год, HDPE 2 мм + GCL Bentofix, биогаз КГЭС, EU 1999/31/EC", level: "L5", exercises: 4,  color: "lime"    },
+  { id: "incinerator-plants",     category: "process",   href: "/smeta-trainer/drawings-practice/incinerator-plants",     icon: "🔥", title: "Мусоросжигание Waste-to-Energy",  subtitle: "Шымкент Veolia 500 т/сут, Martin grate +850°C×2 с, ESP+SCR+AC, EU IED Annex VI", level: "L5", exercises: 4,  color: "orange"  },
+  { id: "recycling-plants",       category: "process",   href: "/smeta-trainer/drawings-practice/recycling-plants",       icon: "♻️", title: "Мусоросортировка MRF",            subtitle: "Алматы 500 т/сут, Tomra Autosort 5 NIR + Sutco BRT + Macpresse, EU 2008/98/EC",  level: "L5", exercises: 4,  color: "teal"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

@@ -328,9 +328,9 @@ export const projects: GlobusProject[] = [
     code: "QCONTRACT",
     name: "QContract — Self-destruct Smart Documents",
     description:
-      "Саморазрушающиеся смарт-документы: контроль доступа, срок действия, защита контента + concept board. MVP 2026-05-15 — /api/qcontract.",
+      "Смарт-документи: 5 шаблонів (NDA/договір/дозвіл/конфіденційність/ТЗ), auth-gated CRUD, view-token, audit log CSV, OpenAPI — 17/17 prod smoke ✅.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["documents", "security"],
     createdAt: now,
@@ -380,9 +380,9 @@ export const projects: GlobusProject[] = [
     code: "QCHAINGOV",
     name: "QChainGov — DAO Governance",
     description:
-      "DAO governance MVP 2026-05-15 — proposals + 3 vote modes (yes-no, ranked, weighted), tally execution with quorum, citizen-proposed concept board. /api/qchaingov.",
+      "DAO governance: proposals + 3 vote modes (yes-no, ranked, weighted), tally execution with quorum, auth-gated voting, stats — 15/15 prod smoke ✅.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 4,
     tags: ["dao", "governance"],
     createdAt: now,

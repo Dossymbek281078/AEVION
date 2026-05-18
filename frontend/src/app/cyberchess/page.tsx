@@ -85,6 +85,8 @@ import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
 import { calibrateFromGames } from "./ratingCalibration";
 import AiPersonalityPicker from "./AiPersonalityPicker";
+import SpectatorChat from "./SpectatorChat";
+import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -1198,11 +1200,15 @@ export default function CyberChessPage(){
   // Publish current state на каждое изменение позиции/хода (если on && spectatorPublish)
   useEffect(()=>{
     if(!spectatorPublish||!on||setup)return;
+    // Replay snapshots: FEN на каждом ply + eval history → backend сохранит в replay archive при result
+    const evalCpHistory=analysis.length>0?analysis.map(a=>typeof a.cp==="number"?a.cp:0):undefined;
     const payload={
       gameId:spectatorGameIdRef.current||undefined,
       hostName:(typeof window!=="undefined"?(localStorage.getItem("aevion_user_display_name")||"Anon"):"Anon"),
       fen:game.fen(),
       hist,
+      fenSnapshots:fenHist.length>0?fenHist:undefined,
+      evalCpHistory,
       evalCp:typeof evalCp==="number"?evalCp:undefined,
       evalMate:typeof evalMate==="number"?evalMate:undefined,
       lastSan:hist[hist.length-1],
@@ -1217,6 +1223,54 @@ export default function CyberChessPage(){
       if(d?.gameId)spectatorGameIdRef.current=d.gameId;
     }).catch(()=>{});
   },[spectatorPublish,on,setup,bk,over]);
+  // Matchmaking: SSE подписка на match stream если есть ?matchId= в URL
+  const[matchmakingId,sMatchmakingId]=useState<string|null>(null);
+  const matchmakingMoveRef=useRef<{from:Square;to:Square;pr?:string}|null>(null);
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    try{
+      const params=new URLSearchParams(window.location.search);
+      const mid=params.get("matchId");
+      if(mid&&/^[a-zA-Z0-9-]{6,64}$/.test(mid))sMatchmakingId(mid);
+    }catch{}
+  },[]);
+  useEffect(()=>{
+    if(!matchmakingId)return;
+    const es=new EventSource(`/api/cyberchess/matchmaking/match/${matchmakingId}/stream`);
+    es.addEventListener("move",(e:MessageEvent)=>{
+      try{
+        const data=JSON.parse(e.data);
+        if(data?.uci&&typeof data.uci==="string"&&data.uci.length>=4){
+          matchmakingMoveRef.current={
+            from:data.uci.slice(0,2) as Square,
+            to:data.uci.slice(2,4) as Square,
+            pr:data.uci[4],
+          };
+        }
+      }catch{}
+    });
+    es.addEventListener("end",()=>{showToast("🤝 Соперник завершил матч","info")});
+    es.addEventListener("disconnect",()=>{showToast("🔌 Соперник отключился","info")});
+    return()=>{es.close()};
+  },[matchmakingId,showToast]);
+  useEffect(()=>{
+    const mv=matchmakingMoveRef.current;
+    if(!mv)return;
+    matchmakingMoveRef.current=null;
+    try{exec(mv.from,mv.to,mv.pr as "q"|"r"|"b"|"n"|undefined,false)}catch{}
+  },[bk]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lastSentMmHistLenRef=useRef<number>(0);
+  useEffect(()=>{
+    if(!matchmakingId||hist.length<=lastSentMmHistLenRef.current||hist.length===0||!lm)return;
+    const wasMyMove=hist.length%2===(pCol==="w"?1:0);
+    if(!wasMyMove){lastSentMmHistLenRef.current=hist.length;return}
+    lastSentMmHistLenRef.current=hist.length;
+    const userId=(typeof window!=="undefined")?(localStorage.getItem("cyberchess.userId")||"anon"):"anon";
+    fetch(`/api/cyberchess/matchmaking/match/${matchmakingId}/move`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({userId,uci:`${lm.from}${lm.to}`}),
+    }).catch(()=>{});
+  },[hist.length,matchmakingId,lm,pCol]);
   // On disable — отозвать стрим из registry
   useEffect(()=>{
     if(spectatorPublish||!spectatorGameIdRef.current)return;
@@ -3211,6 +3265,39 @@ export default function CyberChessPage(){
       return()=>clearTimeout(t);
     }
     if(useSF&&sfR.current?.ready()){
+      // AI personality wire: если установлена (не "standard") — использовать multiPV(3) + selectMoveByPersonality
+      const personalityId=loadStoredPersonalityId();
+      const personality=personalityId&&personalityId!=="standard"?findPersonality(personalityId):null;
+      if(personality){
+        const t=setTimeout(()=>{
+          const sf=sfR.current;
+          if(!sf?.ready()){sThink(false);return}
+          try{
+            sf.multiPV(fenAtTrigger,SFD[aiI]||10,3,(lines:Array<{moves:string[];cp:number;mate:number}>)=>{
+              if(game.fen()!==fenAtTrigger){sThink(false);return}
+              if(!lines||!lines.length){sThink(false);return}
+              const candidates:CandidateMove[]=lines.map(l=>{
+                const u=l.moves?.[0]||"";
+                return{
+                  uci:u,
+                  signals:{cp:l.cp,mate:l.mate},
+                };
+              }).filter(c=>typeof c.uci==="string"&&c.uci.length>=4);
+              if(!candidates.length){sThink(false);return}
+              const picked=selectMoveByPersonality(personality,candidates,{ply:hist.length});
+              const u=picked?.uci||"";
+              if(u.length>=4){
+                const from=u.slice(0,2) as Square;
+                const to=u.slice(2,4) as Square;
+                const pr=u.length>4?u[4] as "q"|"r"|"b"|"n":undefined;
+                exec(from,to,pr,false);
+              }
+              sThink(false);
+            });
+          }catch{sThink(false)}
+        },delay);
+        return()=>clearTimeout(t);
+      }
       const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
         try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any,false)}catch{}
@@ -11437,6 +11524,15 @@ ${question.trim()}`;
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />
+    {/* Host SpectatorChat — floating правый-низ когда стрим включён */}
+    {spectatorPublish&&spectatorGameIdRef.current&&<div style={{position:"fixed",right:16,bottom:16,width:320,maxHeight:"60vh",zIndex:90}}>
+      <SpectatorChat
+        gameId={spectatorGameIdRef.current}
+        isHost={true}
+        surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+        text={CC.text} textDim={CC.textDim} brand={CC.brand}
+      />
+    </div>}
     <PlayerStatsDashboard
       open={showStatsDashboard}
       onClose={()=>sShowStatsDashboard(false)}

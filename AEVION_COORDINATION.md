@@ -168,7 +168,7 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | **npm publish session COMPLETE 2026-05-18.** Все 4 AEVION SDK на npm: fintech-sdk + catalog-client под @aevion-io, qpaynet-client + qcoreai-client под @dosymbek. 142/142 vitest GREEN. | 2026-05-18 17:30 UTC+5 |
+| _free_ | — | **PROD-LIVE SESSION COMPLETE 2026-05-18.** live=33, mvp=2(chess+smeta других окон), idea=0. QCoreAI/HealthAI/Puzzles Prisma→pool. Mass mvp→live (32 модуля). QMaskCard idea→live. Commit c2660840. | 2026-05-18 19:00 UTC+5 |
 
 ### Завершено 2026-05-18 (npm publish + smoke drift fixes + scope unification)
 

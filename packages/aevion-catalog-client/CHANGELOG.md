@@ -1,4 +1,4 @@
-# Changelog — @aevion/catalog-client
+# Changelog — @aevion-io/catalog-client
 
 All notable changes to this package will be documented in this file.
 

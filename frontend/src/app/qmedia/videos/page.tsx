@@ -20,7 +20,7 @@ export default function QMediaVideosPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ title: "", description: "", url: "", thumbnailUrl: "", category: "other" });
 
-  // v0.8: load videos via @aevion/catalog-client SDK (cat.qmedia.videos).
+  // v0.8: load videos via @aevion-io/catalog-client SDK (cat.qmedia.videos).
   useEffect(() => {
     const c = category === "All" ? undefined : category.toLowerCase().replace(/ /g, "-");
     catalog.qmedia

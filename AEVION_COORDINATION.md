@@ -177,14 +177,14 @@ C) [третий вариант]
 - ✅ **npm org `aevion-io` создана** — короткий `@aevion` reserved by npm. Все будущие AEVION SDK публикуем под `@aevion-io/*`. См. `[[aevion-npm-publish]]` в auto-memory.
 - ✅ **2 smoke drift fixes** (commit `29d25e2e`) — `pricing-prod-smoke.js` переписан под реальные routes (был с фантомными /faq, /social-proof, которых нет в pricing.ts), `fintech-cross-module-smoke.mjs` адаптирован (/veilnetx-ledger/head убран → /stats, Z-Tide leaderboard вместо entries, QMaskCard /stats теперь public).
 - ✅ **20/20 read-only prod-smokes GREEN на Railway** — финальная сверка перед публикацией.
-- ⏸ **`@aevion/catalog-client` миграция отложена** — параллельная сессия активно правит package.json (version 0.7.0↔0.8.0 пересчитывается, name переписывается). По zone-protocol отступил, не сломал чужую работу. Откатил dirty changes. **Кому удобно — переименуйте scope `@aevion → @aevion-io` в `packages/aevion-catalog-client/package.json` + tsconfig path в `frontend/`, опубликуйте `@aevion-io/catalog-client@0.8.0`.**
+- ⏸ **`@aevion-io/catalog-client` миграция отложена** — параллельная сессия активно правит package.json (version 0.7.0↔0.8.0 пересчитывается, name переписывается). По zone-protocol отступил, не сломал чужую работу. Откатил dirty changes. **Кому удобно — переименуйте scope `@aevion → @aevion-io` в `packages/aevion-catalog-client/package.json` + tsconfig path в `frontend/`, опубликуйте `@aevion-io/catalog-client@0.8.0`.**
 - 🔒 **Security TODO для пользователя**: npm Automation токен `aevion-io-publish` попал в чат-историю при публикации — revoke на https://www.npmjs.com/settings/dosymbek/tokens.
 
 ### Завершено 2026-05-14 (parallel block 7+8)
 
 - ✅ **Smoke segfault fix** — qstore-smoke BOM strip (4ac6ed2f)
 - ✅ **SDK v0.7.0** — qcoreai+multichat+qmedia+coach sub-clients, 13 endpoints, 24 tests (4e76df15)
-- ✅ **Workspace alias** — @aevion/catalog-client via tsconfig paths (f30ae546)
+- ✅ **Workspace alias** — @aevion-io/catalog-client via tsconfig paths (f30ae546)
 - ✅ **Coach Bearer JWT** — migrated 8 owner-scoped endpoints to requireAuth (c630ded5)
 - ✅ **API Explorer multi-spec** — /api-explorer/specs with 21 specs aggregated
 - ✅ **Globus MOTD highlight** — pulsing amber ring on today's module country + M shortcut (f24604ad)
@@ -226,7 +226,7 @@ C) [третий вариант]
 - ✅ **ApiKeys** — PATCH /:id (rename) + GET /:id/usage (quota meter) + inline rename UI + expandable usage panel
 - ✅ **Modules** — GET /:id/history (sparkline data) + AutoRefreshToggle 30s
 - ✅ **Pricing GTM** — /api/pricing/faq (15Q's, 5 categories) + /social-proof (live counter) + category-filtered FAQ
-- ✅ **SDK consumers** — /qstore + /qlearn + /devhub переключены на @aevion/catalog-client v0.6
+- ✅ **SDK consumers** — /qstore + /qlearn + /devhub переключены на @aevion-io/catalog-client v0.6
 - ✅ **SEO/JSON-LD** — 6 layouts (Product/ProfilePage/CollectionPage/WebApplication) с BreadcrumbList
 - ✅ **E2E Playwright** — 5 spec файлов (qstore/qlearn/qevents/devhub/planet) с 35+ assertions
 - ⚠️ **Globus + QShield** — продолжают висеть локально, OAuth scope не обновлён
@@ -239,7 +239,7 @@ C) [третий вариант]
 - ✅ **Coach polish** — sessions lifecycle + goals (7 endpoints) + dashboard с live-session timer + goal tracker. SHA: `1c2bd0ba`.
 - ✅ **QStore seller profile** — `/qstore/seller/[id]` page + link из item detail. SHA: `c1aa6300`.
 - ✅ **Ecosystem** — `/api/ecosystem/activity` (cross-module feed) + `/graph` (deps+health-matrix) + `/ecosystem` dashboard. SHA: `c2bce26e`.
-- ✅ **SDK v0.6.0** — `@aevion/catalog-client` 5 namespaced sub-clients (qstore/qlearn/qevents/devhub/planet) + 16 endpoints + 30 vitest tests. SHA: `61721427`.
+- ✅ **SDK v0.6.0** — `@aevion-io/catalog-client` 5 namespaced sub-clients (qstore/qlearn/qevents/devhub/planet) + 16 endpoints + 30 vitest tests. SHA: `61721427`.
 - ✅ **Mobile audit** — anti-iOS-zoom, safer grids, modal scroll, sticky breakpoint, MOBILE_AUDIT_2026-05-14.md. SHA: `4120093d`.
 
 ### Smoke audit на prod Railway (2026-05-14, до redeploy)
@@ -262,7 +262,7 @@ C) [третий вариант]
 - ✅ **MVP-семейка-2** (`aevion-core/main`) — 1 commit + push: MvpConceptBoard wired в voice-of-earth/mapreality/startup-exchange/kids-ai-content (закрыта семейка 10/10). SHA: `119a1ea1`.
 - ✅ **DevHub backend** (`aevion-core/main`) — 1 commit + push: DevHubSnippet table + 4 endpoints (list/create/get/star) + tag/user filters. UI и smoke не сделано (агент остановился на backend из-за sandbox-блока). SHA: `791942a5`.
 - ✅ **Planet Compliance** (`aevion-core/main`) — 1 commit + push: `GET /api/planet/activity` — chronological event feed (submitted/certified/revoked/voted), kinds filter. SHA: `b8fc854c`.
-- ✅ **AEVION-hub** (`aevion-core/main`) — 2 commits + push: `/api/aevion/stats` (extended с coverage matrix + recent activity) + `/api/aevion/module-of-the-day` (deterministic by day-of-year) + SDK поддержка в `@aevion/catalog-client` (+8 vitest = 64/64 passed). SHA: `31e7eb8a`, `16c33eab`.
+- ✅ **AEVION-hub** (`aevion-core/main`) — 2 commits + push: `/api/aevion/stats` (extended с coverage matrix + recent activity) + `/api/aevion/module-of-the-day` (deterministic by day-of-year) + SDK поддержка в `@aevion-io/catalog-client` (+8 vitest = 64/64 passed). SHA: `31e7eb8a`, `16c33eab`.
 
 ### Завершено 2026-05-13 (parallel block 1)
 

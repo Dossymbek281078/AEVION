@@ -1,11 +1,11 @@
 "use strict";
 /**
- * @aevion/catalog-client — TypeScript client for the AEVION Hub catalog API.
+ * @aevion-io/catalog-client — TypeScript client for the AEVION Hub catalog API.
  *
  * Zero dependencies. Uses global fetch (Node 18+ / all modern browsers).
  *
  * Usage:
- *   import { AevionCatalog } from "@aevion/catalog-client";
+ *   import { AevionCatalog } from "@aevion-io/catalog-client";
  *   const cat = new AevionCatalog();
  *   const all = await cat.list();
  *   const mvps = await cat.list({ status: "mvp" });

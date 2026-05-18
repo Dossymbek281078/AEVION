@@ -343,7 +343,7 @@ export default function SearchExplorerPage() {
   const noResults = showResults && hits.length === 0 && loadState === "ok";
 
   const previewQ = debounced.trim() || "ai";
-  const sdkSnippet = `import { AevionCatalog } from "@aevion/catalog-client";
+  const sdkSnippet = `import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 const hits = await cat.findByText(${JSON.stringify(previewQ)});
 // → [{ item, score }, ...] sorted by score desc`;

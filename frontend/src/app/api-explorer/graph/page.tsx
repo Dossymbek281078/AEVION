@@ -475,7 +475,7 @@ export default function GraphExplorerPage() {
   };
 
   // Snippets
-  const sdkSnippet = `import { AevionCatalog } from "@aevion/catalog-client";
+  const sdkSnippet = `import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 const { nodes, edges } = await cat.graph({
   topK: ${topK},
@@ -524,7 +524,7 @@ const { nodes, edges } = await cat.graph({
             <code style={{ background: "rgba(15,23,42,0.06)", padding: "1px 6px", borderRadius: 4 }}>
               cat.graph()
             </code>{" "}
-            in <code>@aevion/catalog-client</code> v0.4. Source data:{" "}
+            in <code>@aevion-io/catalog-client</code> v0.4. Source data:{" "}
             <code style={{ background: "rgba(15,23,42,0.06)", padding: "1px 6px", borderRadius: 4 }}>
               GET /api/aevion/catalog?fields=id,name,status,tags
             </code>

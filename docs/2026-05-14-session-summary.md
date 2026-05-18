@@ -18,7 +18,7 @@
 | Planning landings unified | 14 |
 | New Playwright E2E specs | 5 |
 | Layouts shipping JSON-LD | 6 |
-| SDK release | `@aevion/catalog-client` 0.5 → 0.6 |
+| SDK release | `@aevion-io/catalog-client` 0.5 → 0.6 |
 
 For commit SHAs, run `git log --since=2026-05-13 --pretty=oneline` on
 `main`.
@@ -70,10 +70,10 @@ For commit SHAs, run `git log --since=2026-05-13 --pretty=oneline` on
 | Multichat | Provider health-strip + 5 mission presets | `frontend/src/app/multichat/**` |
 | QStore | Seller profile `/qstore/seller/[id]` | `frontend/src/app/qstore/seller/[id]/**` |
 | Ecosystem | `/activity`, `/graph`, health-matrix, dashboard | `frontend/src/app/ecosystem/**` |
-| SDK | `@aevion/catalog-client` 0.5 → 0.6 — 5 namespaced sub-clients, 16 endpoints, 30 tests | `packages/catalog-client/**` |
+| SDK | `@aevion-io/catalog-client` 0.5 → 0.6 — 5 namespaced sub-clients, 16 endpoints, 30 tests | `packages/catalog-client/**` |
 | Mobile audit | 8 files fixed (responsive / overflow) | scattered `frontend/src/app/**` |
 
-### SDK release notes — `@aevion/catalog-client` 0.6.0
+### SDK release notes — `@aevion-io/catalog-client` 0.6.0
 
 - Introduces 5 namespaced sub-clients (one per domain).
 - Exposes 16 endpoints (was 11 in 0.5).

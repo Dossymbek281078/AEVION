@@ -636,7 +636,7 @@ export default function DiffExplorerPage() {
   };
 
   // Snippets
-  const sdkSnippet = `import { AevionCatalog } from "@aevion/catalog-client";
+  const sdkSnippet = `import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 const diff = await cat.diff("${idA || "qsign"}", "${idB || "qright"}");
 // { shared, onlyA, onlyB, jaccard, statusEqual, kindEqual, priorityEqual }`;
@@ -675,7 +675,7 @@ const diff = await cat.diff("${idA || "qsign"}", "${idB || "qright"}");
             <code style={{ background: "rgba(15,23,42,0.06)", padding: "1px 6px", borderRadius: 4 }}>
               cat.diff(a, b)
             </code>{" "}
-            in <code>@aevion/catalog-client</code> v0.5, computed entirely client-side from two{" "}
+            in <code>@aevion-io/catalog-client</code> v0.5, computed entirely client-side from two{" "}
             <code style={{ background: "rgba(15,23,42,0.06)", padding: "1px 6px", borderRadius: 4 }}>
               GET /api/aevion/catalog/:id
             </code>{" "}

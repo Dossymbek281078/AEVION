@@ -78,6 +78,8 @@ import MusicPlayer from "./MusicPlayer";
 import AevionMiniHub from "./AevionMiniHub";
 import VoiceCoach from "./VoiceCoach";
 import TurnClock from "./TurnClock";
+import AchievementPanel from "./AchievementPanel";
+import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -1176,6 +1178,21 @@ export default function CyberChessPage(){
       return {...c,balance:c.balance+reward,lifetime:c.lifetime+reward,ach:{...c.ach,[key]:Date.now()}};
     });
   },[showToast]);
+  // Achievement panel + auto-detect newly-unlocked from catalog
+  const[showAchievements,sShowAchievements]=useState(false);
+  const achContext=useMemo(()=>({
+    totalGames, totalWins: sts.w,
+    pzSolvedCount, pzBestStreak: 0,
+    rushBestScore: 0,
+    rating: rat,
+    lifetimeChessy: chessy.lifetime,
+  }),[totalGames, sts.w, pzSolvedCount, rat, chessy.lifetime]);
+  useEffect(()=>{
+    const newly=findNewlyUnlocked(chessy.ach,achContext);
+    for(const a of newly){
+      unlockAch(a.id,a.reward,a.title);
+    }
+  },[achContext,chessy.ach,unlockAch]);
   // Coord trainer tick (defined here so addChessy is in scope)
   useEffect(()=>{
     if(!coordSession||coordResult)return;
@@ -5050,6 +5067,7 @@ export default function CyberChessPage(){
           {label:"🏆 Турниры v2",hint:"Bracket view + registration",onClick:()=>{window.location.href="/cyberchess/tournaments"}},
           {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
           {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
+          {label:"🏆 Достижения",hint:"Каталог + прогресс",onClick:()=>sShowAchievements(true)},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
         ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
           style={{
@@ -11270,6 +11288,14 @@ ${question.trim()}`;
       </div>
     )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    <AchievementPanel
+      open={showAchievements}
+      onClose={()=>sShowAchievements(false)}
+      achState={chessy.ach}
+      context={achContext}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
+    />
     <VoiceCoach
       enabled={!muted}
       fen={game.fen()}

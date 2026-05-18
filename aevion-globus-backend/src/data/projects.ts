@@ -175,9 +175,9 @@ export const projects: GlobusProject[] = [
     code: "HEALTHAI",
     name: "HealthAI — Personal AI Doctor",
     description:
-      "Персональный ИИ-доктор и тренер здоровья: рекомендации, трекеры, персональные планы.",
+      "Postgres-персистентний AI-лікар: профілі, симптом-чек, денний лог (сон/настрій/вага/вода), цикл-трекер, AI план, тренди, рефераліти, популяційні аверейджи, 15/15 prod smoke ✅.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["health", "ai", "coach"],
     createdAt: now,

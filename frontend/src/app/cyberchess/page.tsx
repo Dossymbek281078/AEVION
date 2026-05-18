@@ -80,6 +80,7 @@ import VoiceCoach from "./VoiceCoach";
 import TurnClock from "./TurnClock";
 import AchievementPanel from "./AchievementPanel";
 import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
+import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
@@ -1183,6 +1184,7 @@ export default function CyberChessPage(){
 
   // Achievement panel + auto-detect newly-unlocked from catalog
   const[showAchievements,sShowAchievements]=useState(false);
+  const[showStatsDashboard,sShowStatsDashboard]=useState(false);
   // ── Counters для achievements (variantsTried / coachUsed / ecosystemVisits / loginStreak) ──
   const[coachUsedCount,sCoachUsedCount]=useState<number>(()=>{
     try{return parseInt(localStorage.getItem("cc_coach_used_v1")||"0")||0}catch{return 0}
@@ -5070,6 +5072,7 @@ export default function CyberChessPage(){
           {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
           {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
           {label:"🏆 Достижения",hint:"Каталог + прогресс",onClick:()=>sShowAchievements(true)},
+          {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время",onClick:()=>sShowStatsDashboard(true)},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
         ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
           style={{
@@ -11353,6 +11356,19 @@ ${question.trim()}`;
       onClose={()=>sShowAchievements(false)}
       achState={chessy.ach}
       context={achContext}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
+    />
+    <PlayerStatsDashboard
+      open={showStatsDashboard}
+      onClose={()=>sShowStatsDashboard(false)}
+      savedGames={savedGames}
+      stats={sts}
+      rating={rat}
+      pzSolvedCount={pzSolvedCount}
+      achievementsUnlocked={Object.keys(chessy.ach).length}
+      achievementsTotal={ACHIEVEMENTS.length}
+      loginStreak={loginStreak}
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
     />

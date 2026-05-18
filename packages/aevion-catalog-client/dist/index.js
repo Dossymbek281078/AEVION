@@ -438,7 +438,7 @@ class QLearnClient {
         }
     }
     /** POST /api/qlearn/courses/:id/bookmark — add bookmark. */
-    bookmark(courseId) {
+    async bookmark(courseId) {
         this._assertCourseId(courseId);
         return this._root._request("POST", `/api/qlearn/courses/${courseId}/bookmark`);
     }
@@ -477,7 +477,7 @@ class QEventsClient {
         });
     }
     /** GET /api/qevents/events/:id/ics — returns ICS text/calendar payload. */
-    ics(eventId) {
+    async ics(eventId) {
         if (!eventId || !/^[a-z0-9-]+$/i.test(eventId)) {
             throw new Error(`QEvents.ics invalid eventId: '${eventId}'`);
         }
@@ -540,7 +540,7 @@ class DevHubClient {
         return this._root._request("GET", `/api/devhub/snippets/${snippetId}`);
     }
     /** POST /api/devhub/snippets/:id/star — toggle / increment star. */
-    star(snippetId) {
+    async star(snippetId) {
         if (!snippetId || !/^[a-z0-9-]+$/i.test(snippetId)) {
             throw new Error(`DevHub.star invalid snippetId: '${snippetId}'`);
         }
@@ -606,7 +606,7 @@ class MultichatClient {
         return this._root._request("GET", "/api/multichat/presets");
     }
     /** POST /api/multichat/presets/:id/launch — launch a preset, returns session. */
-    launchPreset(presetId) {
+    async launchPreset(presetId) {
         if (!presetId || !/^[a-z0-9-]+$/i.test(presetId)) {
             throw new Error(`Multichat.launchPreset invalid presetId: '${presetId}'`);
         }

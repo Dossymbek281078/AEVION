@@ -1,6 +1,6 @@
 {
   "name": "@aevion-io/catalog-client",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "TypeScript client for the AEVION Hub catalog API (/api/aevion/*) — module discovery, registry stats, status badges, plus typed sub-clients for QStore, QLearn, QEvents, DevHub, Planet, QCoreAI, Multichat, QMedia, Coach. Zero deps.",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

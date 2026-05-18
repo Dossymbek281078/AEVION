@@ -168,17 +168,26 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | **npm publish session done 2026-05-18.** Fintech SDK live, smoke drift fixes pushed, catalog-client migration deferred (conflict с активной параллельной сессией). | 2026-05-18 17:00 UTC+5 |
+| _free_ | — | **npm publish session COMPLETE 2026-05-18.** Все 4 AEVION SDK на npm: fintech-sdk + catalog-client под @aevion-io, qpaynet-client + qcoreai-client под @dosymbek. 142/142 vitest GREEN. | 2026-05-18 17:30 UTC+5 |
 
-### Завершено 2026-05-18 (npm publish + smoke drift fixes)
+### Завершено 2026-05-18 (npm publish + smoke drift fixes + scope unification)
 
-- ✅ **`@aevion-io/fintech-sdk@0.2.0` на npm** — первый AEVION SDK официально опубликован (https://www.npmjs.com/package/@aevion-io/fintech-sdk). 6 модулей + webhook signing. Commit `c4a46998` (LICENSE + publishConfig + author/homepage/bugs).
+**🎉 AEVION SDK presence на npm — все 4 пакета live:**
+- ✅ **`@aevion-io/fintech-sdk@0.2.0`** — первый AEVION SDK официально опубликован (https://www.npmjs.com/package/@aevion-io/fintech-sdk). 6 модулей + webhook signing. Commit `c4a46998`.
+- ✅ **`@aevion-io/catalog-client@0.8.1`** — scope migration `@aevion → @aevion-io` (commit `105d4e9b`). Mass rename 30 файлов: package, frontend file:dep, ~13 frontend pages, docs, root README/CHANGELOG. 0.8.1 — фикс 4 vitest `.rejects.toThrow` (sync throw → `async` methods для bookmark/ics/star/launchPreset). **142/142 tests GREEN.**
 - ✅ **`@dosymbek/qpaynet-client@1.0.4` bump-publish** — registry был на 1.0.3, локально 1.0.4 ждал. Залит.
+- ✅ **`@dosymbek/qcoreai-client@1.0.0`** — в sync, action не требовался.
+
+**Infra/CI:**
 - ✅ **npm org `aevion-io` создана** — короткий `@aevion` reserved by npm. Все будущие AEVION SDK публикуем под `@aevion-io/*`. См. `[[aevion-npm-publish]]` в auto-memory.
-- ✅ **2 smoke drift fixes** (commit `29d25e2e`) — `pricing-prod-smoke.js` переписан под реальные routes (был с фантомными /faq, /social-proof, которых нет в pricing.ts), `fintech-cross-module-smoke.mjs` адаптирован (/veilnetx-ledger/head убран → /stats, Z-Tide leaderboard вместо entries, QMaskCard /stats теперь public).
-- ✅ **20/20 read-only prod-smokes GREEN на Railway** — финальная сверка перед публикацией.
-- ⏸ **`@aevion-io/catalog-client` миграция отложена** — параллельная сессия активно правит package.json (version 0.7.0↔0.8.0 пересчитывается, name переписывается). По zone-protocol отступил, не сломал чужую работу. Откатил dirty changes. **Кому удобно — переименуйте scope `@aevion → @aevion-io` в `packages/aevion-catalog-client/package.json` + tsconfig path в `frontend/`, опубликуйте `@aevion-io/catalog-client@0.8.0`.**
-- 🔒 **Security TODO для пользователя**: npm Automation токен `aevion-io-publish` попал в чат-историю при публикации — revoke на https://www.npmjs.com/settings/dosymbek/tokens.
+- ✅ **2 smoke drift fixes** (commit `29d25e2e`) — `pricing-prod-smoke.js` переписан под реальные routes (был с фантомными /faq, /social-proof), `fintech-cross-module-smoke.mjs` адаптирован (/veilnetx-ledger/head → /stats, Z-Tide leaderboard вместо entries, QMaskCard /stats теперь public).
+- ✅ **20/20 read-only prod-smokes GREEN на Railway** — final verification.
+
+**Pending пользователя:**
+- 🔒 **Security TODO**: npm Automation токен `aevion-io-publish` попал в чат-историю при публикации — revoke на https://www.npmjs.com/settings/dosymbek/tokens, сгенери новый.
+- ⏸ Daily-smoke CI cron READ_ONLY=1 default — нужен `gh auth login -h github.com -s workflow` чтобы пушнуть .github/workflows/ изменения.
+
+**Параллельным сессиям:** при rebase main вы получите `@aevion-io/catalog-client` rename. В ваших frontend-* worktrees обновите импорты `@aevion/catalog-client → @aevion-io/catalog-client` и file:dep в frontend/package.json. tsconfig.json `paths` alias теперь не нужен (frontend полагается на file:dep напрямую).
 
 ### Завершено 2026-05-14 (parallel block 7+8)
 

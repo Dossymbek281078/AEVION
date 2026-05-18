@@ -423,6 +423,11 @@ const MODULES: Module[] = [
   { id: "maternity-perinatal",    category: "practice",  href: "/smeta-trainer/drawings-practice/maternity-perinatal",    icon: "🤱", title: "Перинатальные центры и роддома",  subtitle: "РНЦМД Астана 350 коек, NICU III Drager Babyleo, операц. ISO 5, Code Pink Joint Comm", level: "L5", exercises: 4,  color: "pink"    },
   { id: "spa-wellness",           category: "practice",  href: "/smeta-trainer/drawings-practice/spa-wellness",           icon: "🌿", title: "СПА-курорты и термальные центры", subtitle: "Sary-Agash +60°C минер., 3 термальных бассейна, кедровые бочки, ESPA + DIN EN 15288",  level: "L5", exercises: 4,  color: "teal"    },
   { id: "veterinary-clinics",     category: "practice",  href: "/smeta-trainer/drawings-practice/veterinary-clinics",     icon: "🐾", title: "Ветеринарные клиники 24/7",       subtitle: "Vetlife Алматы 3000 м², PetCT Toshiba + IDEXX лаб., AAHA + OIE biosafety zoonoses",  level: "L5", exercises: 4,  color: "lime"    },
+
+  // ── Наука, образование, спорт-2 ──
+  { id: "national-library",       category: "practice",  href: "/smeta-trainer/drawings-practice/national-library",       icon: "📚", title: "Национальные библиотеки",         subtitle: "НАБ РК Foster 30 000 м², 1.5 млн томов, Bruynzeel Compactus + РГС O₂=3%, ISO 11799",  level: "L5", exercises: 4,  color: "indigo"  },
+  { id: "ski-resort-snow",        category: "practice",  href: "/smeta-trainer/drawings-practice/ski-resort-snow",        icon: "⛷️", title: "Лыжные трамплины и биатлон",      subtitle: "Алатау K-90/K-125, Profiltex охлаждаемый Inrun, биатлон 30 мишеней Megalink ESA, FIS+IBU", level: "L5", exercises: 4,  color: "sky"     },
+  { id: "summer-camp",            category: "practice",  href: "/smeta-trainer/drawings-practice/summer-camp",            icon: "⛺", title: "Детские оздоровит. лагеря",       subtitle: "Балдаурен Боровое 600 мест, 4 корпуса × 150 детей, ФОК+эстрада, СанПиН РК 4.01-015",   level: "L5", exercises: 4,  color: "lime"    },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

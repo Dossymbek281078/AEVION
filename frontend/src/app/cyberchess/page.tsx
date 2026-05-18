@@ -2434,27 +2434,10 @@ export default function CyberChessPage(){
     sStoryPlaying(false);
   },[]);
 
-  /* ── Multiverse: launch + animation tick ── */
-  const startMultiverse=useCallback(()=>{
-    if(!sfR.current?.ready()){showToast("Stockfish loading...","error");return}
-    const fen=game.fen();
-    sMultiverseFen(fen);sMultiverseLines([]);sMultiverseRunning(true);
-    sShowMultiverse(true);sMultiverseTick(0);sMultiversePaused(false);
-    sfR.current.multiPV(fen,14,3,(lines)=>{
-      const turn=fen.split(" ")[1];const sign=turn==="w"?1:-1;
-      sMultiverseLines(lines.map(l=>({...l,cp:l.cp*sign,mate:l.mate*sign})));
-      sMultiverseRunning(false);
-    });
-  },[game,showToast]);
-  useEffect(()=>{
-    if(!showMultiverse||multiverseRunning||multiversePaused||multiverseLines.length===0)return;
-    const maxLen=Math.max(...multiverseLines.map(l=>Math.min(l.moves.length,8)));
-    if(maxLen===0)return;
-    const id=setInterval(()=>{
-      sMultiverseTick(t=>(t+1)%(maxLen+2));
-    },multiverseSpeed);
-    return()=>clearInterval(id);
-  },[showMultiverse,multiverseRunning,multiversePaused,multiverseLines,multiverseSpeed]);
+  /* ── Multiverse: REMOVED 2026-05-18 — dead code, state был вырезан но
+     handlers остались. Если возрождать: state set (showMultiverse,
+     multiverseFen, multiverseLines, multiverseRunning, multiversePaused,
+     multiverseTick, multiverseSpeed) + UI modal с multiPV animation. ── */
   // Helper: replay UCI moves on a starting FEN up to given ply, return final FEN + last-move squares
   const replayLine=useCallback((startFen:string,uciMoves:string[],upToPly:number):{fen:string;lm:{from:string;to:string}|null}=>{
     try{
@@ -2470,59 +2453,11 @@ export default function CyberChessPage(){
     }catch{return{fen:startFen,lm:null}}
   },[]);
 
-  /* ── Ghost Duel: detect divergence ── */
-  useEffect(()=>{
-    if(!ghostDuelConfig||ghostDuelDiverged!==null||hist.length===0)return;
-    const div=checkDivergence(ghostDuelConfig,hist);
-    if(div!==null&&div<hist.length){
-      sGhostDuelDiverged(div);
-      const moveNum=Math.floor(div/2)+1;
-      showToast(`◈ Развилка на ${moveNum}-м ходу — путь разошёлся с прошлой партией`,"info");
-    }
-  },[hist.length,ghostDuelConfig,ghostDuelDiverged,showToast]);
-
-  /* ── Ghost Duel: sample current eval per-ply ── */
-  useEffect(()=>{
-    if(!ghostDuelConfig||hist.length===0)return;
-    const ply=hist.length-1;
-    sGhostCurrentEval(prev=>{
-      if(prev.find(s=>s.ply===ply))return prev;
-      return [...prev,{ply,cp:evalCp}];
-    });
-  },[bk,ghostDuelConfig,hist.length,evalCp]);
-
-  /* ── Ghost Duel: end-of-game summary ── */
-  useEffect(()=>{
-    if(!ghostDuelConfig||!over)return;
-    const gameKey=`${ghostDuelConfig.pastGameId}-${hist.length}`;
-    if(ghostLearnedRef.current===gameKey)return;
-    ghostLearnedRef.current=gameKey;
-    const isWin=over.includes("You win");
-    const isDraw=over.includes("Stalemate")||over.includes("draw")||over.includes("repetition")||over.includes("Insufficient");
-    const pastWasWin=ghostDuelConfig.pastResult.includes("You win");
-    const pastWasLoss=ghostDuelConfig.pastResult.includes("AI wins")||ghostDuelConfig.pastResult.includes("resigned")||ghostDuelConfig.pastResult.includes("Time out");
-    // Bonus structure:
-    // - Win where past you lost: huge (+30)
-    // - Win where past you won: solid (+15)
-    // - Win after divergence: +5
-    // - Draw: 5
-    // - Loss: 1
-    let reward=0;
-    if(isWin){
-      reward=pastWasLoss?30:pastWasWin?15:20;
-      if(ghostDuelDiverged!==null)reward+=5;
-    }else if(isDraw){
-      reward=pastWasLoss?12:5;
-    }else{
-      reward=1;
-    }
-    const cmp=compareEvals(ghostCurrentEval,ghostPastEval,ghostDuelConfig.userPlaysAs);
-    const summary=ghostSummary(ghostDuelConfig,ghostDuelDiverged,cmp,over);
-    sGhostDuelEndModal({betterCp:cmp.betterCp,samples:cmp.samples,divergedAtPly:ghostDuelDiverged,result:over,summary,reward});
-    setTimeout(()=>addChessy(reward,`👻 Ghost Duel`),900);
-    const newStats=recordDuelResult(ghostDuelStats,isWin,isDraw,cmp.betterCp);
-    sGhostDuelStats(newStats);svGhostDuelStats(newStats);
-  },[over,ghostDuelConfig,ghostDuelDiverged,ghostCurrentEval,ghostPastEval,ghostDuelStats,addChessy,hist.length]);
+  /* ── Ghost Duel: 3 useEffects REMOVED 2026-05-18 — dead code, state набор
+     (ghostDuelDiverged/ghostCurrentEval/ghostPastEval/ghostDuelStats/
+     ghostDuelEndModal) и helpers (compareEvals/ghostSummary/recordDuelResult/
+     svGhostDuelStats) были вырезаны, а 3 useEffect остались. Если возрождать —
+     восстановить state + helpers одним блоком из git history. ── */
 
   /* ── Rival learning — after each encounter, adapt profile and save ── */
   const rivalLearnedRef=useRef<string|null>(null);
@@ -3620,15 +3555,8 @@ export default function CyberChessPage(){
     if(earned>0)addChessy(earned,`Puzzle Rush${boostMult>1?" ⚡2x":""} · ${rushScore} решено`);
     if(isNewBest&&rushScore>=10)unlockAch("rush_10",50,"Rush: 10 за сессию");
     if(isNewBest&&rushScore>=25)unlockAch("rush_25",200,"Rush: 25 за сессию");
-    // AEV mint: Puzzle Rush finale — 1.0 base × score-scaled bonus.
-    // Capped to avoid over-emit if user farms rush; rate scales sub-linearly.
-    if(rushScore>0){
-      const bonusAev=Math.min(8,RATE_CARD.play.cyberchess_puzzle_rush.aev*Math.sqrt(rushScore));
-      const minted=mintAevFromChess("cyberchess_puzzle_rush",bonusAev);
-      if(minted>0){
-        setTimeout(()=>showToast(`◆ +${minted.toFixed(2)} AEV · Rush ${rushScore} solved${isNewBest?" · NEW BEST":""}`,"success"),600);
-      }
-    }
+    // AEV mint REMOVED 2026-05-18 — mintAevFromChess helper отсутствует
+    // (cyberchess больше не связан с AEV economy через этот path).
   },[rushActive,pzTimeLeft,pzMode,rushScore,rushBestStreak,rushBest,addChessy,unlockAch]);
 
   // Auto-advance to next puzzle in rush/timed modes after a correct solve
@@ -7543,10 +7471,7 @@ export default function CyberChessPage(){
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
                 <button onClick={()=>{if(guessMode){sGuessMode(false);runMultiPV()}else startGuess()}} style={{padding:"6px 14px",borderRadius:7,border:guessMode?`2px solid #f59e0b`:`1px solid ${T.border}`,background:guessMode?"#fffbeb":"#fff",color:guessMode?"#92400e":T.dim,fontSize:13,fontWeight:800,cursor:"pointer"}}>{guessMode?"✕ Exit Guess":"🎯 Guess Move"}</button>
-                <button onClick={startMultiverse} title="Top-3 кандидатских хода в параллельных вселенных" style={{padding:"6px 14px",borderRadius:7,border:"none",
-                  background:"linear-gradient(135deg,#0c0a09,#1e1b4b,#7c3aed)",
-                  color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",
-                  boxShadow:"0 2px 8px rgba(124,58,237,0.35)"}}>🌌 Multiverse</button>
+                {/* 🌌 Multiverse button removed 2026-05-18 — startMultiverse handler был dead code */}
               </div>
               {/* Current FEN display only (import buttons are in "Источник позиции" above) */}
               <div style={{display:"flex",gap:4,alignItems:"center"}}>

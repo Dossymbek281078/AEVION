@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-import { PrismaClient } from "@prisma/client";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 
@@ -100,11 +99,9 @@ const cyclesMem = new Map<string, CycleEntry[]>();
 const planSnapshotsMem = new Map<string, any[]>();
 
 /**
- * Hybrid store: Prisma если есть DATABASE_URL и таблицы доступны, иначе
- * in-memory Maps. Init выполняется лениво при первом use, чтобы не
- * падать на старте если БД ещё не готова.
+ * Hybrid store: raw SQL pool if DATABASE_URL available, else in-memory Maps.
+ * Tables bootstrapped on first use via CREATE TABLE IF NOT EXISTS.
  */
-let prisma: PrismaClient | null = null;
 let useDb = false;
 let dbInitTried = false;
 
@@ -187,11 +184,9 @@ async function ensureDb() {
       "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "PlanSnapshot_profileId_generatedAt_idx" ON "PlanSnapshot" ("profileId", "generatedAt")`);
-    const p = new PrismaClient();
-    await p.healthProfile.findFirst();
-    prisma = p;
+    await pool.query(`SELECT 1 FROM "HealthProfile" LIMIT 1`);
     useDb = true;
-    console.log("[HealthAI] Prisma persistence enabled (tables bootstrapped)");
+    console.log("[HealthAI] Postgres persistence enabled");
   } catch (e) {
     console.warn(
       "[HealthAI] DB init failed, fallback in-memory:",
@@ -268,97 +263,65 @@ function rowToLog(r: any): DailyLog {
 const store = {
   async getProfile(id: string): Promise<HealthProfile | null> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.healthProfile.findUnique({ where: { id } });
-      return r ? rowToProfile(r) : null;
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "HealthProfile" WHERE "id"=$1`, [id]);
+      return r.rows.length ? rowToProfile(r.rows[0]) : null;
     }
     return profilesMem.get(id) || null;
   },
   async upsertProfile(p: HealthProfile): Promise<HealthProfile> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.healthProfile.upsert({
-        where: { id: p.id },
-        update: {
-          userId: p.userId ?? null,
-          memberLabel: p.memberLabel ?? null,
-          age: p.age,
-          sex: p.sex,
-          heightCm: p.heightCm,
-          weightKg: p.weightKg,
-          conditions: p.conditions,
-          allergies: p.allergies,
-          medications: p.medications,
-        },
-        create: {
-          id: p.id,
-          userId: p.userId ?? null,
-          memberLabel: p.memberLabel ?? null,
-          age: p.age,
-          sex: p.sex,
-          heightCm: p.heightCm,
-          weightKg: p.weightKg,
-          conditions: p.conditions,
-          allergies: p.allergies,
-          medications: p.medications,
-        },
-      });
-      return rowToProfile(r);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO "HealthProfile" ("id","userId","memberLabel","age","sex","heightCm","weightKg","conditions","allergies","medications","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+         ON CONFLICT ("id") DO UPDATE SET "userId"=$2,"memberLabel"=$3,"age"=$4,"sex"=$5,"heightCm"=$6,"weightKg"=$7,"conditions"=$8,"allergies"=$9,"medications"=$10,"updatedAt"=NOW()
+         RETURNING *`,
+        [p.id, p.userId??null, p.memberLabel??null, p.age, p.sex, p.heightCm, p.weightKg, p.conditions, p.allergies, p.medications]
+      );
+      return rowToProfile(r.rows[0]);
     }
     profilesMem.set(p.id, p);
     return p;
   },
   async listProfilesByUser(userId: string): Promise<HealthProfile[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.healthProfile.findMany({
-        where: { userId },
-        orderBy: { createdAt: "asc" },
-      });
-      return rows.map(rowToProfile);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "HealthProfile" WHERE "userId"=$1 ORDER BY "createdAt" ASC`, [userId]);
+      return r.rows.map(rowToProfile);
     }
     return Array.from(profilesMem.values()).filter((p) => p.userId === userId);
   },
   async deleteProfile(id: string): Promise<boolean> {
     await ensureDb();
-    if (useDb && prisma) {
-      try {
-        await prisma.healthProfile.delete({ where: { id } });
-        return true;
-      } catch {
-        return false;
-      }
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`DELETE FROM "HealthProfile" WHERE "id"=$1 RETURNING id`, [id]);
+      return r.rowCount! > 0;
     }
     return profilesMem.delete(id);
   },
   async getChecks(profileId: string, limit = 200): Promise<SymptomCheck[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.symptomCheck.findMany({
-        where: { profileId },
-        orderBy: { createdAt: "desc" },
-        take: limit,
-      });
-      return rows.map(rowToCheck);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "SymptomCheck" WHERE "profileId"=$1 ORDER BY "createdAt" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map(rowToCheck);
     }
     return (checksMem.get(profileId) || []).slice(0, limit);
   },
   async addCheck(c: SymptomCheck): Promise<void> {
     await ensureDb();
-    if (useDb && prisma) {
-      await prisma.symptomCheck.create({
-        data: {
-          id: c.id,
-          profileId: c.profileId,
-          symptoms: c.symptoms,
-          severity: c.severity,
-          durationH: c.durationH,
-          notes: c.notes,
-          matched: c.matched as any,
-          generic: c.generic,
-          disclaimer: c.disclaimer,
-        },
-      });
+    if (useDb) {
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO "SymptomCheck" ("id","profileId","symptoms","severity","durationH","notes","matched","generic","disclaimer","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+        [c.id, c.profileId, c.symptoms, c.severity, c.durationH, c.notes??null, JSON.stringify(c.matched), c.generic??null, c.disclaimer??null]
+      );
       return;
     }
     const list = checksMem.get(c.profileId) || [];
@@ -368,111 +331,73 @@ const store = {
   },
   async getLogs(profileId: string, limit = 365): Promise<DailyLog[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.healthDailyLog.findMany({
-        where: { profileId },
-        orderBy: { date: "desc" },
-        take: limit,
-      });
-      return rows.map(rowToLog);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "HealthDailyLog" WHERE "profileId"=$1 ORDER BY "date" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map(rowToLog);
     }
     return (logsMem.get(profileId) || []).slice(0, limit);
   },
   async upsertLog(l: DailyLog): Promise<DailyLog> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.healthDailyLog.upsert({
-        where: {
-          profileId_date: { profileId: l.profileId, date: l.date },
-        },
-        update: {
-          sleepHours: l.sleepHours,
-          moodScore: l.moodScore,
-          weightKg: l.weightKg,
-          waterL: l.waterL,
-          exerciseMin: l.exerciseMin,
-          notes: l.notes,
-        },
-        create: {
-          id: l.id,
-          profileId: l.profileId,
-          date: l.date,
-          sleepHours: l.sleepHours,
-          moodScore: l.moodScore,
-          weightKg: l.weightKg,
-          waterL: l.waterL,
-          exerciseMin: l.exerciseMin,
-          notes: l.notes,
-        },
-      });
-      return rowToLog(r);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO "HealthDailyLog" ("id","profileId","date","sleepHours","moodScore","weightKg","waterL","exerciseMin","notes","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+         ON CONFLICT ("profileId","date") DO UPDATE SET "sleepHours"=$4,"moodScore"=$5,"weightKg"=$6,"waterL"=$7,"exerciseMin"=$8,"notes"=$9
+         RETURNING *`,
+        [l.id, l.profileId, l.date, l.sleepHours??null, l.moodScore??null, l.weightKg??null, l.waterL??null, l.exerciseMin??null, l.notes??null]
+      );
+      return rowToLog(r.rows[0]);
     }
     const list = logsMem.get(l.profileId) || [];
     const idx = list.findIndex((x) => x.date === l.date);
-    if (idx >= 0) list[idx] = l;
-    else list.unshift(l);
+    if (idx >= 0) list[idx] = l; else list.unshift(l);
     if (list.length > 365) list.length = 365;
     logsMem.set(l.profileId, list);
     return l;
   },
   async getCycles(profileId: string, limit = 365): Promise<CycleEntry[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.cycleEntry.findMany({
-        where: { profileId },
-        orderBy: { date: "desc" },
-        take: limit,
-      });
-      return rows.map(rowToCycle);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "CycleEntry" WHERE "profileId"=$1 ORDER BY "date" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map(rowToCycle);
     }
     return (cyclesMem.get(profileId) || []).slice(0, limit);
   },
   async upsertCycle(c: CycleEntry): Promise<CycleEntry> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.cycleEntry.upsert({
-        where: { profileId_date: { profileId: c.profileId, date: c.date } },
-        update: { flow: c.flow, symptoms: c.symptoms, notes: c.notes },
-        create: {
-          id: c.id,
-          profileId: c.profileId,
-          date: c.date,
-          flow: c.flow,
-          symptoms: c.symptoms,
-          notes: c.notes,
-        },
-      });
-      return rowToCycle(r);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO "CycleEntry" ("id","profileId","date","flow","symptoms","notes","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,NOW())
+         ON CONFLICT ("profileId","date") DO UPDATE SET "flow"=$4,"symptoms"=$5,"notes"=$6
+         RETURNING *`,
+        [c.id, c.profileId, c.date, c.flow??null, c.symptoms, c.notes??null]
+      );
+      return rowToCycle(r.rows[0]);
     }
     const list = cyclesMem.get(c.profileId) || [];
     const idx = list.findIndex((x) => x.date === c.date);
-    if (idx >= 0) list[idx] = c;
-    else list.unshift(c);
+    if (idx >= 0) list[idx] = c; else list.unshift(c);
     cyclesMem.set(c.profileId, list);
     return c;
   },
   async addPlanSnapshot(s: {
-    id: string;
-    profileId: string;
-    plan: unknown;
-    bmi?: number | null;
-    avgSleep7d?: number | null;
-    avgMood7d?: number | null;
-    generatedAt: string;
+    id: string; profileId: string; plan: unknown;
+    bmi?: number | null; avgSleep7d?: number | null; avgMood7d?: number | null; generatedAt: string;
   }): Promise<void> {
     await ensureDb();
-    if (useDb && prisma) {
-      await prisma.planSnapshot.create({
-        data: {
-          id: s.id,
-          profileId: s.profileId,
-          plan: s.plan as any,
-          bmi: s.bmi ?? null,
-          avgSleep7d: s.avgSleep7d ?? null,
-          avgMood7d: s.avgMood7d ?? null,
-          generatedAt: new Date(s.generatedAt),
-        },
-      });
+    if (useDb) {
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO "PlanSnapshot" ("id","profileId","plan","bmi","avgSleep7d","avgMood7d","generatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [s.id, s.profileId, JSON.stringify(s.plan), s.bmi??null, s.avgSleep7d??null, s.avgMood7d??null, new Date(s.generatedAt)]
+      );
       return;
     }
     const list = planSnapshotsMem.get(s.profileId) || [];
@@ -482,58 +407,46 @@ const store = {
   },
   async listPlanSnapshots(profileId: string, limit = 30): Promise<any[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.planSnapshot.findMany({
-        where: { profileId },
-        orderBy: { generatedAt: "desc" },
-        take: limit,
-      });
-      return rows.map((r) => ({
-        id: r.id,
-        profileId: r.profileId,
-        plan: r.plan,
-        bmi: r.bmi == null ? null : Number(r.bmi),
-        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
-        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
-        generatedAt:
-          r.generatedAt instanceof Date
-            ? r.generatedAt.toISOString()
-            : r.generatedAt,
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "PlanSnapshot" WHERE "profileId"=$1 ORDER BY "generatedAt" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map((row: any) => ({
+        id: row.id, profileId: row.profileId, plan: row.plan,
+        bmi: row.bmi == null ? null : Number(row.bmi),
+        avgSleep7d: row.avgSleep7d == null ? null : Number(row.avgSleep7d),
+        avgMood7d: row.avgMood7d == null ? null : Number(row.avgMood7d),
+        generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
       }));
     }
     return (planSnapshotsMem.get(profileId) || []).slice(0, limit);
   },
   async getPlanSnapshot(id: string): Promise<any | null> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.planSnapshot.findUnique({ where: { id } });
-      if (!r) return null;
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "PlanSnapshot" WHERE "id"=$1`, [id]);
+      if (!r.rows.length) return null;
+      const row: any = r.rows[0];
       return {
-        id: r.id,
-        profileId: r.profileId,
-        plan: r.plan,
-        bmi: r.bmi == null ? null : Number(r.bmi),
-        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
-        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
-        generatedAt:
-          r.generatedAt instanceof Date
-            ? r.generatedAt.toISOString()
-            : r.generatedAt,
+        id: row.id, profileId: row.profileId, plan: row.plan,
+        bmi: row.bmi == null ? null : Number(row.bmi),
+        avgSleep7d: row.avgSleep7d == null ? null : Number(row.avgSleep7d),
+        avgMood7d: row.avgMood7d == null ? null : Number(row.avgMood7d),
+        generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
       };
     }
     for (const list of planSnapshotsMem.values()) {
-      const found = list.find((x) => x.id === id);
+      const found = list.find((x: any) => x.id === id);
       if (found) return found;
     }
     return null;
   },
   async allProfileIdsWithLogs(): Promise<string[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.healthDailyLog.groupBy({
-        by: ["profileId"],
-      });
-      return rows.map((r) => r.profileId);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT DISTINCT "profileId" FROM "HealthDailyLog"`);
+      return r.rows.map((row: any) => row.profileId);
     }
     return Array.from(logsMem.keys());
   },
@@ -708,9 +621,9 @@ healthaiRouter.get("/health", async (_req, res) => {
   res.json({
     status: "ok",
     service: "AEVION HealthAI",
-    persistence: useDb ? "prisma" : "in-memory",
-    profilesCount: useDb && prisma
-      ? await prisma.healthProfile.count()
+    persistence: useDb ? "postgres" : "in-memory",
+    profilesCount: useDb
+      ? Number((await getPool().query(`SELECT COUNT(*) FROM "HealthProfile"`)).rows[0].count)
       : profilesMem.size,
     rulesCount: ADVICE_RULES.length,
     timestamp: nowIso(),

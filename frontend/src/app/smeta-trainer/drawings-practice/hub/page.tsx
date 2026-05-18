@@ -438,6 +438,11 @@ const MODULES: Module[] = [
   { id: "tech-park-incubator",    category: "practice",  href: "/smeta-trainer/drawings-practice/tech-park-incubator",    icon: "💻", title: "Технопарки и IT-инкубаторы",      subtitle: "Astana Hub 26 000 м², фальшпол 250 мм + 2600 Floor Box, WELL v2 Platinum, Stratasys F900", level: "L5", exercises: 4,  color: "cyan"    },
   { id: "coworking-flex-office",  category: "practice",  href: "/smeta-trainer/drawings-practice/coworking-flex-office",  icon: "🏢", title: "Коворкинги и гибкие офисы",       subtitle: "Multispace Алматы 280 мест, Framery O phone booths, VLAN per tenant, ANSI/ASA S12.60",  level: "L5", exercises: 4,  color: "orange"  },
   { id: "edutech-school-modern",  category: "practice",  href: "/smeta-trainer/drawings-practice/edutech-school-modern",  icon: "🎓", title: "EduTech-школы IB/Cambridge",      subtitle: "Quantum Алматы 800 учащ., 48 Promethean ActivPanel 75 inch, Stratasys F123 STEM, IB World",  level: "L5", exercises: 4,  color: "blue"    },
+
+  // ── Финансы, спорт-2, наука-3 ──
+  { id: "stock-exchange-fintech", category: "special",   href: "/smeta-trainer/drawings-practice/stock-exchange-fintech", icon: "📈", title: "Биржи и финтех-центры",           subtitle: "AIX/KASE 240 Bloomberg Terminal, Tier IV co-location, Dark Fiber NYSE/LSE, MiFID II",  level: "L5", exercises: 4,  color: "emerald" },
+  { id: "stadium-large-football", category: "special",   href: "/smeta-trainer/drawings-practice/stadium-large-football", icon: "🏟️", title: "Большие стадионы 50 000+ мест",   subtitle: "Asgard 50 000 bowl, ETFE крыша 25 000 м², Desso GrassMaster + подогрев, FIFA Cat 4", level: "L5", exercises: 4,  color: "orange"  },
+  { id: "research-lab-bsl4",      category: "special",   href: "/smeta-trainer/drawings-practice/research-lab-bsl4",      icon: "🦠", title: "BSL-4 лаборатории макс. биозащ.",  subtitle: "КНИИОИ Алматы, suit lab −30 Па тройн. HEPA H14, Trelleborg pos-pressure, ВОЗ 4th ed", level: "L5", exercises: 4,  color: "red"     },
 ];
 
 const CATEGORIES: { id: Category; icon: string; title: string; description: string }[] = [

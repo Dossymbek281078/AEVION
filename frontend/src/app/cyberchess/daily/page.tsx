@@ -1,4 +1,5 @@
 'use client';
+// CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Chess, Square } from 'chess.js';

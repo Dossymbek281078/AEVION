@@ -118,80 +118,75 @@ async function ensureDb() {
   try {
     // Bootstrap Prisma tables via raw SQL (mirrors schema.prisma HealthAI models).
     // Prisma's db push isn't in the Railway build command, so we create them here.
+    // One pool.query() per statement — same pattern as ensureQCoreTables.ts.
     const pool = getPool();
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "HealthProfile" (
-        "id"          TEXT PRIMARY KEY,
-        "userId"      TEXT,
-        "memberLabel" TEXT,
-        "age"         INT NOT NULL DEFAULT 0,
-        "sex"         TEXT NOT NULL DEFAULT 'other',
-        "heightCm"    INT NOT NULL DEFAULT 0,
-        "weightKg"    DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "conditions"  TEXT[] NOT NULL DEFAULT '{}',
-        "allergies"   TEXT[] NOT NULL DEFAULT '{}',
-        "medications" TEXT[] NOT NULL DEFAULT '{}',
-        "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS "HealthProfile_userId_idx" ON "HealthProfile" ("userId");
+    await pool.query(`CREATE TABLE IF NOT EXISTS "HealthProfile" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT,
+      "memberLabel" TEXT,
+      "age"         INT NOT NULL DEFAULT 0,
+      "sex"         TEXT NOT NULL DEFAULT 'other',
+      "heightCm"    INT NOT NULL DEFAULT 0,
+      "weightKg"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "conditions"  TEXT[] NOT NULL DEFAULT '{}',
+      "allergies"   TEXT[] NOT NULL DEFAULT '{}',
+      "medications" TEXT[] NOT NULL DEFAULT '{}',
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "HealthProfile_userId_idx" ON "HealthProfile" ("userId")`);
 
-      CREATE TABLE IF NOT EXISTS "HealthDailyLog" (
-        "id"          TEXT PRIMARY KEY,
-        "profileId"   TEXT NOT NULL,
-        "date"        TEXT NOT NULL,
-        "sleepHours"  DOUBLE PRECISION,
-        "moodScore"   INT,
-        "weightKg"    DOUBLE PRECISION,
-        "waterL"      DOUBLE PRECISION,
-        "exerciseMin" INT,
-        "notes"       TEXT,
-        "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE ("profileId", "date"),
-        CONSTRAINT fk_hdl_profile FOREIGN KEY ("profileId") REFERENCES "HealthProfile"("id") ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS "HealthDailyLog_profileId_date_idx" ON "HealthDailyLog" ("profileId", "date");
+    await pool.query(`CREATE TABLE IF NOT EXISTS "HealthDailyLog" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "date"        TEXT NOT NULL,
+      "sleepHours"  DOUBLE PRECISION,
+      "moodScore"   INT,
+      "weightKg"    DOUBLE PRECISION,
+      "waterL"      DOUBLE PRECISION,
+      "exerciseMin" INT,
+      "notes"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("profileId", "date")
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "HealthDailyLog_profileId_date_idx" ON "HealthDailyLog" ("profileId", "date")`);
 
-      CREATE TABLE IF NOT EXISTS "SymptomCheck" (
-        "id"          TEXT PRIMARY KEY,
-        "profileId"   TEXT NOT NULL,
-        "symptoms"    TEXT[] NOT NULL DEFAULT '{}',
-        "severity"    INT NOT NULL DEFAULT 5,
-        "durationH"   DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "notes"       TEXT,
-        "matched"     JSONB NOT NULL DEFAULT '[]',
-        "generic"     TEXT,
-        "disclaimer"  TEXT,
-        "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        CONSTRAINT fk_sc_profile FOREIGN KEY ("profileId") REFERENCES "HealthProfile"("id") ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS "SymptomCheck_profileId_createdAt_idx" ON "SymptomCheck" ("profileId", "createdAt");
+    await pool.query(`CREATE TABLE IF NOT EXISTS "SymptomCheck" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "symptoms"    TEXT[] NOT NULL DEFAULT '{}',
+      "severity"    INT NOT NULL DEFAULT 5,
+      "durationH"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "notes"       TEXT,
+      "matched"     JSONB NOT NULL DEFAULT '[]',
+      "generic"     TEXT,
+      "disclaimer"  TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "SymptomCheck_profileId_createdAt_idx" ON "SymptomCheck" ("profileId", "createdAt")`);
 
-      CREATE TABLE IF NOT EXISTS "CycleEntry" (
-        "id"        TEXT PRIMARY KEY,
-        "profileId" TEXT NOT NULL,
-        "date"      TEXT NOT NULL,
-        "flow"      TEXT,
-        "symptoms"  TEXT[] NOT NULL DEFAULT '{}',
-        "notes"     TEXT,
-        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE ("profileId", "date"),
-        CONSTRAINT fk_ce_profile FOREIGN KEY ("profileId") REFERENCES "HealthProfile"("id") ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS "CycleEntry_profileId_date_idx" ON "CycleEntry" ("profileId", "date");
+    await pool.query(`CREATE TABLE IF NOT EXISTS "CycleEntry" (
+      "id"        TEXT PRIMARY KEY,
+      "profileId" TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "date"      TEXT NOT NULL,
+      "flow"      TEXT,
+      "symptoms"  TEXT[] NOT NULL DEFAULT '{}',
+      "notes"     TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("profileId", "date")
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "CycleEntry_profileId_date_idx" ON "CycleEntry" ("profileId", "date")`);
 
-      CREATE TABLE IF NOT EXISTS "PlanSnapshot" (
-        "id"          TEXT PRIMARY KEY,
-        "profileId"   TEXT NOT NULL,
-        "plan"        JSONB NOT NULL,
-        "bmi"         DOUBLE PRECISION,
-        "avgSleep7d"  DOUBLE PRECISION,
-        "avgMood7d"   DOUBLE PRECISION,
-        "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        CONSTRAINT fk_ps_profile FOREIGN KEY ("profileId") REFERENCES "HealthProfile"("id") ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS "PlanSnapshot_profileId_generatedAt_idx" ON "PlanSnapshot" ("profileId", "generatedAt");
-    `);
+    await pool.query(`CREATE TABLE IF NOT EXISTS "PlanSnapshot" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "plan"        JSONB NOT NULL,
+      "bmi"         DOUBLE PRECISION,
+      "avgSleep7d"  DOUBLE PRECISION,
+      "avgMood7d"   DOUBLE PRECISION,
+      "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "PlanSnapshot_profileId_generatedAt_idx" ON "PlanSnapshot" ("profileId", "generatedAt")`);
     const p = new PrismaClient();
     await p.healthProfile.findFirst();
     prisma = p;

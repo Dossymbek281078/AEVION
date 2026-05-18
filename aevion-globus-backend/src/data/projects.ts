@@ -22,9 +22,9 @@ export const projects: GlobusProject[] = [
     code: "QCOREAI",
     name: "QCoreAI — AI Core Engine",
     description:
-      "Базовый ИИ-движок для всех Q-проектов: 5 LLM-провайдеров, rate-limit, chat history.",
+      "Postgres-персистентный мульти-агент AI-движок: 5 LLM-провайдеров, сессии/ран/сообщения в БД, webhooks, eval harness, notebooks, A/B тесты, ветвление ранов.",
     kind: "core",
-    status: "launched",
+    status: "live",
     priority: 1,
     tags: ["ai", "engine", "core"],
     createdAt: now,
@@ -231,9 +231,9 @@ export const projects: GlobusProject[] = [
     code: "QPERSONA",
     name: "QPersona — Digital Avatar",
     description:
-      "Публичный профиль-аватар: CRUD персон, deterministic SVG avatar, AI bio via QCoreAI, gallery, concept board. MVP 2026-05-15 — /api/qpersona.",
+      "AI doppelganger: style analyzer (LLM extracts rhythm/emoji/tone from 3+ messages) + reply generator (answers in your voice). Concept board shared. Launched 2026-05-18 — browser-smoke verified on https://aevion.app/qpersona. /api/qpersona + /api/qcoreai/chat.",
     kind: "product",
-    status: "mvp",
+    status: "launched",
     priority: 3,
     tags: ["avatar", "persona", "ai"],
     createdAt: now,

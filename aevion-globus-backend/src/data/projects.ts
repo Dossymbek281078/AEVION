@@ -37,7 +37,7 @@ export const projects: GlobusProject[] = [
     description:
       "Мультичат с параллельными агентами: персистентные conversations, fan-out до 8 агентов, JWT-scoped история.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["ai", "chat", "agents"],
     createdAt: now,
@@ -50,7 +50,7 @@ export const projects: GlobusProject[] = [
     description:
       "Интеллектуальный маршрутизатор AI-запросов: стратегии speed/quality/cost/auto, live providers dashboard, fusion playground + concept board. MVP 2026-05-15 — /api/qfusionai.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["ai", "fusion", "engine", "router"],
     createdAt: now,
@@ -106,7 +106,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа для покупок и переводов без интернета: офлайн-операции, верификация, защита.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 1,
     tags: ["payments", "offline", "fintech"],
     createdAt: now,
@@ -119,7 +119,7 @@ export const projects: GlobusProject[] = [
     description:
       "Встроенная платёжная система для приложений AEVION: кошельки, переводы, мерчант-ключи, комиссии.",
     kind: "service",
-    status: "mvp",
+    status: "live",
     priority: 1,
     tags: ["payments", "engine", "fintech"],
     createdAt: now,
@@ -147,7 +147,7 @@ export const projects: GlobusProject[] = [
     description:
       "Privacy proxy network MVP 2026-05-15 — pre-launch status surface, waitlist with email-hash dedupe, principles + threat model, in-memory concept board. /api/veilnetx.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["crypto", "privacy", "network"],
     createdAt: now,
@@ -186,11 +186,11 @@ export const projects: GlobusProject[] = [
   {
     id: "qlife",
     code: "QLIFE",
-    name: "QLife — Longevity & Anti-Aging",
+    name: "QLife — Personal OS",
     description:
-      "Антистарение MVP 2026-05-15 — биомаркеры (BP/weight/sleep/VO2max/HRV/glucose/stress), weekly trends, AI longevity plan via QCoreAI + concept board. /api/qlife.",
+      "Personal Operating System: 6-pillar live dashboard (Finance/Health/Communication/AI/Data/Identity) polling real AEVION health endpoints, cross-module AI insights, community life-prompts concept board. Launched 2026-05-18 — browser-smoke verified https://aevion.app/qlife. /api/qlife.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["health", "longevity", "anti-aging"],
     createdAt: now,
@@ -205,7 +205,7 @@ export const projects: GlobusProject[] = [
     description:
       "Психо-MVP 2026-05-15 — mood log (1-10 + emotion), AI therapist chat, 5 exercises (breathing/grounding/gratitude/body-scan/reframe), 7-day trend + concept board. /api/qgood.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["psychology", "mental-health", "ai"],
     createdAt: now,
@@ -218,7 +218,7 @@ export const projects: GlobusProject[] = [
     description:
       "Выход из зависимостей MVP 2026-05-15 — streak tracker (alcohol/smoking), trigger log с intensity 1-10, AI support via QCoreAI, 10 RU affirmations + concept board. /api/psyapp-deps.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["addiction", "recovery", "psychology", "ai"],
     createdAt: now,
@@ -233,7 +233,7 @@ export const projects: GlobusProject[] = [
     description:
       "AI doppelganger: style analyzer (LLM extracts rhythm/emoji/tone from 3+ messages) + reply generator (answers in your voice). Concept board shared. Launched 2026-05-18 — browser-smoke verified on https://aevion.app/qpersona. /api/qpersona + /api/qcoreai/chat.",
     kind: "product",
-    status: "launched",
+    status: "live",
     priority: 3,
     tags: ["avatar", "persona", "ai"],
     createdAt: now,
@@ -248,7 +248,7 @@ export const projects: GlobusProject[] = [
     description:
       "Детский обучающий контент: каталог уроков RU/EN/KZ, AI-помощник через QCoreAI, трекинг прогресса по псевдониму + concept board. MVP 2026-05-15 — 10 seed уроков, /api/kids-ai.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["kids", "education", "multilang", "ai"],
     createdAt: now,
@@ -261,7 +261,7 @@ export const projects: GlobusProject[] = [
     description:
       "Международный музыкальный проект: каталог треков с многоязычными текстами, подача от авторов, голосование (UNIQUE per voter) + concept board. MVP 2026-05-15 — 8 seed треков (RU/EN/KZ/ES), /api/voice-of-earth.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["music", "multilang", "content"],
     createdAt: now,
@@ -276,7 +276,7 @@ export const projects: GlobusProject[] = [
     description:
       "Биржа стартапов: submit идеи → авто-защита через QRight-style SHA-256 → лента → interest от инвесторов + concept board. Privacy by default. MVP 2026-05-15 — /api/startupx.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["startups", "marketplace", "ip"],
     createdAt: now,
@@ -291,7 +291,7 @@ export const projects: GlobusProject[] = [
     description:
       "Антихаос productivity: AI Inbox Parser (LLM достаёт next-action из дампов email/Slack/notes с приоритетом+owner+deadline), Focus Session pomodoro 25min, Bridge to QCoreAI agents, persistent concept board. Launched 2026-05-18 — browser-smoke verified on https://aevion.app/deepsan. /api/deepsan + /api/qcoreai/chat.",
     kind: "product",
-    status: "launched",
+    status: "live",
     priority: 3,
     tags: ["productivity", "focus"],
     createdAt: now,
@@ -304,7 +304,7 @@ export const projects: GlobusProject[] = [
     description:
       "Карта реальных потребностей: сигналы (need/event/request) с гео-привязкой, +1 поддержка с dedupe, агрегация по категориям/регионам + concept board. MVP 2026-05-15 — /api/mapreality.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["map", "data", "society"],
     createdAt: now,
@@ -317,7 +317,7 @@ export const projects: GlobusProject[] = [
     description:
       "Adaptive social-economic coordination MVP 2026-05-15 — contribution events (10 kinds × 12 source modules), decayed tide score, 7-rank ladder (Seedling→Ocean), leaderboard, in-memory concept board. /api/ztide.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 4,
     tags: ["currency", "concept"],
     createdAt: now,
@@ -343,7 +343,7 @@ export const projects: GlobusProject[] = [
     description:
       "Privacy concept simulator MVP 2026-05-15 — 4 threat models, routing simulator (3-7 hops + Mulberry32), privacy score, E2E encrypted posts (WebCrypto AES-GCM + PBKDF2 250k) + concept board. /api/shadownet.",
     kind: "experiment",
-    status: "mvp",
+    status: "live",
     priority: 4,
     tags: ["network", "privacy", "crypto"],
     createdAt: now,
@@ -356,7 +356,7 @@ export const projects: GlobusProject[] = [
     description:
       "Time-locked капсулы MVP 2026-05-15 — содержимое скрыто до unlock_at, 5 категорий (knowledge/values/instructions/future_self/advice), countdown, alias gate + concept board. /api/lifebox.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 4,
     tags: ["storage", "security", "personal", "time-locked"],
     createdAt: now,
@@ -369,7 +369,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа найма для строительной вертикали: проекты, вакансии, тестовые задания, AI-оценка резюме, лояльность и cashback в AEV.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 1,
     tags: ["hiring", "construction", "ai", "marketplace"],
     createdAt: now,
@@ -410,7 +410,7 @@ export const projects: GlobusProject[] = [
     description:
       "Агрегатор отраслевых новостей для экосистемы AEVION: строительство, крипто, IP-право, AI, финтех. Пользователи публикуют и читают релевантный контент. AI генерирует дайджест дня и суммаризует статьи + concept board. MVP 2026-05-15 — /api/qnews.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["news", "aggregator", "ai", "media", "content"],
     createdAt: now,
@@ -425,7 +425,7 @@ export const projects: GlobusProject[] = [
     description:
       "Медиа-платформа: стриминг музыки и видео, AI-creative (тексты, обложки, цветовые палитры). Waveform-визуализация, плеер с мини-эквалайзером, песочница для авторов.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["media", "music", "video", "ai", "creative"],
     createdAt: now,
@@ -438,7 +438,7 @@ export const projects: GlobusProject[] = [
     description:
       "Real-time streaming AI с переключаемыми persona и chunk-based UI. Альтернативный фронт к QCoreAI с фокусом на потоковую генерацию word-by-word и быстрый UX.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["ai", "streaming", "chat", "persona"],
     createdAt: now,
@@ -451,7 +451,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа обучения AEVION: курсы, уроки, AI-тренер, прогресс студента. Postgres-first: курсы, модули, ответы, аттестация. Связан со Smeta Trainer как канал доставки контента.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["education", "ai", "courses", "learning"],
     createdAt: now,
@@ -464,7 +464,7 @@ export const projects: GlobusProject[] = [
     description:
       "Магазин экосистемы AEVION: товары, цифровые продукты, услуги. Postgres-каталог, корзина, заказы; интеграция с QPayNet для оплат и QRight для защиты авторских позиций.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 2,
     tags: ["commerce", "marketplace", "store", "fintech"],
     createdAt: now,
@@ -477,7 +477,7 @@ export const projects: GlobusProject[] = [
     description:
       "Платформа событий и конференций: создание мероприятий, регистрация, расписание, рассылки. Postgres-storage; интеграция с QSign для билетов и QPayNet для платежей.",
     kind: "product",
-    status: "mvp",
+    status: "live",
     priority: 3,
     tags: ["events", "conferences", "scheduling"],
     createdAt: now,

@@ -125,7 +125,7 @@ async function hmacSha256Hex(secret: string, payload: string): Promise<string> {
   const g: any = globalThis;
   if (!g.crypto || !g.crypto.subtle) {
     throw new Error(
-      "@aevion/fintech-sdk: globalThis.crypto.subtle is unavailable. " +
+      "@aevion-io/fintech-sdk: globalThis.crypto.subtle is unavailable. " +
       "On Node < 19, run with --experimental-global-webcrypto, or upgrade to Node 19+.",
     );
   }

@@ -1,5 +1,5 @@
 {
-  "name": "@aevion/fintech-sdk",
+  "name": "@aevion-io/fintech-sdk",
   "version": "0.2.0",
   "description": "TypeScript client for the AEVION fintech ecosystem — 6 modules (QGood charity, QMaskCard virtual cards, VeilNetX settlement ledger, Z-Tide reputation, QChainGov governance, QPayNet wallets/transfers) + webhook signing helpers (HMAC-SHA256 with replay protection + rolling rotation).",
   "main": "./dist/index.js",

@@ -1,5 +1,5 @@
 /**
- * @aevion/fintech-sdk — TypeScript client for the AEVION fintech ecosystem.
+ * @aevion-io/fintech-sdk — TypeScript client for the AEVION fintech ecosystem.
  *
  * Six modules under one client:
  *   QGood       — charity campaigns + donations + matching pools
@@ -15,7 +15,7 @@
  *
  * Quick start:
  * ```ts
- * import { FintechClient } from "@aevion/fintech-sdk";
+ * import { FintechClient } from "@aevion-io/fintech-sdk";
  *
  * const client = new FintechClient({
  *   baseUrl: "https://aevion-production-a70c.up.railway.app",
@@ -37,7 +37,7 @@
  *
  * Receiving webhooks:
  * ```ts
- * import { verifyWebhook } from "@aevion/fintech-sdk";
+ * import { verifyWebhook } from "@aevion-io/fintech-sdk";
  *
  * const result = await verifyWebhook({
  *   signature: req.headers["x-aevion-signature"] as string,

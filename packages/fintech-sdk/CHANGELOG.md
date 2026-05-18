@@ -32,11 +32,11 @@
 
   ```ts
   // before (v0.1.x)
-  import { createClient } from "@aevion/fintech-sdk";
+  import { createClient } from "@aevion-io/fintech-sdk";
   const c = createClient({ baseUrl, token });
 
   // after (v0.2.x)
-  import { FintechClient } from "@aevion/fintech-sdk";
+  import { FintechClient } from "@aevion-io/fintech-sdk";
   const c = new FintechClient({ baseUrl }).withToken(token);
   ```
 

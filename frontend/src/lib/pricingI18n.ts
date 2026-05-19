@@ -996,7 +996,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
  * Композиция базового словаря и вынесенных секций.
  * Section keys имеют приоритет (override) над baseDict.
  */
-const dict: Record<Lang, Record<string, string>> = {
+const dict: Record<string, Record<string, string>> = {
   ru: { ...baseDict.ru, ...migrationsDict.ru },
   en: { ...baseDict.en, ...migrationsDict.en },
 };
@@ -1004,7 +1004,7 @@ const dict: Record<Lang, Record<string, string>> = {
 export function usePricingT() {
   const { lang } = useI18n();
   return (key: string, vars?: Record<string, string | number>): string => {
-    const raw = dict[lang][key] ?? dict.en[key] ?? key;
+    const raw = (dict[lang] ?? dict.en ?? {})[key] ?? dict.en?.[key] ?? key;
     if (!vars) return raw;
     return Object.keys(vars).reduce(
       (acc, k) => acc.replace(`{${k}}`, String(vars[k])),

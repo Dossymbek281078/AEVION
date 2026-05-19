@@ -150,7 +150,7 @@ const OBJECT_RU: StringTable = {
   failedDetail: "Реестр AEVION временно недоступен. Попробуйте позже.",
 };
 
-const TABLES: Record<"transparency" | "object", Record<Lang, StringTable>> = {
+const TABLES: Record<"transparency" | "object", Record<string, StringTable>> = {
   transparency: { en: TRANSPARENCY_EN, ru: TRANSPARENCY_RU, kk: TRANSPARENCY_EN },
   object: { en: OBJECT_EN, ru: OBJECT_RU, kk: OBJECT_EN },
 };
@@ -169,7 +169,7 @@ export function tString(
   key: string,
   vars: Record<string, string | number> = {}
 ): string {
-  const table = TABLES[page][lang] || TABLES[page].en;
-  const raw = table[key] ?? TABLES[page].en[key] ?? key;
+  const table = TABLES[page][lang] ?? TABLES[page]["en"] ?? {} as StringTable;
+  const raw = table[key] ?? TABLES[page]["en"]?.[key] ?? key;
   return Object.keys(vars).length > 0 ? interpolate(raw, vars) : raw;
 }

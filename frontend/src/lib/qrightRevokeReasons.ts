@@ -50,7 +50,7 @@ const LABELS_RU: Record<string, string> = {
   unspecified: "Причина не указана",
 };
 
-const TABLES: Record<Lang, Record<string, string>> = {
+const TABLES: Record<string, Record<string, string>> = {
   en: LABELS_EN,
   ru: LABELS_RU,
   kk: LABELS_EN,

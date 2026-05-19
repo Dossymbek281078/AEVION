@@ -294,7 +294,25 @@ export function LevelHome() {
             >
               📚 Справочник ССЦ РК 8.04-08-2025
               <span className="text-[10px] text-emerald-500 font-normal">
-                182 936 позиций
+                189 493 позиций
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/ssc-search"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              🔍 Глобальный поиск ССЦ
+              <span className="text-[10px] text-emerald-500 font-normal">
+                все 20 регионов
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/ssc-stats"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📊 Статистика ССЦ
+              <span className="text-[10px] text-emerald-500 font-normal">
+                покрытие по регионам/книгам
               </span>
             </Link>
             <Link

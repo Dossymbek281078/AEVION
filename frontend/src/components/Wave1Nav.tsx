@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 import Link from "next/link";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useEffect, useState } from "react";
 import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
 import { ldClosed } from "@/app/qtrade/marketSim";
@@ -147,6 +148,8 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <AevPill variant={variant} />
       <RiskPill variant={variant} />
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
+      <span style={{ color: sep }} aria-hidden>|</span>
+      <LanguageSwitcher />
     </nav>
   );
 }

@@ -1,6 +1,5 @@
 import { Router } from "express";
 import crypto from "crypto";
-import Stripe from "stripe";
 import {
   buildPool as pool,
   ok,
@@ -193,10 +192,10 @@ billingRouter.get("/orders/me", async (req, res) => {
   }
 });
 
-// POST /api/build/orders/:id/checkout — create a Stripe Checkout session.
+// POST /api/build/orders/:id/checkout — create a Paddle transaction checkout.
 // Returns { url } — redirect the browser there to complete payment.
-// On success Stripe calls /api/build/webhooks/payment via build webhook route.
-// Falls back to the dev-mode payOrder stub if STRIPE_SECRET_KEY is not set.
+// On success Paddle calls /api/build/webhooks/payment via build webhook route.
+// Falls back to dev-mode payOrder stub if PADDLE_API_KEY is not set.
 billingRouter.post("/orders/:id/checkout", async (req, res) => {
   try {
     const auth = requireBuildAuth(req, res);
@@ -210,40 +209,52 @@ billingRouter.post("/orders/:id/checkout", async (req, res) => {
     if (row.status === "PAID") return ok(res, { alreadyPaid: true });
     if (row.status !== "PENDING") return fail(res, 400, "order_not_payable", { currentStatus: row.status });
 
-    const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
+    const paddleKey = process.env.PADDLE_API_KEY?.trim();
     const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
 
-    if (!stripeKey) {
-      // Dev mode: immediately mark as paid (same as /pay stub)
+    if (!paddleKey) {
+      // Dev mode: immediately mark as paid
       const result = await markOrderPaid(id);
       return ok(res, { devMode: true, order: result.order });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stripe = new Stripe(stripeKey, { apiVersion: "2026-04-22.dahlia" as any });
-    const amount = Math.round(Number(row.amount) * 100); // Stripe uses minor units
-    const currency = (String(row.currency || "rub")).toLowerCase();
+    const isSandbox = process.env.PADDLE_SANDBOX !== "false";
+    const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
+    const amountCents = Math.round(Number(row.amount) * 100);
+    const currency = String(row.currency || "USD").toUpperCase().slice(0, 3);
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: [{
-        price_data: {
-          currency,
-          unit_amount: amount,
-          product_data: {
-            name: `AEVION QBuild — ${String(row.kind).replace("_", " ")}`,
-            description: `Order #${id.slice(0, 8)}`,
-          },
-        },
+    const txBody = {
+      items: [{
         quantity: 1,
+        price: {
+          name: `AEVION QBuild — ${String(row.kind).replace("_", " ")}`,
+          description: `Order #${id.slice(0, 8)}`,
+          unit_price: { amount: String(amountCents), currency_code: currency },
+          tax_mode: "exclusive",
+          custom_data: { buildOrderId: id, userId: auth.sub },
+        },
       }],
-      metadata: { buildOrderId: id, userId: auth.sub },
-      success_url: `${frontendUrl}/build?payment=success&orderId=${id}`,
-      cancel_url: `${frontendUrl}/build?payment=cancelled&orderId=${id}`,
+      custom_data: { buildOrderId: id, userId: auth.sub },
+      checkout: { url: `${frontendUrl}/build?payment=success&orderId=${id}` },
+    };
+
+    const r = await fetch(`${paddleBase}/transactions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(txBody),
     });
 
-    return ok(res, { url: session.url, sessionId: session.id });
+    if (!r.ok) {
+      console.error("[build-billing] Paddle error", r.status, await r.text().catch(() => ""));
+      return fail(res, 500, "checkout_session_failed");
+    }
+
+    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
+    const tx = data.data;
+    if (!tx?.id) return fail(res, 500, "checkout_session_failed");
+
+    const url = tx.checkout?.url ?? `${paddleBase.replace("api.", "")}/checkout/${tx.id}`;
+    return ok(res, { url, transactionId: tx.id, provider: "paddle" });
   } catch (err: unknown) {
     return fail(res, 500, "checkout_session_failed");
   }

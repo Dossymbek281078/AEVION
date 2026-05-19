@@ -3,7 +3,9 @@ import { verifyBearerOptional } from "../lib/authJwt";
 
 export const paymentsRouter = Router();
 
-const STRIPE_KEY = () => process.env.STRIPE_SECRET_KEY?.trim() || "";
+const PADDLE_KEY = () => process.env.PADDLE_API_KEY?.trim() || "";
+const PADDLE_SANDBOX = () => process.env.PADDLE_SANDBOX !== "false";
+const PADDLE_BASE = () => PADDLE_SANDBOX() ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
 const PAYBOX_MERCHANT = () => process.env.PAYBOX_MERCHANT_ID?.trim() || "";
 const PAYBOX_SECRET = () => process.env.PAYBOX_SECRET_KEY?.trim() || "";
 
@@ -11,67 +13,129 @@ const PAYBOX_SECRET = () => process.env.PAYBOX_SECRET_KEY?.trim() || "";
 
 const PLANS = [
   { id: "free", name: "Free", price: 0, currency: "usd", interval: "month", features: ["5 QCoreAI runs/day", "3 DevHub projects", "1 GB QMedia storage", "Basic analytics"] },
-  { id: "pro", name: "Pro", price: 1900, currency: "usd", interval: "month", features: ["Unlimited QCoreAI runs", "Unlimited DevHub projects", "50 GB QMedia storage", "AI Memory", "Priority support", "Advanced analytics", "API keys", "Organizations"] },
-  { id: "enterprise", name: "Enterprise", price: 9900, currency: "usd", interval: "month", features: ["Everything in Pro", "Custom AI models", "SLA 99.9%", "Dedicated support", "Custom integrations", "On-premise option"] },
+  { id: "pro", name: "Pro", price: 1900, currency: "usd", interval: "month", priceId: process.env.PADDLE_PRICE_PRO_MONTHLY, features: ["Unlimited QCoreAI runs", "Unlimited DevHub projects", "50 GB QMedia storage", "AI Memory", "Priority support", "Advanced analytics", "API keys", "Organizations"] },
+  { id: "enterprise", name: "Enterprise", price: 9900, currency: "usd", interval: "month", priceId: process.env.PADDLE_PRICE_BIZ_MONTHLY, features: ["Everything in Pro", "Custom AI models", "SLA 99.9%", "Dedicated support", "Custom integrations", "On-premise option"] },
 ];
 
-/* ═══ Stripe ═══ */
+/* ═══ Paddle ═══ */
 
-paymentsRouter.get("/stripe/config", (_req, res) => {
-  const key = STRIPE_KEY();
+paymentsRouter.get("/paddle/config", (_req, res) => {
   res.json({
-    publishableKey: key ? (key.replace(/^sk_/, "pk_").replace(/_[a-zA-Z0-9]+$/, "_...")) : null,
-    testMode: key.startsWith("sk_test_"),
-    configured: Boolean(key),
+    configured: Boolean(PADDLE_KEY()),
+    sandbox: PADDLE_SANDBOX(),
+    provider: "paddle",
   });
 });
 
-paymentsRouter.get("/stripe/plans", (_req, res) => {
+paymentsRouter.get("/paddle/plans", (_req, res) => {
   res.json({ plans: PLANS });
 });
 
-paymentsRouter.post("/stripe/create-payment-intent", async (req, res) => {
+paymentsRouter.post("/paddle/create-transaction", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const { amount, currency, description } = req.body || {};
-    if (!amount || typeof amount !== "number" || amount < 50) return res.status(400).json({ error: "amount required (min 50 cents)" });
-    const key = STRIPE_KEY();
-    if (!key) {
-      return res.json({ clientSecret: "pi_test_stub_secret", paymentIntentId: "pi_test_stub", amount, currency: currency || "usd", mode: "stub" });
+    const { amount, currency = "USD", description, priceId, successUrl } = req.body || {};
+    if (!amount || typeof amount !== "number" || amount < 50) {
+      return res.status(400).json({ error: "amount required (min 50 cents)" });
     }
-    const params = new URLSearchParams({
-      amount: String(Math.round(amount)),
-      currency: String(currency || "usd"),
-      "automatic_payment_methods[enabled]": "true",
-      ...(description ? { description: String(description).slice(0, 500) } : {}),
-    });
-    const r = await fetch("https://api.stripe.com/v1/payment_intents", {
+
+    if (!PADDLE_KEY()) {
+      return res.json({
+        checkoutUrl: `https://buy.paddle.com/stub?amount=${amount}`,
+        transactionId: `txn_stub_${Date.now()}`,
+        mode: "stub",
+      });
+    }
+
+    const body: Record<string, unknown> = priceId
+      ? { items: [{ price_id: priceId, quantity: 1 }] }
+      : {
+          items: [{
+            quantity: 1,
+            price: {
+              name: (description || "AEVION Payment").slice(0, 200),
+              unit_price: { amount: String(Math.round(amount)), currency_code: String(currency).toUpperCase().slice(0, 3) },
+              tax_mode: "exclusive",
+            },
+          }],
+        };
+
+    if (successUrl) (body as any).checkout = { url: successUrl };
+
+    const r = await fetch(`${PADDLE_BASE()}/transactions`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+      headers: { Authorization: `Bearer ${PADDLE_KEY()}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
-      return res.status(400).json({ error: (err as any)?.error?.message || "Stripe error" });
+      return res.status(400).json({ error: (err as any)?.error?.detail || "Paddle error" });
     }
-    const pi = await r.json() as any;
-    res.json({ clientSecret: pi.client_secret, paymentIntentId: pi.id, amount: pi.amount, currency: pi.currency });
-  } catch { res.status(500).json({ error: "create payment intent failed" }); }
+    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
+    const tx = data.data;
+    if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
+
+    res.json({
+      checkoutUrl: tx.checkout?.url ?? `${PADDLE_BASE().replace("api.", "")}/checkout/${tx.id}`,
+      transactionId: tx.id,
+      provider: "paddle",
+      sandbox: PADDLE_SANDBOX(),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "create transaction failed" });
+  }
 });
 
-paymentsRouter.post("/stripe/create-subscription", async (req, res) => {
+paymentsRouter.post("/paddle/create-subscription", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const { priceId } = req.body || {};
-    if (!priceId) return res.status(400).json({ error: "priceId required" });
-    const key = STRIPE_KEY();
-    if (!key) {
-      return res.json({ subscriptionId: "sub_test_stub", status: "active", clientSecret: "seti_test_stub_secret", mode: "stub" });
+    const { priceId, email, successUrl } = req.body || {};
+    if (!priceId) return res.status(400).json({ error: "priceId required (get from /api/payments/paddle/plans)" });
+
+    if (!PADDLE_KEY()) {
+      return res.json({ checkoutUrl: `https://buy.paddle.com/stub?price=${priceId}`, mode: "stub" });
     }
-    res.json({ subscriptionId: "sub_pending", status: "incomplete", clientSecret: null, message: "Full subscription flow requires Stripe customer setup" });
-  } catch { res.status(500).json({ error: "create subscription failed" }); }
+
+    const body: Record<string, unknown> = {
+      items: [{ price_id: priceId, quantity: 1 }],
+      ...(email ? { customer: { email } } : {}),
+      ...(successUrl ? { checkout: { url: successUrl } } : {}),
+    };
+
+    const r = await fetch(`${PADDLE_BASE()}/transactions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${PADDLE_KEY()}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return res.status(400).json({ error: (err as any)?.error?.detail || "Paddle error" });
+    }
+    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
+    const tx = data.data;
+    res.json({
+      checkoutUrl: tx?.checkout?.url ?? null,
+      transactionId: tx?.id,
+      provider: "paddle",
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "create subscription failed" });
+  }
+});
+
+/* ═══ Legacy Stripe aliases (redirect to Paddle) ═══ */
+
+paymentsRouter.get("/stripe/config", (_req, res) => {
+  res.json({ configured: false, migrated: true, provider: "paddle", message: "Stripe removed — use /api/payments/paddle/*" });
+});
+paymentsRouter.get("/stripe/plans", (_req, res) => res.redirect("/api/payments/paddle/plans"));
+paymentsRouter.post("/stripe/create-payment-intent", (_req, res) => {
+  res.status(410).json({ error: "Stripe removed — use POST /api/payments/paddle/create-transaction" });
+});
+paymentsRouter.post("/stripe/create-subscription", (_req, res) => {
+  res.status(410).json({ error: "Stripe removed — use POST /api/payments/paddle/create-subscription" });
 });
 
 /* ═══ PayBox (Kazakhstan) ═══ */
@@ -111,12 +175,12 @@ paymentsRouter.post("/paybox/init", async (req, res) => {
   } catch { res.status(500).json({ error: "paybox init failed" }); }
 });
 
-paymentsRouter.post("/paybox/callback", async (req, res) => {
+paymentsRouter.post("/paybox/callback", (_req, res) => {
   res.setHeader("Content-Type", "text/xml");
   res.send(`<?xml version="1.0" encoding="utf-8"?><response><pg_status>ok</pg_status></response>`);
 });
 
-paymentsRouter.get("/paybox/status/:orderId", async (req, res) => {
+paymentsRouter.get("/paybox/status/:orderId", (req, res) => {
   res.json({ orderId: req.params.orderId, status: "pending", amount: null });
 });
 
@@ -130,9 +194,10 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 
 paymentsRouter.get("/health", (_req, res) => {
   res.json({
-    stripe: { configured: Boolean(STRIPE_KEY()), testMode: STRIPE_KEY().startsWith("sk_test_") },
+    paddle: { configured: Boolean(PADDLE_KEY()), sandbox: PADDLE_SANDBOX() },
     paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
     kaspi: { configured: false },
+    stripe: { configured: false, migrated: true },
   });
 });
 

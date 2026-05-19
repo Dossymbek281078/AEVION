@@ -84,7 +84,9 @@ import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
-import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage } from "./ratingCalibration";
+import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage } from "./ratingCalibration";
+import AntiCheatPanel from "./AntiCheatPanel";
+import { analyzeGameForCheating, buildReport, type AntiCheatResult } from "./anticheat";
 import AiPersonalityPicker from "./AiPersonalityPicker";
 import SpectatorChat from "./SpectatorChat";
 import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
@@ -1409,6 +1411,8 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_personality_wins_v1",String(personalityWins))}catch{}},[personalityWins]);
   // fideOpened — boolean: 1 если открывал FIDE panel
   const[fideOpened,sFideOpened]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_fide_opened_v1")||"0")||0}catch{return 0}});
+  const[acResult,sAcResult]=useState<AntiCheatResult|null>(null);
+  const[showAcPanel,sShowAcPanel]=useState(false);
   useEffect(()=>{
     if(showFidePanel&&fideOpened===0){
       sFideOpened(1);
@@ -2373,6 +2377,32 @@ export default function CyberChessPage(){
       showToast(`📊 CPI: ${Math.round(newState.cpi)} (${sign}${Math.round(last.delta)})`,"info");
     }catch{/* CPI is strictly optional — never break the game-end flow */}
   },[over,pCol,tc.ini,showToast]);
+
+  /* ── Anti-cheat analysis on game-end ── */
+  useEffect(()=>{
+    if(!over)return;
+    const snap=metricsRef.current.snapshot();
+    if(snap.length<6)return; // skip very short games
+    try{
+      const fideEst=loadEstimateFromStorage();
+      const result=analyzeGameForCheating(snap,pCol,fideEst,`game-${gameStartTimeRef.current}`);
+      sAcResult(result);
+      // Auto-show panel for suspicious/flagged results; clean/unusual only on demand
+      if(result.verdict==="suspicious"||result.verdict==="flagged"){
+        sShowAcPanel(true);
+      }
+      // Report to backend (fire-and-forget; best-effort)
+      if(result.confidence!=="insufficient"){
+        const userId=typeof window!=="undefined"?(window.localStorage.getItem("cyberchess.userId")||"anon"):"anon";
+        const report=buildReport(result,userId);
+        fetch("/api/cyberchess-anticheat/report",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(report),
+        }).catch(()=>{});
+      }
+    }catch{/* anti-cheat is optional — never break game-end */}
+  },[over,pCol]);
 
   /* ── Show game-over overlay when over is set ── */
   useEffect(()=>{if(over){sShowGameOver(true)}},[over]);
@@ -5322,6 +5352,7 @@ export default function CyberChessPage(){
           {label:"🎞 Replays",hint:"Архив завершённых трансляций (50 LRU)",onClick:()=>{window.location.href="/cyberchess/replays"}},
           {label:"🤝 Найти соперника",hint:"Real-player matchmaking — очередь по рейтингу + time control",onClick:()=>{window.location.href="/cyberchess/matchmaking"}},
           {label:"📐 FIDE-оценка",hint:"CPI regression + factor breakdown + slider explorer",onClick:()=>sShowFidePanel(true)},
+          {label:`🛡 Анти-чит${acResult?` · ${acResult.suspicionScore}/100`:""}`,hint:"Статистический анализ последней партии на читерство",onClick:()=>{if(acResult)sShowAcPanel(true);else showToast("Сыграй партию — анализ появится по окончании","info")}},
           {label:"🎭 Стиль AI",hint:"Magnus/Hikaru/Tal/Karpov/...10 personalities",onClick:()=>sShowAiPersonalityPicker(true)},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
         ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
@@ -11625,6 +11656,13 @@ ${question.trim()}`;
       open={showFidePanel}
       onClose={()=>sShowFidePanel(false)}
       initialMetrics={calibrateFromGames(savedGames)}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
+    />
+    <AntiCheatPanel
+      open={showAcPanel}
+      onClose={()=>sShowAcPanel(false)}
+      result={acResult}
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />

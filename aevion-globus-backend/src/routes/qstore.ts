@@ -318,15 +318,36 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
           : Math.round(pRow.price * 100); // USD/other — cents
 
         try {
-          const txBody: Record<string, unknown> = {
-            items: [{
-              price: {
-                description: (pRow.description || pRow.title).slice(0, 255),
+          // If a catalog product exists, create a price under it; else inline
+          const qstoreProductId = process.env.PADDLE_PRODUCT_QSTORE;
+          const priceBody: Record<string, unknown> = qstoreProductId
+            ? {
+                product_id: qstoreProductId,
+                description: pRow.title.slice(0, 255),
                 unit_price: { amount: String(amountCents), currency_code: currency },
-                product: { name: pRow.title.slice(0, 255), tax_category: "standard" },
-              },
-              quantity: 1,
-            }],
+                tax_mode: "account_setting",
+              }
+            : null as unknown as Record<string, unknown>;
+
+          // For one-time QStore items we always create a fresh price (per product)
+          let resolvedPriceId: string | null = null;
+          if (qstoreProductId) {
+            const pr = await paddlePost("/prices", priceBody) as { data?: { id: string } } | null;
+            resolvedPriceId = pr?.data?.id ?? null;
+          }
+
+          const txBody: Record<string, unknown> = {
+            items: [resolvedPriceId
+              ? { price_id: resolvedPriceId, quantity: 1 }
+              : {
+                  price: {
+                    description: pRow.title.slice(0, 255),
+                    unit_price: { amount: String(amountCents), currency_code: currency },
+                    product: { name: pRow.title.slice(0, 255), tax_category: "standard" },
+                  },
+                  quantity: 1,
+                }
+            ],
             checkout: { url: `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}` },
             custom_data: { purchaseId, productId: pRow.id, buyerId: auth.sub, source: "qstore" },
           };

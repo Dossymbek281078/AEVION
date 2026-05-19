@@ -134,13 +134,14 @@ checkoutRouter.post("/session", async (req, res) => {
       });
     }
 
-    // Реальный Paddle Checkout — создаём Transaction
-    const description = [
-      `AEVION ${tier.name}`,
-      period === "annual" ? "Годовая подписка" : "Месячная подписка",
-      seats > (tier.limits.seats ?? 1) ? `+${extraSeats} доп. польз.` : "",
-      discountUsd > 0 ? `Скидка $${discountUsd.toFixed(2)}` : "",
-    ].filter(Boolean).join(" · ");
+    // Реальный Paddle Checkout — используем каталожные priceId если заданы, иначе inline price
+    const PADDLE_PRICES: Record<string, string | undefined> = {
+      "pro:monthly":   process.env.PADDLE_PRICE_PRO_MONTHLY,
+      "pro:annual":    process.env.PADDLE_PRICE_PRO_ANNUAL,
+      "business:monthly": process.env.PADDLE_PRICE_BIZ_MONTHLY,
+      "business:annual":  process.env.PADDLE_PRICE_BIZ_ANNUAL,
+    };
+    const catalogPriceId = PADDLE_PRICES[`${tier.id}:${period}`];
 
     const customData: Record<string, string> = {
       tierId: tier.id,
@@ -152,16 +153,21 @@ checkoutRouter.post("/session", async (req, res) => {
       source: "aevion_checkout",
     };
 
+    // Build items: prefer catalog priceId, fall back to inline price
+    const item: Record<string, unknown> = catalogPriceId
+      ? { price_id: catalogPriceId, quantity: 1 }
+      : {
+          price: {
+            description: `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`,
+            unit_price: { amount: String(totalCents), currency_code: "USD" },
+            product: { name: `AEVION ${tier.name}`, tax_category: "standard" },
+          },
+          quantity: 1,
+        };
+
     // Find or create Paddle customer
     const txBody: Record<string, unknown> = {
-      items: [{
-        price: {
-          description: description.slice(0, 255),
-          unit_price: { amount: String(totalCents), currency_code: "USD" },
-          product: { name: `AEVION ${tier.name}`, tax_category: "standard" },
-        },
-        quantity: 1,
-      }],
+      items: [item],
       checkout: {
         url: `${FRONTEND_URL}/pricing/checkout/success?tier=${tier.id}&period=${period}`,
       },

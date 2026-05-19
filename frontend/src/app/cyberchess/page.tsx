@@ -1327,6 +1327,76 @@ export default function CyberChessPage(){
       sLoginStreak(newStreak);
     }catch{sLoginStreak(1)}
   },[]);
+  // 2026-05-19: counters для новых social achievements
+  // matchmakingWins — incrementit ниже когда over='You win' и matchmakingId != null
+  const[matchmakingWins,sMatchmakingWins]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_matchmaking_wins_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("cc_matchmaking_wins_v1",String(matchmakingWins))}catch{}},[matchmakingWins]);
+  // spectatorStreams — Set unique gameId (persist в localStorage)
+  const[spectatorStreams,sSpectatorStreams]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_spectator_streams_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("cc_spectator_streams_v1",String(spectatorStreams))}catch{}},[spectatorStreams]);
+  const lastTrackedSpectatorIdRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!spectatorPublish||!spectatorGameIdRef.current)return;
+    if(lastTrackedSpectatorIdRef.current===spectatorGameIdRef.current)return;
+    lastTrackedSpectatorIdRef.current=spectatorGameIdRef.current;
+    sSpectatorStreams(n=>n+1);
+  },[spectatorPublish,bk]);
+  // replayViews — read из localStorage (replays/[gameId]/page.tsx сама incrementит)
+  const[replayViews,sReplayViews]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_replay_views_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{
+    const handler=()=>{try{sReplayViews(parseInt(localStorage.getItem("cc_replay_views_v1")||"0")||0)}catch{}};
+    window.addEventListener("storage",handler);
+    handler(); // initial sync
+    return()=>window.removeEventListener("storage",handler);
+  },[]);
+  // personalitiesTried — Set persist в localStorage
+  const[personalitiesTried,sPersonalitiesTried]=useState<number>(()=>{
+    try{const r=localStorage.getItem("cc_personalities_tried_v1");return r?(JSON.parse(r) as string[]).length:0}catch{return 0}
+  });
+  useEffect(()=>{
+    const sync=()=>{
+      try{
+        const r=localStorage.getItem("cc_personalities_tried_v1");
+        sPersonalitiesTried(r?(JSON.parse(r) as string[]).length:0);
+      }catch{}
+    };
+    const interval=setInterval(()=>{
+      try{
+        const pid=localStorage.getItem("cc_ai_personality_v1");
+        if(!pid||pid==="standard")return;
+        const r=localStorage.getItem("cc_personalities_tried_v1");
+        const set=new Set<string>(r?JSON.parse(r):[]);
+        if(!set.has(pid)){set.add(pid);localStorage.setItem("cc_personalities_tried_v1",JSON.stringify([...set]));sync();}
+      }catch{}
+    },2000);
+    sync();
+    return()=>clearInterval(interval);
+  },[]);
+  // personalityWins — incrementit при победе если personality != standard
+  const[personalityWins,sPersonalityWins]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_personality_wins_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("cc_personality_wins_v1",String(personalityWins))}catch{}},[personalityWins]);
+  // fideOpened — boolean: 1 если открывал FIDE panel
+  const[fideOpened,sFideOpened]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_fide_opened_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{
+    if(showFidePanel&&fideOpened===0){
+      sFideOpened(1);
+      try{localStorage.setItem("cc_fide_opened_v1","1")}catch{}
+    }
+  },[showFidePanel,fideOpened]);
+  // Increment matchmakingWins + personalityWins при победе
+  const lastWinTrackedRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!over||!over.toLowerCase().includes("you win"))return;
+    const gameKey=`${matchmakingId||"local"}-${hist.length}`;
+    if(lastWinTrackedRef.current===gameKey)return;
+    lastWinTrackedRef.current=gameKey;
+    if(matchmakingId){sMatchmakingWins(n=>n+1)}
+    try{
+      const pid=localStorage.getItem("cc_ai_personality_v1");
+      if(pid&&pid!=="standard")sPersonalityWins(n=>n+1);
+    }catch{}
+  },[over,matchmakingId,hist.length]);
+
   const achContext=useMemo(()=>({
     totalGames, totalWins: sts.w,
     pzSolvedCount, pzBestStreak: 0,
@@ -1338,7 +1408,9 @@ export default function CyberChessPage(){
     ecosystemVisits: ecosystemVisits.length,
     loginStreak,
     lifetimeChessy: chessy.lifetime,
-  }),[totalGames, sts.w, pzSolvedCount, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime]);
+    matchmakingWins, spectatorStreams, replayViews,
+    personalitiesTried, personalityWins, fideOpened,
+  }),[totalGames, sts.w, pzSolvedCount, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime, matchmakingWins, spectatorStreams, replayViews, personalitiesTried, personalityWins, fideOpened]);
   useEffect(()=>{
     const newly=findNewlyUnlocked(chessy.ach,achContext);
     for(const a of newly){

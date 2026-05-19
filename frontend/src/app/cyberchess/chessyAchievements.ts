@@ -16,7 +16,7 @@
  *   login_streak_7, variants_5, ecosystem_5, repertoire_5, coach_10, chessy_1000
  */
 
-export type AchievementCategory = "games" | "puzzles" | "rating" | "streak" | "explore" | "skill";
+export type AchievementCategory = "games" | "puzzles" | "rating" | "streak" | "explore" | "skill" | "social";
 
 export type Achievement = {
   id: string;
@@ -41,6 +41,13 @@ export type AchievementContext = {
   ecosystemVisits?: number;
   loginStreak?: number;
   lifetimeChessy?: number;
+  // 2026-05-19: counters для новых фич (matchmaking / spectator / replay / personality / FIDE)
+  matchmakingWins?: number;
+  spectatorStreams?: number;
+  replayViews?: number;
+  personalitiesTried?: number;
+  personalityWins?: number;
+  fideOpened?: number;
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -81,6 +88,19 @@ export const ACHIEVEMENTS: Achievement[] = [
   // ───────── Skill (новые) ─────────
   { id: "coach_10",       title: "Ученик",            desc: "Спроси коуча 10 раз",          icon: "🎓", category: "skill", reward: 30, target: 10 },
   { id: "chessy_1000",    title: "Богач",             desc: "Заработай 1000 Chessy всего",  icon: "💰", category: "skill", reward: 100, target: 1000 },
+
+  // ───────── Social (2026-05-19, новые фичи) ─────────
+  { id: "matchmaking_win_1",  title: "Первая дуэль",   desc: "Победи реального соперника в matchmaking", icon: "🤝", category: "social", reward: 50, target: 1 },
+  { id: "matchmaking_win_5",  title: "Соперник",       desc: "5 побед в matchmaking",                    icon: "⚔",  category: "social", reward: 150, target: 5 },
+  { id: "matchmaking_win_20", title: "Дуэлянт",        desc: "20 побед в matchmaking",                   icon: "🗡", category: "social", reward: 400, target: 20 },
+  { id: "stream_1",           title: "Первый стрим",   desc: "Запусти трансляцию своей партии",          icon: "📡", category: "social", reward: 30, target: 1 },
+  { id: "stream_10",          title: "Стример",        desc: "10 трансляций партий",                     icon: "🎙", category: "social", reward: 120, target: 10 },
+  { id: "replay_view_5",      title: "Кинолюб",        desc: "Посмотри 5 завершённых трансляций",        icon: "🎞", category: "social", reward: 25, target: 5 },
+  { id: "replay_view_20",     title: "Аналитик",       desc: "Посмотри 20 трансляций — изучай чужие",    icon: "📽", category: "social", reward: 80, target: 20 },
+  { id: "personality_try_3",  title: "Стилист",        desc: "Попробуй 3 разных AI personalities",       icon: "🎭", category: "social", reward: 40, target: 3 },
+  { id: "personality_try_all",title: "Полиглот шахмат",desc: "Попробуй все 10 AI personalities",         icon: "🌟", category: "social", reward: 200, target: 10 },
+  { id: "personality_win_1",  title: "Победил легенду",desc: "Победи AI с personality (Magnus/Hikaru/...)",icon:"🏆",category: "social", reward: 80, target: 1 },
+  { id: "fide_check",         title: "Калибровка",     desc: "Открой FIDE-оценку своей силы",            icon: "📐", category: "social", reward: 15, target: 1 },
 ];
 
 export const CATEGORIES: { id: AchievementCategory | "all"; label: string }[] = [
@@ -91,6 +111,7 @@ export const CATEGORIES: { id: AchievementCategory | "all"; label: string }[] = 
   { id: "streak",   label: "Серии" },
   { id: "explore",  label: "Открытия" },
   { id: "skill",    label: "Мастерство" },
+  { id: "social",   label: "Сообщество" },
 ];
 
 export function progressOf(ach: Achievement, ctx: AchievementContext): number {
@@ -116,6 +137,17 @@ export function progressOf(ach: Achievement, ctx: AchievementContext): number {
     case "repertoire_5":   return ctx.repertoireBranches ?? 0;
     case "coach_10":       return ctx.coachUsed ?? 0;
     case "chessy_1000":    return ctx.lifetimeChessy ?? 0;
+    case "matchmaking_win_1":
+    case "matchmaking_win_5":
+    case "matchmaking_win_20": return ctx.matchmakingWins ?? 0;
+    case "stream_1":
+    case "stream_10":          return ctx.spectatorStreams ?? 0;
+    case "replay_view_5":
+    case "replay_view_20":     return ctx.replayViews ?? 0;
+    case "personality_try_3":
+    case "personality_try_all":return ctx.personalitiesTried ?? 0;
+    case "personality_win_1":  return ctx.personalityWins ?? 0;
+    case "fide_check":         return ctx.fideOpened ?? 0;
     default: return 0;
   }
 }

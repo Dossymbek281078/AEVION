@@ -167,6 +167,12 @@ export default function ReplayViewerPage() {
         if (!alive) return;
         setReplay(r);
         setCurrentPly(0);
+        // Increment replay views counter (achievement counter, см. cyberchess/page.tsx)
+        try {
+          const cur = parseInt(localStorage.getItem("cc_replay_views_v1") || "0") || 0;
+          localStorage.setItem("cc_replay_views_v1", String(cur + 1));
+          window.dispatchEvent(new StorageEvent("storage", { key: "cc_replay_views_v1" }));
+        } catch {}
       })
       .catch((e: unknown) => {
         if (alive) setError(e instanceof Error ? e.message : String(e));

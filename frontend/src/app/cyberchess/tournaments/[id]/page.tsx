@@ -9,8 +9,9 @@
 //   • swiss              → round-by-round view + standings
 //   • round_robin        → N×N matrix with results
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const T = {
   bg: "#0a0e1a",
@@ -80,6 +81,43 @@ interface TournamentMeta {
   currentRound?: number;
   players?: number;
   maxPlayers?: number;
+  realPlayers?: boolean;
+}
+
+type RegState =
+  | { phase: "idle" }
+  | { phase: "registering" }
+  | { phase: "registered"; userId: string; ticketId: string }
+  | { phase: "waiting"; userId: string; ticketId: string }
+  | {
+      phase: "matched";
+      userId: string;
+      matchId: string;
+      color: "white" | "black";
+      tournamentId: string;
+    }
+  | { phase: "error"; message: string };
+
+function genLocalUserId(tournamentId: string): string {
+  if (typeof window === "undefined") return `anon_${Math.random().toString(36).slice(2, 10)}`;
+  const key = `cc_user_id`;
+  let id = window.localStorage.getItem(key);
+  if (!id) {
+    id =
+      `u_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      window.localStorage.setItem(key, id);
+    } catch {
+      // ignore
+    }
+  }
+  void tournamentId;
+  return id;
+}
+
+function getDisplayName(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem("cc_display_name") || "";
 }
 
 export default function TournamentDetailPage({
@@ -93,6 +131,7 @@ export default function TournamentDetailPage({
       : (params as { id: string });
 
   const tournamentId = resolved.id;
+  const router = useRouter();
 
   const [tab, setTab] = useState<TabId>("bracket");
   const [meta, setMeta] = useState<TournamentMeta | null>(null);
@@ -101,6 +140,9 @@ export default function TournamentDetailPage({
   const [nextRound, setNextRound] = useState<NextRound | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [reg, setReg] = useState<RegState>({ phase: "idle" });
+  const sseRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +169,7 @@ export default function TournamentDetailPage({
             currentRound: tData.tournament.currentRound,
             players: tData.tournament.players,
             maxPlayers: tData.tournament.maxPlayers,
+            realPlayers: !!tData.tournament.realPlayers,
           });
         }
 
@@ -167,6 +210,127 @@ export default function TournamentDetailPage({
 
   const titleGuess = meta?.title ?? prettyTitle(tournamentId);
   const format: Format = meta?.format ?? "single_elimination";
+
+  // ── registration handler ─────────────────────────────────────────
+  const handleRegister = async () => {
+    if (!meta) return;
+    if (reg.phase === "registering" || reg.phase === "waiting") return;
+    setReg({ phase: "registering" });
+    const userId = genLocalUserId(tournamentId);
+    const displayName = getDisplayName();
+    try {
+      const r = await fetch(`/api/cyberchess-tournaments/${tournamentId}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, displayName }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data?.ok) {
+        const err = (data && data.error) || `HTTP ${r.status}`;
+        setReg({ phase: "error", message: String(err) });
+        return;
+      }
+      if (meta.realPlayers || data.realPlayers) {
+        setReg({
+          phase: "waiting",
+          userId,
+          ticketId: data.ticketId,
+        });
+      } else {
+        setReg({
+          phase: "registered",
+          userId,
+          ticketId: data.ticketId,
+        });
+      }
+    } catch (e) {
+      setReg({ phase: "error", message: (e as Error).message });
+    }
+  };
+
+  // ── SSE subscription while waiting ───────────────────────────────
+  useEffect(() => {
+    if (reg.phase !== "waiting") {
+      if (sseRef.current) {
+        try {
+          sseRef.current.close();
+        } catch {
+          // ignore
+        }
+        sseRef.current = null;
+      }
+      return;
+    }
+    const userId = reg.userId;
+    const url = `/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userId)}`;
+    let es: EventSource;
+    try {
+      es = new EventSource(url);
+    } catch {
+      return;
+    }
+    sseRef.current = es;
+    const onMatched = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data);
+        const matchId = String(data.matchId || "");
+        const color = (data.color === "black" ? "black" : "white") as "white" | "black";
+        if (!matchId) return;
+        setReg({
+          phase: "matched",
+          userId,
+          matchId,
+          color,
+          tournamentId,
+        });
+        try {
+          es.close();
+        } catch {
+          // ignore
+        }
+        const target = `/cyberchess?matchId=${encodeURIComponent(matchId)}&color=${color}&tournamentId=${encodeURIComponent(tournamentId)}`;
+        // small delay so the user sees the "matched" state for ~600ms
+        window.setTimeout(() => {
+          router.push(target);
+        }, 600);
+      } catch {
+        // ignore malformed payload
+      }
+    };
+    const onCancelled = () => {
+      setReg({ phase: "error", message: "Ожидание отменено сервером." });
+      try {
+        es.close();
+      } catch {
+        // ignore
+      }
+    };
+    const onTimeout = () => {
+      setReg({ phase: "error", message: "Истекло время ожидания пары." });
+      try {
+        es.close();
+      } catch {
+        // ignore
+      }
+    };
+    es.addEventListener("matched", onMatched as EventListener);
+    es.addEventListener("cancelled", onCancelled as EventListener);
+    es.addEventListener("timeout", onTimeout as EventListener);
+    es.onerror = () => {
+      // best-effort: keep listener open; native EventSource auto-retries
+    };
+    return () => {
+      try {
+        es.removeEventListener("matched", onMatched as EventListener);
+        es.removeEventListener("cancelled", onCancelled as EventListener);
+        es.removeEventListener("timeout", onTimeout as EventListener);
+        es.close();
+      } catch {
+        // ignore
+      }
+      if (sseRef.current === es) sseRef.current = null;
+    };
+  }, [reg, tournamentId, router]);
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, color: T.text, padding: "24px 32px" }}>
@@ -216,6 +380,16 @@ export default function TournamentDetailPage({
           <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
             Бэкенд недоступен ({errorMsg}). Показываем sample data, если оно есть.
           </div>
+        )}
+
+        {/* Registration / Matching panel */}
+        {meta && meta.status === "upcoming" && (
+          <RegPanel
+            reg={reg}
+            realPlayers={!!meta.realPlayers}
+            onRegister={handleRegister}
+            full={(meta.players ?? 0) >= (meta.maxPlayers ?? 0) && (meta.maxPlayers ?? 0) > 0}
+          />
         )}
       </header>
 
@@ -1048,6 +1222,143 @@ function EmptyBox({ label }: { label: string }) {
     >
       {label}
     </div>
+  );
+}
+
+// ── registration panel ────────────────────────────────────────────
+
+function RegPanel({
+  reg,
+  realPlayers,
+  onRegister,
+  full,
+}: {
+  reg: RegState;
+  realPlayers: boolean;
+  onRegister: () => void;
+  full: boolean;
+}) {
+  const phase = reg.phase;
+  const isBusy = phase === "registering" || phase === "waiting";
+  const canRegister = phase === "idle" || phase === "error";
+
+  let body: React.ReactNode = null;
+  if (phase === "idle" || phase === "error") {
+    body = (
+      <>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <button
+            onClick={onRegister}
+            disabled={!canRegister || full}
+            style={{
+              background: full ? T.faint : T.accent,
+              color: "#0a0e1a",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 22px",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: full ? "not-allowed" : "pointer",
+              letterSpacing: 0.3,
+            }}
+          >
+            {full ? "Турнир заполнен" : "Зарегистрироваться"}
+          </button>
+          {realPlayers && (
+            <span style={{ fontSize: 12, color: T.dim }}>
+              ⚡ Турнир с реальными игроками — после регистрации откроется ожидание пары.
+            </span>
+          )}
+        </div>
+        {phase === "error" && (
+          <div style={{ marginTop: 8, fontSize: 12, color: T.red }}>
+            Ошибка: {(reg as { message: string }).message}
+          </div>
+        )}
+      </>
+    );
+  } else if (phase === "registering") {
+    body = (
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <Spinner color={T.accent} />
+        <span style={{ fontSize: 14, color: T.text }}>Регистрируем участника...</span>
+      </div>
+    );
+  } else if (phase === "registered") {
+    body = (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Badge color={T.accent}>✓ Регистрация подтверждена</Badge>
+        <span style={{ fontSize: 12, color: T.dim }}>
+          ticket: {(reg as { ticketId: string }).ticketId.slice(0, 14)}…
+        </span>
+      </div>
+    );
+  } else if (phase === "waiting") {
+    body = (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Spinner color={T.blue} />
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: 14, color: T.text, fontWeight: 600 }}>
+            Ожидание пары...
+          </span>
+          <span style={{ fontSize: 11, color: T.faint, marginTop: 2 }}>
+            Когда tournament-scheduler опубликует следующий тур, вы получите матч и переход в игру.
+          </span>
+        </div>
+      </div>
+    );
+  } else if (phase === "matched") {
+    const m = reg as Extract<RegState, { phase: "matched" }>;
+    body = (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <Badge color={T.accent}>● Пара найдена</Badge>
+        <span style={{ fontSize: 13, color: T.text }}>
+          Открываем партию ({m.color})…
+        </span>
+        <span style={{ fontSize: 11, color: T.faint, fontFamily: "ui-monospace, monospace" }}>
+          {m.matchId.slice(0, 14)}…
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        padding: "14px 16px",
+        background: T.surface,
+        border: `1px solid ${
+          phase === "matched"
+            ? T.accent
+            : phase === "waiting"
+              ? `${T.blue}88`
+              : T.border
+        }`,
+        borderRadius: 10,
+      }}
+    >
+      {body}
+    </div>
+  );
+}
+
+function Spinner({ color }: { color: string }) {
+  return (
+    <span
+      aria-label="loading"
+      style={{
+        display: "inline-block",
+        width: 18,
+        height: 18,
+        border: `2px solid ${color}33`,
+        borderTopColor: color,
+        borderRadius: "50%",
+        animation: "cc-spin 0.8s linear infinite",
+      }}
+    >
+      <style>{`@keyframes cc-spin { to { transform: rotate(360deg); } }`}</style>
+    </span>
   );
 }
 

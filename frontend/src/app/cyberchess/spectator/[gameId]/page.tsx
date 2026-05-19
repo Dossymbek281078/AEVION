@@ -3,6 +3,7 @@
 import { useEffect, useState, use as reactUse } from "react";
 import Link from "next/link";
 import SpectatorChat from "../../SpectatorChat";
+import SpectatorVoiceFeed from "../../SpectatorVoiceFeed";
 
 const T = {
   bg: "#0a0e1a",
@@ -648,6 +649,17 @@ export default function SpectatorViewerPage(props: Props) {
                 </div>
               )}
             </div>
+
+            {/* AI VoiceCoach feed */}
+            {gameId && !finished && (
+              <SpectatorVoiceFeed
+                gameId={gameId}
+                surface={T.surface}
+                text={T.text}
+                textDim={T.textDim}
+                brand={T.accent}
+              />
+            )}
 
             {/* Chat */}
             {gameId && (

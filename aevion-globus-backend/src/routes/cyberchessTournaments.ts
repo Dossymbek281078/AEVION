@@ -9,14 +9,22 @@
 // with graceful no-op writes.
 //
 // Real-player extension: tournaments may set `realPlayers: true` to opt
-// into turn-by-turn pairing driven by the matchmaking module. The new
+// into turn-by-turn pairing driven by the matchmaking module. The
 // POST /:id/queue-match endpoint produces pairings for the next round
-// based on previous round results. Default behaviour is unchanged.
+// based on previous round results. When `realPlayers: true`, each
+// pairing is immediately materialised in the matchmaking layer via
+// createPreMatchedMatch(), giving both players a live matchId + SSE
+// notification + redirect URL.
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+  createPreMatchedMatch,
+  ALLOWED_TIME_CONTROLS,
+  type TimeControl as MmTimeControl,
+} from "./cyberchessMatchmaking";
 
 const router = Router();
 
@@ -38,6 +46,7 @@ export interface Player {
   whiteCount: number;
   blackCount: number;
   opponentIds: string[];
+  userId?: string; // when a real registered user is mapped onto this roster slot
 }
 
 export interface BracketMatch {
@@ -53,8 +62,14 @@ export interface BracketMatch {
   whitePlayerId?: string | null;
   blackPlayerId?: string | null;
   // real-player extension: when tournament.realPlayers === true the
-  // scheduler can attach a live matchmaking match id here.
+  // scheduler attaches the live matchmaking match id here.
   liveMatchId?: string | null;
+  // viewer URLs published when a live match is created for this pairing
+  viewerUrlWhite?: string | null;
+  viewerUrlBlack?: string | null;
+  // userIds of the participants when known (real-player mode)
+  whiteUserId?: string | null;
+  blackUserId?: string | null;
 }
 
 export interface BracketRound {
@@ -421,6 +436,34 @@ function buildSeedFixtures(): Tournament[] {
     realPlayers: false,
   };
 
+  // --- real-player demo tournament (small swiss, realPlayers=true) ---
+  const realDemoRoster = [
+    mkPlayer("Демо-Алиса", 1700, 91),
+    mkPlayer("Демо-Боб", 1720, 92),
+    mkPlayer("Демо-Карл", 1680, 93),
+    mkPlayer("Демо-Дина", 1740, 94),
+  ];
+  const realDemo: Tournament = {
+    id: "real-swiss-demo",
+    title: "Real Players Swiss (демо)",
+    format: "swiss",
+    timeControl: "rapid",
+    eloMin: 1500,
+    eloMax: 2000,
+    players: 0,
+    maxPlayers: 8,
+    prizeChessy: 1_000,
+    status: "upcoming",
+    startsAt: "2026-05-19T18:00:00Z",
+    description: "Демо-турнир с реальными игроками. Регистрация открыта.",
+    swissRounds: 3,
+    currentRound: 0,
+    registeredUserIds: [],
+    roster: realDemoRoster,
+    rounds: [],
+    realPlayers: true,
+  };
+
   return [
     elim1,
     elim2,
@@ -433,6 +476,7 @@ function buildSeedFixtures(): Tournament[] {
     elimLegacy5,
     elimLegacy6,
     elimLegacy7,
+    realDemo,
   ];
 }
 
@@ -763,6 +807,99 @@ function maybeAdvanceRR(t: Tournament): void {
   }
 }
 
+// ── tournament → matchmaking bridge ────────────────────────────────
+
+/**
+ * Map our coarse TimeControl ("blitz"/"rapid"/"classic") to one of the
+ * matchmaking module's concrete clocks. Stable mapping; can be replaced
+ * by a per-tournament override later.
+ */
+function mapTimeControl(tc: TimeControl): MmTimeControl {
+  switch (tc) {
+    case "blitz":
+      return "180+0";
+    case "rapid":
+      return "300+5";
+    case "classic":
+      return "1800+0";
+    default:
+      // fallback compile-time safety
+      return "300+5";
+  }
+}
+
+/**
+ * Resolve a Player roster entry into a real userId, if one is mapped.
+ * Today we use Player.userId (set during /register on realPlayers tournaments).
+ * If absent, falls back to the synthetic player.id so the matchmaking
+ * layer still gets a usable token (bot/anon slot).
+ */
+function resolveUserId(t: Tournament, playerId: string | null | undefined): string | null {
+  if (!playerId) return null;
+  const p = t.roster.find((x) => x.id === playerId);
+  if (!p) return null;
+  return p.userId || p.id;
+}
+
+function resolveDisplayName(t: Tournament, playerId: string | null | undefined): string | null {
+  if (!playerId) return null;
+  const p = t.roster.find((x) => x.id === playerId);
+  return p?.name ?? null;
+}
+
+function resolveRating(t: Tournament, playerId: string | null | undefined): number {
+  if (!playerId) return 1500;
+  const p = t.roster.find((x) => x.id === playerId);
+  return p?.rating ?? 1500;
+}
+
+/**
+ * For every pairing in a freshly-built round, if both sides have
+ * resolvable userIds, materialise a live match in matchmaking and
+ * decorate the bracket match with liveMatchId + viewer URLs.
+ *
+ * Errors are isolated per-pairing — one failure must not abort the
+ * whole round.
+ */
+function publishRoundToMatchmaking(t: Tournament, matches: BracketMatch[]): void {
+  if (!t.realPlayers) return;
+  const mmTc = mapTimeControl(t.timeControl);
+  for (const m of matches) {
+    if (m.status === "done") continue; // byes
+    const whiteUserId = resolveUserId(t, m.whitePlayerId);
+    const blackUserId = resolveUserId(t, m.blackPlayerId);
+    if (!whiteUserId || !blackUserId) {
+      m.liveMatchId = m.liveMatchId ?? null;
+      continue;
+    }
+    try {
+      const result = createPreMatchedMatch({
+        whiteUserId,
+        blackUserId,
+        whiteName: resolveDisplayName(t, m.whitePlayerId) || undefined,
+        blackName: resolveDisplayName(t, m.blackPlayerId) || undefined,
+        whiteRating: resolveRating(t, m.whitePlayerId),
+        blackRating: resolveRating(t, m.blackPlayerId),
+        timeControl: mmTc,
+        tournamentId: t.id,
+        round: m.round,
+      });
+      m.liveMatchId = result.matchId;
+      m.viewerUrlWhite = result.viewerUrlWhite;
+      m.viewerUrlBlack = result.viewerUrlBlack;
+      m.whiteUserId = whiteUserId;
+      m.blackUserId = blackUserId;
+      m.status = "live";
+    } catch (e) {
+      console.warn(
+        `[cyberchess-tournaments] publishRoundToMatchmaking failed for ${m.id}:`,
+        (e as Error).message,
+      );
+      m.liveMatchId = null;
+    }
+  }
+}
+
 // ── routes ─────────────────────────────────────────────────────────
 
 initStore();
@@ -823,12 +960,40 @@ router.post("/:id/register", (req: Request, res: Response): void => {
   const userId: string =
     (typeof req.body?.userId === "string" && req.body.userId) ||
     `anon_${randomUUID().slice(0, 8)}`;
+  const displayName: string =
+    (typeof req.body?.displayName === "string" && req.body.displayName.trim()) ||
+    `Player_${userId.slice(-4)}`;
   if (t.registeredUserIds.includes(userId)) {
     res.status(409).json({ ok: false, error: "already_registered", userId });
     return;
   }
   t.registeredUserIds.push(userId);
   t.players += 1;
+
+  // For real-player tournaments, attach the userId onto a roster slot so
+  // that publishRoundToMatchmaking() can later resolve real userIds.
+  if (t.realPlayers) {
+    const freeSlot = t.roster.find((p) => !p.userId);
+    if (freeSlot) {
+      freeSlot.userId = userId;
+      freeSlot.name = displayName;
+    } else {
+      // grow roster on demand if no fixture slot available
+      const newPlayer: Player = {
+        id: `pl_dyn_${t.registeredUserIds.length.toString().padStart(3, "0")}_${userId.slice(-6)}`,
+        name: displayName,
+        rating: 1500,
+        score: 0,
+        buchholz: 0,
+        whiteCount: 0,
+        blackCount: 0,
+        opponentIds: [],
+        userId,
+      };
+      t.roster.push(newPlayer);
+    }
+  }
+
   tryWriteToDisk();
   const ticketId = `tkt_${randomUUID()}`;
   res.json({
@@ -837,6 +1002,10 @@ router.post("/:id/register", (req: Request, res: Response): void => {
     tournamentId: t.id,
     title: t.title,
     userId,
+    realPlayers: !!t.realPlayers,
+    queueStreamUrl: t.realPlayers
+      ? `/api/cyberchess/matchmaking/queue/stream?userId=${encodeURIComponent(userId)}`
+      : null,
     registeredAt: new Date().toISOString(),
   });
 });
@@ -957,9 +1126,9 @@ router.post("/:id/result", (req: Request, res: Response): void => {
 //      * swiss → pairSwissRound on roster
 //      * round_robin → next scheduled round already exists in t.rounds
 //      * single_elimination → winners of previous round are paired in order
-//  - Returns the next round's matches with placeholder liveMatchId (the
-//    matchmaking module is responsible for spinning up live matches
-//    keyed to bracket match id; this endpoint does NOT call it).
+//  - For each pairing where both players have resolvable userIds, a live
+//    matchmaking match is created via createPreMatchedMatch(); matchId
+//    and viewer URLs are attached to the bracket match.
 router.post("/:id/queue-match", (req: Request, res: Response): void => {
   const t = TOURNAMENTS.find((x) => x.id === req.params.id);
   if (!t) {
@@ -995,6 +1164,7 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
       id: `${t.id}-r${nextRoundNo}-${i + 1}`,
       liveMatchId: null as string | null,
     }));
+    publishRoundToMatchmaking(t, next);
     t.rounds.push({ name: `Тур ${nextRoundNo}`, round: nextRoundNo, matches: next });
     t.currentRound = nextRoundNo;
     tryWriteToDisk();
@@ -1003,6 +1173,16 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
       tournamentId: t.id,
       round: nextRoundNo,
       matches: next,
+      live: next
+        .filter((m) => !!m.liveMatchId)
+        .map((m) => ({
+          bracketMatchId: m.id,
+          matchId: m.liveMatchId,
+          viewerUrlWhite: m.viewerUrlWhite,
+          viewerUrlBlack: m.viewerUrlBlack,
+          whiteUserId: m.whiteUserId,
+          blackUserId: m.blackUserId,
+        })),
     });
     return;
   }
@@ -1020,6 +1200,7 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
     for (const m of pending.matches) {
       if (typeof m.liveMatchId === "undefined") m.liveMatchId = null;
     }
+    publishRoundToMatchmaking(t, pending.matches);
     t.currentRound = pending.round;
     tryWriteToDisk();
     res.json({
@@ -1027,6 +1208,16 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
       tournamentId: t.id,
       round: pending.round,
       matches: pending.matches,
+      live: pending.matches
+        .filter((m) => !!m.liveMatchId)
+        .map((m) => ({
+          bracketMatchId: m.id,
+          matchId: m.liveMatchId,
+          viewerUrlWhite: m.viewerUrlWhite,
+          viewerUrlBlack: m.viewerUrlBlack,
+          whiteUserId: m.whiteUserId,
+          blackUserId: m.blackUserId,
+        })),
     });
     return;
   }
@@ -1066,6 +1257,7 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
         liveMatchId: null,
       });
     }
+    publishRoundToMatchmaking(t, matches);
     t.rounds.push({ name: `Тур ${nextRoundNo}`, round: nextRoundNo, matches });
     t.currentRound = nextRoundNo;
     tryWriteToDisk();
@@ -1074,11 +1266,27 @@ router.post("/:id/queue-match", (req: Request, res: Response): void => {
       tournamentId: t.id,
       round: nextRoundNo,
       matches,
+      live: matches
+        .filter((m) => !!m.liveMatchId)
+        .map((m) => ({
+          bracketMatchId: m.id,
+          matchId: m.liveMatchId,
+          viewerUrlWhite: m.viewerUrlWhite,
+          viewerUrlBlack: m.viewerUrlBlack,
+          whiteUserId: m.whiteUserId,
+          blackUserId: m.blackUserId,
+        })),
     });
     return;
   }
 
   res.status(400).json({ ok: false, error: "unsupported_format", format: t.format });
+});
+
+// expose the allowed matchmaking time-controls so the frontend can show
+// the mapping if needed (purely informational)
+router.get("/__meta/time-controls", (_req: Request, res: Response): void => {
+  res.json({ ok: true, matchmaking: ALLOWED_TIME_CONTROLS });
 });
 
 export default router;

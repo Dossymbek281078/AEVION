@@ -1,5 +1,5 @@
 /**
- * CyberChess Spectator — SSE live game registry + Chat + Replay archive
+ * CyberChess Spectator — SSE live game registry + Chat + Replay archive + VoiceCoach broadcast
  *
  * In-memory registry of live games + SSE streams so spectators can watch
  * any published game in real-time. No DB, no external deps.
@@ -8,13 +8,18 @@
  * full game (history, eval-cp series, optional FEN snapshots) into a bounded
  * LRU replay archive so viewers can rewatch finished games via /replays/*.
  *
+ * NEW: voice broadcast — `POST /voice/:gameId` sends an SSE "voice" event to
+ * all subscribers of the given live game with `{text, audioUrl?, fromHost?}`.
+ * Designed for AI VoiceCoach commentary on every move.
+ *
  * Endpoints:
  *   POST   /publish           — host publishes/updates game state
  *   DELETE /:gameId           — host ends the stream
  *   GET    /list              — directory of live games for the spectator hub
- *   GET    /:gameId           — SSE stream of game updates (state + chat events)
+ *   GET    /:gameId           — SSE stream of game updates (state + chat + voice events)
  *   POST   /chat/:gameId      — post a chat message
  *   GET    /chat/:gameId      — recent chat messages (initial load for joiners)
+ *   POST   /voice/:gameId     — broadcast AI VoiceCoach comment (text + optional audio URL)
  *   GET    /replays           — list of finished games (LRU archive)
  *   GET    /replays/:gameId   — full ReplayGame payload
  *   DELETE /replays/:gameId   — soft delete a replay (TODO: gate with admin)
@@ -72,6 +77,20 @@ type ChatBody = {
   isHost?: boolean;
 };
 
+type VoiceBody = {
+  text?: string;
+  audioUrl?: string;
+  fromHost?: boolean;
+};
+
+type VoiceMessage = {
+  id: string;
+  text: string;
+  audioUrl?: string;
+  fromHost?: boolean;
+  ts: number;
+};
+
 type ReplayGame = {
   gameId: string;
   hostName?: string;
@@ -99,6 +118,9 @@ const chatMessages = new Map<string, ChatMessage[]>();
 // Chat rate limiting: per (ip + gameId) — 10 msgs / minute
 const chatRateBucket = new Map<string, { count: number; resetAt: number }>();
 
+// Voice rate limiting: per gameId — VOICE_RATE_MAX broadcasts / minute
+const voiceRateBucket = new Map<string, { count: number; resetAt: number }>();
+
 // LRU archive of finished games. Map preserves insertion order, so iterating
 // .keys() yields oldest-first; we evict from the front when over capacity.
 const replayArchive = new Map<string, ReplayGame>();
@@ -109,6 +131,8 @@ const MAX_HOST_NAME = 32;
 const MAX_AUTHOR_LEN = 32;
 const MAX_CHAT_TEXT_LEN = 200;
 const MAX_CHAT_PER_GAME = 100;
+const MAX_VOICE_TEXT_LEN = 300;
+const MAX_VOICE_AUDIO_URL_LEN = 2048;
 const MAX_HIST_LEN = 1000;
 const MAX_FEN_LEN = 128;
 const HEARTBEAT_MS = 25_000;
@@ -118,6 +142,8 @@ const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 60;
 const CHAT_RATE_WINDOW_MS = 60_000;
 const CHAT_RATE_MAX = 10;
+const VOICE_RATE_WINDOW_MS = 60_000;
+const VOICE_RATE_MAX = 6; // 6 broadcasts/min per gameId — enough for blitz commentary + heartbeat
 
 // Simple banned-word filter — replace match with ***
 const BANNED_WORDS = ["spam", "scam", "хуй", "пизда"];
@@ -213,6 +239,25 @@ function sanitizeChatText(text: unknown): string | null {
   return t;
 }
 
+function sanitizeVoiceText(text: unknown): string | null {
+  if (typeof text !== "string") return null;
+  let t = stripHtml(text);
+  if (!t) return null;
+  if (t.length > MAX_VOICE_TEXT_LEN) t = t.slice(0, MAX_VOICE_TEXT_LEN);
+  t = applyBannedFilter(t);
+  return t;
+}
+
+function sanitizeVoiceAudioUrl(url: unknown): string | undefined {
+  if (typeof url !== "string") return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length > MAX_VOICE_AUDIO_URL_LEN) return undefined;
+  // Allow http(s) URLs and data: URLs (for inline TTS audio).
+  if (!/^(https?:\/\/|data:audio\/)/i.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 function clientIp(req: Request): string {
   const xff = req.headers["x-forwarded-for"];
   if (typeof xff === "string" && xff.length > 0) {
@@ -242,6 +287,18 @@ function chatRateLimitOk(ip: string, gameId: string): boolean {
     return true;
   }
   if (slot.count >= CHAT_RATE_MAX) return false;
+  slot.count += 1;
+  return true;
+}
+
+function voiceRateLimitOk(gameId: string): boolean {
+  const now = Date.now();
+  const slot = voiceRateBucket.get(gameId);
+  if (!slot || slot.resetAt <= now) {
+    voiceRateBucket.set(gameId, { count: 1, resetAt: now + VOICE_RATE_WINDOW_MS });
+    return true;
+  }
+  if (slot.count >= VOICE_RATE_MAX) return false;
   slot.count += 1;
   return true;
 }
@@ -286,6 +343,7 @@ function dropChatForGame(gameId: string): void {
   for (const key of chatRateBucket.keys()) {
     if (key.endsWith(suffix)) chatRateBucket.delete(key);
   }
+  voiceRateBucket.delete(gameId);
 }
 
 /**
@@ -373,6 +431,14 @@ function archiveFinishedGame(g: LiveGame, endedAt: number): void {
   }
 }
 
+// ---------- Public getter for cross-router integration ----------
+// Used by cyberchessVoiceCoach.ts to validate that a gameId refers to a
+// currently-live game before broadcasting AI commentary into its SSE stream.
+export function isLiveGame(gameId: string): boolean {
+  if (!validGameId(gameId)) return false;
+  return liveGames.has(gameId);
+}
+
 // ---------- Cleanup loop ----------
 
 const cleanupTimer = setInterval(() => {
@@ -404,6 +470,9 @@ const cleanupTimer = setInterval(() => {
   }
   for (const [key, slot] of chatRateBucket) {
     if (slot.resetAt <= now) chatRateBucket.delete(key);
+  }
+  for (const [gid, slot] of voiceRateBucket) {
+    if (slot.resetAt <= now) voiceRateBucket.delete(gid);
   }
 }, CLEANUP_INTERVAL_MS);
 
@@ -735,6 +804,58 @@ router.get("/chat/:gameId", (req: Request, res: Response) => {
 });
 
 /**
+ * POST /voice/:gameId
+ * Broadcast an AI VoiceCoach comment to all spectators via SSE "voice" event.
+ * Body: { text, audioUrl?, fromHost? }
+ *
+ * Rate-limited to VOICE_RATE_MAX (6) broadcasts/min per gameId — enough for
+ * commentary on every blitz move + heartbeat without flooding viewers.
+ *
+ * Called internally by /api/cyberchess-voice-coach/broadcast (after the LLM
+ * comment + optional TTS audio are produced). Public endpoint is fine for MVP
+ * because we validate the gameId is a currently-live published game.
+ */
+router.post("/voice/:gameId", (req: Request, res: Response) => {
+  const gameId = String(req.params.gameId ?? "");
+  if (!validGameId(gameId)) {
+    res.status(400).json({ ok: false, error: "bad_game_id" });
+    return;
+  }
+
+  if (!liveGames.has(gameId)) {
+    res.status(404).json({ ok: false, error: "not_found" });
+    return;
+  }
+
+  if (!voiceRateLimitOk(gameId)) {
+    res.status(429).json({ ok: false, error: "rate_limited" });
+    return;
+  }
+
+  const body = (req.body || {}) as VoiceBody;
+
+  const text = sanitizeVoiceText(body.text);
+  if (!text) {
+    res.status(400).json({ ok: false, error: "bad_text" });
+    return;
+  }
+
+  const audioUrl = sanitizeVoiceAudioUrl(body.audioUrl);
+
+  const msg: VoiceMessage = {
+    id: crypto.randomUUID(),
+    text,
+    audioUrl,
+    fromHost: body.fromHost === true ? true : undefined,
+    ts: Date.now(),
+  };
+
+  broadcast(gameId, msg, "voice");
+
+  res.json({ ok: true, message: msg, viewers: viewerCount(gameId) });
+});
+
+/**
  * GET /:gameId
  * Server-Sent Events stream of game updates (and chat events).
  * NOTE: This catch-all path param must stay AFTER the /list, /replays, /chat
@@ -811,5 +932,6 @@ export const _internal = {
   rateBucket,
   chatMessages,
   chatRateBucket,
+  voiceRateBucket,
   replayArchive,
 };

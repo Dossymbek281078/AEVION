@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { fideConfidenceInterval, nearestAnchor, RATING_ANCHORS } from "./ratingCalibration";
+import { useCcI18n } from "./i18n";
 
 /**
  * Player Stats Dashboard — visual summary накопленной статистики игрока.
@@ -66,6 +67,7 @@ export default function PlayerStatsDashboard({
   achievementsUnlocked, achievementsTotal, loginStreak,
   surface1, surface2, border, text, textDim, textMute, brand,
 }: Props) {
+  const { t } = useCcI18n();
   const [tab, setTab] = useState<Tab>("overview");
 
   const metrics = useMemo(() => {
@@ -177,7 +179,7 @@ export default function PlayerStatsDashboard({
         }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: text }}>
-              📊 Статистика игрока
+              {t("stats.title")}
             </h2>
             <div style={{ fontSize: 12, color: textDim, marginTop: 4 }}>
               {metrics.total} партий · рейтинг {rating} · {pzSolvedCount} пазлов · {achievementsUnlocked}/{achievementsTotal} ачивок
@@ -196,11 +198,11 @@ export default function PlayerStatsDashboard({
           display: "flex", borderBottom: `1px solid ${border}`,
         }}>
           {([
-            ["overview", "Обзор"],
-            ["openings", "Дебюты"],
-            ["timing", "Время"],
-            ["trend", "Тренд"],
-            ["calibration", "FIDE"],
+            ["overview", t("stats.tab.overview")],
+            ["openings", t("stats.tab.openings")],
+            ["timing", t("stats.tab.timing")],
+            ["trend", t("stats.tab.trend")],
+            ["calibration", t("stats.tab.calibration")],
           ] as [Tab, string][]).map(([id, label]) => {
             const active = tab === id;
             return (
@@ -222,17 +224,17 @@ export default function PlayerStatsDashboard({
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
           {tab === "overview" && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-              <Card label="Победы" value={stats.w} pct={metrics.winPct} color="#10b981" surface={surface2} border={border} dim={textDim} />
-              <Card label="Поражения" value={stats.l} pct={metrics.lossPct} color="#ef4444" surface={surface2} border={border} dim={textDim} />
-              <Card label="Ничьи" value={stats.d} pct={metrics.drawPct} color="#f59e0b" surface={surface2} border={border} dim={textDim} />
-              <Card label="Текущая серия"
+              <Card label={t("stats.card.wins")} value={stats.w} pct={metrics.winPct} color="#10b981" surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.losses")} value={stats.l} pct={metrics.lossPct} color="#ef4444" surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.draws")} value={stats.d} pct={metrics.drawPct} color="#f59e0b" surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.streak")}
                 value={metrics.currentStreak > 0 ? `${metrics.currentStreak}${metrics.streakKind === "W" ? "🏆" : metrics.streakKind === "L" ? "💔" : "🤝"}` : "—"}
                 color={metrics.streakKind === "W" ? "#10b981" : metrics.streakKind === "L" ? "#ef4444" : textMute}
                 surface={surface2} border={border} dim={textDim} />
-              <Card label="Лучшая серия побед" value={metrics.longestWinStreak} color="#a78bfa" surface={surface2} border={border} dim={textDim} />
-              <Card label="Login streak" value={`${loginStreak} 📅`} color="#f59e0b" surface={surface2} border={border} dim={textDim} />
-              <Card label="Средняя длина" value={`${metrics.avgPlies} ходов`} color={textMute} surface={surface2} border={border} dim={textDim} />
-              <Card label="Пиковый час" value={metrics.peakHour >= 0 ? `${metrics.peakHour}:00` : "—"} color={textMute} surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.best_streak")} value={metrics.longestWinStreak} color="#a78bfa" surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.login_streak")} value={`${loginStreak} 📅`} color="#f59e0b" surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.avg_length")} value={`${metrics.avgPlies} ходов`} color={textMute} surface={surface2} border={border} dim={textDim} />
+              <Card label={t("stats.card.peak_hour")} value={metrics.peakHour >= 0 ? `${metrics.peakHour}:00` : "—"} color={textMute} surface={surface2} border={border} dim={textDim} />
             </div>
           )}
 

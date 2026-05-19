@@ -1222,6 +1222,29 @@ export default function CyberChessPage(){
       body:JSON.stringify(payload),
     }).then(r=>r.ok?r.json():null).then(d=>{
       if(d?.gameId)spectatorGameIdRef.current=d.gameId;
+      // Best-effort AI VoiceCoach broadcast — only when game is live, has a
+      // last move, and isn't already finished. Backend throttles per gameId
+      // (≤ 6/min) + soft 4s min-gap, so it's safe to fire on every publish.
+      const gid=d?.gameId||spectatorGameIdRef.current;
+      if(!gid)return;
+      if(over)return;
+      if(!hist||hist.length===0)return;
+      const broadcastBody={
+        gameId:gid,
+        fen:payload.fen,
+        lastMove:payload.lastSan,
+        eval:typeof payload.evalCp==="number"||typeof payload.evalMate==="number"
+          ?{cp:typeof payload.evalCp==="number"?payload.evalCp:undefined,
+             mate:typeof payload.evalMate==="number"?payload.evalMate:undefined}
+          :null,
+        hostName:payload.hostName,
+        moveNumber:Math.floor(hist.length/2)+1,
+        tts:true,
+      };
+      fetch("/api/cyberchess-voice-coach/broadcast",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(broadcastBody),
+      }).catch(()=>{/* best-effort */});
     }).catch(()=>{});
   },[spectatorPublish,on,setup,bk,over]);
   // Matchmaking: SSE подписка на match stream если есть ?matchId= в URL

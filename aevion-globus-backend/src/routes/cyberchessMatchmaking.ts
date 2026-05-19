@@ -10,6 +10,17 @@
 // triggered synchronously inside /queue/join for low-latency match.
 //
 // Rate limit: 5 queue joins / minute / IP (sliding window).
+//
+// Tournament integration (2026-05-19):
+//  - Exported helper `createPreMatchedMatch(...)` lets the tournaments
+//    router materialise bracket pairings directly inside MATCHES,
+//    skipping the queue. If either player happens to be currently in
+//    QUEUE waiting on this same timeControl, they get an immediate SSE
+//    "matched" event with the bracket-supplied matchId, redirecting
+//    them straight into the game.
+//  - Internal HTTP fallback: POST /internal/pre-match (gated by
+//    X-Internal-Token header against process.env.INTERNAL_TOKEN when
+//    set; otherwise loopback-only).
 
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
@@ -60,6 +71,10 @@ export interface Match {
   moves: { uci: string; by: string; at: number }[];
   // SSE response objects per-side (transient, never serialized)
   subscribers: Map<string, Response>;
+  // Tournament linkage (optional)
+  tournamentId?: string;
+  tournamentRound?: number;
+  source?: "queue" | "tournament";
 }
 
 // ── storage ────────────────────────────────────────────────────────
@@ -193,6 +208,7 @@ function makeMatch(
     status: "pending",
     moves: [],
     subscribers: new Map(),
+    source: "queue",
   };
   MATCHES.set(match.matchId, match);
 
@@ -298,6 +314,128 @@ function queuePositionFor(entry: QueueEntry): number {
     .sort((a, b) => a.joinedAt - b.joinedAt);
   const idx = peers.findIndex((e) => e.userId === entry.userId);
   return idx < 0 ? 0 : idx + 1;
+}
+
+// ── tournament integration ─────────────────────────────────────────
+
+export interface PreMatchedInput {
+  whiteUserId: string;
+  blackUserId: string;
+  whiteName?: string;
+  blackName?: string;
+  whiteRating?: number;
+  blackRating?: number;
+  timeControl: TimeControl;
+  tournamentId?: string;
+  round?: number;
+}
+
+export interface PreMatchedResult {
+  ok: true;
+  matchId: string;
+  whiteUserId: string;
+  blackUserId: string;
+  viewerUrlWhite: string;
+  viewerUrlBlack: string;
+  tournamentId?: string;
+  round?: number;
+  notifiedWhite: boolean;
+  notifiedBlack: boolean;
+}
+
+/**
+ * Create a Match immediately in MATCHES, bypassing the queue.
+ * Used by the tournaments router to materialise bracket pairings.
+ *
+ * Side effects:
+ *  - If either player is currently in QUEUE waiting, they are marked
+ *    "matched" and receive an SSE "matched" event with the new matchId.
+ *  - SSE channels for the new match are opened lazily by /match/:id/stream.
+ */
+export function createPreMatchedMatch(
+  input: PreMatchedInput,
+): PreMatchedResult {
+  const tc = input.timeControl;
+  const whiteRating = safeRating(input.whiteRating ?? 1500) ?? 1500;
+  const blackRating = safeRating(input.blackRating ?? 1500) ?? 1500;
+  const match: Match = {
+    matchId: `m_${randomUUID()}`,
+    white: {
+      userId: input.whiteUserId,
+      displayName: input.whiteName || `Player_${input.whiteUserId.slice(-4)}`,
+      ratingInternal: whiteRating,
+    },
+    black: {
+      userId: input.blackUserId,
+      displayName: input.blackName || `Player_${input.blackUserId.slice(-4)}`,
+      ratingInternal: blackRating,
+    },
+    timeControl: tc,
+    createdAt: Date.now(),
+    status: "pending",
+    moves: [],
+    subscribers: new Map(),
+    tournamentId: input.tournamentId,
+    tournamentRound: input.round,
+    source: "tournament",
+  };
+  MATCHES.set(match.matchId, match);
+
+  // viewer URLs (relative — the frontend resolves to its own origin)
+  const tParam = input.tournamentId
+    ? `&tournamentId=${encodeURIComponent(input.tournamentId)}`
+    : "";
+  const viewerUrlWhite = `/cyberchess?matchId=${encodeURIComponent(
+    match.matchId,
+  )}&color=white${tParam}`;
+  const viewerUrlBlack = `/cyberchess?matchId=${encodeURIComponent(
+    match.matchId,
+  )}&color=black${tParam}`;
+
+  // Optionally notify queue subscribers if either player is waiting
+  let notifiedWhite = false;
+  let notifiedBlack = false;
+  const tryNotify = (userId: string, color: Color): boolean => {
+    const entry = QUEUE.get(userId);
+    if (!entry || entry.status !== "waiting") return false;
+    entry.status = "matched";
+    entry.matchedTo = match.matchId;
+    if (entry.sse) {
+      const opp: MatchPlayer = color === "white" ? match.black : match.white;
+      try {
+        entry.sse.write(
+          `event: matched\ndata: ${JSON.stringify({
+            matchId: match.matchId,
+            color,
+            opponent: opp,
+            timeControl: match.timeControl,
+            tournamentId: input.tournamentId,
+            round: input.round,
+            source: "tournament",
+          })}\n\n`,
+        );
+        entry.sse.end();
+      } catch {
+        // ignore
+      }
+    }
+    return true;
+  };
+  notifiedWhite = tryNotify(input.whiteUserId, "white");
+  notifiedBlack = tryNotify(input.blackUserId, "black");
+
+  return {
+    ok: true,
+    matchId: match.matchId,
+    whiteUserId: input.whiteUserId,
+    blackUserId: input.blackUserId,
+    viewerUrlWhite,
+    viewerUrlBlack,
+    tournamentId: input.tournamentId,
+    round: input.round,
+    notifiedWhite,
+    notifiedBlack,
+  };
 }
 
 // ── routes ─────────────────────────────────────────────────────────
@@ -410,6 +548,9 @@ router.get("/queue/status", (req: Request, res: Response): void => {
         color,
         opponent,
         timeControl: match.timeControl,
+        tournamentId: match.tournamentId,
+        round: match.tournamentRound,
+        source: match.source,
       });
       return;
     }
@@ -451,16 +592,31 @@ router.post("/queue/leave", (req: Request, res: Response): void => {
 });
 
 // GET /queue/stream?userId=X — SSE per-user, fires "matched"/"cancelled"/"timeout"
+//
+// Tournament mode: callers may register an SSE listener BEFORE joining the
+// queue (e.g. tournament registration with realPlayers=true). In that case
+// we lazily create a "waiting" queue entry tagged with a synthetic
+// timeControl, so that createPreMatchedMatch() can push notifications.
+// If a real queue entry exists already, we just attach to it.
 router.get("/queue/stream", (req: Request, res: Response): void => {
   const userId = String(req.query.userId || "").trim();
   if (!userId) {
     res.status(400).json({ ok: false, error: "userId_required" });
     return;
   }
-  const entry = QUEUE.get(userId);
+  let entry = QUEUE.get(userId);
   if (!entry) {
-    res.status(404).json({ ok: false, error: "not_in_queue" });
-    return;
+    // lazy listener entry for tournament notifications (no rating-based pairing)
+    entry = {
+      userId,
+      displayName: `Listener_${userId.slice(-4) || "anon"}`,
+      ratingInternal: 1500,
+      timeControl: "300+5",
+      joinedAt: Date.now(),
+      queueId: `q_${randomUUID()}`,
+      status: "waiting",
+    };
+    QUEUE.set(userId, entry);
   }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -484,8 +640,65 @@ router.get("/queue/stream", (req: Request, res: Response): void => {
   }, 15_000);
   req.on("close", () => {
     clearInterval(hb);
-    if (entry.sse === res) entry.sse = undefined;
+    if (entry && entry.sse === res) entry.sse = undefined;
   });
+});
+
+// POST /internal/pre-match — tournament → matchmaking bridge (HTTP form)
+//
+// Direct in-process callers should use createPreMatchedMatch() instead.
+// This endpoint is provided for parity / future cross-process use.
+//
+// Auth: header X-Internal-Token must match process.env.INTERNAL_TOKEN
+// when that env is set; otherwise loopback connections (127.0.0.1 / ::1)
+// are accepted.
+router.post("/internal/pre-match", (req: Request, res: Response): void => {
+  const expected = process.env.INTERNAL_TOKEN || "";
+  const provided = String(req.headers["x-internal-token"] || "");
+  if (expected) {
+    if (provided !== expected) {
+      res.status(403).json({ ok: false, error: "forbidden" });
+      return;
+    }
+  } else {
+    const ip = req.ip || req.socket?.remoteAddress || "";
+    const isLoopback =
+      ip === "127.0.0.1" ||
+      ip === "::1" ||
+      ip === "::ffff:127.0.0.1" ||
+      ip.startsWith("127.");
+    if (!isLoopback) {
+      res
+        .status(403)
+        .json({ ok: false, error: "forbidden_no_token_and_non_loopback" });
+      return;
+    }
+  }
+  const body = (req.body ?? {}) as Partial<PreMatchedInput>;
+  if (!body.whiteUserId || !body.blackUserId) {
+    res.status(400).json({ ok: false, error: "whiteUserId_and_blackUserId_required" });
+    return;
+  }
+  if (!isTimeControl(body.timeControl)) {
+    res.status(400).json({
+      ok: false,
+      error: "invalid_timeControl",
+      allowed: ALLOWED_TIME_CONTROLS,
+    });
+    return;
+  }
+  const result = createPreMatchedMatch({
+    whiteUserId: String(body.whiteUserId),
+    blackUserId: String(body.blackUserId),
+    whiteName: body.whiteName ? String(body.whiteName) : undefined,
+    blackName: body.blackName ? String(body.blackName) : undefined,
+    whiteRating: typeof body.whiteRating === "number" ? body.whiteRating : undefined,
+    blackRating: typeof body.blackRating === "number" ? body.blackRating : undefined,
+    timeControl: body.timeControl,
+    tournamentId: body.tournamentId ? String(body.tournamentId) : undefined,
+    round: typeof body.round === "number" ? body.round : undefined,
+  });
+  res.json(result);
 });
 
 // GET /match/:matchId
@@ -506,6 +719,9 @@ router.get("/match/:matchId", (req: Request, res: Response): void => {
       status: m.status,
       moveCount: m.moves.length,
       lastMove: m.moves[m.moves.length - 1] ?? null,
+      tournamentId: m.tournamentId,
+      round: m.tournamentRound,
+      source: m.source,
     },
   });
 });
@@ -610,6 +826,8 @@ router.get("/match/:matchId/stream", (req: Request, res: Response): void => {
       color: m.white.userId === userId ? "white" : "black",
       moves: m.moves,
       timeControl: m.timeControl,
+      tournamentId: m.tournamentId,
+      round: m.tournamentRound,
     })}\n\n`,
   );
   m.subscribers.set(userId, res);
@@ -661,6 +879,7 @@ router.get("/debug/stats", (_req: Request, res: Response): void => {
       active: [...MATCHES.values()].filter((m) => m.status === "active").length,
       pending: [...MATCHES.values()].filter((m) => m.status === "pending").length,
       ended: [...MATCHES.values()].filter((m) => m.status === "ended").length,
+      tournamentLinked: [...MATCHES.values()].filter((m) => !!m.tournamentId).length,
     },
   });
 });

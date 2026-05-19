@@ -1,7 +1,7 @@
 /**
  * cyberchessVoiceCoach.ts
  *
- * Express router for CyberChess AI Voice Coach v3 (LLM-backed).
+ * Express router for CyberChess AI Voice Coach v3 (LLM-backed) + Spectator broadcast.
  *
  * Endpoints:
  *   POST /comment            — build a Russian, 1-2 sentence comment.
@@ -14,10 +14,15 @@
  *   POST /sessions/:id/clear — clear the in-memory history for a session.
  *   POST /tts                — proxy TTS request to ElevenLabs, returns audio/mpeg.
  *                              Cache key now uses sha1(text) (short, stable).
+ *   POST /broadcast          — NEW. Build a comment (LLM → fallback) for a live
+ *                              spectator game and broadcast it via the spectator
+ *                              SSE "voice" event. Optionally generates a TTS
+ *                              audio data URL (when ELEVENLABS_API_KEY is set)
+ *                              so spectators auto-play AI commentary.
  *   GET  /voices             — static voice catalogue used by the client dropdown.
  *
  * Required env vars:
- *   ELEVENLABS_API_KEY  — secret key from elevenlabs.io (only for /tts).
+ *   ELEVENLABS_API_KEY  — secret key from elevenlabs.io (only for /tts + /broadcast TTS).
  *   QCOREAI_BASE        — optional. Fully-qualified base URL of QCoreAI if this
  *                         service runs outside the monorepo. Defaults to
  *                         '/api/qcoreai' (same-origin via the AEVION gateway).
@@ -37,6 +42,7 @@ import buildComment, {
   buildCommentLLM,
   answerQuestion,
 } from '../lib/voiceCoachPrompt';
+import { isLiveGame } from './cyberchessSpectator';
 
 const router = Router();
 
@@ -169,6 +175,21 @@ const MOCK_MODELS = [
 export function generateCommentText(input: BuildCommentInput): string {
   return buildComment(input);
 }
+
+// ─── Per-gameId throttle for /broadcast (defence in depth) ───────────────
+// Spectator router enforces a hard 6/min cap on outbound "voice" events; we
+// add a soft 4-second min-gap here so accidental client double-fire doesn't
+// burn the bucket within a single move.
+const broadcastLastAt = new Map<string, number>();
+const BROADCAST_MIN_GAP_MS = 4_000;
+const BROADCAST_GC_INTERVAL_MS = 5 * 60 * 1_000;
+const broadcastGc = setInterval(() => {
+  const now = Date.now();
+  for (const [gid, t] of broadcastLastAt) {
+    if (now - t > 10 * 60 * 1_000) broadcastLastAt.delete(gid);
+  }
+}, BROADCAST_GC_INTERVAL_MS);
+if (typeof broadcastGc.unref === 'function') broadcastGc.unref();
 
 // ─── POST /comment ──────────────────────────────────────────────────────
 // Body: BuildCommentInput + optional { model?, temperature?, llm?: boolean }
@@ -408,6 +429,227 @@ router.post('/tts', async (req: Request, res: Response) => {
   } catch (err) {
     return res.status(502).json({
       error: 'elevenlabs_proxy_failed',
+      message: (err as Error)?.message ?? 'unknown error',
+    });
+  }
+});
+
+// ─── Internal helper: generate TTS as a data URL (for /broadcast inline audio) ──
+async function generateTtsDataUrl(text: string, voiceId: string): Promise<string | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return null;
+  if (!text) return null;
+
+  // Hard cap so we don't burn quota on giant comments — broadcasts are short anyway.
+  const trimmed = text.length > 300 ? text.slice(0, 300) : text;
+
+  const cacheKey = ttsCacheKey(voiceId, trimmed);
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    return `data:audio/mpeg;base64,${cached.toString('base64')}`;
+  }
+
+  try {
+    const upstream = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg',
+        },
+        body: JSON.stringify({
+          text: trimmed,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.75,
+            style: 0.25,
+            use_speaker_boost: true,
+          },
+        }),
+      },
+    );
+    if (!upstream.ok) return null;
+    const arrayBuf = await upstream.arrayBuffer();
+    const buf = Buffer.from(arrayBuf);
+    cacheSet(cacheKey, buf);
+    return `data:audio/mpeg;base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+// ─── POST /broadcast ────────────────────────────────────────────────────
+// Body: { gameId, fen, lastMove?, eval?, hostName?, llm?: boolean, tts?: boolean,
+//         voiceId?, model?, temperature?, depth?, isCheck?, isCapture?, ... }
+//
+// Generates an AI comment for the current move/position (LLM → fallback),
+// optionally synthesises TTS (data URL), then pushes a "voice" event to the
+// spectator SSE stream of the given gameId via the local spectator router.
+//
+// Auth (MVP): we don't yet have host tokens; instead we verify the gameId
+// refers to a currently-live published game using isLiveGame() — that means
+// only games actually being streamed can receive commentary, which is the
+// invariant the feature needs.
+//
+// Returns: { ok, text, source, audioUrl?, viewers? }
+router.post('/broadcast', async (req: Request, res: Response) => {
+  try {
+    const body = (req.body ?? {}) as {
+      gameId?: string;
+      fen?: string;
+      lastMove?: MoveInfo | string | null;
+      eval?: EvalInfo | null;
+      prevEval?: EvalInfo | null;
+      depth?: number;
+      isCheck?: boolean;
+      isCapture?: boolean;
+      isCastling?: boolean;
+      isPromotion?: boolean;
+      phase?: BuildCommentInput['phase'];
+      moveNumber?: number;
+      hostName?: string;
+      llm?: boolean;
+      tts?: boolean;
+      voiceId?: string;
+      model?: string;
+      temperature?: number;
+    };
+
+    const gameId =
+      typeof body.gameId === 'string' ? body.gameId.trim() : '';
+    if (!gameId) {
+      return res.status(400).json({ ok: false, error: 'missing_game_id' });
+    }
+    if (!isLiveGame(gameId)) {
+      return res
+        .status(404)
+        .json({ ok: false, error: 'game_not_live', gameId });
+    }
+
+    // Soft per-game min-gap to absorb client double-fire.
+    const lastAt = broadcastLastAt.get(gameId) ?? 0;
+    const now = Date.now();
+    if (now - lastAt < BROADCAST_MIN_GAP_MS) {
+      return res
+        .status(429)
+        .json({ ok: false, error: 'throttled', retryAfterMs: BROADCAST_MIN_GAP_MS - (now - lastAt) });
+    }
+    broadcastLastAt.set(gameId, now);
+
+    if (typeof body.fen !== 'string' || !body.fen.trim()) {
+      return res.status(400).json({ ok: false, error: 'missing_fen' });
+    }
+
+    // Normalise lastMove: spectator publish stream sends `lastSan` as a string,
+    // but BuildCommentInput expects a MoveInfo-ish object. Accept both.
+    let lastMove: MoveInfo | null = null;
+    if (body.lastMove && typeof body.lastMove === 'object') {
+      lastMove = body.lastMove as MoveInfo;
+    } else if (typeof body.lastMove === 'string' && body.lastMove.trim()) {
+      lastMove = { san: body.lastMove.trim() } as MoveInfo;
+    }
+
+    const input: BuildCommentInput = {
+      fen: body.fen,
+      lastMove,
+      eval: (body.eval ?? null) as EvalInfo | null,
+      prevEval: (body.prevEval ?? null) as EvalInfo | null,
+      depth: body.depth,
+      isCheck: !!body.isCheck,
+      isCapture: !!body.isCapture,
+      isCastling: !!body.isCastling,
+      isPromotion: !!body.isPromotion,
+      phase: body.phase,
+      moveNumber: body.moveNumber,
+    };
+
+    // 1. Build the comment text — LLM preferred, rule-based fallback.
+    const fallback = generateCommentText(input);
+    let source: 'llm' | 'fallback' = 'fallback';
+    let text = fallback;
+
+    if (body.llm !== false) {
+      try {
+        const llmText = await buildCommentLLM(input, {
+          qcoreaiBase: qcoreaiBase(),
+          model: body.model,
+          temperature: body.temperature,
+          timeoutMs: 3500, // broadcasts must not stall the move stream
+        });
+        if (llmText && llmText !== fallback) {
+          text = llmText;
+          source = 'llm';
+        }
+      } catch {
+        // keep fallback
+      }
+    }
+
+    // Hard cap to spectator voice text length.
+    if (text.length > 300) text = text.slice(0, 300);
+
+    // 2. Optionally synthesise TTS as a data URL — best-effort, never blocks.
+    let audioUrl: string | undefined;
+    if (body.tts !== false && process.env.ELEVENLABS_API_KEY) {
+      const voiceId =
+        typeof body.voiceId === 'string' && body.voiceId.trim().length > 0
+          ? body.voiceId.trim()
+          : DEFAULT_VOICE_ID;
+      const url = await generateTtsDataUrl(text, voiceId);
+      if (url) audioUrl = url;
+    }
+
+    // 3. Push to the spectator SSE stream via the in-process broadcast endpoint.
+    //    We call our own /api/cyberchess-spectator/voice/:gameId so the spectator
+    //    router stays the single source of truth for SSE fan-out + rate limiting.
+    //    PORT comes from index.ts (defaults to 4001); we fall back to 4001.
+    const port = process.env.PORT ?? '4001';
+    const internalUrl = `http://127.0.0.1:${port}/api/cyberchess-spectator/voice/${encodeURIComponent(gameId)}`;
+    let viewers: number | undefined;
+    try {
+      const upstream = await fetch(internalUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, audioUrl, fromHost: true }),
+      });
+      if (upstream.ok) {
+        const j = (await upstream.json().catch(() => null)) as
+          | { ok?: boolean; viewers?: number }
+          | null;
+        viewers = j?.viewers;
+      } else if (upstream.status === 429) {
+        return res.status(429).json({
+          ok: false,
+          error: 'spectator_rate_limited',
+          text,
+          source,
+        });
+      } else if (upstream.status === 404) {
+        return res
+          .status(404)
+          .json({ ok: false, error: 'game_not_live', text, source });
+      }
+    } catch (err) {
+      // Internal SSE push failed — return text anyway so the client knows the
+      // commentary was generated; it just won't be visible to spectators.
+      return res.status(502).json({
+        ok: false,
+        error: 'spectator_unreachable',
+        message: (err as Error)?.message ?? 'unknown',
+        text,
+        source,
+        audioUrl,
+      });
+    }
+
+    res.json({ ok: true, text, source, audioUrl, viewers });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: 'broadcast_failed',
       message: (err as Error)?.message ?? 'unknown error',
     });
   }

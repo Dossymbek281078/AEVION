@@ -9,6 +9,7 @@ import {
   AchievementContext,
   progressOf,
 } from "./chessyAchievements";
+import { useCcI18n } from "./i18n";
 
 type Props = {
   open: boolean;
@@ -29,6 +30,7 @@ export default function AchievementPanel({
   achState, context,
   surface1, surface2, border, text, textDim, textMute, brand,
 }: Props) {
+  const { t } = useCcI18n();
   const [filter, setFilter] = useState<AchievementCategory | "all">("all");
   const [showLocked, setShowLocked] = useState(true);
 
@@ -75,10 +77,10 @@ export default function AchievementPanel({
         }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: text }}>
-              🏆 Достижения
+              {t("ach.title")}
             </h2>
             <div style={{ fontSize: 12, color: textDim, marginTop: 4 }}>
-              {unlockedCount} / {totalCount} ({completion}%) · заработано {totalEarned} Chessy
+              {unlockedCount} / {totalCount} ({completion}%) · {t("ach.earned")} {totalEarned}
             </div>
           </div>
           <button onClick={onClose} aria-label="Close"
@@ -119,7 +121,7 @@ export default function AchievementPanel({
                   color: active ? brand : textDim,
                   fontSize: 11, fontWeight: 800, cursor: "pointer",
                   transition: "all 150ms",
-                }}>{c.label}</button>
+                }}>{t(`ach.category.${c.id}`)}</button>
             );
           })}
           <div style={{ flex: 1 }} />
@@ -129,7 +131,7 @@ export default function AchievementPanel({
           }}>
             <input type="checkbox" checked={showLocked}
               onChange={e => setShowLocked(e.target.checked)} />
-            Показывать закрытые
+            {t("ach.show_locked")}
           </label>
         </div>
 
@@ -208,7 +210,7 @@ export default function AchievementPanel({
               gridColumn: "1 / -1", padding: 24, textAlign: "center" as const,
               color: textMute, fontSize: 12,
             }}>
-              Нет достижений по этому фильтру
+              {t("ach.empty")}
             </div>
           )}
         </div>

@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useCcI18n } from "../i18n";
 
 // ----- Types -----
 
@@ -98,6 +99,7 @@ async function fetchReplays(limit = 50): Promise<ReplayItem[]> {
 // ----- Page -----
 
 export default function ReplayHubPage() {
+  const { t } = useCcI18n();
   const [items, setItems] = useState<ReplayItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -165,7 +167,7 @@ export default function ReplayHubPage() {
               CyberChess
             </div>
             <h1 className="mt-1 text-3xl font-semibold sm:text-4xl">
-              Архив трансляций
+              {t("replay.hub.title")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
               Завершённые партии, доступные для пересмотра с покадровой
@@ -193,10 +195,10 @@ export default function ReplayHubPage() {
           <div className="flex flex-wrap gap-1.5">
             {(
               [
-                { key: "all", label: "Все", n: counts.all },
-                { key: "wins", label: "Победы", n: counts.wins },
-                { key: "losses", label: "Поражения", n: counts.losses },
-                { key: "draws", label: "Ничьи", n: counts.draws },
+                { key: "all", label: t("replay.hub.filter.all"), n: counts.all },
+                { key: "wins", label: t("replay.hub.filter.wins"), n: counts.wins },
+                { key: "losses", label: t("replay.hub.filter.losses"), n: counts.losses },
+                { key: "draws", label: t("replay.hub.filter.draws"), n: counts.draws },
               ] as { key: Filter; label: string; n: number }[]
             ).map((chip) => {
               const active = filter === chip.key;

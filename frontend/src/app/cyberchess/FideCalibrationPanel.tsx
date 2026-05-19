@@ -23,6 +23,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { useCcI18n } from "./i18n";
 import {
   CPIMetrics,
   estimateFideFromCPI,
@@ -79,6 +80,7 @@ export default function FideCalibrationPanel({
   textDim,
   accent,
 }: Props) {
+  const { t } = useCcI18n();
   // Local mutable copy — slider explorer
   const [metrics, setMetrics] = useState<CPIMetrics>(initialMetrics);
 
@@ -192,7 +194,7 @@ export default function FideCalibrationPanel({
         >
           <div>
             <div style={{ fontSize: 12, color: textDim, textTransform: "uppercase", letterSpacing: 1 }}>
-              {dirty ? "Симуляция" : "Текущая оценка"}
+              {dirty ? t("fide.after") : t("fide.current")}
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 8 }}>
               <div style={{ fontSize: 48, fontWeight: 800, color: accent, lineHeight: 1 }}>
@@ -322,7 +324,7 @@ export default function FideCalibrationPanel({
                   fontSize: 12,
                 }}
               >
-                Сбросить
+                {t("fide.reset")}
               </button>
             )}
           </div>
@@ -376,7 +378,7 @@ export default function FideCalibrationPanel({
           }}>
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 11, color: textDim, textTransform: "uppercase", letterSpacing: 1 }}>
-                Сейчас
+                {t("fide.before")}
               </div>
               <div style={{ fontSize: 28, fontWeight: 700, color: text, marginTop: 4 }}>
                 {initialResult.fide}

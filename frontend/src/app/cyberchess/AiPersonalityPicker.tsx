@@ -8,6 +8,7 @@ import {
   loadStoredPersonalityId,
   saveStoredPersonalityId,
 } from "./aiPersonalities";
+import { useCcI18n } from "./i18n";
 
 /**
  * AI Personality Picker — модалка с гридом 10 cards, каждая описывает
@@ -47,6 +48,7 @@ const DEFAULTS = {
 };
 
 export default function AiPersonalityPicker(props: Props) {
+  const { t } = useCcI18n();
   const {
     open,
     onClose,
@@ -109,7 +111,7 @@ export default function AiPersonalityPicker(props: Props) {
         }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: text }}>
-              🎭 Стиль AI-соперника
+              🎭 {t("ai.title")}
             </h2>
             <div style={{ fontSize: 12, color: textDim, marginTop: 4 }}>
               Выбери манеру игры — каждый «гросс» играет по-своему. Сохраняется локально.
@@ -195,6 +197,7 @@ function PersonalityCard({
   personality, selected, onPick,
   surface2, border, text, textDim, brand, brandSoft, accent,
 }: CardProps) {
+  const { t } = useCcI18n();
   const { name, realName, emoji, description, eloRange, style, quirks } = personality;
 
   // 4 ключевых метрики для баров — остальные style-параметры показываем текстом.
@@ -306,7 +309,7 @@ function PersonalityCard({
           opacity: selected ? 0.7 : 1,
         }}
       >
-        {selected ? "Уже выбран" : `Играть с ${name.replace("-style", "")}`}
+        {selected ? t("ai.already_selected") : `${t("ai.play_with")} ${name.replace("-style", "")}`}
       </button>
     </div>
   );

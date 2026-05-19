@@ -247,7 +247,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.body.error).toMatch(/size must be/);
   });
 
-  test("calls OpenAI Images API with dall-e-3 + returns URL", async () => {
+  test("calls OpenAI Images API with gpt-image-1 + returns URL", async () => {
     process.env.OPENAI_API_KEY = "sk-fake";
     fetchMock.mockResolvedValueOnce(jsonResp(200, {
       data: [{ url: "https://oaidalleapi.example/img.png", revised_prompt: "A cat sitting" }],
@@ -262,7 +262,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.body.url).toBe("https://oaidalleapi.example/img.png");
     expect(r.body.revisedPrompt).toBe("A cat sitting");
     const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.model).toBe("dall-e-3");
+    expect(body.model).toBe("gpt-image-1");
     expect(body.quality).toBe("hd");
   });
 });

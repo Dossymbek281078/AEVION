@@ -13,6 +13,13 @@ type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
 type TierId = "free" | "pro" | "business" | "enterprise";
 
+// Paddle Price IDs — production live
+const PADDLE_PRICE_IDS: Partial<Record<`${TierId}_${BillingPeriod}`, string>> = {
+  pro_monthly:      "pri_01krzxq0t2rmy9erdv54c9ny3w",
+  pro_annual:       "pri_01krzyf5trnvptmpwdxz570mpf",
+  business_monthly: "pri_01krzy7zgqn32xc52qjbkfhvz0",
+};
+
 interface TierLimits {
   modules: number | null;
   qrightObjectsPerMonth: number | null;
@@ -237,18 +244,44 @@ export default function PricingPage() {
       },
     });
     try {
-      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(opts),
-      });
-      const j = await r.json();
-      if (j.url) {
-        window.location.href = j.url;
+      const period = opts.period ?? "monthly";
+      const priceKey = `${opts.tierId}_${period}` as keyof typeof PADDLE_PRICE_IDS;
+      const priceId = PADDLE_PRICE_IDS[priceKey];
+
+      if (priceId) {
+        // Paddle checkout (primary)
+        const r = await fetch(apiUrl("/api/paddle/checkout"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            priceId,
+            appId: "platform",
+            tierId: opts.tierId,
+          }),
+        });
+        const j = await r.json();
+        if (j.url) {
+          window.location.href = j.url;
+        } else {
+          console.error("[paddle checkout] no url", j);
+          alert("Ошибка чекаута. Попробуйте ещё раз.");
+          setCheckingOut(null);
+        }
       } else {
-        console.error("[checkout] no url returned", j);
-        alert("Ошибка чекаута. Попробуйте ещё раз или свяжитесь с продажами.");
-        setCheckingOut(null);
+        // Free или Enterprise — старый flow
+        const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(opts),
+        });
+        const j = await r.json();
+        if (j.url) {
+          window.location.href = j.url;
+        } else {
+          console.error("[checkout] no url returned", j);
+          alert("Ошибка чекаута. Попробуйте ещё раз или свяжитесь с продажами.");
+          setCheckingOut(null);
+        }
       }
     } catch (e) {
       console.error("[checkout] failed", e);

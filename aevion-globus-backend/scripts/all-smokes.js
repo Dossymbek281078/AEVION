@@ -107,6 +107,10 @@ const SMOKES = [
   // + auth gates (401 on /me, /sessions, /audit, /whoami-strict, /account
   // DELETE) WITHOUT actually attempting login (avoids rate-limit + lockout).
   { name: "auth-prod", script: "auth-prod-smoke.js", readOnly: true },
+  // Modules PROD — 13 checks for /api/modules/status central registry +
+  // per-module health probe. Catches silent drops from the live list
+  // (frontend portal/docs site/status page all read from this endpoint).
+  { name: "modules-prod", script: "modules-prod-smoke.js", readOnly: true },
   // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
   { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
   // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.

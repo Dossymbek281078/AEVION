@@ -43,9 +43,9 @@ async function run() {
     single.body?.appId === appId ? ok("appId matches") : fail("appId matches");
   } else { passed += 2; }
 
-  // 14. Stripe balance
-  const bal = await req("/api/revenue/stripe/balance");
-  bal.status === 200 ? ok("GET /stripe/balance → 200") : fail("GET /stripe/balance → 200", String(bal.status));
+  // 14. Paddle balance (replaced Stripe)
+  const bal = await req("/api/revenue/paddle/balance");
+  bal.status === 200 ? ok("GET /paddle/balance → 200", `totalUsd=${bal.body?.totalUsd}`) : fail("GET /paddle/balance → 200", String(bal.status));
 
   // 15. Env guide
   const guide = await req("/api/revenue/env-guide");

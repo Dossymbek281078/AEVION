@@ -86,7 +86,8 @@ import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
 import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage } from "./ratingCalibration";
 import AntiCheatPanel from "./AntiCheatPanel";
-import { analyzeGameForCheating, buildReport, type AntiCheatResult } from "./anticheat";
+import { analyzeGameForCheating, buildReport, updateSessionBaseline, type AntiCheatResult } from "./anticheat";
+import { BehaviorTracker } from "./behaviorTracker";
 import AiPersonalityPicker from "./AiPersonalityPicker";
 import SpectatorChat from "./SpectatorChat";
 import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
@@ -698,6 +699,7 @@ export default function CyberChessPage(){
   // engineTop3 currently uses a minimal heuristic (live evalCp scalar); F2-phase-2
   // will swap in real multiPV=3 output from the Stockfish worker.
   const metricsRef=useRef(new MetricsCollector());
+  const behaviorRef=useRef(new BehaviorTracker());
   const cpiAppliedRef=useRef<string|null>(null);
   const prevEvalCpForCpiRef=useRef<number>(0);
   const gameStartTimeRef=useRef<number>(Date.now());
@@ -2238,6 +2240,8 @@ export default function CyberChessPage(){
     const cpiTimeMs=now-lastMoveStartRef.current;
     moveTimesRef.current=[...moveTimesRef.current,cpiTimeMs];
     sMoveTimes([...moveTimesRef.current]);
+    // Notify behavior tracker of player move
+    if(mv.color===pCol){behaviorRef.current.onMoveMade(hist.length,cpiTimeMs);}
     lastMoveStartRef.current=now;
     sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
     // F2-phase-2: record per-move metrics into the CPI collector.
@@ -2385,7 +2389,10 @@ export default function CyberChessPage(){
     if(snap.length<6)return; // skip very short games
     try{
       const fideEst=loadEstimateFromStorage();
-      const result=analyzeGameForCheating(snap,pCol,fideEst,`game-${gameStartTimeRef.current}`);
+      const behaviorSummary=behaviorRef.current.getSummary();
+      behaviorRef.current.detach();
+      const result=analyzeGameForCheating(snap,pCol,fideEst,behaviorSummary,`game-${gameStartTimeRef.current}`);
+      updateSessionBaseline(result);
       sAcResult(result);
       // Auto-show panel for suspicious/flagged results; clean/unusual only on demand
       if(result.verdict==="suspicious"||result.verdict==="flagged"){
@@ -3231,6 +3238,8 @@ export default function CyberChessPage(){
             }
           }catch{}
           sThink(false);
+          // Notify behavior tracker that it's now player's turn
+          behaviorRef.current.onTurnStart(hist.length+1);
         },600+Math.random()*400);
         return()=>clearTimeout(t2);
       }
@@ -3620,7 +3629,7 @@ export default function CyberChessPage(){
     else if(variant==="pawnapocalypse"){startFen=pawnApocalypseFen()}
     sVariantStartFen(startFen);sVariantArmies(armies);
     const ng=startFen?new Chess(startFen):new Chess();
-    setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();
+    setGame(ng);sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([ng.fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);sGuessMode(false);sGuessResult("idle");sGuessBest("");sGuessBestSan("");sPzCurrent(null);sPzAttempt("idle");sBrowseIdx(-1);pT.reset();aT.reset();clearResume();behaviorRef.current.reset();behaviorRef.current.attach();
     // Reset time-per-move tracker and annotations for new game
     moveTimesRef.current=[];sMoveTimes([]);lastMoveStartRef.current=Date.now();
     // F2-phase: reset CPI collector for the new game (one bucket per game)

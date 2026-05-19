@@ -84,6 +84,7 @@ import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
 import { revenueRouter } from "./routes/revenue";
 import { paddleRouter } from "./routes/paddle";
+import { searchRouter } from "./routes/search";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -781,6 +782,8 @@ app.use("/api/qevents", qeventsRouter);
 app.use("/api/revenue", revenueRouter);
 // Paddle Billing — payment processor for KZ + international (MoR model)
 app.use("/api/paddle", paddleRouter);
+// Universal Search — /api/search?q=<query> across QStore/QLearn/QNews/QEvents/QJobs/QRight
+app.use("/api/search", searchRouter);
 
 // DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
 app.use("/api/deepsan", deepSanRouter);

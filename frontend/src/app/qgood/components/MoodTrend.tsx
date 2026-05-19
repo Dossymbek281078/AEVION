@@ -74,7 +74,7 @@ export default function MoodTrend({ userId = 'anonymous', refreshKey = 0 }: Prop
     );
   }
 
-  const avg = trends?.avg_score ?? null;
+  const avg = trends?.avg_score != null ? Number(trends.avg_score) : null;
 
   return (
     <div style={{ background: '#fdf6ff', borderRadius: 16, padding: '24px', border: '1px solid #e8d5f5' }}>

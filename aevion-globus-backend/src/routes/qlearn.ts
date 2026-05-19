@@ -5,6 +5,46 @@ import { getPool } from "../lib/dbPool";
 import { ensureQLearnTables, isQLearnDbReady } from "../lib/ensureQLearnTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
 
+/**
+ * Register a completion certificate as a QRight IP object.
+ * Fire-and-forget — failure doesn't break cert issuance.
+ */
+async function registerCertificateInQRight(cert: {
+  certificateNumber: string;
+  courseTitle: string;
+  userId: string;
+  completedAt: string;
+}): Promise<void> {
+  try {
+    const raw = JSON.stringify({
+      type: "learning_certificate",
+      certificateNumber: cert.certificateNumber,
+      courseTitle: cert.courseTitle,
+      userId: cert.userId,
+      completedAt: cert.completedAt,
+      platform: "AEVION QLearn",
+    });
+    const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO "QRightObject"
+         ("id","title","description","kind","contentHash","ownerUserId","createdAt")
+       VALUES ($1,$2,$3,$4,$5,$6,NOW())
+       ON CONFLICT DO NOTHING`,
+      [
+        crypto.randomUUID(),
+        `Certificate: ${cert.courseTitle}`,
+        `AEVION QLearn completion certificate ${cert.certificateNumber}. Issued ${cert.completedAt}.`,
+        "text",
+        contentHash,
+        cert.userId,
+      ],
+    );
+  } catch {
+    // QRight registration is best-effort — cert still issued
+  }
+}
+
 export const qlearnRouter = Router();
 
 const pool = getPool();
@@ -465,6 +505,7 @@ qlearnRouter.patch("/enrollments/:id/progress", async (req: Request, res: Respon
       certificateNumber: "AEVION-" + Date.now(),
     };
     memCertificates.set(enrollmentId, cert);
+    void registerCertificateInQRight(cert); // QRight registration — best-effort
   }
 
   res.json({ enrollment });
@@ -498,7 +539,8 @@ qlearnRouter.post("/enrollments/:id/complete", (req: Request, res: Response) => 
     certificateNumber: "AEVION-" + Date.now(),
   };
   memCertificates.set(enrollmentId, cert);
-  res.status(201).json({ certificate: cert });
+  void registerCertificateInQRight(cert); // QRight registration — best-effort
+  res.status(201).json({ certificate: cert, qrightRegistered: true });
 });
 
 // GET /api/qlearn/enrollments/:id/certificate — get certificate for enrollment

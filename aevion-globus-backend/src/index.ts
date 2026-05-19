@@ -423,6 +423,64 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/revenue/youtube/{channelId}": { get: { summary: "YouTube AdSense stats for channel" } },
       "/api/revenue/twitch/{login}": { get: { summary: "Twitch affiliate stats for streamer" } },
       "/api/revenue/env-guide": { get: { summary: "Setup guide for Revenue Hub env vars" } },
+      // QLearn — courses + quizzes + progress
+      "/api/qlearn/health": { get: { summary: "QLearn health probe", security: [] } },
+      "/api/qlearn/courses": {
+        get: { summary: "List published courses (filter by category, level, lang)", security: [] },
+      },
+      "/api/qlearn/courses/{id}": {
+        get: { summary: "Get single course with modules + quizzes", security: [] },
+      },
+      "/api/qlearn/progress": {
+        get: { summary: "User course progress (Bearer required)" },
+      },
+      // QEvents — events platform
+      "/api/qevents/health": { get: { summary: "QEvents health + service marker", security: [] } },
+      "/api/qevents/events": {
+        get: { summary: "List events (filter by category, when, location)", security: [] },
+        post: { summary: "Create event (Bearer required)" },
+      },
+      "/api/qevents/events/{id}": {
+        get: { summary: "Single event with attendee count", security: [] },
+      },
+      "/api/qevents/categories": {
+        get: { summary: "List event categories", security: [] },
+      },
+      // QMedia — music + video + playlists
+      "/api/qmedia/health": { get: { summary: "QMedia health + table count", security: [] } },
+      "/api/qmedia/tracks": {
+        get: { summary: "List music tracks", security: [] },
+        post: { summary: "Upload track (Bearer required)" },
+      },
+      "/api/qmedia/videos": {
+        get: { summary: "List videos", security: [] },
+      },
+      "/api/qmedia/playlists": {
+        get: { summary: "List playlists", security: [] },
+      },
+      // QAI — universal AI assistant (personas + sessions + chat)
+      "/api/qai/health": { get: { summary: "QAI health + session count", security: [] } },
+      "/api/qai/personas": {
+        get: { summary: "List built-in personas (id, name, emoji, description)", security: [] },
+      },
+      "/api/qai/sessions": {
+        get: { summary: "List user chat sessions (Bearer required)" },
+      },
+      "/api/qai/chat": {
+        post: { summary: "Send a chat message (Bearer required)" },
+      },
+      // QJobs — job board
+      "/api/qjobs/health": { get: { summary: "QJobs health + service marker", security: [] } },
+      "/api/qjobs/jobs": {
+        get: { summary: "List job postings (filter by type, location)", security: [] },
+        post: { summary: "Create job posting (Bearer required)" },
+      },
+      "/api/qjobs/jobs/{id}": {
+        get: { summary: "Single job posting with application count", security: [] },
+      },
+      "/api/qjobs/stats": {
+        get: { summary: "Aggregate stats — postings, applications, by type", security: [] },
+      },
       // QTradeOffline
       "/api/qtradeoffline/health": { get: { summary: "QTradeOffline health + wallet/transfer counts" } },
       "/api/qtradeoffline/wallet/register": { post: { summary: "Register ECDSA P-256 wallet — 100 AEV airdrop on first call" } },

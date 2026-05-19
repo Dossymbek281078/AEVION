@@ -503,3 +503,21 @@ export function estimateFideFromGames(games: SavedGameForCPI[]): FideEstimateRes
   const metrics = calibrateFromGames(games);
   return estimateFideFromCPI(metrics);
 }
+
+const FIDE_ESTIMATE_KEY = "cc_fide_estimate_v1";
+
+/** Persist calibrated FIDE equivalent so matchmaking can use it. */
+export function saveEstimateToStorage(fide: number): void {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(FIDE_ESTIMATE_KEY, String(Math.round(fide))); } catch {}
+}
+
+/** Returns saved FIDE estimate or null if not yet calibrated. */
+export function loadEstimateFromStorage(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = Number(window.localStorage.getItem(FIDE_ESTIMATE_KEY));
+    if (!Number.isFinite(v) || v < 100 || v > 3200) return null;
+    return Math.round(v);
+  } catch { return null; }
+}

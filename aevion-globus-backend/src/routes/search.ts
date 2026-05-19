@@ -39,12 +39,12 @@ function scoreText(query: string, title: string, description: string): number {
 async function searchQStore(pool: any, q: string, limit: number): Promise<SearchResult[]> {
   try {
     const r = await pool.query(
-      `SELECT id, title, description, category, price, currency, "salesCount", tags
+      `SELECT DISTINCT ON (LOWER(title)) id, title, description, category, price, currency, "salesCount", tags
        FROM "QStoreProduct"
        WHERE "isPublic" = TRUE AND (
          LOWER(title) LIKE $1 OR LOWER(description) LIKE $1 OR LOWER(category) LIKE $1
          OR EXISTS (SELECT 1 FROM unnest(tags) t WHERE LOWER(t) LIKE $1)
-       ) ORDER BY "salesCount" DESC LIMIT $2`,
+       ) ORDER BY LOWER(title), "salesCount" DESC LIMIT $2`,
       [`%${q.toLowerCase()}%`, limit],
     );
     return r.rows.map((row: any) => ({
@@ -105,11 +105,11 @@ async function searchQNews(pool: any, q: string, limit: number): Promise<SearchR
 async function searchQEvents(pool: any, q: string, limit: number): Promise<SearchResult[]> {
   try {
     const r = await pool.query(
-      `SELECT id, title, description, category, location, "startAt", "attendeeCount"
+      `SELECT DISTINCT ON (LOWER(title)) id, title, description, category, location, "startAt", "attendeeCount"
        FROM "QEvent"
        WHERE "isPublic" = TRUE AND "startAt" > NOW() AND (
          LOWER(title) LIKE $1 OR LOWER(description) LIKE $1 OR LOWER(category) LIKE $1 OR LOWER(location) LIKE $1
-       ) ORDER BY "startAt" ASC LIMIT $2`,
+       ) ORDER BY LOWER(title), "startAt" ASC LIMIT $2`,
       [`%${q.toLowerCase()}%`, limit],
     );
     return r.rows.map((row: any) => ({

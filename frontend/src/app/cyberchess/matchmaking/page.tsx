@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCcI18n } from "../i18n";
+import { loadEstimateFromStorage } from "../ratingCalibration";
 
 type TimeControl = "60+0" | "180+0" | "300+5" | "600+10" | "1800+0";
 
@@ -63,6 +64,9 @@ function getDisplayName(): string {
 
 function getStoredRating(): number {
   if (typeof window === "undefined") return 1500;
+  // Prefer FIDE-calibrated estimate when available (set by main chess page after 3+ games)
+  const fide = loadEstimateFromStorage();
+  if (fide !== null) return fide;
   const v = Number(window.localStorage.getItem("cyberchess.rating") || 1500);
   if (!Number.isFinite(v)) return 1500;
   return Math.max(100, Math.min(3000, Math.round(v)));
@@ -80,6 +84,7 @@ export default function CyberChessMatchmakingPage() {
   const router = useRouter();
   const [timeControl, setTimeControl] = useState<TimeControl>("180+0");
   const [rating, setRating] = useState<number>(1500);
+  const [fideEstimate, setFideEstimate] = useState<number | null>(null);
   const [displayName, setDisplayName] = useState<string>("Игрок");
   const [state, setState] = useState<QueueState>({ phase: "idle" });
   const userIdRef = useRef<string>("");
@@ -92,6 +97,8 @@ export default function CyberChessMatchmakingPage() {
   useEffect(() => {
     userIdRef.current = getOrCreateUserId();
     setDisplayName(getDisplayName());
+    const fide = loadEstimateFromStorage();
+    setFideEstimate(fide);
     setRating(getStoredRating());
   }, []);
 
@@ -362,11 +369,18 @@ export default function CyberChessMatchmakingPage() {
 
           {/* Rating slider */}
           <div className="mb-2">
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2 flex items-center justify-between gap-2 flex-wrap">
               <label className="text-sm text-slate-400">Твой рейтинг</label>
-              <span className="text-sm font-medium">
-                {rating} <span className="text-slate-500">(диапазон {rating - 150}–{rating + 150})</span>
-              </span>
+              <div className="flex items-center gap-2">
+                {fideEstimate !== null && (
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
+                    FIDE ~{fideEstimate}
+                  </span>
+                )}
+                <span className="text-sm font-medium">
+                  {rating} <span className="text-slate-500">(диапазон {rating - 150}–{rating + 150})</span>
+                </span>
+              </div>
             </div>
             <input
               type="range"
@@ -385,6 +399,11 @@ export default function CyberChessMatchmakingPage() {
               <span>2000</span>
               <span>3000</span>
             </div>
+            {fideEstimate !== null && (
+              <p className="mt-1 text-xs text-slate-500">
+                Рейтинг автоматически определён по твоим партиям (FIDE ~{fideEstimate}). Можно скорректировать вручную.
+              </p>
+            )}
           </div>
         </section>
 

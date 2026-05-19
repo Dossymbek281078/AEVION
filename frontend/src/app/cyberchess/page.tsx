@@ -84,7 +84,7 @@ import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
-import { calibrateFromGames } from "./ratingCalibration";
+import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage } from "./ratingCalibration";
 import AiPersonalityPicker from "./AiPersonalityPicker";
 import SpectatorChat from "./SpectatorChat";
 import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
@@ -946,6 +946,14 @@ export default function CyberChessPage(){
   const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
+  // Auto-persist FIDE estimate so matchmaking can read it from localStorage
+  useEffect(()=>{
+    if(savedGames.length<3)return;
+    try{
+      const est=estimateFideFromCPI(calibrateFromGames(savedGames));
+      saveEstimateToStorage(est.fide);
+    }catch{}
+  },[savedGames]);
   // Opening Trainer state (killer #4)
   const[showOpeningTrainer,sShowOpeningTrainer]=useState(false);
   const[openingDrill,sOpeningDrill]=useState<null|{eco:string;name:string;moves:string[];ply:number;mistakes:number}>(null);

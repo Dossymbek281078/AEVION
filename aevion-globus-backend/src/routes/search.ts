@@ -195,7 +195,12 @@ searchRouter.get("/", searchLimit, async (req: Request, res: Response) => {
   if (types.has("qright"))  searches.push(searchQRight(pool, q, limit));
 
   const results = await Promise.all(searches);
-  const all = results.flat().sort((a, b) => b.score - a.score).slice(0, limit * 3);
+  // Deduplicate by (type, id) — same item can't appear twice
+  const seen = new Set<string>();
+  const all = results.flat()
+    .filter(r => { const k = `${r.type}:${r.id}`; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit * 3);
 
   const byType: Record<string, SearchResult[]> = {};
   for (const r of all) {

@@ -83,6 +83,12 @@ const SMOKES = [
   { name: "qsign-prod", script: "qsign-prod-smoke.js", readOnly: true },
   // HealthAI PROD — 15 read-only checks (health, referrals, empty-series graceful, auth gates).
   { name: "healthai-prod", script: "healthai-prod-smoke.js", readOnly: true },
+  // Revenue Hub PROD — 15 checks: health, apps, overview, Stripe balance, env-guide.
+  { name: "revenue-prod", script: "revenue-prod-smoke.js", readOnly: true },
+  // MVP Concepts PROD — 25 checks across 12 ownerless modules (deepsan/kids-ai/mapreality/etc).
+  { name: "mvp-concepts-prod", script: "mvp-concepts-prod-smoke.js", readOnly: true },
+  // QMaskCard PROD — 14 checks: health, stats, auth-gates.
+  { name: "qmaskcard-prod", script: "qmaskcard-prod-smoke.js", readOnly: true },
   // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
   { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
   // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.
@@ -101,6 +107,11 @@ const SMOKES = [
   // bank-prod + qbuild-prod stay OUT — they have dedicated daily-smoke
   // CI jobs and double-running here would waste a minute per cron.
   { name: "qmaskcard-prod", script: "qmaskcard-prod-smoke.js", readOnly: true },
+  // MVP Concepts PROD — 25 checks across 12 ownerless-module routers
+  // (deepsan, kids-ai, mapreality, psyapp-deps, qfusionai, qlife, qpersona,
+  // shadownet, startupx, voice-of-earth, lifebox, globus). Closes the
+  // last prod-surface gap revealed by 2026-05-19 audit.
+  { name: "mvp-concepts-prod", script: "mvp-concepts-prod-smoke.js", readOnly: true },
   // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
   // Closes the prod-surface gap for modules without their own *-prod-smoke.
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },

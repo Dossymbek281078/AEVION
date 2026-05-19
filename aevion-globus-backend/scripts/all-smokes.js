@@ -97,6 +97,10 @@ const SMOKES = [
   // /stripe/balance + per-app monetization channel coverage (centralized
   // Stripe + YouTube + Twitch hub introduced in c8917171).
   { name: "revenue-prod", script: "revenue-prod-smoke.js", readOnly: true },
+  // QMaskCard PROD — 15 checks (existed on disk but wasn't wired in).
+  // bank-prod + qbuild-prod stay OUT — they have dedicated daily-smoke
+  // CI jobs and double-running here would waste a minute per cron.
+  { name: "qmaskcard-prod", script: "qmaskcard-prod-smoke.js", readOnly: true },
   // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
   // Closes the prod-surface gap for modules without their own *-prod-smoke.
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },

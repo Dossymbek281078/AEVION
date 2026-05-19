@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCcI18n } from "../i18n";
 
 type TimeControl = "60+0" | "180+0" | "300+5" | "600+10" | "1800+0";
 
@@ -75,6 +76,7 @@ function formatDuration(ms: number): string {
 }
 
 export default function CyberChessMatchmakingPage() {
+  const { t } = useCcI18n();
   const router = useRouter();
   const [timeControl, setTimeControl] = useState<TimeControl>("180+0");
   const [rating, setRating] = useState<number>(1500);
@@ -395,7 +397,7 @@ export default function CyberChessMatchmakingPage() {
                 onClick={onJoin}
                 className="w-full max-w-md rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-8 py-6 text-2xl font-bold text-white shadow-lg shadow-indigo-500/30 transition hover:from-indigo-400 hover:to-purple-400 active:scale-[0.98]"
               >
-                Найти соперника
+                {t("match.search")}
               </button>
               <p className="text-center text-sm text-slate-400">
                 Кликни — встанешь в живую очередь. Найдём пару за 5–60 секунд.
@@ -414,7 +416,7 @@ export default function CyberChessMatchmakingPage() {
             <div className="flex flex-col gap-5">
               <div className="flex flex-col items-center gap-2">
                 <div className="h-14 w-14 animate-pulse rounded-full bg-indigo-500/20 ring-4 ring-indigo-500/40" />
-                <p className="text-lg font-semibold">Ищем соперника…</p>
+                <p className="text-lg font-semibold">{t("match.searching")}</p>
                 <p className="text-sm text-slate-400">
                   Прошло: {formatDuration(state.elapsedMs)} · Ожидание ≈ {formatDuration(state.estimatedWaitMs)}
                 </p>
@@ -423,7 +425,7 @@ export default function CyberChessMatchmakingPage() {
               {/* Queue visualization */}
               <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4">
                 <div className="mb-2 flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Позиция в очереди</span>
+                  <span className="text-slate-400">{t("match.position")}</span>
                   <span className="font-mono font-semibold text-indigo-300">
                     {state.position} / {state.waiting}
                   </span>
@@ -464,7 +466,7 @@ export default function CyberChessMatchmakingPage() {
                 onClick={onLeave}
                 className="self-center rounded-xl border border-slate-700 bg-slate-950 px-6 py-3 text-sm font-medium text-slate-300 hover:border-rose-500 hover:text-rose-300"
               >
-                Покинуть очередь
+                {t("match.cancel")}
               </button>
             </div>
           )}
@@ -472,7 +474,7 @@ export default function CyberChessMatchmakingPage() {
           {state.phase === "matched" && (
             <div className="flex flex-col items-center gap-4 py-6">
               <div className="rounded-full bg-emerald-500/20 px-4 py-1 text-sm font-semibold text-emerald-300">
-                Соперник найден
+                {t("match.found")}
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold">{state.opponent.displayName}</div>

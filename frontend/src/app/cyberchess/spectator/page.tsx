@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useCcI18n } from "../i18n";
 
 const T = {
   bg: "#0a0e1a",
@@ -44,6 +45,7 @@ function fmtAge(ts?: number): string {
 }
 
 export default function SpectatorHubPage() {
+  const { t } = useCcI18n();
   const [games, setGames] = useState<LiveGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +108,7 @@ export default function SpectatorHubPage() {
               display: "inline-block",
             }}
           >
-            ← к шахматам
+            {t("spectator.hub.back")}
           </Link>
         </div>
 
@@ -130,7 +132,7 @@ export default function SpectatorHubPage() {
                 letterSpacing: -0.5,
               }}
             >
-              📡 Spectator Hub
+              📡 {t("spectator.hub.title")}
             </h1>
             <div
               style={{
@@ -161,7 +163,7 @@ export default function SpectatorHubPage() {
                 display: "inline-block",
               }}
             />
-            <span>{games.length} live · обновлено {fmtAge(lastRefresh)}</span>
+            <span>{games.length} {t("spectator.hub.live")} · {fmtAge(lastRefresh)}</span>
             <button
               onClick={fetchList}
               style={{
@@ -174,7 +176,7 @@ export default function SpectatorHubPage() {
                 fontSize: 12,
               }}
             >
-              ↻ обновить
+              {t("spectator.hub.refresh")}
             </button>
           </div>
         </div>
@@ -224,7 +226,7 @@ export default function SpectatorHubPage() {
           >
             <div style={{ fontSize: 40, marginBottom: 12 }}>🌙</div>
             <div style={{ fontSize: 15, color: T.text, marginBottom: 6 }}>
-              Никто не стримит сейчас
+              {t("spectator.hub.empty")}
             </div>
             <div style={{ fontSize: 13 }}>
               попроси друга включить 📡 в{" "}

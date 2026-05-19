@@ -76,6 +76,7 @@ import WorkspaceMediaPane from "./WorkspaceMediaPane";
 import WorkspaceDock from "./WorkspaceDock";
 import MusicPlayer from "./MusicPlayer";
 import AevionMiniHub from "./AevionMiniHub";
+import LocaleSwitcher from "./LocaleSwitcher";
 import VoiceCoach from "./VoiceCoach";
 import TurnClock from "./TurnClock";
 import AchievementPanel from "./AchievementPanel";
@@ -4131,6 +4132,12 @@ export default function CyberChessPage(){
         <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
 
         <div style={{flex:1}}/>
+
+        {/* Locale switcher (RU/EN/KK) — для новых компонентов (Spectator/Replay/Matchmaking/FidePanel/AiPicker) */}
+        <LocaleSwitcher
+          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+          text={CC.text} textDim={CC.textDim} brand={CC.brand}
+        />
 
         {/* AEVION ecosystem mini-hub — переход в другие продукты без покидания CyberChess */}
         <AevionMiniHub

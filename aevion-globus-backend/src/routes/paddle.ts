@@ -135,6 +135,15 @@ paddleRouter.get("/health", async (_req, res) => {
 });
 
 /**
+ * GET /api/paddle/plans
+ * Список тарифов AEVION с Paddle Price IDs — для фронтенда.
+ */
+paddleRouter.get("/plans", (_req, res) => {
+  const { PADDLE_PLANS } = require("../data/paddlePrices");
+  res.json({ plans: PADDLE_PLANS, sandbox: IS_SANDBOX() });
+});
+
+/**
  * GET /api/paddle/products
  * Список продуктов/цен из Paddle dashboard.
  */

@@ -27,24 +27,30 @@ import { cookies, headers } from "next/headers";
 // "Cannot read properties of undefined (reading <key>)" for every SSR page
 // that wasn't a static route (observed on /globus, /qbuild, /qtradeoffline,
 // /aevion-ip-bureau, /awards on Vercel 2026-05-03).
-import { LANG_COOKIE, interpolate, translations, type Lang } from "./i18n-data";
+import { LANGS, LANG_COOKIE, interpolate, translations, type Lang } from "./i18n-data";
 
 export type { Lang } from "./i18n-data";
 
 function isLang(x: unknown): x is Lang {
-  return x === "en" || x === "ru" || x === "kk";
+  return typeof x === "string" && (LANGS as readonly string[]).includes(x);
 }
 
 function parseAcceptLanguage(al: string): Lang | null {
   const lower = al.toLowerCase();
-  // Pick the *first* recognised tag rather than scanning the whole list — most
-  // browsers send the user's preferred locale first.
   const parts = lower.split(",");
   for (const part of parts) {
     const tag = part.trim().split(";")[0]?.trim();
     if (!tag) continue;
     if (tag.startsWith("kk") || tag.startsWith("kz")) return "kk";
     if (tag.startsWith("ru")) return "ru";
+    if (tag.startsWith("de")) return "de";
+    if (tag.startsWith("fr")) return "fr";
+    if (tag.startsWith("es")) return "es";
+    if (tag.startsWith("zh")) return "zh";
+    if (tag.startsWith("ja")) return "ja";
+    if (tag.startsWith("ar")) return "ar";
+    if (tag.startsWith("pt")) return "pt";
+    if (tag.startsWith("tr")) return "tr";
     if (tag.startsWith("en")) return "en";
   }
   return null;

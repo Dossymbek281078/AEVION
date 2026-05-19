@@ -221,7 +221,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.6.0",
+      version: "0.7.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },

@@ -168,7 +168,18 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | **PROD-LIVE SESSION COMPLETE 2026-05-18.** live=33, mvp=2(chess+smeta других окон), idea=0. QCoreAI/HealthAI/Puzzles Prisma→pool. Mass mvp→live (32 модуля). QMaskCard idea→live. Commit c2660840. | 2026-05-18 19:00 UTC+5 |
+| _free_ | — | **COVERAGE-CLOSEOUT SESSION COMPLETE 2026-05-19.** 26 read-only prod-smokes (qshield drift fix + 3 new wirings + openapi-completeness), OpenAPI 0.7.0 documents 39 module prefixes (was 23 in 0.6.0), все 20 soft prefixes теперь present. | 2026-05-19 13:00 UTC+5 |
+
+### Завершено 2026-05-19 (OpenAPI 0.7.0 + smoke gap closure)
+
+- ✅ **OpenAPI 0.6.0 → 0.7.0** (commit follow): added ~58 inline path stubs in src/index.ts covering qlearn, qevents, qmedia, qai, qjobs, qnews, coach, multichat, devhub, qfusionai, qpersona, qlife, lifebox, shadownet, deepsan, psyapp-deps. Soft prefix coverage 4/21 → **20/20 ALL PRESENT**.
+- ✅ **`openapi-completeness-smoke.js`** (commit `caefc98d`) — guards /api/openapi.json against silent route drops. 19 critical + 20 soft prefixes tracked. 25/25 PASS.
+- ✅ **`qshield-prod` drift fix** (commit `98652a39`) — /api/qright/objects threshold ≤10 → ≤50 (backend ignores limit param, smoke was underspecced).
+- ✅ **Orchestrator: 26 read-only prod-smokes** — wired `revenue-prod` (yesterday's c8917171 Revenue Hub), `mvp-concepts-prod` (12 ownerless modules), `qmaskcard-prod` (existed на диске, не зарегистрирован). bank-prod + qbuild-prod остаются вне (имеют dedicated CI jobs).
+- ⚠️ **Railway flapping под нагрузкой** — 26 smokes подряд через orchestrator дают разные транзиентные fails каждый запуск. Individual run = always GREEN. Не критично для daily-smoke (ephemeral pg, не prod).
+- 🔒 **npm token revoke** — токен `aevion-io-publish` всё ещё попал в чат-историю 2026-05-18. Revoke на https://www.npmjs.com/settings/dosymbek/tokens когда удобно.
+
+**Прод-surface полностью покрыт smoke + openapi (для всех 34 live модулей).** Следующая итерация — feature work или новый модуль.
 
 ### Завершено 2026-05-18 (npm publish + smoke drift fixes + scope unification)
 

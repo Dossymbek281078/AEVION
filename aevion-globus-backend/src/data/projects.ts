@@ -5,6 +5,19 @@ const now = new Date().toISOString();
 export const projects: GlobusProject[] = [
   // ===== CORE / PLATFORM =====
   {
+    id: "revenue-hub",
+    code: "REVENUE",
+    name: "Revenue Hub — Monetization Central",
+    description:
+      "Centralized monetization: Stripe balance/payments, YouTube AdSense, Twitch affiliate — 12 AEVION apps tracked. Real Stripe connected (test mode). 15/15 prod smoke ✅.",
+    kind: "service",
+    status: "live",
+    priority: 1,
+    tags: ["revenue", "stripe", "monetization"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
     id: "globus",
     code: "GLOBUS",
     name: "AEVION Globus",

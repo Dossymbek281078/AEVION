@@ -97,6 +97,11 @@ const SMOKES = [
   // every AI-using module eventually calls into it). Validates health,
   // providers/configuration consistency, sessions/agents/prompts shape.
   { name: "qcoreai-prod", script: "qcoreai-prod-smoke.js", readOnly: true },
+  // Planet Compliance PROD — 15 checks for the central trust layer
+  // (submissions → artifact versions → certificates → activity). Stats
+  // invariants (certified ≤ total), activity timestamp parseability,
+  // auth gates on /submissions + /admin/*.
+  { name: "planet-prod", script: "planet-prod-smoke.js", readOnly: true },
   // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
   { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
   // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.

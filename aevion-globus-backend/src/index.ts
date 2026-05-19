@@ -481,6 +481,118 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/qjobs/stats": {
         get: { summary: "Aggregate stats — postings, applications, by type", security: [] },
       },
+      // QNews — news aggregator
+      "/api/qnews/health": { get: { summary: "QNews health + service marker", security: [] } },
+      "/api/qnews/articles": {
+        get: { summary: "List news articles (filter by category, since)", security: [] },
+        post: { summary: "Create article (Bearer required)" },
+      },
+      "/api/qnews/articles/{id}": {
+        get: { summary: "Single article with full body + comments", security: [] },
+      },
+      "/api/qnews/categories": {
+        get: { summary: "Categories with counts (id + count)", security: [] },
+      },
+      "/api/qnews/rss": {
+        get: { summary: "RSS 2.0 feed for the news catalog (application/rss+xml)", security: [] },
+      },
+      // Coach — AI coaching / goal-tracking
+      "/api/coach/health": { get: { summary: "Coach health + provider config", security: [] } },
+      "/api/coach/sessions": {
+        get: { summary: "List user coaching sessions (Bearer required)" },
+        post: { summary: "Create new session with goal (Bearer required)" },
+      },
+      "/api/coach/sessions/{id}": {
+        get: { summary: "Get session with conversation history (Bearer required)" },
+      },
+      // Multichat — multi-agent chat (fully Bearer-gated on prod)
+      "/api/multichat/health": { get: { summary: "Multichat health (Bearer required)" } },
+      "/api/multichat/rooms": {
+        get: { summary: "List user chat rooms (Bearer required)" },
+        post: { summary: "Create new room (Bearer required)" },
+      },
+      "/api/multichat/rooms/{id}/messages": {
+        get: { summary: "Get room message history (Bearer required)" },
+        post: { summary: "Post message to room (Bearer required)" },
+      },
+      // DevHub — code snippets + tooling
+      "/api/devhub/health": { get: { summary: "DevHub health + DB status", security: [] } },
+      "/api/devhub/snippets": {
+        get: { summary: "List code snippets (filter by lang, tag)", security: [] },
+        post: { summary: "Create snippet (Bearer required)" },
+      },
+      "/api/devhub/snippets/{id}": {
+        get: { summary: "Single snippet with code + metadata", security: [] },
+      },
+      "/api/devhub/snippets/{id}/star": {
+        post: { summary: "Toggle star on snippet (Bearer required)" },
+      },
+      // QFusionAI — multi-model fusion orchestrator
+      "/api/qfusionai/health": { get: { summary: "QFusionAI health + model count", security: [] } },
+      "/api/qfusionai/stats": {
+        get: { summary: "Fusion stats — runs, by-model, totals", security: [] },
+      },
+      "/api/qfusionai/fusions": {
+        get: { summary: "List fusion runs", security: [] },
+        post: { summary: "Create fusion run (Bearer required)" },
+      },
+      // QPersona — persona profile pages (with waitlist + unsubscribe)
+      "/api/qpersona/health": { get: { summary: "QPersona health + persona count", security: [] } },
+      "/api/qpersona/personas": {
+        get: { summary: "List public personas", security: [] },
+      },
+      "/api/qpersona/personas/{slug}": {
+        get: { summary: "Single persona by slug — public profile", security: [] },
+      },
+      "/api/qpersona/waitlist": {
+        post: { summary: "Join early-access waitlist (HMAC unsubscribe link emailed)", security: [] },
+      },
+      "/api/qpersona/unsubscribe": {
+        get: { summary: "Unsubscribe via signed HMAC token from email link", security: [] },
+      },
+      // QLife — life-prompts catalog
+      "/api/qlife/health": { get: { summary: "QLife health + prompt count", security: [] } },
+      "/api/qlife/prompts": {
+        get: { summary: "List daily life prompts (filter by mood, category)", security: [] },
+      },
+      "/api/qlife/prompts/{id}": {
+        get: { summary: "Single prompt with full content", security: [] },
+      },
+      // LifeBox — time-capsule messages to future-self
+      "/api/lifebox/health": { get: { summary: "LifeBox health + capsule count", security: [] } },
+      "/api/lifebox/capsules": {
+        get: { summary: "List public capsules (filter by year, theme)", security: [] },
+        post: { summary: "Create capsule (Bearer required)" },
+      },
+      "/api/lifebox/capsules/{id}": {
+        get: { summary: "Single capsule (public or owner only)", security: [] },
+      },
+      // ShadowNet — anonymous threat/whistleblower posts
+      "/api/shadownet/health": { get: { summary: "ShadowNet health + post count", security: [] } },
+      "/api/shadownet/posts": {
+        get: { summary: "List anonymous posts (filter by category)", security: [] },
+        post: { summary: "Submit anonymous post (no auth — by design)", security: [] },
+      },
+      "/api/shadownet/posts/{id}": {
+        get: { summary: "Single post with comments", security: [] },
+      },
+      // DeepSan — long-running deep-sanity AI runs
+      "/api/deepsan/health": { get: { summary: "DeepSan health + run count", security: [] } },
+      "/api/deepsan/runs": {
+        get: { summary: "List deep-sanity runs", security: [] },
+        post: { summary: "Start new run (Bearer required)" },
+      },
+      "/api/deepsan/runs/{id}": {
+        get: { summary: "Single run with output + timing", security: [] },
+      },
+      // PsyApp-Deps — addiction-recovery streak + assessments
+      "/api/psyapp-deps/health": { get: { summary: "PsyApp-Deps health + assessment count", security: [] } },
+      "/api/psyapp-deps/assessments": {
+        get: { summary: "List standard assessments (PHQ-9, GAD-7, etc.)", security: [] },
+      },
+      "/api/psyapp-deps/assessments/{id}": {
+        get: { summary: "Single assessment with questions", security: [] },
+      },
       // QTradeOffline
       "/api/qtradeoffline/health": { get: { summary: "QTradeOffline health + wallet/transfer counts" } },
       "/api/qtradeoffline/wallet/register": { post: { summary: "Register ECDSA P-256 wallet — 100 AEV airdrop on first call" } },

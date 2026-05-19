@@ -1,9 +1,14 @@
 import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
+import Stripe from "stripe";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQStoreTables, isQStoreDbReady } from "../lib/ensureQStoreTables";
 import { applyOgEtag } from "../lib/ogEtag";
+
+const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
+const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-04-22.dahlia" as any }) : null;
+const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
 
 export const qstoreRouter = Router();
 
@@ -306,21 +311,67 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
       const pRow = row.rows[0];
       const purchaseId = crypto.randomUUID();
+
+      // Stripe Checkout: if Stripe is configured and product has non-zero price
+      if (stripe && pRow.price > 0) {
+        const currency = (pRow.currency || "kzt").toLowerCase();
+        const amountCents = currency === "kzt"
+          ? Math.round(pRow.price)       // QStore stores KZT as integer
+          : Math.round(pRow.price * 100); // USD/other — cents
+
+        try {
+          const session = await stripe.checkout.sessions.create({
+            mode: "payment",
+            line_items: [{
+              price_data: {
+                currency,
+                unit_amount: amountCents,
+                product_data: {
+                  name: pRow.title,
+                  description: (pRow.description || "").slice(0, 500) || undefined,
+                },
+              },
+              quantity: 1,
+            }],
+            metadata: { purchaseId, productId: pRow.id, buyerId: auth.sub, source: "qstore" },
+            success_url: `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}`,
+            cancel_url: `${FRONTEND_URL}/qstore/${id}?purchase=cancelled`,
+          });
+
+          await pool.query(
+            `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","stripeSessionId","createdAt")
+             VALUES ($1,$2,$3,$4,'pending',$5,NOW())`,
+            [purchaseId, pRow.id, auth.sub, pRow.price, session.id],
+          );
+
+          res.status(201).json({ purchaseId, checkoutUrl: session.url, mode: "stripe", status: "pending" });
+          return;
+        } catch (stripeErr) {
+          console.warn("[QStore] Stripe session failed, falling back to direct:", stripeErr instanceof Error ? stripeErr.message : stripeErr);
+          // Fall through to direct purchase
+        }
+      }
+
+      // Direct purchase (free items or Stripe not configured)
       await pool.query(
-        `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","createdAt")
-         VALUES ($1,$2,$3,$4,NOW())`,
+        `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","paidAt","createdAt")
+         VALUES ($1,$2,$3,$4,'paid',NOW(),NOW())`,
         [purchaseId, pRow.id, auth.sub, pRow.price],
       );
       await pool.query(
         `UPDATE "QStoreProduct" SET "salesCount" = "salesCount" + 1 WHERE "id" = $1`,
         [pRow.id],
       );
-      res.status(201).json({ purchaseId });
+      res.status(201).json({ purchaseId, mode: "direct", status: "paid" });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      console.error("[QStore] purchase error:", e instanceof Error ? e.message : e);
+      res.status(500).json({ error: "purchase_failed" });
+      return;
     }
   }
+
+  // In-memory fallback
   const product = memProducts.get(id);
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
   const purchaseId = crypto.randomUUID();
@@ -332,7 +383,7 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
     createdAt: new Date().toISOString(),
   });
   product.salesCount += 1;
-  res.status(201).json({ purchaseId });
+  res.status(201).json({ purchaseId, mode: "memory", status: "paid" });
 });
 
 // GET /api/qstore/me/purchases

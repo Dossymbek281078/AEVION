@@ -220,7 +220,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.5.0",
+      version: "0.6.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -412,6 +412,51 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/provisioning/healthz": {
         get: { summary: "Provisioning subsystem health: storage path, email mode" },
       },
+      // Revenue Hub
+      "/api/revenue/health": { get: { summary: "Revenue Hub health — Stripe/YouTube/Twitch config status" } },
+      "/api/revenue/apps": { get: { summary: "List 12 AEVION apps with monetization channels" } },
+      "/api/revenue/apps/{appId}": { get: { summary: "Single app revenue config + channel stubs" } },
+      "/api/revenue/overview": { get: { summary: "Global monetization overview — channel coverage, app counts" } },
+      "/api/revenue/stripe/balance": { get: { summary: "Stripe balance (KZT + USD)" } },
+      "/api/revenue/stripe/recent": { get: { summary: "Recent Stripe payments grouped by AEVION app" } },
+      "/api/revenue/youtube/{channelId}": { get: { summary: "YouTube AdSense stats for channel" } },
+      "/api/revenue/twitch/{login}": { get: { summary: "Twitch affiliate stats for streamer" } },
+      "/api/revenue/env-guide": { get: { summary: "Setup guide for Revenue Hub env vars" } },
+      // QTradeOffline
+      "/api/qtradeoffline/health": { get: { summary: "QTradeOffline health + wallet/transfer counts" } },
+      "/api/qtradeoffline/wallet/register": { post: { summary: "Register ECDSA P-256 wallet — 100 AEV airdrop on first call" } },
+      "/api/qtradeoffline/wallet/{id}": { get: { summary: "Wallet balance" } },
+      "/api/qtradeoffline/history/{id}": { get: { summary: "Wallet ledger history" } },
+      "/api/qtradeoffline/leaderboard": { get: { summary: "Top 10 wallets by balance" } },
+      "/api/qtradeoffline/stats": { get: { summary: "Global stats — wallets, totalSupply, transfers, volume" } },
+      "/api/qtradeoffline/sync": { post: { summary: "Batch-apply offline-signed transfers (atomic, idempotent via nonce)" } },
+      // QStore enhanced
+      "/api/qstore/products": {
+        get: { summary: "List marketplace products" },
+      },
+      "/api/qstore/products/{id}/purchase": {
+        post: { summary: "Purchase product — returns Stripe Checkout URL if Stripe configured, else direct" },
+      },
+      // QMaskCard
+      "/api/qmaskcard/health": { get: { summary: "QMaskCard health" } },
+      "/api/qmaskcard/stats": { get: { summary: "Global stats — active masks, authorized charges, volume" } },
+      "/api/qmaskcard/masks": {
+        get: { summary: "List user virtual cards (Bearer required)" },
+        post: { summary: "Issue new virtual card with spend limits (Bearer required)" },
+      },
+      "/api/qmaskcard/charges": {
+        get: { summary: "List charges for user's masks (Bearer required)" },
+        post: { summary: "Authorize a charge against a mask (Bearer required)" },
+      },
+      // HealthAI
+      "/api/healthai/health": { get: { summary: "HealthAI health — persistence mode + profile count" } },
+      "/api/healthai/profile": { post: { summary: "Create/update health profile" } },
+      "/api/healthai/profile/{id}": { get: { summary: "Get health profile" } },
+      "/api/healthai/log": { post: { summary: "Daily wellness log (sleep, mood, weight, water, exercise)" } },
+      "/api/healthai/plan/{profileId}": {
+        get: { summary: "Generate AI wellness plan — rule-based + LLM-enhanced (Anthropic/OpenAI/Gemini chain)" },
+      },
+      "/api/healthai/check": { post: { summary: "Symptom check + rule-based advice" } },
       ...FINTECH_OPENAPI_PATHS,
       ...NEW_WAVE_OPENAPI_PATHS,
     },

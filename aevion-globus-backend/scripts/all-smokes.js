@@ -124,6 +124,8 @@ const SMOKES = [
   // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
   // Closes the prod-surface gap for modules without their own *-prod-smoke.
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },
+  // Universal Search PROD — 15 checks: health, results shape, byType, type filter, validation gates.
+  { name: "search-prod", script: "search-prod-smoke.js", readOnly: true },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.

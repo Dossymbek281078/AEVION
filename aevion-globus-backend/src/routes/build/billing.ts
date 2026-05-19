@@ -281,7 +281,7 @@ billingRouter.post("/orders/:id/pay", async (req, res) => {
   }
 });
 
-// POST /api/build/webhooks/payment
+// POST /api/build/webhooks/payment — Paddle webhook handler
 billingRouter.post("/webhooks/payment", async (req, res) => {
   try {
     const secret = (process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "").trim();
@@ -289,44 +289,50 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
     const isLocal = /^(127\.|::1|::ffff:127\.|localhost)/.test(remoteAddr);
 
     if (secret) {
-      const sigHeader = (req.headers["x-aevion-signature"] || "").toString();
-      // HMAC must be computed over the EXACT raw bytes the sender signed.
-      // express.json() stashes them on req.rawBody (see src/index.ts).
-      // Re-serialising via JSON.stringify(req.body) loses original key order
-      // and whitespace → false-rejections (or worse, silent acceptance if
-      // both sides happen to canonicalize identically by accident).
-      const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
-      const canonical = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
-      const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
-      if (
-        sigHeader.length !== expected.length ||
-        !crypto.timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expected, "hex"))
-      ) {
-        return fail(res, 401, "invalid_signature");
-      }
-      // Optional timestamp replay-protection. If the partner sends
-      // X-Aevion-Timestamp (unix seconds), reject deliveries older than
-      // 5 min. A captured-and-replayed payload would otherwise pass the
-      // signature check forever. Header is optional so existing partners
-      // who don't yet sign timestamps keep working — they should add it
-      // before we flip WEBHOOK_REQUIRE_HMAC=1 in prod.
-      const tsHeader = (req.headers["x-aevion-timestamp"] || "").toString().trim();
-      if (tsHeader) {
-        const ts = Number(tsHeader);
+      // Paddle signature format: Paddle-Signature: ts=<unix>;h1=<hmac-sha256>
+      const paddleSig = (req.headers["paddle-signature"] || "").toString();
+      if (paddleSig) {
+        const parts = Object.fromEntries(paddleSig.split(";").map((p) => p.split("=")));
+        const ts = parts["ts"] || "";
+        const h1 = parts["h1"] || "";
+        const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+        const body = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
+        const signed = `${ts}:${body}`;
+        const expected = crypto.createHmac("sha256", secret).update(signed).digest("hex");
+        if (!h1 || h1.length !== expected.length ||
+            !crypto.timingSafeEqual(Buffer.from(h1, "hex"), Buffer.from(expected, "hex"))) {
+          return fail(res, 401, "invalid_signature");
+        }
+        // Replay protection: reject events older than 5 minutes
         const nowSec = Math.floor(Date.now() / 1000);
-        if (!Number.isFinite(ts) || Math.abs(nowSec - ts) > 300) {
+        if (!ts || Math.abs(nowSec - Number(ts)) > 300) {
           return fail(res, 401, "timestamp_outside_tolerance");
+        }
+      } else {
+        // Legacy x-aevion-signature (smoke tests)
+        const sigHeader = (req.headers["x-aevion-signature"] || "").toString();
+        const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;
+        const canonical = rawBuf ? rawBuf.toString("utf8") : JSON.stringify(req.body ?? {});
+        const expected = crypto.createHmac("sha256", secret).update(canonical).digest("hex");
+        if (sigHeader.length !== expected.length ||
+            !crypto.timingSafeEqual(Buffer.from(sigHeader, "hex"), Buffer.from(expected, "hex"))) {
+          return fail(res, 401, "invalid_signature");
         }
       }
     } else if (!isLocal) {
       return fail(res, 503, "webhook_secret_not_configured");
     }
 
-    const event = String(req.body?.event || "").trim();
-    const orderId = String(req.body?.orderId || "").trim();
+    // Parse Paddle event
+    const eventType = String(req.body?.event_type || req.body?.event || "").trim();
+    const txData = req.body?.data as Record<string, unknown> | undefined;
+    const customData = (txData?.custom_data || {}) as Record<string, string>;
+
+    // Support both Paddle (buildOrderId in custom_data) and legacy (orderId in body)
+    const orderId = customData["buildOrderId"] || String(req.body?.orderId || "").trim();
     if (!orderId) return fail(res, 400, "orderId_required");
 
-    if (event === "payment.succeeded") {
+    if (eventType === "transaction.completed" || eventType === "payment.succeeded") {
       try {
         const result = await markOrderPaid(orderId);
         return ok(res, { processed: true, orderId, alreadyPaid: result.alreadyPaid, order: result.order });
@@ -337,14 +343,15 @@ billingRouter.post("/webhooks/payment", async (req, res) => {
         throw err;
       }
     }
-    if (event === "payment.failed") {
+    if (eventType === "transaction.payment_failed" || eventType === "payment.failed") {
       const upd = await pool.query(
         `UPDATE "BuildOrder" SET "status" = 'CANCELED' WHERE "id" = $1 AND "status" = 'PENDING' RETURNING "id","status"`,
         [orderId],
       );
       return ok(res, { processed: true, orderId, status: upd.rows[0]?.status || "noop" });
     }
-    return fail(res, 400, "unknown_event", { event });
+    // Unknown event — acknowledge to prevent Paddle retries
+    return ok(res, { processed: false, ignored: true, event: eventType });
   } catch (err: unknown) {
     return fail(res, 500, "webhook_failed");
   }

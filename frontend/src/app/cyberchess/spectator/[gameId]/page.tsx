@@ -149,6 +149,15 @@ export default function SpectatorViewerPage(props: Props) {
   const [state, setState] = useState<SpectatorState>({});
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [obsCopied, setObsCopied] = useState(false);
+
+  function copyObsUrl() {
+    const url = `${window.location.origin}/cyberchess/obs/${encodeURIComponent(gameId)}?bg=transparent&eval=1&clock=1&voice=1&size=480`;
+    navigator.clipboard.writeText(url).then(() => {
+      setObsCopied(true);
+      setTimeout(() => setObsCopied(false), 2000);
+    });
+  }
 
   useEffect(() => {
     if (!gameId) return;
@@ -249,6 +258,23 @@ export default function SpectatorViewerPage(props: Props) {
           >
             к шахматам
           </Link>
+          <button
+            onClick={copyObsUrl}
+            style={{
+              marginLeft: "auto",
+              cursor: "pointer",
+              fontSize: 13,
+              padding: "6px 12px",
+              borderRadius: 6,
+              border: `1px solid ${obsCopied ? T.accent : T.border}`,
+              background: obsCopied ? T.accentSoft : T.surface,
+              color: obsCopied ? T.accent : T.textDim,
+              transition: "all 0.2s",
+            }}
+            title="Скопировать URL для OBS Browser Source"
+          >
+            {obsCopied ? "✓ Скопировано" : "📺 OBS Overlay"}
+          </button>
         </div>
 
         {/* Layout: board + sidebar */}

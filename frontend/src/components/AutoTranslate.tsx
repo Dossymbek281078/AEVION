@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, translations, type Lang } from "@/lib/i18n";
 
 const dict: Record<string, string> = {
   "Trust \u00b7 IP \u00b7 Globus": "\u0414\u043e\u0432\u0435\u0440\u0438\u0435 \u00b7 IP \u00b7 Globus",
@@ -253,18 +253,40 @@ const dict: Record<string, string> = {
   "Planet Compliance": "Planet Compliance",
 };
 
-const sortedKeys = Object.keys(dict).sort((a, b) => b.length - a.length);
+// Cache of sorted keys per dict to avoid re-sorting on every render
+const sortedRuKeys = Object.keys(dict).sort((a, b) => b.length - a.length);
 
-function translateText(text: string): string {
+// Build EN→LANG reverse map from the structured translations dict.
+// Cached per language — computed once, reused on subsequent renders.
+const langDictCache = new Map<Lang, { d: Record<string, string>; k: string[] }>();
+
+function getLangDict(lang: Lang): { d: Record<string, string>; k: string[] } {
+  if (langDictCache.has(lang)) return langDictCache.get(lang)!;
+  const tbl = translations as Record<string, Record<string, string>>;
+  const enTbl = tbl["en"] ?? {};
+  const langTbl = tbl[lang] ?? {};
+  const d: Record<string, string> = {};
+  for (const key of Object.keys(enTbl)) {
+    const en = enTbl[key];
+    const tr = langTbl[key];
+    if (en && tr && en !== tr) d[en] = tr;
+  }
+  const k = Object.keys(d).sort((a, b) => b.length - a.length);
+  const entry = { d, k };
+  langDictCache.set(lang, entry);
+  return entry;
+}
+
+function translateText(text: string, d: Record<string, string>, keys: string[]): string {
   let r = text;
-  for (const k of sortedKeys) { if (r.includes(k)) r = r.split(k).join(dict[k]); }
+  for (const k of keys) { if (r.includes(k)) r = r.split(k).join(d[k]); }
   return r;
 }
 
-function walk(node: Node) {
+function walk(node: Node, d: Record<string, string>, keys: string[]) {
   if (node.nodeType === Node.TEXT_NODE) {
     const o = node.textContent || ""; if (!o.trim()) return;
-    const t = translateText(o); if (t !== o) node.textContent = t;
+    const t = translateText(o, d, keys); if (t !== o) node.textContent = t;
     return;
   }
   if (node.nodeType === Node.ELEMENT_NODE) {
@@ -272,10 +294,10 @@ function walk(node: Node) {
     if (["SCRIPT","STYLE","TEXTAREA","INPUT","CODE","PRE","SVG"].includes(tag)) return;
     const el = node as HTMLElement;
     for (const a of ["placeholder","title","aria-label"]) {
-      const v = el.getAttribute(a); if (v) { const t = translateText(v); if (t !== v) el.setAttribute(a, t); }
+      const v = el.getAttribute(a); if (v) { const t = translateText(v, d, keys); if (t !== v) el.setAttribute(a, t); }
     }
   }
-  node.childNodes.forEach(c => walk(c));
+  node.childNodes.forEach(c => walk(c, d, keys));
 }
 
 export function AutoTranslate({ children }: { children: React.ReactNode }) {
@@ -283,17 +305,19 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const obs = useRef<MutationObserver | null>(null);
   useEffect(() => {
-    if (!ref.current) return;
-    if (lang === "ru") {
-      walk(ref.current);
-      obs.current = new MutationObserver(ms => {
-        for (const m of ms) {
-          if (m.type === "childList") m.addedNodes.forEach(n => walk(n));
-          else if (m.type === "characterData") walk(m.target);
-        }
-      });
-      obs.current.observe(ref.current, { childList: true, subtree: true, characterData: true });
-    }
+    if (!ref.current || lang === "en") return;
+    // RU: use the comprehensive hardcoded dict; other langs: use reverse map from translations
+    const activeDict = lang === "ru" ? dict : getLangDict(lang).d;
+    const activeKeys = lang === "ru" ? sortedRuKeys : getLangDict(lang).k;
+    if (activeKeys.length === 0) return;
+    walk(ref.current, activeDict, activeKeys);
+    obs.current = new MutationObserver(ms => {
+      for (const m of ms) {
+        if (m.type === "childList") m.addedNodes.forEach(n => walk(n, activeDict, activeKeys));
+        else if (m.type === "characterData") walk(m.target, activeDict, activeKeys);
+      }
+    });
+    obs.current.observe(ref.current, { childList: true, subtree: true, characterData: true });
     return () => { obs.current?.disconnect(); obs.current = null; };
   }, [lang]);
   return <div ref={ref} key={lang} style={{ display: "contents" }}>{children}</div>;

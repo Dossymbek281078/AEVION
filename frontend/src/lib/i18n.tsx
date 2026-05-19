@@ -59,10 +59,18 @@ function isLang(x: unknown): x is Lang {
 }
 
 function detectBrowserLang(): Lang {
-  if (typeof navigator === "undefined") return "en";
+  if (typeof navigator === "undefined") return "ru";
   const raw = (navigator.language || "en").toLowerCase();
   if (raw.startsWith("kk") || raw.startsWith("kz")) return "kk";
   if (raw.startsWith("ru")) return "ru";
+  if (raw.startsWith("de")) return "de";
+  if (raw.startsWith("fr")) return "fr";
+  if (raw.startsWith("es")) return "es";
+  if (raw.startsWith("zh")) return "zh";
+  if (raw.startsWith("ja")) return "ja";
+  if (raw.startsWith("ar")) return "ar";
+  if (raw.startsWith("pt")) return "pt";
+  if (raw.startsWith("tr")) return "tr";
   return "en";
 }
 

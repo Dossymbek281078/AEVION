@@ -8,6 +8,11 @@
 //   • Format chips (All / Elim / Swiss / RR)
 //   • Format badge on each card ("Swiss 5 rounds" / "Round-robin" / "Single Elim")
 //   • Standings preview on card hover (mini-table top-5)
+//
+// Enhancements (2026-05-19):
+//   • Filter chip "Только real-player" — keep only realPlayers === true
+//   • Sort dropdown: fill (players/maxPlayers) | startsAt date | prize
+//   • Live indicator with pulse dot for status === "live" tournaments
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -47,6 +52,7 @@ interface Tournament {
   startsAt: string;
   swissRounds?: number;
   currentRound?: number;
+  realPlayers?: boolean;
 }
 
 interface StandingRow {
@@ -87,6 +93,7 @@ const MOCK_FALLBACK: Tournament[] = [
     startsAt: "2026-05-16 18:00",
     swissRounds: 5,
     currentRound: 1,
+    realPlayers: true,
   },
   {
     id: "classic-rr-may",
@@ -106,11 +113,14 @@ const MOCK_FALLBACK: Tournament[] = [
 type TcFilter = "all" | TimeControl;
 type StatusFilter = "all" | Status;
 type FormatFilter = "all" | Format;
+type SortKey = "fill" | "startsAt" | "prize";
 
 export default function TournamentsHubPage() {
   const [tcFilter, setTcFilter] = useState<TcFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [formatFilter, setFormatFilter] = useState<FormatFilter>("all");
+  const [realPlayersOnly, setRealPlayersOnly] = useState<boolean>(false);
+  const [sortKey, setSortKey] = useState<SortKey>("startsAt");
   const [eloMin, setEloMin] = useState<number>(0);
   const [eloMax, setEloMax] = useState<number>(3000);
 
@@ -143,18 +153,47 @@ export default function TournamentsHubPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    return tournaments.filter((t) => {
+    const arr = tournaments.filter((t) => {
       if (formatFilter !== "all" && t.format !== formatFilter) return false;
       if (tcFilter !== "all" && t.timeControl !== tcFilter) return false;
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (realPlayersOnly && !t.realPlayers) return false;
       if (t.eloMax < eloMin) return false;
       if (t.eloMin > eloMax) return false;
       return true;
     });
-  }, [tournaments, formatFilter, tcFilter, statusFilter, eloMin, eloMax]);
+
+    // Sort
+    arr.sort((a, b) => {
+      if (sortKey === "fill") {
+        const fa = a.maxPlayers > 0 ? a.players / a.maxPlayers : 0;
+        const fb = b.maxPlayers > 0 ? b.players / b.maxPlayers : 0;
+        return fb - fa; // most-full first
+      }
+      if (sortKey === "prize") {
+        return b.prizeChessy - a.prizeChessy; // biggest prize first
+      }
+      // startsAt: earliest first (string compare works for ISO-ish "2026-05-18 19:00")
+      return a.startsAt.localeCompare(b.startsAt);
+    });
+
+    return arr;
+  }, [tournaments, formatFilter, tcFilter, statusFilter, realPlayersOnly, sortKey, eloMin, eloMax]);
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, color: T.text, padding: "24px 32px" }}>
+      {/* Global keyframes */}
+      <style>{`
+        @keyframes cc-hub-pulse-dot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%      { transform: scale(1.5); opacity: 0.5; }
+        }
+        @keyframes cc-hub-live-glow {
+          0%, 100% { box-shadow: 0 0 0 1px ${T.red}33, 0 0 18px ${T.red}22; }
+          50%      { box-shadow: 0 0 0 2px ${T.red}77, 0 0 28px ${T.red}55; }
+        }
+      `}</style>
+
       {/* Breadcrumb */}
       <div style={{ marginBottom: 16 }}>
         <Link
@@ -261,6 +300,31 @@ export default function TournamentsHubPage() {
                   ? "Live"
                   : "Завершён"
               }
+            />
+          ))}
+        </FilterGroup>
+
+        <FilterGroup label="Игроки">
+          <PillButton
+            active={realPlayersOnly}
+            onClick={() => setRealPlayersOnly((v) => !v)}
+            label={realPlayersOnly ? "⚡ только реальные" : "Все игроки"}
+          />
+        </FilterGroup>
+
+        <FilterGroup label="Сортировать">
+          {(
+            [
+              ["startsAt", "По дате"],
+              ["fill", "По заполненности"],
+              ["prize", "По призу"],
+            ] as const
+          ).map(([key, label]) => (
+            <PillButton
+              key={key}
+              active={sortKey === key}
+              onClick={() => setSortKey(key)}
+              label={label}
             />
           ))}
         </FilterGroup>
@@ -402,7 +466,8 @@ function TournamentCard({ t }: { t: Tournament }) {
   const statusColor =
     t.status === "live" ? T.red : t.status === "upcoming" ? T.accent : T.faint;
   const statusLabel =
-    t.status === "live" ? "● LIVE" : t.status === "upcoming" ? "Скоро" : "Завершён";
+    t.status === "live" ? "LIVE" : t.status === "upcoming" ? "Скоро" : "Завершён";
+  const isLive = t.status === "live";
 
   const full = t.players >= t.maxPlayers;
 
@@ -432,7 +497,7 @@ function TournamentCard({ t }: { t: Tournament }) {
       onMouseLeave={() => setHovered(false)}
       style={{
         background: T.surface,
-        border: `1px solid ${hovered ? T.accentDim : T.border}`,
+        border: `1px solid ${isLive ? `${T.red}77` : hovered ? T.accentDim : T.border}`,
         borderRadius: 12,
         padding: 18,
         display: "flex",
@@ -440,6 +505,7 @@ function TournamentCard({ t }: { t: Tournament }) {
         gap: 12,
         position: "relative",
         transition: "border-color 160ms",
+        animation: isLive ? "cc-hub-live-glow 2.2s ease-in-out infinite" : undefined,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -454,8 +520,23 @@ function TournamentCard({ t }: { t: Tournament }) {
             fontWeight: 700,
             textTransform: "uppercase",
             letterSpacing: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
           }}
         >
+          {isLive && (
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: T.red,
+                display: "inline-block",
+                animation: "cc-hub-pulse-dot 1.2s ease-in-out infinite",
+              }}
+            />
+          )}
           {statusLabel}
         </span>
       </div>
@@ -469,6 +550,7 @@ function TournamentCard({ t }: { t: Tournament }) {
         <Tag color={full ? T.red : T.accent}>
           {t.players}/{t.maxPlayers} игроков
         </Tag>
+        {t.realPlayers && <Tag color={T.yellow}>⚡ real players</Tag>}
       </div>
 
       {/* Standings preview (hover) */}

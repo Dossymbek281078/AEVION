@@ -8,6 +8,12 @@
 //   • single_elimination → classic bracket grid
 //   • swiss              → round-by-round view + standings
 //   • round_robin        → N×N matrix with results
+//
+// Enhancements (2026-05-19):
+//   A) Sortable standings table (score/buchholz/rating/games)
+//   B) Bracket animations: slide-in for pairings, hover-highlight, pulse for live
+//   C) Real-time round progress bar with animated stripes, 15s polling,
+//      auto-trigger queue-match on round completion for realPlayers tournaments
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -82,6 +88,7 @@ interface TournamentMeta {
   players?: number;
   maxPlayers?: number;
   realPlayers?: boolean;
+  liveMatchId?: string | null;
 }
 
 type RegState =
@@ -97,6 +104,9 @@ type RegState =
       tournamentId: string;
     }
   | { phase: "error"; message: string };
+
+type SortKey = "score" | "buchholz" | "rating" | "games";
+type SortDir = "asc" | "desc";
 
 function genLocalUserId(tournamentId: string): string {
   if (typeof window === "undefined") return `anon_${Math.random().toString(36).slice(2, 10)}`;
@@ -144,69 +154,129 @@ export default function TournamentDetailPage({
   const [reg, setReg] = useState<RegState>({ phase: "idle" });
   const sseRef = useRef<EventSource | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchAll = async () => {
-      setLoading(true);
-      setErrorMsg(null);
-      try {
-        const [tRes, bRes, sRes, nRes] = await Promise.all([
-          fetch(`/api/cyberchess-tournaments/${tournamentId}`, { cache: "no-store" }),
-          fetch(`/api/cyberchess-tournaments/${tournamentId}/bracket`, { cache: "no-store" }),
-          fetch(`/api/cyberchess-tournaments/${tournamentId}/standings`, { cache: "no-store" }),
-          fetch(`/api/cyberchess-tournaments/${tournamentId}/next-round`, { cache: "no-store" }),
-        ]);
+  // Track previous round-completion state so we only fire queue-match once
+  // per transition (instead of every 15s poll).
+  const lastDoneCountRef = useRef<number>(0);
+  const lastQueueRoundRef = useRef<number>(-1);
 
-        if (!tRes.ok) throw new Error(`tournament HTTP ${tRes.status}`);
-        const tData = await tRes.json();
-        if (!cancelled && tData?.ok && tData.tournament) {
-          setMeta({
-            id: tData.tournament.id,
-            title: tData.tournament.title,
-            format: tData.tournament.format,
-            status: tData.tournament.status,
-            swissRounds: tData.tournament.swissRounds,
-            currentRound: tData.tournament.currentRound,
-            players: tData.tournament.players,
-            maxPlayers: tData.tournament.maxPlayers,
-            realPlayers: !!tData.tournament.realPlayers,
+  const fetchAll = async (silent = false) => {
+    if (!silent) setLoading(true);
+    setErrorMsg(null);
+    try {
+      const [tRes, bRes, sRes, nRes] = await Promise.all([
+        fetch(`/api/cyberchess-tournaments/${tournamentId}`, { cache: "no-store" }),
+        fetch(`/api/cyberchess-tournaments/${tournamentId}/bracket`, { cache: "no-store" }),
+        fetch(`/api/cyberchess-tournaments/${tournamentId}/standings`, { cache: "no-store" }),
+        fetch(`/api/cyberchess-tournaments/${tournamentId}/next-round`, { cache: "no-store" }),
+      ]);
+
+      if (!tRes.ok) throw new Error(`tournament HTTP ${tRes.status}`);
+      const tData = await tRes.json();
+      if (tData?.ok && tData.tournament) {
+        setMeta({
+          id: tData.tournament.id,
+          title: tData.tournament.title,
+          format: tData.tournament.format,
+          status: tData.tournament.status,
+          swissRounds: tData.tournament.swissRounds,
+          currentRound: tData.tournament.currentRound,
+          players: tData.tournament.players,
+          maxPlayers: tData.tournament.maxPlayers,
+          realPlayers: !!tData.tournament.realPlayers,
+          liveMatchId: tData.tournament.liveMatchId ?? null,
+        });
+      }
+
+      if (bRes.ok) {
+        const bData = await bRes.json();
+        if (bData?.ok && Array.isArray(bData.rounds)) {
+          setRounds(bData.rounds);
+        }
+      }
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        if (sData?.ok && Array.isArray(sData.standings)) {
+          setStandings(sData.standings);
+        }
+      }
+      if (nRes.ok) {
+        const nData = await nRes.json();
+        if (nData?.ok) {
+          setNextRound({
+            finished: !!nData.finished,
+            round: nData.round ?? null,
+            name: nData.name,
+            matches: nData.matches,
           });
         }
-
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          if (!cancelled && bData?.ok && Array.isArray(bData.rounds)) {
-            setRounds(bData.rounds);
-          }
-        }
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          if (!cancelled && sData?.ok && Array.isArray(sData.standings)) {
-            setStandings(sData.standings);
-          }
-        }
-        if (nRes.ok) {
-          const nData = await nRes.json();
-          if (!cancelled && nData?.ok) {
-            setNextRound({
-              finished: !!nData.finished,
-              round: nData.round ?? null,
-              name: nData.name,
-              matches: nData.matches,
-            });
-          }
-        }
-      } catch (e) {
-        if (!cancelled) setErrorMsg((e as Error).message);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
-    };
-    fetchAll();
+    } catch (e) {
+      setErrorMsg((e as Error).message);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  // Initial fetch
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchAll(false);
+    })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournamentId]);
+
+  // C) Real-time polling every 15s — keeps meta/rounds/standings fresh
+  // and detects round completion for auto-queue-match trigger.
+  useEffect(() => {
+    if (!meta) return;
+    if (meta.status === "finished") return;
+    const interval = window.setInterval(() => {
+      void fetchAll(true);
+    }, 15_000);
+    return () => {
+      window.clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta?.status, tournamentId]);
+
+  // C) Auto-trigger queue-match when current round completes for realPlayers tournaments
+  useEffect(() => {
+    if (!meta || !meta.realPlayers) return;
+    if (meta.status === "finished") return;
+    if (rounds.length === 0) return;
+
+    // Find the latest in-progress round
+    const cr = meta.currentRound ?? 0;
+    const currentRoundData = rounds.find((r) => r.round === cr);
+    if (!currentRoundData) return;
+
+    const total = currentRoundData.matches.length;
+    const done = currentRoundData.matches.filter((m) => m.status === "done").length;
+    const allDone = total > 0 && done === total;
+
+    // Only fire if round just transitioned to done AND we haven't queued it yet
+    if (
+      allDone &&
+      lastQueueRoundRef.current !== cr &&
+      lastDoneCountRef.current < total
+    ) {
+      lastQueueRoundRef.current = cr;
+      void fetch(`/api/cyberchess-tournaments/${tournamentId}/queue-match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }).catch(() => {
+        // best-effort; backend may not have endpoint yet
+      });
+    }
+    lastDoneCountRef.current = done;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rounds, meta?.currentRound, meta?.realPlayers, meta?.status, tournamentId]);
 
   const titleGuess = meta?.title ?? prettyTitle(tournamentId);
   const format: Format = meta?.format ?? "single_elimination";
@@ -332,8 +402,59 @@ export default function TournamentDetailPage({
     };
   }, [reg, tournamentId, router]);
 
+  // ── progress bar metrics ─────────────────────────────────────────
+  const progress = useMemo(() => computeProgress(format, meta, rounds), [format, meta, rounds]);
+
   return (
     <div style={{ minHeight: "100vh", background: T.bg, color: T.text, padding: "24px 32px" }}>
+      {/* Global keyframes for animations */}
+      <style>{`
+        @keyframes cc-spin { to { transform: rotate(360deg); } }
+        @keyframes cc-slide-in-left {
+          from { opacity: 0; transform: translateX(-24px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes cc-slide-in-right {
+          from { opacity: 0; transform: translateX(24px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes cc-fade-in {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes cc-pulse-live {
+          0%, 100% { box-shadow: 0 0 0 1px ${T.red}55, 0 0 16px ${T.red}33; }
+          50%      { box-shadow: 0 0 0 2px ${T.red}aa, 0 0 28px ${T.red}88; }
+        }
+        @keyframes cc-pulse-dot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%      { transform: scale(1.4); opacity: 0.55; }
+        }
+        @keyframes cc-stripes {
+          0%   { background-position: 0 0; }
+          100% { background-position: 32px 0; }
+        }
+        /* Hover handle so connection lines / next-round cards highlight when a match is hovered */
+        .cc-match-card { transition: transform 160ms ease, box-shadow 160ms ease; }
+        .cc-match-card:hover { transform: translateY(-1px); }
+        .cc-match-card[data-live="1"] {
+          animation: cc-pulse-live 1.8s ease-in-out infinite;
+        }
+        .cc-bracket-round { position: relative; }
+        .cc-bracket-round[data-hovered="1"] .cc-match-card {
+          border-color: ${T.accent} !important;
+        }
+        .cc-connector {
+          position: absolute;
+          background: ${T.border};
+          transition: background-color 160ms ease;
+        }
+        .cc-bracket-round[data-hovered="1"] + .cc-bracket-round .cc-connector,
+        .cc-bracket-round[data-hovered="1"] .cc-connector {
+          background: ${T.accent};
+        }
+      `}</style>
+
       {/* Breadcrumb */}
       <div style={{ marginBottom: 16 }}>
         <Link
@@ -376,6 +497,12 @@ export default function TournamentDetailPage({
           )}
           {!meta && loading && <Badge color={T.faint}>Загрузка...</Badge>}
         </div>
+
+        {/* C) Real-time progress bar */}
+        {meta && meta.status !== "finished" && progress.total > 0 && (
+          <RoundProgressBar progress={progress} />
+        )}
+
         {errorMsg && (
           <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
             Бэкенд недоступен ({errorMsg}). Показываем sample data, если оно есть.
@@ -409,7 +536,12 @@ export default function TournamentDetailPage({
 
       {/* Tab content */}
       {tab === "bracket" && (
-        <BracketView format={format} rounds={rounds} loading={loading} />
+        <BracketView
+          format={format}
+          rounds={rounds}
+          loading={loading}
+          liveMatchId={meta?.liveMatchId ?? null}
+        />
       )}
       {tab === "standings" && (
         <StandingsView
@@ -420,7 +552,12 @@ export default function TournamentDetailPage({
         />
       )}
       {tab === "schedule" && (
-        <ScheduleView rounds={rounds} nextRound={nextRound} loading={loading} />
+        <ScheduleView
+          rounds={rounds}
+          nextRound={nextRound}
+          loading={loading}
+          progress={progress}
+        />
       )}
     </div>
   );
@@ -432,10 +569,12 @@ function BracketView({
   format,
   rounds,
   loading,
+  liveMatchId,
 }: {
   format: Format;
   rounds: BracketRound[];
   loading: boolean;
+  liveMatchId: string | null;
 }) {
   if (loading && rounds.length === 0) {
     return <SkeletonBox label="Загружаем bracket..." />;
@@ -445,13 +584,13 @@ function BracketView({
   }
 
   if (format === "swiss") {
-    return <SwissRoundsView rounds={rounds} />;
+    return <SwissRoundsView rounds={rounds} liveMatchId={liveMatchId} />;
   }
   if (format === "round_robin") {
     return <RoundRobinMatrixView rounds={rounds} />;
   }
 
-  // single_elimination — classic horizontal grid
+  // single_elimination — classic horizontal grid with hover-highlight
   return (
     <section
       style={{
@@ -470,44 +609,98 @@ function BracketView({
           minWidth: 920,
         }}
       >
-        {rounds.map((round) => (
-          <div
+        {rounds.map((round, ri) => (
+          <BracketRoundColumn
             key={`${round.name}-${round.round}`}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-around",
-              gap: 16,
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 12,
-                color: T.faint,
-                textTransform: "uppercase",
-                letterSpacing: 1.5,
-                textAlign: "center",
-              }}
-            >
-              {round.name}
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
-              {round.matches.map((m) => (
-                <MatchCard key={m.id} m={m} />
-              ))}
-            </div>
-          </div>
+            round={round}
+            roundIndex={ri}
+            totalRounds={rounds.length}
+            liveMatchId={liveMatchId}
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function SwissRoundsView({ rounds }: { rounds: BracketRound[] }) {
+function BracketRoundColumn({
+  round,
+  roundIndex,
+  totalRounds,
+  liveMatchId,
+}: {
+  round: BracketRound;
+  roundIndex: number;
+  totalRounds: number;
+  liveMatchId: string | null;
+}) {
+  const [hoveredMatchId, setHoveredMatchId] = useState<string | null>(null);
+  const isHovered = hoveredMatchId !== null;
+
+  return (
+    <div
+      className="cc-bracket-round"
+      data-hovered={isHovered ? "1" : "0"}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-around",
+        gap: 16,
+      }}
+    >
+      <h3
+        style={{
+          margin: 0,
+          fontSize: 12,
+          color: T.faint,
+          textTransform: "uppercase",
+          letterSpacing: 1.5,
+          textAlign: "center",
+        }}
+      >
+        {round.name}
+      </h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
+        {round.matches.map((m, mi) => (
+          <div
+            key={m.id}
+            onMouseEnter={() => setHoveredMatchId(m.id)}
+            onMouseLeave={() => setHoveredMatchId(null)}
+            style={{
+              animation: `cc-fade-in 320ms ease ${Math.min(mi * 60, 480)}ms both`,
+              position: "relative",
+            }}
+          >
+            {/* Connector to next round (rightward) */}
+            {roundIndex < totalRounds - 1 && (
+              <span
+                className="cc-connector"
+                style={{
+                  top: "50%",
+                  right: -24,
+                  width: 24,
+                  height: 1,
+                }}
+              />
+            )}
+            <MatchCard m={m} liveMatchId={liveMatchId} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SwissRoundsView({
+  rounds,
+  liveMatchId,
+}: {
+  rounds: BracketRound[];
+  liveMatchId: string | null;
+}) {
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {rounds.map((round) => (
+      {rounds.map((round, ri) => (
         <div
           key={`swiss-${round.round}`}
           style={{
@@ -515,6 +708,7 @@ function SwissRoundsView({ rounds }: { rounds: BracketRound[] }) {
             border: `1px solid ${T.border}`,
             borderRadius: 12,
             padding: 16,
+            animation: `cc-fade-in 280ms ease ${Math.min(ri * 50, 320)}ms both`,
           }}
         >
           <div
@@ -548,8 +742,15 @@ function SwissRoundsView({ rounds }: { rounds: BracketRound[] }) {
               gap: 10,
             }}
           >
-            {round.matches.map((m) => (
-              <MatchCard key={m.id} m={m} />
+            {round.matches.map((m, mi) => (
+              <div
+                key={m.id}
+                style={{
+                  animation: `${mi % 2 === 0 ? "cc-slide-in-left" : "cc-slide-in-right"} 380ms ease ${Math.min(mi * 40, 360)}ms both`,
+                }}
+              >
+                <MatchCard m={m} liveMatchId={liveMatchId} />
+              </div>
             ))}
           </div>
         </div>
@@ -771,6 +972,9 @@ function StandingsView({
   rounds: BracketRound[];
   loading: boolean;
 }) {
+  const [sortKey, setSortKey] = useState<SortKey>("score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
   if (loading && standings.length === 0) {
     return <SkeletonBox label="Считаем standings..." />;
   }
@@ -837,7 +1041,39 @@ function StandingsView({
     );
   }
 
-  // swiss / round_robin → table
+  // A) Sortable swiss / round_robin → table
+  const sortedStandings = useMemo(() => {
+    const arr = [...standings];
+    const getter: Record<SortKey, (r: StandingRow) => number> = {
+      score: (r) => r.score,
+      buchholz: (r) => r.buchholz,
+      rating: (r) => r.rating,
+      games: (r) => r.gamesPlayed,
+    };
+    const fn = getter[sortKey];
+    arr.sort((a, b) => {
+      const diff = fn(a) - fn(b);
+      return sortDir === "asc" ? diff : -diff;
+    });
+    return arr;
+  }, [standings, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // default to desc for score/buchholz/rating/games (higher = better, except games where higher = more played)
+      setSortDir("desc");
+    }
+  };
+
+  const SortArrow = ({ active }: { active: boolean }) => (
+    <span style={{ marginLeft: 4, color: active ? T.accent : T.faint, fontSize: 10 }}>
+      {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
+    </span>
+  );
+
   return (
     <section
       style={{
@@ -854,39 +1090,63 @@ function StandingsView({
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
-              {["#", "Игрок", "Рейтинг", "Очки", "Buchholz", "Партий", "W/B"].map((h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: h === "Игрок" ? "left" : "center",
-                    padding: "8px 10px",
-                    borderBottom: `1px solid ${T.border}`,
-                    color: T.faint,
-                    fontSize: 11,
-                    textTransform: "uppercase",
-                    letterSpacing: 1,
-                  }}
-                >
-                  {h}
-                </th>
-              ))}
+              {/* Static columns */}
+              <th style={thStyle({ active: false, sortable: false, align: "center" })}>#</th>
+              <th style={thStyle({ active: false, sortable: false, align: "left" })}>Игрок</th>
+              {/* Sortable columns */}
+              <th
+                onClick={() => handleSort("rating")}
+                style={thStyle({ active: sortKey === "rating", sortable: true, align: "center" })}
+                title="Сортировать по рейтингу"
+              >
+                Рейтинг <SortArrow active={sortKey === "rating"} />
+              </th>
+              <th
+                onClick={() => handleSort("score")}
+                style={thStyle({ active: sortKey === "score", sortable: true, align: "center" })}
+                title="Сортировать по очкам"
+              >
+                Очки <SortArrow active={sortKey === "score"} />
+              </th>
+              <th
+                onClick={() => handleSort("buchholz")}
+                style={thStyle({ active: sortKey === "buchholz", sortable: true, align: "center" })}
+                title="Сортировать по Buchholz"
+              >
+                Buchholz <SortArrow active={sortKey === "buchholz"} />
+              </th>
+              <th
+                onClick={() => handleSort("games")}
+                style={thStyle({ active: sortKey === "games", sortable: true, align: "center" })}
+                title="Сортировать по числу партий"
+              >
+                Партий <SortArrow active={sortKey === "games"} />
+              </th>
+              <th style={thStyle({ active: false, sortable: false, align: "center" })}>W/B</th>
             </tr>
           </thead>
           <tbody>
-            {standings.map((r) => (
+            {sortedStandings.map((r, idx) => (
               <tr key={r.id}>
                 <td
                   style={{
                     padding: "8px 10px",
-                    color: r.rank <= 3 ? T.yellow : T.faint,
+                    color: idx < 3 ? T.yellow : T.faint,
                     fontWeight: 700,
                     textAlign: "center",
                   }}
                 >
-                  {r.rank}
+                  {idx + 1}
                 </td>
                 <td style={{ padding: "8px 10px", color: T.text }}>{r.name}</td>
-                <td style={{ padding: "8px 10px", textAlign: "center", color: T.dim }}>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    textAlign: "center",
+                    color: sortKey === "rating" ? T.text : T.dim,
+                    fontWeight: sortKey === "rating" ? 700 : 500,
+                  }}
+                >
                   {r.rating}
                 </td>
                 <td
@@ -904,13 +1164,21 @@ function StandingsView({
                   style={{
                     padding: "8px 10px",
                     textAlign: "center",
-                    color: T.dim,
+                    color: sortKey === "buchholz" ? T.text : T.dim,
+                    fontWeight: sortKey === "buchholz" ? 700 : 500,
                     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                   }}
                 >
                   {r.buchholz.toFixed(1)}
                 </td>
-                <td style={{ padding: "8px 10px", textAlign: "center", color: T.dim }}>
+                <td
+                  style={{
+                    padding: "8px 10px",
+                    textAlign: "center",
+                    color: sortKey === "games" ? T.text : T.dim,
+                    fontWeight: sortKey === "games" ? 700 : 500,
+                  }}
+                >
                   {r.gamesPlayed}
                 </td>
                 <td
@@ -932,20 +1200,67 @@ function StandingsView({
   );
 }
 
+function thStyle(opts: {
+  active: boolean;
+  sortable: boolean;
+  align: "left" | "center";
+}): React.CSSProperties {
+  return {
+    textAlign: opts.align,
+    padding: "8px 10px",
+    borderBottom: `1px solid ${T.border}`,
+    color: opts.active ? T.accent : T.faint,
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    cursor: opts.sortable ? "pointer" : "default",
+    userSelect: "none",
+    background: opts.active ? `${T.accent}10` : "transparent",
+    transition: "background 160ms, color 160ms",
+  };
+}
+
 function ScheduleView({
   rounds,
   nextRound,
   loading,
+  progress,
 }: {
   rounds: BracketRound[];
   nextRound: NextRound | null;
   loading: boolean;
+  progress: { current: number; total: number; label: string };
 }) {
   if (loading && rounds.length === 0) {
     return <SkeletonBox label="Загружаем расписание..." />;
   }
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Progress inside Schedule too (always visible here) */}
+      {progress.total > 0 && (
+        <div
+          style={{
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            borderRadius: 12,
+            padding: 16,
+          }}
+        >
+          <h3
+            style={{
+              margin: "0 0 10px",
+              fontSize: 13,
+              color: T.faint,
+              letterSpacing: 1.5,
+              textTransform: "uppercase",
+            }}
+          >
+            Прогресс турнира
+          </h3>
+          <ProgressBarInner progress={progress} />
+        </div>
+      )}
+
       {/* Up next */}
       <div
         style={{
@@ -970,8 +1285,15 @@ function ScheduleView({
               {nextRound.name ?? `Тур ${nextRound.round}`}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
-              {(nextRound.matches ?? []).map((m) => (
-                <MatchCard key={m.id} m={m} />
+              {(nextRound.matches ?? []).map((m, mi) => (
+                <div
+                  key={m.id}
+                  style={{
+                    animation: `${mi % 2 === 0 ? "cc-slide-in-left" : "cc-slide-in-right"} 340ms ease ${Math.min(mi * 40, 280)}ms both`,
+                  }}
+                >
+                  <MatchCard m={m} liveMatchId={null} />
+                </div>
               ))}
             </div>
           </>
@@ -1025,6 +1347,124 @@ function ScheduleView({
   );
 }
 
+// ── progress bar ──────────────────────────────────────────────────
+
+function computeProgress(
+  format: Format,
+  meta: TournamentMeta | null,
+  rounds: BracketRound[],
+): { current: number; total: number; label: string } {
+  if (!meta) return { current: 0, total: 0, label: "" };
+
+  if (format === "swiss" || format === "round_robin") {
+    const total = meta.swissRounds ?? rounds.length;
+    const current = meta.currentRound ?? 0;
+    return {
+      current: Math.min(current, total),
+      total,
+      label: `Тур ${Math.min(current, total)} / ${total}`,
+    };
+  }
+
+  // single_elimination: count matches
+  let total = 0;
+  let done = 0;
+  for (const r of rounds) {
+    total += r.matches.length;
+    done += r.matches.filter((m) => m.status === "done").length;
+  }
+  return {
+    current: done,
+    total,
+    label: `${done} / ${total} матчей сыграно`,
+  };
+}
+
+function RoundProgressBar({
+  progress,
+}: {
+  progress: { current: number; total: number; label: string };
+}) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: 6,
+          fontSize: 11,
+          color: T.faint,
+          textTransform: "uppercase",
+          letterSpacing: 1,
+        }}
+      >
+        <span>Прогресс</span>
+        <span style={{ color: T.dim }}>{progress.label}</span>
+      </div>
+      <ProgressBarInner progress={progress} />
+    </div>
+  );
+}
+
+function ProgressBarInner({
+  progress,
+}: {
+  progress: { current: number; total: number; label: string };
+}) {
+  const pct = progress.total > 0 ? Math.min(100, (progress.current / progress.total) * 100) : 0;
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: T.surfaceAlt,
+        border: `1px solid ${T.border}`,
+        borderRadius: 8,
+        height: 14,
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          width: `${pct}%`,
+          height: "100%",
+          background: `repeating-linear-gradient(
+            45deg,
+            ${T.accent} 0,
+            ${T.accent} 8px,
+            ${T.accentDim} 8px,
+            ${T.accentDim} 16px
+          )`,
+          backgroundSize: "32px 32px",
+          animation: "cc-stripes 1.2s linear infinite",
+          transition: "width 600ms ease",
+          boxShadow: pct > 0 ? `0 0 12px ${T.accent}66` : "none",
+        }}
+      />
+      {pct > 5 && (
+        <span
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 10,
+            color: T.text,
+            fontWeight: 700,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            textShadow: "0 1px 2px rgba(0,0,0,0.6)",
+          }}
+        >
+          {pct.toFixed(0)}%
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── small bits ────────────────────────────────────────────────────
 
 function Tab({
@@ -1059,12 +1499,20 @@ function Tab({
   );
 }
 
-function MatchCard({ m }: { m: Match }) {
-  const live = m.status === "live";
+function MatchCard({
+  m,
+  liveMatchId,
+}: {
+  m: Match;
+  liveMatchId: string | null;
+}) {
+  const live = m.status === "live" || (liveMatchId !== null && liveMatchId === m.id);
   const done = m.status === "done";
 
   return (
     <div
+      className="cc-match-card"
+      data-live={live ? "1" : "0"}
       style={{
         background: T.surfaceAlt,
         border: `1px solid ${live ? T.red : T.border}`,
@@ -1084,9 +1532,22 @@ function MatchCard({ m }: { m: Match }) {
             fontWeight: 700,
             color: T.red,
             letterSpacing: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
           }}
         >
-          ● LIVE
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: T.red,
+              animation: "cc-pulse-dot 1.2s ease-in-out infinite",
+              display: "inline-block",
+            }}
+          />
+          LIVE
         </div>
       )}
       <PlayerRow
@@ -1239,7 +1700,6 @@ function RegPanel({
   full: boolean;
 }) {
   const phase = reg.phase;
-  const isBusy = phase === "registering" || phase === "waiting";
   const canRegister = phase === "idle" || phase === "error";
 
   let body: React.ReactNode = null;
@@ -1356,9 +1816,7 @@ function Spinner({ color }: { color: string }) {
         borderRadius: "50%",
         animation: "cc-spin 0.8s linear infinite",
       }}
-    >
-      <style>{`@keyframes cc-spin { to { transform: rotate(360deg); } }`}</style>
-    </span>
+    />
   );
 }
 

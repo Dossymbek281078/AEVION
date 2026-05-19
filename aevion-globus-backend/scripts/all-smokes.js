@@ -93,6 +93,10 @@ const SMOKES = [
   { name: "qzone-prod", script: "qzone-prod-smoke.js", readOnly: true },
   // Pricing PROD — 15 checks: FAQ, social-proof, provisioning, category filter.
   { name: "pricing-prod", script: "pricing-prod-smoke.js", readOnly: true },
+  // Revenue Hub PROD — 15 checks: /health, /apps, /overview, /env-guide,
+  // /stripe/balance + per-app monetization channel coverage (centralized
+  // Stripe + YouTube + Twitch hub introduced in c8917171).
+  { name: "revenue-prod", script: "revenue-prod-smoke.js", readOnly: true },
   // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
   // Closes the prod-surface gap for modules without their own *-prod-smoke.
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },

@@ -1889,7 +1889,7 @@ devhubRouter.post("/media/image", async (req, res) => {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: "gpt-image-1",
         prompt: prompt.trim(),
         n: 1,
         size,
@@ -2368,7 +2368,7 @@ devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
         const dResp = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "dall-e-3", prompt, n: 1, size: step.size || "1024x1024" }),
+          body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
         });
         if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
         const d = await dResp.json() as { data: Array<{ url: string }> };
@@ -2609,7 +2609,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
         const dResp = await fetch("https://api.openai.com/v1/images/generations", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "dall-e-3", prompt, n: 1, size: step.size || "1024x1024" }),
+          body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
         });
         if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
         const d = await dResp.json() as { data: Array<{ url: string }> };

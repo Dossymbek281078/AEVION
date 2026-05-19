@@ -102,6 +102,11 @@ const SMOKES = [
   // invariants (certified ≤ total), activity timestamp parseability,
   // auth gates on /submissions + /admin/*.
   { name: "planet-prod", script: "planet-prod-smoke.js", readOnly: true },
+  // Auth PROD — 15 checks for the JWT auth surface. Foundation gate for
+  // every Bearer endpoint. Verifies validation gates (400 on empty body)
+  // + auth gates (401 on /me, /sessions, /audit, /whoami-strict, /account
+  // DELETE) WITHOUT actually attempting login (avoids rate-limit + lockout).
+  { name: "auth-prod", script: "auth-prod-smoke.js", readOnly: true },
   // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
   { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
   // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.

@@ -1864,7 +1864,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 
 // POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
 devhubRouter.post("/media/image", async (req, res) => {
-  const { prompt, size = "1024x1024", quality = "standard", style = "vivid" } = req.body || {};
+  const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt required" });
   }
@@ -1894,7 +1894,6 @@ devhubRouter.post("/media/image", async (req, res) => {
         n: 1,
         size,
         quality: quality === "hd" ? "hd" : "standard",
-        style: style === "natural" ? "natural" : "vivid",
         response_format: "url",
       }),
     });

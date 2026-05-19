@@ -36,8 +36,8 @@ interface PaddleBalance {
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
-  stripe_subscription: "Stripe Sub",
-  stripe_onetime: "Stripe Pay",
+  paddle_subscription: "Paddle Sub",
+  paddle_onetime: "Paddle Pay",
   paybox: "PayBox",
   kaspi: "Kaspi",
   youtube_adsense: "YouTube",
@@ -50,8 +50,8 @@ const CHANNEL_LABELS: Record<string, string> = {
 };
 
 const CHANNEL_COLORS: Record<string, string> = {
-  stripe_subscription: "bg-violet-500/20 text-violet-300 border-violet-500/30",
-  stripe_onetime: "bg-violet-500/20 text-violet-300 border-violet-500/30",
+  paddle_subscription: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  paddle_onetime: "bg-blue-400/20 text-blue-200 border-blue-400/30",
   paybox: "bg-amber-500/20 text-amber-300 border-amber-500/30",
   kaspi: "bg-red-500/20 text-red-300 border-red-500/30",
   youtube_adsense: "bg-red-500/20 text-red-300 border-red-500/30",

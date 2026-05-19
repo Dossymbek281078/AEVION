@@ -1,13 +1,11 @@
 import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
-import Stripe from "stripe";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQStoreTables, isQStoreDbReady } from "../lib/ensureQStoreTables";
 import { applyOgEtag } from "../lib/ogEtag";
+import { PADDLE_KEY, paddlePost, paddleGet, IS_PADDLE_SANDBOX } from "../lib/paddleClient";
 
-const STRIPE_SK = process.env.STRIPE_SECRET_KEY?.trim();
-const stripe = STRIPE_SK ? new Stripe(STRIPE_SK, { apiVersion: "2026-04-22.dahlia" as any }) : null;
 const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
 
 export const qstoreRouter = Router();
@@ -312,43 +310,45 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       const pRow = row.rows[0];
       const purchaseId = crypto.randomUUID();
 
-      // Stripe Checkout: if Stripe is configured and product has non-zero price
-      if (stripe && pRow.price > 0) {
-        const currency = (pRow.currency || "kzt").toLowerCase();
-        const amountCents = currency === "kzt"
-          ? Math.round(pRow.price)       // QStore stores KZT as integer
+      // Paddle Checkout: if Paddle is configured and product has non-zero price
+      if (PADDLE_KEY() && pRow.price > 0) {
+        const currency = (pRow.currency || "KZT").toUpperCase();
+        const amountCents = currency === "KZT"
+          ? Math.round(pRow.price)       // QStore stores KZT as integer tenge
           : Math.round(pRow.price * 100); // USD/other — cents
 
         try {
-          const session = await stripe.checkout.sessions.create({
-            mode: "payment",
-            line_items: [{
-              price_data: {
-                currency,
-                unit_amount: amountCents,
-                product_data: {
-                  name: pRow.title,
-                  description: (pRow.description || "").slice(0, 500) || undefined,
-                },
+          const txBody: Record<string, unknown> = {
+            items: [{
+              price: {
+                description: (pRow.description || pRow.title).slice(0, 255),
+                unit_price: { amount: String(amountCents), currency_code: currency },
+                product: { name: pRow.title.slice(0, 255), tax_category: "standard" },
               },
               quantity: 1,
             }],
-            metadata: { purchaseId, productId: pRow.id, buyerId: auth.sub, source: "qstore" },
-            success_url: `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}`,
-            cancel_url: `${FRONTEND_URL}/qstore/${id}?purchase=cancelled`,
-          });
+            checkout: { url: `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}` },
+            custom_data: { purchaseId, productId: pRow.id, buyerId: auth.sub, source: "qstore" },
+          };
 
-          await pool.query(
-            `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","stripeSessionId","createdAt")
-             VALUES ($1,$2,$3,$4,'pending',$5,NOW())`,
-            [purchaseId, pRow.id, auth.sub, pRow.price, session.id],
-          );
+          const tx = await paddlePost("/transactions", txBody) as {
+            data?: { id: string; checkout?: { url: string } };
+          } | null;
 
-          res.status(201).json({ purchaseId, checkoutUrl: session.url, mode: "stripe", status: "pending" });
-          return;
-        } catch (stripeErr) {
-          console.warn("[QStore] Stripe session failed, falling back to direct:", stripeErr instanceof Error ? stripeErr.message : stripeErr);
-          // Fall through to direct purchase
+          if (tx?.data) {
+            await pool.query(
+              `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","stripeSessionId","createdAt")
+               VALUES ($1,$2,$3,$4,'pending',$5,NOW())`,
+              [purchaseId, pRow.id, auth.sub, pRow.price, tx.data.id],
+            );
+            const checkoutUrl = tx.data.checkout?.url
+              ?? `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}`;
+            res.status(201).json({ purchaseId, checkoutUrl, mode: "paddle", status: "pending", sandbox: IS_PADDLE_SANDBOX() });
+            return;
+          }
+          console.warn("[QStore] Paddle transaction failed, falling back to direct");
+        } catch (paddleErr) {
+          console.warn("[QStore] Paddle error, falling back to direct:", paddleErr instanceof Error ? paddleErr.message : paddleErr);
         }
       }
 

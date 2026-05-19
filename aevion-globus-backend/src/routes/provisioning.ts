@@ -184,6 +184,7 @@ export async function provisionSubscription(input: {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  paddleTransactionId?: string;
   source?: string;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string }> {
   const trialDays = input.trialDays ?? 0;

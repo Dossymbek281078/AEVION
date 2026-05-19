@@ -9,29 +9,31 @@ interface RevenueOverview {
   liveApps: number;
   channelCoverage: Record<string, number>;
   providers: {
-    stripe: { configured: boolean };
+    paddle: { configured: boolean; sandbox: boolean };
     youtube: { configured: boolean };
     twitch: { configured: boolean };
+    paybox?: { configured: boolean };
   };
-  apps: {
-    appId: string;
-    appName: string;
-    channels: string[];
-    color: string;
-  }[];
+  apps: { appId: string; appName: string; channels: string[]; color: string }[];
 }
 
-interface StripeBalance {
-  available?: { amount: number; currency: string }[];
-  pending?: { amount: number; currency: string }[];
+interface PaddleRecent {
+  transactions: { id: string; appId: string; amountUsd: number; currency: string; status: string; date: string }[];
+  byApp: Record<string, { count: number; totalUsd: number }>;
+  sandbox?: boolean;
   stub?: boolean;
   message?: string;
+  setupGuide?: string;
 }
 
-interface StripeRecent {
-  payments: { id: string; appId: string; amountUsd: number; currency: string; status: string; date: string }[];
-  byApp: Record<string, { count: number; totalUsd: number }>;
+interface PaddleBalance {
+  totalUsd?: number;
+  currency?: string;
+  sandbox?: boolean;
+  transactionCount?: number;
   stub?: boolean;
+  message?: string;
+  setupGuide?: string;
 }
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -44,7 +46,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   twitch_partner: "Twitch+",
   in_app_purchase: "In-App",
   donation: "Donation",
-  course_sale: "Courses",
+  course_sale: "Курсы",
   marketplace: "Market",
 };
 
@@ -64,16 +66,16 @@ const CHANNEL_COLORS: Record<string, string> = {
 
 export default function RevenuePage() {
   const [overview, setOverview] = useState<RevenueOverview | null>(null);
-  const [balance, setBalance] = useState<StripeBalance | null>(null);
-  const [recent, setRecent] = useState<StripeRecent | null>(null);
+  const [balance, setBalance] = useState<PaddleBalance | null>(null);
+  const [recent, setRecent] = useState<PaddleRecent | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const base = BACKEND ? `${BACKEND}/api/revenue` : "/api/revenue";
     Promise.all([
       fetch(`${base}/overview`).then((r) => r.json()).catch(() => null),
-      fetch(`${base}/stripe/balance`).then((r) => r.json()).catch(() => null),
-      fetch(`${base}/stripe/recent`).then((r) => r.json()).catch(() => null),
+      fetch(`${base}/paddle/balance`).then((r) => r.json()).catch(() => null),
+      fetch(`${base}/paddle/recent`).then((r) => r.json()).catch(() => null),
     ]).then(([ov, bal, rec]) => {
       setOverview(ov);
       setBalance(bal);
@@ -91,6 +93,7 @@ export default function RevenuePage() {
   }
 
   const providers = overview?.providers;
+  const paddleConfigured = providers?.paddle?.configured;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -100,87 +103,91 @@ export default function RevenuePage() {
           <div>
             <h1 className="text-xl font-semibold text-white">AEVION Revenue Hub</h1>
             <p className="text-sm text-gray-400 mt-0.5">
-              Централизованная монетизация · {overview?.liveApps ?? 0} приложений live
+              Paddle · PayBox · YouTube · Twitch · {overview?.liveApps ?? 0} приложений live
             </p>
           </div>
-          <div className="flex gap-2">
-            <ProviderBadge name="Stripe" ok={providers?.stripe.configured} />
-            <ProviderBadge name="YouTube" ok={providers?.youtube.configured} />
-            <ProviderBadge name="Twitch" ok={providers?.twitch.configured} />
+          <div className="flex gap-2 flex-wrap justify-end">
+            <ProviderBadge name="Paddle" ok={providers?.paddle?.configured} sandbox={providers?.paddle?.sandbox} />
+            <ProviderBadge name="PayBox" ok={providers?.paybox?.configured} />
+            <ProviderBadge name="YouTube" ok={providers?.youtube?.configured} />
+            <ProviderBadge name="Twitch" ok={providers?.twitch?.configured} />
           </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
 
-        {/* Stripe Balance */}
+        {/* Paddle Balance */}
         <section>
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Stripe Balance</h2>
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
+            Paddle Balance {balance?.sandbox && <span className="ml-2 text-xs text-amber-400 normal-case">(sandbox)</span>}
+          </h2>
           {balance?.stub ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-amber-400">
-              {balance.message || "STRIPE_SECRET_KEY не настроен. Добавьте в Railway → Variables."}
-            </div>
+            <PaddleSetupCard />
           ) : (
             <div className="grid grid-cols-2 gap-4">
-              <BalanceCard
-                label="Доступно"
-                items={balance?.available ?? []}
-              />
-              <BalanceCard
-                label="В ожидании"
-                items={balance?.pending ?? []}
-              />
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Завершённые транзакции</div>
+                <div className="text-3xl font-semibold text-white">
+                  ${(balance?.totalUsd ?? 0).toFixed(2)}
+                  <span className="text-sm text-gray-400 ml-2">USD</span>
+                </div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="text-xs text-gray-400 mb-2">Всего транзакций</div>
+                <div className="text-3xl font-semibold text-white">{balance?.transactionCount ?? 0}</div>
+              </div>
             </div>
           )}
         </section>
 
-        {/* Recent Stripe Payments */}
-        <section>
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние платежи</h2>
-          {recent?.stub ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm text-amber-400">
-              Stripe не настроен
-            </div>
-          ) : (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-              {(recent?.payments ?? []).length === 0 ? (
-                <div className="p-4 text-sm text-gray-500">Нет платежей</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-800 text-gray-400 text-xs">
-                      <th className="text-left px-4 py-2.5">ID</th>
-                      <th className="text-left px-4 py-2.5">Приложение</th>
-                      <th className="text-left px-4 py-2.5">Сумма</th>
-                      <th className="text-left px-4 py-2.5">Статус</th>
-                      <th className="text-left px-4 py-2.5">Дата</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(recent?.payments ?? []).map((p) => (
-                      <tr key={p.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                        <td className="px-4 py-2 font-mono text-xs text-gray-400">{p.id.slice(0, 14)}…</td>
-                        <td className="px-4 py-2">
-                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{p.appId}</span>
-                        </td>
-                        <td className="px-4 py-2 font-medium">${p.amountUsd.toFixed(2)}</td>
-                        <td className="px-4 py-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${p.status === "succeeded" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}`}>
-                            {p.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{new Date(p.date).toLocaleDateString("ru")}</td>
+        {/* Recent Transactions */}
+        {paddleConfigured && (
+          <section>
+            <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Последние транзакции</h2>
+            {recent?.stub ? (
+              <div className="bg-gray-900 border border-amber-500/20 rounded-xl p-4 text-sm text-amber-400">Paddle не настроен</div>
+            ) : (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                {(recent?.transactions ?? []).length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">Нет транзакций пока</div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                        <th className="text-left px-4 py-2.5">ID</th>
+                        <th className="text-left px-4 py-2.5">Приложение</th>
+                        <th className="text-left px-4 py-2.5">Сумма</th>
+                        <th className="text-left px-4 py-2.5">Статус</th>
+                        <th className="text-left px-4 py-2.5">Дата</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </section>
+                    </thead>
+                    <tbody>
+                      {(recent?.transactions ?? []).map((t) => (
+                        <tr key={t.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                          <td className="px-4 py-2 font-mono text-xs text-gray-400">{t.id.slice(0, 16)}…</td>
+                          <td className="px-4 py-2">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{t.appId}</span>
+                          </td>
+                          <td className="px-4 py-2 font-medium">${t.amountUsd.toFixed(2)}</td>
+                          <td className="px-4 py-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${t.status === "completed" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"}`}>
+                              {t.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{t.date ? new Date(t.date).toLocaleDateString("ru") : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* By-App breakdown */}
-        {recent && !recent.stub && Object.keys(recent.byApp ?? {}).length > 0 && (
+        {paddleConfigured && recent && !recent.stub && Object.keys(recent.byApp ?? {}).length > 0 && (
           <section>
             <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">По приложениям</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -188,7 +195,7 @@ export default function RevenuePage() {
                 <div key={appId} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-400 mb-1">{appId}</div>
                   <div className="text-lg font-semibold text-white">${data.totalUsd.toFixed(2)}</div>
-                  <div className="text-xs text-gray-500">{data.count} платежей</div>
+                  <div className="text-xs text-gray-500">{data.count} транзакций</div>
                 </div>
               ))}
             </div>
@@ -223,34 +230,17 @@ export default function RevenuePage() {
         )}
 
         {/* Setup Guide */}
-        <SetupGuide providers={providers} />
+        {!paddleConfigured && <PaddleSetupCard full />}
       </div>
     </div>
   );
 }
 
-function ProviderBadge({ name, ok }: { name: string; ok?: boolean }) {
+function ProviderBadge({ name, ok, sandbox }: { name: string; ok?: boolean; sandbox?: boolean }) {
   return (
     <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border ${ok ? "bg-green-500/10 text-green-400 border-green-500/30" : "bg-gray-800 text-gray-500 border-gray-700"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-green-400" : "bg-gray-600"}`} />
-      {name}
-    </div>
-  );
-}
-
-function BalanceCard({ label, items }: { label: string; items: { amount: number; currency: string }[] }) {
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="text-xs text-gray-400 mb-2">{label}</div>
-      {items.length === 0 ? (
-        <div className="text-sm text-gray-600">—</div>
-      ) : (
-        items.map((item, i) => (
-          <div key={i} className="text-2xl font-semibold text-white">
-            {(item.amount / 100).toFixed(2)} <span className="text-sm text-gray-400 uppercase">{item.currency}</span>
-          </div>
-        ))
-      )}
+      {name}{sandbox && ok ? " ·sandbox" : ""}
     </div>
   );
 }
@@ -273,39 +263,34 @@ function AppCard({ app }: { app: { appId: string; appName: string; channels: str
   );
 }
 
-function SetupGuide({ providers }: { providers?: { stripe: { configured: boolean }; youtube: { configured: boolean }; twitch: { configured: boolean } } }) {
-  const missing = [
-    !providers?.stripe.configured && { key: "STRIPE_SECRET_KEY", label: "Stripe", url: "https://dashboard.stripe.com/apikeys", hint: "Developers → API keys → Secret key" },
-    !providers?.youtube.configured && { key: "YOUTUBE_API_KEY", label: "YouTube", url: "https://console.cloud.google.com/apis/credentials", hint: "APIs → YouTube Data API v3 → API Key" },
-    !providers?.twitch.configured && { key: "TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET", label: "Twitch", url: "https://dev.twitch.tv/console/apps", hint: "Register App → Client ID + Secret" },
-  ].filter(Boolean) as { key: string; label: string; url: string; hint: string }[];
-
-  if (missing.length === 0) return null;
-
+function PaddleSetupCard({ full }: { full?: boolean }) {
   return (
-    <section>
-      <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">Настройка доступов</h2>
-      <div className="space-y-2">
-        {missing.map((m) => (
-          <div key={m.key} className="bg-gray-900 border border-amber-500/20 rounded-xl p-4 flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-amber-300">{m.label} — не настроен</div>
-              <div className="text-xs text-gray-400 mt-1">
-                Railway → Variables → <code className="bg-gray-800 px-1 rounded text-amber-200">{m.key}</code>
-              </div>
-              <div className="text-xs text-gray-500 mt-0.5">{m.hint}</div>
-            </div>
-            <a
-              href={m.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
-            >
-              Открыть →
-            </a>
+    <div className={`bg-gray-900 border border-amber-500/20 rounded-xl p-5 ${full ? "" : "text-sm"}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="font-semibold text-amber-300 mb-1">Paddle не настроен</div>
+          <div className="text-gray-400 text-sm mb-3">
+            Paddle — лучшая замена Stripe для Казахстана. Merchant of Record, выплаты на KZ банк, не нужен US entity.
           </div>
-        ))}
+          {full && (
+            <ol className="text-sm text-gray-400 space-y-1 list-decimal list-inside">
+              <li>Зарегистрируйся на <strong className="text-white">paddle.com</strong> (Individual + Kazakhstan)</li>
+              <li>Dashboard → Developer → Authentication → Generate API Key</li>
+              <li>Railway → Variables → <code className="bg-gray-800 px-1 rounded text-amber-200">PADDLE_API_KEY</code> = ключ</li>
+              <li>Railway → Variables → <code className="bg-gray-800 px-1 rounded text-amber-200">PADDLE_SANDBOX</code> = true</li>
+              <li>Проверь: <code className="bg-gray-800 px-1 rounded text-gray-300">/api/paddle/health</code></li>
+            </ol>
+          )}
+        </div>
+        <a
+          href="https://paddle.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-xs px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors whitespace-nowrap"
+        >
+          Открыть Paddle →
+        </a>
       </div>
-    </section>
+    </div>
   );
 }

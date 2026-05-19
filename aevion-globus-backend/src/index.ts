@@ -83,6 +83,7 @@ import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
 import { revenueRouter } from "./routes/revenue";
+import { paddleRouter } from "./routes/paddle";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -606,8 +607,10 @@ app.use("/api/qsocial", qsocialRouter);
 // QEvents — events platform (RSVP, create, attend)
 app.use("/api/qevents", qeventsRouter);
 
-// Revenue Hub — centralized monetization: Stripe + YouTube + Twitch per app
+// Revenue Hub — centralized monetization: Paddle + YouTube + Twitch per app
 app.use("/api/revenue", revenueRouter);
+// Paddle Billing — payment processor for KZ + international (MoR model)
+app.use("/api/paddle", paddleRouter);
 
 // DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
 app.use("/api/deepsan", deepSanRouter);

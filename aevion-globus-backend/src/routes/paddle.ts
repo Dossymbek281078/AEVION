@@ -19,6 +19,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { provisionSubscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+// paddleClient exports are re-used below; local helpers kept for backward compat
 
 export const paddleRouter = Router();
 

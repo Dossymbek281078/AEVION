@@ -72,7 +72,6 @@ const SOFT_PREFIXES = [
   "/api/mapreality",
   "/api/voice-of-earth",
   "/api/startupx",
-  "/api/qfusionai",
 ];
 
 async function run() {

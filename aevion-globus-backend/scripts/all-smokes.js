@@ -90,9 +90,13 @@ const SMOKES = [
   // QMaskCard PROD — 14 checks: health, stats, auth-gates.
   { name: "qmaskcard-prod", script: "qmaskcard-prod-smoke.js", readOnly: true },
   // OpenAPI completeness — guards /api/openapi.json against silent route drops.
-  // 19 critical module prefixes must be documented; 21 soft prefixes tracked
-  // for awareness (currently 17 missing, informational only).
+  // 19 critical module prefixes must be documented; 20 soft prefixes tracked
+  // for awareness (after 2026-05-19 expansion: all 20 present).
   { name: "openapi-completeness", script: "openapi-completeness-smoke.js", readOnly: true },
+  // QCoreAI PROD — 12 checks for the multi-agent AI core (foundational —
+  // every AI-using module eventually calls into it). Validates health,
+  // providers/configuration consistency, sessions/agents/prompts shape.
+  { name: "qcoreai-prod", script: "qcoreai-prod-smoke.js", readOnly: true },
   // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
   { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
   // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.

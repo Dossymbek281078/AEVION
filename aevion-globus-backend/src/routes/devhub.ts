@@ -1786,77 +1786,64 @@ devhubRouter.post("/media/email", async (req, res) => {
   }
 });
 
-// POST /api/devhub/media/payment-link — create Stripe payment link
+// POST /api/devhub/media/payment-link — create Paddle checkout link
 devhubRouter.post("/media/payment-link", async (req, res) => {
-  const { name, amountCents, currency = "usd", description } = req.body || {};
+  const { name, amountCents, currency = "USD", description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
   if (!Number.isFinite(amt) || amt < 50) return res.status(400).json({ error: "amountCents must be ≥ 50" });
 
-  const apiKey = process.env.STRIPE_SECRET_KEY;
-  if (!apiKey) {
+  const paddleKey = process.env.PADDLE_API_KEY?.trim();
+  if (!paddleKey) {
     return res.status(503).json({
-      error: "Stripe not configured — set STRIPE_SECRET_KEY",
-      setupUrl: "https://dashboard.stripe.com/apikeys",
+      error: "Paddle not configured — set PADDLE_API_KEY",
+      setupUrl: "https://vendors.paddle.com/api-key",
     });
   }
 
+  const isSandbox = process.env.PADDLE_SANDBOX !== "false";
+  const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
+  const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
+
   try {
-    // 1. Create product
-    const productResp = await fetch("https://api.stripe.com/v1/products", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+    const txBody: Record<string, unknown> = {
+      items: [{
+        quantity: 1,
+        price: {
+          name: name.trim().slice(0, 200),
+          ...(description ? { description: String(description).slice(0, 500) } : {}),
+          unit_price: {
+            amount: String(Math.round(amt)),
+            currency_code: String(currency).toUpperCase().slice(0, 3),
+          },
+          tax_mode: "exclusive",
+        },
+      }],
+      checkout: {
+        url: successUrl || `${frontendUrl}/devhub?payment=success`,
       },
-      body: new URLSearchParams({
-        name: name.trim().slice(0, 200),
-        ...(description ? { description: String(description).slice(0, 500) } : {}),
-      }).toString(),
-    });
-    if (!productResp.ok) {
-      const errText = await productResp.text();
-      return res.status(productResp.status).json({ error: `Stripe product error: ${errText.slice(0, 300)}` });
-    }
-    const product = await productResp.json() as { id: string };
+    };
 
-    // 2. Create price
-    const priceResp = await fetch("https://api.stripe.com/v1/prices", {
+    const r = await fetch(`${paddleBase}/transactions`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        product: product.id,
-        unit_amount: String(Math.round(amt)),
-        currency: String(currency).toLowerCase().slice(0, 3),
-      }).toString(),
+      headers: { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(txBody),
     });
-    if (!priceResp.ok) {
-      const errText = await priceResp.text();
-      return res.status(priceResp.status).json({ error: `Stripe price error: ${errText.slice(0, 300)}` });
-    }
-    const price = await priceResp.json() as { id: string };
 
-    // 3. Create payment link
-    const linkResp = await fetch("https://api.stripe.com/v1/payment_links", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        "line_items[0][price]": price.id,
-        "line_items[0][quantity]": "1",
-      }).toString(),
-    });
-    if (!linkResp.ok) {
-      const errText = await linkResp.text();
-      return res.status(linkResp.status).json({ error: `Stripe link error: ${errText.slice(0, 300)}` });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Paddle error: ${errText.slice(0, 300)}` });
     }
-    const link = await linkResp.json() as { id: string; url: string };
-    res.json({ ok: true, paymentLinkId: link.id, url: link.url, productId: product.id, priceId: price.id });
+    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
+    const tx = data.data;
+    if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
+
+    res.json({
+      ok: true,
+      provider: "paddle",
+      transactionId: tx.id,
+      url: tx.checkout?.url ?? `${paddleBase.replace("api.", "")}/checkout/${tx.id}`,
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Payment link creation failed" });
   }

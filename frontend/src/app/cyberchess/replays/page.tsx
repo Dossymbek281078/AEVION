@@ -1,4 +1,5 @@
 "use client";
+// Replay hub — force Vercel rebuild 2026-05-19 (stale CDN cache от пред-fix эпохи)
 
 /**
  * CyberChess — Replay hub

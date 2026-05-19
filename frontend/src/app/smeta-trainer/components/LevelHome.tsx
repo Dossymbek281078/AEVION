@@ -330,7 +330,7 @@ export function LevelHome() {
             >
               🎓 Экзамен
               <span className="text-[10px] text-amber-600 font-normal">
-                автопроверка ЛСР · балл 0–100
+                5 заданий · автопроверка · балл 0–100
               </span>
             </Link>
             <Link

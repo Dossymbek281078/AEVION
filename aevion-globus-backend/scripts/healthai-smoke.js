@@ -106,10 +106,11 @@ async function main() {
       durationH: 24,
       notes: "smoke test",
     });
+    const checkData = r.data?.check ?? r.data;
     check(
       "symptom check",
-      r.ok && r.data && Array.isArray(r.data.matched) && r.data.disclaimer,
-      `status=${r.status}, matched=${r.data && r.data.matched && r.data.matched.length}`,
+      r.ok && checkData && Array.isArray(checkData.matched) && checkData.disclaimer,
+      `status=${r.status}, matched=${checkData?.matched?.length}`,
     );
   }
 
@@ -202,12 +203,12 @@ async function main() {
     );
   }
 
-  // 10) Cleanup (best-effort).
+  // 10) Cleanup (best-effort — DELETE requires auth in prod; informational).
   {
     const r = await req("DELETE", `/profile/${profileId}`);
     check(
-      "cleanup profile",
-      r.ok || r.status === 404,
+      "cleanup profile (informational)",
+      r.ok || r.status === 404 || r.status === 401,
       `status=${r.status}`,
     );
   }

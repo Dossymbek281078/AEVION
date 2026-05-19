@@ -316,6 +316,15 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/documents"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📄 Учебные документы
+              <span className="text-[10px] text-emerald-500 font-normal">
+                КС-2 · КС-3 · Ф-2 РК · АОСР
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/indexes"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
             >

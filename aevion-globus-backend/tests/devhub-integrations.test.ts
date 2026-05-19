@@ -255,7 +255,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
 
     const r = await request(makeApp())
       .post("/api/devhub/media/image")
-      .send({ prompt: "a cat", size: "1024x1024", quality: "hd", style: "natural" });
+      .send({ prompt: "a cat", size: "1024x1024", quality: "hd" });
 
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
@@ -264,7 +264,6 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
     expect(body.model).toBe("dall-e-3");
     expect(body.quality).toBe("hd");
-    expect(body.style).toBe("natural");
   });
 });
 

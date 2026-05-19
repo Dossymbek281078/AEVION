@@ -325,6 +325,15 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/exam"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              🎓 Экзамен
+              <span className="text-[10px] text-amber-600 font-normal">
+                автопроверка ЛСР · балл 0–100
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/indexes"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
             >

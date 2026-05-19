@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+import { apiUrl } from "@/lib/apiBase";
 
 interface RevenueOverview {
   totalApps: number;
@@ -71,11 +70,10 @@ export default function RevenuePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const base = BACKEND ? `${BACKEND}/api/revenue` : "/api/revenue";
     Promise.all([
-      fetch(`${base}/overview`).then((r) => r.json()).catch(() => null),
-      fetch(`${base}/paddle/balance`).then((r) => r.json()).catch(() => null),
-      fetch(`${base}/paddle/recent`).then((r) => r.json()).catch(() => null),
+      fetch(apiUrl("/api/revenue/overview")).then((r) => r.json()).catch(() => null),
+      fetch(apiUrl("/api/revenue/paddle/balance")).then((r) => r.json()).catch(() => null),
+      fetch(apiUrl("/api/revenue/paddle/recent")).then((r) => r.json()).catch(() => null),
     ]).then(([ov, bal, rec]) => {
       setOverview(ov);
       setBalance(bal);

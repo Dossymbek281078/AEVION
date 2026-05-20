@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
+import jwt from "jsonwebtoken";
+import { getJwtSecret } from "../lib/authJwt";
 import { createHmac, timingSafeEqual } from "crypto";
 import {
   TIERS,
@@ -1375,4 +1377,52 @@ pricingRouter.get("/social-proof", (_req, res) => {
       individuals: 4,
     },
   });
+});
+
+/**
+ * GET /api/pricing/subscription/me
+ * Returns the latest subscription for the authenticated user (by email from JWT).
+ * Returns { subscription: null } if no subscription found.
+ */
+pricingRouter.get("/subscription/me", (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "unauthorized" });
+  let email: string;
+  try {
+    const payload = jwt.verify(auth.slice(7), getJwtSecret(), { algorithms: ["HS256"] }) as { email?: string };
+    if (!payload.email) return res.status(401).json({ error: "invalid_token" });
+    email = payload.email.toLowerCase();
+  } catch {
+    return res.status(401).json({ error: "invalid_token" });
+  }
+
+  const SUBS_FILE = process.env.SUBSCRIPTIONS_FILE
+    ? process.env.SUBSCRIPTIONS_FILE
+    : join(process.cwd(), "data", "subscriptions.jsonl");
+
+  try {
+    if (!existsSync(SUBS_FILE)) return res.json({ subscription: null });
+    const lines = readFileSync(SUBS_FILE, "utf8").trim().split("\n").filter(Boolean);
+    const subs = lines
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((s) => s && s.email?.toLowerCase() === email);
+    if (subs.length === 0) return res.json({ subscription: null });
+    // Return the most recent subscription
+    const latest = subs[subs.length - 1];
+    res.json({
+      subscription: {
+        tierId: latest.tierId,
+        period: latest.period,
+        seats: latest.seats ?? 1,
+        validUntil: latest.validUntil ?? null,
+        trialDays: latest.trialDays ?? 0,
+        amountUsd: latest.amountUsd ?? null,
+        source: latest.source ?? null,
+        createdAt: latest.ts,
+      },
+    });
+  } catch (e) {
+    console.error("[subscription/me] read failed", e);
+    res.status(500).json({ error: "read_failed" });
+  }
 });

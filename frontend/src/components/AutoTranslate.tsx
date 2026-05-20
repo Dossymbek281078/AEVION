@@ -254,6 +254,21 @@ const dict: Record<string, string> = {
   "Submitted": "Отправлено",
   "Revoked": "Отозвано",
   "Voted": "Проголосовано",
+  // Длинные варианты ключей выше (Auth/Copy/Sign/Type) — порядок неважен,
+  // dict сортируется длиной убыв., longer keys win first.
+  "Signatures": "Подписи",
+  "Signature": "Подпись",
+  "Signed": "Подписано",
+  "Authorship": "Авторство",
+  "Authors": "Авторы",
+  "Author": "Автор",
+  "Authorize": "Авторизовать",
+  "Authorization": "Авторизация",
+  "Authentication": "Аутентификация",
+  "Authentic": "Подлинный",
+  "Authority": "Полномочия",
+  "Copyright": "Авторское право",
+  "TypeScript": "TypeScript",
 };
 
 // Cache of sorted keys per dict to avoid re-sorting on every render

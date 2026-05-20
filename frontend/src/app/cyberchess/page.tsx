@@ -84,6 +84,7 @@ import { findNewlyUnlocked, ACHIEVEMENTS } from "./chessyAchievements";
 import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
+import ClockPressureDrill from "./ClockPressureDrill";
 import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage } from "./ratingCalibration";
 import AntiCheatPanel from "./AntiCheatPanel";
 import { analyzeGameForCheating, buildReport, updateSessionBaseline, type AntiCheatResult } from "./anticheat";
@@ -120,6 +121,9 @@ import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type G
 import Link from "next/link";
 import { MetricsCollector, computeCPL, type MoveMetric, type PVLine as MetricsPVLine } from "./stockfishMetrics";
 import { applyGameToCPI } from "./cpi";
+import OpeningFlashCard from "./OpeningFlashCard";
+import MirrorModePanel from "./MirrorModePanel";
+import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
 
 const FILES = "abcdefgh";
 const PM: Record<string,string> = {wk:"♔",wq:"♕",wr:"♖",wb:"♗",wn:"♘",wp:"♙",bk:"♚",bq:"♛",br:"♜",bb:"♝",bn:"♞",bp:"♟"};
@@ -791,6 +795,8 @@ export default function CyberChessPage(){
   const[openingsDb,sOpeningsDb]=useState<OpeningIndexed[]>([]);
   const openingMapRef=useRef<Map<string,OpeningIndexed>>(new Map());
   const[currentOpening,sCurrentOpening]=useState<Opening|null>(null);
+  const[showOpeningCard,sShowOpeningCard]=useState(false);
+  const[openingCardShownPly,sOpeningCardShownPly]=useState(-1);
   const[savedGames,sSavedGames]=useState<SavedGame[]>([]);
   const[gamesFilter,sGamesFilter]=useState<string>("all");
   // Library v2: full-text search across opening + AI level + result + sort modes
@@ -948,6 +954,7 @@ export default function CyberChessPage(){
   const[billingPending,sBillingPending]=useState<null|{tier:ChessyTier;tierName:string;requestId:string;token:string;payUrl:string;busy:boolean}>(null);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
   const[showPuzzleExpand,sShowPuzzleExpand]=useState(false);
+  const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
   // Auto-persist FIDE estimate so matchmaking can read it from localStorage
@@ -957,6 +964,16 @@ export default function CyberChessPage(){
       const est=estimateFideFromCPI(calibrateFromGames(savedGames));
       saveEstimateToStorage(est.fide);
     }catch{}
+  },[savedGames]);
+  // Mirror Mode: rebuild profile whenever savedGames changes
+  useEffect(()=>{
+    if(savedGames.length<3){sMirrorProfile(null);return;}
+    const forMirror:SavedGameForMirror[]=savedGames.slice(0,20).map(g=>({
+      moves:g.moves??[],
+      result:g.result??"",
+      playerColor:g.playerColor??"w",
+    }));
+    sMirrorProfile(buildPlayerProfile(forMirror));
   },[savedGames]);
   // Opening Trainer state (killer #4)
   const[showOpeningTrainer,sShowOpeningTrainer]=useState(false);
@@ -1259,6 +1276,9 @@ export default function CyberChessPage(){
       }).catch(()=>{/* best-effort */});
     }).catch(()=>{});
   },[spectatorPublish,on,setup,bk,over]);
+  // Mirror Mode — AI plays like the player based on game history
+  const[mirrorActive,sMirrorActive]=useState(false);
+  const[mirrorProfile,sMirrorProfile]=useState<PlayerProfile|null>(null);
   // Matchmaking: SSE подписка на match stream если есть ?matchId= в URL
   const[matchmakingId,sMatchmakingId]=useState<string|null>(null);
   const matchmakingMoveRef=useRef<{from:Square;to:Square;pr?:string}|null>(null);
@@ -1844,6 +1864,16 @@ export default function CyberChessPage(){
     }
     if(bestMatch)sCurrentOpening(bestMatch);
   },[hist,openingsDb]);
+  // Opening Flash Card: показываем каждые 4 полухода (2 полных хода) в игре
+  useEffect(()=>{
+    if(!currentOpening||!on||over||setup){sShowOpeningCard(false);return;}
+    const ply=hist.length;
+    if(ply>=4&&ply%4===0&&ply!==openingCardShownPly){
+      sShowOpeningCard(true);
+      sOpeningCardShownPly(ply);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[hist.length,currentOpening,on,over,setup]);
   // Lazy Stockfish init: грузим WASM только когда пользователь начинает играть или
   // открывает Analysis/Coach. На setup screen Stockfish не нужен.
   function ensureSF(){
@@ -3483,6 +3513,8 @@ export default function CyberChessPage(){
       return()=>clearTimeout(t);
     }
     if(useSF&&sfR.current?.ready()){
+      // Mirror Mode overrides depth to match the player's estimated skill level
+      const effectiveDepth=mirrorActive&&mirrorProfile?mirrorDepth(mirrorProfile):(SFD[aiI]||10);
       // AI personality wire: если установлена (не "standard") — использовать multiPV(3) + selectMoveByPersonality
       const personalityId=loadStoredPersonalityId();
       const personality=personalityId&&personalityId!=="standard"?findPersonality(personalityId):null;
@@ -3491,7 +3523,7 @@ export default function CyberChessPage(){
           const sf=sfR.current;
           if(!sf?.ready()){sThink(false);return}
           try{
-            sf.multiPV(fenAtTrigger,SFD[aiI]||10,3,(lines:Array<{moves:string[];cp:number;mate:number}>)=>{
+            sf.multiPV(fenAtTrigger,effectiveDepth,3,(lines:Array<{moves:string[];cp:number;mate:number}>)=>{
               if(game.fen()!==fenAtTrigger){sThink(false);return}
               if(!lines||!lines.length){sThink(false);return}
               const candidates:CandidateMove[]=lines.map(l=>{
@@ -3516,7 +3548,7 @@ export default function CyberChessPage(){
         },delay);
         return()=>clearTimeout(t);
       }
-      const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,SFD[aiI]||10,(f,t2,p)=>{
+      const t=setTimeout(()=>sfR.current!.go(fenAtTrigger,effectiveDepth,(f,t2,p)=>{
         // Only apply if the board is still on the same position we asked about.
         try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any,false)}catch{}
         sThink(false);
@@ -3531,7 +3563,7 @@ export default function CyberChessPage(){
       sThink(false);
     },delay);
     return()=>clearTimeout(t);
-  },[bk,over,on,tab,p2pMode,ghostDuelMode,ghostDuelConfig,ghostDuelDivergePly]);
+  },[bk,over,on,tab,p2pMode,ghostDuelMode,ghostDuelConfig,ghostDuelDivergePly,mirrorActive,mirrorProfile]);
 
   /* ── Click: normal move OR premove ── */
   const click=useCallback((sq:Square)=>{
@@ -5423,6 +5455,7 @@ export default function CyberChessPage(){
           {label:"🧠 Коуч",hint:"Спросить коуча",onClick:()=>{sTab("coach");showToast("Коуч","info")}},
           {label:"🧩 Пазлы",hint:"Решить тактику",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
           {label:"⚡ Puzzle Rush",hint:"Скоростной режим",onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
+          {label:"⏱ Clock Drill",hint:"30 секунд на ход — тренировка под давлением времени",onClick:()=>sShowClockDrill(true)},
           {label:"🎲 Варианты",hint:"12 вариантов шахмат",onClick:()=>sShowVariants(true)},
           {label:"📅 Daily Puzzle",hint:"Пазл дня + streak + leaderboard",onClick:()=>{window.location.href="/cyberchess/daily"}},
           {label:"📖 Репертуар v2",hint:"Свои дебюты — CRUD + drill + book stats",onClick:()=>{window.location.href="/cyberchess/repertoire"}},
@@ -5439,6 +5472,7 @@ export default function CyberChessPage(){
           {label:"📐 FIDE-оценка",hint:"CPI regression + factor breakdown + slider explorer",onClick:()=>sShowFidePanel(true)},
           {label:`🛡 Анти-чит${acResult?` · ${acResult.suspicionScore}/100`:""}`,hint:"Статистический анализ последней партии на читерство",onClick:()=>{if(acResult)sShowAcPanel(true);else showToast("Сыграй партию — анализ появится по окончании","info")}},
           {label:"🎭 Стиль AI",hint:"Magnus/Hikaru/Tal/Karpov/...10 personalities",onClick:()=>sShowAiPersonalityPicker(true)},
+          {label:mirrorActive?"🪞 Mirror ON":"🪞 Mirror",hint:"AI играет как ты — учится по твоим партиям",onClick:()=>{if(!mirrorProfile){showToast("Нужно сыграть 3+ партии","info");return;}sMirrorActive(v=>!v);showToast(mirrorActive?"🪞 Mirror выключен":"🪞 Mirror — AI играет как ты","info");}},
           {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
         ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
           style={{
@@ -11796,6 +11830,13 @@ ${question.trim()}`;
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} brand={CC.brand}
     />
+    <ClockPressureDrill
+      open={showClockDrill}
+      onClose={()=>sShowClockDrill(false)}
+      puzzles={PUZZLES.length>0?PUZZLES.slice(0,50).map(p=>({fen:p.fen,solution:p.sol?.[0]||"",id:undefined,theme:p.theme})):[]}
+      surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
+    />
     <FideCalibrationPanel
       open={showFidePanel}
       onClose={()=>sShowFidePanel(false)}
@@ -11816,6 +11857,18 @@ ${question.trim()}`;
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />
+    {/* Mirror Mode floating panel — bottom-left when play tab is active */}
+    {on&&!setup&&tab==="play"&&(
+      <div style={{position:"fixed",bottom:80,left:16,zIndex:40}}>
+        <MirrorModePanel
+          profile={mirrorProfile}
+          active={mirrorActive}
+          onActivate={()=>{sMirrorActive(true);showToast("🪞 Mirror Mode — AI играет как ты","info");}}
+          onDeactivate={()=>{sMirrorActive(false);showToast("🪞 Mirror Mode выключен","info");}}
+          surface={CC.surface1} border={CC.border} text={CC.text} textDim={CC.textDim} accent={CC.brand}
+        />
+      </div>
+    )}
     {/* Host SpectatorChat — floating правый-низ когда стрим включён */}
     {spectatorPublish&&spectatorGameIdRef.current&&<div style={{position:"fixed",right:16,bottom:16,width:320,maxHeight:"60vh",zIndex:90}}>
       <SpectatorChat
@@ -11825,6 +11878,16 @@ ${question.trim()}`;
         text={CC.text} textDim={CC.textDim} brand={CC.brand}
       />
     </div>}
+    {/* Opening Flash Card — плавающая карточка дебюта */}
+    {currentOpening&&<OpeningFlashCard
+      open={showOpeningCard}
+      opening={currentOpening}
+      currentPly={hist.length}
+      isPlayerTurn={game.turn()===pCol}
+      onDismiss={()=>sShowOpeningCard(false)}
+      surface={CC.surface1} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
+    />}
     <PlayerStatsDashboard
       open={showStatsDashboard}
       onClose={()=>sShowStatsDashboard(false)}

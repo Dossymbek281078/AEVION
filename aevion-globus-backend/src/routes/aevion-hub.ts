@@ -786,7 +786,55 @@ aevionHubRouter.get("/module-of-the-day", (req, res) => {
 // Public consumer-facing endpoint: integration docs, install commands,
 // links to npmjs.com. Single source of truth so frontend SDK pages,
 // docs site, and partner integrations agree on what's published.
-aevionHubRouter.get("/sdks", (_req, res) => {
+//
+// Enriches each entry with live npm stats (last-week downloads +
+// lastPublished timestamp). Stats are cached in-memory for 1 hour
+// since npm download counts update once daily — no need to hammer.
+// If the npm API is slow or down, we serve the static fallback so the
+// endpoint stays available; stats fields just become null.
+
+interface SdkStats {
+  downloadsLastWeek: number | null;
+  lastPublished: string | null;
+  fetchedAt: string;
+}
+
+const SDK_STATS_CACHE = new Map<string, { stats: SdkStats; expiresAt: number }>();
+const SDK_STATS_TTL_MS = 3600 * 1000; // 1h
+
+async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
+  const cached = SDK_STATS_CACHE.get(pkgName);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) return cached.stats;
+
+  const stats: SdkStats = { downloadsLastWeek: null, lastPublished: null, fetchedAt: new Date().toISOString() };
+  const enc = encodeURIComponent(pkgName);
+
+  // Two parallel requests, 2.5s each — total stays under 3s P95.
+  const ac = AbortSignal.timeout(2500);
+  const [dlRes, regRes] = await Promise.allSettled([
+    fetch(`https://api.npmjs.org/downloads/point/last-week/${enc}`, { signal: ac }),
+    fetch(`https://registry.npmjs.org/${enc}`, { signal: ac }),
+  ]);
+
+  if (dlRes.status === "fulfilled" && dlRes.value.ok) {
+    try {
+      const j = await dlRes.value.json() as { downloads?: number };
+      if (typeof j.downloads === "number") stats.downloadsLastWeek = j.downloads;
+    } catch { /* leave null */ }
+  }
+  if (regRes.status === "fulfilled" && regRes.value.ok) {
+    try {
+      const j = await regRes.value.json() as { modified?: string };
+      if (typeof j.modified === "string") stats.lastPublished = j.modified;
+    } catch { /* leave null */ }
+  }
+
+  SDK_STATS_CACHE.set(pkgName, { stats, expiresAt: now + SDK_STATS_TTL_MS });
+  return stats;
+}
+
+aevionHubRouter.get("/sdks", async (req, res) => {
   const sdks = [
     {
       id: "fintech-sdk",
@@ -834,10 +882,30 @@ aevionHubRouter.get("/sdks", (_req, res) => {
     },
   ];
 
+  // ?stats=0 disables enrichment (cheap path for orchestrator smokes).
+  const wantStats = String(req.query.stats ?? "1") !== "0";
+
+  let enriched: Array<typeof sdks[number] & Partial<SdkStats>> = sdks;
+  let totalDownloadsLastWeek: number | null = null;
+
+  if (wantStats) {
+    const stats = await Promise.all(sdks.map((s) => fetchSdkStats(s.name).catch(() => null)));
+    enriched = sdks.map((sdk, i) => ({
+      ...sdk,
+      downloadsLastWeek: stats[i]?.downloadsLastWeek ?? null,
+      lastPublished: stats[i]?.lastPublished ?? null,
+    }));
+    totalDownloadsLastWeek = stats.reduce(
+      (sum, s) => (sum === null ? null : (s?.downloadsLastWeek ?? 0) + sum),
+      0 as number | null,
+    );
+  }
+
   res.set("Cache-Control", "public, max-age=300");
   res.json({
     total: sdks.length,
-    sdks,
+    sdks: enriched,
+    totalDownloadsLastWeek,
     docs: "https://github.com/Dossymbek281078/AEVION",
     generatedAt: new Date().toISOString(),
   });

@@ -28,13 +28,29 @@ interface SDK {
   tarball: string;
   modules: string[];
   license: string;
+  /** Optional npm-enriched fields (returned when ?stats=1, default). */
+  downloadsLastWeek?: number | null;
+  lastPublished?: string | null;
 }
 
 interface SdksResponse {
   total: number;
   sdks: SDK[];
+  totalDownloadsLastWeek?: number | null;
   docs: string;
   generatedAt: string;
+}
+
+function formatRelativeDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const days = Math.floor((Date.now() - t) / 86_400_000);
+  if (days < 1) return "today";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 async function fetchSdks(): Promise<SdksResponse | null> {
@@ -81,6 +97,12 @@ export default async function SdksPage() {
             ? `${data.total} официально опубликованных TypeScript-пакета на npm, покрывающих экосистему AEVION. Zero-dep, strict-typed, готовы к prod.`
             : "TypeScript-клиенты для AEVION экосистемы (загрузка списка временно недоступна — попробуйте обновить страницу)."}
         </p>
+
+        {data && typeof data.totalDownloadsLastWeek === "number" && data.totalDownloadsLastWeek > 0 && (
+          <p style={{ fontSize: 13, color: "#0d9488", marginBottom: 24, fontWeight: 600 }}>
+            🚀 {data.totalDownloadsLastWeek.toLocaleString("ru-RU")} установок за прошлую неделю (npm)
+          </p>
+        )}
 
         {!data && (
           <div
@@ -177,6 +199,17 @@ export default async function SdksPage() {
                           {m}
                         </span>
                       ))}
+                    </div>
+                  )}
+
+                  {(typeof sdk.downloadsLastWeek === "number" || sdk.lastPublished) && (
+                    <div style={{ display: "flex", gap: 14, fontSize: 12, color: "#64748b", paddingTop: 6, borderTop: "1px solid rgba(15,23,42,0.06)" }}>
+                      {typeof sdk.downloadsLastWeek === "number" && (
+                        <span><strong style={{ color: "#0f172a" }}>{sdk.downloadsLastWeek.toLocaleString("ru-RU")}</strong> downloads/wk</span>
+                      )}
+                      {formatRelativeDate(sdk.lastPublished) && (
+                        <span>updated {formatRelativeDate(sdk.lastPublished)}</span>
+                      )}
                     </div>
                   )}
 

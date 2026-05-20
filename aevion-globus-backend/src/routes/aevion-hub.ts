@@ -839,7 +839,10 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
     } catch { /* leave null */ }
   }
 
-  SDK_STATS_CACHE.set(pkgName, { stats, expiresAt: now + SDK_STATS_TTL_MS });
+  // Only cache successful fetches for the full hour. If npm was slow this
+  // call, cache for 60s so we retry sooner instead of serving null for 1h.
+  const ok = stats.downloadsLastWeek !== null && stats.lastPublished !== null;
+  SDK_STATS_CACHE.set(pkgName, { stats, expiresAt: now + (ok ? SDK_STATS_TTL_MS : 60_000) });
   return stats;
 }
 

@@ -112,6 +112,11 @@ export default function AccountPage() {
   const [revokingAll, setRevokingAll] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [sub, setSub] = useState<{
+    tierId: string; period: string; seats: number;
+    validUntil: string | null; trialDays: number; amountUsd: number | null;
+    source: string | null; createdAt: string;
+  } | null>(null);
 
   const authHeaders = useCallback((): HeadersInit => {
     try {
@@ -135,10 +140,11 @@ export default function AccountPage() {
     }
     setLoading(true);
     try {
-      const [meRes, sessRes, auditRes] = await Promise.all([
+      const [meRes, sessRes, auditRes, subRes] = await Promise.all([
         fetch(apiUrl("/api/auth/me"), { headers: authHeaders() }),
         fetch(apiUrl("/api/auth/sessions"), { headers: authHeaders() }),
         fetch(apiUrl("/api/auth/me/audit?limit=50"), { headers: authHeaders() }),
+        fetch(apiUrl("/api/pricing/subscription/me"), { headers: authHeaders() }),
       ]);
       if (meRes.ok) {
         const d = await meRes.json();
@@ -158,6 +164,10 @@ export default function AccountPage() {
       if (auditRes.ok) {
         const d = await auditRes.json();
         setAudit(d.items || []);
+      }
+      if (subRes.ok) {
+        const d = await subRes.json();
+        setSub(d.subscription ?? null);
       }
     } catch {
       /* silent */
@@ -521,6 +531,57 @@ export default function AccountPage() {
                 >
                   {pwdBusy ? "Changing…" : "Change password"}
                 </button>
+              </div>
+
+              {/* Subscription */}
+              <div style={card}>
+                <h2 style={{ margin: 0, marginBottom: 12, fontSize: 16, fontWeight: 800 }}>Subscription</h2>
+                {sub ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <div style={labelStyle}>Plan</div>
+                      <span style={{ fontWeight: 800, textTransform: "capitalize", color: "#0d9488" }}>
+                        {sub.tierId}
+                      </span>
+                    </div>
+                    <div>
+                      <div style={labelStyle}>Billing</div>
+                      <span style={{ textTransform: "capitalize" }}>{sub.period}</span>
+                    </div>
+                    {sub.seats > 1 && (
+                      <div>
+                        <div style={labelStyle}>Seats</div>
+                        <span>{sub.seats}</span>
+                      </div>
+                    )}
+                    {sub.amountUsd !== null && (
+                      <div>
+                        <div style={labelStyle}>Amount</div>
+                        <span>${sub.amountUsd.toLocaleString("en-US")}</span>
+                      </div>
+                    )}
+                    {sub.validUntil && (
+                      <div>
+                        <div style={labelStyle}>Valid until</div>
+                        <span>{new Date(sub.validUntil).toLocaleDateString("ru-RU")}</span>
+                      </div>
+                    )}
+                    <div>
+                      <div style={labelStyle}>Since</div>
+                      <span>{new Date(sub.createdAt).toLocaleDateString("ru-RU")}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                    <span style={{ fontSize: 13, color: "#64748b" }}>Free plan — no active subscription.</span>
+                    <Link
+                      href="/pricing"
+                      style={{ padding: "6px 16px", background: "#0d9488", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 13 }}
+                    >
+                      Upgrade
+                    </Link>
+                  </div>
+                )}
               </div>
 
               {/* Sessions */}

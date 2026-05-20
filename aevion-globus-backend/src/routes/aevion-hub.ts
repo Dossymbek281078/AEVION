@@ -810,13 +810,20 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   const stats: SdkStats = { downloadsLastWeek: null, lastPublished: null, fetchedAt: new Date().toISOString() };
   const enc = encodeURIComponent(pkgName);
 
-  // Two parallel requests, 4s each — Railway egress can be slow on the
-  // full /<pkg> registry payload (50-100KB JSON), so we give it more room.
-  // Total stays under 5s P95.
-  const ac = AbortSignal.timeout(4000);
+  // Two parallel requests, 5s each — Railway egress can be slow on the
+  // full /<pkg> registry payload (~12KB JSON), and some npm CDN edges
+  // are picky about the User-Agent header for non-browser clients.
+  const ac = AbortSignal.timeout(5000);
+  const fetchOpts = {
+    signal: ac,
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "aevion-hub/1.0 (+https://github.com/Dossymbek281078/AEVION)",
+    },
+  };
   const [dlRes, regRes] = await Promise.allSettled([
-    fetch(`https://api.npmjs.org/downloads/point/last-week/${enc}`, { signal: ac }),
-    fetch(`https://registry.npmjs.org/${enc}`, { signal: ac }),
+    fetch(`https://api.npmjs.org/downloads/point/last-week/${enc}`, fetchOpts),
+    fetch(`https://registry.npmjs.org/${enc}`, fetchOpts),
   ]);
 
   if (dlRes.status === "fulfilled" && dlRes.value.ok) {

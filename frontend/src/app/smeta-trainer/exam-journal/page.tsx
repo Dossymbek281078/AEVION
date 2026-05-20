@@ -122,6 +122,12 @@ export default function ExamJournalPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Link
+              href="/smeta-trainer/exam-analytics"
+              className="px-3 py-1.5 text-xs border border-slate-300 rounded hover:bg-slate-100"
+            >
+              📊 Аналитика
+            </Link>
             <button
               onClick={handleExport}
               disabled={attempts.length === 0}

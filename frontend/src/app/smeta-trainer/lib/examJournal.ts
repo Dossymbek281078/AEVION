@@ -97,6 +97,16 @@ export function bestAttempt(taskId: string): ExamAttempt | null {
   return all.reduce((best, a) => (a.score > best.score ? a : best));
 }
 
+/** Сколько уже было неудачных попыток (<70) по этому заданию. */
+export function failedAttemptsCount(taskId: string, threshold = 70): number {
+  return safeRead().filter((a) => a.taskId === taskId && a.score < threshold).length;
+}
+
+/** Сколько вообще попыток по заданию (для подсказок и метрик). */
+export function attemptsForTask(taskId: string): number {
+  return safeRead().filter((a) => a.taskId === taskId).length;
+}
+
 export function bestScores(): Record<string, number> {
   const out: Record<string, number> = {};
   for (const a of safeRead()) {

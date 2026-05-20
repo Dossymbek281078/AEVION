@@ -1419,6 +1419,10 @@ export default function CyberChessPage(){
   // spectatorStreams — Set unique gameId (persist в localStorage)
   const[spectatorStreams,sSpectatorStreams]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_spectator_streams_v1")||"0")||0}catch{return 0}});
   useEffect(()=>{try{localStorage.setItem("cc_spectator_streams_v1",String(spectatorStreams))}catch{}},[spectatorStreams]);
+  const[acCleanGames,sAcCleanGames]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_ac_clean_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("cc_ac_clean_v1",String(acCleanGames))}catch{}},[acCleanGames]);
+  const[obsStreamed,sObsStreamed]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_obs_streamed_v1")||"0")||0}catch{return 0}});
+  useEffect(()=>{try{localStorage.setItem("cc_obs_streamed_v1",String(obsStreamed))}catch{}},[obsStreamed]);
   const lastTrackedSpectatorIdRef=useRef<string|null>(null);
   useEffect(()=>{
     if(!spectatorPublish||!spectatorGameIdRef.current)return;
@@ -1497,7 +1501,8 @@ export default function CyberChessPage(){
     lifetimeChessy: chessy.lifetime,
     matchmakingWins, spectatorStreams, replayViews,
     personalitiesTried, personalityWins, fideOpened,
-  }),[totalGames, sts.w, pzSolvedCount, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime, matchmakingWins, spectatorStreams, replayViews, personalitiesTried, personalityWins, fideOpened]);
+    acCleanGames, obsStreamed,
+  }),[totalGames, sts.w, pzSolvedCount, rat, variantStats, coachUsedCount, repertoire, ecosystemVisits, loginStreak, chessy.lifetime, matchmakingWins, spectatorStreams, replayViews, personalitiesTried, personalityWins, fideOpened, acCleanGames, obsStreamed]);
   useEffect(()=>{
     const newly=findNewlyUnlocked(chessy.ach,achContext);
     for(const a of newly){
@@ -2443,6 +2448,8 @@ export default function CyberChessPage(){
       const result=analyzeGameForCheating(snap,pCol,fideEst,behaviorSummary,`game-${gameStartTimeRef.current}`);
       updateSessionBaseline(result);
       sAcResult(result);
+      if(result.verdict==="clean"||result.verdict==="unusual"){sAcCleanGames(n=>n+1);}
+      else{sAcCleanGames(()=>0);} // reset streak on suspicious/flagged
       // Auto-show panel for suspicious/flagged results; clean/unusual only on demand
       if(result.verdict==="suspicious"||result.verdict==="flagged"){
         sShowAcPanel(true);
@@ -5405,8 +5412,8 @@ export default function CyberChessPage(){
           {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
           {label:"🏆 Достижения",hint:"Каталог + прогресс",onClick:()=>sShowAchievements(true)},
           {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время, FIDE",onClick:()=>sShowStatsDashboard(true)},
-          {label:spectatorPublish?"📡 Стрим ON":"📡 Стрим",hint:spectatorPublish?"Партия публикуется зрителям — клик чтобы остановить":"Включить стрим партии для зрителей",onClick:()=>sSpectatorPublish(v=>!v)},
-          ...(matchmakingId?[{label:"📡 P2P LIVE",hint:`Матч транслируется зрителям + VoiceCoach комментарий. Ссылка: /cyberchess/spectator/${mmSpectatorGameIdRef.current||`mm_${matchmakingId}`}`,onClick:()=>{const gid=mmSpectatorGameIdRef.current||`mm_${matchmakingId}`;navigator.clipboard?.writeText(`${window.location.origin}/cyberchess/spectator/${gid}`).catch(()=>{});showToast("Ссылка скопирована","success")}}]:[]),
+          {label:spectatorPublish?"📡 Стрим ON":"📡 Стрим",hint:spectatorPublish?"Партия публикуется зрителям — клик чтобы остановить":"Включить стрим партии для зрителей",onClick:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
+          ...(matchmakingId?[{label:"📡 P2P LIVE",hint:`Матч транслируется зрителям + VoiceCoach комментарий. Ссылка: /cyberchess/spectator/${mmSpectatorGameIdRef.current||`mm_${matchmakingId}`}`,onClick:()=>{const gid=mmSpectatorGameIdRef.current||`mm_${matchmakingId}`;navigator.clipboard?.writeText(`${window.location.origin}/cyberchess/spectator/${gid}`).catch(()=>{});sObsStreamed(n=>n+1);showToast("Ссылка скопирована","success")}}]:[]),
           {label:"👀 Смотреть",hint:"Открыть hub live-партий других игроков",onClick:()=>{window.location.href="/cyberchess/spectator"}},
           {label:"🎞 Replays",hint:"Архив завершённых трансляций (50 LRU)",onClick:()=>{window.location.href="/cyberchess/replays"}},
           {label:"🤝 Найти соперника",hint:"Real-player matchmaking — очередь по рейтингу + time control",onClick:()=>{window.location.href="/cyberchess/matchmaking"}},
@@ -7079,9 +7086,9 @@ export default function CyberChessPage(){
                   const isActivePair=wIsBrowsed||bIsBrowsed||wIsPreview||bIsPreview;
                   const wEval=analysis[wIdx];const bEval=analysis[bIdx];
                   const wQ=wEval?.quality;const bQ=bEval?.quality;
-                  // Realtime quality badges — выразительные emoji + цвет per category
-                  const qIcon=(q?:string)=>q==="blunder"?"💀":q==="mistake"?"❌":q==="inacc"?"⚠":q==="great"?"⭐":"";
-                  const qColor=(q?:string)=>q==="blunder"?T.danger:q==="mistake"?"#ea580c":q==="inacc"?"#ca8a04":q==="great"?T.accent:"";
+                  // Realtime quality badges — symbol + colour per category
+                  const qIcon=(q?:string)=>q==="blunder"?"??":q==="mistake"?"?":q==="inacc"?"?!":q==="good"?"✓":q==="great"?"⭐":"";
+                  const qColor=(q?:string)=>q==="blunder"?"#ef4444":q==="mistake"?"#f97316":q==="inacc"?"#6366f1":q==="good"?"#10b981":q==="great"?"#f59e0b":"";
                   // Hover-scrub: snapshot canonical state on first enter, then preview.
                   // Click promotes preview to canonical (browseIdx) and clears the snapshot.
                   // GATED: disabled during an active live game (when `on && !over` — i.e. clock is
@@ -7163,6 +7170,17 @@ export default function CyberChessPage(){
                 </div>
               </div>}
             </div>
+            {analysis.length>0&&hist.length>0&&<div style={{padding:"4px 10px 5px",borderTop:`1px solid ${CC.border}`,fontSize:11,color:CC.textDim,lineHeight:1.6,display:"flex",flexWrap:"wrap",gap:"0 8px"}}>
+              <span style={{color:"#f59e0b",fontWeight:800}}>⭐</span><span>отлично</span>
+              <span style={{color:CC.textMute}}>·</span>
+              <span style={{color:"#10b981",fontWeight:800}}>✓</span><span>хорошо</span>
+              <span style={{color:CC.textMute}}>·</span>
+              <span style={{color:"#6366f1",fontWeight:800}}>?!</span><span>неточность</span>
+              <span style={{color:CC.textMute}}>·</span>
+              <span style={{color:"#f97316",fontWeight:800}}>?</span><span>ошибка</span>
+              <span style={{color:CC.textMute}}>·</span>
+              <span style={{color:"#ef4444",fontWeight:800}}>??</span><span>зевок</span>
+            </div>}
           </div>
 
           {/* Scratch / Analysis-during-play — relocated here per UX feedback (was above

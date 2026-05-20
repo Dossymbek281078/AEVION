@@ -251,10 +251,13 @@ export default function SpectatorHubPage() {
           >
             {games.map((g) => {
               const id = g.gameId;
+              const isP2P = id.startsWith("mm_");
               const ai =
-                g.aiLevel !== undefined && g.aiLevel !== null
-                  ? `AI ${g.aiLevel}`
-                  : "AI ?";
+                isP2P
+                  ? "Real vs Real"
+                  : g.aiLevel !== undefined && g.aiLevel !== null
+                    ? `AI ${g.aiLevel}`
+                    : "AI ?";
               const rating = g.rating ? `${g.rating}` : "—";
               const viewers = g.viewers ?? 0;
               const moves = g.histCount ?? 0;
@@ -322,26 +325,67 @@ export default function SpectatorHubPage() {
                     {/* host */}
                     <div
                       style={{
-                        fontSize: 16,
-                        fontWeight: 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
                         marginBottom: 4,
                         paddingRight: 70,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
                       }}
                     >
-                      {g.hostName || "Аноним"}
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 600,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        {g.hostName || "Аноним"}
+                      </div>
+                      {isP2P && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: "2px 7px",
+                            borderRadius: 4,
+                            background: "rgba(245,158,11,0.15)",
+                            color: "#f59e0b",
+                            border: "1px solid rgba(245,158,11,0.4)",
+                            whiteSpace: "nowrap",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {t("match.p2p_badge")}
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{
                         fontSize: 12,
                         color: T.textDim,
-                        marginBottom: 14,
+                        marginBottom: isP2P ? 6 : 14,
                       }}
                     >
                       {ai} · рейтинг {rating}
                     </div>
+                    {isP2P && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#f59e0b",
+                          marginBottom: 14,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        🎙 VoiceCoach
+                      </div>
+                    )}
 
                     {/* meta grid */}
                     <div

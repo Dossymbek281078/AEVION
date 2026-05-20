@@ -48,6 +48,8 @@ export type AchievementContext = {
   personalitiesTried?: number;
   personalityWins?: number;
   fideOpened?: number;
+  acCleanGames?: number;
+  obsStreamed?: number;
 };
 
 export const ACHIEVEMENTS: Achievement[] = [
@@ -101,6 +103,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "personality_try_all",title: "Полиглот шахмат",desc: "Попробуй все 10 AI personalities",         icon: "🌟", category: "social", reward: 200, target: 10 },
   { id: "personality_win_1",  title: "Победил легенду",desc: "Победи AI с personality (Magnus/Hikaru/...)",icon:"🏆",category: "social", reward: 80, target: 1 },
   { id: "fide_check",         title: "Калибровка",     desc: "Открой FIDE-оценку своей силы",            icon: "📐", category: "social", reward: 15, target: 1 },
+  { id: "ac_clean_1",   title: "Честная игра",      desc: "Заверши партию с вердиктом 'Чисто' от анти-чит системы", icon: "🛡", category: "social", reward: 30,  target: 1  },
+  { id: "ac_clean_5",   title: "Рыцарь чести",       desc: "5 партий подряд без подозрений",                          icon: "⚔",  category: "social", reward: 100, target: 5  },
+  { id: "ac_clean_20",  title: "Безупречный игрок",  desc: "20 чистых партий — настоящий спортсмен",                 icon: "🏅", category: "social", reward: 300, target: 20 },
+  { id: "obs_stream_1", title: "Первый эфир",         desc: "Скопируй OBS overlay ссылку или выйди в стрим",          icon: "📺", category: "social", reward: 40,  target: 1  },
 ];
 
 export const CATEGORIES: { id: AchievementCategory | "all"; label: string }[] = [
@@ -148,6 +154,10 @@ export function progressOf(ach: Achievement, ctx: AchievementContext): number {
     case "personality_try_all":return ctx.personalitiesTried ?? 0;
     case "personality_win_1":  return ctx.personalityWins ?? 0;
     case "fide_check":         return ctx.fideOpened ?? 0;
+    case "ac_clean_1":
+    case "ac_clean_5":
+    case "ac_clean_20": return ctx.acCleanGames ?? 0;
+    case "obs_stream_1": return ctx.obsStreamed ?? 0;
     default: return 0;
   }
 }

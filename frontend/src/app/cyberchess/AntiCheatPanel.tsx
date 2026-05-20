@@ -1,6 +1,7 @@
 "use client";
 
 import { type AntiCheatResult, type AntiCheatSignal } from "./anticheat";
+import { useCcI18n } from "./i18n";
 
 type Props = {
   open: boolean;
@@ -21,12 +22,12 @@ function scoreColor(score: number): string {
   return "#ef4444";
 }
 
-function verdictLabel(verdict: AntiCheatResult["verdict"]): string {
+function verdictLabel(verdict: AntiCheatResult["verdict"], t: (key: string) => string): string {
   switch (verdict) {
-    case "clean":      return "✓ ЧИСТО";
-    case "unusual":    return "⚠ НЕСТАНДАРТНО";
-    case "suspicious": return "⚠ ПОДОЗРИТЕЛЬНО";
-    case "flagged":    return "🚨 НАРУШЕНИЕ";
+    case "clean":      return `✓ ${t("ac.verdict.clean").toUpperCase()}`;
+    case "unusual":    return `⚠ ${t("ac.verdict.unusual").toUpperCase()}`;
+    case "suspicious": return `⚠ ${t("ac.verdict.suspicious").toUpperCase()}`;
+    case "flagged":    return `🚨 ${t("ac.verdict.flagged").toUpperCase()}`;
   }
 }
 
@@ -39,12 +40,12 @@ function verdictColor(verdict: AntiCheatResult["verdict"]): string {
   }
 }
 
-function confidenceLabel(c: AntiCheatResult["confidence"]): string {
+function confidenceLabel(c: AntiCheatResult["confidence"], t: (key: string) => string): string {
   switch (c) {
-    case "insufficient": return "Недостаточно данных";
-    case "low":          return "Низкая уверенность";
-    case "medium":       return "Средняя уверенность";
-    case "high":         return "Высокая уверенность";
+    case "insufficient": return t("ac.confidence.insufficient");
+    case "low":          return t("ac.confidence.low");
+    case "medium":       return t("ac.confidence.medium");
+    case "high":         return t("ac.confidence.high");
   }
 }
 
@@ -64,6 +65,7 @@ export default function AntiCheatPanel({
   open, onClose, result,
   surface1, surface2, border, text, textDim, accent,
 }: Props) {
+  const { t } = useCcI18n();
   if (!open || !result) return null;
 
   const { suspicionScore, verdict, confidence, signals, stats, fenCopyDetected } = result;
@@ -178,13 +180,13 @@ export default function AntiCheatPanel({
               color: verdictColor(verdict), border: `1px solid ${verdictColor(verdict)}55`,
               borderRadius: "999px", padding: "3px 12px", fontSize: "13px", fontWeight: 700,
             }}>
-              {verdictLabel(verdict)}
+              {verdictLabel(verdict, t)}
             </span>
             <span style={{
               background: surface1, border: `1px solid ${border}`,
               borderRadius: "999px", padding: "3px 10px", fontSize: "12px", color: textDim,
             }}>
-              {confidenceLabel(confidence)}
+              {confidenceLabel(confidence, t)}
             </span>
             {(stats.sessionGamesCount ?? 0) > 0 && (
               <span style={{ fontSize: "12px", color: textDim }}>

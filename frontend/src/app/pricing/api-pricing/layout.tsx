@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "Per-call билинг: $0.30/1k проверок подписи, $15/1k регистраций IP, $0.50/1k LLM-токенов. Free quota на каждом endpoint.",
     type: "website",
-    url: "https://aevion.app/pricing/api-pricing",
+    url: "https://aevion.io/pricing/api-pricing",
     siteName: "AEVION",
   },
   twitter: {

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "Что добавили / изменили / убрали в тарифах AEVION. Хронология с группировкой по месяцам и фильтром.",
     type: "website",
-    url: "https://aevion.app/pricing/changelog",
+    url: "https://aevion.io/pricing/changelog",
     siteName: "AEVION",
   },
   twitter: {

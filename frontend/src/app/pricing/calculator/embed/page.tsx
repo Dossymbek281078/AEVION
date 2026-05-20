@@ -55,7 +55,7 @@ interface Quote {
 }
 
 const SITE_ORIGIN =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.io";
 
 export default function PricingCalculatorEmbedPage() {
   const [data, setData] = useState<PricingPayload | null>(null);
@@ -141,7 +141,7 @@ export default function PricingCalculatorEmbedPage() {
   // Optional: dynamic resize
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'aevion-calc-height') {
-      var iframe = document.querySelector('iframe[src*="aevion.app/pricing/calculator"]');
+      var iframe = document.querySelector('iframe[src*="aevion.io/pricing/calculator"]');
       if (iframe && e.data.height) iframe.style.height = (e.data.height + 20) + 'px';
     }
   });

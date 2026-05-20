@@ -1,4 +1,4 @@
-# `@aevion/catalog-client` — Usage Guide (v0.7+)
+# `@aevion-io/catalog-client` — Usage Guide (v0.7+)
 
 > Comprehensive cookbook for the AEVION Hub TypeScript SDK.
 >
@@ -22,13 +22,13 @@
 
 ```bash
 # npm
-npm install @aevion/catalog-client
+npm install @aevion-io/catalog-client
 
 # pnpm
-pnpm add @aevion/catalog-client
+pnpm add @aevion-io/catalog-client
 
 # yarn
-yarn add @aevion/catalog-client
+yarn add @aevion-io/catalog-client
 ```
 
 Inside the AEVION monorepo, the package is wired as a workspace `file:` dep on
@@ -37,7 +37,7 @@ TypeScript source — no rebuild step needed when editing the SDK.
 
 ```ts
 // Anywhere in `frontend/`:
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 ```
 
 ## 2. Import patterns
@@ -46,7 +46,7 @@ The SDK has three import shapes, pick whichever fits the call-site:
 
 ```ts
 // (a) Class — pass config, create once, reuse across the surface.
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 
 // (b) Singleton convenience helpers — shortest path for one-off calls
@@ -59,12 +59,12 @@ import {
   getQStoreFeatured,
   getMyCoachGoals,
   qcoreaiChat,
-} from "@aevion/catalog-client";
+} from "@aevion-io/catalog-client";
 
 const live = await listCatalog({ status: "mvp" });
 
 // (c) Default export — `AevionCatalog` itself.
-import AevionCatalog from "@aevion/catalog-client";
+import AevionCatalog from "@aevion-io/catalog-client";
 ```
 
 Type imports are available alongside every value:
@@ -79,7 +79,7 @@ import type {
   CoachGoal,
   QCoreAIChatRequest,
   PlanetActivityItem,
-} from "@aevion/catalog-client";
+} from "@aevion-io/catalog-client";
 ```
 
 ---
@@ -97,7 +97,7 @@ unauthenticated call:
 ```tsx
 // frontend/src/app/qstore/page.tsx
 import { catalog } from "@/lib/aevionCatalog";
-import type { QStoreFeaturedResponse } from "@aevion/catalog-client";
+import type { QStoreFeaturedResponse } from "@aevion-io/catalog-client";
 
 export default async function QStorePage() {
   const featured: QStoreFeaturedResponse = await catalog.qstore.featured({ limit: 8 });
@@ -119,7 +119,7 @@ export default async function QStorePage() {
 "use client";
 import { useEffect, useState } from "react";
 import { catalogWithToken, getAuthToken } from "@/lib/aevionCatalog";
-import type { QLearnProgress } from "@aevion/catalog-client";
+import type { QLearnProgress } from "@aevion-io/catalog-client";
 
 export default function MyLearningPage() {
   const [progress, setProgress] = useState<QLearnProgress | null>(null);
@@ -135,7 +135,7 @@ export default function MyLearningPage() {
 ### 3.3 Custom client for tests, SSR, or alternative backends
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const staging = new AevionCatalog({
   baseUrl: "https://staging.api.aevion.app",
@@ -291,7 +291,7 @@ class QLearnClient {
 "use client";
 import { useEffect, useState } from "react";
 import { catalogWithToken, getAuthToken } from "@/lib/aevionCatalog";
-import type { QLearnStreak } from "@aevion/catalog-client";
+import type { QLearnStreak } from "@aevion-io/catalog-client";
 
 export function StreakChip() {
   const [s, setS] = useState<QLearnStreak | null>(null);
@@ -540,7 +540,7 @@ class CoachClient {
 "use client";
 import { useEffect, useState } from "react";
 import { catalogWithToken, getAuthToken } from "@/lib/aevionCatalog";
-import type { CoachGoal } from "@aevion/catalog-client";
+import type { CoachGoal } from "@aevion-io/catalog-client";
 
 export function CoachDashboard() {
   const [open, setOpen] = useState<CoachGoal[]>([]);
@@ -611,7 +611,7 @@ The frontend's singleton helper does this for you:
 
 ```ts
 // frontend/src/lib/aevionCatalog.ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 import { getApiBase } from "@/lib/apiBase";
 import { getAuthToken as getAuthTokenCanonical } from "@/lib/auth";
 
@@ -760,7 +760,7 @@ No code changes required. Just bump:
 // package.json
 {
   "dependencies": {
-    "@aevion/catalog-client": "^0.7.0"
+    "@aevion-io/catalog-client": "^0.7.0"
   }
 }
 ```

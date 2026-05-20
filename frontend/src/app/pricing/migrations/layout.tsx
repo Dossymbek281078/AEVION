@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "AEVION Migration Guides",
     description: "DocuSign → QSign · OpenAI → QCoreAI · Stripe → QPayNet · Patently → IP Bureau",
     type: "website",
-    url: "https://aevion.app/pricing/migrations",
+    url: "https://aevion.io/pricing/migrations",
     siteName: "AEVION",
   },
   twitter: {

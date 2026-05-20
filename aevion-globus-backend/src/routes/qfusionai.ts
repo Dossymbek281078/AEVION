@@ -10,6 +10,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import {
   callProvider,
   getProviders,
@@ -537,3 +538,23 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
     },
   });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qfusionaiRouter.get("/status", routeLimiter, (_req: Request, res: Response) => {
+  res.json({
+    module: "qfusionai",
+    code: "QFUSIONAI",
+    status: "mvp",
+    description: "Hybrid AI engine: route requests across multiple AI providers with smart selection + concept board.",
+    endpoints: {
+      health: "/api/qfusionai/health",
+      route: "/api/qfusionai/route",
+      conceptMessages: "/api/qfusionai/concept/messages",
+      conceptStats: "/api/qfusionai/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: qfusionaiRouter, moduleId: "qfusionai", defaultTag: "qfusionai", readLimit: routeLimiter, writeLimit: routeLimiter });

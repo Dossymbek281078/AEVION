@@ -84,7 +84,7 @@ const CARDS = [
     href: "/api-explorer/sdk",
     title: "SDK playground",
     blurb:
-      "Live demo of every @aevion/catalog-client method via dropdown. Pick a method, see the request, the response and the exact TypeScript snippet to copy.",
+      "Live demo of every @aevion-io/catalog-client method via dropdown. Pick a method, see the request, the response and the exact TypeScript snippet to copy.",
     cta: "Open SDK playground",
     accent: "#3b82f6",
   },
@@ -307,7 +307,7 @@ export default async function ApiExplorerIndexPage() {
               lineHeight: 1.5,
               overflow: "auto",
             }}
-          >{`import { AevionCatalog } from "@aevion/catalog-client";
+          >{`import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const { items } = await cat.list({ status: "mvp" });

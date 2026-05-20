@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureDeepSanTables, isDeepSanDbReady } from "../lib/ensureDeepSanTables";
 
@@ -410,3 +411,24 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
     streakDays: streak,
   });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+deepSanRouter.get("/status", limiter, (_req: Request, res: Response) => {
+  res.json({
+    module: "deepsan",
+    code: "DEEPSAN",
+    status: "mvp",
+    description: "Anti-chaos: Kanban + Pomodoro + focus sessions + concept board.",
+    endpoints: {
+      tasks: "/api/deepsan/tasks",
+      sessions: "/api/deepsan/sessions",
+      stats: "/api/deepsan/stats",
+      conceptMessages: "/api/deepsan/concept/messages",
+      conceptStats: "/api/deepsan/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: deepSanRouter, moduleId: "deepsan", defaultTag: "deepsan", readLimit: limiter, writeLimit: limiter });

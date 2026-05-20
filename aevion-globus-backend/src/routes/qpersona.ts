@@ -13,6 +13,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { ensureQPersonaTables, isQPersonaDbReady, getQPersonaDbError } from "../lib/ensureQPersonaTables";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
@@ -377,3 +378,24 @@ qpersonaRouter.post("/personas/:alias/ai-bio", aiLimit, async (req: Request, res
     res.status(500).json({ ok: false, error: e?.message || "AI bio generation failed" });
   }
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qpersonaRouter.get("/status", readLimit, (_req: Request, res: Response) => {
+  res.json({
+    module: "qpersona",
+    code: "QPERSONA",
+    status: "mvp",
+    description: "AI-generated public persona built on verified content (QSign + QRight).",
+    endpoints: {
+      health: "/api/qpersona/health",
+      stats: "/api/qpersona/stats",
+      personas: "/api/qpersona/personas",
+      conceptMessages: "/api/qpersona/concept/messages",
+      conceptStats: "/api/qpersona/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: qpersonaRouter, moduleId: "qpersona", defaultTag: "qpersona", readLimit, writeLimit });

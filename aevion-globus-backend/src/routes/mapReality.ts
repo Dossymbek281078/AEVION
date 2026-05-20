@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureMapRealityTables, isMapRealityDbReady } from "../lib/ensureMapRealityTables";
 
@@ -262,7 +263,7 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
 
   try {
     if (isMapRealityDbReady()) {
-      const { rows } = await pool.query<Signal & { distance_km: number }>(
+      const _qResult = await pool.query(
         `SELECT *,
            (6371 * acos(
              cos(radians($1)) * cos(radians(lat)) *
@@ -280,6 +281,7 @@ mapRealityRouter.get("/signals/nearby", async (req: Request, res: Response) => {
          LIMIT $4`,
         [lat, lng, radius, limit],
       );
+      const rows = _qResult.rows;
       return res.json({
         success: true,
         data: { signals: rows, center: { lat, lng }, radius, count: rows.length },
@@ -479,3 +481,24 @@ mapRealityRouter.get("/stats", async (_req: Request, res: Response) => {
     backend: "memory",
   });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+mapRealityRouter.get("/status", (_req: Request, res: Response) => {
+  res.json({
+    module: "mapreality",
+    code: "MAPREALITY",
+    status: "mvp",
+    description: "AR-cartography: places overlaid with verified meta-signals (events, alerts, marks).",
+    endpoints: {
+      health: "/api/mapreality/health",
+      signals: "/api/mapreality/signals",
+      stats: "/api/mapreality/stats",
+      conceptMessages: "/api/mapreality/concept/messages",
+      conceptStats: "/api/mapreality/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: mapRealityRouter, moduleId: "mapreality", defaultTag: "mapreality", writeLimit: submitLimiter });

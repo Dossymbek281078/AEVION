@@ -4,6 +4,9 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureQStoreTables, isQStoreDbReady } from "../lib/ensureQStoreTables";
 import { applyOgEtag } from "../lib/ogEtag";
+import { PADDLE_KEY, paddlePost, paddleGet, IS_PADDLE_SANDBOX } from "../lib/paddleClient";
+
+const FRONTEND_URL = (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "https://aevion.app").replace(/\/$/, "");
 
 export const qstoreRouter = Router();
 
@@ -306,21 +309,90 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
       if (row.rows.length === 0) { res.status(404).json({ error: "Product not found" }); return; }
       const pRow = row.rows[0];
       const purchaseId = crypto.randomUUID();
+
+      // Paddle Checkout: if Paddle is configured and product has non-zero price
+      if (PADDLE_KEY() && pRow.price > 0) {
+        const currency = (pRow.currency || "KZT").toUpperCase();
+        const amountCents = currency === "KZT"
+          ? Math.round(pRow.price)       // QStore stores KZT as integer tenge
+          : Math.round(pRow.price * 100); // USD/other — cents
+
+        try {
+          // If a catalog product exists, create a price under it; else inline
+          const qstoreProductId = process.env.PADDLE_PRODUCT_QSTORE;
+          const priceBody: Record<string, unknown> = qstoreProductId
+            ? {
+                product_id: qstoreProductId,
+                description: pRow.title.slice(0, 255),
+                unit_price: { amount: String(amountCents), currency_code: currency },
+                tax_mode: "account_setting",
+              }
+            : null as unknown as Record<string, unknown>;
+
+          // For one-time QStore items we always create a fresh price (per product)
+          let resolvedPriceId: string | null = null;
+          if (qstoreProductId) {
+            const pr = await paddlePost("/prices", priceBody) as { data?: { id: string } } | null;
+            resolvedPriceId = pr?.data?.id ?? null;
+          }
+
+          const txBody: Record<string, unknown> = {
+            items: [resolvedPriceId
+              ? { price_id: resolvedPriceId, quantity: 1 }
+              : {
+                  price: {
+                    description: pRow.title.slice(0, 255),
+                    unit_price: { amount: String(amountCents), currency_code: currency },
+                    product: { name: pRow.title.slice(0, 255), tax_category: "standard" },
+                  },
+                  quantity: 1,
+                }
+            ],
+            checkout: { url: `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}` },
+            custom_data: { purchaseId, productId: pRow.id, buyerId: auth.sub, source: "qstore" },
+          };
+
+          const tx = await paddlePost("/transactions", txBody) as {
+            data?: { id: string; checkout?: { url: string } };
+          } | null;
+
+          if (tx?.data) {
+            await pool.query(
+              `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","stripeSessionId","createdAt")
+               VALUES ($1,$2,$3,$4,'pending',$5,NOW())`,
+              [purchaseId, pRow.id, auth.sub, pRow.price, tx.data.id],
+            );
+            const checkoutUrl = tx.data.checkout?.url
+              ?? `${FRONTEND_URL}/qstore?purchase=success&id=${purchaseId}`;
+            res.status(201).json({ purchaseId, checkoutUrl, mode: "paddle", status: "pending", sandbox: IS_PADDLE_SANDBOX() });
+            return;
+          }
+          console.warn("[QStore] Paddle transaction failed, falling back to direct");
+        } catch (paddleErr) {
+          console.warn("[QStore] Paddle error, falling back to direct:", paddleErr instanceof Error ? paddleErr.message : paddleErr);
+        }
+      }
+
+      // Direct purchase (free items or Stripe not configured)
       await pool.query(
-        `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","createdAt")
-         VALUES ($1,$2,$3,$4,NOW())`,
+        `INSERT INTO "QStorePurchase" ("id","productId","buyerId","amount","status","paidAt","createdAt")
+         VALUES ($1,$2,$3,$4,'paid',NOW(),NOW())`,
         [purchaseId, pRow.id, auth.sub, pRow.price],
       );
       await pool.query(
         `UPDATE "QStoreProduct" SET "salesCount" = "salesCount" + 1 WHERE "id" = $1`,
         [pRow.id],
       );
-      res.status(201).json({ purchaseId });
+      res.status(201).json({ purchaseId, mode: "direct", status: "paid" });
       return;
-    } catch {
-      // fall through
+    } catch (e) {
+      console.error("[QStore] purchase error:", e instanceof Error ? e.message : e);
+      res.status(500).json({ error: "purchase_failed" });
+      return;
     }
   }
+
+  // In-memory fallback
   const product = memProducts.get(id);
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
   const purchaseId = crypto.randomUUID();
@@ -332,7 +404,7 @@ qstoreRouter.post("/products/:id/purchase", async (req: Request, res: Response) 
     createdAt: new Date().toISOString(),
   });
   product.salesCount += 1;
-  res.status(201).json({ purchaseId });
+  res.status(201).json({ purchaseId, mode: "memory", status: "paid" });
 });
 
 // GET /api/qstore/me/purchases

@@ -5,7 +5,7 @@
  * Default BASE_URL: http://localhost:4001
  */
 
-const BASE = process.argv[2] ?? process.env.BACKEND_URL ?? "http://localhost:4001";
+const BASE = process.argv[2] ?? process.env.BASE ?? process.env.BACKEND_URL ?? "http://localhost:4001";
 const JWT  = process.env.TEST_JWT ?? ""; // optional bearer token for auth endpoints
 
 let passed = 0;

@@ -292,17 +292,22 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
       const count = await getWaitlistCount(config.id);
       if (created) {
         const emailHash = hashEmail(email);
-        const unsubToken = makeUnsubToken(config.id, emailHash);
-        // Fire-and-forget confirmation. Silently skips if SMTP isn't configured.
-        sendWaitlistConfirmation({
-          toEmail: email,
-          moduleId: config.id,
-          moduleTitle: config.title,
-          modulePhase: config.phase,
-          moduleEta: config.eta,
-          moduleDescription: config.description,
-          unsubToken,
-        });
+        try {
+          // makeUnsubToken throws in prod if WAITLIST_UNSUB_SECRET is not set;
+          // treat confirmation email as optional — signup still succeeds.
+          const unsubToken = makeUnsubToken(config.id, emailHash);
+          sendWaitlistConfirmation({
+            toEmail: email,
+            moduleId: config.id,
+            moduleTitle: config.title,
+            modulePhase: config.phase,
+            moduleEta: config.eta,
+            moduleDescription: config.description,
+            unsubToken,
+          });
+        } catch {
+          // WAITLIST_UNSUB_SECRET not configured — skip confirmation email
+        }
       }
       res.status(created ? 201 : 200).json({ ok: true, id, alreadyJoined: !created, waitlistCount: count });
     } catch {
@@ -315,7 +320,8 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
     if (!token) {
       return res.status(400).send(htmlPage("Bad request", "Параметр token отсутствует."));
     }
-    const decoded = verifyUnsubToken(token);
+    let decoded: ReturnType<typeof verifyUnsubToken>;
+    try { decoded = verifyUnsubToken(token); } catch { decoded = null; }
     if (!decoded || decoded.moduleId !== config.id) {
       return res.status(400).send(htmlPage("Invalid token", "Ссылка повреждена или относится к другому модулю."));
     }

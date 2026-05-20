@@ -12,7 +12,7 @@
  *   BACKEND_URL=https://aevion.app/api-backend node scripts/cyberchess-smoke.js
  */
 
-const BASE = (process.argv[2] ?? process.env.BACKEND_URL ?? "http://localhost:4001").replace(/\/+$/, "");
+const BASE = (process.argv[2] ?? process.env.BASE ?? process.env.BACKEND_URL ?? "http://localhost:4001").replace(/\/+$/, "");
 const DEVICE = `chess-smoke-${Date.now()}`;
 
 let passed = 0;
@@ -52,10 +52,10 @@ async function run() {
   }
   const token = r.body.token;
 
-  // 3. AEV mint (chess win via play engine)
+  // 3. AEV mint (chess win via play engine) — requires Bearer in prod
   r = await req("POST", `/api/aev/wallet/${DEVICE}/mint`, {
     amount: 1.0, sourceKind: "play", sourceModule: "cyberchess", reason: "chess-win-smoke",
-  });
+  }, token);
   if (r.status === 200 && r.body?.wallet?.balance >= 1)
     ok("AEV mint (chess win)", `balance=${r.body.wallet.balance}`);
   else fail("AEV mint", `${r.status} ${JSON.stringify(r.body)}`);

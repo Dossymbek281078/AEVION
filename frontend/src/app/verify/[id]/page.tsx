@@ -105,6 +105,7 @@ export default function VerifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
+  const aevMinted = 0; // mintAevBureauVerify removed — function was never defined
 
   useEffect(() => {
     if (!certId) return;
@@ -232,6 +233,18 @@ export default function VerifyPage() {
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
             Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
           </div>
+          {aevMinted > 0 && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 8, marginTop: 12,
+              padding: "6px 14px", borderRadius: 999,
+              background: "linear-gradient(135deg, rgba(34,211,238,0.12), rgba(168,85,247,0.10))",
+              border: "1px solid rgba(34,211,238,0.35)",
+              color: "#0e7490", fontWeight: 800, fontSize: 12,
+            }}>
+              ◆ +{aevMinted.toFixed(2)} AEV minted · Bureau verify reward
+              <a href="/aev/tokenomics" style={{ color: "#0e7490", textDecoration: "underline", fontWeight: 700 }}>see ledger →</a>
+            </div>
+          )}
         </div>
 
         {/* How to read this page */}

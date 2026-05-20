@@ -40,6 +40,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
 
@@ -357,3 +358,25 @@ ztideRouter.get("/stats", readLimit, async (_req, res) => {
     res.status(500).json({ error: "stats_failed" });
   }
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+ztideRouter.get("/status", readLimit, (_req, res) => {
+  res.json({
+    module: "z-tide",
+    code: "Z-TIDE",
+    status: "mvp",
+    description:
+      "Adaptive social-economic coordination — energy/emotion-anchored contribution scoring.",
+    endpoints: {
+      health: "/api/ztide/health",
+      stats: "/api/ztide/stats",
+      conceptMessages: "/api/ztide/concept/messages",
+      conceptStats: "/api/ztide/concept-stats",
+      leaderboard: "/api/ztide/leaderboard",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: ztideRouter, moduleId: "z-tide", defaultTag: "z-tide", readLimit, writeLimit });

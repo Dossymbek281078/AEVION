@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "Все 27 модулей × 4 тарифа в одной таблице. Что включено, что доступно как add-on, что только в Enterprise.",
     type: "website",
-    url: "https://aevion.app/pricing/compare",
+    url: "https://aevion.io/pricing/compare",
     siteName: "AEVION",
   },
   twitter: {

@@ -35,6 +35,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import rateLimit from "express-rate-limit";
@@ -849,3 +850,24 @@ qgoodRouter.post("/exercises/:id/complete", moodLimit, async (req, res) => {
   ).size;
   res.status(201).json({ ok: true, exercise_id: exerciseId, streak: uniqueDays, total_done });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qgoodRouter.get("/status", readLimit, (_req, res) => {
+  res.json({
+    module: "qgood",
+    code: "QGOOD",
+    status: "mvp",
+    description: "Psychology & mental health: mood log, AI therapist chat, 5 exercises + concept board.",
+    endpoints: {
+      mood: "/api/qgood/mood",
+      exercises: "/api/qgood/exercises",
+      stats: "/api/qgood/stats",
+      conceptMessages: "/api/qgood/concept/messages",
+      conceptStats: "/api/qgood/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: qgoodRouter, moduleId: "qgood", defaultTag: "qgood", readLimit, writeLimit: createLimit });

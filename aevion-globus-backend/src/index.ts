@@ -22,10 +22,9 @@ import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
-import { healthaiRouter } from "./routes/healthai";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
-import { provisioningRouter } from "./routes/provisioning";
+import { healthaiRouter } from "./routes/healthai";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
@@ -33,6 +32,12 @@ import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
+import cyberchessTournamentsRouter from "./routes/cyberchessTournaments";
+import cyberchessDailyRouter from "./routes/cyberchessDaily";
+import cyberchessVoiceCoachRouter from "./routes/cyberchessVoiceCoach";
+import cyberchessSpectatorRouter from "./routes/cyberchessSpectator";
+import cyberchessMatchmakingRouter from "./routes/cyberchessMatchmaking";
+import cyberchessAnticheatRouter from "./routes/cyberchessAnticheat";
 import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
@@ -42,9 +47,11 @@ import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
 import { qcontractRouter } from "./routes/qcontract";
-import { healthaiRouter } from "./routes/healthai";
 import { qfusionaiRouter } from "./routes/qfusionai";
 import { veilnetxRouter } from "./routes/veilnetx";
+import { shadownetRouter } from "./routes/shadownet";
+import { psyappDepsRouter } from "./routes/psyappDeps";
+import { lifeboxRouter } from "./routes/lifebox";
 import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
 import { mountMvpConcepts } from "./routes/mvpConcepts";
 import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
@@ -76,6 +83,9 @@ import { qeventsRouter } from "./routes/qevents";
 import { deepSanRouter } from "./routes/deepsan";
 import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
+import { revenueRouter } from "./routes/revenue";
+import { paddleRouter } from "./routes/paddle";
+import { searchRouter } from "./routes/search";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -85,6 +95,10 @@ initSentry();
 
 const app = express();
 const PORT = process.env.PORT || 4001;
+
+// Railway sits behind a reverse proxy — trust the first hop so that
+// express-rate-limit reads the real client IP from X-Forwarded-For.
+app.set("trust proxy", 1);
 
 app.use(cors());
 // 10mb to accommodate base64-encoded resume scans posted to /api/build/ai/parse-resume.
@@ -209,7 +223,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.5.0",
+      version: "0.7.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -389,6 +403,9 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/checkout/subscriptions/count": {
         get: { summary: "Total provisioned subscriptions count" },
       },
+      "/api/pricing/roadmap": {
+        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
+      },
       "/api/pricing/provisioning/history": {
         get: { summary: "Subscription history by email (?email=...) — masked PII, capped at 100" },
       },
@@ -398,9 +415,221 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/provisioning/healthz": {
         get: { summary: "Provisioning subsystem health: storage path, email mode" },
       },
-      "/api/pricing/roadmap": {
-        get: { summary: "Public roadmap for all 27 modules with phases and progress" },
+      // Revenue Hub
+      "/api/revenue/health": { get: { summary: "Revenue Hub health — Stripe/YouTube/Twitch config status" } },
+      "/api/revenue/apps": { get: { summary: "List 12 AEVION apps with monetization channels" } },
+      "/api/revenue/apps/{appId}": { get: { summary: "Single app revenue config + channel stubs" } },
+      "/api/revenue/overview": { get: { summary: "Global monetization overview — channel coverage, app counts" } },
+      "/api/revenue/stripe/balance": { get: { summary: "Stripe balance (KZT + USD)" } },
+      "/api/revenue/stripe/recent": { get: { summary: "Recent Stripe payments grouped by AEVION app" } },
+      "/api/revenue/youtube/{channelId}": { get: { summary: "YouTube AdSense stats for channel" } },
+      "/api/revenue/twitch/{login}": { get: { summary: "Twitch affiliate stats for streamer" } },
+      "/api/revenue/env-guide": { get: { summary: "Setup guide for Revenue Hub env vars" } },
+      // QLearn — courses + quizzes + progress
+      "/api/qlearn/health": { get: { summary: "QLearn health probe", security: [] } },
+      "/api/qlearn/courses": {
+        get: { summary: "List published courses (filter by category, level, lang)", security: [] },
       },
+      "/api/qlearn/courses/{id}": {
+        get: { summary: "Get single course with modules + quizzes", security: [] },
+      },
+      "/api/qlearn/progress": {
+        get: { summary: "User course progress (Bearer required)" },
+      },
+      // QEvents — events platform
+      "/api/qevents/health": { get: { summary: "QEvents health + service marker", security: [] } },
+      "/api/qevents/events": {
+        get: { summary: "List events (filter by category, when, location)", security: [] },
+        post: { summary: "Create event (Bearer required)" },
+      },
+      "/api/qevents/events/{id}": {
+        get: { summary: "Single event with attendee count", security: [] },
+      },
+      "/api/qevents/categories": {
+        get: { summary: "List event categories", security: [] },
+      },
+      // QMedia — music + video + playlists
+      "/api/qmedia/health": { get: { summary: "QMedia health + table count", security: [] } },
+      "/api/qmedia/tracks": {
+        get: { summary: "List music tracks", security: [] },
+        post: { summary: "Upload track (Bearer required)" },
+      },
+      "/api/qmedia/videos": {
+        get: { summary: "List videos", security: [] },
+      },
+      "/api/qmedia/playlists": {
+        get: { summary: "List playlists", security: [] },
+      },
+      // QAI — universal AI assistant (personas + sessions + chat)
+      "/api/qai/health": { get: { summary: "QAI health + session count", security: [] } },
+      "/api/qai/personas": {
+        get: { summary: "List built-in personas (id, name, emoji, description)", security: [] },
+      },
+      "/api/qai/sessions": {
+        get: { summary: "List user chat sessions (Bearer required)" },
+      },
+      "/api/qai/chat": {
+        post: { summary: "Send a chat message (Bearer required)" },
+      },
+      // QJobs — job board
+      "/api/qjobs/health": { get: { summary: "QJobs health + service marker", security: [] } },
+      "/api/qjobs/jobs": {
+        get: { summary: "List job postings (filter by type, location)", security: [] },
+        post: { summary: "Create job posting (Bearer required)" },
+      },
+      "/api/qjobs/jobs/{id}": {
+        get: { summary: "Single job posting with application count", security: [] },
+      },
+      "/api/qjobs/stats": {
+        get: { summary: "Aggregate stats — postings, applications, by type", security: [] },
+      },
+      // QNews — news aggregator
+      "/api/qnews/health": { get: { summary: "QNews health + service marker", security: [] } },
+      "/api/qnews/articles": {
+        get: { summary: "List news articles (filter by category, since)", security: [] },
+        post: { summary: "Create article (Bearer required)" },
+      },
+      "/api/qnews/articles/{id}": {
+        get: { summary: "Single article with full body + comments", security: [] },
+      },
+      "/api/qnews/categories": {
+        get: { summary: "Categories with counts (id + count)", security: [] },
+      },
+      "/api/qnews/rss": {
+        get: { summary: "RSS 2.0 feed for the news catalog (application/rss+xml)", security: [] },
+      },
+      // Coach — AI coaching / goal-tracking
+      "/api/coach/health": { get: { summary: "Coach health + provider config", security: [] } },
+      "/api/coach/sessions": {
+        get: { summary: "List user coaching sessions (Bearer required)" },
+        post: { summary: "Create new session with goal (Bearer required)" },
+      },
+      "/api/coach/sessions/{id}": {
+        get: { summary: "Get session with conversation history (Bearer required)" },
+      },
+      // Multichat — multi-agent chat (fully Bearer-gated on prod)
+      "/api/multichat/health": { get: { summary: "Multichat health (Bearer required)" } },
+      "/api/multichat/rooms": {
+        get: { summary: "List user chat rooms (Bearer required)" },
+        post: { summary: "Create new room (Bearer required)" },
+      },
+      "/api/multichat/rooms/{id}/messages": {
+        get: { summary: "Get room message history (Bearer required)" },
+        post: { summary: "Post message to room (Bearer required)" },
+      },
+      // DevHub — code snippets + tooling
+      "/api/devhub/health": { get: { summary: "DevHub health + DB status", security: [] } },
+      "/api/devhub/snippets": {
+        get: { summary: "List code snippets (filter by lang, tag)", security: [] },
+        post: { summary: "Create snippet (Bearer required)" },
+      },
+      "/api/devhub/snippets/{id}": {
+        get: { summary: "Single snippet with code + metadata", security: [] },
+      },
+      "/api/devhub/snippets/{id}/star": {
+        post: { summary: "Toggle star on snippet (Bearer required)" },
+      },
+      // QFusionAI — multi-model fusion orchestrator
+      "/api/qfusionai/health": { get: { summary: "QFusionAI health + model count", security: [] } },
+      "/api/qfusionai/stats": {
+        get: { summary: "Fusion stats — runs, by-model, totals", security: [] },
+      },
+      "/api/qfusionai/fusions": {
+        get: { summary: "List fusion runs", security: [] },
+        post: { summary: "Create fusion run (Bearer required)" },
+      },
+      // QPersona — persona profile pages (with waitlist + unsubscribe)
+      "/api/qpersona/health": { get: { summary: "QPersona health + persona count", security: [] } },
+      "/api/qpersona/personas": {
+        get: { summary: "List public personas", security: [] },
+      },
+      "/api/qpersona/personas/{slug}": {
+        get: { summary: "Single persona by slug — public profile", security: [] },
+      },
+      "/api/qpersona/waitlist": {
+        post: { summary: "Join early-access waitlist (HMAC unsubscribe link emailed)", security: [] },
+      },
+      "/api/qpersona/unsubscribe": {
+        get: { summary: "Unsubscribe via signed HMAC token from email link", security: [] },
+      },
+      // QLife — life-prompts catalog
+      "/api/qlife/health": { get: { summary: "QLife health + prompt count", security: [] } },
+      "/api/qlife/prompts": {
+        get: { summary: "List daily life prompts (filter by mood, category)", security: [] },
+      },
+      "/api/qlife/prompts/{id}": {
+        get: { summary: "Single prompt with full content", security: [] },
+      },
+      // LifeBox — time-capsule messages to future-self
+      "/api/lifebox/health": { get: { summary: "LifeBox health + capsule count", security: [] } },
+      "/api/lifebox/capsules": {
+        get: { summary: "List public capsules (filter by year, theme)", security: [] },
+        post: { summary: "Create capsule (Bearer required)" },
+      },
+      "/api/lifebox/capsules/{id}": {
+        get: { summary: "Single capsule (public or owner only)", security: [] },
+      },
+      // ShadowNet — anonymous threat/whistleblower posts
+      "/api/shadownet/health": { get: { summary: "ShadowNet health + post count", security: [] } },
+      "/api/shadownet/posts": {
+        get: { summary: "List anonymous posts (filter by category)", security: [] },
+        post: { summary: "Submit anonymous post (no auth — by design)", security: [] },
+      },
+      "/api/shadownet/posts/{id}": {
+        get: { summary: "Single post with comments", security: [] },
+      },
+      // DeepSan — long-running deep-sanity AI runs
+      "/api/deepsan/health": { get: { summary: "DeepSan health + run count", security: [] } },
+      "/api/deepsan/runs": {
+        get: { summary: "List deep-sanity runs", security: [] },
+        post: { summary: "Start new run (Bearer required)" },
+      },
+      "/api/deepsan/runs/{id}": {
+        get: { summary: "Single run with output + timing", security: [] },
+      },
+      // PsyApp-Deps — addiction-recovery streak + assessments
+      "/api/psyapp-deps/health": { get: { summary: "PsyApp-Deps health + assessment count", security: [] } },
+      "/api/psyapp-deps/assessments": {
+        get: { summary: "List standard assessments (PHQ-9, GAD-7, etc.)", security: [] },
+      },
+      "/api/psyapp-deps/assessments/{id}": {
+        get: { summary: "Single assessment with questions", security: [] },
+      },
+      // QTradeOffline
+      "/api/qtradeoffline/health": { get: { summary: "QTradeOffline health + wallet/transfer counts" } },
+      "/api/qtradeoffline/wallet/register": { post: { summary: "Register ECDSA P-256 wallet — 100 AEV airdrop on first call" } },
+      "/api/qtradeoffline/wallet/{id}": { get: { summary: "Wallet balance" } },
+      "/api/qtradeoffline/history/{id}": { get: { summary: "Wallet ledger history" } },
+      "/api/qtradeoffline/leaderboard": { get: { summary: "Top 10 wallets by balance" } },
+      "/api/qtradeoffline/stats": { get: { summary: "Global stats — wallets, totalSupply, transfers, volume" } },
+      "/api/qtradeoffline/sync": { post: { summary: "Batch-apply offline-signed transfers (atomic, idempotent via nonce)" } },
+      // QStore enhanced
+      "/api/qstore/products": {
+        get: { summary: "List marketplace products" },
+      },
+      "/api/qstore/products/{id}/purchase": {
+        post: { summary: "Purchase product — returns Stripe Checkout URL if Stripe configured, else direct" },
+      },
+      // QMaskCard
+      "/api/qmaskcard/health": { get: { summary: "QMaskCard health" } },
+      "/api/qmaskcard/stats": { get: { summary: "Global stats — active masks, authorized charges, volume" } },
+      "/api/qmaskcard/masks": {
+        get: { summary: "List user virtual cards (Bearer required)" },
+        post: { summary: "Issue new virtual card with spend limits (Bearer required)" },
+      },
+      "/api/qmaskcard/charges": {
+        get: { summary: "List charges for user's masks (Bearer required)" },
+        post: { summary: "Authorize a charge against a mask (Bearer required)" },
+      },
+      // HealthAI
+      "/api/healthai/health": { get: { summary: "HealthAI health — persistence mode + profile count" } },
+      "/api/healthai/profile": { post: { summary: "Create/update health profile" } },
+      "/api/healthai/profile/{id}": { get: { summary: "Get health profile" } },
+      "/api/healthai/log": { post: { summary: "Daily wellness log (sleep, mood, weight, water, exercise)" } },
+      "/api/healthai/plan/{profileId}": {
+        get: { summary: "Generate AI wellness plan — rule-based + LLM-enhanced (Anthropic/OpenAI/Gemini chain)" },
+      },
+      "/api/healthai/check": { post: { summary: "Symptom check + rule-based advice" } },
       ...FINTECH_OPENAPI_PATHS,
       ...NEW_WAVE_OPENAPI_PATHS,
     },
@@ -418,6 +647,12 @@ app.use("/api/qright", qrightRouter);
 app.use("/api/qright", qrightRoyaltiesRouter);
 app.use("/api/ecosystem", ecosystemRouter);
 app.use("/api/cyberchess", cyberchessRouter);
+app.use("/api/cyberchess-tournaments", cyberchessTournamentsRouter);
+app.use("/api/cyberchess-daily", cyberchessDailyRouter);
+app.use("/api/cyberchess-voice-coach", cyberchessVoiceCoachRouter);
+app.use("/api/cyberchess-spectator", cyberchessSpectatorRouter);
+app.use("/api/cyberchess/matchmaking", cyberchessMatchmakingRouter);
+app.use("/api/cyberchess-anticheat", cyberchessAnticheatRouter);
 app.use("/api/puzzles", puzzlesRouter);
 
 // ==========================
@@ -439,6 +674,8 @@ app.use("/api/healthai", healthaiRouter);
 // ==========================
 // Pricing / GTM
 // ==========================
+app.use("/api/pricing", pricingRouter);
+app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/quotas", apiQuotasRouter);
 app.use("/api/keys", apiKeysRouter);
 app.use("/api/qgood", qgoodRouter);
@@ -448,7 +685,6 @@ app.use("/api/ztide", ztideRouter);
 app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
-app.use("/api/pricing/provisioning", provisioningRouter);
 app.use("/api/pricing/events", eventsRouter);
 // ==========================
 // Auth
@@ -488,6 +724,19 @@ app.use("/api/qfusionai", qfusionaiRouter);
 
 // VeilNetX — privacy proxy pre-launch status + waitlist
 app.use("/api/veilnetx", veilnetxRouter);
+
+// ShadowNet — alternative private internet concept simulator.
+// Mounted BEFORE the generic planning stubs loop (which would also create
+// /api/shadownet) so the dedicated endpoints win.
+app.use("/api/shadownet", shadownetRouter);
+app.use("/api/psyapp-deps", psyappDepsRouter);
+app.use("/api/lifebox", lifeboxRouter);
+// Wave 1/3/4 MVPs — mount BEFORE planning stubs so dedicated routes win.
+app.use("/api/mapreality", mapRealityRouter);
+app.use("/api/voice-of-earth", voiceOfEarthRouter);
+app.use("/api/deepsan", deepSanRouter);
+app.use("/api/qpersona", qpersonaRouter);
+app.use("/api/qlife", qlifeRouter);
 
 // MVP concept routers (per `routes/mvpConcepts.ts`) MUST mount BEFORE
 // the generic planning stubs so module-specific paths (e.g.
@@ -530,6 +779,13 @@ app.use("/api/build/social", qsocialRouter);
 app.use("/api/qsocial", qsocialRouter);
 // QEvents — events platform (RSVP, create, attend)
 app.use("/api/qevents", qeventsRouter);
+
+// Revenue Hub — centralized monetization: Paddle + YouTube + Twitch per app
+app.use("/api/revenue", revenueRouter);
+// Paddle Billing — payment processor for KZ + international (MoR model)
+app.use("/api/paddle", paddleRouter);
+// Universal Search — /api/search?q=<query> across QStore/QLearn/QNews/QEvents/QJobs/QRight
+app.use("/api/search", searchRouter);
 
 // DeepSan — anti-chaos productivity (tasks, focus sessions, stats)
 app.use("/api/deepsan", deepSanRouter);

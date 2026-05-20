@@ -334,7 +334,7 @@ veilnetxLedgerRouter.get("/chain/verify", readLimit, async (_req, res) => {
         amountCents: String(row.amountCents),
         currency: String(row.currency),
         metaJson: JSON.stringify(row.meta ?? {}),
-        createdAt: new Date(String(row.createdAt)).toISOString(),
+        createdAt: (row.createdAt instanceof Date ? row.createdAt : new Date(String(row.createdAt))).toISOString(),
       });
       if (recomputed !== row.entryHash || row.prevHash !== prevHash) {
         brokenAt = Number(row.sequenceNumber);

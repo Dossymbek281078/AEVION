@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import MvpConceptBoard from '@/components/MvpConceptBoard';
 import MoodCheckIn from './components/MoodCheckIn';
 import AiChat from './components/AiChat';
 import MoodTrend from './components/MoodTrend';
@@ -171,6 +172,23 @@ export default function QGoodPage() {
           <MoodTrend userId={USER_ID} refreshKey={moodRefreshKey} />
         )}
 
+      </div>
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 32px' }}>
+        <MvpConceptBoard
+          moduleId="qgood"
+          noun="concept/messages"
+          accent="rose"
+          sectionTitle="Mental health concept board"
+          sectionHint="Какие практики действительно помогают? Какие сценарии должны быть в AI-терапевте?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / практика", placeholder: "напр.: 5-минутный body scan вечером", required: true },
+            { key: "rationale", label: "Почему это работает", type: "textarea", placeholder: "Что меняется в состоянии, источник / личный опыт" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
       </div>
 
       {/* Footer */}

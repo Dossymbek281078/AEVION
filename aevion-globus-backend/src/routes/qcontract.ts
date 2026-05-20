@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { randomUUID, createHash } from "node:crypto";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 
@@ -842,3 +843,23 @@ qcontractRouter.get("/openapi.json", (_req, res) => {
     },
   });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qcontractRouter.get("/status", (_req, res) => {
+  res.json({
+    module: "qcontract",
+    code: "QCONTRACT",
+    status: "mvp",
+    description: "Self-destructing smart documents with view-count limits + concept board.",
+    endpoints: {
+      documents: "/api/qcontract/documents",
+      stats: "/api/qcontract/stats",
+      conceptMessages: "/api/qcontract/concept/messages",
+      conceptStats: "/api/qcontract/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: qcontractRouter, moduleId: "qcontract", defaultTag: "qcontract" });

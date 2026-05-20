@@ -9,7 +9,8 @@ export type GlobusProjectStatus =
   | "planning"
   | "in_progress"
   | "mvp"
-  | "launched";
+  | "launched"
+  | "live";
 
 export interface GlobusProject {
   id: string;                // внутренний ID

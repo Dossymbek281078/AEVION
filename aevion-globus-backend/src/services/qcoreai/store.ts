@@ -3121,10 +3121,10 @@ export async function rateRun(
   const r = await pool.query(
     `INSERT INTO "QCoreRunRating" ("runId","userId","rating","note")
      VALUES ($1,$2,$3,$4)
-     ON CONFLICT ("runId", COALESCE("userId",'')) DO UPDATE
+     ON CONFLICT ("runId","userId") DO UPDATE
        SET "rating"=$3, "note"=$4, "createdAt"=NOW()
      RETURNING *`,
-    [runId, userId, rating, row.note]
+    [runId, userId ?? '', rating, row.note]
   );
   return r.rows[0] as RatingRow;
 }
@@ -3134,7 +3134,7 @@ export async function getRating(runId: string, userId: string | null): Promise<R
   const key = `${runId}:${userId ?? ""}`;
   if (!isDbReady()) return memRatings.get(key) ?? null;
   const r = await pool.query(
-    `SELECT * FROM "QCoreRunRating" WHERE "runId"=$1 AND COALESCE("userId",'')=$2`,
+    `SELECT * FROM "QCoreRunRating" WHERE "runId"=$1 AND "userId"=$2`,
     [runId, userId ?? ""]
   );
   return (r.rows[0] as RatingRow) || null;

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import {
@@ -405,3 +406,23 @@ voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
     }));
   res.json({ total: tracks.length, byLanguage, byMood, topTracks });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+voiceOfEarthRouter.get("/status", (_req: Request, res: Response) => {
+  res.json({
+    module: "voice-of-earth",
+    code: "VOE",
+    status: "mvp",
+    description: "Voice of Earth: indigenous-language tracks library with verifiable provenance + concept board.",
+    endpoints: {
+      tracks: "/api/voe/tracks",
+      stats: "/api/voe/stats",
+      conceptMessages: "/api/voe/concept/messages",
+      conceptStats: "/api/voe/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: voiceOfEarthRouter, moduleId: "voe", defaultTag: "voe", writeLimit: submitLimiter });

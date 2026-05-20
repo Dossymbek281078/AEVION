@@ -1,5 +1,6 @@
 "use client";
 import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -285,6 +286,23 @@ export default function QContractHome() {
           </div>
         </div>
       )}
+
+      <div className="max-w-5xl mx-auto px-6 pb-10">
+        <MvpConceptBoard
+          moduleId="qcontract"
+          noun="concept/messages"
+          accent="violet"
+          sectionTitle="Smart documents concept board"
+          sectionHint="Какие типы саморазрушающихся документов нужны? Какие watermarks обязательны?"
+          titleField="idea"
+          summaryField="rationale"
+          fields={[
+            { key: "idea", label: "Идея / use-case", placeholder: "напр.: NDA с per-viewer watermark", required: true },
+            { key: "rationale", label: "Почему это нужно", type: "textarea", placeholder: "Какую угрозу адресует, кому полезно" },
+            { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+          ]}
+        />
+      </div>
 
       {/* Stats footer */}
       <QContractStats />

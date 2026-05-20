@@ -503,38 +503,6 @@ const obj = await a.qright.register({
           </Link>
         </div>
       </section>
-
-      {/* Machine-readable contract */}
-      <section
-        style={{
-          marginTop: 24,
-          padding: 16,
-          background: "rgba(15,23,42,0.04)",
-          border: BORDER,
-          borderRadius: 12,
-          fontSize: 12,
-          color: "#475569",
-          lineHeight: 1.5,
-        }}
-      >
-        <strong style={{ color: "#0f172a" }}>For developers:</strong>{" "}
-        машино-читаемый контракт тиров и rate-limits доступен по{" "}
-        <Link
-          href="/api-backend/api/quotas"
-          style={{ color: "#0d9488", textDecoration: "underline", fontWeight: 700 }}
-        >
-          /api/quotas
-        </Link>
-        {" · "}спецификация:{" "}
-        <a
-          href="https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: "#0d9488", textDecoration: "underline", fontWeight: 700 }}
-        >
-          PUBLIC_API_QUOTAS.md
-        </a>
-      </section>
     </ProductPageShell>
   );
 }

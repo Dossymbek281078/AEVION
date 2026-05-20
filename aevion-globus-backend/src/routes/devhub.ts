@@ -1079,14 +1079,6 @@ devhubRouter.delete("/projects/:id/collaborators/:collabUserId", async (req, res
 
 // POST /api/devhub/projects/:id/github/push
 devhubRouter.post("/projects/:id/github/push", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
-  if (!githubToken) {
-    return res.json({
-      ok: false,
-      message: "Set GITHUB_TOKEN env var to enable GitHub integration",
-      setupUrl: "https://github.com/settings/tokens",
-    });
-  }
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1097,6 +1089,14 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   }
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
+  }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  if (!githubToken) {
+    return res.json({
+      ok: false,
+      message: "Set GITHUB_TOKEN in project Env Vars or server env to enable GitHub integration",
+      setupUrl: "https://github.com/settings/tokens",
+    });
   }
   try {
     const projectSlug = slugify(project.name) + "-" + project.id.slice(0, 8);
@@ -1181,7 +1181,6 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
 
 // GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
 devhubRouter.get("/projects/:id/github/status", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1193,6 +1192,7 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
   }
@@ -1228,7 +1228,6 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
 
 // GET /api/devhub/projects/:id/github/branches — list branches of linked repo
 devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1240,6 +1239,7 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });
   }
@@ -1268,7 +1268,6 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
 
 // POST /api/devhub/projects/:id/github/sync — pull latest commit SHA for default branch
 devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
-  const githubToken = process.env.GITHUB_TOKEN;
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? "anonymous";
   let project: DevHubProject | null;
@@ -1280,8 +1279,9 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   if (!project || project.userId !== userId) {
     return res.status(404).json({ error: "project not found" });
   }
+  const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
-    return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing" });
+    return res.json({ ok: false, message: "No GitHub repo linked or GITHUB_TOKEN missing (set in project envVars or server env)" });
   }
   try {
     const match = project.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
@@ -1786,77 +1786,64 @@ devhubRouter.post("/media/email", async (req, res) => {
   }
 });
 
-// POST /api/devhub/media/payment-link — create Stripe payment link
+// POST /api/devhub/media/payment-link — create Paddle checkout link
 devhubRouter.post("/media/payment-link", async (req, res) => {
-  const { name, amountCents, currency = "usd", description } = req.body || {};
+  const { name, amountCents, currency = "USD", description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
   if (!Number.isFinite(amt) || amt < 50) return res.status(400).json({ error: "amountCents must be ≥ 50" });
 
-  const apiKey = process.env.STRIPE_SECRET_KEY;
-  if (!apiKey) {
+  const paddleKey = process.env.PADDLE_API_KEY?.trim();
+  if (!paddleKey) {
     return res.status(503).json({
-      error: "Stripe not configured — set STRIPE_SECRET_KEY",
-      setupUrl: "https://dashboard.stripe.com/apikeys",
+      error: "Paddle not configured — set PADDLE_API_KEY",
+      setupUrl: "https://vendors.paddle.com/api-key",
     });
   }
 
+  const isSandbox = process.env.PADDLE_SANDBOX !== "false";
+  const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
+  const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
+
   try {
-    // 1. Create product
-    const productResp = await fetch("https://api.stripe.com/v1/products", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+    const txBody: Record<string, unknown> = {
+      items: [{
+        quantity: 1,
+        price: {
+          name: name.trim().slice(0, 200),
+          ...(description ? { description: String(description).slice(0, 500) } : {}),
+          unit_price: {
+            amount: String(Math.round(amt)),
+            currency_code: String(currency).toUpperCase().slice(0, 3),
+          },
+          tax_mode: "exclusive",
+        },
+      }],
+      checkout: {
+        url: successUrl || `${frontendUrl}/devhub?payment=success`,
       },
-      body: new URLSearchParams({
-        name: name.trim().slice(0, 200),
-        ...(description ? { description: String(description).slice(0, 500) } : {}),
-      }).toString(),
-    });
-    if (!productResp.ok) {
-      const errText = await productResp.text();
-      return res.status(productResp.status).json({ error: `Stripe product error: ${errText.slice(0, 300)}` });
-    }
-    const product = await productResp.json() as { id: string };
+    };
 
-    // 2. Create price
-    const priceResp = await fetch("https://api.stripe.com/v1/prices", {
+    const r = await fetch(`${paddleBase}/transactions`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        product: product.id,
-        unit_amount: String(Math.round(amt)),
-        currency: String(currency).toLowerCase().slice(0, 3),
-      }).toString(),
+      headers: { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(txBody),
     });
-    if (!priceResp.ok) {
-      const errText = await priceResp.text();
-      return res.status(priceResp.status).json({ error: `Stripe price error: ${errText.slice(0, 300)}` });
-    }
-    const price = await priceResp.json() as { id: string };
 
-    // 3. Create payment link
-    const linkResp = await fetch("https://api.stripe.com/v1/payment_links", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        "line_items[0][price]": price.id,
-        "line_items[0][quantity]": "1",
-      }).toString(),
-    });
-    if (!linkResp.ok) {
-      const errText = await linkResp.text();
-      return res.status(linkResp.status).json({ error: `Stripe link error: ${errText.slice(0, 300)}` });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Paddle error: ${errText.slice(0, 300)}` });
     }
-    const link = await linkResp.json() as { id: string; url: string };
-    res.json({ ok: true, paymentLinkId: link.id, url: link.url, productId: product.id, priceId: price.id });
+    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
+    const tx = data.data;
+    if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
+
+    res.json({
+      ok: true,
+      provider: "paddle",
+      transactionId: tx.id,
+      url: tx.checkout?.url ?? `${paddleBase.replace("api.", "")}/checkout/${tx.id}`,
+    });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Payment link creation failed" });
   }
@@ -1864,7 +1851,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
 
 // POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
 devhubRouter.post("/media/image", async (req, res) => {
-  const { prompt, size = "1024x1024", quality = "standard", style = "vivid" } = req.body || {};
+  const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
   if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
     return res.status(400).json({ error: "prompt required" });
   }
@@ -1889,13 +1876,11 @@ devhubRouter.post("/media/image", async (req, res) => {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "dall-e-3",
+        model: "gpt-image-1",
         prompt: prompt.trim(),
         n: 1,
         size,
         quality: quality === "hd" ? "hd" : "standard",
-        style: style === "natural" ? "natural" : "vivid",
-        response_format: "url",
       }),
     });
     if (!r.ok) {
@@ -2076,6 +2061,1416 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   }
 });
 
+// ── Voice clone helpers ─────────────────────────────────────────────────────
+
+function buildVoiceCloneMultipart(opts: { name: string; description?: string; mimeType: string; audio: Buffer }): { body: Buffer; boundary: string } {
+  const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+  const parts: Buffer[] = [];
+  const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+  push(`--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\n${opts.name}\r\n`);
+  if (opts.description) push(`--${boundary}\r\nContent-Disposition: form-data; name="description"\r\n\r\n${opts.description}\r\n`);
+  push(`--${boundary}\r\nContent-Disposition: form-data; name="files"; filename="sample.${opts.mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${opts.mimeType}\r\n\r\n`);
+  parts.push(opts.audio);
+  push(`\r\n--${boundary}--\r\n`);
+  return { body: Buffer.concat(parts), boundary };
+}
+
+// POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
+devhubRouter.post("/media/voice-clone", async (req, res) => {
+  const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
+  if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
+  if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
+  if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
+
+  if (confirm !== true) {
+    return res.status(400).json({ error: "preview first — pass confirm:true after listening to /media/voice-clone/preview", needsConfirm: true });
+  }
+
+  try {
+    const audioBuffer = Buffer.from(sampleBase64, "base64");
+    const { body, boundary } = buildVoiceCloneMultipart({
+      name: name.trim(), description: description ? String(description).slice(0, 500) : undefined,
+      mimeType, audio: audioBuffer,
+    });
+    const r = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: body as unknown as BodyInit,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Voice clone error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { voice_id: string; requires_verification?: boolean };
+    res.json({ ok: true, voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Voice clone failed" });
+  }
+});
+
+// POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
+// Body: { sampleBase64, mimeType?, previewText? }
+// Response: audio/mpeg of `previewText` rendered with the cloned voice
+devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
+  const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
+  if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
+  if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
+
+  const text = String(previewText || "AEVION voice preview — your custom voice is ready").slice(0, 500);
+  const tempName = `aevion-preview-${crypto.randomBytes(4).toString("hex")}`;
+  let voiceId: string | null = null;
+
+  try {
+    const audioBuffer = Buffer.from(sampleBase64, "base64");
+
+    // 1. Clone voice (temporary)
+    const cloneReq = buildVoiceCloneMultipart({ name: tempName, mimeType, audio: audioBuffer });
+    const cloneResp = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${cloneReq.boundary}` },
+      body: cloneReq.body as unknown as BodyInit,
+    });
+    if (!cloneResp.ok) {
+      const errText = await cloneResp.text();
+      return res.status(cloneResp.status).json({ error: `Clone (preview) failed: ${errText.slice(0, 300)}` });
+    }
+    const cloneData = await cloneResp.json() as { voice_id: string };
+    voiceId = cloneData.voice_id;
+    if (!voiceId) return res.status(500).json({ error: "no voice_id returned for preview" });
+
+    // 2. Render preview TTS with the cloned voice
+    const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+    });
+    if (!ttsResp.ok) {
+      const errText = await ttsResp.text();
+      // Best-effort cleanup before bailing
+      fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => {});
+      return res.status(ttsResp.status).json({ error: `Preview TTS failed: ${errText.slice(0, 300)}` });
+    }
+    const audio = Buffer.from(await ttsResp.arrayBuffer());
+
+    // 3. Best-effort delete to avoid leaking temp voices in the user's account
+    try {
+      await fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, {
+        method: "DELETE", headers: { "xi-api-key": apiKey },
+      });
+    } catch { /* leak is acceptable — preview already returned */ }
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Length", audio.length);
+    res.setHeader("X-Aevion-Preview-Bytes", String(audio.length));
+    res.setHeader("Cache-Control", "no-store");
+    res.send(audio);
+  } catch (e: any) {
+    if (voiceId) {
+      fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, { method: "DELETE", headers: { "xi-api-key": apiKey } }).catch(() => {});
+    }
+    res.status(500).json({ error: e?.message || "Voice preview failed" });
+  }
+});
+
+// POST /api/devhub/media/stt — ElevenLabs Speech-to-Text (scribe-v1)
+devhubRouter.post("/media/stt", async (req, res) => {
+  const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
+  if (!audioBase64 || typeof audioBase64 !== "string") return res.status(400).json({ error: "audioBase64 required" });
+  if (audioBase64.length > 30_000_000) return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
+
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY" });
+
+  try {
+    const audioBuffer = Buffer.from(audioBase64, "base64");
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="model_id"\r\n\r\nscribe_v1\r\n`);
+    if (language) push(`--${boundary}\r\nContent-Disposition: form-data; name="language_code"\r\n\r\n${String(language).slice(0, 10)}\r\n`);
+    push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.${mimeType.includes("wav") ? "wav" : "mp3"}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+    parts.push(audioBuffer);
+    push(`\r\n--${boundary}--\r\n`);
+    const body = Buffer.concat(parts);
+    const r = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `STT error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
+    res.json({ ok: true, text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "STT failed" });
+  }
+});
+
+// POST /api/devhub/media/drive-search — Google Drive file search
+devhubRouter.post("/media/drive-search", async (req, res) => {
+  const { query = "", limit = 20 } = req.body || {};
+  const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  if (!token) {
+    return res.status(503).json({
+      error: "Google Drive not configured — set GOOGLE_DRIVE_ACCESS_TOKEN (OAuth Bearer)",
+      setupUrl: "https://developers.google.com/drive/api/quickstart/js",
+    });
+  }
+  try {
+    const q = String(query).trim();
+    const params = new URLSearchParams({
+      pageSize: String(Math.min(Math.max(Number(limit) || 20, 1), 100)),
+      fields: "files(id,name,mimeType,modifiedTime,size)",
+    });
+    if (q) params.set("q", `name contains '${q.replace(/'/g, "\\'")}' and trashed = false`);
+    else params.set("q", "trashed = false");
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Drive error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { files: Array<{ id: string; name: string; mimeType: string; modifiedTime?: string; size?: string }> };
+    res.json({ ok: true, files: data.files || [] });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Drive search failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/drive/import — import Drive file into project files
+devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { fileId, targetPath } = req.body || {};
+  if (!fileId || typeof fileId !== "string") return res.status(400).json({ error: "fileId required" });
+  const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  if (!token) return res.status(503).json({ error: "Google Drive not configured — set GOOGLE_DRIVE_ACCESS_TOKEN" });
+
+  try {
+    const metaResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=name,mimeType`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!metaResp.ok) {
+      const t = await metaResp.text();
+      return res.status(metaResp.status).json({ error: `Drive metadata error: ${t.slice(0, 200)}` });
+    }
+    const meta = await metaResp.json() as { name: string; mimeType: string };
+    const isGoogleDoc = meta.mimeType.startsWith("application/vnd.google-apps");
+    let contentResp: Response;
+    if (isGoogleDoc) {
+      const exportMime = meta.mimeType.includes("document") ? "text/markdown"
+                      : meta.mimeType.includes("spreadsheet") ? "text/csv"
+                      : "text/plain";
+      contentResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(exportMime)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } else {
+      contentResp = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+    if (!contentResp.ok) {
+      const t = await contentResp.text();
+      return res.status(contentResp.status).json({ error: `Drive content error: ${t.slice(0, 200)}` });
+    }
+    const content = await contentResp.text();
+    const path = String(targetPath || meta.name).replace(/^\/+/, "").slice(0, 200) || meta.name;
+    const file: DevHubFile = {
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      path,
+      content,
+      language: detectLanguage(path),
+      updatedAt: now(),
+    };
+    try { await dbUpsertFile(file); }
+    catch {
+      const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path);
+      if (existing) { existing.content = file.content; existing.language = file.language; existing.updatedAt = file.updatedAt; }
+      else memFiles.set(file.id, file);
+    }
+    res.json({ ok: true, path, bytes: content.length, mimeType: meta.mimeType });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Drive import failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
+devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { steps } = req.body || {};
+  if (!Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: "steps array required" });
+  if (steps.length > 20) return res.status(400).json({ error: "max 20 steps per workflow" });
+
+  const results: Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }> = [];
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const type = String(step?.type || "");
+    try {
+      if (type === "code") {
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for code step");
+        const stack = String(step.stack || project.stack);
+        const targetFile = step.saveAs ? String(step.saveAs) : undefined;
+        const files = await generateCodeWithAI(prompt, stack, targetFile);
+        for (const gf of files) {
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: gf.path,
+            content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); }
+          catch {
+            const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === gf.path);
+            if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
+            else memFiles.set(f.id, f);
+          }
+        }
+        results.push({ step: i, type, ok: true, output: { files: files.map((f) => f.path) } });
+      } else if (type === "image") {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for image step");
+        const dResp = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
+        });
+        if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
+        const d = await dResp.json() as { data: Array<{ url: string }> };
+        const oaiUrl = d.data?.[0]?.url;
+        if (!oaiUrl) throw new Error("no image url returned");
+        // Auto-upload to Cloudflare Images for permanent URL (if env set)
+        const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
+        const url = permanentUrl || oaiUrl;
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: url, language: detectLanguage(savedAs), updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        results.push({ step: i, type, ok: true, output: { url }, savedAs });
+      } else if (type === "tts") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for tts step");
+        const VOICE_IDS: Record<string, string> = {
+          Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
+          Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
+        };
+        const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+        });
+        if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+      } else if (type === "sfx") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for sfx step");
+        const body: Record<string, unknown> = { text };
+        const dur = Number(step.durationSeconds);
+        if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
+        const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+      } else if (type === "music") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const prompt = String(step.prompt || step.text || "");
+        if (!prompt) throw new Error("prompt required for music step");
+        const body: Record<string, unknown> = { prompt };
+        const lenSec = Number(step.lengthSeconds);
+        if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
+          body.music_length_ms = Math.round(lenSec * 1000);
+        }
+        const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await musicResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          results.push({ step: i, type, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+      } else {
+        results.push({ step: i, type, ok: false, error: `unknown step type: ${type}` });
+      }
+    } catch (e: any) {
+      results.push({ step: i, type, ok: false, error: e?.message || "step failed" });
+    }
+  }
+
+  const okCount = results.filter((r) => r.ok).length;
+  res.json({
+    ok: okCount === results.length,
+    totalSteps: results.length,
+    successCount: okCount,
+    failureCount: results.length - okCount,
+    results,
+  });
+});
+
+// ── Agent workflow templates ────────────────────────────────────────────────
+const AGENT_WORKFLOW_TEMPLATES = [
+  {
+    id: "landing",
+    name: "Landing page",
+    description: "Hero + headline + CTA + voiceover + sound effect",
+    steps: [
+      { type: "code", prompt: "Modern landing page: hero section with headline, subheadline, and CTA button. Tailwind, dark theme.", saveAs: "pages/index.tsx" },
+      { type: "image", prompt: "Futuristic abstract gradient, purple and teal, soft glow, hero background", size: "1792x1024", saveAs: "public/hero.url.txt" },
+      { type: "tts", text: "Welcome to AEVION — the unified AI platform. Build, deploy, and scale your ideas in one place.", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+      { type: "sfx", text: "Subtle whoosh transition, modern UI sound", durationSeconds: 1.5, saveAs: "public/whoosh.mp3.b64" },
+      { type: "music", prompt: "Ambient electronic background, soft synth pads, hopeful, looped — for landing page hero", lengthSeconds: 30, saveAs: "public/landing-bg.mp3.b64" },
+    ],
+  },
+  {
+    id: "blog",
+    name: "Blog post",
+    description: "Article with header image + audio narration",
+    steps: [
+      { type: "code", prompt: "Blog post page with title, date, hero image, and markdown article body in Next.js", saveAs: "pages/post.tsx" },
+      { type: "image", prompt: "Editorial illustration, flat design, vibrant colors, abstract concept", size: "1024x1024", saveAs: "public/article-hero.url.txt" },
+      { type: "tts", text: "Welcome to our weekly article. Today, we explore the future of AI-assisted development.", voice: "Adam", saveAs: "public/narration.mp3.b64" },
+    ],
+  },
+  {
+    id: "dashboard",
+    name: "Analytics dashboard",
+    description: "Stats cards + chart + onboarding voice",
+    steps: [
+      { type: "code", prompt: "Analytics dashboard: 4 stat cards (users, revenue, sessions, conversion) + bar chart of last 7 days. Mock data, light theme.", saveAs: "pages/dashboard.tsx" },
+      { type: "image", prompt: "Minimal dashboard UI mockup, light theme, clean typography", size: "1024x1024", saveAs: "public/dashboard-preview.url.txt" },
+      { type: "tts", text: "Your dashboard is ready. Track users, revenue, and conversion in real time.", voice: "Bella", saveAs: "public/dashboard-intro.mp3.b64" },
+    ],
+  },
+];
+
+// GET /api/devhub/agent/templates
+devhubRouter.get("/agent/templates", (_req, res) => {
+  res.json({ templates: AGENT_WORKFLOW_TEMPLATES });
+});
+
+// POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
+devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { steps } = req.body || {};
+  if (!Array.isArray(steps) || steps.length === 0) return res.status(400).json({ error: "steps array required" });
+  if (steps.length > 20) return res.status(400).json({ error: "max 20 steps per workflow" });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const emit = (event: any) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
+  };
+
+  emit({ type: "start", totalSteps: steps.length });
+
+  let okCount = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const type = String(step?.type || "");
+    emit({ type: "step-start", index: i, stepType: type });
+
+    try {
+      if (type === "code") {
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for code step");
+        const stack = String(step.stack || project.stack);
+        const targetFile = step.saveAs ? String(step.saveAs) : undefined;
+        const files = await generateCodeWithAI(prompt, stack, targetFile);
+        for (const gf of files) {
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: gf.path,
+            content: gf.content, language: gf.language || detectLanguage(gf.path), updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); }
+          catch {
+            const existing = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === gf.path);
+            if (existing) { existing.content = f.content; existing.language = f.language; existing.updatedAt = f.updatedAt; }
+            else memFiles.set(f.id, f);
+          }
+        }
+        emit({ type: "step-done", index: i, ok: true, output: { files: files.map((f) => f.path) } });
+        okCount++;
+      } else if (type === "image") {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+        const prompt = String(step.prompt || "");
+        if (!prompt) throw new Error("prompt required for image step");
+        const dResp = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
+        });
+        if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
+        const d = await dResp.json() as { data: Array<{ url: string }> };
+        const oaiUrl = d.data?.[0]?.url;
+        if (!oaiUrl) throw new Error("no image url returned");
+        // Auto-upload to Cloudflare Images for permanent URL (if env set)
+        const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
+        const url = permanentUrl || oaiUrl;
+        const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
+        const f: DevHubFile = {
+          id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+          content: url, language: detectLanguage(savedAs), updatedAt: now(),
+        };
+        try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+        emit({ type: "step-done", index: i, ok: true, output: { url }, savedAs });
+        okCount++;
+      } else if (type === "tts") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for tts step");
+        const VOICE_IDS: Record<string, string> = {
+          Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
+          Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
+        };
+        const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+        const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify({ text, model_id: "eleven_monolingual_v1" }),
+        });
+        if (!ttsResp.ok) throw new Error(`TTS error: ${(await ttsResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await ttsResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/tts-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/voice-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/voice-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+        okCount++;
+      } else if (type === "sfx") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const text = String(step.text || "");
+        if (!text) throw new Error("text required for sfx step");
+        const body: Record<string, unknown> = { text };
+        const dur = Number(step.durationSeconds);
+        if (Number.isFinite(dur) && dur >= 0.5 && dur <= 22) body.duration_seconds = dur;
+        const sfxResp = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!sfxResp.ok) throw new Error(`SFX error: ${(await sfxResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await sfxResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/sfx-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/sfx-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/sfx-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+        okCount++;
+      } else if (type === "music") {
+        const apiKey = process.env.ELEVENLABS_API_KEY;
+        if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
+        const prompt = String(step.prompt || step.text || "");
+        if (!prompt) throw new Error("prompt required for music step");
+        const body: Record<string, unknown> = { prompt };
+        const lenSec = Number(step.lengthSeconds);
+        if (Number.isFinite(lenSec) && lenSec >= 10 && lenSec <= 300) {
+          body.music_length_ms = Math.round(lenSec * 1000);
+        }
+        const musicResp = await fetch("https://api.elevenlabs.io/v1/music/compose", {
+          method: "POST",
+          headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+          body: JSON.stringify(body),
+        });
+        if (!musicResp.ok) throw new Error(`Music error: ${(await musicResp.text()).slice(0, 200)}`);
+        const audioBuf = Buffer.from(await musicResp.arrayBuffer());
+        const r2Key = `audio/${project.id}/music-${i}-${Date.now()}.mp3`;
+        const cdnUrl = await tryAutoUploadAudioToR2(audioBuf, "audio/mpeg", r2Key);
+        if (cdnUrl) {
+          const savedAs = step.saveAs ? String(step.saveAs).replace(/\.mp3\.b64$/i, ".url.txt") : `public/music-${i}.url.txt`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: cdnUrl, language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { url: cdnUrl, bytes: audioBuf.length }, savedAs });
+        } else {
+          const savedAs = step.saveAs ? String(step.saveAs) : `public/music-${i}.mp3.b64`;
+          const f: DevHubFile = {
+            id: crypto.randomUUID(), projectId: project.id, path: savedAs,
+            content: audioBuf.toString("base64"), language: "plaintext", updatedAt: now(),
+          };
+          try { await dbUpsertFile(f); } catch { memFiles.set(f.id, f); }
+          emit({ type: "step-done", index: i, ok: true, output: { bytes: audioBuf.length }, savedAs });
+        }
+        okCount++;
+      } else {
+        emit({ type: "step-done", index: i, ok: false, error: `unknown step type: ${type}` });
+      }
+    } catch (e: any) {
+      emit({ type: "step-done", index: i, ok: false, error: e?.message || "step failed" });
+    }
+  }
+
+  emit({ type: "complete", totalSteps: steps.length, successCount: okCount, failureCount: steps.length - okCount });
+  res.end();
+});
+
+// POST /api/devhub/media/sms — Brevo transactional SMS
+devhubRouter.post("/media/sms", async (req, res) => {
+  const { recipient, content, sender } = req.body || {};
+  if (!recipient || typeof recipient !== "string") return res.status(400).json({ error: "recipient (E.164 phone) required" });
+  if (!/^\+\d{6,18}$/.test(recipient.trim())) return res.status(400).json({ error: "recipient must be E.164 format (e.g. +14155552671)" });
+  if (!content || typeof content !== "string") return res.status(400).json({ error: "content required" });
+  if (content.length > 612) return res.status(400).json({ error: "content too long (max 612 chars, 4 SMS segments)" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "Brevo not configured — set BREVO_API_KEY",
+      setupUrl: "https://app.brevo.com/settings/keys/api",
+    });
+  }
+
+  const senderName = (typeof sender === "string" && sender.trim()) ? sender.trim().slice(0, 11) : (process.env.BREVO_SMS_SENDER || "AEVION");
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        type: "transactional",
+        sender: senderName,
+        recipient: recipient.trim(),
+        content: content.slice(0, 612),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo SMS error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({
+      ok: true,
+      reference: (data as any)?.reference ?? null,
+      messageId: (data as any)?.messageId ?? null,
+      smsCount: (data as any)?.smsCount ?? null,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "SMS send failed" });
+  }
+});
+
+// POST /api/devhub/media/whatsapp — Brevo WhatsApp template message
+devhubRouter.post("/media/whatsapp", async (req, res) => {
+  const { contactNumber, templateId, params } = req.body || {};
+  if (!contactNumber || typeof contactNumber !== "string") return res.status(400).json({ error: "contactNumber (E.164 phone) required" });
+  if (!/^\+?\d{6,18}$/.test(contactNumber.trim())) return res.status(400).json({ error: "contactNumber must be E.164 format" });
+  if (!templateId || (typeof templateId !== "string" && typeof templateId !== "number")) return res.status(400).json({ error: "templateId required (approved WABA template)" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+  }
+
+  const senderNumberId = process.env.BREVO_WHATSAPP_SENDER_ID;
+  if (!senderNumberId) {
+    return res.status(503).json({
+      error: "Brevo WhatsApp sender not configured — set BREVO_WHATSAPP_SENDER_ID",
+      setupUrl: "https://app.brevo.com/whatsapp",
+    });
+  }
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/whatsapp/sendMessage", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        senderNumberId,
+        contactNumbers: [contactNumber.trim().replace(/^\+/, "")],
+        templateId: Number(templateId) || templateId,
+        ...(params && typeof params === "object" ? { params } : {}),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo WhatsApp error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "WhatsApp send failed" });
+  }
+});
+
+// POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)
+// Body: { sourceUrl?: string } OR { base64: string, mimeType?: string }
+devhubRouter.post("/media/upload-image", async (req, res) => {
+  const { sourceUrl, base64, mimeType = "image/png" } = req.body || {};
+  if (!sourceUrl && !base64) {
+    return res.status(400).json({ error: "sourceUrl or base64 required" });
+  }
+
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) {
+    return res.status(503).json({
+      error: "Cloudflare Images not configured — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID",
+      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    });
+  }
+
+  try {
+    // Cloudflare Images API: multipart form, "url" OR "file" field
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    const push = (s: string) => parts.push(Buffer.from(s, "utf8"));
+
+    if (sourceUrl) {
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="url"\r\n\r\n${String(sourceUrl)}\r\n`);
+    } else {
+      const ext = mimeType.includes("png") ? "png" : mimeType.includes("jpg") || mimeType.includes("jpeg") ? "jpg" : "bin";
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="upload.${ext}"\r\nContent-Type: ${mimeType}\r\n\r\n`);
+      parts.push(Buffer.from(base64, "base64"));
+      push(`\r\n`);
+    }
+    push(`--${boundary}--\r\n`);
+    const body = Buffer.concat(parts);
+
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Cloudflare Images error: ${errText.slice(0, 400)}` });
+    }
+    const data = await r.json() as { result?: { id: string; variants: string[]; uploaded: string } };
+    if (!data.result?.id) {
+      return res.status(500).json({ error: "no image id returned from Cloudflare" });
+    }
+    res.json({
+      ok: true,
+      imageId: data.result.id,
+      url: data.result.variants?.[0] || null,
+      variants: data.result.variants || [],
+      uploaded: data.result.uploaded,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Image upload failed" });
+  }
+});
+
+// ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
+async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | null> {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken || !accountId) return null;
+  try {
+    const boundary = `----aevion${crypto.randomBytes(16).toString("hex")}`;
+    const parts: Buffer[] = [];
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="url"\r\n\r\n${sourceUrl}\r\n--${boundary}--\r\n`, "utf8"));
+    const body = Buffer.concat(parts);
+    const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/images/v1`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) return null;
+    const data = await r.json() as { result?: { variants?: string[] } };
+    return data.result?.variants?.[0] ?? null;
+  } catch { return null; }
+}
+
+// POST /api/devhub/media/translate — DeepL text translation
+devhubRouter.post("/media/translate", async (req, res) => {
+  const { text, targetLang, sourceLang, formality } = req.body || {};
+  if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
+  if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
+  if (text.length > 128_000) return res.status(400).json({ error: "text too long (max 128k chars)" });
+
+  const apiKey = process.env.DEEPL_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: "DeepL not configured — set DEEPL_API_KEY",
+      setupUrl: "https://www.deepl.com/account/summary",
+    });
+  }
+  const endpoint = apiKey.endsWith(":fx")
+    ? "https://api-free.deepl.com/v2/translate"
+    : "https://api.deepl.com/v2/translate";
+
+  try {
+    const params = new URLSearchParams();
+    params.append("text", text);
+    params.append("target_lang", targetLang.toUpperCase().slice(0, 5));
+    if (sourceLang) params.append("source_lang", String(sourceLang).toUpperCase().slice(0, 5));
+    if (formality && ["default", "more", "less", "prefer_more", "prefer_less"].includes(String(formality))) {
+      params.append("formality", String(formality));
+    }
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `DeepL-Auth-Key ${apiKey}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
+    const first = data.translations?.[0];
+    if (!first) return res.status(500).json({ error: "no translation returned" });
+    res.json({
+      ok: true,
+      text: first.text,
+      detectedSource: first.detected_source_language,
+      targetLang: targetLang.toUpperCase(),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Translation failed" });
+  }
+});
+
+// POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
+devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { path, targetLang, saveAs } = req.body || {};
+  if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
+  if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required" });
+
+  const apiKey = process.env.DEEPL_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
+
+  let file: DevHubFile | null;
+  try { file = await dbGetFile(project.id, path); }
+  catch { file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === path) ?? null; }
+  if (!file) return res.status(404).json({ error: "file not found in project" });
+
+  const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+  try {
+    const params = new URLSearchParams();
+    params.append("text", file.content);
+    params.append("target_lang", targetLang.toUpperCase().slice(0, 5));
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { translations: Array<{ text: string }> };
+    const translated = data.translations?.[0]?.text;
+    if (!translated) return res.status(500).json({ error: "no translation returned" });
+
+    const lang = targetLang.toLowerCase();
+    const newPath = String(saveAs || path.replace(/(\.[^./]+)$/, `.${lang}$1`) || `${path}.${lang}`).slice(0, 200);
+    const out: DevHubFile = {
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      path: newPath,
+      content: translated,
+      language: file.language,
+      updatedAt: now(),
+    };
+    try { await dbUpsertFile(out); }
+    catch {
+      const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === newPath);
+      if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
+      else memFiles.set(out.id, out);
+    }
+    res.json({ ok: true, path: newPath, bytes: translated.length, targetLang: targetLang.toUpperCase() });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "File translation failed" });
+  }
+});
+
+// GET /api/devhub/media/email-templates — list Brevo SMTP templates
+devhubRouter.get("/media/email-templates", async (req, res) => {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+
+  const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  try {
+    const r = await fetch(`https://api.brevo.com/v3/smtp/templates?limit=${limit}&offset=${offset}`, {
+      headers: { "api-key": apiKey, Accept: "application/json" },
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json() as { templates?: Array<{ id: number; name: string; subject: string; isActive: boolean; createdAt: string }>; count?: number };
+    res.json({
+      ok: true,
+      total: data.count ?? 0,
+      templates: (data.templates || []).map((t) => ({
+        id: t.id, name: t.name, subject: t.subject, isActive: t.isActive, createdAt: t.createdAt,
+      })),
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Templates fetch failed" });
+  }
+});
+
+// POST /api/devhub/media/email-template-send — send transac email by template ID with params
+devhubRouter.post("/media/email-template-send", async (req, res) => {
+  const { templateId, to, params } = req.body || {};
+  if (!templateId || (typeof templateId !== "number" && typeof templateId !== "string")) {
+    return res.status(400).json({ error: "templateId required" });
+  }
+  if (!to || typeof to !== "string") return res.status(400).json({ error: "to (email) required" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())) return res.status(400).json({ error: "invalid recipient email" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+
+  try {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        templateId: Number(templateId) || templateId,
+        to: [{ email: to.trim() }],
+        ...(params && typeof params === "object" ? { params } : {}),
+      }),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({}));
+    res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Template send failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Binary file serving (decode .b64 → audio/image MIME)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const B64_BINARY_MIME: Record<string, string> = {
+  ".mp3.b64": "audio/mpeg",
+  ".wav.b64": "audio/wav",
+  ".ogg.b64": "audio/ogg",
+  ".png.b64": "image/png",
+  ".jpg.b64": "image/jpeg",
+  ".webp.b64": "image/webp",
+};
+
+function detectB64Mime(path: string): string | null {
+  for (const [suffix, mime] of Object.entries(B64_BINARY_MIME)) {
+    if (path.toLowerCase().endsWith(suffix)) return mime;
+  }
+  return null;
+}
+
+// GET /api/devhub/projects/:id/file-binary?path=... — decode base64 file and serve as binary
+devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  const filePath = String(req.query.path || "");
+  if (!filePath) return res.status(400).json({ error: "path query param required" });
+
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  let file: DevHubFile | null;
+  try { file = await dbGetFile(project.id, filePath); }
+  catch { file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === filePath) ?? null; }
+  if (!file) return res.status(404).json({ error: "file not found" });
+
+  const mime = detectB64Mime(filePath) || "application/octet-stream";
+  try {
+    const buf = Buffer.from(file.content, "base64");
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Length", buf.length);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.send(buf);
+  } catch {
+    res.status(500).json({ error: "failed to decode base64 content" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Bulk DeepL translate (multi-file × multi-lang)
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { paths, targetLangs } = req.body || {};
+  if (!Array.isArray(paths) || paths.length === 0) return res.status(400).json({ error: "paths array required" });
+  if (!Array.isArray(targetLangs) || targetLangs.length === 0) return res.status(400).json({ error: "targetLangs array required" });
+  if (paths.length * targetLangs.length > 50) return res.status(400).json({ error: "max 50 translations per bulk call" });
+
+  const apiKey = process.env.DEEPL_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
+  const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+
+  const results: Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; bytes?: number; error?: string }> = [];
+
+  for (const p of paths) {
+    let file: DevHubFile | null;
+    try { file = await dbGetFile(project.id, String(p)); }
+    catch { file = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === String(p)) ?? null; }
+    if (!file) {
+      for (const lang of targetLangs) {
+        results.push({ path: String(p), targetLang: String(lang), ok: false, error: "file not found" });
+      }
+      continue;
+    }
+    for (const lang of targetLangs) {
+      try {
+        const params = new URLSearchParams();
+        params.append("text", file.content);
+        params.append("target_lang", String(lang).toUpperCase().slice(0, 5));
+        const r = await fetch(endpoint, {
+          method: "POST",
+          headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+        if (!r.ok) {
+          const errText = await r.text();
+          results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: errText.slice(0, 200) });
+          continue;
+        }
+        const data = await r.json() as { translations: Array<{ text: string }> };
+        const translated = data.translations?.[0]?.text;
+        if (!translated) {
+          results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: "no translation returned" });
+          continue;
+        }
+        const langLower = String(lang).toLowerCase();
+        const newPath = file.path.replace(/(\.[^./]+)$/, `.${langLower}$1`) || `${file.path}.${langLower}`;
+        const out: DevHubFile = {
+          id: crypto.randomUUID(),
+          projectId: project.id,
+          path: newPath,
+          content: translated,
+          language: file.language,
+          updatedAt: now(),
+        };
+        try { await dbUpsertFile(out); }
+        catch {
+          const existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === newPath);
+          if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
+          else memFiles.set(out.id, out);
+        }
+        results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: true, outputPath: newPath, bytes: translated.length });
+      } catch (e: any) {
+        results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: e?.message || "step failed" });
+      }
+    }
+  }
+
+  const okCount = results.filter((r) => r.ok).length;
+  res.json({
+    ok: okCount === results.length,
+    total: results.length,
+    successCount: okCount,
+    failureCount: results.length - okCount,
+    results,
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SDK generation (TypeScript client from project's Express routes)
+// ═════════════════════════════════════════════════════════════════════════════
+
+interface DetectedRoute { method: string; path: string; sourceFile: string }
+
+function detectExpressRoutes(files: DevHubFile[]): DetectedRoute[] {
+  const routes: DetectedRoute[] = [];
+  const routeRe = /(?:app|router)\s*\.\s*(get|post|put|patch|delete|all)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
+  for (const f of files) {
+    if (!/\.(ts|js|tsx|jsx|mjs)$/i.test(f.path)) continue;
+    let m: RegExpExecArray | null;
+    while ((m = routeRe.exec(f.content)) !== null) {
+      routes.push({ method: m[1].toUpperCase(), path: m[2], sourceFile: f.path });
+    }
+  }
+  return routes;
+}
+
+function generateSDK(projectName: string, baseUrl: string, routes: DetectedRoute[]): string {
+  const lines: string[] = [];
+  lines.push(`// Auto-generated SDK for ${projectName}`);
+  lines.push(`// Detected ${routes.length} endpoint(s) via AEVION DevHub`);
+  lines.push(`// DO NOT EDIT — re-generate via /api/devhub/projects/:id/sdk`);
+  lines.push("");
+  lines.push(`export interface SdkOptions {`);
+  lines.push(`  baseUrl?: string;`);
+  lines.push(`  token?: string;`);
+  lines.push(`  fetch?: typeof globalThis.fetch;`);
+  lines.push(`}`);
+  lines.push("");
+  lines.push(`export function createClient(opts: SdkOptions = {}) {`);
+  lines.push(`  const baseUrl = (opts.baseUrl || ${JSON.stringify(baseUrl)}).replace(/\\/$/, "");`);
+  lines.push(`  const f = opts.fetch || globalThis.fetch;`);
+  lines.push(`  const headers: Record<string, string> = { "Content-Type": "application/json" };`);
+  lines.push(`  if (opts.token) headers.Authorization = \`Bearer \${opts.token}\`;`);
+  lines.push("");
+  lines.push(`  async function call(method: string, path: string, body?: unknown, query?: Record<string, string | number | boolean>) {`);
+  lines.push(`    let url = baseUrl + path;`);
+  lines.push(`    if (query && Object.keys(query).length) {`);
+  lines.push(`      const qs = new URLSearchParams();`);
+  lines.push(`      for (const [k, v] of Object.entries(query)) qs.set(k, String(v));`);
+  lines.push(`      url += "?" + qs.toString();`);
+  lines.push(`    }`);
+  lines.push(`    const r = await f(url, {`);
+  lines.push(`      method,`);
+  lines.push(`      headers,`);
+  lines.push(`      body: body !== undefined && method !== "GET" ? JSON.stringify(body) : undefined,`);
+  lines.push(`    });`);
+  lines.push(`    if (!r.ok) {`);
+  lines.push(`      const txt = await r.text();`);
+  lines.push(`      throw new Error(\`\${method} \${path} → \${r.status}: \${txt.slice(0, 200)}\`);`);
+  lines.push(`    }`);
+  lines.push(`    const ct = r.headers.get("content-type") || "";`);
+  lines.push(`    return ct.includes("application/json") ? r.json() : r.text();`);
+  lines.push(`  }`);
+  lines.push("");
+  lines.push(`  return {`);
+  // De-dupe routes by method+path
+  const seen = new Set<string>();
+  for (const r of routes) {
+    const key = `${r.method} ${r.path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // Make a JS-safe identifier from method + path
+    const fnName = r.method.toLowerCase() +
+      r.path.replace(/[^a-zA-Z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "")
+            .replace(/^(\d)/, "_$1") || "root";
+    const hasParams = r.path.includes(":");
+    const params = hasParams ? r.path.match(/:(\w+)/g)?.map((s) => s.slice(1)) || [] : [];
+    const paramArgs = params.map((p) => `${p}: string | number`).join(", ");
+    const pathExpr = hasParams
+      ? '`' + r.path.replace(/:(\w+)/g, "${$1}") + '`'
+      : JSON.stringify(r.path);
+    const bodyArg = ["POST", "PUT", "PATCH"].includes(r.method) ? `body?: unknown` : "";
+    const queryArg = `query?: Record<string, string | number | boolean>`;
+    const allArgs = [paramArgs, bodyArg, queryArg].filter(Boolean).join(", ");
+    lines.push(`    /** ${r.method} ${r.path} — from ${r.sourceFile} */`);
+    lines.push(`    ${fnName}(${allArgs}) {`);
+    lines.push(`      return call(${JSON.stringify(r.method)}, ${pathExpr}, ${bodyArg ? "body" : "undefined"}, query);`);
+    lines.push(`    },`);
+  }
+  lines.push(`  };`);
+  lines.push(`}`);
+  lines.push("");
+  lines.push(`export type Client = ReturnType<typeof createClient>;`);
+  return lines.join("\n");
+}
+
+// GET /api/devhub/projects/:id/sdk — return TypeScript SDK
+devhubRouter.get("/projects/:id/sdk", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const files = await dbListFiles(project.id);
+  const routes = detectExpressRoutes(files);
+  const baseUrl = project.deployUrl || `https://${slugify(project.name)}-${project.id.slice(0, 8)}.aevion.app`;
+  const sdk = generateSDK(project.name, baseUrl, routes);
+
+  if (req.query.download === "1") {
+    res.setHeader("Content-Type", "text/typescript");
+    res.setHeader("Content-Disposition", `attachment; filename="${slugify(project.name)}-sdk.ts"`);
+    res.send(sdk);
+  } else {
+    res.json({
+      ok: true,
+      projectName: project.name,
+      baseUrl,
+      detectedRoutes: routes,
+      sdkBytes: sdk.length,
+      sdk,
+    });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Project export as ZIP (minimal stored-mode ZIP, no external deps)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const CRC32_TABLE: Uint32Array = (() => {
+  const tbl = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    tbl[i] = c >>> 0;
+  }
+  return tbl;
+})();
+
+function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC32_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function buildZipStored(entries: Array<{ path: string; content: Buffer }>): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.path, "utf8");
+    const dataBuf = entry.content;
+    const crc = crc32(dataBuf);
+    const size = dataBuf.length;
+
+    // Local file header (30 bytes + name + data)
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); // signature
+    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt16LE(0, 6); // flags
+    local.writeUInt16LE(0, 8); // method (0=stored)
+    local.writeUInt16LE(0, 10); // mtime
+    local.writeUInt16LE(0, 12); // mdate
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(size, 18); // compressed size
+    local.writeUInt32LE(size, 22); // uncompressed size
+    local.writeUInt16LE(nameBuf.length, 26); // name length
+    local.writeUInt16LE(0, 28); // extra length
+
+    const localHeader = Buffer.concat([local, nameBuf, dataBuf]);
+    localParts.push(localHeader);
+
+    // Central directory entry (46 bytes + name)
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0); // signature
+    central.writeUInt16LE(20, 4); // version made by
+    central.writeUInt16LE(20, 6); // version needed
+    central.writeUInt16LE(0, 8); // flags
+    central.writeUInt16LE(0, 10); // method
+    central.writeUInt16LE(0, 12); // mtime
+    central.writeUInt16LE(0, 14); // mdate
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(size, 20);
+    central.writeUInt32LE(size, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30); // extra length
+    central.writeUInt16LE(0, 32); // comment length
+    central.writeUInt16LE(0, 34); // disk number
+    central.writeUInt16LE(0, 36); // internal attrs
+    central.writeUInt32LE(0, 38); // external attrs
+    central.writeUInt32LE(offset, 42); // local header offset
+
+    centralParts.push(Buffer.concat([central, nameBuf]));
+    offset += localHeader.length;
+  }
+
+  const localBlock = Buffer.concat(localParts);
+  const centralBlock = Buffer.concat(centralParts);
+
+  // End of central directory record (22 bytes)
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); // signature
+  eocd.writeUInt16LE(0, 4); // disk number
+  eocd.writeUInt16LE(0, 6); // disk where CD starts
+  eocd.writeUInt16LE(entries.length, 8); // num entries this disk
+  eocd.writeUInt16LE(entries.length, 10); // total num entries
+  eocd.writeUInt32LE(centralBlock.length, 12); // size of CD
+  eocd.writeUInt32LE(localBlock.length, 16); // CD offset
+  eocd.writeUInt16LE(0, 20); // comment length
+
+  return Buffer.concat([localBlock, centralBlock, eocd]);
+}
+
+// GET /api/devhub/projects/:id/export — download project as ZIP
+devhubRouter.get("/projects/:id/export", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  try {
+    const files = await dbListFiles(project.id);
+    if (files.length === 0) return res.status(400).json({ error: "project has no files to export" });
+
+    const entries = files.map((f) => {
+      // Decode .b64 files back to binary
+      const isB64 = detectB64Mime(f.path);
+      let content: Buffer;
+      let outPath = f.path;
+      if (isB64) {
+        try { content = Buffer.from(f.content, "base64"); }
+        catch { content = Buffer.from(f.content, "utf8"); }
+        outPath = f.path.replace(/\.b64$/i, "");
+      } else {
+        content = Buffer.from(f.content, "utf8");
+      }
+      return { path: outPath, content };
+    });
+
+    // Include a metadata file
+    const meta = {
+      projectName: project.name,
+      description: project.description,
+      stack: project.stack,
+      exportedAt: new Date().toISOString(),
+      fileCount: files.length,
+      generatedBy: "AEVION DevHub",
+    };
+    entries.push({ path: "aevion-export.json", content: Buffer.from(JSON.stringify(meta, null, 2), "utf8") });
+
+    const zip = buildZipStored(entries);
+    const filename = `${slugify(project.name)}-${project.id.slice(0, 8)}.zip`;
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", zip.length);
+    res.send(zip);
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "export failed" });
+  }
+});
+
 // POST /api/devhub/projects/:id/deploy/vercel — deploy to Vercel
 devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
   const auth = verifyBearerOptional(req);
@@ -2187,4 +3582,289 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     return res.status(500).json({ ok: false, error: e?.message || "Vercel deploy failed" });
   }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Cloudflare R2 audio upload (S3-compatible, AWS SigV4)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function r2Configured(): boolean {
+  return Boolean(
+    process.env.CLOUDFLARE_R2_ACCOUNT_ID &&
+    process.env.CLOUDFLARE_R2_ACCESS_KEY_ID &&
+    process.env.CLOUDFLARE_R2_SECRET_KEY &&
+    process.env.CLOUDFLARE_R2_BUCKET
+  );
+}
+
+function sha256Hex(buf: Buffer | string): string {
+  return crypto.createHash("sha256").update(buf).digest("hex");
+}
+function hmacSha256(key: Buffer | string, msg: string): Buffer {
+  return crypto.createHmac("sha256", key).update(msg, "utf8").digest();
+}
+
+function signR2PutHeaders(opts: {
+  host: string; bucket: string; key: string; body: Buffer; contentType: string;
+  accessKey: string; secretKey: string; region?: string; now?: Date;
+}): Record<string, string> {
+  const region = opts.region || "auto";
+  const service = "s3";
+  const now = opts.now || new Date();
+  const amzDate = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const payloadHash = sha256Hex(opts.body);
+  const uri = `/${opts.bucket}/${opts.key.split("/").map(encodeURIComponent).join("/")}`;
+  const canonicalHeaders =
+    `content-type:${opts.contentType}\n` +
+    `host:${opts.host}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+  const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = ["PUT", uri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const credScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, credScope, sha256Hex(canonicalRequest)].join("\n");
+  const kDate = hmacSha256("AWS4" + opts.secretKey, dateStamp);
+  const kRegion = hmacSha256(kDate, region);
+  const kService = hmacSha256(kRegion, service);
+  const kSigning = hmacSha256(kService, "aws4_request");
+  const signature = crypto.createHmac("sha256", kSigning).update(stringToSign, "utf8").digest("hex");
+  const auth = `AWS4-HMAC-SHA256 Credential=${opts.accessKey}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  return {
+    Authorization: auth,
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": amzDate,
+    "Content-Type": opts.contentType,
+  };
+}
+
+async function r2PutObject(key: string, body: Buffer, contentType: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID;
+  const accessKey = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID;
+  const secretKey = process.env.CLOUDFLARE_R2_SECRET_KEY;
+  const bucket = process.env.CLOUDFLARE_R2_BUCKET;
+  if (!accountId || !accessKey || !secretKey || !bucket) return { ok: false, error: "R2 not configured" };
+
+  const host = `${accountId}.r2.cloudflarestorage.com`;
+  const headers = signR2PutHeaders({ host, bucket, key, body, contentType, accessKey, secretKey });
+  const uri = `/${bucket}/${key.split("/").map(encodeURIComponent).join("/")}`;
+  try {
+    const r = await fetch(`https://${host}${uri}`, { method: "PUT", headers, body: body as unknown as BodyInit });
+    if (!r.ok) {
+      const errText = await r.text();
+      return { ok: false, error: `R2 PUT ${r.status}: ${errText.slice(0, 200)}` };
+    }
+    const publicBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/\/+$/, "");
+    const url = publicBase
+      ? `${publicBase}/${key.split("/").map(encodeURIComponent).join("/")}`
+      : `https://${host}${uri}`;
+    return { ok: true, url };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || "R2 PUT failed" };
+  }
+}
+
+async function tryAutoUploadAudioToR2(buf: Buffer, contentType: string, key: string): Promise<string | null> {
+  if (!r2Configured()) return null;
+  const r = await r2PutObject(key, buf, contentType);
+  return r.ok ? r.url : null;
+}
+
+// POST /api/devhub/media/upload-audio — upload audio to Cloudflare R2 (permanent CDN URL)
+// Body: { sourceUrl?: string } OR { base64: string, mimeType?: string, key?: string }
+devhubRouter.post("/media/upload-audio", async (req, res) => {
+  const { sourceUrl, base64, mimeType = "audio/mpeg", key } = req.body || {};
+  if (!sourceUrl && !base64) return res.status(400).json({ error: "sourceUrl or base64 required" });
+  if (!r2Configured()) {
+    return res.status(503).json({
+      error: "Cloudflare R2 not configured — set CLOUDFLARE_R2_ACCOUNT_ID + CLOUDFLARE_R2_ACCESS_KEY_ID + CLOUDFLARE_R2_SECRET_KEY + CLOUDFLARE_R2_BUCKET",
+      setupUrl: "https://dash.cloudflare.com/?to=/:account/r2/api-tokens",
+    });
+  }
+
+  try {
+    let buf: Buffer;
+    if (sourceUrl) {
+      const sr = await fetch(String(sourceUrl));
+      if (!sr.ok) return res.status(sr.status).json({ error: `source fetch failed: ${sr.status}` });
+      buf = Buffer.from(await sr.arrayBuffer());
+    } else {
+      buf = Buffer.from(String(base64), "base64");
+    }
+    if (buf.length === 0) return res.status(400).json({ error: "audio body empty" });
+    if (buf.length > 25 * 1024 * 1024) return res.status(400).json({ error: "audio too large (max 25 MB)" });
+
+    const ct = String(mimeType);
+    const ext = ct.includes("wav") ? "wav" : ct.includes("ogg") ? "ogg" : "mp3";
+    const finalKey = String(key || `audio/${crypto.randomUUID()}.${ext}`).replace(/^\/+/, "").slice(0, 256);
+
+    const result = await r2PutObject(finalKey, buf, ct);
+    if (!result.ok) return res.status(502).json({ error: result.error });
+    res.json({ ok: true, key: finalKey, url: result.url, bytes: buf.length, mimeType: ct });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Audio upload failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Brevo: create SMTP email template
+// ═════════════════════════════════════════════════════════════════════════════
+
+devhubRouter.post("/media/email-template-create", async (req, res) => {
+  const { name, subject, htmlContent, senderEmail, senderName, replyTo, tag, isActive } = req.body || {};
+  if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
+  if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });
+  if (!htmlContent || typeof htmlContent !== "string") return res.status(400).json({ error: "htmlContent required" });
+  if (htmlContent.length > 2_000_000) return res.status(400).json({ error: "htmlContent too large (max 2 MB)" });
+
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: "Brevo not configured — set BREVO_API_KEY" });
+
+  const sEmail = String(senderEmail || process.env.BREVO_SENDER_EMAIL || "").trim();
+  const sName = String(senderName || process.env.BREVO_SENDER_NAME || "AEVION").trim();
+  if (!sEmail) return res.status(400).json({ error: "senderEmail required (or set BREVO_SENDER_EMAIL)" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sEmail)) return res.status(400).json({ error: "invalid senderEmail" });
+  if (replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(replyTo))) return res.status(400).json({ error: "invalid replyTo" });
+
+  try {
+    const payload: Record<string, unknown> = {
+      templateName: name.trim().slice(0, 100),
+      subject: subject.trim().slice(0, 300),
+      htmlContent,
+      sender: { email: sEmail, name: sName },
+      isActive: isActive === false ? false : true,
+    };
+    if (replyTo) payload.replyTo = String(replyTo).trim();
+    if (tag) payload.tag = String(tag).slice(0, 50);
+
+    const r = await fetch("https://api.brevo.com/v3/smtp/templates", {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      return res.status(r.status).json({ error: `Brevo error: ${errText.slice(0, 300)}` });
+    }
+    const data = await r.json().catch(() => ({})) as { id?: number };
+    if (!data.id) return res.status(500).json({ error: "Brevo did not return template id" });
+    res.json({ ok: true, id: data.id, name: payload.templateName, subject: payload.subject });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Template create failed" });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ZIP import (symmetric to GET /projects/:id/export — method=0 stored only)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function parseZipStored(buf: Buffer): Array<{ path: string; content: Buffer }> | { error: string } {
+  // Find EOCD signature 0x06054b50 — search backwards (max comment 65535)
+  const eocdSig = 0x06054b50;
+  let eocdOffset = -1;
+  const maxSearch = Math.min(buf.length, 65557);
+  for (let i = buf.length - 22; i >= buf.length - maxSearch && i >= 0; i--) {
+    if (buf.readUInt32LE(i) === eocdSig) { eocdOffset = i; break; }
+  }
+  if (eocdOffset < 0) return { error: "EOCD not found — not a valid ZIP" };
+  const numEntries = buf.readUInt16LE(eocdOffset + 10);
+  const cdOffset = buf.readUInt32LE(eocdOffset + 16);
+  if (cdOffset < 0 || cdOffset >= buf.length) return { error: "invalid central directory offset" };
+
+  const entries: Array<{ path: string; content: Buffer }> = [];
+  let p = cdOffset;
+  for (let n = 0; n < numEntries; n++) {
+    if (p + 46 > buf.length) return { error: "central directory truncated" };
+    if (buf.readUInt32LE(p) !== 0x02014b50) return { error: "bad CD entry signature" };
+    const method = buf.readUInt16LE(p + 10);
+    const compSize = buf.readUInt32LE(p + 20);
+    const uncompSize = buf.readUInt32LE(p + 24);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const commentLen = buf.readUInt16LE(p + 32);
+    const localOffset = buf.readUInt32LE(p + 42);
+    if (method !== 0) return { error: `unsupported compression method ${method} (only stored=0)` };
+    if (compSize !== uncompSize) return { error: "stored entry size mismatch" };
+    const name = buf.slice(p + 46, p + 46 + nameLen).toString("utf8");
+    p += 46 + nameLen + extraLen + commentLen;
+
+    // Local header at localOffset
+    if (localOffset + 30 > buf.length) return { error: "local header truncated" };
+    if (buf.readUInt32LE(localOffset) !== 0x04034b50) return { error: "bad local header signature" };
+    const lhNameLen = buf.readUInt16LE(localOffset + 26);
+    const lhExtraLen = buf.readUInt16LE(localOffset + 28);
+    const dataStart = localOffset + 30 + lhNameLen + lhExtraLen;
+    if (dataStart + uncompSize > buf.length) return { error: "data exceeds buffer" };
+    const content = buf.slice(dataStart, dataStart + uncompSize);
+    entries.push({ path: name, content });
+  }
+  return entries;
+}
+
+const BINARY_EXTENSIONS = /\.(mp3|wav|ogg|png|jpg|jpeg|webp|gif|pdf|zip|woff2?|ttf|otf)$/i;
+
+devhubRouter.post("/projects/:id/import-zip", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = auth?.sub ?? "anonymous";
+  let project: DevHubProject | null;
+  try { project = await dbGetProject(req.params.id); }
+  catch { project = memProjects.get(req.params.id) ?? null; }
+  if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
+
+  const { base64Zip, overwrite } = req.body || {};
+  if (!base64Zip || typeof base64Zip !== "string") return res.status(400).json({ error: "base64Zip required" });
+
+  let zipBuf: Buffer;
+  try { zipBuf = Buffer.from(base64Zip, "base64"); }
+  catch { return res.status(400).json({ error: "invalid base64" }); }
+  if (zipBuf.length === 0) return res.status(400).json({ error: "empty ZIP" });
+  if (zipBuf.length > 50 * 1024 * 1024) return res.status(400).json({ error: "ZIP too large (max 50 MB)" });
+
+  const parsed = parseZipStored(zipBuf);
+  if (!Array.isArray(parsed)) return res.status(400).json({ error: parsed.error });
+  if (parsed.length === 0) return res.status(400).json({ error: "ZIP contains no entries" });
+  if (parsed.length > 500) return res.status(400).json({ error: "max 500 files per import" });
+
+  const imported: Array<{ path: string; bytes: number; binary: boolean }> = [];
+  const skipped: Array<{ path: string; reason: string }> = [];
+
+  for (const entry of parsed) {
+    // Skip metadata + directory entries
+    if (entry.path === "aevion-export.json") { skipped.push({ path: entry.path, reason: "metadata" }); continue; }
+    if (entry.path.endsWith("/")) { skipped.push({ path: entry.path, reason: "directory" }); continue; }
+    if (entry.path.includes("..")) { skipped.push({ path: entry.path, reason: "path traversal" }); continue; }
+    if (entry.path.length > 240) { skipped.push({ path: entry.path, reason: "path too long" }); continue; }
+
+    const isBinary = BINARY_EXTENSIONS.test(entry.path);
+    const finalPath = isBinary && !entry.path.endsWith(".b64") ? entry.path + ".b64" : entry.path;
+    const content = isBinary ? entry.content.toString("base64") : entry.content.toString("utf8");
+
+    // overwrite=false ⇒ skip if exists
+    if (overwrite === false) {
+      let existing: DevHubFile | null;
+      try { existing = await dbGetFile(project.id, finalPath); }
+      catch { existing = [...memFiles.values()].find((f) => f.projectId === project!.id && f.path === finalPath) ?? null; }
+      if (existing) { skipped.push({ path: finalPath, reason: "already exists" }); continue; }
+    }
+
+    const f: DevHubFile = {
+      id: crypto.randomUUID(), projectId: project.id, path: finalPath,
+      content, language: detectLanguage(finalPath), updatedAt: now(),
+    };
+    try { await dbUpsertFile(f); }
+    catch {
+      const ex = [...memFiles.values()].find((x) => x.projectId === project!.id && x.path === finalPath);
+      if (ex) { ex.content = f.content; ex.language = f.language; ex.updatedAt = f.updatedAt; }
+      else memFiles.set(f.id, f);
+    }
+    imported.push({ path: finalPath, bytes: entry.content.length, binary: isBinary });
+  }
+
+  res.json({
+    ok: imported.length > 0,
+    importedCount: imported.length,
+    skippedCount: skipped.length,
+    imported,
+    skipped,
+  });
 });

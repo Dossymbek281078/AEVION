@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     description:
       "6 case-studies из 4 индустрий. Что считают клиенты: −73% времени на подпись, −74% на регистрацию IP, $2.3M экономии в год.",
     type: "website",
-    url: "https://aevion.app/pricing/cases",
+    url: "https://aevion.io/pricing/cases",
     siteName: "AEVION",
   },
   twitter: {

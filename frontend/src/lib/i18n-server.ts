@@ -82,7 +82,8 @@ export function tServer(
   key: string,
   vars?: Record<string, string | number>,
 ): string {
-  const raw = translations[lang]?.[key] ?? translations.en[key] ?? key;
+  const tbl = translations as unknown as Record<string, Record<string, string>>;
+  const raw = tbl[lang]?.[key] ?? tbl["en"]?.[key] ?? key;
   return interpolate(raw, vars);
 }
 

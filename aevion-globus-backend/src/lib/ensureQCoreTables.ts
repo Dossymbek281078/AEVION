@@ -253,8 +253,6 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebookCollection_owner_idx" ON "QCoreNotebookCollection" ("ownerUserId", "updatedAt" DESC);`);
-  await pool.query(`ALTER TABLE "QCoreNotebook" ADD COLUMN IF NOT EXISTS "collectionId" TEXT;`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_collection_idx" ON "QCoreNotebook" ("collectionId") WHERE "collectionId" IS NOT NULL;`);
 
   // Custom pipelines — user-defined multi-step agent chains saved as named configs.
   await pool.query(`
@@ -319,11 +317,11 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "QCoreRunRating" (
       "runId"     TEXT NOT NULL,
-      "userId"    TEXT,
+      "userId"    TEXT NOT NULL DEFAULT '',
       "rating"    INTEGER NOT NULL CHECK ("rating" IN (1, -1)),
       "note"      TEXT,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY ("runId", COALESCE("userId", ''))
+      PRIMARY KEY ("runId", "userId")
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreRunRating_runId_idx" ON "QCoreRunRating" ("runId");`);
@@ -365,6 +363,10 @@ export async function ensureQCoreTables(pool: PgPoolInstance): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_owner_updated_idx" ON "QCoreNotebook" ("ownerUserId", "updatedAt" DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_run_idx" ON "QCoreNotebook" ("runId");`);
   await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_tags_gin_idx" ON "QCoreNotebook" USING GIN ("tags");`);
+
+  // collectionId on Notebook — must run after QCoreNotebook is created above.
+  await pool.query(`ALTER TABLE "QCoreNotebook" ADD COLUMN IF NOT EXISTS "collectionId" TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS "QCoreNotebook_collection_idx" ON "QCoreNotebook" ("collectionId") WHERE "collectionId" IS NOT NULL;`);
 
   // Public comments on shared runs. No auth required to post — authorName is free-text.
   await pool.query(`

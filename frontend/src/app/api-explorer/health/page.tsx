@@ -153,7 +153,7 @@ export default function HealthExplorerPage() {
   const apiBase = getApiBase();
   const fullUrl = `${apiBase}/api/aevion/health`;
   const curl = `curl -s '${fullUrl}' | jq .`;
-  const sdk = `import { AevionCatalog } from "@aevion/catalog-client";
+  const sdk = `import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 const { status, healthy, total, services } = await cat.health();
 // status: "ok" | "degraded" | "down"
@@ -251,7 +251,7 @@ const { status, healthy, total, services } = await cat.health();
           {[
             { label: "URL", body: fullUrl, key: "url" },
             { label: "curl", body: curl, key: "curl" },
-            { label: "@aevion/catalog-client", body: sdk, key: "sdk" },
+            { label: "@aevion-io/catalog-client", body: sdk, key: "sdk" },
           ].map((s) => (
             <div
               key={s.key}

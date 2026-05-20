@@ -9,6 +9,21 @@ import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
+
+// AEV connector — Proof-of-Play engine A: успешные signing/verify действия mint'ят
+// AEV в общий wallet. Возвращает количество сminted AEV или 0 если cap/off-mode.
+function mintAevQSign(action: "qsign_sign" | "qsign_verify"): number {
+  try {
+    const w = ldWallet();
+    if (!w.modes.play) return 0;
+    const before = w.balance;
+    const next = recordPlay(w, action, "qsign");
+    if (next === w) return 0;
+    svWallet(next);
+    return next.balance - before;
+  } catch { return 0; }
+}
 
 const TOKEN_KEY = "aevion_auth_token_v1";
 

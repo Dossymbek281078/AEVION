@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import {
   ensureStartupExchangeTables,
@@ -537,3 +538,23 @@ startupExchangeRouter.post("/ideas/:id/interest", postLimiter, async (req: Reque
     createdAt: row.created_at,
   }, 201);
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+startupExchangeRouter.get("/status", (_req: Request, res: Response) => {
+  res.json({
+    module: "startupx",
+    code: "STARTUPX",
+    status: "mvp",
+    description: "Startup ideas marketplace with investor-interest signals.",
+    endpoints: {
+      ideas: "/api/startupx/ideas",
+      stats: "/api/startupx/stats",
+      conceptMessages: "/api/startupx/concept/messages",
+      conceptStats: "/api/startupx/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: startupExchangeRouter, moduleId: "startupx", defaultTag: "startupx", writeLimit: postLimiter });

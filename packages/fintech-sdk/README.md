@@ -1,4 +1,4 @@
-# @aevion/fintech-sdk
+# @aevion-io/fintech-sdk
 
 TypeScript client for the AEVION fintech ecosystem.
 
@@ -20,7 +20,7 @@ single auth-aware client, **and standalone webhook signing utilities**
 ## Install
 
 ```bash
-npm install @aevion/fintech-sdk
+npm install @aevion-io/fintech-sdk
 ```
 
 Node 18+ required (uses native `fetch`, `AbortSignal.timeout`, and
@@ -30,7 +30,7 @@ Workers, Deno, and edge runtimes — no native dependencies.
 ## Quickstart
 
 ```ts
-import { FintechClient } from "@aevion/fintech-sdk";
+import { FintechClient } from "@aevion-io/fintech-sdk";
 
 const client = new FintechClient({
   baseUrl: "https://aevion-production-a70c.up.railway.app",
@@ -88,7 +88,7 @@ sender + receiver helpers — use these instead of rolling your own HMAC.
 ### Verify incoming webhooks
 
 ```ts
-import { verifyWebhook } from "@aevion/fintech-sdk";
+import { verifyWebhook } from "@aevion-io/fintech-sdk";
 import express from "express";
 
 app.post("/webhooks/aevion", express.raw({ type: "*/*" }), async (req, res) => {
@@ -112,7 +112,7 @@ app.post("/webhooks/aevion", express.raw({ type: "*/*" }), async (req, res) => {
 ### Sign outgoing webhooks (dev fixtures, partner mocks, bridges)
 
 ```ts
-import { signWebhookPayload, aevionWebhookHeaders } from "@aevion/fintech-sdk";
+import { signWebhookPayload, aevionWebhookHeaders } from "@aevion-io/fintech-sdk";
 
 // Low-level — get signature + timestamp separately
 const { signature, timestamp } = await signWebhookPayload({ body, secret });
@@ -139,7 +139,7 @@ See the full rotation playbook at `/developers/fintech/troubleshooting`
 Non-2xx responses throw a plain `SDKError` shape (not an `Error` instance):
 
 ```ts
-import type { SDKError } from "@aevion/fintech-sdk";
+import type { SDKError } from "@aevion-io/fintech-sdk";
 
 try {
   await authed.qchaingov.vote(proposalId, { choice: "yes" });

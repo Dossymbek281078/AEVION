@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "AEVION Glossary",
     description: "30+ терминов по праву, compliance, технологиям, аутентификации и биллингу.",
     type: "website",
-    url: "https://aevion.app/pricing/glossary",
+    url: "https://aevion.io/pricing/glossary",
     siteName: "AEVION",
   },
   twitter: {

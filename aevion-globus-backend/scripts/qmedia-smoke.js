@@ -28,17 +28,17 @@ async function run() {
   console.log("1. Public tracks");
   const tracks = await req("GET", "/api/qmedia/tracks");
   assert("GET /tracks → 200", tracks.status === 200, String(tracks.status));
-  assert("tracks array", Array.isArray(tracks.body?.tracks ?? tracks.body));
+  assert("tracks array", Array.isArray(tracks.body?.tracks ?? tracks.body?.items ?? tracks.body));
 
   console.log("\n2. Playlists");
   const playlists = await req("GET", "/api/qmedia/playlists");
   assert("GET /playlists → 200", playlists.status === 200, String(playlists.status));
-  assert("playlists array", Array.isArray(playlists.body?.playlists ?? playlists.body));
+  assert("playlists array", Array.isArray(playlists.body?.playlists ?? playlists.body?.items ?? playlists.body));
 
   console.log("\n3. Videos");
   const videos = await req("GET", "/api/qmedia/videos");
   assert("GET /videos → 200", videos.status === 200, String(videos.status));
-  assert("videos array", Array.isArray(videos.body?.videos ?? videos.body));
+  assert("videos array", Array.isArray(videos.body?.videos ?? videos.body?.items ?? videos.body));
 
   console.log("\n4. Auth gates");
   const noAuthTrack = await req("POST", "/api/qmedia/me/tracks", { title: "Test", url: "https://x.com" });

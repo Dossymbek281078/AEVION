@@ -35,6 +35,7 @@
 import { Router } from "express";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
 
@@ -452,4 +453,32 @@ qchaingovRouter.get("/stats", readLimit, async (_req, res) => {
     console.error("[qchaingov] stats_failed", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "stats_failed" });
   }
+});
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qchaingovRouter.get("/status", readLimit, (_req, res) => {
+  res.json({
+    module: "qchaingov",
+    code: "QCHAINGOV",
+    status: "mvp",
+    description: "DAO governance — identity-bound proposals, votes, transparent execution.",
+    endpoints: {
+      health: "/api/qchaingov/health",
+      stats: "/api/qchaingov/stats",
+      proposals: "/api/qchaingov/proposals",
+      conceptMessages: "/api/qchaingov/concept/messages",
+      conceptStats: "/api/qchaingov/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({
+  router: qchaingovRouter,
+  moduleId: "qchaingov",
+  defaultTag: "qchaingov",
+  fieldMap: { idea: "topic", rationale: "motivation", extraFields: ["category"] },
+  readLimit,
+  writeLimit,
 });

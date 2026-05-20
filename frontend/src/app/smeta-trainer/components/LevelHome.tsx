@@ -294,7 +294,52 @@ export function LevelHome() {
             >
               📚 Справочник ССЦ РК 8.04-08-2025
               <span className="text-[10px] text-emerald-500 font-normal">
-                182 936 позиций
+                189 493 позиций
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/ssc-search"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              🔍 Глобальный поиск ССЦ
+              <span className="text-[10px] text-emerald-500 font-normal">
+                все 20 регионов
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/ssc-stats"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📊 Статистика ССЦ
+              <span className="text-[10px] text-emerald-500 font-normal">
+                покрытие по регионам/книгам
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/documents"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold rounded-lg"
+            >
+              📄 Учебные документы
+              <span className="text-[10px] text-emerald-500 font-normal">
+                КС-2 · КС-3 · Ф-2 РК · АОСР
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/exam"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              🎓 Экзамен
+              <span className="text-[10px] text-amber-600 font-normal">
+                5 заданий · автопроверка · балл 0–100
+              </span>
+            </Link>
+            <Link
+              href="/smeta-trainer/exam-journal"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              📔 Журнал попыток
+              <span className="text-[10px] text-amber-600 font-normal">
+                история · CSV-экспорт
               </span>
             </Link>
             <Link

@@ -15,7 +15,8 @@
     "index.ts",
     "index.js",
     "index.d.ts",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "keywords": [
     "aevion",
@@ -33,9 +34,13 @@
     "url": "https://github.com/Dossymbek281078/AEVION.git",
     "directory": "aevion-globus-backend/sdk/qsign-client"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "author": "AEVION",
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {},
   "devDependencies": {
@@ -43,6 +48,7 @@
   },
   "scripts": {
     "build": "tsc index.ts --declaration --target es2020 --module commonjs --strict --skipLibCheck",
-    "build:esm": "tsc index.ts --declaration --target es2020 --module es2020 --strict --skipLibCheck --outDir esm"
+    "build:esm": "tsc index.ts --declaration --target es2020 --module es2020 --strict --skipLibCheck --outDir esm",
+    "prepublishOnly": "npm run build"
   }
 }

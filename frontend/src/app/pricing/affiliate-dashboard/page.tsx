@@ -416,7 +416,7 @@ function DashboardContent({
           Документация программы
         </Link>
         <a
-          href={`mailto:hello@aevion.app?subject=Affiliate%20${encodeURIComponent(application.email)}`}
+          href={`mailto:hello@aevion.io?subject=Affiliate%20${encodeURIComponent(application.email)}`}
           style={{
             padding: "10px 20px",
             fontSize: 13,

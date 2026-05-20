@@ -1,6 +1,6 @@
-# PUBLISH-CHECKLIST — @aevion/catalog-client
+# PUBLISH-CHECKLIST — @aevion-io/catalog-client
 
-Pre-flight checklist for an npm publish of `@aevion/catalog-client`.
+Pre-flight checklist for an npm publish of `@aevion-io/catalog-client`.
 Run from `packages/aevion-catalog-client/` unless stated otherwise.
 
 > **Requires `NPM_TOKEN` env var** (Automation token, scope: `@aevion`, publish rights).
@@ -21,9 +21,9 @@ Run from `packages/aevion-catalog-client/` unless stated otherwise.
 - [ ] **verify tarball** — `npm pack` produces `aevion-catalog-client-<v>.tgz`, inspect it
 - [ ] **NPM_TOKEN set** OR `npm login` completed (one-time, requires 2FA)
 - [ ] **Real publish** — `npm publish --access public --provenance`
-- [ ] **Verify on npmjs.org** — https://www.npmjs.com/package/@aevion/catalog-client shows new version
+- [ ] **Verify on npmjs.org** — https://www.npmjs.com/package/@aevion-io/catalog-client shows new version
 - [ ] **Git tag** — `catalog-client-v<version>` pushed to origin
-- [ ] **Smoke install** — in a clean dir: `npm i @aevion/catalog-client && node -e "console.log(require('@aevion/catalog-client'))"`
+- [ ] **Smoke install** — in a clean dir: `npm i @aevion-io/catalog-client && node -e "console.log(require('@aevion-io/catalog-client'))"`
 
 ---
 
@@ -114,13 +114,13 @@ npm publish --access public
 
 ```bash
 # 1. Web view
-open https://www.npmjs.com/package/@aevion/catalog-client
+open https://www.npmjs.com/package/@aevion-io/catalog-client
 
 # 2. Install in a fresh sandbox
 mkdir /tmp/aevion-sdk-smoke && cd /tmp/aevion-sdk-smoke
 npm init -y
-npm i @aevion/catalog-client
-node -e "const { AevionCatalog } = require('@aevion/catalog-client'); console.log(typeof AevionCatalog);"
+npm i @aevion-io/catalog-client
+node -e "const { AevionCatalog } = require('@aevion-io/catalog-client'); console.log(typeof AevionCatalog);"
 # expected: "function"
 
 # 3. Tag the release in git
@@ -136,7 +136,7 @@ git push origin catalog-client-v0.7.0
 npm allows `unpublish` only within **72 hours** of publish:
 
 ```bash
-npm unpublish @aevion/catalog-client@0.7.0
+npm unpublish @aevion-io/catalog-client@0.7.0
 ```
 
 After 72 hours, you MUST publish a patch instead (e.g. `0.7.1`).
@@ -145,7 +145,7 @@ After 72 hours, you MUST publish a patch instead (e.g. `0.7.1`).
 If the package is broken but can't be unpublished, deprecate it:
 
 ```bash
-npm deprecate @aevion/catalog-client@0.7.0 "Broken release, use 0.7.1+"
+npm deprecate @aevion-io/catalog-client@0.7.0 "Broken release, use 0.7.1+"
 ```
 
 ---

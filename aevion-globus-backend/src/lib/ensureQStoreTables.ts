@@ -49,13 +49,19 @@ export async function ensureQStoreTables(pool: PgPoolInstance): Promise<void> {
     `);
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "QStorePurchase" (
-        "id"        TEXT PRIMARY KEY,
-        "productId" TEXT NOT NULL,
-        "buyerId"   TEXT NOT NULL,
-        "amount"    INTEGER NOT NULL DEFAULT 0,
-        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        "id"              TEXT PRIMARY KEY,
+        "productId"       TEXT NOT NULL,
+        "buyerId"         TEXT NOT NULL,
+        "amount"          INTEGER NOT NULL DEFAULT 0,
+        "status"          TEXT NOT NULL DEFAULT 'pending',
+        "stripeSessionId" TEXT,
+        "paidAt"          TIMESTAMPTZ,
+        "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await pool.query(`ALTER TABLE "QStorePurchase" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'pending'`);
+    await pool.query(`ALTER TABLE "QStorePurchase" ADD COLUMN IF NOT EXISTS "stripeSessionId" TEXT`);
+    await pool.query(`ALTER TABLE "QStorePurchase" ADD COLUMN IF NOT EXISTS "paidAt" TIMESTAMPTZ`);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "QStorePurchase_buyer_idx"
         ON "QStorePurchase" ("buyerId");

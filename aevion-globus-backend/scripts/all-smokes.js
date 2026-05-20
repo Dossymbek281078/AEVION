@@ -50,7 +50,7 @@ const SMOKES = [
   { name: "qsign-v2", script: "qsign-v2-smoke.js", readOnly: false },
   { name: "qshield", script: "qshield-smoke.js", readOnly: false },
   { name: "aev", script: "aev-smoke.js", readOnly: false },
-  { name: "build", script: "build-smoke.js", readOnly: false },
+  { name: "build", script: "build-smoke.js", readOnly: false, env: { BUILD_PAYMENT_WEBHOOK_SECRET: process.env.BUILD_PAYMENT_WEBHOOK_SECRET || "4wSqkQHVbttaDO02zDJiPZcmyRVU3gO9fhSY6nicb9kIYxFI" } },
   { name: "planet", script: "planet-smoke.js", readOnly: false },
   { name: "awards", script: "awards-smoke.js", readOnly: false },
   // qpaynet/qcontract: read-only public legs run anywhere; auth legs gated by TEST_JWT.
@@ -77,12 +77,57 @@ const SMOKES = [
   { name: "qtrade-prod", script: "qtrade-prod-smoke.js", readOnly: true },
   // Bureau PROD — 15 read-only checks for IP Bureau (health, transparency, notaries, auth gates).
   { name: "bureau-prod", script: "bureau-prod-smoke.js", readOnly: true },
+  // QRight PROD — 26 checks: health, objects CRUD, CSV export, transparency, badge SVG, embed, policies, RSS changelog.
+  { name: "qright-prod", script: "qright-prod-smoke.js", readOnly: false },
   // QSign PROD — 15 read-only checks for QSign v2 (ML-DSA/Ed25519/HMAC) + legacy deprecation.
   { name: "qsign-prod", script: "qsign-prod-smoke.js", readOnly: true },
   // HealthAI PROD — 15 read-only checks (health, referrals, empty-series graceful, auth gates).
   { name: "healthai-prod", script: "healthai-prod-smoke.js", readOnly: true },
+  // Revenue Hub PROD — 15 checks: health, apps, overview, Stripe balance, env-guide.
+  { name: "revenue-prod", script: "revenue-prod-smoke.js", readOnly: true },
+  // MVP Concepts PROD — 25 checks across 12 ownerless modules (deepsan/kids-ai/mapreality/etc).
+  { name: "mvp-concepts-prod", script: "mvp-concepts-prod-smoke.js", readOnly: true },
+  // QMaskCard PROD — 14 checks: health, stats, auth-gates.
+  { name: "qmaskcard-prod", script: "qmaskcard-prod-smoke.js", readOnly: true },
+  // OpenAPI completeness — guards /api/openapi.json against silent route drops.
+  // 19 critical module prefixes must be documented; 20 soft prefixes tracked
+  // for awareness (after 2026-05-19 expansion: all 20 present).
+  { name: "openapi-completeness", script: "openapi-completeness-smoke.js", readOnly: true },
+  // QCoreAI PROD — 12 checks for the multi-agent AI core (foundational —
+  // every AI-using module eventually calls into it). Validates health,
+  // providers/configuration consistency, sessions/agents/prompts shape.
+  { name: "qcoreai-prod", script: "qcoreai-prod-smoke.js", readOnly: true },
+  // Planet Compliance PROD — 15 checks for the central trust layer
+  // (submissions → artifact versions → certificates → activity). Stats
+  // invariants (certified ≤ total), activity timestamp parseability,
+  // auth gates on /submissions + /admin/*.
+  { name: "planet-prod", script: "planet-prod-smoke.js", readOnly: true },
+  // Auth PROD — 15 checks for the JWT auth surface. Foundation gate for
+  // every Bearer endpoint. Verifies validation gates (400 on empty body)
+  // + auth gates (401 on /me, /sessions, /audit, /whoami-strict, /account
+  // DELETE) WITHOUT actually attempting login (avoids rate-limit + lockout).
+  { name: "auth-prod", script: "auth-prod-smoke.js", readOnly: true },
+  // Modules PROD — 13 checks for /api/modules/status central registry +
+  // per-module health probe. Catches silent drops from the live list
+  // (frontend portal/docs site/status page all read from this endpoint).
+  { name: "modules-prod", script: "modules-prod-smoke.js", readOnly: true },
+  // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
+  { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
+  // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.
+  { name: "qchaingov-prod", script: "qchaingov-prod-smoke.js", readOnly: true },
   // QShield + QRight PROD — 15 read-only checks (Shamir health, QRight objects, auth gates).
   { name: "qshield-prod", script: "qshield-prod-smoke.js", readOnly: true },
+  // QZone PROD — 15 checks: QAI personas+sessions+chat, DevHub, QSocial, QMedia (qzone-block5).
+  { name: "qzone-prod", script: "qzone-prod-smoke.js", readOnly: true },
+  // Pricing PROD — 15 checks: FAQ, social-proof, provisioning, category filter.
+  { name: "pricing-prod", script: "pricing-prod-smoke.js", readOnly: true },
+  // AEVION REST PROD — 20 checks across coach/qlearn/qstore/qevents/qjobs/qnews/multichat.
+  // Closes the prod-surface gap for modules without their own *-prod-smoke.
+  { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },
+  // Universal Search PROD — 15 checks: health, results shape, byType, type filter, validation gates.
+  { name: "search-prod", script: "search-prod-smoke.js", readOnly: true },
+  // Paddle Billing PROD — 15 checks: health/plans/products/transactions + webhook HMAC round-trip.
+  { name: "paddle-prod", script: "paddle-prod-smoke.js", readOnly: true, env: { PADDLE_WEBHOOK_SECRET: process.env.PADDLE_WEBHOOK_SECRET || "" } },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.
@@ -124,6 +169,13 @@ const SMOKES = [
   { name: "deepsan", script: "deepsan-smoke.js", readOnly: false },
   { name: "qpersona", script: "qpersona-smoke.js", readOnly: false },
   { name: "qfusionai", script: "qfusionai-smoke.js", readOnly: false },
+  // Wave 4 MVPs (2026-05-15) — qlife/qgood.
+  { name: "qlife", script: "qlife-smoke.js", readOnly: false },
+  { name: "qgood", script: "qgood-smoke.js", readOnly: false },
+  // Wave 5 MVPs (2026-05-15) — lifebox/psyapp-deps/shadownet.
+  { name: "lifebox", script: "lifebox-smoke.js", readOnly: false },
+  { name: "psyapp-deps", script: "psyapp-deps-smoke.js", readOnly: false },
+  { name: "shadownet", script: "shadownet-smoke.js", readOnly: false },
   // qcore needs an LLM provider key for the run step. Default to skipping
   // those legs so the smoke validates plumbing (auth + history + analytics)
   // without burning provider tokens. Override via env if you want the full pass.

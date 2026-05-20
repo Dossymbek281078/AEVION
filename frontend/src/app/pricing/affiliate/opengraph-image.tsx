@@ -101,7 +101,7 @@ export default async function Image() {
             <Tag label="60 ДНЕЙ" hint="cookie window" />
             <Tag label="$50" hint="мин. выплата" />
           </div>
-          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/affiliate</div>
+          <div style={{ fontSize: 16, color: "#64748b" }}>aevion.io/pricing/affiliate</div>
         </div>
       </div>
     ),

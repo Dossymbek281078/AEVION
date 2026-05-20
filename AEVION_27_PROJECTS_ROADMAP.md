@@ -1,5 +1,9 @@
 # AEVION — 27 проектов: дорожная карта до рабочих версий
 
+> **Статус 2026-05-15:** **28 из 29 модулей** в разрешённых зонах достигли `status: "mvp"` в `projects.ts` (исключая `qtradeoffline` planning + `qmaskcard` idea — оба в excluded зонах ктрейд/финтех). Канонический 4-surface MVP-паттерн (/status + /concept/messages GET/POST + /concept-stats + frontend MvpConceptBoard) применён ко всем 17 модулям, которые в этот день перешли из `in_progress` в `mvp`. Prod smoke 17/17 ✅ на `https://aevion.app/api-backend`.
+>
+> **Статус 2026-05-18:** concept-board persistence chapter закрыт — **17/17 модулей** на shared Postgres (`aevion_concept_messages`) через `mountConceptBoard()` helper из `src/lib/conceptBoardStore.ts`. Helper поддерживает `fieldMap` для модулей с custom POST shape (qchaingov: topic/motivation/category, veilnetx: useCase/threatModel). Концепт-доски переживают Railway redeploy. Следующая фаза — реальные фичи поверх MVP-каркасов + переход `mvp → live`.
+
 **База:** список в `aevion-globus-backend/src/data/projects.ts` (ровно **27** узлов).  
 **«Рабочая версия» (Working v1):** для пользователя есть стабильный сценарий (UI или API), данные не теряются при перезапуске там, где нужна персистентность, есть базовая документация запуска.
 

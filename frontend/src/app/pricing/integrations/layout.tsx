@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     title: "AEVION Integrations",
     description: "20+ интеграций: коммуникации, CRM, автоматизация, платежи, разработчикам.",
     type: "website",
-    url: "https://aevion.app/pricing/integrations",
+    url: "https://aevion.io/pricing/integrations",
     siteName: "AEVION",
   },
   twitter: {

@@ -49,7 +49,7 @@ async function run() {
   console.log("\n3. List ideas");
   const list = await req("GET", "/api/startupx/ideas?limit=5");
   assert("GET /ideas → 200", list.status === 200, String(list.status));
-  assert("response has data array", Array.isArray(list.body?.data));
+  assert("response has data array", Array.isArray(list.body?.data?.ideas));
 
   console.log("\n4. Single idea");
   if (ideaId) {

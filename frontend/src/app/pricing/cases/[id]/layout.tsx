@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       title,
       description,
       type: "article",
-      url: `https://aevion.app/pricing/cases/${c.id}`,
+      url: `https://aevion.io/pricing/cases/${c.id}`,
       siteName: "AEVION",
     },
     twitter: {

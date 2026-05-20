@@ -50,7 +50,7 @@ export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
  *
  * @example
  * ```ts
- * import { FintechClient } from "@aevion/fintech-sdk";
+ * import { FintechClient } from "@aevion-io/fintech-sdk";
  *
  * const client = new FintechClient({
  *   baseUrl: "https://aevion-production-a70c.up.railway.app",

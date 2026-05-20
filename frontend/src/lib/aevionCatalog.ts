@@ -1,5 +1,5 @@
 /**
- * Singleton wrapper around `@aevion/catalog-client` for the frontend.
+ * Singleton wrapper around `@aevion-io/catalog-client` for the frontend.
  *
  * Connects to the same backend that `apiUrl()` targets:
  *   - In the browser: `/api-backend` (Next rewrites to backend)
@@ -10,10 +10,13 @@
  *
  * The SDK lives in the monorepo at `packages/aevion-catalog-client/` and
  * is wired into `frontend/package.json` as `file:` dep plus a tsconfig
- * `paths` alias, so the `@aevion/catalog-client` import below resolves
+ * `paths` alias, so the `@aevion-io/catalog-client` import below resolves
  * to the package's TS source.
  */
-import { AevionCatalog } from "@aevion/catalog-client";
+// Relative import to workspace package — Turbopack prod build не резолвит
+// bare specifier `@aevion-io/catalog-client` через file:../ npm dep + symlink.
+// Используем явный путь к built dist (package main).
+import { AevionCatalog } from "../../../packages/aevion-catalog-client/dist/index.js";
 import { getApiBase } from "@/lib/apiBase";
 
 /** Default unauthenticated client. Cheap to construct; created once. */

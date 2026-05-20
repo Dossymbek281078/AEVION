@@ -1,10 +1,10 @@
 /**
- * @aevion/catalog-client — TypeScript client for the AEVION Hub catalog API.
+ * @aevion-io/catalog-client — TypeScript client for the AEVION Hub catalog API.
  *
  * Zero dependencies. Uses global fetch (Node 18+ / all modern browsers).
  *
  * Usage:
- *   import { AevionCatalog } from "@aevion/catalog-client";
+ *   import { AevionCatalog } from "@aevion-io/catalog-client";
  *   const cat = new AevionCatalog();
  *   const all = await cat.list();
  *   const mvps = await cat.list({ status: "mvp" });
@@ -1078,7 +1078,7 @@ export class QLearnClient {
   }
 
   /** POST /api/qlearn/courses/:id/bookmark — add bookmark. */
-  bookmark(courseId: string): Promise<QLearnBookmarkResult> {
+  async bookmark(courseId: string): Promise<QLearnBookmarkResult> {
     this._assertCourseId(courseId);
     return this._root._request<QLearnBookmarkResult>(
       "POST",
@@ -1127,7 +1127,7 @@ export class QEventsClient {
   }
 
   /** GET /api/qevents/events/:id/ics — returns ICS text/calendar payload. */
-  ics(eventId: string): Promise<string> {
+  async ics(eventId: string): Promise<string> {
     if (!eventId || !/^[a-z0-9-]+$/i.test(eventId)) {
       throw new Error(`QEvents.ics invalid eventId: '${eventId}'`);
     }
@@ -1191,7 +1191,7 @@ export class DevHubClient {
   }
 
   /** POST /api/devhub/snippets/:id/star — toggle / increment star. */
-  star(snippetId: string): Promise<DevHubStarResult> {
+  async star(snippetId: string): Promise<DevHubStarResult> {
     if (!snippetId || !/^[a-z0-9-]+$/i.test(snippetId)) {
       throw new Error(`DevHub.star invalid snippetId: '${snippetId}'`);
     }
@@ -1265,7 +1265,7 @@ export class MultichatClient {
   }
 
   /** POST /api/multichat/presets/:id/launch — launch a preset, returns session. */
-  launchPreset(presetId: string): Promise<MultichatLaunchResponse> {
+  async launchPreset(presetId: string): Promise<MultichatLaunchResponse> {
     if (!presetId || !/^[a-z0-9-]+$/i.test(presetId)) {
       throw new Error(`Multichat.launchPreset invalid presetId: '${presetId}'`);
     }

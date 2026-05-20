@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { apiUrl } from "@/lib/apiBase";
+import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { SignalForm } from "./components/SignalForm";
 import { SignalCard, type Signal } from "./components/SignalCard";
 import { Filters, type FilterState } from "./components/Filters";
@@ -55,7 +57,7 @@ export default function MapRealityPage() {
       if (filters.category !== "all") params.set("category", filters.category);
       if (filters.country) params.set("country", filters.country);
       params.set("limit", "50");
-      const r = await fetch(`/api/mapreality/signals?${params}`, { cache: "no-store" });
+      const r = await fetch(apiUrl(`/api/mapreality/signals?${params}`), { cache: "no-store" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = (await r.json()) as { signals: Signal[]; total: number };
       setSignals(data.signals ?? []);
@@ -324,6 +326,23 @@ export default function MapRealityPage() {
               />
             ))}
           </div>
+        </div>
+
+        <div style={{ marginTop: 24 }}>
+          <MvpConceptBoard
+            moduleId="mapreality"
+            noun="concept/messages"
+            accent="emerald"
+            sectionTitle="Map concept board"
+            sectionHint="Какие слои реальности должны быть на карте? Какие сигналы важны для AR-навигации?"
+            titleField="idea"
+            summaryField="rationale"
+            fields={[
+              { key: "idea", label: "Идея / слой", placeholder: "напр.: тепловые карты безопасности районов", required: true },
+              { key: "rationale", label: "Зачем нужен этот слой", type: "textarea", placeholder: "Какую проблему решает, как верифицировать" },
+              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+            ]}
+          />
         </div>
 
         <footer

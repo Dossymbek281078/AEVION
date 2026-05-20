@@ -1,7 +1,19 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
-import { PrismaClient } from "@prisma/client";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { getPool } from "../lib/dbPool";
+
+/**
+ * qstr — нормализует значение из req.params / req.query / req.headers,
+ * которое в типах Express 5 имеет вид `string | string[] | undefined`,
+ * в обычный `string`. Если пришёл массив — берём первый элемент.
+ * Runtime-safe (в отличие от `as string`).
+ */
+function qstr(v: unknown, defaultValue = ""): string {
+  if (Array.isArray(v)) return String(v[0] ?? defaultValue);
+  if (v === undefined || v === null) return defaultValue;
+  return String(v);
+}
 
 /**
  * HealthAI v1 — Personal AI Doctor MVP.
@@ -87,11 +99,9 @@ const cyclesMem = new Map<string, CycleEntry[]>();
 const planSnapshotsMem = new Map<string, any[]>();
 
 /**
- * Hybrid store: Prisma если есть DATABASE_URL и таблицы доступны, иначе
- * in-memory Maps. Init выполняется лениво при первом use, чтобы не
- * падать на старте если БД ещё не готова.
+ * Hybrid store: raw SQL pool if DATABASE_URL available, else in-memory Maps.
+ * Tables bootstrapped on first use via CREATE TABLE IF NOT EXISTS.
  */
-let prisma: PrismaClient | null = null;
 let useDb = false;
 let dbInitTried = false;
 
@@ -103,14 +113,83 @@ async function ensureDb() {
     return;
   }
   try {
-    const p = new PrismaClient();
-    await p.healthProfile.findFirst();
-    prisma = p;
+    // Bootstrap Prisma tables via raw SQL (mirrors schema.prisma HealthAI models).
+    // Prisma's db push isn't in the Railway build command, so we create them here.
+    // One pool.query() per statement — same pattern as ensureQCoreTables.ts.
+    const pool = getPool();
+    await pool.query(`CREATE TABLE IF NOT EXISTS "HealthProfile" (
+      "id"          TEXT PRIMARY KEY,
+      "userId"      TEXT,
+      "memberLabel" TEXT,
+      "age"         INT NOT NULL DEFAULT 0,
+      "sex"         TEXT NOT NULL DEFAULT 'other',
+      "heightCm"    INT NOT NULL DEFAULT 0,
+      "weightKg"    DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "conditions"  TEXT[] NOT NULL DEFAULT '{}',
+      "allergies"   TEXT[] NOT NULL DEFAULT '{}',
+      "medications" TEXT[] NOT NULL DEFAULT '{}',
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "HealthProfile_userId_idx" ON "HealthProfile" ("userId")`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS "HealthDailyLog" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "date"        TEXT NOT NULL,
+      "sleepHours"  DOUBLE PRECISION,
+      "moodScore"   INT,
+      "weightKg"    DOUBLE PRECISION,
+      "waterL"      DOUBLE PRECISION,
+      "exerciseMin" INT,
+      "notes"       TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("profileId", "date")
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "HealthDailyLog_profileId_date_idx" ON "HealthDailyLog" ("profileId", "date")`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS "SymptomCheck" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "symptoms"    TEXT[] NOT NULL DEFAULT '{}',
+      "severity"    INT NOT NULL DEFAULT 5,
+      "durationH"   DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "notes"       TEXT,
+      "matched"     JSONB NOT NULL DEFAULT '[]',
+      "generic"     TEXT,
+      "disclaimer"  TEXT,
+      "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "SymptomCheck_profileId_createdAt_idx" ON "SymptomCheck" ("profileId", "createdAt")`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS "CycleEntry" (
+      "id"        TEXT PRIMARY KEY,
+      "profileId" TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "date"      TEXT NOT NULL,
+      "flow"      TEXT,
+      "symptoms"  TEXT[] NOT NULL DEFAULT '{}',
+      "notes"     TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE ("profileId", "date")
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "CycleEntry_profileId_date_idx" ON "CycleEntry" ("profileId", "date")`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS "PlanSnapshot" (
+      "id"          TEXT PRIMARY KEY,
+      "profileId"   TEXT NOT NULL REFERENCES "HealthProfile"("id") ON DELETE CASCADE,
+      "plan"        JSONB NOT NULL,
+      "bmi"         DOUBLE PRECISION,
+      "avgSleep7d"  DOUBLE PRECISION,
+      "avgMood7d"   DOUBLE PRECISION,
+      "generatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS "PlanSnapshot_profileId_generatedAt_idx" ON "PlanSnapshot" ("profileId", "generatedAt")`);
+    await pool.query(`SELECT 1 FROM "HealthProfile" LIMIT 1`);
     useDb = true;
-    console.log("[HealthAI] Prisma persistence enabled");
+    console.log("[HealthAI] Postgres persistence enabled");
   } catch (e) {
     console.warn(
-      "[HealthAI] Prisma init failed, fallback in-memory:",
+      "[HealthAI] DB init failed, fallback in-memory:",
       e instanceof Error ? e.message : e,
     );
   }
@@ -184,97 +263,65 @@ function rowToLog(r: any): DailyLog {
 const store = {
   async getProfile(id: string): Promise<HealthProfile | null> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.healthProfile.findUnique({ where: { id } });
-      return r ? rowToProfile(r) : null;
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "HealthProfile" WHERE "id"=$1`, [id]);
+      return r.rows.length ? rowToProfile(r.rows[0]) : null;
     }
     return profilesMem.get(id) || null;
   },
   async upsertProfile(p: HealthProfile): Promise<HealthProfile> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.healthProfile.upsert({
-        where: { id: p.id },
-        update: {
-          userId: p.userId ?? null,
-          memberLabel: p.memberLabel ?? null,
-          age: p.age,
-          sex: p.sex,
-          heightCm: p.heightCm,
-          weightKg: p.weightKg,
-          conditions: p.conditions,
-          allergies: p.allergies,
-          medications: p.medications,
-        },
-        create: {
-          id: p.id,
-          userId: p.userId ?? null,
-          memberLabel: p.memberLabel ?? null,
-          age: p.age,
-          sex: p.sex,
-          heightCm: p.heightCm,
-          weightKg: p.weightKg,
-          conditions: p.conditions,
-          allergies: p.allergies,
-          medications: p.medications,
-        },
-      });
-      return rowToProfile(r);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO "HealthProfile" ("id","userId","memberLabel","age","sex","heightCm","weightKg","conditions","allergies","medications","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+         ON CONFLICT ("id") DO UPDATE SET "userId"=$2,"memberLabel"=$3,"age"=$4,"sex"=$5,"heightCm"=$6,"weightKg"=$7,"conditions"=$8,"allergies"=$9,"medications"=$10,"updatedAt"=NOW()
+         RETURNING *`,
+        [p.id, p.userId??null, p.memberLabel??null, p.age, p.sex, p.heightCm, p.weightKg, p.conditions, p.allergies, p.medications]
+      );
+      return rowToProfile(r.rows[0]);
     }
     profilesMem.set(p.id, p);
     return p;
   },
   async listProfilesByUser(userId: string): Promise<HealthProfile[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.healthProfile.findMany({
-        where: { userId },
-        orderBy: { createdAt: "asc" },
-      });
-      return rows.map(rowToProfile);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "HealthProfile" WHERE "userId"=$1 ORDER BY "createdAt" ASC`, [userId]);
+      return r.rows.map(rowToProfile);
     }
     return Array.from(profilesMem.values()).filter((p) => p.userId === userId);
   },
   async deleteProfile(id: string): Promise<boolean> {
     await ensureDb();
-    if (useDb && prisma) {
-      try {
-        await prisma.healthProfile.delete({ where: { id } });
-        return true;
-      } catch {
-        return false;
-      }
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`DELETE FROM "HealthProfile" WHERE "id"=$1 RETURNING id`, [id]);
+      return r.rowCount! > 0;
     }
     return profilesMem.delete(id);
   },
   async getChecks(profileId: string, limit = 200): Promise<SymptomCheck[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.symptomCheck.findMany({
-        where: { profileId },
-        orderBy: { createdAt: "desc" },
-        take: limit,
-      });
-      return rows.map(rowToCheck);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "SymptomCheck" WHERE "profileId"=$1 ORDER BY "createdAt" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map(rowToCheck);
     }
     return (checksMem.get(profileId) || []).slice(0, limit);
   },
   async addCheck(c: SymptomCheck): Promise<void> {
     await ensureDb();
-    if (useDb && prisma) {
-      await prisma.symptomCheck.create({
-        data: {
-          id: c.id,
-          profileId: c.profileId,
-          symptoms: c.symptoms,
-          severity: c.severity,
-          durationH: c.durationH,
-          notes: c.notes,
-          matched: c.matched as any,
-          generic: c.generic,
-          disclaimer: c.disclaimer,
-        },
-      });
+    if (useDb) {
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO "SymptomCheck" ("id","profileId","symptoms","severity","durationH","notes","matched","generic","disclaimer","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())`,
+        [c.id, c.profileId, c.symptoms, c.severity, c.durationH, c.notes??null, JSON.stringify(c.matched), c.generic??null, c.disclaimer??null]
+      );
       return;
     }
     const list = checksMem.get(c.profileId) || [];
@@ -284,111 +331,73 @@ const store = {
   },
   async getLogs(profileId: string, limit = 365): Promise<DailyLog[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.healthDailyLog.findMany({
-        where: { profileId },
-        orderBy: { date: "desc" },
-        take: limit,
-      });
-      return rows.map(rowToLog);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "HealthDailyLog" WHERE "profileId"=$1 ORDER BY "date" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map(rowToLog);
     }
     return (logsMem.get(profileId) || []).slice(0, limit);
   },
   async upsertLog(l: DailyLog): Promise<DailyLog> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.healthDailyLog.upsert({
-        where: {
-          profileId_date: { profileId: l.profileId, date: l.date },
-        },
-        update: {
-          sleepHours: l.sleepHours,
-          moodScore: l.moodScore,
-          weightKg: l.weightKg,
-          waterL: l.waterL,
-          exerciseMin: l.exerciseMin,
-          notes: l.notes,
-        },
-        create: {
-          id: l.id,
-          profileId: l.profileId,
-          date: l.date,
-          sleepHours: l.sleepHours,
-          moodScore: l.moodScore,
-          weightKg: l.weightKg,
-          waterL: l.waterL,
-          exerciseMin: l.exerciseMin,
-          notes: l.notes,
-        },
-      });
-      return rowToLog(r);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO "HealthDailyLog" ("id","profileId","date","sleepHours","moodScore","weightKg","waterL","exerciseMin","notes","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+         ON CONFLICT ("profileId","date") DO UPDATE SET "sleepHours"=$4,"moodScore"=$5,"weightKg"=$6,"waterL"=$7,"exerciseMin"=$8,"notes"=$9
+         RETURNING *`,
+        [l.id, l.profileId, l.date, l.sleepHours??null, l.moodScore??null, l.weightKg??null, l.waterL??null, l.exerciseMin??null, l.notes??null]
+      );
+      return rowToLog(r.rows[0]);
     }
     const list = logsMem.get(l.profileId) || [];
     const idx = list.findIndex((x) => x.date === l.date);
-    if (idx >= 0) list[idx] = l;
-    else list.unshift(l);
+    if (idx >= 0) list[idx] = l; else list.unshift(l);
     if (list.length > 365) list.length = 365;
     logsMem.set(l.profileId, list);
     return l;
   },
   async getCycles(profileId: string, limit = 365): Promise<CycleEntry[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.cycleEntry.findMany({
-        where: { profileId },
-        orderBy: { date: "desc" },
-        take: limit,
-      });
-      return rows.map(rowToCycle);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "CycleEntry" WHERE "profileId"=$1 ORDER BY "date" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map(rowToCycle);
     }
     return (cyclesMem.get(profileId) || []).slice(0, limit);
   },
   async upsertCycle(c: CycleEntry): Promise<CycleEntry> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.cycleEntry.upsert({
-        where: { profileId_date: { profileId: c.profileId, date: c.date } },
-        update: { flow: c.flow, symptoms: c.symptoms, notes: c.notes },
-        create: {
-          id: c.id,
-          profileId: c.profileId,
-          date: c.date,
-          flow: c.flow,
-          symptoms: c.symptoms,
-          notes: c.notes,
-        },
-      });
-      return rowToCycle(r);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(
+        `INSERT INTO "CycleEntry" ("id","profileId","date","flow","symptoms","notes","createdAt")
+         VALUES ($1,$2,$3,$4,$5,$6,NOW())
+         ON CONFLICT ("profileId","date") DO UPDATE SET "flow"=$4,"symptoms"=$5,"notes"=$6
+         RETURNING *`,
+        [c.id, c.profileId, c.date, c.flow??null, c.symptoms, c.notes??null]
+      );
+      return rowToCycle(r.rows[0]);
     }
     const list = cyclesMem.get(c.profileId) || [];
     const idx = list.findIndex((x) => x.date === c.date);
-    if (idx >= 0) list[idx] = c;
-    else list.unshift(c);
+    if (idx >= 0) list[idx] = c; else list.unshift(c);
     cyclesMem.set(c.profileId, list);
     return c;
   },
   async addPlanSnapshot(s: {
-    id: string;
-    profileId: string;
-    plan: unknown;
-    bmi?: number | null;
-    avgSleep7d?: number | null;
-    avgMood7d?: number | null;
-    generatedAt: string;
+    id: string; profileId: string; plan: unknown;
+    bmi?: number | null; avgSleep7d?: number | null; avgMood7d?: number | null; generatedAt: string;
   }): Promise<void> {
     await ensureDb();
-    if (useDb && prisma) {
-      await prisma.planSnapshot.create({
-        data: {
-          id: s.id,
-          profileId: s.profileId,
-          plan: s.plan as any,
-          bmi: s.bmi ?? null,
-          avgSleep7d: s.avgSleep7d ?? null,
-          avgMood7d: s.avgMood7d ?? null,
-          generatedAt: new Date(s.generatedAt),
-        },
-      });
+    if (useDb) {
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO "PlanSnapshot" ("id","profileId","plan","bmi","avgSleep7d","avgMood7d","generatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [s.id, s.profileId, JSON.stringify(s.plan), s.bmi??null, s.avgSleep7d??null, s.avgMood7d??null, new Date(s.generatedAt)]
+      );
       return;
     }
     const list = planSnapshotsMem.get(s.profileId) || [];
@@ -398,58 +407,46 @@ const store = {
   },
   async listPlanSnapshots(profileId: string, limit = 30): Promise<any[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.planSnapshot.findMany({
-        where: { profileId },
-        orderBy: { generatedAt: "desc" },
-        take: limit,
-      });
-      return rows.map((r) => ({
-        id: r.id,
-        profileId: r.profileId,
-        plan: r.plan,
-        bmi: r.bmi == null ? null : Number(r.bmi),
-        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
-        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
-        generatedAt:
-          r.generatedAt instanceof Date
-            ? r.generatedAt.toISOString()
-            : r.generatedAt,
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "PlanSnapshot" WHERE "profileId"=$1 ORDER BY "generatedAt" DESC LIMIT $2`, [profileId, limit]);
+      return r.rows.map((row: any) => ({
+        id: row.id, profileId: row.profileId, plan: row.plan,
+        bmi: row.bmi == null ? null : Number(row.bmi),
+        avgSleep7d: row.avgSleep7d == null ? null : Number(row.avgSleep7d),
+        avgMood7d: row.avgMood7d == null ? null : Number(row.avgMood7d),
+        generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
       }));
     }
     return (planSnapshotsMem.get(profileId) || []).slice(0, limit);
   },
   async getPlanSnapshot(id: string): Promise<any | null> {
     await ensureDb();
-    if (useDb && prisma) {
-      const r = await prisma.planSnapshot.findUnique({ where: { id } });
-      if (!r) return null;
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT * FROM "PlanSnapshot" WHERE "id"=$1`, [id]);
+      if (!r.rows.length) return null;
+      const row: any = r.rows[0];
       return {
-        id: r.id,
-        profileId: r.profileId,
-        plan: r.plan,
-        bmi: r.bmi == null ? null : Number(r.bmi),
-        avgSleep7d: r.avgSleep7d == null ? null : Number(r.avgSleep7d),
-        avgMood7d: r.avgMood7d == null ? null : Number(r.avgMood7d),
-        generatedAt:
-          r.generatedAt instanceof Date
-            ? r.generatedAt.toISOString()
-            : r.generatedAt,
+        id: row.id, profileId: row.profileId, plan: row.plan,
+        bmi: row.bmi == null ? null : Number(row.bmi),
+        avgSleep7d: row.avgSleep7d == null ? null : Number(row.avgSleep7d),
+        avgMood7d: row.avgMood7d == null ? null : Number(row.avgMood7d),
+        generatedAt: row.generatedAt instanceof Date ? row.generatedAt.toISOString() : row.generatedAt,
       };
     }
     for (const list of planSnapshotsMem.values()) {
-      const found = list.find((x) => x.id === id);
+      const found = list.find((x: any) => x.id === id);
       if (found) return found;
     }
     return null;
   },
   async allProfileIdsWithLogs(): Promise<string[]> {
     await ensureDb();
-    if (useDb && prisma) {
-      const rows = await prisma.healthDailyLog.groupBy({
-        by: ["profileId"],
-      });
-      return rows.map((r) => r.profileId);
+    if (useDb) {
+      const pool = getPool();
+      const r = await pool.query(`SELECT DISTINCT "profileId" FROM "HealthDailyLog"`);
+      return r.rows.map((row: any) => row.profileId);
     }
     return Array.from(logsMem.keys());
   },
@@ -624,9 +621,9 @@ healthaiRouter.get("/health", async (_req, res) => {
   res.json({
     status: "ok",
     service: "AEVION HealthAI",
-    persistence: useDb ? "prisma" : "in-memory",
-    profilesCount: useDb && prisma
-      ? await prisma.healthProfile.count()
+    persistence: useDb ? "postgres" : "in-memory",
+    profilesCount: useDb
+      ? Number((await getPool().query(`SELECT COUNT(*) FROM "HealthProfile"`)).rows[0].count)
       : profilesMem.size,
     rulesCount: ADVICE_RULES.length,
     timestamp: nowIso(),
@@ -693,17 +690,17 @@ healthaiRouter.get("/profiles/me", async (req: Request, res: Response) => {
 healthaiRouter.delete("/profile/:id", async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth-required" });
-  const profile = await store.getProfile(req.params.id);
+  const profile = await store.getProfile(qstr(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   if (profile.userId !== auth.sub) {
     return res.status(403).json({ error: "not-profile-owner" });
   }
-  const ok = await store.deleteProfile(req.params.id);
+  const ok = await store.deleteProfile(qstr(req.params.id));
   res.json({ ok });
 });
 
 healthaiRouter.get("/profile/:id", async (req: Request, res: Response) => {
-  const profile = await store.getProfile(req.params.id);
+  const profile = await store.getProfile(qstr(req.params.id));
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   res.json({
     profile,
@@ -775,14 +772,14 @@ healthaiRouter.post("/log", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/history/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const cks = await store.getChecks(profileId, 20);
   const lgs = await store.getLogs(profileId, 90);
   res.json({ checks: cks, logs: lgs });
 });
 
 healthaiRouter.get("/trends/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const lgs = await store.getLogs(profileId);
   if (lgs.length === 0) {
     return res.json({
@@ -1093,7 +1090,7 @@ healthaiRouter.post("/import", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1240,7 +1237,7 @@ healthaiRouter.get("/risks/:id", async (req: Request, res: Response) => {
  * подсказки. Безопасно: не диагноз, не подменяет врача.
  */
 healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1321,7 +1318,7 @@ healthaiRouter.get("/hydration/:profileId", async (req: Request, res: Response) 
  * мотивационный (НЕ диагноз). Подсвечивает слабое звено для фокуса.
  */
 healthaiRouter.get("/score/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1490,7 +1487,7 @@ healthaiRouter.post("/cycle", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const all = await store.getCycles(profileId);
   if (all.length === 0) {
     return res.json({
@@ -1644,7 +1641,7 @@ healthaiRouter.post("/screener/phq9", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/phq9/:profileId",
   async (req: Request, res: Response) => {
-    const last = PHQ9_LAST.get(req.params.profileId);
+    const last = PHQ9_LAST.get(qstr(req.params.profileId));
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1725,7 +1722,7 @@ healthaiRouter.post("/screener/gad7", async (req: Request, res: Response) => {
 healthaiRouter.get(
   "/screener/gad7/:profileId",
   async (req: Request, res: Response) => {
-    const last = GAD7_LAST.get(req.params.profileId);
+    const last = GAD7_LAST.get(qstr(req.params.profileId));
     if (!last) return res.json({ last: null });
     res.json({ last });
   },
@@ -1753,7 +1750,7 @@ type GeneratedPlan = {
 };
 
 healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 
@@ -1913,6 +1910,45 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
     rationale,
   };
 
+  // LLM enhancement — personalize the rule-based plan with AI insights.
+  // Gracefully falls back to rule-based if no API key or LLM call fails.
+  let aiInsights: string | null = null;
+  let aiModel: string | null = null;
+  const llmSystemPrompt = [
+    "You are a certified wellness coach. A patient's health plan was generated by rules.",
+    "Add 2-3 SHORT, practical, personalized tips that the rules missed.",
+    "Language: match the plan language (Russian if goals are in Russian).",
+    "Output ONLY the tips as a plain numbered list. No headers, no disclaimers, no repetition of existing advice.",
+  ].join(" ");
+  const llmUserPrompt = [
+    `Profile: age ${profile.age}, sex ${profile.sex}, BMI ${bmiVal > 0 ? bmiVal : "unknown"}.`,
+    profile.conditions.length ? `Conditions: ${profile.conditions.join(", ")}.` : "",
+    profile.medications.length ? `Medications: ${profile.medications.join(", ")}.` : "",
+    avgSleep != null ? `Avg sleep 7d: ${avgSleep.toFixed(1)}h.` : "",
+    avgMood != null ? `Avg mood 7d: ${avgMood.toFixed(1)}/10.` : "",
+    avgExercise != null ? `Avg exercise 7d: ${avgExercise.toFixed(0)} min/day.` : "",
+    `Current plan goals: ${plan.goals.slice(0, 3).join("; ")}.`,
+    "Add 2-3 personalized tips not already covered.",
+  ].filter(Boolean).join(" ");
+
+  try {
+    const chain: Array<() => Promise<{ advice: string; model: string }>> = [
+      () => callLlmAnthropic(llmSystemPrompt, llmUserPrompt),
+      () => callLlmOpenAI(llmSystemPrompt, llmUserPrompt),
+      () => callLlmGemini(llmSystemPrompt, llmUserPrompt),
+    ];
+    for (const fn of chain) {
+      try {
+        const r = await fn();
+        aiInsights = r.advice;
+        aiModel = r.model;
+        break;
+      } catch {
+        /* try next provider */
+      }
+    }
+  } catch { /* ignore */ }
+
   const generatedAt = nowIso();
   const snapshotId = newId("plan");
   void store
@@ -1929,6 +1965,9 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
 
   res.json({
     plan,
+    aiInsights,
+    aiModel,
+    aiEnhanced: !!aiInsights,
     snapshotId,
     bmi: bmiVal,
     avgSleep7d: avgSleep,
@@ -1942,7 +1981,7 @@ healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
 });
 
 healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Response) => {
-  const list = await store.listPlanSnapshots(req.params.profileId);
+  const list = await store.listPlanSnapshots(qstr(req.params.profileId));
   res.json({
     snapshots: list.map((s) => ({
       id: s.id,
@@ -1956,14 +1995,14 @@ healthaiRouter.get("/plan/history/:profileId", async (req: Request, res: Respons
 });
 
 healthaiRouter.get("/plan/snapshot/:id", async (req: Request, res: Response) => {
-  const snap = await store.getPlanSnapshot(req.params.id);
+  const snap = await store.getPlanSnapshot(qstr(req.params.id));
   if (!snap) return res.status(404).json({ error: "snapshot-not-found" });
   res.json(snap);
 });
 
 /** Полный экспорт профиля для врача (или для backup). */
 healthaiRouter.get("/export/:id", async (req: Request, res: Response) => {
-  const profileId = req.params.id;
+  const profileId = qstr(req.params.id);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
   const cks = await store.getChecks(profileId);
@@ -1997,7 +2036,7 @@ const POP_BASELINE = {
 };
 
 healthaiRouter.get("/population/:profileId", async (req, res) => {
-  const profileId = req.params.profileId;
+  const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });
 

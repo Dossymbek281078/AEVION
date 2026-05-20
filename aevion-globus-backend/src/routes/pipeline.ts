@@ -248,6 +248,25 @@ async function ensureTables(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_action_at_idx" ON "PipelineAuditLog" ("action", "at" DESC);`,
   );
 
+  // Tier 2: append-only admin audit (force-revoke, etc).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS "PipelineAuditLog" (
+      "id" TEXT PRIMARY KEY,
+      "action" TEXT NOT NULL,
+      "certId" TEXT,
+      "objectId" TEXT,
+      "actor" TEXT,
+      "payload" JSONB,
+      "at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_at_idx" ON "PipelineAuditLog" ("at" DESC);`,
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS "PipelineAuditLog_action_at_idx" ON "PipelineAuditLog" ("action", "at" DESC);`,
+  );
+
   tablesReady = true;
 }
 

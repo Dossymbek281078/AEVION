@@ -28,11 +28,11 @@ const MODULES = [
   { id: "kids-ai-content",  noun: "items",      create: { topic: "Smoke",  ageRange: "6-8", summary: "test" } },
   { id: "qlife",            noun: "prompts",    create: { prompt: "Smoke prompt", rationale: "test" } },
   { id: "psyapp-deps",      noun: "assessments",create: { title: "Smoke",  category: "test" } },
-  { id: "qpersona",         noun: "personas",   create: { name: "Smoke",   traits: ["test"], blueprint: "x" } },
+  { id: "qpersona",         noun: "personas",   create: { alias: `sm${Date.now()}`, displayName: "Smoke Bot", traits: ["test"], blueprint: "x" } },
   { id: "voice-of-earth",   noun: "feeds",      create: { location: "Test", metric: "pm2.5", observation: "x" } },
   { id: "deepsan",          noun: "runs",       create: { facility: "TestF", method: "uv",   } },
-  { id: "shadownet",        noun: "posts",      create: { title: "Smoke",  body: "Anon test body" } },
-  { id: "lifebox",          noun: "capsules",   create: { label: "Smoke",  year: 2026,    occasion: "test" } },
+  { id: "shadownet",        noun: "posts",      create: { alias: `smoke${Date.now()}`, title: "Smoke", body: "Anon test body", ciphertext: "c2lnbmVkLXNtb2tlLXRlc3Q=", iv: "smoke-iv-aevion", salt: "smoke-salt-aevion" } },
+  { id: "lifebox",          noun: "capsules",   create: { alias: `lb${Date.now()}`, title: "Smoke capsule", content: "Test capsule content", category: "knowledge", unlock_at: "2099-01-01T00:00:00Z", year: 2026, occasion: "test" } },
 ];
 
 let passed = 0; let failed = 0;
@@ -51,7 +51,8 @@ async function exercise(m) {
 
   // 1. list
   let r = await req("GET", `/api/${m.id}/${m.noun}?limit=3`);
-  if (r.status === 200 && Array.isArray(r.body?.items)) ok(`GET /api/${m.id}/${m.noun}`, `total=${r.body.total}`);
+  const listArr = r.body?.items ?? r.body?.[m.noun] ?? r.body;
+  if (r.status === 200 && Array.isArray(listArr)) ok(`GET /api/${m.id}/${m.noun}`, `total=${r.body?.total ?? listArr.length}`);
   else { fail(`list /${m.noun}`, `${r.status}`); return; }
 
   // 2. create

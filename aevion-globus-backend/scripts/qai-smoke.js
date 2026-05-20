@@ -12,7 +12,7 @@ function assert(label, cond, info = "") {
 }
 
 async function req(method, path, body) {
-  const opts = { method, headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(8000) };
+  const opts = { method, headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(25000) };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(`${BASE}${path}`, opts);
   const text = await r.text();

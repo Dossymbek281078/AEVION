@@ -11,6 +11,10 @@ out/
 # Backend build artifacts
 dist/
 **/dist/
+# Exception: catalog-client dist must be committed so CI frontend build
+# can import it without a separate build step (file: workspace dep + no
+# workflow scope to modify ci.yml to run tsc first).
+!packages/aevion-catalog-client/dist/
 build/
 **/build/
 # QBuild product source dirs (collide with the broad **/build/ rule above —

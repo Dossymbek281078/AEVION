@@ -327,7 +327,7 @@ export default function PricingRefundPolicyPage() {
         </p>
         <div style={{ display: "inline-flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
           <a
-            href="mailto:billing@aevion.app?subject=Refund%20request"
+            href="mailto:billing@aevion.io?subject=Refund%20request"
             style={{
               padding: "10px 20px",
               fontSize: 13,
@@ -338,7 +338,7 @@ export default function PricingRefundPolicyPage() {
               textDecoration: "none",
             }}
           >
-            billing@aevion.app
+            billing@aevion.io
           </a>
           <Link
             href="/pricing/contact"

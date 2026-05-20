@@ -24,7 +24,7 @@ export default function QMediaMusicPage() {
   const [form, setForm] = useState({ title: "", artist: "", url: "", genre: "pop" });
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // v0.8: load via @aevion/catalog-client SDK (cat.qmedia.tracks).
+  // v0.8: load via @aevion-io/catalog-client SDK (cat.qmedia.tracks).
   useEffect(() => {
     const g = genre === "All" ? undefined : genre.toLowerCase();
     catalog.qmedia

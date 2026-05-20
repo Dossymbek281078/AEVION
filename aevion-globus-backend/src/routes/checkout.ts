@@ -1,45 +1,41 @@
 import { Router } from "express";
-import Stripe from "stripe";
-import { TIERS, MODULES_PRICING, getTier, getModulePrice, resolvePromoCode, type TierId, type BillingPeriod } from "../data/pricing";
+import {
+  PADDLE_KEY, PADDLE_WEBHOOK_SECRET, IS_PADDLE_SANDBOX,
+  paddlePost, paddleGet, verifyPaddleWebhook,
+} from "../lib/paddleClient";
+import {
+  TIERS, getTier, getModulePrice, resolvePromoCode,
+  type TierId, type BillingPeriod,
+} from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
 
 export const checkoutRouter = Router();
 
 /**
- * Stripe Checkout с graceful stub-fallback.
+ * Paddle Billing checkout с graceful stub-fallback.
  *
- * Если STRIPE_SECRET_KEY задан — создаём реальную checkout-session.
- * Если нет — возвращаем stub-ссылку на /pricing/checkout/success?stub=true,
- * чтобы UX-flow можно было прокликать без реальных ключей.
+ * Если PADDLE_API_KEY задан — создаём реальную Paddle Transaction.
+ * Если нет — возвращаем stub-ссылку для UX-flow без реальных ключей.
  *
- * Это тот же паттерн, что у QCoreAI (OpenAI key → real, нет → stub).
+ * ENV:
+ *   PADDLE_API_KEY         — secret key из Paddle dashboard
+ *   PADDLE_WEBHOOK_SECRET  — webhook endpoint secret
+ *   PADDLE_SANDBOX         — "true"(default)/"false" для prod
  */
 
-const SK = process.env.STRIPE_SECRET_KEY?.trim();
-const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET?.trim();
 const FRONTEND_URL = process.env.FRONTEND_URL?.trim() || "http://localhost:3000";
-
-const stripe = SK ? new Stripe(SK, { apiVersion: "2026-04-22.dahlia" }) : null;
 
 interface CheckoutBody {
   tierId: TierId;
-  modules?: string[];
+  period?: "monthly" | "annual";
   seats?: number;
-  period?: BillingPeriod;
-  email?: string;
+  modules?: string[];
   promoCode?: string;
+  email?: string;
   trial?: boolean;
 }
 
-/**
- * POST /api/pricing/checkout/session
- * Body: { tierId, modules?, seats?, period?, email? }
- *
- * Возвращает: { url, mode: 'real' | 'stub', sessionId? }
- *
- * Free и Enterprise — отдельные сценарии: free создаёт фейковый success,
- * enterprise редиректит на /pricing/contact (нет self-service).
- */
+// ── POST /session ─────────────────────────────────────────────────────────────
 checkoutRouter.post("/session", async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
@@ -52,7 +48,6 @@ checkoutRouter.post("/session", async (req, res) => {
     const seats = Math.max(1, Math.min(1000, body.seats ?? 1));
 
     if (tier.id === "free") {
-      // Free — сразу к success без оплаты
       return res.json({
         url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=free`,
         mode: "stub",
@@ -60,95 +55,49 @@ checkoutRouter.post("/session", async (req, res) => {
     }
 
     if (tier.id === "enterprise") {
-      // Enterprise — никакого self-service, направляем в форму
       return res.json({
         url: `${FRONTEND_URL}/pricing/contact?tier=enterprise`,
         mode: "stub",
       });
     }
 
-    // Считаем сумму в центах (для Stripe — int)
-    const tierUsd = period === "annual"
-      ? (tier.priceAnnualTotal ?? 0)
-      : (tier.priceMonthly ?? 0);
+    const tierUsd = period === "annual" ? (tier.priceAnnualTotal ?? 0) : (tier.priceMonthly ?? 0);
 
-    const lineItems: Array<{
-      name: string;
-      description?: string;
-      amountCents: number;
-      qty: number;
-    }> = [];
+    let totalUsd = tierUsd;
 
-    if (tierUsd > 0) {
-      lineItems.push({
-        name: `AEVION ${tier.name}`,
-        description:
-          period === "annual"
-            ? `Годовая подписка (12 мес, экономия 16%)`
-            : `Месячная подписка`,
-        amountCents: Math.round(tierUsd * 100),
-        qty: 1,
-      });
-    }
-
-    // Доп seats (поверх базовых лимитов)
+    // Extra seats
     const baseSeats = tier.limits.seats ?? 1;
     const extraSeats = Math.max(0, seats - baseSeats);
     if (extraSeats > 0) {
-      lineItems.push({
-        name: `Дополнительные пользователи`,
-        description: `${extraSeats} × $5/мес${period === "annual" ? " × 12 мес" : ""}`,
-        amountCents: 5 * 100 * (period === "annual" ? 12 : 1),
-        qty: extraSeats,
-      });
+      totalUsd += 5 * extraSeats * (period === "annual" ? 12 : 1);
     }
 
-    // Add-on модули
+    // Add-on modules
     for (const mid of body.modules ?? []) {
       const m = getModulePrice(mid);
       if (!m || m.includedIn.includes(tier.id)) continue;
-      if (m.addonMonthly === null || m.addonMonthly === 0) continue;
-      lineItems.push({
-        name: `Модуль ${m.id}`,
-        description: m.oneLiner,
-        amountCents: m.addonMonthly * 100 * (period === "annual" ? 12 : 1),
-        qty: 1,
-      });
+      if (!m.addonMonthly) continue;
+      totalUsd += m.addonMonthly * (period === "annual" ? 12 : 1);
     }
 
-    if (lineItems.length === 0) {
-      return res.status(400).json({ error: "empty_cart" });
-    }
-
-    // Promo-код: применяется как отрицательная line item, чтобы Stripe видел итог
-    let promoLine: { name: string; description: string; amountCents: number; qty: number } | null = null;
+    // Promo code discount
+    let discountUsd = 0;
     if (body.promoCode) {
       const { promo } = resolvePromoCode(body.promoCode, tier.id);
       if (promo) {
-        const subtotalCents = lineItems.reduce((s, l) => s + l.amountCents * l.qty, 0);
-        const promoCents =
-          promo.kind === "percent"
-            ? Math.round((subtotalCents * promo.amount) / 100)
-            : Math.min(subtotalCents, promo.amount * 100 * (period === "annual" ? 12 : 1));
-        // Stripe не принимает отрицательные line items в Checkout — используем coupon
-        promoLine = {
-          name: `Промо ${promo.code}`,
-          description: promo.description,
-          amountCents: -promoCents,
-          qty: 1,
-        };
+        const subtotal = totalUsd;
+        discountUsd = promo.kind === "percent"
+          ? Math.round(subtotal * promo.amount) / 100
+          : Math.min(subtotal, promo.amount * (period === "annual" ? 12 : 1));
+        totalUsd = Math.max(0, totalUsd - discountUsd);
       }
     }
 
     const trialDays = body.trial && (tier.id === "pro" || tier.id === "business") ? 14 : 0;
+    const totalCents = Math.round(totalUsd * 100);
 
-    // Stub-fallback: нет ключа Stripe — эмулируем checkout
-    if (!stripe) {
-      let total = lineItems.reduce((s, l) => s + l.amountCents * l.qty, 0);
-      if (promoLine) total = Math.max(0, total + promoLine.amountCents * promoLine.qty);
-      const trialQs = trialDays > 0 ? `&trial=${trialDays}` : "";
-
-      // Если email указан — сразу провизим подписку (для smoke-flow без webhook'a)
+    // Stub-режим — нет Paddle ключа
+    if (!PADDLE_KEY()) {
       if (body.email) {
         provisionSubscription({
           email: body.email,
@@ -157,124 +106,147 @@ checkoutRouter.post("/session", async (req, res) => {
           seats,
           modules: body.modules ?? [],
           trialDays,
-          amountUsd: total / 100,
+          amountUsd: totalUsd,
           promoCode: body.promoCode,
           source: "stub_checkout",
         }).catch((e) => console.error("[stub_provisioning] failed", e));
       }
-
       return res.json({
-        url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${total}${trialQs}`,
+        url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${totalCents}`,
         mode: "stub",
-        lineItems,
-        promo: promoLine,
-        trialDays: trialDays || undefined,
+        provider: "paddle",
       });
     }
 
-    // Реальный Stripe Checkout. Promo конвертируется в Stripe coupon на лету.
-    let discounts: Array<{ coupon: string }> | undefined;
-    if (promoLine) {
-      const coupon = await stripe.coupons.create({
-        amount_off: -promoLine.amountCents,
-        currency: "usd",
-        name: promoLine.name,
-        duration: "once",
+    if (totalCents <= 0) {
+      // Free / fully discounted
+      if (body.email) {
+        provisionSubscription({
+          email: body.email, tierId: tier.id, period, seats,
+          modules: body.modules ?? [], trialDays, amountUsd: 0,
+          promoCode: body.promoCode, source: "paddle_zero",
+        }).catch((e) => console.error("[provisioning] zero-price failed", e));
+      }
+      return res.json({
+        url: `${FRONTEND_URL}/pricing/checkout/success?paddle=true&tier=${tier.id}&period=${period}&total=0`,
+        mode: "zero",
+        provider: "paddle",
       });
-      discounts = [{ coupon: coupon.id }];
     }
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      line_items: lineItems.map((l) => ({
-        price_data: {
-          currency: "usd",
-          unit_amount: l.amountCents,
-          product_data: {
-            name: l.name,
-            ...(l.description ? { description: l.description } : {}),
+    // Реальный Paddle Checkout — используем каталожные priceId если заданы, иначе inline price
+    const PADDLE_PRICES: Record<string, string | undefined> = {
+      "pro:monthly":   process.env.PADDLE_PRICE_PRO_MONTHLY,
+      "pro:annual":    process.env.PADDLE_PRICE_PRO_ANNUAL,
+      "business:monthly": process.env.PADDLE_PRICE_BIZ_MONTHLY,
+      "business:annual":  process.env.PADDLE_PRICE_BIZ_ANNUAL,
+    };
+    const catalogPriceId = PADDLE_PRICES[`${tier.id}:${period}`];
+
+    const customData: Record<string, string> = {
+      tierId: tier.id,
+      period,
+      seats: String(seats),
+      modules: (body.modules ?? []).join(","),
+      promoCode: body.promoCode ?? "",
+      trialDays: String(trialDays),
+      source: "aevion_checkout",
+    };
+
+    // Build items: prefer catalog priceId, fall back to inline price
+    const item: Record<string, unknown> = catalogPriceId
+      ? { price_id: catalogPriceId, quantity: 1 }
+      : {
+          price: {
+            description: `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`,
+            unit_price: { amount: String(totalCents), currency_code: "USD" },
+            product: { name: `AEVION ${tier.name}`, tax_category: "standard" },
           },
-        },
-        quantity: l.qty,
-      })),
-      ...(discounts ? { discounts } : { allow_promotion_codes: true }),
-      success_url: `${FRONTEND_URL}/pricing/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${FRONTEND_URL}/pricing/checkout/cancel?tier=${tier.id}`,
-      customer_email: body.email,
-      metadata: {
-        tierId: tier.id,
-        period,
-        seats: String(seats),
-        modules: (body.modules ?? []).join(","),
-        promoCode: body.promoCode ?? "",
-        trialDays: String(trialDays),
+          quantity: 1,
+        };
+
+    // Find or create Paddle customer
+    const txBody: Record<string, unknown> = {
+      items: [item],
+      checkout: {
+        url: `${FRONTEND_URL}/pricing/checkout/success?tier=${tier.id}&period=${period}`,
       },
-    });
+      custom_data: customData,
+    };
+
+    if (body.email) {
+      const existing = await paddleGet(
+        `/customers?email=${encodeURIComponent(body.email)}&per_page=1`
+      ) as { data?: { id: string }[] } | null;
+      const customerId = existing?.data?.[0]?.id;
+      if (customerId) {
+        txBody.customer_id = customerId;
+      } else {
+        const newCust = await paddlePost("/customers", { email: body.email }) as { data?: { id: string } } | null;
+        if (newCust?.data?.id) txBody.customer_id = newCust.data.id;
+      }
+    }
+
+    const tx = await paddlePost("/transactions", txBody) as {
+      data?: { id: string; checkout?: { url: string } };
+    } | null;
+
+    if (!tx?.data) {
+      return res.status(502).json({ error: "paddle_transaction_failed" });
+    }
 
     res.json({
-      url: session.url,
+      url: tx.data.checkout?.url ?? `${FRONTEND_URL}/pricing/checkout/success?tx=${tx.data.id}`,
       mode: "real",
-      sessionId: session.id,
+      provider: "paddle",
+      transactionId: tx.data.id,
+      sandbox: IS_PADDLE_SANDBOX(),
     });
   } catch (e: unknown) {
     console.error("[checkout/session] failed", e);
-    res.status(500).json({
-      error: "checkout_failed",
-      message: e instanceof Error ? e.message : String(e),
-    });
+    res.status(500).json({ error: "checkout_failed", message: e instanceof Error ? e.message : String(e) });
   }
 });
 
-/**
- * POST /api/pricing/checkout/webhook
- * Stripe → AEVION webhook (raw body required для verifySignature).
- *
- * В реальном проекте: подключить provisioning (создать аккаунт, активировать тариф,
- * выслать welcome-email, добавить в реестр QRight).
- * Сейчас — только логируем event и подтверждаем 200.
- */
+// ── POST /webhook ─────────────────────────────────────────────────────────────
 checkoutRouter.post("/webhook", (req, res) => {
-  if (!stripe || !WEBHOOK_SECRET) {
-    // В stub-режиме принимаем что угодно для smoke-тестов
-    console.log("[checkout/webhook] STUB mode — event accepted without verification");
+  const secret = PADDLE_WEBHOOK_SECRET();
+
+  if (!secret) {
+    console.log("[checkout/webhook] STUB — no PADDLE_WEBHOOK_SECRET");
     return res.json({ received: true, mode: "stub" });
   }
 
-  const sig = req.headers["stripe-signature"] as string | undefined;
-  if (!sig) {
-    return res.status(400).json({ error: "missing_signature" });
-  }
+  const sig = req.headers["paddle-signature"] as string | undefined;
+  if (!sig) return res.status(400).json({ error: "missing paddle-signature header" });
 
-  // Stripe SDK 22 namespace типы не reach-abble через default import, поэтому
-  // используем минимальную структурную типизацию для нужных нам полей.
-  let event: {
-    type: string;
-    data: { object: { id?: string; metadata?: Record<string, string>; amount_total?: number | null } };
-  };
-  try {
-    event = stripe.webhooks.constructEvent(
-      (req as unknown as { rawBody?: Buffer }).rawBody ?? JSON.stringify(req.body),
-      sig,
-      WEBHOOK_SECRET,
-    ) as typeof event;
-  } catch (e) {
-    console.error("[checkout/webhook] signature verification failed", e);
+  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+  if (!rawBody) return res.status(400).json({ error: "raw body not available" });
+
+  if (!verifyPaddleWebhook(rawBody, sig, secret)) {
+    console.error("[checkout/webhook] signature mismatch");
     return res.status(400).json({ error: "invalid_signature" });
   }
 
-  // Webhook handler — асинхронный provisioning. Stripe ожидает 200 в течение 30s,
-  // поэтому fire-and-forget: ack сразу, провайдинг — в фоне.
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as unknown as {
-      id: string;
-      customer_email?: string | null;
-      customer_details?: { email?: string | null };
-      amount_total?: number | null;
-      metadata?: Record<string, string>;
+  let event: { event_type: string; data: Record<string, unknown> };
+  try {
+    event = JSON.parse(rawBody.toString("utf8"));
+  } catch {
+    return res.status(400).json({ error: "invalid_json" });
+  }
+
+  // Paddle events: transaction.completed → provision subscription
+  if (event.event_type === "transaction.completed") {
+    const tx = event.data as {
+      id?: string;
+      custom_data?: Record<string, string>;
+      customer?: { email?: string };
+      details?: { totals?: { grand_total?: string } };
     };
-    const email = session.customer_email || session.customer_details?.email;
-    const m = session.metadata ?? {};
+    const m = tx.custom_data ?? {};
+    const email = tx.customer?.email;
+    const amountCents = parseInt(tx.details?.totals?.grand_total ?? "0", 10);
+
     if (email && m.tierId) {
       provisionSubscription({
         email,
@@ -283,44 +255,34 @@ checkoutRouter.post("/webhook", (req, res) => {
         seats: m.seats ? parseInt(m.seats, 10) : 1,
         modules: m.modules ? m.modules.split(",").filter(Boolean) : [],
         trialDays: m.trialDays ? parseInt(m.trialDays, 10) : 0,
-        amountUsd: session.amount_total ? session.amount_total / 100 : undefined,
+        amountUsd: amountCents / 100,
         promoCode: m.promoCode || undefined,
-        stripeSessionId: session.id,
-        source: "stripe_webhook",
-      })
-        .then((r) => {
-          console.log(
-            `[provisioning] subscription=${r.subscription.id} tier=${r.subscription.tierId} email_${r.emailMode}=${r.emailSent}${r.emailError ? " err=" + r.emailError : ""}`,
-          );
-        })
-        .catch((e) => console.error("[provisioning] failed", e));
-    } else {
-      console.warn("[checkout/webhook] session.completed without email or tier", session.id);
+        paddleTransactionId: tx.id,
+        source: "paddle_webhook",
+      }).then((r) => {
+        console.log(`[provisioning] paddle tx=${tx.id} tier=${r.subscription.tierId} email=${email}`);
+      }).catch((e) => console.error("[provisioning] failed", e));
     }
-  } else if (event.type === "checkout.session.expired") {
-    console.log("[checkout/webhook] session.expired", event.data.object.id);
+  } else if (event.event_type === "subscription.activated" || event.event_type === "subscription.updated") {
+    console.log(`[checkout/webhook] ${event.event_type}`, (event.data as { id?: string }).id);
   }
 
-  res.json({ received: true });
+  res.json({ received: true, provider: "paddle" });
 });
 
-/**
- * GET /api/pricing/checkout/subscriptions/count
- * Счётчик активированных подписок — открыто (не PII).
- */
+// ── GET /subscriptions/count ──────────────────────────────────────────────────
 checkoutRouter.get("/subscriptions/count", (_req, res) => {
   res.json({ total: countSubscriptions() });
 });
 
-/**
- * GET /api/pricing/checkout/healthz
- * Видимость режима для CI/UI: real/stub + наличие webhook secret.
- */
+// ── GET /healthz ──────────────────────────────────────────────────────────────
 checkoutRouter.get("/healthz", (_req, res) => {
   res.json({
     ok: true,
-    mode: stripe ? "real" : "stub",
-    webhookConfigured: !!WEBHOOK_SECRET,
+    mode: PADDLE_KEY() ? "real" : "stub",
+    provider: "paddle",
+    sandbox: IS_PADDLE_SANDBOX(),
+    webhookConfigured: !!PADDLE_WEBHOOK_SECRET(),
     frontendUrl: FRONTEND_URL,
   });
 });

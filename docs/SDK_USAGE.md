@@ -2,12 +2,12 @@
 
 ## TL;DR
 
-`@aevion/catalog-client` is a zero-dependency TypeScript client for the AEVION Hub catalog API at `api.aevion.app`. Install with `npm i @aevion/catalog-client`, then list, lookup, filter, score, badge, and aggregate every AEVION module from one tiny surface. Full reference: [packages/aevion-catalog-client/README.md](../packages/aevion-catalog-client/README.md).
+`@aevion-io/catalog-client` is a zero-dependency TypeScript client for the AEVION Hub catalog API at `api.aevion.app`. Install with `npm i @aevion-io/catalog-client`, then list, lookup, filter, score, badge, and aggregate every AEVION module from one tiny surface. Full reference: [packages/aevion-catalog-client/README.md](../packages/aevion-catalog-client/README.md).
 
 ## Installation
 
 ```bash
-npm install @aevion/catalog-client
+npm install @aevion-io/catalog-client
 ```
 
 Requirements:
@@ -21,7 +21,7 @@ If you must run on Node 16 or below, inject `node-fetch` via the `fetch` config 
 ## Quick start
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const { items } = await cat.list({ status: "mvp" });
@@ -41,7 +41,7 @@ Eight self-contained snippets. Drop into a `.ts` file, `npx tsx file.ts`, done. 
 `mvpsAndLaunched()` is sugar for `byStatus(["mvp", "launched"])` and returns the items array directly.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const live = await cat.mvpsAndLaunched();
@@ -59,7 +59,7 @@ Note: results are server-filtered, so payload stays small even for large registr
 The API filters by *any* tag match, so for an *all* match (AND), filter client-side after a single fetch.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const want = new Set(["ai", "security"]);
@@ -78,7 +78,7 @@ Gotcha: `searchByTag` returns *union*, not intersection — the client-side filt
 `badgeUrl()` returns a `shields.io`-shaped SVG URL. No fetch — just a string.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const ids = ["qsign", "qright", "planet", "qpersona"];
@@ -97,7 +97,7 @@ Drop the output straight into any Markdown file. Badge colour reflects status (g
 `markdownUrl()` returns a URL to the server-rendered Markdown export. Filter via the same options as `list()`.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const url = cat.markdownUrl({ status: ["mvp", "launched"], kind: "product" });
@@ -114,7 +114,7 @@ The server-rendered format is stable and includes a header, badge column, and ta
 `graph()` is a single-round-trip K-NN over tag-Jaccard similarity — useful for D3 force layouts or recommendation prototypes.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const edges = await cat.graph({ topK: 4, minOverlap: 1 });
@@ -132,7 +132,7 @@ Each edge carries `overlap` (raw shared-tag count) and `score` (Jaccard 0..1). S
 `health()` aggregates `/health` from every wired module into a single object — fast, cached server-side.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const h = await cat.health();
@@ -149,7 +149,7 @@ Gotcha: `status: "degraded"` means at least one but not all services responded �
 The Hub OpenAPI aggregate index lists every npm-published SDK package.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const idx = await cat.openapi();
@@ -166,7 +166,7 @@ The `sdk.npm` array is the source of truth for "what can I `npm i` today" — bo
 `sitemap()` parses `/api/aevion/sitemap.xml` with a zero-dep regex parser into a flat `SitemapEntry[]`.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const urls = await cat.sitemap();
@@ -233,7 +233,7 @@ Standalone wrappers around a default `AevionCatalog()` pointed at `https://api.a
 All methods throw native `Error` instances on non-2xx HTTP or input-validation failures. The message includes the HTTP status and full URL for easy debugging.
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 try {
@@ -253,7 +253,7 @@ Validation errors thrown synchronously (before any fetch): `get("BAD ID")`, `bad
 Two config knobs, both optional:
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const staging = new AevionCatalog({
   baseUrl: "https://staging-api.aevion.app",
@@ -302,7 +302,7 @@ What the SDK explicitly does *not* do (yet):
 - **v0.5** — webhook subscription helpers (`subscribe()`, signed payloads, HMAC verification)
 - **v0.6** — TypeScript decorators for Express auto-routes (`@CatalogRoute("/")` reflecting OpenAPI shape)
 - **v0.7** — optional in-memory LRU cache with TTL config, opt-in per method
-- **v0.8** — first-class browser bundle (`@aevion/catalog-client/browser`) with tree-shaken types
+- **v0.8** — first-class browser bundle (`@aevion-io/catalog-client/browser`) with tree-shaken types
 
 Watch the [package source](../packages/aevion-catalog-client/) for milestones; issues and PRs welcome.
 

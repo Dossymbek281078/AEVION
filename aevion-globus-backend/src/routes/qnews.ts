@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
 import { ensureQNewsTables, isQNewsDbReady } from "../lib/ensureQNewsTables";
 
@@ -488,3 +489,24 @@ qnewsRouter.get("/stats", (_req: Request, res: Response) => {
     backend: "memory",
   });
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qnewsRouter.get("/status", (_req: Request, res: Response) => {
+  res.json({
+    module: "qnews",
+    code: "QNEWS",
+    status: "mvp",
+    description: "Industry news aggregator with AI digest + concept board.",
+    endpoints: {
+      articles: "/api/qnews/articles",
+      digest: "/api/qnews/ai/digest",
+      stats: "/api/qnews/stats",
+      conceptMessages: "/api/qnews/concept/messages",
+      conceptStats: "/api/qnews/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: qnewsRouter, moduleId: "qnews", defaultTag: "qnews", writeLimit: submitLimiter });

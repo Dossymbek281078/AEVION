@@ -1,21 +1,25 @@
 import { PaymentProvider } from "./provider";
 import { stubPaymentProvider } from "./stubProvider";
 import { stripePaymentProvider } from "./stripeProvider";
+import { paddlePaymentProvider } from "./paddlePaymentProvider";
 
 export * from "./provider";
 export { stubPaymentProvider, __resetStubPaymentIntents } from "./stubProvider";
 export { stripePaymentProvider } from "./stripeProvider";
+export { paddlePaymentProvider } from "./paddlePaymentProvider";
 
 export function getPaymentProvider(): PaymentProvider {
   const id = (process.env.BUREAU_PAYMENT_PROVIDER || "stub").toLowerCase();
   switch (id) {
+    case "paddle":
+      return paddlePaymentProvider;
     case "stripe":
       return stripePaymentProvider;
     case "stub":
       return stubPaymentProvider;
     default:
       throw new Error(
-        `Unknown BUREAU_PAYMENT_PROVIDER=${id}. Supported: stub, stripe.`,
+        `Unknown BUREAU_PAYMENT_PROVIDER=${id}. Supported: stub, stripe, paddle.`,
       );
   }
 }

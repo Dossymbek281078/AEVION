@@ -168,13 +168,43 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
-| _free_ | — | **block 7+8 (8 agents + cherry-picks + BOM-strip 109 files) done** | 2026-05-14 block-8 done |
+| _free_ | — | **COVERAGE-CLOSEOUT SESSION COMPLETE 2026-05-19.** 26 read-only prod-smokes (qshield drift fix + 3 new wirings + openapi-completeness), OpenAPI 0.7.0 documents 39 module prefixes (was 23 in 0.6.0), все 20 soft prefixes теперь present. | 2026-05-19 13:00 UTC+5 |
+
+### Завершено 2026-05-19 (OpenAPI 0.7.0 + smoke gap closure)
+
+- ✅ **OpenAPI 0.6.0 → 0.7.0** (commit follow): added ~58 inline path stubs in src/index.ts covering qlearn, qevents, qmedia, qai, qjobs, qnews, coach, multichat, devhub, qfusionai, qpersona, qlife, lifebox, shadownet, deepsan, psyapp-deps. Soft prefix coverage 4/21 → **20/20 ALL PRESENT**.
+- ✅ **`openapi-completeness-smoke.js`** (commit `caefc98d`) — guards /api/openapi.json against silent route drops. 19 critical + 20 soft prefixes tracked. 25/25 PASS.
+- ✅ **`qshield-prod` drift fix** (commit `98652a39`) — /api/qright/objects threshold ≤10 → ≤50 (backend ignores limit param, smoke was underspecced).
+- ✅ **Orchestrator: 26 read-only prod-smokes** — wired `revenue-prod` (yesterday's c8917171 Revenue Hub), `mvp-concepts-prod` (12 ownerless modules), `qmaskcard-prod` (existed на диске, не зарегистрирован). bank-prod + qbuild-prod остаются вне (имеют dedicated CI jobs).
+- ⚠️ **Railway flapping под нагрузкой** — 26 smokes подряд через orchestrator дают разные транзиентные fails каждый запуск. Individual run = always GREEN. Не критично для daily-smoke (ephemeral pg, не prod).
+- 🔒 **npm token revoke** — токен `aevion-io-publish` всё ещё попал в чат-историю 2026-05-18. Revoke на https://www.npmjs.com/settings/dosymbek/tokens когда удобно.
+
+**Прод-surface полностью покрыт smoke + openapi (для всех 34 live модулей).** Следующая итерация — feature work или новый модуль.
+
+### Завершено 2026-05-18 (npm publish + smoke drift fixes + scope unification)
+
+**🎉 AEVION SDK presence на npm — все 4 пакета live:**
+- ✅ **`@aevion-io/fintech-sdk@0.2.0`** — первый AEVION SDK официально опубликован (https://www.npmjs.com/package/@aevion-io/fintech-sdk). 6 модулей + webhook signing. Commit `c4a46998`.
+- ✅ **`@aevion-io/catalog-client@0.8.1`** — scope migration `@aevion → @aevion-io` (commit `105d4e9b`). Mass rename 30 файлов: package, frontend file:dep, ~13 frontend pages, docs, root README/CHANGELOG. 0.8.1 — фикс 4 vitest `.rejects.toThrow` (sync throw → `async` methods для bookmark/ics/star/launchPreset). **142/142 tests GREEN.**
+- ✅ **`@dosymbek/qpaynet-client@1.0.4` bump-publish** — registry был на 1.0.3, локально 1.0.4 ждал. Залит.
+- ✅ **`@dosymbek/qcoreai-client@1.0.0`** — в sync, action не требовался.
+
+**Infra/CI:**
+- ✅ **npm org `aevion-io` создана** — короткий `@aevion` reserved by npm. Все будущие AEVION SDK публикуем под `@aevion-io/*`. См. `[[aevion-npm-publish]]` в auto-memory.
+- ✅ **2 smoke drift fixes** (commit `29d25e2e`) — `pricing-prod-smoke.js` переписан под реальные routes (был с фантомными /faq, /social-proof), `fintech-cross-module-smoke.mjs` адаптирован (/veilnetx-ledger/head → /stats, Z-Tide leaderboard вместо entries, QMaskCard /stats теперь public).
+- ✅ **20/20 read-only prod-smokes GREEN на Railway** — final verification.
+
+**Pending пользователя:**
+- 🔒 **Security TODO**: npm Automation токен `aevion-io-publish` попал в чат-историю при публикации — revoke на https://www.npmjs.com/settings/dosymbek/tokens, сгенери новый.
+- ⏸ Daily-smoke CI cron READ_ONLY=1 default — нужен `gh auth login -h github.com -s workflow` чтобы пушнуть .github/workflows/ изменения.
+
+**Параллельным сессиям:** при rebase main вы получите `@aevion-io/catalog-client` rename. В ваших frontend-* worktrees обновите импорты `@aevion/catalog-client → @aevion-io/catalog-client` и file:dep в frontend/package.json. tsconfig.json `paths` alias теперь не нужен (frontend полагается на file:dep напрямую).
 
 ### Завершено 2026-05-14 (parallel block 7+8)
 
 - ✅ **Smoke segfault fix** — qstore-smoke BOM strip (4ac6ed2f)
 - ✅ **SDK v0.7.0** — qcoreai+multichat+qmedia+coach sub-clients, 13 endpoints, 24 tests (4e76df15)
-- ✅ **Workspace alias** — @aevion/catalog-client via tsconfig paths (f30ae546)
+- ✅ **Workspace alias** — @aevion-io/catalog-client via tsconfig paths (f30ae546)
 - ✅ **Coach Bearer JWT** — migrated 8 owner-scoped endpoints to requireAuth (c630ded5)
 - ✅ **API Explorer multi-spec** — /api-explorer/specs with 21 specs aggregated
 - ✅ **Globus MOTD highlight** — pulsing amber ring on today's module country + M shortcut (f24604ad)
@@ -216,7 +246,7 @@ C) [третий вариант]
 - ✅ **ApiKeys** — PATCH /:id (rename) + GET /:id/usage (quota meter) + inline rename UI + expandable usage panel
 - ✅ **Modules** — GET /:id/history (sparkline data) + AutoRefreshToggle 30s
 - ✅ **Pricing GTM** — /api/pricing/faq (15Q's, 5 categories) + /social-proof (live counter) + category-filtered FAQ
-- ✅ **SDK consumers** — /qstore + /qlearn + /devhub переключены на @aevion/catalog-client v0.6
+- ✅ **SDK consumers** — /qstore + /qlearn + /devhub переключены на @aevion-io/catalog-client v0.6
 - ✅ **SEO/JSON-LD** — 6 layouts (Product/ProfilePage/CollectionPage/WebApplication) с BreadcrumbList
 - ✅ **E2E Playwright** — 5 spec файлов (qstore/qlearn/qevents/devhub/planet) с 35+ assertions
 - ⚠️ **Globus + QShield** — продолжают висеть локально, OAuth scope не обновлён
@@ -229,7 +259,7 @@ C) [третий вариант]
 - ✅ **Coach polish** — sessions lifecycle + goals (7 endpoints) + dashboard с live-session timer + goal tracker. SHA: `1c2bd0ba`.
 - ✅ **QStore seller profile** — `/qstore/seller/[id]` page + link из item detail. SHA: `c1aa6300`.
 - ✅ **Ecosystem** — `/api/ecosystem/activity` (cross-module feed) + `/graph` (deps+health-matrix) + `/ecosystem` dashboard. SHA: `c2bce26e`.
-- ✅ **SDK v0.6.0** — `@aevion/catalog-client` 5 namespaced sub-clients (qstore/qlearn/qevents/devhub/planet) + 16 endpoints + 30 vitest tests. SHA: `61721427`.
+- ✅ **SDK v0.6.0** — `@aevion-io/catalog-client` 5 namespaced sub-clients (qstore/qlearn/qevents/devhub/planet) + 16 endpoints + 30 vitest tests. SHA: `61721427`.
 - ✅ **Mobile audit** — anti-iOS-zoom, safer grids, modal scroll, sticky breakpoint, MOBILE_AUDIT_2026-05-14.md. SHA: `4120093d`.
 
 ### Smoke audit на prod Railway (2026-05-14, до redeploy)
@@ -252,7 +282,7 @@ C) [третий вариант]
 - ✅ **MVP-семейка-2** (`aevion-core/main`) — 1 commit + push: MvpConceptBoard wired в voice-of-earth/mapreality/startup-exchange/kids-ai-content (закрыта семейка 10/10). SHA: `119a1ea1`.
 - ✅ **DevHub backend** (`aevion-core/main`) — 1 commit + push: DevHubSnippet table + 4 endpoints (list/create/get/star) + tag/user filters. UI и smoke не сделано (агент остановился на backend из-за sandbox-блока). SHA: `791942a5`.
 - ✅ **Planet Compliance** (`aevion-core/main`) — 1 commit + push: `GET /api/planet/activity` — chronological event feed (submitted/certified/revoked/voted), kinds filter. SHA: `b8fc854c`.
-- ✅ **AEVION-hub** (`aevion-core/main`) — 2 commits + push: `/api/aevion/stats` (extended с coverage matrix + recent activity) + `/api/aevion/module-of-the-day` (deterministic by day-of-year) + SDK поддержка в `@aevion/catalog-client` (+8 vitest = 64/64 passed). SHA: `31e7eb8a`, `16c33eab`.
+- ✅ **AEVION-hub** (`aevion-core/main`) — 2 commits + push: `/api/aevion/stats` (extended с coverage matrix + recent activity) + `/api/aevion/module-of-the-day` (deterministic by day-of-year) + SDK поддержка в `@aevion-io/catalog-client` (+8 vitest = 64/64 passed). SHA: `31e7eb8a`, `16c33eab`.
 
 ### Завершено 2026-05-13 (parallel block 1)
 

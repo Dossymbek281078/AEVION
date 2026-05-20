@@ -10,6 +10,7 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID, createHash } from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 
 export const veilnetxRouter = Router();
 
@@ -116,6 +117,7 @@ veilnetxRouter.get("/status", async (_req, res) => {
   const count = await getWaitlistCount();
   res.json({
     module: "veilnetx",
+    status: "mvp",
     phase: PHASE,
     eta: ETA,
     version: VERSION,
@@ -162,6 +164,16 @@ veilnetxRouter.post("/waitlist", waitlistLimiter, async (req: Request, res: Resp
   } catch (err) {
     res.status(500).json({ error: "waitlist-failed" });
   }
+});
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+mountConceptBoard({
+  router: veilnetxRouter,
+  moduleId: "veilnetx",
+  defaultTag: "veilnetx",
+  fieldMap: { idea: "useCase", rationale: "threatModel" },
+  writeLimit: waitlistLimiter,
 });
 
 veilnetxRouter.options("/openapi.json", (_req, res) => {

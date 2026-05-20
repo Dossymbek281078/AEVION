@@ -12,6 +12,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { ensureQLifeTables, isQLifeDbReady, getQLifeDbError } from "../lib/ensureQLifeTables";
 import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
@@ -373,3 +374,24 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
     res.status(500).json({ ok: false, error: e?.message || "AI plan generation failed" });
   }
 });
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+qlifeRouter.get("/status", readLimit, (_req: Request, res: Response) => {
+  res.json({
+    module: "qlife",
+    code: "QLIFE",
+    status: "mvp",
+    description: "Longevity & anti-aging: biomarkers, trends, AI plan + concept board.",
+    endpoints: {
+      health: "/api/qlife/health",
+      stats: "/api/qlife/stats",
+      biomarkers: "/api/qlife/biomarkers",
+      conceptMessages: "/api/qlife/concept/messages",
+      conceptStats: "/api/qlife/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: qlifeRouter, moduleId: "qlife", defaultTag: "qlife", readLimit, writeLimit });

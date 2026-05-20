@@ -22,6 +22,7 @@
 import { Router, Request, Response } from "express";
 
 import { getPool } from "../lib/dbPool";
+import { mountConceptBoard } from "../lib/conceptBoardStore";
 import {
   ensureKidsAiTables,
   isKidsAiDbReady,
@@ -532,3 +533,23 @@ kidsAiContentRouter.get(
     });
   },
 );
+
+// ── MVP concept board surface ───────────────────────────────────────────────
+
+kidsAiContentRouter.get("/status", globalLimit, (_req: Request, res: Response) => {
+  res.json({
+    module: "kids-ai-content",
+    code: "KIDS-AI",
+    status: "mvp",
+    description: "Safe multi-language content for kids (5-12): lessons, progress, concept board.",
+    endpoints: {
+      lessons: "/api/kids-ai-content/lessons",
+      progress: "/api/kids-ai-content/progress",
+      conceptMessages: "/api/kids-ai-content/concept/messages",
+      conceptStats: "/api/kids-ai-content/concept-stats",
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+mountConceptBoard({ router: kidsAiContentRouter, moduleId: "kids-ai-content", defaultTag: "kids-ai", readLimit: globalLimit, writeLimit: globalLimit });

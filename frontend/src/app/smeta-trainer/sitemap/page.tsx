@@ -41,6 +41,7 @@ const SECTIONS: Section[] = [
       { href: "/smeta-trainer/capstone", title: "Capstone", description: "Сквозной кейс школы №47", icon: "🏫" },
       { href: "/smeta-trainer/labor-machines", title: "Труд и машины", description: "СЦЗТ + СЦЭМ ставки", icon: "💼🚜" },
       { href: "/smeta-trainer/calc", title: "Калькулятор объёмов", description: "12 типовых расчётов (стены, кровля, бетон, свайное поле)", icon: "🧮" },
+      { href: "/smeta-trainer/rates", title: "Каталог расценок ЭСН", description: "499 единичных норм с поиском и фильтрами", icon: "📋" },
     ],
   },
   {

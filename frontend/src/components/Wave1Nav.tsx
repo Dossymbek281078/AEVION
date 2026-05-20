@@ -145,6 +145,7 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/smeta-trainer" style={{ color: link, fontWeight: 600 }}>Смета</Link>
       <Link href="/qtrade" style={{ color: link, fontWeight: 600 }}>QTrade</Link>
       <Link href="/revenue" style={{ color: link, fontWeight: 600 }}>Revenue</Link>
+      <Link href="/sdks" style={{ color: link, fontWeight: 600 }}>SDKs</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
       <AevPill variant={variant} />
       <RiskPill variant={variant} />

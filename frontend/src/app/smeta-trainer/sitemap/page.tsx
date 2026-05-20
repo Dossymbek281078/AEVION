@@ -40,6 +40,7 @@ const SECTIONS: Section[] = [
       { href: "/smeta-trainer/documents", title: "Учебные документы", description: "КС-2, КС-3, Ф-2 РК, АОСР", icon: "📄" },
       { href: "/smeta-trainer/capstone", title: "Capstone", description: "Сквозной кейс школы №47", icon: "🏫" },
       { href: "/smeta-trainer/labor-machines", title: "Труд и машины", description: "СЦЗТ + СЦЭМ ставки", icon: "💼🚜" },
+      { href: "/smeta-trainer/calc", title: "Калькулятор объёмов", description: "12 типовых расчётов (стены, кровля, бетон, свайное поле)", icon: "🧮" },
     ],
   },
   {

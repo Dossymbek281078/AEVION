@@ -198,6 +198,7 @@ export default function PricingPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoting, setQuoting] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
 
   async function submitNewsletter(e: React.FormEvent) {
     e.preventDefault();
@@ -231,6 +232,7 @@ export default function PricingPage() {
     trial?: boolean;
   }) {
     setCheckingOut(opts.tierId);
+    setCheckoutNotice(null);
     track({
       type: "checkout_start",
       tier: opts.tierId,
@@ -262,9 +264,12 @@ export default function PricingPage() {
         const j = await r.json();
         if (j.url) {
           window.location.href = j.url;
+        } else if (j.error?.includes("checkout_not_enabled")) {
+          setCheckoutNotice("Платёжный шлюз проходит верификацию — будет доступен в течение 1-3 дней. Напишите нам на support@aevion.app и мы оформим вручную.");
+          setCheckingOut(null);
         } else {
           console.error("[paddle checkout] no url", j);
-          alert("Ошибка чекаута. Попробуйте ещё раз.");
+          setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или напишите на support@aevion.app");
           setCheckingOut(null);
         }
       } else {
@@ -279,13 +284,13 @@ export default function PricingPage() {
           window.location.href = j.url;
         } else {
           console.error("[checkout] no url returned", j);
-          alert("Ошибка чекаута. Попробуйте ещё раз или свяжитесь с продажами.");
+          setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.");
           setCheckingOut(null);
         }
       }
     } catch (e) {
       console.error("[checkout] failed", e);
-      alert("Не удалось открыть оплату. Проверьте соединение.");
+      setCheckoutNotice("Нет соединения — проверьте интернет и попробуйте ещё раз.");
       setCheckingOut(null);
     }
   }
@@ -628,6 +633,30 @@ export default function PricingPage() {
           ))}
         </select>
       </section>
+
+      {/* Checkout notice */}
+      {checkoutNotice && (
+        <div
+          style={{
+            marginBottom: 20,
+            padding: "12px 16px",
+            background: "rgba(251,191,36,0.08)",
+            border: "1px solid rgba(251,191,36,0.3)",
+            borderRadius: 10,
+            color: "#d97706",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {checkoutNotice}
+          <button
+            onClick={() => setCheckoutNotice(null)}
+            style={{ float: "right", background: "none", border: "none", cursor: "pointer", color: "#d97706", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Tier cards */}
       <section

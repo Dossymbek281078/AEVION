@@ -7,12 +7,13 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Lsr } from "../../lib/types";
 import { findRate } from "../../lib/corpus";
 import { calcLsr, formatKzt } from "../../lib/calc";
 import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
+import { saveAttempt, bestAttempt } from "../../lib/examJournal";
 
 export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const task = findExamTask(params.id);
@@ -22,6 +23,12 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const [lsr, setLsr] = useState<Lsr>(task!.starter);
   const [report, setReport] = useState<ExamReport | null>(null);
   const [showHints, setShowHints] = useState(false);
+  const [bestSoFar, setBestSoFar] = useState<number | null>(null);
+
+  useEffect(() => {
+    const b = bestAttempt(task!.id);
+    setBestSoFar(b ? b.score : null);
+  }, [task]);
 
   const calc = useMemo(() => calcLsr(lsr), [lsr]);
 
@@ -136,6 +143,9 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
   function submit() {
     const r = gradeExam(lsr, task!.reference, task!.object);
     setReport(r);
+    saveAttempt(task!.id, task!.title, r);
+    const b = bestAttempt(task!.id);
+    setBestSoFar(b ? b.score : null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -148,15 +158,35 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-6xl mx-auto">
         <div className="mb-4">
-          <Link href="/smeta-trainer/exam" className="text-xs text-blue-600 hover:underline">
-            ← К списку экзаменов
-          </Link>
-          <div className="flex items-baseline gap-3 mt-1">
+          <div className="flex justify-between items-baseline">
+            <Link href="/smeta-trainer/exam" className="text-xs text-blue-600 hover:underline">
+              ← К списку экзаменов
+            </Link>
+            <Link href="/smeta-trainer/exam-journal" className="text-xs text-blue-600 hover:underline">
+              📔 Журнал попыток →
+            </Link>
+          </div>
+          <div className="flex items-baseline gap-3 mt-1 flex-wrap">
             <span className="text-3xl">{task!.icon}</span>
             <h1 className="text-2xl font-bold text-slate-900">{task!.title}</h1>
             <span className="text-[10px] uppercase tracking-wider bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold">
               {task!.category} · {task!.difficulty}
             </span>
+            {bestSoFar != null && (
+              <span
+                className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full font-bold ${
+                  bestSoFar >= 85
+                    ? "bg-emerald-100 text-emerald-800"
+                    : bestSoFar >= 70
+                    ? "bg-blue-100 text-blue-800"
+                    : bestSoFar >= 50
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                Лучший балл: {bestSoFar} / 100
+              </span>
+            )}
           </div>
         </div>
 

@@ -14,6 +14,7 @@ import { calcLsr, formatKzt } from "../../lib/calc";
 import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
 import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
+import { isLessonVisited, findLesson } from "../../lib/examLessons";
 
 export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const task = findExamTask(params.id);
@@ -25,11 +26,14 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const [showHints, setShowHints] = useState(false);
   const [bestSoFar, setBestSoFar] = useState<number | null>(null);
   const [failedCount, setFailedCount] = useState(0);
+  const [lessonOpened, setLessonOpened] = useState(false);
+  const lessonExists = !!findLesson(task!.id);
 
   useEffect(() => {
     const b = bestAttempt(task!.id);
     setBestSoFar(b ? b.score : null);
     setFailedCount(failedAttemptsCount(task!.id));
+    setLessonOpened(isLessonVisited(task!.id));
   }, [task]);
 
   // Адаптивные подсказки: hint[0] всегда виден, hint[1] после 1 неудачной попытки,
@@ -172,9 +176,19 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
             <Link href="/smeta-trainer/exam" className="text-xs text-blue-600 hover:underline">
               ← К списку экзаменов
             </Link>
-            <Link href="/smeta-trainer/exam-journal" className="text-xs text-blue-600 hover:underline">
-              📔 Журнал попыток →
-            </Link>
+            <div className="flex gap-3">
+              {lessonExists && (
+                <Link
+                  href={`/smeta-trainer/exam/${task!.id}/lesson`}
+                  className="text-xs text-purple-600 hover:underline"
+                >
+                  📖 {lessonOpened ? "Урок изучен" : "Изучить теорию"} →
+                </Link>
+              )}
+              <Link href="/smeta-trainer/exam-journal" className="text-xs text-blue-600 hover:underline">
+                📔 Журнал попыток →
+              </Link>
+            </div>
           </div>
           <div className="flex items-baseline gap-3 mt-1 flex-wrap">
             <span className="text-3xl">{task!.icon}</span>
@@ -199,6 +213,22 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
             )}
           </div>
         </div>
+
+        {/* Баннер «изучи теорию» — только если урок есть И не открыт */}
+        {lessonExists && !lessonOpened && (
+          <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-3 mb-4 flex items-center justify-between gap-3">
+            <div className="text-xs text-purple-900">
+              <strong>📖 Совет:</strong> перед сдачей посмотрите урок-разбор по этому заданию —
+              формулы, нормативка РК, разобранный пример. ~5 минут.
+            </div>
+            <Link
+              href={`/smeta-trainer/exam/${task!.id}/lesson`}
+              className="shrink-0 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded hover:bg-purple-700"
+            >
+              Открыть урок
+            </Link>
+          </div>
+        )}
 
         {/* Задание */}
         <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4">

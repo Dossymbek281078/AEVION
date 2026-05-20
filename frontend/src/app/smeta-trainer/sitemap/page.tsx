@@ -61,6 +61,7 @@ const SECTIONS: Section[] = [
       { href: "/smeta-trainer/exam", title: "Банк экзаменов", description: `${EXAM_TASKS.length} заданий разной сложности`, icon: "🎓" },
       { href: "/smeta-trainer/exam-journal", title: "Журнал попыток", description: "История + статистика + CSV", icon: "📔" },
       { href: "/smeta-trainer/exam-analytics", title: "Аналитика экзаменов", description: "Слабые места + типовые ошибки", icon: "📊" },
+      { href: "/smeta-trainer/exam/finishing-classroom/lesson", title: "Уроки-разборы экзаменов", description: "15 разборов: формулы, нормативка, типовая ошибка, пример", icon: "📖" },
       { href: "/smeta-trainer/achievements", title: "Достижения", description: "Бейджи прогресса", icon: "🏆" },
       { href: "/smeta-trainer/certificate", title: "Сертификат уровней", description: "Базовый сертификат курса", icon: "📜" },
     ],

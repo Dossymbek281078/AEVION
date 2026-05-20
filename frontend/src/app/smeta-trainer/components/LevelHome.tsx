@@ -343,6 +343,15 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/calc"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold rounded-lg"
+            >
+              🧮 Калькулятор объёмов
+              <span className="text-[10px] text-emerald-600 font-normal">
+                12 типовых расчётов
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/sitemap"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-300 text-slate-700 hover:bg-slate-200 text-xs font-semibold rounded-lg"
             >

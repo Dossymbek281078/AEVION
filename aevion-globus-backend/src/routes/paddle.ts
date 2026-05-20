@@ -194,7 +194,7 @@ paddleRouter.post("/checkout", async (req, res) => {
   const txBody: Record<string, unknown> = {
     items: [{ price_id: priceId, quantity }],
     checkout: {
-      url: successUrl || `${FRONTEND_URL()}/pricing/checkout/success`,
+      url: successUrl || `${FRONTEND_URL()}/pricing/checkout/success?provider=paddle&tierId=${encodeURIComponent(tierId || "")}&appId=${encodeURIComponent(appId || "platform")}`,
     },
     custom_data: {
       app_id: appId || "platform",

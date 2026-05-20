@@ -5,6 +5,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 
 interface Course {
   id: string;
@@ -481,6 +482,10 @@ export default function QLearnPage() {
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px 80px" }}>
+          {/* Paddle upgrade banner */}
+          <div style={{ marginBottom: 20 }}>
+            <PaddleUpgradeButton variant="banner" appId="qlearn" label="Открыть все курсы — 14 дней бесплатно" />
+          </div>
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
             <div>

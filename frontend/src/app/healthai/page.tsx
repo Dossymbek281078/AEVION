@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -1527,6 +1528,11 @@ export default function HealthAIPage() {
       `}</style>
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
         <Wave1Nav variant="dark" />
+
+        {/* Paddle upgrade banner */}
+        <div style={{ marginBottom: 16 }}>
+          <PaddleUpgradeButton variant="banner" appId="healthai" label="Разблокировать HealthAI Pro — 14 дней бесплатно" />
+        </div>
 
         <header style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>

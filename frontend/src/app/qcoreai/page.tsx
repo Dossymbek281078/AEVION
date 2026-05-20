@@ -5,6 +5,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
@@ -199,6 +200,11 @@ export default function QCoreAIPage() {
     <main>
       <ProductPageShell maxWidth={840}>
         <Wave1Nav />
+
+        {/* Paddle upgrade banner */}
+        <div style={{ marginBottom: 16 }}>
+          <PaddleUpgradeButton variant="banner" appId="qcoreai" />
+        </div>
 
         {/* ── Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 20 }}>

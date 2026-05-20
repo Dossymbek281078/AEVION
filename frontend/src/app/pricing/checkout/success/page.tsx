@@ -11,8 +11,10 @@ function SuccessInner() {
   const tp = usePricingT();
   const sp = useSearchParams();
   const sessionId = sp.get("session_id");
+  const paddleTxn = sp.get("_ptxn");                          // Paddle appends this after real checkout
+  const provider = sp.get("provider");                         // "paddle" | undefined (legacy Stripe)
   const stub = sp.get("stub") === "true";
-  const tier = sp.get("tier");
+  const tier = sp.get("tier") ?? sp.get("tierId");            // tierId from Paddle success URL
   const period = sp.get("period");
   const totalCents = sp.get("total");
   const trialDays = sp.get("trial") ? parseInt(sp.get("trial")!, 10) : 0;
@@ -29,7 +31,7 @@ function SuccessInner() {
       tier: tier ?? undefined,
       source: "pricing",
       value: totalUsd ?? undefined,
-      meta: { stub, period: period ?? null, sessionId: sessionId ?? null },
+      meta: { stub, period: period ?? null, sessionId: sessionId ?? paddleTxn ?? null, provider: provider ?? "stripe" },
     });
   }, [sessionId, stub, tier, period, totalUsd]);
 
@@ -125,9 +127,9 @@ function SuccessInner() {
           </div>
         )}
 
-        {sessionId && (
+        {(paddleTxn || sessionId) && (
           <p style={{ fontSize: 11, opacity: 0.7, margin: 0, marginBottom: 24 }}>
-            Session: <code>{sessionId}</code>
+            {paddleTxn ? "Transaction" : "Session"}: <code>{paddleTxn ?? sessionId}</code>
           </p>
         )}
 

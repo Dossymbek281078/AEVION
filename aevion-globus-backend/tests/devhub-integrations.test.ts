@@ -45,7 +45,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   for (const key of [
     "GITHUB_TOKEN", "VERCEL_API_TOKEN", "ELEVENLABS_API_KEY",
-    "BREVO_API_KEY", "STRIPE_SECRET_KEY", "OPENAI_API_KEY",
+    "BREVO_API_KEY", "PADDLE_API_KEY", "PADDLE_SANDBOX", "OPENAI_API_KEY",
     "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID", "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_R2_ACCOUNT_ID", "CLOUDFLARE_R2_ACCESS_KEY_ID",
     "CLOUDFLARE_R2_SECRET_KEY", "CLOUDFLARE_R2_BUCKET", "CLOUDFLARE_R2_PUBLIC_URL",
@@ -178,20 +178,20 @@ describe("POST /api/devhub/media/email (Brevo)", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 3. Stripe Payment Link
+// 3. Paddle Payment Link (was: Stripe, migrated 2026-05-20)
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe("POST /api/devhub/media/payment-link (Stripe)", () => {
-  test("503 when STRIPE_SECRET_KEY missing", async () => {
+describe("POST /api/devhub/media/payment-link (Paddle)", () => {
+  test("503 when PADDLE_API_KEY missing", async () => {
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
       .send({ name: "Pro", amountCents: 999 });
     expect(r.status).toBe(503);
-    expect(r.body.error).toMatch(/STRIPE_SECRET_KEY/);
+    expect(r.body.error).toMatch(/PADDLE_API_KEY/);
   });
 
   test("400 when amount < 50 cents", async () => {
-    process.env.STRIPE_SECRET_KEY = "sk_test_fake";
+    process.env.PADDLE_API_KEY = "pdl_sdbx_fake";
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
       .send({ name: "Pro", amountCents: 10 });
@@ -199,12 +199,11 @@ describe("POST /api/devhub/media/payment-link (Stripe)", () => {
     expect(r.body.error).toMatch(/≥ 50/);
   });
 
-  test("calls Stripe 3 times in sequence: product → price → payment_link", async () => {
-    process.env.STRIPE_SECRET_KEY = "sk_test_fake";
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { id: "prod_123" }))
-      .mockResolvedValueOnce(jsonResp(200, { id: "price_456" }))
-      .mockResolvedValueOnce(jsonResp(200, { id: "plink_789", url: "https://buy.stripe.com/test_789" }));
+  test("creates Paddle transaction with single /transactions call + returns checkout URL", async () => {
+    process.env.PADDLE_API_KEY = "pdl_sdbx_fake";
+    fetchMock.mockResolvedValueOnce(jsonResp(200, {
+      data: { id: "txn_abc123", checkout: { url: "https://sandbox-checkout.paddle.com/txn_abc123" } },
+    }));
 
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
@@ -213,15 +212,13 @@ describe("POST /api/devhub/media/payment-link (Stripe)", () => {
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({
       ok: true,
-      paymentLinkId: "plink_789",
-      url: "https://buy.stripe.com/test_789",
-      productId: "prod_123",
-      priceId: "price_456",
+      provider: "paddle",
+      transactionId: "txn_abc123",
+      url: "https://sandbox-checkout.paddle.com/txn_abc123",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[0][0]).toContain("/v1/products");
-    expect(fetchMock.mock.calls[1][0]).toContain("/v1/prices");
-    expect(fetchMock.mock.calls[2][0]).toContain("/v1/payment_links");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain("/transactions");
+    expect(fetchMock.mock.calls[0][0]).toContain("sandbox-api.paddle.com");
   });
 });
 

@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EXAM_TASKS } from "../lib/examTasks";
 import { bestScores } from "../lib/examJournal";
+import { getVisitedLessons } from "../lib/examLessons";
 
 const DIFFICULTY_COLOR: Record<string, string> = {
   "лёгкая": "bg-emerald-100 text-emerald-800",
@@ -34,9 +35,11 @@ function scoreBadge(score: number): { label: string; cls: string } {
 
 export default function ExamListPage() {
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [visited, setVisited] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setScores(bestScores());
+    setVisited(getVisitedLessons());
   }, []);
 
   const excellent = EXAM_TASKS.filter((t) => (scores[t.id] ?? 0) >= 85).length;
@@ -92,6 +95,11 @@ export default function ExamListPage() {
                         {task.difficulty}
                       </span>
                       <span className="text-[10px] text-slate-500">~ {task.durationMin} мин</span>
+                      {visited.has(task.id) && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-100 text-purple-800">
+                          📖 Урок изучен
+                        </span>
+                      )}
                       {score != null && (
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${scoreBadge(score).cls}`}>
                           {scoreBadge(score).label}

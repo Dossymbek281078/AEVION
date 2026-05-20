@@ -1307,6 +1307,55 @@ export default function CyberChessPage(){
       body:JSON.stringify({userId,uci:`${lm.from}${lm.to}`}),
     }).catch(()=>{});
   },[hist.length,matchmakingId,lm,pCol]);
+  /* ── Matchmaking → Spectator auto-publish + VoiceCoach ──────────────────
+     Reuses the existing spectator SSE + voice-coach broadcast pipeline.
+     When a matchmaking game is active, every move is published as a live
+     spectatable game (gameId = "mm_{matchId}"), so:
+       • Spectators can watch at /cyberchess/spectator/mm_{matchId}
+       • OBS overlay works at /cyberchess/obs/mm_{matchId}?bg=transparent
+       • AI Voice Coach broadcasts commentary after each move
+     No extra backend routes needed — everything chains through existing APIs. */
+  const mmSpectatorGameIdRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!matchmakingId||!on||hist.length===0)return;
+    const candidateId=`mm_${matchmakingId}`;
+    const playerName=typeof window!=="undefined"
+      ?(localStorage.getItem("cyberchess.displayName")||"Игрок"):"Игрок";
+    const payload={
+      gameId:mmSpectatorGameIdRef.current||candidateId,
+      hostName:`⚔ P2P · ${playerName}`,
+      fen:game.fen(),hist,
+      evalCp:typeof evalCp==="number"?evalCp:undefined,
+      evalMate:typeof evalMate==="number"?evalMate:undefined,
+      lastSan:hist[hist.length-1],
+      whiteToMove:game.turn()==="w",
+      result:over||undefined,
+    };
+    fetch("/api/cyberchess-spectator/publish",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),
+    }).then(r=>r.ok?r.json():null).then(d=>{
+      if(d?.gameId)mmSpectatorGameIdRef.current=d.gameId;
+      const gid=d?.gameId||mmSpectatorGameIdRef.current||candidateId;
+      if(!gid||over||hist.length===0)return;
+      // Voice coach broadcast for the matchmaking game
+      fetch("/api/cyberchess-voice-coach/broadcast",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          gameId:gid,
+          fen:payload.fen,
+          lastMove:hist[hist.length-1],
+          eval:(typeof evalCp==="number"||typeof evalMate==="number")
+            ?{cp:typeof evalCp==="number"?evalCp:undefined,
+               mate:typeof evalMate==="number"?evalMate:undefined}
+            :null,
+          moveNumber:Math.floor(hist.length/2)+1,
+          hostName:playerName,
+          tts:true,
+        }),
+      }).catch(()=>{/* best-effort */});
+    }).catch(()=>{});
+  },[matchmakingId,on,bk,over]);
   // On disable — отозвать стрим из registry
   useEffect(()=>{
     if(spectatorPublish||!spectatorGameIdRef.current)return;
@@ -5357,6 +5406,7 @@ export default function CyberChessPage(){
           {label:"🏆 Достижения",hint:"Каталог + прогресс",onClick:()=>sShowAchievements(true)},
           {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время, FIDE",onClick:()=>sShowStatsDashboard(true)},
           {label:spectatorPublish?"📡 Стрим ON":"📡 Стрим",hint:spectatorPublish?"Партия публикуется зрителям — клик чтобы остановить":"Включить стрим партии для зрителей",onClick:()=>sSpectatorPublish(v=>!v)},
+          ...(matchmakingId?[{label:"📡 P2P LIVE",hint:`Матч транслируется зрителям + VoiceCoach комментарий. Ссылка: /cyberchess/spectator/${mmSpectatorGameIdRef.current||`mm_${matchmakingId}`}`,onClick:()=>{const gid=mmSpectatorGameIdRef.current||`mm_${matchmakingId}`;navigator.clipboard?.writeText(`${window.location.origin}/cyberchess/spectator/${gid}`).catch(()=>{});showToast("Ссылка скопирована","success")}}]:[]),
           {label:"👀 Смотреть",hint:"Открыть hub live-партий других игроков",onClick:()=>{window.location.href="/cyberchess/spectator"}},
           {label:"🎞 Replays",hint:"Архив завершённых трансляций (50 LRU)",onClick:()=>{window.location.href="/cyberchess/replays"}},
           {label:"🤝 Найти соперника",hint:"Real-player matchmaking — очередь по рейтингу + time control",onClick:()=>{window.location.href="/cyberchess/matchmaking"}},

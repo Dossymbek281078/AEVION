@@ -126,6 +126,8 @@ const SMOKES = [
   { name: "rest-prod", script: "aevion-rest-prod-smoke.js", readOnly: true },
   // Universal Search PROD — 15 checks: health, results shape, byType, type filter, validation gates.
   { name: "search-prod", script: "search-prod-smoke.js", readOnly: true },
+  // Paddle Billing PROD — 15 checks: health/plans/products/transactions + webhook HMAC round-trip.
+  { name: "paddle-prod", script: "paddle-prod-smoke.js", readOnly: true, env: { PADDLE_WEBHOOK_SECRET: process.env.PADDLE_WEBHOOK_SECRET || "" } },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.

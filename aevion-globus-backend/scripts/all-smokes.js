@@ -111,6 +111,14 @@ const SMOKES = [
   // per-module health probe. Catches silent drops from the live list
   // (frontend portal/docs site/status page all read from this endpoint).
   { name: "modules-prod", script: "modules-prod-smoke.js", readOnly: true },
+  // Pipeline PROD — 12 checks for /api/pipeline/* orchestration layer
+  // (health, certificates, verify, OTS, auth gates) + Hub /aevion/sdks
+  // SDK registry endpoint introduced 2026-05-20.
+  { name: "pipeline-prod", script: "pipeline-prod-smoke.js", readOnly: true },
+  // Ecosystem PROD — 8 checks for /api/ecosystem/* event-bus surface
+  // (fully Bearer-gated on prod — smoke verifies all 5 endpoints return
+  // 401 consistently with JSON error shape).
+  { name: "ecosystem-prod", script: "ecosystem-prod-smoke.js", readOnly: true },
   // QContract PROD — 17 checks: templates, stats, auth-gates, view-token, openapi.
   { name: "qcontract-prod", script: "qcontract-prod-smoke.js", readOnly: true },
   // QChainGov PROD — 15 checks: proposals, votes, stats, auth-gates.

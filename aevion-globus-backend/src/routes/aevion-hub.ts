@@ -782,6 +782,67 @@ aevionHubRouter.get("/module-of-the-day", (req, res) => {
   });
 });
 
+// GET /api/aevion/sdks — published AEVION SDK packages on npm.
+// Public consumer-facing endpoint: integration docs, install commands,
+// links to npmjs.com. Single source of truth so frontend SDK pages,
+// docs site, and partner integrations agree on what's published.
+aevionHubRouter.get("/sdks", (_req, res) => {
+  const sdks = [
+    {
+      id: "fintech-sdk",
+      name: "@aevion-io/fintech-sdk",
+      version: "0.2.0",
+      description: "TypeScript client for the AEVION fintech ecosystem (QGood, QMaskCard, VeilNetX, Z-Tide, QChainGov, QPayNet) + webhook signing helpers.",
+      install: "npm install @aevion-io/fintech-sdk",
+      registry: "https://www.npmjs.com/package/@aevion-io/fintech-sdk",
+      tarball: "https://registry.npmjs.org/@aevion-io/fintech-sdk/-/fintech-sdk-0.2.0.tgz",
+      modules: ["qgood", "qmaskcard", "veilnetx-ledger", "ztide", "qchaingov", "qpaynet-embedded"],
+      license: "MIT",
+    },
+    {
+      id: "catalog-client",
+      name: "@aevion-io/catalog-client",
+      version: "0.8.1",
+      description: "TypeScript client for the AEVION Hub catalog API + 9 namespaced sub-clients (QStore, QLearn, QEvents, DevHub, Planet, QCoreAI, Multichat, QMedia, Coach).",
+      install: "npm install @aevion-io/catalog-client",
+      registry: "https://www.npmjs.com/package/@aevion-io/catalog-client",
+      tarball: "https://registry.npmjs.org/@aevion-io/catalog-client/-/catalog-client-0.8.1.tgz",
+      modules: ["qstore", "qlearn", "qevents", "devhub", "planet", "qcoreai", "multichat-engine", "qmedia", "coach"],
+      license: "MIT",
+    },
+    {
+      id: "qpaynet-client",
+      name: "@dosymbek/qpaynet-client",
+      version: "1.0.4",
+      description: "TypeScript client for AEVION QPayNet — embedded payment infrastructure with HMAC webhooks, idempotent transfers, merchant keys, payment links.",
+      install: "npm install @dosymbek/qpaynet-client",
+      registry: "https://www.npmjs.com/package/@dosymbek/qpaynet-client",
+      tarball: "https://registry.npmjs.org/@dosymbek/qpaynet-client/-/qpaynet-client-1.0.4.tgz",
+      modules: ["qpaynet-embedded"],
+      license: "Apache-2.0",
+    },
+    {
+      id: "qcoreai-client",
+      name: "@dosymbek/qcoreai-client",
+      version: "1.0.0",
+      description: "TypeScript client for AEVION QCoreAI multi-agent pipeline — sync/streaming chat, agents, prompts, threading, batch runs, export hub.",
+      install: "npm install @dosymbek/qcoreai-client",
+      registry: "https://www.npmjs.com/package/@dosymbek/qcoreai-client",
+      tarball: "https://registry.npmjs.org/@dosymbek/qcoreai-client/-/qcoreai-client-1.0.0.tgz",
+      modules: ["qcoreai"],
+      license: "Apache-2.0",
+    },
+  ];
+
+  res.set("Cache-Control", "public, max-age=300");
+  res.json({
+    total: sdks.length,
+    sdks,
+    docs: "https://github.com/Dossymbek281078/AEVION",
+    generatedAt: new Date().toISOString(),
+  });
+});
+
 function extractSummary(body: Record<string, unknown>): Record<string, unknown> {
   // Pull a few well-known fields if present, ignore the rest. Keeps the
   // composite payload small even when sub-health surfaces are noisy.

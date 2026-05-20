@@ -204,10 +204,12 @@ export default function ExamJournalPage() {
             {eligibility && (
               <div
                 className={`border-2 rounded-lg p-5 mb-4 ${
-                  eligibility.tier === "honors"
+                  eligibility.tier === "gold"
                     ? "bg-amber-50 border-amber-300"
-                    : eligibility.tier === "standard"
+                    : eligibility.tier === "silver"
                     ? "bg-emerald-50 border-emerald-300"
+                    : eligibility.tier === "bronze"
+                    ? "bg-orange-50 border-orange-300"
                     : "bg-slate-50 border-slate-200"
                 }`}
               >
@@ -216,20 +218,25 @@ export default function ExamJournalPage() {
                     <div className="text-xs uppercase tracking-wider font-bold mb-1">
                       🎖 Сертификат экзаменационного цикла
                     </div>
-                    {eligibility.tier === "honors" && (
+                    {eligibility.tier === "gold" && (
                       <p className="text-sm text-amber-900">
-                        <strong>Право на сертификат «С ОТЛИЧИЕМ»</strong> — все {eligibility.total} заданий на «отлично» (≥85).
+                        🥇 <strong>Право на сертификат «С ОТЛИЧИЕМ»</strong> — все {eligibility.total} заданий на «отлично» (≥85).
                       </p>
                     )}
-                    {eligibility.tier === "standard" && (
+                    {eligibility.tier === "silver" && (
                       <p className="text-sm text-emerald-900">
-                        <strong>Право на стандартный сертификат</strong> — {eligibility.goodPlus} из {eligibility.total} на «хорошо+» (≥70).
+                        🥈 <strong>Право на стандартный сертификат</strong> — {eligibility.goodPlus} из {eligibility.total} на «хорошо+» (≥70).
+                      </p>
+                    )}
+                    {eligibility.tier === "bronze" && (
+                      <p className="text-sm text-orange-900">
+                        🥉 <strong>Право на базовый сертификат</strong> — {eligibility.satisfactoryPlus} из {eligibility.total} на «удовл.+» (≥50).
                       </p>
                     )}
                     {!eligibility.tier && (
                       <p className="text-sm text-slate-700">
-                        Сертификат пока не доступен. Нужно: <strong>5/5 на «отлично»</strong> (с отличием)
-                        или <strong>4/5 на «хорошо+»</strong> (стандартный). Сейчас: {eligibility.excellent} на «отлично», {eligibility.goodPlus} на «хорошо+».
+                        Сертификат пока не доступен. Минимум — <strong>{Math.ceil(eligibility.total * 0.5)} / {eligibility.total} на «удовл.+»</strong> (бронзовый).
+                        Сейчас: {eligibility.excellent} на «отлично», {eligibility.goodPlus} на «хорошо+», {eligibility.satisfactoryPlus} на «удовл.+».
                       </p>
                     )}
                   </div>
@@ -246,9 +253,11 @@ export default function ExamJournalPage() {
                         onClick={issueCertificate}
                         disabled={!studentName.trim()}
                         className={`px-4 py-2 rounded text-sm font-bold text-white disabled:opacity-50 ${
-                          eligibility.tier === "honors"
+                          eligibility.tier === "gold"
                             ? "bg-amber-600 hover:bg-amber-700"
-                            : "bg-emerald-600 hover:bg-emerald-700"
+                            : eligibility.tier === "silver"
+                            ? "bg-emerald-600 hover:bg-emerald-700"
+                            : "bg-orange-600 hover:bg-orange-700"
                         }`}
                       >
                         Получить сертификат

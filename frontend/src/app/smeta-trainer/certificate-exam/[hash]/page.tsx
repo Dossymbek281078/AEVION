@@ -46,9 +46,18 @@ export default function CertificatePage({ params }: { params: { hash: string } }
   }, [params.hash]);
 
   const serial = certificateSerial(payload!);
-  const tierLabel = payload!.tier === "honors" ? "С ОТЛИЧИЕМ" : "СТАНДАРТНЫЙ";
-  const tierColor = payload!.tier === "honors" ? "text-amber-600" : "text-emerald-600";
-  const borderColor = payload!.tier === "honors" ? "border-amber-400" : "border-emerald-400";
+  const tierLabel =
+    payload!.tier === "gold" ? "🥇 С ОТЛИЧИЕМ"
+    : payload!.tier === "silver" ? "🥈 СТАНДАРТНЫЙ"
+    : "🥉 БАЗОВЫЙ";
+  const tierColor =
+    payload!.tier === "gold" ? "text-amber-600"
+    : payload!.tier === "silver" ? "text-emerald-600"
+    : "text-orange-600";
+  const borderColor =
+    payload!.tier === "gold" ? "border-amber-400"
+    : payload!.tier === "silver" ? "border-emerald-400"
+    : "border-orange-400";
 
   return (
     <div className="min-h-screen bg-slate-100 p-6 print:p-0 print:bg-white">

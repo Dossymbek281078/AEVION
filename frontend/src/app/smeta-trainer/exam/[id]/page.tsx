@@ -13,7 +13,7 @@ import { findRate } from "../../lib/corpus";
 import { calcLsr, formatKzt } from "../../lib/calc";
 import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
-import { saveAttempt, bestAttempt } from "../../lib/examJournal";
+import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
 
 export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const task = findExamTask(params.id);
@@ -24,11 +24,20 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const [report, setReport] = useState<ExamReport | null>(null);
   const [showHints, setShowHints] = useState(false);
   const [bestSoFar, setBestSoFar] = useState<number | null>(null);
+  const [failedCount, setFailedCount] = useState(0);
 
   useEffect(() => {
     const b = bestAttempt(task!.id);
     setBestSoFar(b ? b.score : null);
+    setFailedCount(failedAttemptsCount(task!.id));
   }, [task]);
+
+  // Адаптивные подсказки: hint[0] всегда виден, hint[1] после 1 неудачной попытки,
+  // hint[2+] после 2 неудачных. Раскрытые подсказки — это первые N hints.
+  const unlockedHints = Math.min(
+    task!.hints.length,
+    1 + (failedCount >= 1 ? 1 : 0) + (failedCount >= 2 ? task!.hints.length : 0),
+  );
 
   const calc = useMemo(() => calcLsr(lsr), [lsr]);
 
@@ -146,6 +155,7 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
     saveAttempt(task!.id, task!.title, r);
     const b = bestAttempt(task!.id);
     setBestSoFar(b ? b.score : null);
+    setFailedCount(failedAttemptsCount(task!.id));
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -200,14 +210,47 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
             onClick={() => setShowHints((v) => !v)}
             className="mt-3 text-[11px] text-amber-700 underline hover:text-amber-900"
           >
-            {showHints ? "Скрыть подсказки" : `Показать подсказки (${task!.hints.length})`}
+            {showHints
+              ? "Скрыть подсказки"
+              : `Показать подсказки (${unlockedHints} из ${task!.hints.length} разблокировано)`}
           </button>
           {showHints && (
-            <ul className="mt-2 list-disc list-inside text-xs text-amber-900 space-y-1">
-              {task!.hints.map((h, i) => (
-                <li key={i}>{h}</li>
-              ))}
-            </ul>
+            <div className="mt-2 space-y-2">
+              <ul className="list-disc list-inside text-xs text-amber-900 space-y-1">
+                {task!.hints.slice(0, unlockedHints).map((h, i) => (
+                  <li key={i}>{h}</li>
+                ))}
+              </ul>
+              {unlockedHints < task!.hints.length && (
+                <div className="text-[11px] text-amber-600 italic border-l-2 border-amber-300 pl-2">
+                  🔒 Ещё {task!.hints.length - unlockedHints} подсказок откроется после{" "}
+                  {failedCount === 0 ? "первой" : "второй"} неудачной попытки (балл &lt; 70).
+                </div>
+              )}
+              {failedCount >= 2 && (
+                <div className="bg-amber-100 border border-amber-300 rounded p-2 text-xs text-amber-900 mt-2">
+                  <div className="font-bold mb-1">🔍 Эталонный разбор ({failedCount} неудач):</div>
+                  <table className="w-full text-[11px]">
+                    <thead className="text-amber-700">
+                      <tr>
+                        <th className="text-left py-0.5">Шифр</th>
+                        <th className="text-right py-0.5">Эталон. объём</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {task!.reference.sections.flatMap((sec) =>
+                        sec.positions.map((p) => (
+                          <tr key={p.id} className="border-t border-amber-200">
+                            <td className="py-0.5 font-mono">{p.rateCode}</td>
+                            <td className="py-0.5 text-right font-mono">{p.volume.toFixed(2)}</td>
+                          </tr>
+                        )),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           )}
         </div>
 

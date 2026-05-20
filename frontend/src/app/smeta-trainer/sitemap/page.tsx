@@ -60,6 +60,7 @@ const SECTIONS: Section[] = [
     items: [
       { href: "/smeta-trainer/exam", title: "Банк экзаменов", description: `${EXAM_TASKS.length} заданий разной сложности`, icon: "🎓" },
       { href: "/smeta-trainer/exam-journal", title: "Журнал попыток", description: "История + статистика + CSV", icon: "📔" },
+      { href: "/smeta-trainer/exam-analytics", title: "Аналитика экзаменов", description: "Слабые места + типовые ошибки", icon: "📊" },
       { href: "/smeta-trainer/achievements", title: "Достижения", description: "Бейджи прогресса", icon: "🏆" },
       { href: "/smeta-trainer/certificate", title: "Сертификат уровней", description: "Базовый сертификат курса", icon: "📜" },
     ],
@@ -162,7 +163,7 @@ export default function SitemapPage() {
         </div>
 
         <div className="mt-4 text-[11px] text-slate-500 italic text-center">
-          AEVION Smeta Trainer · НДЦС РК 8.01-08-2022 · 399 расценок ЭСН · 189 493 материала ССЦ ·
+          AEVION Smeta Trainer · НДЦС РК 8.01-08-2022 · 499 расценок ЭСН · 189 493 материала ССЦ ·
           15 AI-сценариев · {EXAM_TASKS.length} экзаменационных кейсов
         </div>
       </div>

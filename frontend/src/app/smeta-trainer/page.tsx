@@ -16,7 +16,7 @@ export default function SmetaTrainerPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="text-[10px] text-slate-400 hidden sm:block">
-            НДЦС РК 8.01-08-2022 · 399 расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
+            НДЦС РК 8.01-08-2022 · 499 расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
           </div>
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}

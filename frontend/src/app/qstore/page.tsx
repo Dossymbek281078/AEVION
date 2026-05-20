@@ -283,12 +283,18 @@ export default function QStorePage() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      const d = await res.json();
       if (res.ok) {
-        setNotice("Purchase successful!");
-        fetchProducts();
-        fetchFeatured();
+        if (d.checkoutUrl) {
+          window.location.href = d.checkoutUrl;
+        } else {
+          setNotice("Purchase successful!");
+          fetchProducts();
+          fetchFeatured();
+        }
+      } else if (d.error?.includes("checkout_not_enabled")) {
+        setNotice("Payment gateway is being verified — available within 1-3 days. Write us at support@aevion.app to purchase manually.");
       } else {
-        const d = await res.json();
         setNotice(d.error || "Purchase failed");
       }
     } catch {

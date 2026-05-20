@@ -296,9 +296,28 @@ function getLangDict(lang: Lang): { d: Record<string, string>; k: string[] } {
 }
 
 function translateText(text: string, d: Record<string, string>, keys: string[]): string {
-  let r = text;
-  for (const k of keys) { if (r.includes(k)) r = r.split(k).join(d[k]); }
-  return r;
+  // Walk left-to-right, at each position try longest key match; consume matched
+  // region so later shorter keys can't corrupt it (e.g., "TypeScript" must not
+  // be re-matched as "Type" + "Script"). Keys are pre-sorted longest-first.
+  let result = "";
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    let matched = false;
+    for (const k of keys) {
+      if (text.startsWith(k, i)) {
+        result += d[k];
+        i += k.length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
 }
 
 function walk(node: Node, d: Record<string, string>, keys: string[]) {

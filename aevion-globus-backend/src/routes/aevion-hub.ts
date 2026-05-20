@@ -810,8 +810,10 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   const stats: SdkStats = { downloadsLastWeek: null, lastPublished: null, fetchedAt: new Date().toISOString() };
   const enc = encodeURIComponent(pkgName);
 
-  // Two parallel requests, 2.5s each — total stays under 3s P95.
-  const ac = AbortSignal.timeout(2500);
+  // Two parallel requests, 4s each — Railway egress can be slow on the
+  // full /<pkg> registry payload (50-100KB JSON), so we give it more room.
+  // Total stays under 5s P95.
+  const ac = AbortSignal.timeout(4000);
   const [dlRes, regRes] = await Promise.allSettled([
     fetch(`https://api.npmjs.org/downloads/point/last-week/${enc}`, { signal: ac }),
     fetch(`https://registry.npmjs.org/${enc}`, { signal: ac }),

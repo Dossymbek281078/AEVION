@@ -2467,6 +2467,25 @@ export default function CyberChessPage(){
     }catch{/* anti-cheat is optional — never break game-end */}
   },[over,pCol]);
 
+  /* ── Auto-analysis at game-end (depth 10, silent — just populates move badges) ── */
+  const autoAnalysedRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!over||hist.length<6)return;
+    const fp=`${gameStartTimeRef.current}|auto`;
+    if(autoAnalysedRef.current===fp)return;
+    autoAnalysedRef.current=fp;
+    // Small delay so Stockfish finishes AI last move evaluation first
+    const t=setTimeout(async()=>{
+      if(!sfR.current?.ready())return;
+      try{
+        await runAnalysis(10);
+        // After quick analysis, toast a summary
+        // analysis state is updated inside runAnalysis via sAnalysis
+      }catch{}
+    },800);
+    return()=>clearTimeout(t);
+  },[over,hist.length]);
+
   /* ── Show game-over overlay when over is set ── */
   useEffect(()=>{if(over){sShowGameOver(true)}},[over]);
 
@@ -3952,7 +3971,7 @@ export default function CyberChessPage(){
   },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab]);
 
   /* ── Post-game analysis ── */
-  const runAnalysis=useCallback(async()=>{
+  const runAnalysis=useCallback(async(depth=16)=>{
     if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}
     sAnalyzing(true);sAnalysis([]);
     const results:{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]=[];
@@ -3961,7 +3980,7 @@ export default function CyberChessPage(){
       const fen=fenHist[i];const turn=fen.split(" ")[1];
       const{cp,mate}=await new Promise<{cp:number;mate:number}>(res=>{
         let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,16,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position
@@ -6023,7 +6042,7 @@ export default function CyberChessPage(){
               showToast("Партия открыта в анализе — запускаю разбор","info");
               setTimeout(()=>{if(sfR.current?.ready()&&fenHist.length>=3)runAnalysis()},150);
             }}>📊 Открыть в Analysis</Btn>
-            <Btn size="sm" variant="primary" loading={analyzing} onClick={runAnalysis}>
+            <Btn size="sm" variant="primary" loading={analyzing} onClick={()=>runAnalysis()}>
               {analyzing?"Analyzing...":showAnal?"🔽 Hide":"⚡ Quick analyze"}
             </Btn>
           </div>}
@@ -7002,7 +7021,7 @@ export default function CyberChessPage(){
           </div>}
 
           {/* Analyze Game button - when game has history */}
-          {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={runAnalysis} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>
+          {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={()=>runAnalysis()} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>
             🔍 Проанализировать всю партию ({hist.length} ходов)
           </button>}
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Analyzing…</div>}
@@ -7130,7 +7149,17 @@ export default function CyberChessPage(){
                         cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
-                      <span>{white||""}{wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,marginLeft:2,fontSize:11}}>{wAnnot}</span>}{!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,marginLeft:3,fontSize:11}}>{qIcon(wQ)}</span>}{moveComments[wIdx]&&<span style={{fontSize:9,color:"#6366f1",marginLeft:3}}>💬</span>}</span>
+                      <span style={{display:"flex",alignItems:"center",gap:3}}>
+                        {white||""}
+                        {wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,fontSize:11}}>{wAnnot}</span>}
+                        {!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,fontSize:11}}>{qIcon(wQ)}</span>}
+                        {moveComments[wIdx]&&<span style={{fontSize:9,color:"#6366f1"}}>💬</span>}
+                        {(wQ==="blunder"||wQ==="mistake")&&over&&fenHist[wIdx]&&<button
+                          onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[wIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(wIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(`📌 Позиция хода ${Math.floor(wIdx/2)+1} — найди лучший ход!`,"info");}}
+                          style={{fontSize:9,padding:"1px 5px",borderRadius:4,border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.12)",color:"#f87171",cursor:"pointer",fontWeight:700,lineHeight:1.4}}>
+                          📌
+                        </button>}
+                      </span>
                       {wEval&&<span style={{fontSize:10,color:wEval.cp>0?CC.brand:wEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
                     </span>
                     {/* Black move */}
@@ -7145,7 +7174,17 @@ export default function CyberChessPage(){
                         cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
-                      <span>{black||""}{bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,marginLeft:2,fontSize:11}}>{bAnnot}</span>}{!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,marginLeft:3,fontSize:11}}>{qIcon(bQ)}</span>}{moveComments[bIdx]&&<span style={{fontSize:9,color:"#6366f1",marginLeft:3}}>💬</span>}</span>
+                      <span style={{display:"flex",alignItems:"center",gap:3}}>
+                        {black||""}
+                        {bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,fontSize:11}}>{bAnnot}</span>}
+                        {!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,fontSize:11}}>{qIcon(bQ)}</span>}
+                        {moveComments[bIdx]&&<span style={{fontSize:9,color:"#6366f1"}}>💬</span>}
+                        {(bQ==="blunder"||bQ==="mistake")&&over&&fenHist[bIdx]&&<button
+                          onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[bIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(bIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(`📌 Позиция хода ${Math.floor(bIdx/2)+1} — найди лучший ход!`,"info");}}
+                          style={{fontSize:9,padding:"1px 5px",borderRadius:4,border:"1px solid rgba(239,68,68,0.4)",background:"rgba(239,68,68,0.12)",color:"#f87171",cursor:"pointer",fontWeight:700,lineHeight:1.4}}>
+                          📌
+                        </button>}
+                      </span>
                       {bEval&&<span style={{fontSize:10,color:bEval.cp>0?CC.brand:bEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
                     </span>
                     {/* Inline comment editor — spans full grid row when active */}
@@ -11650,7 +11689,35 @@ ${question.trim()}`;
           <div style={{fontSize:36,fontWeight:900,color:"#fff",marginBottom:8,letterSpacing:0.5}}>
             {isWin?"Победа!":isDraw?"Ничья":"Поражение"}
           </div>
-          <div style={{fontSize:16,color:"rgba(255,255,255,0.75)",marginBottom:24}}>{over}</div>
+          <div style={{fontSize:16,color:"rgba(255,255,255,0.75)",marginBottom:16}}>{over}</div>
+          {/* Game summary — populated by auto-analysis (depth 10) */}
+          {analysis.length>0&&(()=>{
+            const playerMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
+            const blunders=playerMoves.filter(m=>m.quality==="blunder").length;
+            const mistakes=playerMoves.filter(m=>m.quality==="mistake").length;
+            const great=playerMoves.filter(m=>m.quality==="great").length;
+            const totalCpl=playerMoves.reduce((s,m)=>s+Math.max(0,m.cp),0);
+            const accuracy=playerMoves.length>0?Math.max(0,Math.min(100,Math.round(100-totalCpl/Math.max(1,playerMoves.length)/3))):0;
+            return(
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginBottom:20}}>
+                <div style={{padding:"6px 14px",borderRadius:20,background:"rgba(255,255,255,0.1)",color:"#fff",fontSize:13,fontWeight:700}}>
+                  📊 {accuracy}% точность
+                </div>
+                {great>0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(245,158,11,0.25)",color:"#fbbf24",fontSize:13,fontWeight:700}}>
+                  ⭐ {great} отл.
+                </div>}
+                {mistakes>0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(249,115,22,0.25)",color:"#fb923c",fontSize:13,fontWeight:700}}>
+                  ? {mistakes} ошибок
+                </div>}
+                {blunders>0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(239,68,68,0.25)",color:"#f87171",fontSize:13,fontWeight:700}}>
+                  ?? {blunders} зевков
+                </div>}
+                {blunders===0&&mistakes===0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(16,185,129,0.25)",color:"#34d399",fontSize:13,fontWeight:700}}>
+                  ✓ Чистая партия
+                </div>}
+              </div>
+            );
+          })()}
           <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center"}}>
             <button onClick={()=>{sShowGameOver(false);sSetup(true);sOn(false);}} style={{
               padding:"12px 28px",borderRadius:12,border:"none",

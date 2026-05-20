@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import PersonaCard from "./components/PersonaCard";
 import CreatePersonaForm from "./components/CreatePersonaForm";
 import AvatarDisplay from "./components/AvatarDisplay";
@@ -305,6 +306,10 @@ export default function QPersonaPage() {
           ))}
         </div>
       </section>
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
+        <PaddleUpgradeButton variant="banner" appId="qpersona" label="QPersona Pro — безлимитные персоны, 14 дней бесплатно" />
+      </div>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 40px" }}>
         <MvpConceptBoard

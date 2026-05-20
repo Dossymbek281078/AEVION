@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import CapsuleForm, { type CategoryOption } from "./components/CapsuleForm";
 import CapsuleCard, { type CapsulePreview } from "./components/CapsuleCard";
 import CapsuleReader from "./components/CapsuleReader";
@@ -326,6 +327,10 @@ export default function LifeBoxPage() {
           onClose={() => { setReader(null); setReaderContent(null); setReaderError(null); }}
         />
       )}
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
+        <PaddleUpgradeButton variant="banner" appId="lifebox" label="LifeBox Pro — безлимитные капсулы памяти, 14 дней бесплатно" />
+      </div>
 
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
         <MvpConceptBoard

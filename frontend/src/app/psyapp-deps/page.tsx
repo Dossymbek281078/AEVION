@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import Onboarding from "./components/Onboarding";
 import StreakCounter from "./components/StreakCounter";
 import TriggerLog from "./components/TriggerLog";
@@ -159,6 +160,10 @@ export default function PsyAppDepsPage() {
             к врачу или на горячую линию помощи. PsyApp идёт рядом, не вместо специалиста.
           </p>
         </div>
+      </section>
+
+      <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 16px" }}>
+        <PaddleUpgradeButton variant="banner" appId="psyapp-deps" label="Разблокировать PsyApp Pro — 14 дней бесплатно" />
       </section>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 32px" }}>

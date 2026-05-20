@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import StatsBar from "./components/StatsBar";
 import TaskCard, { type Task, type Priority } from "./components/TaskCard";
 import AddTaskForm from "./components/AddTaskForm";
@@ -530,6 +531,10 @@ export default function DeepSanPage() {
           {toast}
         </div>
       )}
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
+        <PaddleUpgradeButton variant="banner" appId="deepsan" label="DeepSan Pro — убери хаос насовсем, 14 дней бесплатно" />
+      </div>
 
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
         <MvpConceptBoard

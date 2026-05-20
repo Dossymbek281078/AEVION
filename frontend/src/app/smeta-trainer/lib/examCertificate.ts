@@ -3,16 +3,17 @@
 /**
  * Сертификат экзамена — eligibility + payload + hash для QR.
  *
- * Правила выдачи:
- *   • 5 / 5 заданий сданы на «отлично» (best ≥ 85) — Honors
- *   • 4 / 5 на «хорошо+» (best ≥ 70) — Standard
+ * Правила выдачи (для банка из 15 заданий):
+ *   • 15 / 15 на «отлично» (best ≥ 85)  — 🥇 Gold (С ОТЛИЧИЕМ)
+ *   • 12 / 15 на «хорошо+» (best ≥ 70)   — 🥈 Silver (СТАНДАРТНЫЙ)
+ *   •  8 / 15 на «удовл.+» (best ≥ 50)   — 🥉 Bronze (БАЗОВЫЙ)
  *   • меньше — нет права на сертификат
  */
 
 import { EXAM_TASKS } from "./examTasks";
 import { computeStats, type ExamAttempt } from "./examJournal";
 
-export type CertificateTier = "honors" | "standard" | null;
+export type CertificateTier = "gold" | "silver" | "bronze" | null;
 
 export interface CertificatePayload {
   version: 1;
@@ -33,6 +34,7 @@ export interface CertificateEligibility {
   tier: CertificateTier;
   excellent: number;
   goodPlus: number;
+  satisfactoryPlus: number;
   total: number;
   bestByTask: Map<string, ExamAttempt>;
   blockingTaskIds: string[]; // если tier=null — какие задания мешают
@@ -58,6 +60,15 @@ export function saveStudentName(name: string): void {
   }
 }
 
+/** Пороги выдачи для текущего размера банка. */
+function thresholds(total: number) {
+  return {
+    gold: total,                          // все на отлично
+    silver: Math.max(1, total - 3),       // total-3 на хорошо+ (для 15 = 12)
+    bronze: Math.max(1, Math.ceil(total * 0.5)), // ≥ половины на удовл.+ (для 15 = 8)
+  };
+}
+
 export function checkEligibility(): CertificateEligibility {
   const stats = computeStats();
   const bestByTask = new Map<string, ExamAttempt>();
@@ -67,6 +78,7 @@ export function checkEligibility(): CertificateEligibility {
   }
   let excellent = 0;
   let goodPlus = 0;
+  let satisfactoryPlus = 0;
   const blocking: string[] = [];
   for (const t of EXAM_TASKS) {
     const best = bestByTask.get(t.id);
@@ -77,20 +89,28 @@ export function checkEligibility(): CertificateEligibility {
     if (best.score >= 85) {
       excellent += 1;
       goodPlus += 1;
+      satisfactoryPlus += 1;
     } else if (best.score >= 70) {
       goodPlus += 1;
+      satisfactoryPlus += 1;
+    } else if (best.score >= 50) {
+      satisfactoryPlus += 1;
     } else {
       blocking.push(t.id);
     }
   }
+  const total = EXAM_TASKS.length;
+  const th = thresholds(total);
   let tier: CertificateTier = null;
-  if (excellent === EXAM_TASKS.length) tier = "honors";
-  else if (goodPlus >= 4) tier = "standard";
+  if (excellent >= th.gold) tier = "gold";
+  else if (goodPlus >= th.silver) tier = "silver";
+  else if (satisfactoryPlus >= th.bronze) tier = "bronze";
   return {
     tier,
     excellent,
     goodPlus,
-    total: EXAM_TASKS.length,
+    satisfactoryPlus,
+    total,
     bestByTask,
     blockingTaskIds: blocking,
   };
@@ -153,6 +173,13 @@ export function certificateSerial(payload: CertificatePayload): string {
   }
   const date = payload.issuedAt.slice(0, 10).replace(/-/g, "");
   const code = (h % 100000).toString().padStart(5, "0");
-  const tierTag = payload.tier === "honors" ? "H" : "S";
+  const tierTag = payload.tier === "gold" ? "G" : payload.tier === "silver" ? "S" : "B";
   return `SMETA-${tierTag}-${date}-${code}`;
 }
+
+/** Метаданные tier-а для отображения. */
+export const TIER_META: Record<Exclude<CertificateTier, null>, { label: string; emoji: string; color: string }> = {
+  gold:   { label: "С ОТЛИЧИЕМ",   emoji: "🥇", color: "amber"   },
+  silver: { label: "СТАНДАРТНЫЙ", emoji: "🥈", color: "emerald" },
+  bronze: { label: "БАЗОВЫЙ",      emoji: "🥉", color: "orange"  },
+};

@@ -157,6 +157,18 @@ async function run() {
     ok("Content-Type application/json on /pricing/tiers", r.ct);
   } else fail("Content-Type /pricing/tiers", `ct='${r.ct}'`);
 
+  // 16. GET /pricing/subscription/me without auth → 401
+  r = await req("GET", "/api/pricing/subscription/me");
+  if (r.status === 401) {
+    ok("GET /pricing/subscription/me (no auth) → 401");
+  } else fail("GET /pricing/subscription/me (no auth) → 401", `got=${r.status}`);
+
+  // 17. GET /pricing/subscription/me with bad token → 401
+  r = await req("GET", "/api/pricing/subscription/me", { headers: { Authorization: "Bearer badtoken" } });
+  if (r.status === 401) {
+    ok("GET /pricing/subscription/me (bad token) → 401");
+  } else fail("GET /pricing/subscription/me (bad token) → 401", `got=${r.status}`);
+
   console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);
   process.exit(failed > 0 ? 1 : 0);
 }

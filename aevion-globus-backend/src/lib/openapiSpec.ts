@@ -320,7 +320,7 @@ export const openapiSpec = {
   openapi: "3.1.0",
   info: {
     title: "AEVION Globus Backend",
-    version: "0.5.1",
+    version: "0.8.0",
     description:
       "Bank-relevant endpoints (qtrade + ecosystem) and Tier 1 trust spine (qright register/verify, bureau verify, pipeline protect, planet artifact submit + read views, awards transparency + leaderboards) carry full schemas. Tier 3 amplifier surfaces (OG cards, sitemaps, badges, RSS) and admin bulk-edit panels documented as summary entries; see per-surface specs (qsign-v2 at /api/qsign/v2/openapi.json, quantum-shield at /api/quantum-shield/openapi.json) for their full schemas.",
     contact: { name: "AEVION", url: "https://aevion.app" },
@@ -1249,6 +1249,71 @@ export const openapiSpec = {
           "200": { description: "Updated rows" },
           "400": { description: "validation error — no writes" },
           "403": { description: "admin role required" },
+        },
+      },
+    },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Universal Search
+    // ──────────────────────────────────────────────────────────────────────
+    "/api/search/health": { get: { summary: "Search service health — sources list", security: [] } },
+    "/api/search": {
+      get: {
+        summary: "Universal Search — queries QStore/QLearn/QNews/QEvents/QJobs/QRight in parallel",
+        security: [],
+        parameters: [
+          { name: "q", in: "query", required: true, schema: { type: "string", minLength: 2, maxLength: 100 } },
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+          { name: "types", in: "query", schema: { type: "string", description: "Comma-separated: qstore,qlearn,qnews,qevents,qjobs,qright" } },
+        ],
+        responses: {
+          "200": { description: "{ q, total, results[], byType{} }" },
+          "400": { description: "q missing or too short/long" },
+        },
+      },
+    },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Paddle Billing v2
+    // ──────────────────────────────────────────────────────────────────────
+    "/api/paddle/health": { get: { summary: "Paddle API health — configured/sandbox/webhookConfigured/apiReachable", security: [] } },
+    "/api/paddle/plans": { get: { summary: "AEVION Paddle price catalog for frontend", security: [] } },
+    "/api/paddle/products": { get: { summary: "Paddle products + prices from dashboard (live mode)", security: [] } },
+    "/api/paddle/transactions": { get: { summary: "Recent Paddle transactions grouped by appId", security: [] } },
+    "/api/paddle/setup-guide": { get: { summary: "Step-by-step Paddle setup guide for KZ accounts", security: [] } },
+    "/api/paddle/checkout": {
+      post: {
+        summary: "Create Paddle transaction → returns checkout URL",
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { priceId: { type: "string" }, quantity: { type: "integer" }, email: { type: "string" }, tierId: { type: "string" }, appId: { type: "string" } }, required: ["priceId"] } } } },
+        responses: {
+          "200": { description: "{ mode, url, transactionId, sandbox }" },
+          "400": { description: "priceId required" },
+          "502": { description: "Paddle API error" },
+        },
+      },
+    },
+    "/api/paddle/webhook": {
+      post: {
+        summary: "Paddle webhook — verifies Paddle-Signature HMAC, provisions subscription on transaction.completed",
+        security: [],
+        responses: {
+          "200": { description: "{ received: true }" },
+          "400": { description: "missing signature or invalid_signature" },
+        },
+      },
+    },
+    "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
+    "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Pricing — subscription self-service
+    // ──────────────────────────────────────────────────────────────────────
+    "/api/pricing/subscription/me": {
+      get: {
+        summary: "Latest subscription for authenticated user (by email from JWT)",
+        responses: {
+          "200": { description: "{ subscription: { tierId, period, seats, validUntil, trialDays, amountUsd, source, createdAt } | null }" },
+          "401": { description: "unauthorized" },
         },
       },
     },

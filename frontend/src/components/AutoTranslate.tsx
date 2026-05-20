@@ -251,6 +251,9 @@ const dict: Record<string, string> = {
   "Recent Planet artifacts": "\u041d\u0435\u0434\u0430\u0432\u043d\u0438\u0435 \u0430\u0440\u0442\u0435\u0444\u0430\u043a\u0442\u044b Planet",
   "Quantum Shield": "Quantum Shield",
   "Planet Compliance": "Planet Compliance",
+  "Submitted": "Отправлено",
+  "Revoked": "Отозвано",
+  "Voted": "Проголосовано",
 };
 
 // Cache of sorted keys per dict to avoid re-sorting on every render

@@ -16,6 +16,15 @@ import {
   type ExamAttempt,
   type JournalStats,
 } from "../lib/examJournal";
+import {
+  checkEligibility,
+  buildPayload,
+  encodePayload,
+  loadStudentName,
+  saveStudentName,
+  type CertificateEligibility,
+} from "../lib/examCertificate";
+import { useRouter } from "next/navigation";
 
 function formatTs(iso: string): string {
   try {
@@ -40,18 +49,37 @@ function gradeColor(grade: string): string {
 }
 
 export default function ExamJournalPage() {
+  const router = useRouter();
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [filterTask, setFilterTask] = useState<string>("all");
+  const [eligibility, setEligibility] = useState<CertificateEligibility | null>(null);
+  const [studentName, setStudentName] = useState("");
 
   function refresh() {
     setAttempts(loadAttempts());
     setStats(computeStats());
+    setEligibility(checkEligibility());
   }
 
   useEffect(() => {
     refresh();
+    setStudentName(loadStudentName());
   }, []);
+
+  function issueCertificate() {
+    if (!eligibility) return;
+    const name = studentName.trim();
+    if (!name) {
+      alert("Введите ваше ФИО для сертификата");
+      return;
+    }
+    saveStudentName(name);
+    const payload = buildPayload(eligibility, name);
+    if (!payload) return;
+    const hash = encodePayload(payload);
+    router.push(`/smeta-trainer/certificate-exam/${hash}`);
+  }
 
   function handleClear() {
     if (!confirm("Удалить весь журнал? Действие не отменяется.")) return;
@@ -171,6 +199,73 @@ export default function ExamJournalPage() {
                 />
               </div>
             </div>
+
+            {/* Сертификат */}
+            {eligibility && (
+              <div
+                className={`border-2 rounded-lg p-5 mb-4 ${
+                  eligibility.tier === "honors"
+                    ? "bg-amber-50 border-amber-300"
+                    : eligibility.tier === "standard"
+                    ? "bg-emerald-50 border-emerald-300"
+                    : "bg-slate-50 border-slate-200"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="text-xs uppercase tracking-wider font-bold mb-1">
+                      🎖 Сертификат экзаменационного цикла
+                    </div>
+                    {eligibility.tier === "honors" && (
+                      <p className="text-sm text-amber-900">
+                        <strong>Право на сертификат «С ОТЛИЧИЕМ»</strong> — все {eligibility.total} заданий на «отлично» (≥85).
+                      </p>
+                    )}
+                    {eligibility.tier === "standard" && (
+                      <p className="text-sm text-emerald-900">
+                        <strong>Право на стандартный сертификат</strong> — {eligibility.goodPlus} из {eligibility.total} на «хорошо+» (≥70).
+                      </p>
+                    )}
+                    {!eligibility.tier && (
+                      <p className="text-sm text-slate-700">
+                        Сертификат пока не доступен. Нужно: <strong>5/5 на «отлично»</strong> (с отличием)
+                        или <strong>4/5 на «хорошо+»</strong> (стандартный). Сейчас: {eligibility.excellent} на «отлично», {eligibility.goodPlus} на «хорошо+».
+                      </p>
+                    )}
+                  </div>
+                  {eligibility.tier && (
+                    <div className="flex flex-col gap-2 min-w-[280px]">
+                      <input
+                        type="text"
+                        value={studentName}
+                        onChange={(e) => setStudentName(e.target.value)}
+                        placeholder="Ваше ФИО для сертификата"
+                        className="text-sm border border-slate-300 rounded px-3 py-2"
+                      />
+                      <button
+                        onClick={issueCertificate}
+                        disabled={!studentName.trim()}
+                        className={`px-4 py-2 rounded text-sm font-bold text-white disabled:opacity-50 ${
+                          eligibility.tier === "honors"
+                            ? "bg-amber-600 hover:bg-amber-700"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                      >
+                        Получить сертификат
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {!eligibility.tier && eligibility.blockingTaskIds.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-200 text-xs text-slate-600">
+                    <strong>Задания, мешающие выдаче:</strong>{" "}
+                    {eligibility.blockingTaskIds
+                      .map((id) => EXAM_TASKS.find((t) => t.id === id)?.title ?? id)
+                      .join(", ")}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Лучший результат по каждому заданию */}
             <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">

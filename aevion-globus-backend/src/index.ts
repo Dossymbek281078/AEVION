@@ -223,7 +223,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.7.0",
+      version: "0.7.1",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -594,6 +594,35 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/psyapp-deps/assessments/{id}": {
         get: { summary: "Single assessment with questions", security: [] },
+      },
+      // AEVION Hub — central registry + SDK presence + ecosystem stats
+      "/api/aevion/version": { get: { summary: "Hub service version + uptime + node version", security: [] } },
+      "/api/aevion/stats": {
+        get: { summary: "Registry stats: total modules, byTier, coverage matrix, recent activity", security: [] },
+      },
+      "/api/aevion/catalog": {
+        get: { summary: "Unified module catalog with health/openapi/badges links", security: [] },
+      },
+      "/api/aevion/catalog/{id}": {
+        get: { summary: "Single module catalog entry with health probe + related modules", security: [] },
+      },
+      "/api/aevion/registry-stats": {
+        get: { summary: "Lightweight registry stats (count + tier breakdown only)", security: [] },
+      },
+      "/api/aevion/badges/{moduleId}.svg": {
+        get: { summary: "SVG status badge for embedding (image/svg+xml)", security: [] },
+      },
+      "/api/aevion/module-of-the-day": {
+        get: { summary: "Deterministic daily module rotation + related + tomorrow preview", security: [] },
+      },
+      "/api/aevion/sdks": {
+        get: { summary: "Published AEVION npm SDK packages (4 packages with versions, install commands, npmjs registry URLs)", security: [] },
+      },
+      "/api/aevion/openapi.json": {
+        get: { summary: "Composite OpenAPI spec aggregating sub-module specs", security: [] },
+      },
+      "/api/aevion/sitemap.xml": {
+        get: { summary: "XML sitemap of all live module endpoints (application/xml)", security: [] },
       },
       // QTradeOffline
       "/api/qtradeoffline/health": { get: { summary: "QTradeOffline health + wallet/transfer counts" } },

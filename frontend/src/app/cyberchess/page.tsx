@@ -4196,7 +4196,7 @@ export default function CyberChessPage(){
   // (no localStorage-driven values in SSR), so React doesn't have to
   // regenerate the tree on hydration, and event handlers attach immediately.
   if(!mounted){
-    return(<main style={{background:T.bg,minHeight:"100vh"}}>
+    return(<main suppressHydrationWarning style={{background:T.bg,minHeight:"100vh"}}>
       <ProductPageShell fullWidth>
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>

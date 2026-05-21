@@ -535,6 +535,9 @@ type SavedScenario = {
   title: string;
   regime: string;
   createdAt: string;
+  sliders?: Sliders;
+  metrics?: Metrics;
+  regimeId?: string;
 };
 
 export default function ConstitutionPage() {
@@ -566,6 +569,49 @@ export default function ConstitutionPage() {
 
   const [signing, setSigning] = useState<boolean>(false);
   const [signError, setSignError] = useState<string | null>(null);
+  const [compareAId, setCompareAId] = useState<string | null>(null);
+  const [compareBId, setCompareBId] = useState<string | null>(null);
+
+  // Read ?compare=A,B from URL once on mount
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const c = sp.get("compare");
+      if (c) {
+        const [a, b] = c.split(",").map((s) => s.trim());
+        if (a) setCompareAId(a);
+        if (b) setCompareBId(b);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Keep URL in sync with compare selection
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (compareAId || compareBId) {
+        sp.set("compare", `${compareAId ?? ""},${compareBId ?? ""}`);
+      } else {
+        sp.delete("compare");
+      }
+      const query = sp.toString();
+      const url = window.location.pathname + (query ? `?${query}` : "");
+      window.history.replaceState({}, "", url);
+    } catch {
+      /* ignore */
+    }
+  }, [compareAId, compareBId]);
+
+  const compareA = useMemo(
+    () => (compareAId ? saved.find((s) => s.id === compareAId) ?? null : null),
+    [compareAId, saved],
+  );
+  const compareB = useMemo(
+    () => (compareBId ? saved.find((s) => s.id === compareBId) ?? null : null),
+    [compareBId, saved],
+  );
 
   useEffect(() => {
     try {
@@ -591,7 +637,7 @@ export default function ConstitutionPage() {
 
   const loadRecent = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/scenarios?limit=10`);
+      const r = await fetch(`${API}/scenarios?limit=30`);
       if (!r.ok) return;
       const j = await r.json();
       if (Array.isArray(j?.items)) {
@@ -600,14 +646,27 @@ export default function ConstitutionPage() {
           title: string;
           summary?: string | null;
           createdAt: string;
+          payload?: {
+            sliders?: Sliders;
+            metrics?: Metrics;
+            tags?: string[];
+          };
+          tags?: string[];
         }>;
         setSaved(
-          items.map((it) => ({
-            id: it.id,
-            title: it.title,
-            regime: it.summary ?? "",
-            createdAt: it.createdAt,
-          })),
+          items.map((it) => {
+            const tags = it.tags ?? it.payload?.tags ?? [];
+            const regimeId = tags.find((t) => t !== "governance") ?? undefined;
+            return {
+              id: it.id,
+              title: it.title,
+              regime: it.summary ?? "",
+              createdAt: it.createdAt,
+              sliders: it.payload?.sliders,
+              metrics: it.payload?.metrics,
+              regimeId,
+            };
+          }),
         );
         setSavedTotal(typeof j.total === "number" ? j.total : items.length);
       }
@@ -913,6 +972,20 @@ export default function ConstitutionPage() {
           />
         </section>
 
+        <section className="mt-6">
+          <ComparePanel
+            saved={saved}
+            compareA={compareA}
+            compareB={compareB}
+            onPickA={setCompareAId}
+            onPickB={setCompareBId}
+            onClear={() => {
+              setCompareAId(null);
+              setCompareBId(null);
+            }}
+          />
+        </section>
+
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
           <p>
             Теоретическая основа: North / Wallis / Weingast «Violence and Social Orders»,
@@ -1113,6 +1186,248 @@ function WorldMapScatter({
         Чем выше — тем больше драйва и инновации. Страны — приближённая оценка по шкале 0-100; не научный
         рейтинг, а инструмент для интуиции.
       </p>
+    </div>
+  );
+}
+
+function ComparePanel({
+  saved,
+  compareA,
+  compareB,
+  onPickA,
+  onPickB,
+  onClear,
+}: {
+  saved: SavedScenario[];
+  compareA: SavedScenario | null;
+  compareB: SavedScenario | null;
+  onPickA: (id: string | null) => void;
+  onPickB: (id: string | null) => void;
+  onClear: () => void;
+}) {
+  const pickable = saved.filter((s) => s.sliders);
+  const slidersA = compareA?.sliders ?? null;
+  const slidersB = compareB?.sliders ?? null;
+  const metricsA = slidersA ? compareA?.metrics ?? computeMetrics(slidersA) : null;
+  const metricsB = slidersB ? compareB?.metrics ?? computeMetrics(slidersB) : null;
+  const regimeA = slidersA ? classify(slidersA) : null;
+  const regimeB = slidersB ? classify(slidersB) : null;
+  const both = slidersA && slidersB;
+
+  return (
+    <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-[#f5d27a]">Сравнить два сценария</h3>
+        <div className="text-xs text-[#9aa3c0]">
+          Выбери два сохранённых, увидишь ползунки + метрики + режимы рядом. URL ?compare=A,B можно
+          поделиться
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+        <div>
+          <div className="text-xs uppercase text-[#22d3ee] mb-1">A — синий</div>
+          <select
+            value={compareA?.id ?? ""}
+            onChange={(e) => onPickA(e.target.value || null)}
+            className="w-full bg-[#050a1a] border border-[#22d3ee]/40 rounded px-3 py-2 text-sm"
+          >
+            <option value="">— выбрать сценарий —</option>
+            {pickable.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title} {s.regime ? `· ${s.regime}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div className="text-xs uppercase text-[#f472b6] mb-1">B — розовый</div>
+          <select
+            value={compareB?.id ?? ""}
+            onChange={(e) => onPickB(e.target.value || null)}
+            className="w-full bg-[#050a1a] border border-[#f472b6]/40 rounded px-3 py-2 text-sm"
+          >
+            <option value="">— выбрать сценарий —</option>
+            {pickable.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title} {s.regime ? `· ${s.regime}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {pickable.length === 0 && (
+        <div className="text-sm text-[#9aa3c0] italic">
+          Пока нет сохранённых сценариев с полными данными. Сохрани пару выше, и они появятся здесь.
+        </div>
+      )}
+
+      {(compareA || compareB) && (
+        <div className="text-right mb-3">
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-xs px-3 py-1 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
+          >
+            Сбросить выбор
+          </button>
+        </div>
+      )}
+
+      {both && slidersA && slidersB && metricsA && metricsB && regimeA && regimeB && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+            <div className="border border-[#22d3ee]/40 rounded p-3 bg-[#22d3ee]/5">
+              <div className="text-[#22d3ee] font-semibold">{compareA!.title}</div>
+              <div className="text-sm font-bold mt-1">{regimeA.name}</div>
+              <div className="text-xs text-[#9aa3c0] italic">{regimeA.era}</div>
+              <div className="text-xs mt-2">
+                <span className="text-emerald-300">+</span> {regimeA.pros}
+              </div>
+              <div className="text-xs mt-1">
+                <span className="text-rose-300">−</span> {regimeA.cons}
+              </div>
+            </div>
+            <div className="border border-[#f472b6]/40 rounded p-3 bg-[#f472b6]/5">
+              <div className="text-[#f472b6] font-semibold">{compareB!.title}</div>
+              <div className="text-sm font-bold mt-1">{regimeB.name}</div>
+              <div className="text-xs text-[#9aa3c0] italic">{regimeB.era}</div>
+              <div className="text-xs mt-2">
+                <span className="text-emerald-300">+</span> {regimeB.pros}
+              </div>
+              <div className="text-xs mt-1">
+                <span className="text-rose-300">−</span> {regimeB.cons}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <div className="text-xs text-[#9aa3c0] mb-2">Ползунки (A vs B):</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
+              {SLIDER_META.map((m) => {
+                const va = slidersA[m.key];
+                const vb = slidersB[m.key];
+                return (
+                  <div key={m.key}>
+                    <div className="flex justify-between text-xs">
+                      <span className="truncate">{m.label}</span>
+                      <span className="font-mono text-[#9aa3c0]">
+                        <span className="text-[#22d3ee]">{va}</span> ·{" "}
+                        <span className="text-[#f472b6]">{vb}</span>
+                      </span>
+                    </div>
+                    <div className="relative w-full h-2 bg-[#050a1a] rounded">
+                      <div
+                        className="absolute top-0 left-0 h-full rounded bg-[#22d3ee]"
+                        style={{ width: `${va}%`, opacity: 0.55 }}
+                      />
+                      <div
+                        className="absolute top-0 left-0 h-full rounded bg-[#f472b6]"
+                        style={{ width: `${vb}%`, opacity: 0.55 }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <div className="text-xs text-[#9aa3c0] mb-2">Индексы — дельта B минус A:</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2 text-xs">
+              {(
+                [
+                  ["eliteFear", "Страх элит перед низом", true],
+                  ["intraConflict", "Грызня внутри элит", true],
+                  ["resentment", "Обида низа на верх", true],
+                  ["innovation", "Инновация / драйв", false],
+                  ["stability", "Устойчивость", false],
+                  ["legitimacy", "Легитимность", false],
+                ] as Array<[keyof Metrics, string, boolean]>
+              ).map(([key, label, invert]) => {
+                const va = metricsA[key];
+                const vb = metricsB[key];
+                const d = vb - va;
+                // For invert metrics (bad ones): negative delta is improvement (green)
+                const good = invert ? d < 0 : d > 0;
+                return (
+                  <div key={key} className="flex justify-between items-center">
+                    <span className="truncate">{label}</span>
+                    <span className="font-mono">
+                      <span className="text-[#22d3ee]">{va}</span>
+                      <span className="text-[#9aa3c0] mx-1">→</span>
+                      <span className="text-[#f472b6]">{vb}</span>
+                      <span
+                        className={`ml-2 ${d === 0 ? "text-[#9aa3c0]" : good ? "text-emerald-400" : "text-rose-400"}`}
+                      >
+                        ({d > 0 ? "+" : ""}
+                        {d})
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <MiniCompareScatter slidersA={slidersA} slidersB={slidersB} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function MiniCompareScatter({
+  slidersA,
+  slidersB,
+}: {
+  slidersA: Sliders;
+  slidersB: Sliders;
+}) {
+  const ma = computeMetrics(slidersA);
+  const mb = computeMetrics(slidersB);
+  const W = 560;
+  const H = 320;
+  const PAD = 44;
+  const xFor = (v: number) => PAD + ((100 - v) / 100) * (W - 2 * PAD);
+  const yFor = (v: number) => H - PAD - (v / 100) * (H - 2 * PAD);
+  const ax = xFor(ma.eliteFear);
+  const ay = yFor(ma.innovation);
+  const bx = xFor(mb.eliteFear);
+  const by = yFor(mb.innovation);
+  return (
+    <div>
+      <div className="text-xs text-[#9aa3c0] mb-1">
+        A → B на карте мира (X — страх элит, Y — инновация)
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-full">
+        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.4} />
+        <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.4} />
+        <line x1={xFor(50)} y1={PAD} x2={xFor(50)} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.12} strokeDasharray="4 6" />
+        <line x1={PAD} y1={yFor(50)} x2={W - PAD} y2={yFor(50)} stroke="#d4af37" strokeOpacity={0.12} strokeDasharray="4 6" />
+        {COUNTRIES.map((c) => {
+          const m = computeMetrics(c.sliders);
+          return (
+            <g key={c.name}>
+              <circle cx={xFor(m.eliteFear)} cy={yFor(m.innovation)} r={3} fill="#d4af37" opacity={0.35} />
+              <text x={xFor(m.eliteFear) + 5} y={yFor(m.innovation) + 4} fontSize="11">
+                {c.flag}
+              </text>
+            </g>
+          );
+        })}
+        <defs>
+          <marker id="cmpArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#f472b6" />
+          </marker>
+        </defs>
+        <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#f472b6" strokeWidth={2} strokeDasharray="6 4" opacity={0.85} markerEnd="url(#cmpArrow)" />
+        <circle cx={ax} cy={ay} r={6} fill="#22d3ee" stroke="#0b1736" strokeWidth={2} />
+        <text x={ax + 10} y={ay - 6} fill="#22d3ee" fontSize="11" fontWeight="bold">A</text>
+        <circle cx={bx} cy={by} r={6} fill="#f472b6" stroke="#0b1736" strokeWidth={2} />
+        <text x={bx + 10} y={by + 16} fill="#f472b6" fontSize="11" fontWeight="bold">B</text>
+      </svg>
     </div>
   );
 }

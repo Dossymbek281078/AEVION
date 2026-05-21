@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { PlayerProfile } from "./mirrorMode";
+import { useCcI18n } from "./i18n";
 
 type Props = {
   profile: PlayerProfile | null;
@@ -26,8 +27,9 @@ export default function MirrorModePanel({
   textDim,
   accent,
 }: Props) {
+  const { t } = useCcI18n();
   const hasEnough = profile !== null && (profile.estimatedElo > 800 || profile.favoriteOpenings.length > 0);
-  const gamesNote = profile ? `AI изучил твои последние партии` : "Нет данных об играх";
+  const gamesNote = profile ? t("mirror.studied") : t("mirror.no_data");
   const firstOpening = profile?.favoriteOpenings?.[0] ?? null;
 
   return (
@@ -48,7 +50,7 @@ export default function MirrorModePanel({
           <span style={{ fontSize: 15, fontWeight: 700, color: text }}>🪞 Mirror Mode</span>
           {active && (
             <div style={{ fontSize: 11, color: accent, fontWeight: 600, marginTop: 1 }}>
-              играет как ты
+              {t("mirror.plays_like_you")}
             </div>
           )}
         </div>
@@ -75,15 +77,15 @@ export default function MirrorModePanel({
       {/* Stats or warning */}
       {!hasEnough ? (
         <div style={{ fontSize: 12, color: textDim, padding: "4px 0" }}>
-          Нужно 5+ партий для анализа
+          {t("mirror.need_games")}
         </div>
       ) : (
         <div style={{ fontSize: 12, color: textDim, lineHeight: 1.5 }}>
-          ELO ~{profile!.estimatedElo} · Глубина {profile!.stockfishDepth} · Любимый дебют:{" "}
+          ELO ~{profile!.estimatedElo} · {t("mirror.depth")} {profile!.stockfishDepth} · {t("mirror.fav_opening")}{" "}
           {firstOpening ? (
             <span style={{ color: text, fontWeight: 600 }}>{firstOpening}</span>
           ) : (
-            <span style={{ color: textDim }}>нет данных</span>
+            <span style={{ color: textDim }}>{t("mirror.unknown")}</span>
           )}
         </div>
       )}

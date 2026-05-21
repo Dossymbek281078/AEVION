@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useCcI18n } from "./i18n";
 
 type Opening = { eco: string; name: string; moves: string; desc?: string };
 
@@ -31,6 +32,7 @@ export default function OpeningFlashCard({
   textDim,
   accent,
 }: Props) {
+  const { t } = useCcI18n();
   const [showHint, setShowHint] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -134,7 +136,7 @@ export default function OpeningFlashCard({
           <button
             className="ofc-btn"
             onClick={onDismiss}
-            title="Закрыть"
+            title={t("common.close")}
             style={{
               background: "transparent",
               color: textDim,
@@ -160,7 +162,7 @@ export default function OpeningFlashCard({
               lineHeight: 1.5,
             }}
           >
-            Знаешь теорию этого дебюта?
+            {t("flash.know_theory")}
           </p>
         </div>
 
@@ -178,7 +180,7 @@ export default function OpeningFlashCard({
             }}
           >
             <span style={{ fontWeight: 700, color: accent, marginRight: 4 }}>
-              продолжение по теории:
+              {t("flash.continuation")}
             </span>
             <span
               style={{
@@ -203,7 +205,7 @@ export default function OpeningFlashCard({
               border: `1px solid ${accent}50`,
             }}
           >
-            Продолжаю сам 💪
+            {t("flash.on_my_own")}
           </button>
           {!showHint && (
             <button
@@ -216,7 +218,7 @@ export default function OpeningFlashCard({
                 border: `1px solid ${border}`,
               }}
             >
-              Покажи теорию 📚
+              {t("flash.show_theory")}
             </button>
           )}
         </div>

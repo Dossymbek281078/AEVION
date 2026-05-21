@@ -1,0 +1,666 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+const API = "/api-backend/api/constitution";
+const STORAGE_KEY = "constitution.draft";
+
+type Sliders = {
+  floor: number;
+  ruleOfLaw: number;
+  rotation: number;
+  transparency: number;
+  multiStatus: number;
+  skinInGame: number;
+  polycentricity: number;
+  positiveSum: number;
+};
+
+const DEFAULT_SLIDERS: Sliders = {
+  floor: 30,
+  ruleOfLaw: 50,
+  rotation: 20,
+  transparency: 40,
+  multiStatus: 30,
+  skinInGame: 30,
+  polycentricity: 30,
+  positiveSum: 60,
+};
+
+type SliderMeta = {
+  key: keyof Sliders;
+  label: string;
+  hint: string;
+  low: string;
+  high: string;
+};
+
+const SLIDER_META: SliderMeta[] = [
+  {
+    key: "floor",
+    label: "Пол снизу",
+    hint: "Гарантированный минимум: базовый доход / образование / здоровье",
+    low: "Каждый сам за себя",
+    high: "Никто не падает ниже пола",
+  },
+  {
+    key: "ruleOfLaw",
+    label: "Закон обязателен и для верха",
+    hint: "Олигарх тоже может проиграть в суде",
+    low: "Закон для бедных",
+    high: "Все равны под законом",
+  },
+  {
+    key: "rotation",
+    label: "Ротация / жребий",
+    hint: "Случайные граждане в палатах, советах, жюри",
+    low: "Пожизненные касты",
+    high: "Регулярная смена через жребий",
+  },
+  {
+    key: "transparency",
+    label: "Прозрачность элит",
+    hint: "Открытые декларации, публичный учёт решений",
+    low: "Тёмные комнаты",
+    high: "Стеклянные коридоры",
+  },
+  {
+    key: "multiStatus",
+    label: "Множественные статусы",
+    hint: "Уважение через науку, ремесло, заботу, искусство — не только деньги",
+    low: "Одна ось — деньги/власть",
+    high: "Много легитимных арен",
+  },
+  {
+    key: "skinInGame",
+    label: "Skin in the game",
+    hint: "Кто принимает решение — несёт последствия лично (Талеб)",
+    low: "Решают одни, отвечают другие",
+    high: "Каждый при своих ставках",
+  },
+  {
+    key: "polycentricity",
+    label: "Полицентричность",
+    hint: "Реальный суверенитет локальных юрисдикций (Остром)",
+    low: "Сверх-государство",
+    high: "Федерация локальностей",
+  },
+  {
+    key: "positiveSum",
+    label: "Положительная сумма",
+    hint: "Реально и видимо растущий пирог (Acemoglu/Robinson)",
+    low: "Распил фиксированного",
+    high: "Растущая экономика для всех",
+  },
+];
+
+type Metrics = {
+  eliteFear: number;
+  intraConflict: number;
+  resentment: number;
+  innovation: number;
+  stability: number;
+  legitimacy: number;
+};
+
+function computeMetrics(s: Sliders): Metrics {
+  const inv = (x: number) => 100 - x;
+  return {
+    eliteFear: Math.round(
+      inv(s.floor) * 0.3 +
+        inv(s.ruleOfLaw) * 0.3 +
+        inv(s.transparency) * 0.2 +
+        inv(s.positiveSum) * 0.2,
+    ),
+    intraConflict: Math.round(
+      inv(s.rotation) * 0.4 + inv(s.multiStatus) * 0.4 + inv(s.ruleOfLaw) * 0.2,
+    ),
+    resentment: Math.round(
+      inv(s.floor) * 0.4 + inv(s.transparency) * 0.3 + inv(s.skinInGame) * 0.3,
+    ),
+    innovation: Math.round(
+      s.positiveSum * 0.5 + s.polycentricity * 0.25 + s.multiStatus * 0.25,
+    ),
+    stability: Math.round(
+      s.ruleOfLaw * 0.4 + s.floor * 0.3 + s.transparency * 0.2 + s.rotation * 0.1,
+    ),
+    legitimacy: Math.round(
+      s.transparency * 0.3 + s.ruleOfLaw * 0.3 + s.floor * 0.2 + s.rotation * 0.2,
+    ),
+  };
+}
+
+type Regime = {
+  id: string;
+  name: string;
+  era: string;
+  summary: string;
+  pros: string;
+  cons: string;
+};
+
+function classify(s: Sliders): Regime {
+  const hi = (x: number) => x >= 65;
+  const md = (x: number) => x >= 35 && x < 65;
+  const lo = (x: number) => x < 35;
+
+  if (
+    hi(s.floor) &&
+    hi(s.ruleOfLaw) &&
+    hi(s.transparency) &&
+    hi(s.multiStatus) &&
+    hi(s.rotation) &&
+    hi(s.polycentricity) &&
+    hi(s.positiveSum)
+  ) {
+    return {
+      id: "open-access",
+      name: "Открытый порядок (Open Access)",
+      era: "Идеал — North / Wallis / Weingast",
+      summary:
+        "Все опоры закреплены: положительная сумма, закон для всех, пол снизу, ротация, прозрачность, разные оси статуса. Элиты конкурируют, но не уничтожают друг друга — большой пирог делает интригу дороже честной игры.",
+      pros: "Низкая интра-элитная вражда, высокая легитимность, мощная инновация.",
+      cons: "Хрупко в кризис: войну/пандемию проходит хуже мобилизационных режимов. Требует постоянного роста.",
+    };
+  }
+
+  if (
+    hi(s.floor) &&
+    hi(s.ruleOfLaw) &&
+    hi(s.transparency) &&
+    !hi(s.polycentricity)
+  ) {
+    return {
+      id: "nordic",
+      name: "Скандинавская модель",
+      era: "Швеция / Дания / Норвегия — после 1945",
+      summary:
+        "Высокий пол снизу, верховенство закона, прозрачность государства. Элита не боится низа — потому что низа в экзистенциальном смысле нет.",
+      pros: "Минимальная социальная напряжённость, высокое доверие, низкая коррупция.",
+      cons: "Дорого. Требует культурной однородности или сильной интеграции. Тормозит часть инновации.",
+    };
+  }
+
+  if (
+    lo(s.ruleOfLaw) &&
+    lo(s.rotation) &&
+    lo(s.transparency) &&
+    lo(s.polycentricity)
+  ) {
+    return {
+      id: "totalitarian",
+      name: "Тоталитарная диктатура",
+      era: "Сталинский СССР, маоистский Китай, КНДР",
+      summary:
+        "Одна партия, один лидер. Закона как защиты от власти нет, ротации нет, прозрачности нет. Элиты боятся друг друга и низа одинаково сильно.",
+      pros: "Способность к экстремальной мобилизации.",
+      cons: "Самоистребление верха (чистки), технологическая отсталость, наследование власти — катастрофа.",
+    };
+  }
+
+  if (
+    lo(s.ruleOfLaw) &&
+    lo(s.transparency) &&
+    lo(s.rotation) &&
+    !lo(s.polycentricity)
+  ) {
+    return {
+      id: "authoritarian",
+      name: "Авторитарная вертикаль",
+      era: "XX век — Латинская Америка, постсоветские режимы",
+      summary:
+        "Один центр, закон применим избирательно, прозрачности нет, ротации нет. Элита боится низа постоянно — между ними нет правил.",
+      pros: "Быстрая мобилизация в кризис, видимая стабильность на горизонте десятилетия.",
+      cons: "Постоянная паранойя верха. Любой кризис преемственности — революция или хаос.",
+    };
+  }
+
+  if (lo(s.floor) && lo(s.ruleOfLaw) && lo(s.transparency) && hi(s.positiveSum)) {
+    return {
+      id: "extractive-boom",
+      name: "Экстрактивный бум",
+      era: "Бельгийское Конго; нефтяные циклы",
+      summary:
+        "Пирог реально растёт, но достаётся очень узкой группе. Без пола снизу, закона и прозрачности — растущее напряжение, отложенный взрыв.",
+      pros: "Высокие темпы роста в краткосрок.",
+      cons: "Взрывается на первой длинной просадке цены ресурса.",
+    };
+  }
+
+  if (
+    hi(s.polycentricity) &&
+    hi(s.positiveSum) &&
+    hi(s.multiStatus) &&
+    md(s.ruleOfLaw)
+  ) {
+    return {
+      id: "network-post-nation",
+      name: "Сетевая постнация",
+      era: "Гипотеза — конкурирующие юрисдикции 2030-х",
+      summary:
+        "Не одно государство, а лоскутное одеяло конкурирующих юрисдикций. Люди выбирают, под какие правила им встать.",
+      pros: "Конкуренция систем, кто хочет — переезжает. Меньше захвата.",
+      cons: "Слабые гарантии в кризис. Цифровое неравенство закрепляется юридически.",
+    };
+  }
+
+  if (lo(s.floor) && md(s.ruleOfLaw) && lo(s.rotation) && lo(s.multiStatus)) {
+    return {
+      id: "feudalism",
+      name: "Поздний феодализм",
+      era: "Европа XIV–XVII в.; неофеодальные сценарии",
+      summary:
+        "Наследственная элита, низ привязан к земле/работодателю, закон уважает форму, но не суть. Бунт случается раз в поколение и обычно ничего не меняет.",
+      pros: "Стабильность через инерцию.",
+      cons: "Низкая инновация, технологическое отставание, рано или поздно сменяется силой.",
+    };
+  }
+
+  if (hi(s.rotation) && !hi(s.floor) && lo(s.multiStatus)) {
+    return {
+      id: "ancient-polis",
+      name: "Античный полис",
+      era: "Афины V в. до н.э.",
+      summary:
+        "Жребий и ротация в основе устройства, но «полноправные» — это только узкая группа. Снаружи — рабы и метеки.",
+      pros: "Минимальная грызня внутри гражданского круга.",
+      cons: "Систематическое исключение большой части населения.",
+    };
+  }
+
+  if (
+    hi(s.ruleOfLaw) &&
+    md(s.transparency) &&
+    md(s.floor) &&
+    md(s.multiStatus)
+  ) {
+    return {
+      id: "modern-liberal",
+      name: "Современная либеральная демократия",
+      era: "ЕС / США / Япония / Канада — XXI век",
+      summary:
+        "Закон работает, прозрачность присутствует, пол снизу средний. Элиты грызутся, но в рамках процедур. Низ может голосовать, но редко участвует в реальных решениях.",
+      pros: "Большинство в безопасности. Сильная инновация.",
+      cons: "Растущее ощущение, что «они нас не слышат». Олигархизация политики через деньги.",
+    };
+  }
+
+  return {
+    id: "mixed",
+    name: "Смешанный неустойчивый режим",
+    era: "Гибрид — рано классифицировать",
+    summary:
+      "Параметры не складываются в чистую историческую модель. Система может качнуться в любую сторону — конкретный режим определит первый кризис.",
+    pros: "Возможность настройки в желаемую сторону.",
+    cons: "Неустойчиво. Доверие пока слабое в любую сторону.",
+  };
+}
+
+type Preset = { name: string; sliders: Sliders };
+
+const PRESETS: Preset[] = [
+  {
+    name: "Open Access (идеал)",
+    sliders: {
+      floor: 75,
+      ruleOfLaw: 85,
+      rotation: 70,
+      transparency: 80,
+      multiStatus: 75,
+      skinInGame: 70,
+      polycentricity: 65,
+      positiveSum: 80,
+    },
+  },
+  {
+    name: "Скандинавская",
+    sliders: {
+      floor: 80,
+      ruleOfLaw: 85,
+      rotation: 40,
+      transparency: 80,
+      multiStatus: 55,
+      skinInGame: 50,
+      polycentricity: 30,
+      positiveSum: 65,
+    },
+  },
+  {
+    name: "США XXI века",
+    sliders: {
+      floor: 35,
+      ruleOfLaw: 65,
+      rotation: 25,
+      transparency: 60,
+      multiStatus: 50,
+      skinInGame: 35,
+      polycentricity: 55,
+      positiveSum: 70,
+    },
+  },
+  {
+    name: "Авторитарная",
+    sliders: {
+      floor: 30,
+      ruleOfLaw: 25,
+      rotation: 10,
+      transparency: 15,
+      multiStatus: 25,
+      skinInGame: 25,
+      polycentricity: 15,
+      positiveSum: 50,
+    },
+  },
+  {
+    name: "Феодализм",
+    sliders: {
+      floor: 15,
+      ruleOfLaw: 35,
+      rotation: 5,
+      transparency: 20,
+      multiStatus: 25,
+      skinInGame: 60,
+      polycentricity: 70,
+      positiveSum: 25,
+    },
+  },
+];
+
+type SavedScenario = {
+  id: string;
+  title: string;
+  regime: string;
+  createdAt: string;
+};
+
+export default function ConstitutionPage() {
+  const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
+  const [title, setTitle] = useState<string>("");
+  const [saved, setSaved] = useState<SavedScenario[]>([]);
+  const [busy, setBusy] = useState<boolean>(false);
+  const [savedTotal, setSavedTotal] = useState<number>(0);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Sliders>;
+        if (parsed && typeof parsed === "object") {
+          setSliders({ ...DEFAULT_SLIDERS, ...parsed });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sliders));
+    } catch {
+      /* ignore */
+    }
+  }, [sliders]);
+
+  const loadRecent = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/scenarios?limit=10`);
+      if (!r.ok) return;
+      const j = await r.json();
+      if (Array.isArray(j?.items)) {
+        const items = j.items as Array<{
+          id: string;
+          title: string;
+          summary?: string | null;
+          createdAt: string;
+        }>;
+        setSaved(
+          items.map((it) => ({
+            id: it.id,
+            title: it.title,
+            regime: it.summary ?? "",
+            createdAt: it.createdAt,
+          })),
+        );
+        setSavedTotal(typeof j.total === "number" ? j.total : items.length);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRecent();
+  }, [loadRecent]);
+
+  const metrics = useMemo(() => computeMetrics(sliders), [sliders]);
+  const regime = useMemo(() => classify(sliders), [sliders]);
+
+  const setSlider = useCallback(
+    (k: keyof Sliders, v: number) => setSliders((s) => ({ ...s, [k]: v })),
+    [],
+  );
+
+  const reset = useCallback(() => setSliders(DEFAULT_SLIDERS), []);
+
+  const save = useCallback(async () => {
+    if (!title.trim()) return;
+    setBusy(true);
+    try {
+      const r = await fetch(`${API}/scenarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          sliders,
+          regime: regime.name,
+          metrics,
+          tags: ["governance", regime.id],
+        }),
+      });
+      if (r.ok) {
+        setTitle("");
+        await loadRecent();
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  }, [title, sliders, regime, metrics, loadRecent]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-6">
+          <Link href="/" className="text-[#d4af37] hover:underline text-sm">
+            ← AEVION
+          </Link>
+          <h1 className="text-3xl md:text-4xl font-bold mt-2 text-[#d4af37]">
+            Constitution — Лаборатория устройства мира
+          </h1>
+          <p className="text-[#9aa3c0] mt-2 max-w-3xl">
+            Восемь параметров — четыре опоры, на которых элиты перестают бояться низа и грызться между собой.
+            Двигай ползунки, смотри, в какой исторический режим скатывается система. Сохрани сценарий — увидишь,
+            что выбрали другие.
+          </p>
+        </header>
+
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-[#f5d27a]">Восемь параметров</h2>
+              <button
+                type="button"
+                onClick={reset}
+                className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
+              >
+                Сброс
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {SLIDER_META.map((m) => {
+                const val = sliders[m.key];
+                return (
+                  <div key={m.key}>
+                    <div className="flex justify-between items-baseline">
+                      <label htmlFor={`s-${m.key}`} className="font-medium">
+                        {m.label}
+                      </label>
+                      <span className="text-[#d4af37] font-mono text-sm">{val}</span>
+                    </div>
+                    <input
+                      id={`s-${m.key}`}
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={val}
+                      onChange={(e) => setSlider(m.key, Number(e.target.value))}
+                      className="w-full accent-[#d4af37]"
+                    />
+                    <div className="flex justify-between text-xs text-[#9aa3c0] mt-1">
+                      <span>{m.low}</span>
+                      <span>{m.high}</span>
+                    </div>
+                    <p className="text-xs text-[#9aa3c0] italic mt-1">{m.hint}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-[#d4af37]/20">
+              <div className="text-xs text-[#9aa3c0] mb-2">Пресеты:</div>
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => setSliders(p.sliders)}
+                    className="text-xs px-3 py-1 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-xl p-5">
+              <div className="text-xs uppercase tracking-wide text-[#9aa3c0]">
+                Получившийся режим
+              </div>
+              <h3 className="text-2xl font-bold text-[#d4af37] mt-1">{regime.name}</h3>
+              <div className="text-sm text-[#9aa3c0] italic">{regime.era}</div>
+              <p className="mt-3">{regime.summary}</p>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="border border-emerald-500/30 rounded p-3 bg-emerald-500/5">
+                  <div className="text-emerald-300 text-xs uppercase mb-1">Плюсы</div>
+                  <div>{regime.pros}</div>
+                </div>
+                <div className="border border-rose-500/30 rounded p-3 bg-rose-500/5">
+                  <div className="text-rose-300 text-xs uppercase mb-1">Минусы</div>
+                  <div>{regime.cons}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">Шесть индексов</h3>
+              <MetricBar label="Страх элит перед низом" value={metrics.eliteFear} invert />
+              <MetricBar label="Грызня внутри элит" value={metrics.intraConflict} invert />
+              <MetricBar label="Обида низа на верх" value={metrics.resentment} invert />
+              <MetricBar label="Инновация / драйв" value={metrics.innovation} />
+              <MetricBar label="Устойчивость" value={metrics.stability} />
+              <MetricBar label="Легитимность" value={metrics.legitimacy} />
+            </div>
+
+            <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
+                Сохранить сценарий{savedTotal > 0 ? ` (всего: ${savedTotal})` : ""}
+              </h3>
+              <div className="flex gap-2">
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Название (например, «Казахстан-2050»)"
+                  className="flex-1 bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
+                  maxLength={120}
+                />
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={busy || !title.trim()}
+                  className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold disabled:opacity-40"
+                >
+                  {busy ? "..." : "Сохранить"}
+                </button>
+              </div>
+              {saved.length > 0 && (
+                <div className="mt-4">
+                  <div className="text-xs text-[#9aa3c0] mb-2">Недавние сценарии:</div>
+                  <ul className="space-y-1 text-sm">
+                    {saved.slice(0, 8).map((it) => (
+                      <li
+                        key={it.id}
+                        className="flex justify-between border-b border-[#d4af37]/10 py-1"
+                      >
+                        <span className="truncate flex-1">{it.title}</span>
+                        <span className="text-[#9aa3c0] text-xs ml-2 truncate max-w-[40%]">
+                          {it.regime}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
+          <p>
+            Теоретическая основа: North / Wallis / Weingast «Violence and Social Orders»,
+            Acemoglu / Robinson «Why Nations Fail», Elinor Ostrom «Governing the Commons»,
+            Nassim Taleb «Skin in the Game».
+          </p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function MetricBar({
+  label,
+  value,
+  invert,
+}: {
+  label: string;
+  value: number;
+  invert?: boolean;
+}) {
+  const color = invert
+    ? value > 60
+      ? "bg-rose-500"
+      : value > 30
+        ? "bg-amber-500"
+        : "bg-emerald-500"
+    : value > 60
+      ? "bg-emerald-500"
+      : value > 30
+        ? "bg-amber-500"
+        : "bg-rose-500";
+  return (
+    <div className="mb-2">
+      <div className="flex justify-between text-xs mb-1">
+        <span>{label}</span>
+        <span className="text-[#d4af37] font-mono">{value}</span>
+      </div>
+      <div className="w-full h-2 bg-[#050a1a] rounded">
+        <div className={`h-full rounded ${color}`} style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  );
+}

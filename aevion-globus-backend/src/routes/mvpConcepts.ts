@@ -74,6 +74,10 @@ const CONCEPTS: ConceptConfig[] = [
   { id: "lifebox", noun: "capsules", titleField: "label",
     summaryField: "occasion", requiredFields: ["label", "year"],
     defaultTags: ["archive"] },
+  // constitution: world-system design scenarios (slider snapshots + regime label)
+  { id: "constitution", noun: "scenarios", titleField: "title",
+    summaryField: "regime", requiredFields: ["title", "sliders"],
+    defaultTags: ["governance"] },
 ];
 
 const writeLimit = rateLimit({ windowMs: 60_000, max: 20, keyPrefix: "mvp-concept-write" });

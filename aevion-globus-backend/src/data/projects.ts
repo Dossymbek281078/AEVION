@@ -496,4 +496,17 @@ export const projects: GlobusProject[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    id: "constitution",
+    code: "CONSTITUTION",
+    name: "Constitution — World-System Design Lab",
+    description:
+      "Интерактивный симулятор государственного устройства: 8 ползунков (пол снизу, верховенство закона, ротация, прозрачность, multi-status, skin-in-the-game, полицентричность, положительная сумма) → классификатор исторических режимов + сохранение сценариев в Postgres через mvpConcepts.",
+    kind: "experiment",
+    status: "live",
+    priority: 3,
+    tags: ["governance", "simulator", "social-design", "concept"],
+    createdAt: now,
+    updatedAt: now,
+  },
 ];

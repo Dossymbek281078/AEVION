@@ -847,6 +847,36 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   return stats;
 }
 
+// GET /api/aevion/sdks/diag — diagnostic: probe npm endpoints from this host
+// and return raw outcome (status, headers, error message). Read-only.
+aevionHubRouter.get("/sdks/diag", async (_req, res) => {
+  const enc = encodeURIComponent("@aevion-io/fintech-sdk");
+  const headers = {
+    "Accept": "application/json",
+    "User-Agent": "aevion-hub/1.0 (+https://github.com/Dossymbek281078/AEVION)",
+  };
+  async function probe(url: string, method: "GET" | "HEAD"): Promise<Record<string, unknown>> {
+    const started = Date.now();
+    try {
+      const r = await fetch(url, { method, headers, signal: AbortSignal.timeout(5000) });
+      return {
+        url, method, ok: r.ok, status: r.status,
+        elapsedMs: Date.now() - started,
+        lastModified: r.headers.get("last-modified"),
+        contentLength: r.headers.get("content-length"),
+      };
+    } catch (e) {
+      const err = e as Error;
+      return { url, method, ok: false, elapsedMs: Date.now() - started, errorName: err.name, errorMessage: err.message };
+    }
+  }
+  const [dl, reg] = await Promise.all([
+    probe(`https://api.npmjs.org/downloads/point/last-week/${enc}`, "GET"),
+    probe(`https://registry.npmjs.org/${enc}`, "HEAD"),
+  ]);
+  res.json({ probedAt: new Date().toISOString(), downloads: dl, registry: reg });
+});
+
 aevionHubRouter.get("/sdks", async (req, res) => {
   const sdks = [
     {

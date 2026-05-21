@@ -823,7 +823,7 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   };
   const [dlRes, regRes] = await Promise.allSettled([
     fetch(`https://api.npmjs.org/downloads/point/last-week/${enc}`, fetchOpts),
-    fetch(`https://registry.npmjs.org/${enc}`, fetchOpts),
+    fetch(`https://registry.npmjs.org/${enc}`, { ...fetchOpts, method: "HEAD" }),
   ]);
 
   if (dlRes.status === "fulfilled" && dlRes.value.ok) {
@@ -833,10 +833,11 @@ async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
     } catch { /* leave null */ }
   }
   if (regRes.status === "fulfilled" && regRes.value.ok) {
-    try {
-      const j = await regRes.value.json() as { modified?: string };
-      if (typeof j.modified === "string") stats.lastPublished = j.modified;
-    } catch { /* leave null */ }
+    const lastMod = regRes.value.headers.get("last-modified");
+    if (lastMod) {
+      const iso = new Date(lastMod).toISOString();
+      if (!Number.isNaN(Date.parse(iso))) stats.lastPublished = iso;
+    }
   }
 
   // Only cache successful fetches for the full hour. If npm was slow this

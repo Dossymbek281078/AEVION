@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, Suspense, useContext, useState } from "react";
 
 const PENDING_KEY = "smeta-trainer:pending-calc-value";
 
@@ -65,6 +65,14 @@ function sendToExam(value: number, label: string, unit: string) {
 }
 
 export default function CalcPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 p-6 text-slate-500 text-sm">Загрузка…</div>}>
+      <CalcPageInner />
+    </Suspense>
+  );
+}
+
+function CalcPageInner() {
   const [tab, setTab] = useState<CalcKey>("wall-net");
   const groups = Array.from(new Set(TABS.map((t) => t.group)));
   const searchParams = useSearchParams();
@@ -146,6 +154,7 @@ export default function CalcPage() {
         </div>
       </div>
     </div>
+    </ExamSenderCtx.Provider>
   );
 }
 
@@ -179,6 +188,17 @@ function Field({ label, value, onChange, unit, step = "0.01" }: { label: string;
 
 function Result({ label, value, unit, hint }: { label: string; value: number | string; unit: string; hint?: string }) {
   const display = typeof value === "number" ? value.toFixed(2) : value;
+  const numeric = typeof value === "number" ? value : parseFloat(display);
+  const { fromExam, examId } = useContext(ExamSenderCtx);
+  const [sent, setSent] = useState(false);
+
+  function handleSend() {
+    if (!isFinite(numeric)) return;
+    sendToExam(numeric, label, unit);
+    setSent(true);
+    setTimeout(() => setSent(false), 2500);
+  }
+
   return (
     <div className="bg-emerald-50 border border-emerald-200 rounded p-3 mt-3 flex items-center gap-3">
       <div className="flex-1">
@@ -188,13 +208,32 @@ function Result({ label, value, unit, hint }: { label: string; value: number | s
         </div>
         {hint && <div className="text-[10px] text-emerald-600 italic mt-1">{hint}</div>}
       </div>
-      <button
-        onClick={() => copyText(String(display))}
-        className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700"
-        title="Скопировать значение"
-      >
-        📋 Копировать
-      </button>
+      <div className="flex flex-col gap-1">
+        {fromExam && isFinite(numeric) && (
+          <button
+            onClick={handleSend}
+            className={`px-3 py-1.5 text-xs rounded font-bold ${
+              sent
+                ? "bg-emerald-700 text-white"
+                : "bg-emerald-600 text-white hover:bg-emerald-700"
+            }`}
+            title={
+              examId
+                ? `Передаст значение во вкладку с экзаменом ${examId}`
+                : "Передаст значение в открытую вкладку с экзаменом"
+            }
+          >
+            {sent ? "✓ Передано" : "📤 Передать в смету"}
+          </button>
+        )}
+        <button
+          onClick={() => copyText(String(display))}
+          className="px-3 py-1.5 text-xs bg-white border border-emerald-300 text-emerald-700 rounded hover:bg-emerald-100"
+          title="Скопировать значение"
+        >
+          📋 Копировать
+        </button>
+      </div>
     </div>
   );
 }

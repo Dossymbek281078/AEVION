@@ -564,6 +564,9 @@ export default function ConstitutionPage() {
     }
   }, [shockedSliders]);
 
+  const [signing, setSigning] = useState<boolean>(false);
+  const [signError, setSignError] = useState<string | null>(null);
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -652,6 +655,79 @@ export default function ConstitutionPage() {
       setBusy(false);
     }
   }, [title, sliders, regime, metrics, loadRecent]);
+
+  const signAndDownload = useCallback(async () => {
+    setSigning(true);
+    setSignError(null);
+    try {
+      const cleanTitle = title.trim() || "untitled-constitution";
+      const payload = {
+        module: "aevion.constitution",
+        version: 1,
+        title: cleanTitle,
+        regime: { id: regime.id, name: regime.name, era: regime.era },
+        sliders: Object.fromEntries(
+          (Object.keys(sliders) as Array<keyof Sliders>)
+            .sort()
+            .map((k) => [k, sliders[k]]),
+        ),
+        metrics: Object.fromEntries(
+          (Object.keys(metrics) as Array<keyof Metrics>)
+            .sort()
+            .map((k) => [k, metrics[k]]),
+        ),
+        issuedAt: new Date().toISOString(),
+      };
+      const r = await fetch("/api-backend/api/qsign/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        throw new Error(`QSign HTTP ${r.status}: ${text.slice(0, 120)}`);
+      }
+      const signed = (await r.json()) as {
+        payload: unknown;
+        signature: string;
+        algo: string;
+        createdAt: string;
+      };
+      const envelope = {
+        spec: "aevion.constitution/v1+qsign",
+        algo: signed.algo,
+        signedAt: signed.createdAt,
+        signature: signed.signature,
+        payload: signed.payload,
+        verify: {
+          endpoint: "/api/qsign/verify",
+          hint: "POST { payload, signature } — must return { valid: true }",
+        },
+      };
+      const slug = cleanTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9а-яё-]+/giu, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40) || "constitution";
+      const ts = signed.createdAt.replace(/[:.]/g, "-");
+      const filename = `constitution-${slug}-${ts}.signed.json`;
+      const blob = new Blob([JSON.stringify(envelope, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSignError(err instanceof Error ? err.message : "sign_failed");
+    } finally {
+      setSigning(false);
+    }
+  }, [title, sliders, regime, metrics]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
@@ -764,12 +840,12 @@ export default function ConstitutionPage() {
               <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
                 Сохранить сценарий{savedTotal > 0 ? ` (всего: ${savedTotal})` : ""}
               </h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Название (например, «Казахстан-2050»)"
-                  className="flex-1 bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
+                  className="flex-1 min-w-[180px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
                   maxLength={120}
                 />
                 <button
@@ -780,7 +856,21 @@ export default function ConstitutionPage() {
                 >
                   {busy ? "..." : "Сохранить"}
                 </button>
+                <button
+                  type="button"
+                  onClick={signAndDownload}
+                  disabled={signing}
+                  title="QSign HMAC-SHA256: подписать текущий сценарий и скачать как .signed.json"
+                  className="px-4 py-2 rounded border border-[#d4af37] text-[#d4af37] font-semibold hover:bg-[#d4af37]/10 disabled:opacity-40"
+                >
+                  {signing ? "..." : "QSign + скачать"}
+                </button>
               </div>
+              {signError && (
+                <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
+                  Ошибка подписи: {signError}
+                </div>
+              )}
               {saved.length > 0 && (
                 <div className="mt-4">
                   <div className="text-xs text-[#9aa3c0] mb-2">Недавние сценарии:</div>

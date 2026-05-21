@@ -432,6 +432,26 @@ const PRESETS: Preset[] = [
   },
 ];
 
+type Country = { flag: string; name: string; sliders: Sliders };
+
+const COUNTRIES: Country[] = [
+  { flag: "🇺🇸", name: "США",         sliders: { floor: 35, ruleOfLaw: 65, rotation: 25, transparency: 60, multiStatus: 60, skinInGame: 35, polycentricity: 65, positiveSum: 75 } },
+  { flag: "🇩🇪", name: "Германия",    sliders: { floor: 75, ruleOfLaw: 85, rotation: 40, transparency: 75, multiStatus: 60, skinInGame: 50, polycentricity: 65, positiveSum: 65 } },
+  { flag: "🇳🇴", name: "Норвегия",    sliders: { floor: 90, ruleOfLaw: 90, rotation: 50, transparency: 90, multiStatus: 60, skinInGame: 55, polycentricity: 30, positiveSum: 70 } },
+  { flag: "🇯🇵", name: "Япония",      sliders: { floor: 70, ruleOfLaw: 80, rotation: 25, transparency: 65, multiStatus: 65, skinInGame: 50, polycentricity: 30, positiveSum: 60 } },
+  { flag: "🇸🇬", name: "Сингапур",    sliders: { floor: 65, ruleOfLaw: 80, rotation: 15, transparency: 65, multiStatus: 40, skinInGame: 55, polycentricity: 10, positiveSum: 85 } },
+  { flag: "🇦🇪", name: "ОАЭ",         sliders: { floor: 55, ruleOfLaw: 50, rotation: 5,  transparency: 25, multiStatus: 30, skinInGame: 40, polycentricity: 15, positiveSum: 80 } },
+  { flag: "🇸🇦", name: "Сауд. Аравия", sliders: { floor: 60, ruleOfLaw: 30, rotation: 5,  transparency: 15, multiStatus: 20, skinInGame: 25, polycentricity: 10, positiveSum: 55 } },
+  { flag: "🇷🇺", name: "Россия",      sliders: { floor: 35, ruleOfLaw: 25, rotation: 10, transparency: 20, multiStatus: 30, skinInGame: 30, polycentricity: 25, positiveSum: 50 } },
+  { flag: "🇨🇳", name: "Китай",       sliders: { floor: 50, ruleOfLaw: 35, rotation: 10, transparency: 20, multiStatus: 35, skinInGame: 35, polycentricity: 30, positiveSum: 80 } },
+  { flag: "🇮🇷", name: "Иран",        sliders: { floor: 30, ruleOfLaw: 25, rotation: 15, transparency: 15, multiStatus: 30, skinInGame: 30, polycentricity: 25, positiveSum: 35 } },
+  { flag: "🇰🇵", name: "КНДР",        sliders: { floor: 15, ruleOfLaw: 5,  rotation: 0,  transparency: 5,  multiStatus: 10, skinInGame: 15, polycentricity: 5,  positiveSum: 20 } },
+  { flag: "🇻🇪", name: "Венесуэла",   sliders: { floor: 25, ruleOfLaw: 15, rotation: 10, transparency: 15, multiStatus: 25, skinInGame: 25, polycentricity: 25, positiveSum: 25 } },
+  { flag: "🇮🇳", name: "Индия",       sliders: { floor: 35, ruleOfLaw: 55, rotation: 30, transparency: 50, multiStatus: 55, skinInGame: 40, polycentricity: 70, positiveSum: 65 } },
+  { flag: "🇧🇷", name: "Бразилия",    sliders: { floor: 40, ruleOfLaw: 45, rotation: 25, transparency: 50, multiStatus: 50, skinInGame: 35, polycentricity: 60, positiveSum: 50 } },
+  { flag: "🇰🇿", name: "Казахстан",   sliders: { floor: 50, ruleOfLaw: 40, rotation: 10, transparency: 30, multiStatus: 30, skinInGame: 35, polycentricity: 25, positiveSum: 60 } },
+];
+
 type SavedScenario = {
   id: string;
   title: string;
@@ -685,6 +705,10 @@ export default function ConstitutionPage() {
           </div>
         </section>
 
+        <section className="mt-6">
+          <WorldMapScatter sliders={sliders} />
+        </section>
+
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
           <p>
             Теоретическая основа: North / Wallis / Weingast «Violence and Social Orders»,
@@ -726,6 +750,117 @@ function MetricBar({
       <div className="w-full h-2 bg-[#050a1a] rounded">
         <div className={`h-full rounded ${color}`} style={{ width: `${value}%` }} />
       </div>
+    </div>
+  );
+}
+
+function WorldMapScatter({ sliders }: { sliders: Sliders }) {
+  const currentMetrics = computeMetrics(sliders);
+  const W = 720;
+  const H = 480;
+  const PAD = 56;
+  const xFor = (v: number) => PAD + ((100 - v) / 100) * (W - 2 * PAD); // invert: low elite-fear → right
+  const yFor = (v: number) => H - PAD - (v / 100) * (H - 2 * PAD); // high innovation → top
+
+  const points = COUNTRIES.map((c) => {
+    const m = computeMetrics(c.sliders);
+    return { ...c, eliteFear: m.eliteFear, innovation: m.innovation };
+  });
+
+  const cx = xFor(currentMetrics.eliteFear);
+  const cy = yFor(currentMetrics.innovation);
+
+  return (
+    <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-[#f5d27a]">
+          Где ты на карте мира
+        </h3>
+        <div className="text-xs text-[#9aa3c0]">
+          ось X — страх элит перед низом (←&nbsp;выше) · ось Y — инновация / драйв (↑&nbsp;выше)
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full h-auto max-w-full"
+          style={{ minWidth: 480 }}
+        >
+          {/* axes */}
+          <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.4} />
+          <line x1={PAD} y1={PAD} x2={PAD} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.4} />
+          {/* gridlines at 50 */}
+          <line x1={xFor(50)} y1={PAD} x2={xFor(50)} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.12} strokeDasharray="4 6" />
+          <line x1={PAD} y1={yFor(50)} x2={W - PAD} y2={yFor(50)} stroke="#d4af37" strokeOpacity={0.12} strokeDasharray="4 6" />
+          {/* quadrant labels */}
+          <text x={W - PAD - 8} y={PAD + 14} textAnchor="end" fill="#10b981" fontSize="11" opacity={0.7}>
+            ↗ свобода + рост
+          </text>
+          <text x={PAD + 8} y={PAD + 14} fill="#f97316" fontSize="11" opacity={0.7}>
+            страх + рост
+          </text>
+          <text x={W - PAD - 8} y={H - PAD - 8} textAnchor="end" fill="#9aa3c0" fontSize="11" opacity={0.7}>
+            свобода + застой
+          </text>
+          <text x={PAD + 8} y={H - PAD - 8} fill="#ef4444" fontSize="11" opacity={0.7}>
+            ↙ страх + застой
+          </text>
+          {/* axis ticks */}
+          <text x={PAD} y={H - PAD + 18} fill="#9aa3c0" fontSize="10">100</text>
+          <text x={W - PAD} y={H - PAD + 18} textAnchor="end" fill="#9aa3c0" fontSize="10">0</text>
+          <text x={PAD - 6} y={PAD + 4} textAnchor="end" fill="#9aa3c0" fontSize="10">100</text>
+          <text x={PAD - 6} y={H - PAD} textAnchor="end" fill="#9aa3c0" fontSize="10">0</text>
+          <text x={W / 2} y={H - PAD + 32} textAnchor="middle" fill="#d4af37" fontSize="12">
+            страх элит перед низом ←
+          </text>
+          <text
+            x={PAD - 28}
+            y={H / 2}
+            textAnchor="middle"
+            fill="#d4af37"
+            fontSize="12"
+            transform={`rotate(-90 ${PAD - 28} ${H / 2})`}
+          >
+            ↑ инновация / драйв
+          </text>
+
+          {/* country points */}
+          {points.map((p) => (
+            <g key={p.name}>
+              <circle cx={xFor(p.eliteFear)} cy={yFor(p.innovation)} r={4} fill="#d4af37" opacity={0.55} />
+              <text
+                x={xFor(p.eliteFear) + 8}
+                y={yFor(p.innovation) + 4}
+                fontSize="14"
+              >
+                {p.flag}
+              </text>
+              <text
+                x={xFor(p.eliteFear) + 28}
+                y={yFor(p.innovation) + 4}
+                fill="#9aa3c0"
+                fontSize="10"
+              >
+                {p.name}
+              </text>
+            </g>
+          ))}
+
+          {/* current scenario — glowing dot */}
+          <circle cx={cx} cy={cy} r={14} fill="#22d3ee" opacity={0.18}>
+            <animate attributeName="r" values="10;18;10" dur="2.4s" repeatCount="indefinite" />
+          </circle>
+          <circle cx={cx} cy={cy} r={7} fill="#22d3ee" stroke="#0b1736" strokeWidth={2} />
+          <text x={cx + 12} y={cy + 4} fill="#22d3ee" fontSize="12" fontWeight="bold">
+            ты сейчас
+          </text>
+        </svg>
+      </div>
+      <p className="text-xs text-[#9aa3c0] mt-3">
+        Точка «ты сейчас» считается из текущих ползунков. Чем правее — тем меньше элиты боятся низа.
+        Чем выше — тем больше драйва и инновации. Страны — приближённая оценка по шкале 0-100; не научный
+        рейтинг, а инструмент для интуиции.
+      </p>
     </div>
   );
 }

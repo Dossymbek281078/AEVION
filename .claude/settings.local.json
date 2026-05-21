@@ -89,7 +89,21 @@
       "PowerShell(git show *)",
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx\\)..\\($idx+25\\)] | ForEach-Object {Write-Host $_} })",
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges &&\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx-3\\)..\\($idx+30\\)] | ForEach-Object {Write-Host \"$\\($lines.IndexOf\\($_\\) + 1\\):  $_\"} })",
-      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)"
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)",
+      "Bash(npx --prefix frontend tsc --noEmit -p frontend)",
+      "Skill(schedule)",
+      "Bash(BASE=https://aevion.app/api-backend node aevion-globus-backend/scripts/qcontract-smoke.js)",
+      "Bash(BASE=https://aevion.app/api-backend node aevion-globus-backend/scripts/qpaynet-smoke.js)",
+      "Bash(BASE=https://aevion.app/api-backend node aevion-globus-backend/scripts/multichat-smoke.js)",
+      "Bash(BACKEND_URL=https://aevion.app/api-backend node aevion-globus-backend/scripts/qcontract-smoke.js)",
+      "Bash(BACKEND_URL=https://aevion.app/api-backend node aevion-globus-backend/scripts/qpaynet-smoke.js)",
+      "Bash(BACKEND_URL=https://aevion.app/api-backend node aevion-globus-backend/scripts/multichat-smoke.js)",
+      "Bash(BACKEND_URL=https://aevion.app/api-backend node aevion-globus-backend/scripts/qbuild-prod-smoke.js)",
+      "Bash(grep -rn \"minmax\\([0-9]\\\\{3\\\\}px,\\\\s*1fr\\)\" frontend/src/app/build frontend/src/app/qcontract frontend/src/app/qpaynet frontend/src/app/multichat-engine frontend/src/components/build)",
+      "Bash(echo \"RC=$?\")",
+      "Bash(GIT_PAGER=cat git diff origin/main origin/feat/prod-readiness-2026-05-12 -- frontend/src/app/qpaynet/send/page.tsx)",
+      "Bash(tee /c/Users/user/aevion-build/.qsend3.diff)",
+      "Bash(sh -c \"git --no-pager show a4a132db -- frontend/src/app/qpaynet/send/page.tsx\")"
     ]
   }
 }

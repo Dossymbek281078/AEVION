@@ -87,7 +87,7 @@ exports.cyberchessRouter.get("/upcoming", async (_req, res) => {
         res.json({ items });
     }
     catch (err) {
-        res.status(500).json({ error: "tournaments load failed", details: err?.message });
+        res.status(500).json({ error: "tournaments load failed" });
     }
 });
 // Webhook called by the tournament service when a tournament finalizes.

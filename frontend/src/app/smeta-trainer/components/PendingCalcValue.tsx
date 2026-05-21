@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 
 const VALUE_KEY = "smeta-trainer:pending-calc-value";
 const RATE_KEY = "smeta-trainer:pending-rate-code";
+const FORMULA_KEY = "smeta-trainer:pending-formula";
 
 type ValuePending = {
   kind?: "value";
@@ -36,9 +37,17 @@ type RatePending = {
   at: number;
 };
 
+type FormulaPending = {
+  kind: "formula";
+  formula: string;
+  label: string;
+  at: number;
+};
+
 type Pending =
   | ({ source: "value" } & ValuePending)
-  | ({ source: "rate" } & RatePending);
+  | ({ source: "rate" } & RatePending)
+  | ({ source: "formula" } & FormulaPending);
 
 function readPending(): Pending | null {
   if (typeof window === "undefined") return null;
@@ -48,6 +57,17 @@ function readPending(): Pending | null {
       const parsed = JSON.parse(rawRate) as RatePending;
       if (typeof parsed.rateCode === "string" && parsed.rateCode.length > 0) {
         return { source: "rate", ...parsed, kind: "rate" };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  const rawFormula = window.localStorage.getItem(FORMULA_KEY);
+  if (rawFormula) {
+    try {
+      const parsed = JSON.parse(rawFormula) as FormulaPending;
+      if (typeof parsed.formula === "string" && parsed.formula.length > 0) {
+        return { source: "formula", ...parsed, kind: "formula" };
       }
     } catch {
       /* fall through */
@@ -67,17 +87,21 @@ function readPending(): Pending | null {
   return null;
 }
 
-function clearPending(source: "value" | "rate") {
+function clearPending(source: "value" | "rate" | "formula") {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(source === "rate" ? RATE_KEY : VALUE_KEY);
+  const key =
+    source === "rate" ? RATE_KEY : source === "formula" ? FORMULA_KEY : VALUE_KEY;
+  window.localStorage.removeItem(key);
 }
 
 export function PendingCalcValue({
   onApplyValue,
   onApplyRate,
+  onApplyFormula,
 }: {
   onApplyValue: (value: number) => void;
   onApplyRate?: (rateCode: string) => void;
+  onApplyFormula?: (formula: string) => void;
 }) {
   const [pending, setPending] = useState<Pending | null>(null);
 
@@ -98,26 +122,46 @@ export function PendingCalcValue({
 
   const ageMin = Math.round((Date.now() - pending.at) / 60_000);
 
-  const isRate = pending.source === "rate";
-  const headline = isRate
-    ? "Из каталога расценок"
-    : "Из калькулятора";
-  const primary = isRate
-    ? `${pending.rateCode}`
-    : `${pending.value.toFixed(2)}`;
-  const secondary = isRate
-    ? pending.title
-    : pending.label;
-  const actionLabel = isRate ? "Добавить позицию" : "Применить объём";
+  const headline =
+    pending.source === "rate"
+      ? "Из каталога расценок"
+      : pending.source === "formula"
+      ? "Из шпаргалки"
+      : "Из калькулятора";
+  const primary =
+    pending.source === "rate"
+      ? pending.rateCode
+      : pending.source === "formula"
+      ? pending.formula
+      : pending.value.toFixed(2);
+  const secondary =
+    pending.source === "rate"
+      ? pending.title
+      : pending.label;
+  const unit = pending.source === "value" || pending.source === "rate" ? pending.unit : "";
+  const icon =
+    pending.source === "rate" ? "📋" : pending.source === "formula" ? "🧮" : "✨";
+  const actionLabel =
+    pending.source === "rate"
+      ? "Добавить позицию"
+      : pending.source === "formula"
+      ? "Вставить формулу"
+      : "Применить объём";
+  const actionHint =
+    pending.source === "rate"
+      ? "Добавит новую позицию в первый раздел"
+      : pending.source === "formula"
+      ? "Запишет формулу в поле последней позиции первого раздела"
+      : "Подставит в последнюю позицию первого раздела";
 
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-white border-2 border-emerald-400 rounded-lg shadow-xl px-4 py-3 flex items-center gap-3 max-w-xl print:hidden">
-      <span className="text-2xl">{isRate ? "📋" : "✨"}</span>
+      <span className="text-2xl">{icon}</span>
       <div className="flex-1 text-xs">
         <div className="font-bold text-slate-800">
           {headline}:{" "}
-          <span className="font-mono text-emerald-700">{primary}</span>{" "}
-          <span className="text-slate-500">{pending.unit}</span>
+          <span className="font-mono text-emerald-700 break-all">{primary}</span>{" "}
+          {unit && <span className="text-slate-500">{unit}</span>}
         </div>
         <div className="text-[10px] text-slate-500 truncate max-w-md">
           {secondary}
@@ -129,6 +173,9 @@ export function PendingCalcValue({
           if (pending.source === "rate") {
             if (onApplyRate) onApplyRate(pending.rateCode);
             clearPending("rate");
+          } else if (pending.source === "formula") {
+            if (onApplyFormula) onApplyFormula(pending.formula);
+            clearPending("formula");
           } else {
             onApplyValue(pending.value);
             clearPending("value");
@@ -136,11 +183,7 @@ export function PendingCalcValue({
           setPending(readPending());
         }}
         className="px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700"
-        title={
-          isRate
-            ? "Добавит новую позицию в первый раздел"
-            : "Подставит в последнюю позицию первого раздела"
-        }
+        title={actionHint}
       >
         {actionLabel}
       </button>

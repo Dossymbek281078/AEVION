@@ -1,6 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+
+const PENDING_FORMULA_KEY = "smeta-trainer:pending-formula";
+
+function sendFormulaToExam(formula: string, label: string) {
+  if (typeof window === "undefined") return;
+  const payload = { kind: "formula", formula, label, at: Date.now() };
+  try {
+    window.localStorage.setItem(PENDING_FORMULA_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 /**
  * Шпаргалка сметчика РК — A4 portrait, печатная.
@@ -8,6 +22,18 @@ import Link from "next/link";
  * лимитированных затрат. Источники указаны в подвале.
  */
 export default function CheatsheetPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-100 p-4 text-slate-500 text-sm">Загрузка…</div>}>
+      <CheatsheetPageInner />
+    </Suspense>
+  );
+}
+
+function CheatsheetPageInner() {
+  const searchParams = useSearchParams();
+  const fromExam = searchParams?.get("from") === "exam";
+  const examId = searchParams?.get("examId") ?? null;
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 p-4 print:bg-white print:p-0">
       {/* Toolbar (скрыт при печати) */}
@@ -23,6 +49,24 @@ export default function CheatsheetPage() {
         </button>
       </div>
 
+      {fromExam && (
+        <div className="max-w-3xl mx-auto mb-3 bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3 flex items-center gap-3 text-xs text-emerald-900 print:hidden">
+          <span className="text-lg">🎯</span>
+          <div className="flex-1">
+            <strong>Режим из экзамена.</strong> Нажмите «📤» рядом с формулой — она появится во
+            вкладке с экзаменом и подставится в поле formula последней позиции первого раздела.
+          </div>
+          {examId && (
+            <Link
+              href={`/smeta-trainer/exam/${examId}`}
+              className="shrink-0 text-emerald-700 underline hover:text-emerald-900"
+            >
+              ← вернуться
+            </Link>
+          )}
+        </div>
+      )}
+
       {/* Сама шпаргалка */}
       <div className="max-w-3xl mx-auto bg-white border border-slate-300 rounded-lg shadow-sm print:shadow-none print:border-0 p-6 text-[11px] leading-snug text-slate-800">
         {/* Заголовок */}
@@ -37,12 +81,20 @@ export default function CheatsheetPage() {
         <section className="mb-4">
           <div className="text-xs font-bold text-emerald-700 uppercase mb-1.5">1. Базовые формулы</div>
           <div className="bg-emerald-50/40 border border-emerald-200 rounded p-2 space-y-1 font-mono text-[11px]">
-            <div><span className="text-slate-500">Прямые затраты позиции:</span> <strong>ПЗ = ФОТ + ЭМ + Материалы</strong></div>
-            <div><span className="text-slate-500">Стоимость позиции:</span> <strong>S<sub>поз</sub> = (ПЗ × К<sub>усл</sub>) × Индекс × V<sub>объём</sub></strong></div>
-            <div><span className="text-slate-500">Накладные расходы:</span> <strong>НР = ФОТ × %НР<sub>категории</sub></strong></div>
-            <div><span className="text-slate-500">Сметная прибыль:</span> <strong>СП = ФОТ × %СП<sub>категории</sub></strong></div>
-            <div><span className="text-slate-500">Итог раздела:</span> <strong>Σ = ПЗ + НР + СП</strong></div>
-            <div><span className="text-slate-500">Итог ЛСР с НДС:</span> <strong>ЛСР<sub>с НДС</sub> = Σ × 1.12</strong></div>
+            {[
+              { label: "Прямые затраты позиции", formula: "ПЗ = ФОТ + ЭМ + Материалы" },
+              { label: "Стоимость позиции", formula: "S_поз = (ПЗ × К_усл) × Индекс × V_объём" },
+              { label: "Накладные расходы", formula: "НР = ФОТ × %НР_категории" },
+              { label: "Сметная прибыль", formula: "СП = ФОТ × %СП_категории" },
+              { label: "Итог раздела", formula: "Σ = ПЗ + НР + СП" },
+              { label: "Итог ЛСР с НДС", formula: "ЛСР_с_НДС = Σ × 1.12" },
+            ].map(({ label, formula }) => (
+              <div key={label} className="flex items-center gap-2">
+                <span className="text-slate-500 shrink-0">{label}:</span>
+                <strong className="flex-1">{formula}</strong>
+                {fromExam && <SendFormulaButton formula={formula} label={label} />}
+              </div>
+            ))}
           </div>
         </section>
 
@@ -231,5 +283,26 @@ export default function CheatsheetPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+function SendFormulaButton({ formula, label }: { formula: string; label: string }) {
+  const [sent, setSent] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        sendFormulaToExam(formula, label);
+        setSent(true);
+        setTimeout(() => setSent(false), 2000);
+      }}
+      className={`shrink-0 px-1.5 py-0.5 text-[9px] font-bold rounded print:hidden ${
+        sent
+          ? "bg-emerald-700 text-white"
+          : "bg-emerald-600 text-white hover:bg-emerald-700"
+      }`}
+      title="Передать формулу в открытую вкладку с экзаменом"
+    >
+      {sent ? "✓" : "📤"}
+    </button>
   );
 }

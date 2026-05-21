@@ -214,10 +214,25 @@ export default function ExamTaskPage({
     });
   }
 
+  function applyPendingFormula(formula: string) {
+    setLsr((prev) => {
+      const sections = prev.sections.map((s) => ({ ...s, positions: [...s.positions] }));
+      const target = sections[0];
+      if (!target || target.positions.length === 0) return prev;
+      const lastIdx = target.positions.length - 1;
+      target.positions[lastIdx] = { ...target.positions[lastIdx], formula };
+      return { ...prev, sections, updatedAt: new Date().toISOString() };
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <ExamToolsPanel examId={task!.id} hasLesson={lessonExists} />
-      <PendingCalcValue onApplyValue={applyPendingValue} onApplyRate={applyPendingRate} />
+      <PendingCalcValue
+        onApplyValue={applyPendingValue}
+        onApplyRate={applyPendingRate}
+        onApplyFormula={applyPendingFormula}
+      />
       <div className="max-w-6xl mx-auto">
         <div className="mb-4">
           <div className="flex justify-between items-baseline">

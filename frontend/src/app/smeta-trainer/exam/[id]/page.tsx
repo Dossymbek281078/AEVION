@@ -191,10 +191,33 @@ export default function ExamTaskPage({
     });
   }
 
+  function applyPendingRate(rateCode: string) {
+    if (!findRate(rateCode)) {
+      alert(`Расценка ${rateCode} не найдена в корпусе`);
+      return;
+    }
+    setLsr((prev) => {
+      const sections = prev.sections.map((s) => ({ ...s, positions: [...s.positions] }));
+      const target = sections[0];
+      if (!target) return prev;
+      target.positions = [
+        ...target.positions,
+        {
+          id: `from-rates-${Date.now()}`,
+          rateCode,
+          volume: 1,
+          coefficients: [],
+          formula: "добавлено из каталога расценок",
+        },
+      ];
+      return { ...prev, sections, updatedAt: new Date().toISOString() };
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <ExamToolsPanel examId={task!.id} hasLesson={lessonExists} />
-      <PendingCalcValue onApply={applyPendingValue} />
+      <PendingCalcValue onApplyValue={applyPendingValue} onApplyRate={applyPendingRate} />
       <div className="max-w-6xl mx-auto">
         <div className="mb-4">
           <div className="flex justify-between items-baseline">

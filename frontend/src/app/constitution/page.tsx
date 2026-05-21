@@ -365,6 +365,71 @@ const PRESETS: Preset[] = [
       positiveSum: 25,
     },
   },
+  {
+    name: "Сингапур",
+    sliders: {
+      floor: 65,
+      ruleOfLaw: 80,
+      rotation: 15,
+      transparency: 65,
+      multiStatus: 40,
+      skinInGame: 55,
+      polycentricity: 10,
+      positiveSum: 85,
+    },
+  },
+  {
+    name: "ОАЭ",
+    sliders: {
+      floor: 55,
+      ruleOfLaw: 50,
+      rotation: 5,
+      transparency: 25,
+      multiStatus: 30,
+      skinInGame: 40,
+      polycentricity: 15,
+      positiveSum: 80,
+    },
+  },
+  {
+    name: "Саудовская Аравия",
+    sliders: {
+      floor: 60,
+      ruleOfLaw: 30,
+      rotation: 5,
+      transparency: 15,
+      multiStatus: 20,
+      skinInGame: 25,
+      polycentricity: 10,
+      positiveSum: 55,
+    },
+  },
+  {
+    name: "СССР 1980",
+    sliders: {
+      floor: 65,
+      ruleOfLaw: 20,
+      rotation: 10,
+      transparency: 10,
+      multiStatus: 30,
+      skinInGame: 35,
+      polycentricity: 10,
+      positiveSum: 35,
+    },
+  },
+  {
+    name: "Кочевая Степь",
+    sliders: {
+      floor: 40,
+      ruleOfLaw: 45,
+      rotation: 60,
+      transparency: 70,
+      multiStatus: 65,
+      skinInGame: 90,
+      polycentricity: 85,
+      positiveSum: 35,
+    },
+  },
 ];
 
 type SavedScenario = {

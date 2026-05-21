@@ -377,6 +377,12 @@ function projectGeo(projectId: string) {
       lat: 34.0522,
       lon: -118.2437,
     },
+    constitution: {
+      country: "Greece",
+      city: "Athens",
+      lat: 37.9838,
+      lon: 23.7275,
+    },
   };
 
   if (known[projectId]) return known[projectId];

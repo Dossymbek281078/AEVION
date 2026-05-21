@@ -15,6 +15,8 @@ import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
 import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
+import { ExamToolsPanel } from "../../components/ExamToolsPanel";
+import { PendingCalcValue } from "../../components/PendingCalcValue";
 
 export default function ExamTaskPage({ params }: { params: { id: string } }) {
   const task = findExamTask(params.id);
@@ -168,8 +170,23 @@ export default function ExamTaskPage({ params }: { params: { id: string } }) {
     setReport(null);
   }
 
+  function applyPendingValue(value: number) {
+    setLsr((prev) => {
+      const sections = prev.sections.map((s) => ({ ...s }));
+      const target = sections[0];
+      if (!target || target.positions.length === 0) return prev;
+      const positions = [...target.positions];
+      const lastIdx = positions.length - 1;
+      positions[lastIdx] = { ...positions[lastIdx], volume: value };
+      target.positions = positions;
+      return { ...prev, sections, updatedAt: new Date().toISOString() };
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
+      <ExamToolsPanel examId={task!.id} hasLesson={lessonExists} />
+      <PendingCalcValue onApply={applyPendingValue} />
       <div className="max-w-6xl mx-auto">
         <div className="mb-4">
           <div className="flex justify-between items-baseline">

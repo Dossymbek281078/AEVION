@@ -33,24 +33,64 @@ import { mkdirSync } from "node:fs";
  * ──────────────────────────────────────────────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { pgn: null, output: null, limit: Infinity };
+  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pgn") args.pgn = argv[++i];
     else if (a === "--output") args.output = argv[++i];
+    else if (a === "--features-csv") args.featuresCsv = argv[++i];
     else if (a === "--limit") args.limit = Number(argv[++i]) || Infinity;
     else if (a === "--help" || a === "-h") {
       console.log(
-        "Usage: node scripts/cyberchess-fide-calibrate.mjs --pgn <path> --output <path> [--limit N]"
+        "Usage: node scripts/cyberchess-fide-calibrate.mjs --output <path> ( --pgn <path> | --features-csv <path> ) [--limit N]\n" +
+        "  --features-csv  Skip PGN parsing and read engine-derived rows from CSV\n" +
+        "                  (produced by cyberchess-stockfish-eval.mjs).\n" +
+        "                  Columns: gameId,side,targetElo,result,accuracyPct,\n" +
+        "                           openingDepth,tacticalEff,endgameStrength,\n" +
+        "                           blunderRate,avgMoveTime[,plies,meanCpLoss]"
       );
       process.exit(0);
     }
   }
-  if (!args.pgn || !args.output) {
-    console.error("ERROR: --pgn and --output are required. See --help.");
+  if (!args.output || (!args.pgn && !args.featuresCsv)) {
+    console.error("ERROR: --output and one of --pgn / --features-csv are required. See --help.");
     process.exit(1);
   }
   return args;
+}
+
+function loadRowsFromCsv(path) {
+  const raw = readFileSync(path, "utf8").trim();
+  const lines = raw.split(/\r?\n/);
+  const header = lines.shift().split(",");
+  const idx = (name) => header.indexOf(name);
+  const required = ["targetElo","accuracyPct","openingDepth","tacticalEff","endgameStrength","blunderRate","avgMoveTime"];
+  for (const r of required) {
+    if (idx(r) < 0) {
+      console.error(`ERROR: features CSV missing column "${r}". Need: ${required.join(", ")}`);
+      process.exit(1);
+    }
+  }
+  const rows = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cols = line.split(",");
+    const targetFide = parseFloat(cols[idx("targetElo")]);
+    if (!Number.isFinite(targetFide) || targetFide < 800 || targetFide > 2900) continue;
+    rows.push({
+      targetFide,
+      features: [
+        parseFloat(cols[idx("accuracyPct")]),
+        parseFloat(cols[idx("openingDepth")]),
+        parseFloat(cols[idx("tacticalEff")]),
+        parseFloat(cols[idx("endgameStrength")]),
+        parseFloat(cols[idx("blunderRate")]),
+        parseFloat(cols[idx("avgMoveTime")]),
+      ],
+      meta: { side: cols[idx("side")] || "?" }
+    });
+  }
+  return rows;
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -346,57 +386,73 @@ function main() {
   console.log("=".repeat(72));
   console.log("AEVION CyberChess — FIDE CPI calibration");
   console.log("=".repeat(72));
-  console.log(`Input PGN:  ${args.pgn}`);
+  console.log(`Input:      ${args.featuresCsv ? "CSV " + args.featuresCsv : "PGN " + args.pgn}`);
   console.log(`Output:     ${args.output}`);
   console.log(`Limit:      ${args.limit === Infinity ? "unlimited" : args.limit}`);
   console.log("");
 
-  const pgnPath = resolve(args.pgn);
-  if (!existsSync(pgnPath)) {
-    console.error(`ERROR: PGN file not found: ${pgnPath}`);
-    process.exit(1);
-  }
+  let rows;
+  let sourceFile;
 
-  console.log("[1/5] Reading PGN file…");
-  const raw = readFileSync(pgnPath, "utf8");
-  console.log(`      ${raw.length} bytes read.`);
+  if (args.featuresCsv) {
+    const csvPath = resolve(args.featuresCsv);
+    if (!existsSync(csvPath)) {
+      console.error(`ERROR: features CSV not found: ${csvPath}`);
+      process.exit(1);
+    }
+    console.log("[1/4] Loading engine-derived features from CSV…");
+    rows = loadRowsFromCsv(csvPath);
+    if (rows.length > args.limit) rows = rows.slice(0, args.limit);
+    sourceFile = csvPath;
+    console.log(`      Loaded ${rows.length} rows.`);
+  } else {
+    const pgnPath = resolve(args.pgn);
+    if (!existsSync(pgnPath)) {
+      console.error(`ERROR: PGN file not found: ${pgnPath}`);
+      process.exit(1);
+    }
+    sourceFile = pgnPath;
 
-  console.log("[2/5] Splitting games…");
-  const chunks = splitGames(raw);
-  console.log(`      ${chunks.length} game chunks found.`);
+    console.log("[1/5] Reading PGN file…");
+    const raw = readFileSync(pgnPath, "utf8");
+    console.log(`      ${raw.length} bytes read.`);
 
-  console.log("[3/5] Parsing + deriving CPI rows…");
-  const rows = [];
-  let parsed = 0;
-  let skipped = 0;
-  for (const chunk of chunks) {
-    if (rows.length >= args.limit) break;
-    try {
-      const g = parseGame(chunk);
-      if (!g.headers.WhiteElo && !g.headers.BlackElo) {
-        skipped++;
-        continue;
-      }
-      if (g.moves.length < 6) {
-        skipped++;
-        continue;
-      }
-      const gameRows = deriveRowsFromGame(g);
-      for (const r of gameRows) {
-        if (rows.length >= args.limit) break;
-        // Sanity: Elo bounds
-        if (r.targetFide < 800 || r.targetFide > 2900) {
+    console.log("[2/5] Splitting games…");
+    const chunks = splitGames(raw);
+    console.log(`      ${chunks.length} game chunks found.`);
+
+    console.log("[3/5] Parsing + deriving CPI rows…");
+    rows = [];
+    let parsed = 0;
+    let skipped = 0;
+    for (const chunk of chunks) {
+      if (rows.length >= args.limit) break;
+      try {
+        const g = parseGame(chunk);
+        if (!g.headers.WhiteElo && !g.headers.BlackElo) {
           skipped++;
           continue;
         }
-        rows.push(r);
+        if (g.moves.length < 6) {
+          skipped++;
+          continue;
+        }
+        const gameRows = deriveRowsFromGame(g);
+        for (const r of gameRows) {
+          if (rows.length >= args.limit) break;
+          if (r.targetFide < 800 || r.targetFide > 2900) {
+            skipped++;
+            continue;
+          }
+          rows.push(r);
+        }
+        parsed++;
+      } catch (e) {
+        skipped++;
       }
-      parsed++;
-    } catch (e) {
-      skipped++;
     }
+    console.log(`      Parsed ${parsed} games. Derived ${rows.length} rows. Skipped ${skipped}.`);
   }
-  console.log(`      Parsed ${parsed} games. Derived ${rows.length} rows. Skipped ${skipped}.`);
 
   if (rows.length < 20) {
     console.error("ERROR: Not enough valid rows for fit (need ≥20).");
@@ -469,7 +525,7 @@ function main() {
   const out = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    sourceFile: pgnPath,
+    sourceFile,
     samples: rows.length,
     coefficients: {
       accuracy: round(wAcc, 4),

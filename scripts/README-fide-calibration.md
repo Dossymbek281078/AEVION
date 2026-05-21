@@ -135,10 +135,25 @@ functional without a calibration deploy.
   are coarse (win=high accuracy, loss=high blunder). The fit will
   inflate the *correlation* between game result and rating, which is
   partly a tautology. Treat the proxy weights as a seed, not gospel.
-- **Production-grade calibration** needs Stockfish to compute true
-  centipawn loss per move. Plan to add `scripts/cyberchess-stockfish-eval.mjs`
-  that re-derives accuracy / blunder from real engine analysis when we
-  have the CPU budget.
+- **Production-grade calibration** uses
+  `scripts/cyberchess-stockfish-eval.mjs` to compute true per-move
+  centipawn loss (accuracy + blunderRate) via bundled Stockfish 18 Lite
+  WASM. Run it before calibrate:
+  ```bash
+  node scripts/cyberchess-stockfish-eval.mjs \
+    --pgn ./corpus.pgn \
+    --output ./features.csv \
+    --depth 12
+
+  node scripts/cyberchess-fide-calibrate.mjs \
+    --features-csv ./features.csv \
+    --output ./frontend/public/calibration-weights.json
+  ```
+  Throughput on lite-single: ~30 plies/sec at depth=12. Plan ~3h for a
+  5k-game corpus, or sample/lower depth. Switching from proxy to
+  stockfish on the bundled smoke fixture drops R² 0.60→0.53 and shrinks
+  the runaway blunder coefficient from 86k → 2.7k — proxy R² was inflated
+  by the tautology accuracy=result.
 - **Selection bias.** A GM-heavy corpus over-represents 2400-2700; the
   fit will be best in that range and weaker at amateur Elo. Bracket
   RMSE in the script output makes this visible.

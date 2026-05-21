@@ -4,6 +4,7 @@ import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/ToastProvider";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { AppShellLanguagePill } from "@/components/AppShellLanguagePill";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { WebVitals } from "@/components/WebVitals";
@@ -25,6 +26,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
     <I18nProvider>
       <AutoTranslate>
         {!isApp && <SiteHeader />}
+        {isApp && <AppShellLanguagePill />}
         <ToastProvider>
           <div style={{ flex: 1 }}>{children}</div>
         </ToastProvider>

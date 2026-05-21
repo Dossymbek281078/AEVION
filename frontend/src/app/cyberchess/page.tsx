@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
-import AevionTicker from "./AevionTicker";
 import AevionProjectsBanner from "./AevionProjectsBanner";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Pieces";
@@ -4198,7 +4197,7 @@ export default function CyberChessPage(){
   // regenerate the tree on hydration, and event handlers attach immediately.
   if(!mounted){
     return(<main style={{background:T.bg,minHeight:"100vh"}}>
-      <ProductPageShell fullWidth><AevionTicker/>
+      <ProductPageShell fullWidth>
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${T.dim}`,borderTopColor:T.accent,animation:"cc-spin 0.8s linear infinite"}}/>
@@ -4218,7 +4217,7 @@ export default function CyberChessPage(){
   const hasBg=bgPreset!=="none"&&!!bgPreset;
   return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
-    <ProductPageShell fullWidth><AevionTicker/>
+    <ProductPageShell fullWidth>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
       <StreamerOverlay active={streamerMode} onToolbar={t=>{streamerToolbarRef.current=t}}/>
       {streamerMode&&<div style={{position:"fixed",top:10,right:10,zIndex:300,display:"flex",gap:6,alignItems:"center"}}>

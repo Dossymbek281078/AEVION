@@ -5259,6 +5259,37 @@ export default function CyberChessPage(){
             </div>
           </Card>
 
+          {/* ─── Onboarding tiles — заполняют hub пока у пользователя <3 партий ─── */}
+          {savedGames.length<3&&(()=>{
+            const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
+              {emoji:"♟",title:"Сыграй первую партию",desc:"AI любого уровня. От 800 до 2400. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
+              {emoji:"◆",title:"Реши пазл",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:"10 818 задач в банке."}`,cta:"К пазлам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"🎓",title:"Спроси Coach",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
+              {emoji:"📅",title:"Задача дня",desc:"Один пазл каждый день. Streak, leaderboard, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
+            ];
+            return <Card padding={SPACE[3]} elevation="sm">
+              <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:SPACE[3]}}>
+                ✨ С чего начать
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
+                {tiles.map(t=><button key={t.title} onClick={t.onClick} style={{
+                  padding:SPACE[3],borderRadius:RADIUS.md,
+                  background:CC.surface2,border:`1px solid ${CC.border}`,
+                  textAlign:"left" as const,cursor:"pointer",
+                  display:"flex",flexDirection:"column",gap:SPACE[1],
+                  transition:`transform ${MOTION.fast} ${MOTION.ease}, border-color ${MOTION.fast} ${MOTION.ease}`,
+                }}
+                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=t.accent;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
+                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
+                  <div style={{fontSize:28,lineHeight:1}}>{t.emoji}</div>
+                  <div style={{fontSize:14,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
+                  <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4,minHeight:30}}>{t.desc}</div>
+                  <div style={{marginTop:SPACE[1],fontSize:11,fontWeight:900,color:t.accent,letterSpacing:0.4,textTransform:"uppercase" as const}}>{t.cta} →</div>
+                </button>)}
+              </div>
+            </Card>;
+          })()}
+
           {/* ─── Инфографика по форматам + ошибки по фазам ─── */}
           {savedGames.length>=3&&(()=>{
             const cats=["Bullet","Blitz","Rapid","Classical"] as const;

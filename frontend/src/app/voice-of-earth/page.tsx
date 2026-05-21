@@ -2,6 +2,7 @@
 
 import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import Filters, { LangFilter, MoodFilter } from "./components/Filters";
 import StatsBar, { Stats } from "./components/StatsBar";
@@ -198,7 +199,7 @@ export default function VoiceOfEarthPage() {
       if (lang !== "all") params.set("lang", lang);
       if (mood !== "all") params.set("mood", mood);
       params.set("limit", "30");
-      const r = await fetch(`/api/voice-of-earth/tracks?${params.toString()}`);
+      const r = await fetch(apiUrl(`/api/voice-of-earth/tracks?${params.toString()}`));
       if (r.ok) {
         const data = (await r.json()) as ApiTracks;
         setTracks(data.items);
@@ -214,7 +215,7 @@ export default function VoiceOfEarthPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const r = await fetch("/api/voice-of-earth/stats");
+      const r = await fetch(apiUrl("/api/voice-of-earth/stats"));
       if (r.ok) {
         const data = (await r.json()) as Stats;
         setStats(data);
@@ -236,7 +237,7 @@ export default function VoiceOfEarthPage() {
     async (id: number) => {
       const voterAlias = getOrCreateVoter();
       try {
-        const r = await fetch(`/api/voice-of-earth/tracks/${id}/vote`, {
+        const r = await fetch(apiUrl(`/api/voice-of-earth/tracks/${id}/vote`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ voterAlias }),
@@ -287,7 +288,7 @@ export default function VoiceOfEarthPage() {
           lyrics: data.lyrics,
           audioUrl: data.audioUrl || undefined,
         };
-        const r = await fetch("/api/voice-of-earth/tracks", {
+        const r = await fetch(apiUrl("/api/voice-of-earth/tracks"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -400,7 +401,7 @@ export default function VoiceOfEarthPage() {
 
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>
         <MvpConceptBoard
-          moduleId="voe"
+          moduleId="voice-of-earth"
           noun="concept/messages"
           accent="teal"
           sectionTitle="Voice of Earth concept board"

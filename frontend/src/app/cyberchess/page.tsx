@@ -5443,49 +5443,63 @@ export default function CyberChessPage(){
 
       {/* In-game dashboard chips — quick access во время игры, не уходя в модалки.
           Скрыт в setup (там есть hero-карточки) и в streamer mode. */}
-      {!streamerMode&&!setup&&on&&tab==="play"&&<div style={{
-        display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,
-        padding:"6px 10px",marginBottom:10,
-        background:"linear-gradient(135deg,rgba(5,150,105,0.04),rgba(124,58,237,0.05))",
-        border:`1px solid ${CC.border}`,borderRadius:RADIUS.lg,
-      }}>
-        <span style={{fontWeight:900,color:CC.textDim,letterSpacing:0.5,textTransform:"uppercase" as const,fontSize:10,marginRight:6}}>⚡ Быстрый доступ</span>
-        {[
-          {label:"📊 Анализ",hint:"Открыть анализ позиции",onClick:()=>{sTab("analysis");showToast("Анализ","info")}},
-          {label:"🧠 Коуч",hint:"Спросить коуча",onClick:()=>{sTab("coach");showToast("Коуч","info")}},
-          {label:"🧩 Пазлы",hint:"Решить тактику",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-          {label:"⚡ Puzzle Rush",hint:"Скоростной режим",onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
-          {label:"⏱ Clock Drill",hint:"30 секунд на ход — тренировка под давлением времени",onClick:()=>sShowClockDrill(true)},
-          {label:"🎲 Варианты",hint:"12 вариантов шахмат",onClick:()=>sShowVariants(true)},
-          {label:"📅 Daily Puzzle",hint:"Пазл дня + streak + leaderboard",onClick:()=>{window.location.href="/cyberchess/daily"}},
-          {label:"📖 Репертуар v2",hint:"Свои дебюты — CRUD + drill + book stats",onClick:()=>{window.location.href="/cyberchess/repertoire"}},
-          {label:"🏆 Турниры v2",hint:"Bracket view + registration",onClick:()=>{window.location.href="/cyberchess/tournaments"}},
-          {label:hotseat?"🤝 Hotseat вкл":"🤝 Hotseat",hint:"Игра вдвоём за одной доской",onClick:()=>{sHotseat(v=>!v);showToast(hotseat?"Hotseat выкл":"Hotseat вкл","info")}},
-          {label:"🎵 Музыка",hint:"Открыть плеер",onClick:()=>sShowMusicPlayer(true)},
-          {label:"🏆 Достижения",hint:"Каталог + прогресс",onClick:()=>sShowAchievements(true)},
-          {label:"📊 Статистика",hint:"Дашборд игрока — W/L, дебюты, тренд, время, FIDE",onClick:()=>sShowStatsDashboard(true)},
-          {label:spectatorPublish?"📡 Стрим ON":"📡 Стрим",hint:spectatorPublish?"Партия публикуется зрителям — клик чтобы остановить":"Включить стрим партии для зрителей",onClick:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
-          ...(matchmakingId?[{label:"📡 P2P LIVE",hint:`Матч транслируется зрителям + VoiceCoach комментарий. Ссылка: /cyberchess/spectator/${mmSpectatorGameIdRef.current||`mm_${matchmakingId}`}`,onClick:()=>{const gid=mmSpectatorGameIdRef.current||`mm_${matchmakingId}`;navigator.clipboard?.writeText(`${window.location.origin}/cyberchess/spectator/${gid}`).catch(()=>{});sObsStreamed(n=>n+1);showToast("Ссылка скопирована","success")}}]:[]),
-          {label:"👀 Смотреть",hint:"Открыть hub live-партий других игроков",onClick:()=>{window.location.href="/cyberchess/spectator"}},
-          {label:"🎞 Replays",hint:"Архив завершённых трансляций (50 LRU)",onClick:()=>{window.location.href="/cyberchess/replays"}},
-          {label:"🤝 Найти соперника",hint:"Real-player matchmaking — очередь по рейтингу + time control",onClick:()=>{window.location.href="/cyberchess/matchmaking"}},
-          {label:"📐 FIDE-оценка",hint:"CPI regression + factor breakdown + slider explorer",onClick:()=>sShowFidePanel(true)},
-          {label:`🛡 Анти-чит${acResult?` · ${acResult.suspicionScore}/100`:""}`,hint:"Статистический анализ последней партии на читерство",onClick:()=>{if(acResult)sShowAcPanel(true);else showToast("Сыграй партию — анализ появится по окончании","info")}},
-          {label:"🎭 Стиль AI",hint:"Magnus/Hikaru/Tal/Karpov/...10 personalities",onClick:()=>sShowAiPersonalityPicker(true)},
-          {label:mirrorActive?"🪞 Mirror ON":"🪞 Mirror",hint:"AI играет как ты — учится по твоим партиям",onClick:()=>{if(!mirrorProfile){showToast("Нужно сыграть 3+ партии","info");return;}sMirrorActive(v=>!v);showToast(mirrorActive?"🪞 Mirror выключен":"🪞 Mirror — AI играет как ты","info");}},
-          {label:"⚙ Настройки",hint:"Звуки фигур, темы, опции",onClick:()=>sShowSettings(true)},
-        ].map((c,i)=><button key={i} onClick={c.onClick} title={c.hint}
-          style={{
-            padding:"4px 10px",borderRadius:RADIUS.full,
-            background:CC.surface1,border:`1px solid ${CC.border}`,color:CC.text,
-            fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,
-            transition:`all ${MOTION.fast} ${MOTION.ease}`,
-          }}
-          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.borderStrong;(e.currentTarget as HTMLElement).style.background="#fff"}}
-          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
-          {c.label}
-        </button>)}
-      </div>}
+      {!streamerMode&&!setup&&on&&tab==="play"&&(()=>{
+        // Primary chips — always visible. Secondary — behind ⋯ toggle.
+        const primary=[
+          {label:"📊 Анализ",  hint:"Открыть анализ позиции",    onClick:()=>{sTab("analysis")}},
+          {label:"🧠 Коуч",    hint:"AI-коуч + объяснения",       onClick:()=>{sTab("coach")}},
+          {label:"🧩 Пазлы",   hint:"Случайная тактика",          onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+          {label:"⚡ Rush",    hint:"Скоростные пазлы",            onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
+          {label:"⏱ Drill",   hint:"30 сек на ход",               onClick:()=>sShowClockDrill(true)},
+          {label:"🎲 Варианты",hint:"12 вариантов шахмат",         onClick:()=>sShowVariants(true)},
+          {label:spectatorPublish?"📡 Live●":"📡 Стрим",
+           hint:spectatorPublish?"Стрим идёт — клик выключить":"Включить стрим для зрителей",
+           onClick:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
+          {label:`🛡${acResult?` ${acResult.suspicionScore}`:""}`,
+           hint:"Анти-чит анализ последней партии",
+           onClick:()=>{if(acResult)sShowAcPanel(true);else showToast("Сыграй партию","info")}},
+        ];
+        const secondary=[
+          {label:"📅 Daily",    hint:"Пазл дня",             onClick:()=>{window.location.href="/cyberchess/daily"}},
+          {label:"📖 Дебюты",  hint:"Репертуар",             onClick:()=>{window.location.href="/cyberchess/repertoire"}},
+          {label:"🏆 Турниры", hint:"Bracket + запись",       onClick:()=>{window.location.href="/cyberchess/tournaments"}},
+          {label:"🤝 Матчмейкинг",hint:"Найти соперника",    onClick:()=>{window.location.href="/cyberchess/matchmaking"}},
+          {label:"👀 Зрители",  hint:"Live-партии",           onClick:()=>{window.location.href="/cyberchess/spectator"}},
+          {label:"🎞 Replay",  hint:"Архив трансляций",       onClick:()=>{window.location.href="/cyberchess/replays"}},
+          {label:"📐 FIDE",    hint:"Оценка рейтинга",        onClick:()=>sShowFidePanel(true)},
+          {label:"🎭 Стиль AI",hint:"10 AI personalities",   onClick:()=>sShowAiPersonalityPicker(true)},
+          {label:mirrorActive?"🪞 ON":"🪞 Mirror",hint:"AI играет как ты",onClick:()=>{if(!mirrorProfile){showToast("Нужно 3+ партии","info");return;}sMirrorActive(v=>!v);}},
+          {label:"🏆 Ачивки", hint:"Каталог ачивок",          onClick:()=>sShowAchievements(true)},
+          {label:"📊 Стат",    hint:"Дашборд W/L/дебюты",    onClick:()=>sShowStatsDashboard(true)},
+          {label:"🎵 Музыка",  hint:"Фоновая музыка",         onClick:()=>sShowMusicPlayer(true)},
+          ...(matchmakingId?[{label:"📡 P2P",hint:"Скопировать ссылку зрителям",onClick:()=>{const gid=mmSpectatorGameIdRef.current||`mm_${matchmakingId}`;navigator.clipboard?.writeText(`${window.location.origin}/cyberchess/spectator/${gid}`).catch(()=>{});sObsStreamed(n=>n+1);showToast("Ссылка скопирована","success")}}]:[]),
+          {label:"⚙ Настройки",hint:"Звуки, темы, опции",    onClick:()=>sShowSettings(true)},
+        ];
+        const chipStyle={
+          padding:"3px 8px",borderRadius:RADIUS.full,
+          background:CC.surface1,border:`1px solid ${CC.border}`,color:CC.text,
+          fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,
+          transition:`background ${MOTION.fast}`,lineHeight:1.5,
+        };
+        return <div style={{
+          display:"flex",flexWrap:"wrap",alignItems:"center",gap:4,
+          padding:"5px 8px",marginBottom:8,
+          background:CC.surface2,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
+        }}>
+          {primary.map((c,i)=><button key={i} onClick={c.onClick} title={c.hint} style={chipStyle}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fff"}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
+            {c.label}
+          </button>)}
+          <div style={{width:1,height:16,background:CC.border,margin:"0 2px",flexShrink:0}}/>
+          {secondary.map((c,i)=><button key={`s${i}`} onClick={c.onClick} title={c.hint}
+            style={{...chipStyle,color:CC.textDim}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fff";(e.currentTarget as HTMLElement).style.color=CC.text}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface1;(e.currentTarget as HTMLElement).style.color=CC.textDim}}>
+            {c.label}
+          </button>)}
+        </div>;
+      })()}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
@@ -5497,7 +5511,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",
+            width:"min(calc(100vh - 130px),calc(100vw - 288px))",
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -5519,7 +5533,7 @@ export default function CyberChessPage(){
             const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
-            const bw="min(calc(100vh - 120px),calc(100vw * 0.62),1400px)";
+            const bw="min(calc(100vh - 130px),calc(100vw - 288px))";
             const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
               const name=isAI?al.name+" AI":"Вы";
               const elo=isAI?al.elo:rat;
@@ -5573,7 +5587,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",gap:4}}>
+          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 130px),calc(100vw - 288px))",gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -5830,7 +5844,7 @@ export default function CyberChessPage(){
               </div>}
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 130px),calc(100vw - 288px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
 
           {/* Нижняя player row (свой игрок) — chess.com style */}
           {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
@@ -5843,7 +5857,7 @@ export default function CyberChessPage(){
             const myLow=pT.time<30000&&on&&!over;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
-              width:"min(calc(100vh - 120px),calc(100vw * 0.62),1400px)",
+              width:"min(calc(100vh - 130px),calc(100vw - 288px))",
               padding:"5px 0",marginTop:2,gap:8,
               borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
               paddingLeft:6,transition:"border-color 200ms",
@@ -6087,7 +6101,59 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"1 1 0",minWidth:280,display:"flex",flexDirection:"column",gap:10}}>
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 252px",width:252,minWidth:0,maxWidth:252,display:"flex",flexDirection:"column",gap:8}}>
+          {/* ── Live Stats Card — top of sidebar, visible during active game ── */}
+          {on&&!setup&&(tab==="play"||tab==="coach")&&<div style={{
+            padding:"10px 12px",borderRadius:RADIUS.md,
+            background:CC.surface1,border:`1px solid ${CC.border}`,
+            display:"flex",alignItems:"center",gap:10,
+          }}>
+            {/* Eval number */}
+            <div style={{
+              fontSize:22,fontWeight:900,fontFamily:"ui-monospace,monospace",lineHeight:1,
+              color:evalMate!==0?"#a855f7":evalCp>30?CC.brand:evalCp<-30?CC.danger:CC.text,
+              minWidth:52,flexShrink:0,
+            }}>
+              {evalMate!==0?(evalMate>0?`M${evalMate}`:`-M${Math.abs(evalMate)}`)
+                :evalCp>=0?`+${(evalCp/100).toFixed(1)}`:(evalCp/100).toFixed(1)}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              {/* Whose turn */}
+              <div style={{
+                fontSize:11,fontWeight:800,
+                color:game.turn()===pCol?CC.brand:CC.textDim,
+                display:"flex",alignItems:"center",gap:4,
+              }}>
+                <span style={{
+                  width:6,height:6,borderRadius:"50%",flexShrink:0,
+                  background:game.turn()===pCol?CC.brand:CC.textDim,
+                  animation:game.turn()===pCol&&on&&!over?"cc-pulse-glow 1.5s infinite":undefined,
+                }}/>
+                {over?"Партия завершена":game.turn()===pCol?"Твой ход":"Ход AI"}
+              </div>
+              {/* Move count + TC */}
+              <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
+                Ход {Math.ceil(hist.length/2)} · {tc.ini>0?tc.name:"без таймера"}
+              </div>
+            </div>
+            {/* Last move quality badge */}
+            {(()=>{
+              const lastQ=analysis.length>0?analysis[analysis.length-1]?.quality:null;
+              if(!lastQ||lastQ==="good")return null;
+              const qMap:{[k:string]:[string,string,string]}={
+                great:["⭐","#f59e0b","rgba(245,158,11,0.12)"],
+                inacc:["?!","#6366f1","rgba(99,102,241,0.12)"],
+                mistake:["?","#f97316","rgba(249,115,22,0.12)"],
+                blunder:["??","#ef4444","rgba(239,68,68,0.12)"],
+              };
+              const[icon,col,bg]=qMap[lastQ]||["","",""];
+              if(!icon)return null;
+              return <div style={{
+                padding:"3px 7px",borderRadius:20,fontSize:11,fontWeight:900,
+                color:col,background:bg,flexShrink:0,lineHeight:1.4,
+              }}>{icon}</div>;
+            })()}
+          </div>}
           {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
               Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
               History appears when user has saved games. */}
@@ -7082,8 +7148,8 @@ export default function CyberChessPage(){
               <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
                 style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ всё</button>
             </div>}
-            <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,fontWeight:900,letterSpacing:"0.1em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+            <div style={{padding:"7px 10px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>
                 Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
                 {currentOpening&&hist.length>0&&hist.length<=30&&<span style={{
@@ -7128,7 +7194,7 @@ export default function CyberChessPage(){
                 },80);
               }}
               style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
-              {hist.length?<div style={{display:"grid",gridTemplateColumns:"36px 1fr 1fr",fontSize:13,fontFamily:"monospace"}}>
+              {hist.length?<div style={{display:"grid",gridTemplateColumns:"26px 1fr 1fr",fontSize:12,fontFamily:"monospace"}}>
                 {Array.from({length:Math.ceil(hist.length/2)}).map((_,i)=>{
                   const white=hist[i*2],black=hist[i*2+1];
                   const wIdx=i*2,bIdx=i*2+1;
@@ -7166,9 +7232,9 @@ export default function CyberChessPage(){
                   return <React.Fragment key={i}>
                     {/* Move number */}
                     <span data-pair-idx={i} data-active={isActivePair?"1":undefined}
-                      style={{color:CC.textMute,fontWeight:700,textAlign:"center",padding:"5px 0",
+                      style={{color:CC.textMute,fontWeight:700,textAlign:"center",padding:"3px 0",
                         background:isActivePair?CC.brandSoft:CC.surface2,
-                        borderRight:`1px solid ${CC.border}`,fontSize:11,fontFamily:"ui-monospace,monospace"}}>
+                        borderRight:`1px solid ${CC.border}`,fontSize:10,fontFamily:"ui-monospace,monospace"}}>
                       {i+1}
                     </span>
                     {/* White move */}
@@ -7177,7 +7243,7 @@ export default function CyberChessPage(){
                       title={tab==="analysis"?"ПКМ — аннотация · Двойной клик — заметка":undefined}
                       style={{
                         color:wIsBrowsed?CC.brand:CC.text,fontWeight:wIsBrowsed?900:600,
-                        padding:"5px 8px",fontSize:13,
+                        padding:"3px 6px",fontSize:12,
                         background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:"transparent",
                         borderLeft:wIsPreview?`3px solid ${CC.gold}`:wIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
                         cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
@@ -7202,7 +7268,7 @@ export default function CyberChessPage(){
                       title={tab==="analysis"&&black?"ПКМ — аннотация · Двойной клик — заметка":undefined}
                       style={{
                         color:bIsBrowsed?CC.brand:CC.textDim,fontWeight:bIsBrowsed?900:500,
-                        padding:"5px 8px",fontSize:13,
+                        padding:"3px 6px",fontSize:12,
                         background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:"transparent",
                         borderLeft:bIsPreview?`3px solid ${CC.gold}`:bIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
                         cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",

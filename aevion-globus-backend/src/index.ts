@@ -223,7 +223,7 @@ app.get("/api/openapi.json", (_req, res) => {
     openapi: "3.1.0",
     info: {
       title: "AEVION Globus Backend",
-      version: "0.7.1",
+      version: "0.8.0",
     },
     paths: {
       "/health": { get: { summary: "Service health" } },
@@ -659,6 +659,44 @@ app.get("/api/openapi.json", (_req, res) => {
         get: { summary: "Generate AI wellness plan — rule-based + LLM-enhanced (Anthropic/OpenAI/Gemini chain)" },
       },
       "/api/healthai/check": { post: { summary: "Symptom check + rule-based advice" } },
+      // Universal Search
+      "/api/search/health": { get: { summary: "Search service health — sources list", security: [] } },
+      "/api/search": {
+        get: {
+          summary: "Universal Search — queries QStore/QLearn/QNews/QEvents/QJobs/QRight in parallel",
+          security: [],
+          parameters: [
+            { name: "q", in: "query", required: true, schema: { type: "string", minLength: 2, maxLength: 100 } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+            { name: "types", in: "query", schema: { type: "string", description: "Comma-separated: qstore,qlearn,qnews,qevents,qjobs,qright" } },
+          ],
+        },
+      },
+      // Paddle Billing v2
+      "/api/paddle/health": { get: { summary: "Paddle API health — configured/sandbox/webhookConfigured/apiReachable", security: [] } },
+      "/api/paddle/plans": { get: { summary: "AEVION Paddle price catalog for frontend", security: [] } },
+      "/api/paddle/products": { get: { summary: "Paddle products + prices from dashboard (live mode)", security: [] } },
+      "/api/paddle/transactions": { get: { summary: "Recent Paddle transactions grouped by appId", security: [] } },
+      "/api/paddle/setup-guide": { get: { summary: "Step-by-step Paddle setup guide for KZ accounts", security: [] } },
+      "/api/paddle/checkout": {
+        post: {
+          summary: "Create Paddle transaction → returns checkout URL",
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { priceId: { type: "string" }, quantity: { type: "integer" }, email: { type: "string" }, tierId: { type: "string" }, appId: { type: "string" } }, required: ["priceId"] } } } },
+        },
+      },
+      "/api/paddle/webhook": {
+        post: {
+          summary: "Paddle webhook — verifies Paddle-Signature HMAC, provisions subscription on transaction.completed",
+          security: [],
+        },
+      },
+      "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
+      "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
+      // Pricing — subscription self-service
+      "/api/pricing/subscription/me": {
+        get: { summary: "Latest subscription for authenticated user (JWT)" },
+      },
+      "/api/pricing/cases": { get: { summary: "Customer case stories with ROI metrics" } },
       ...FINTECH_OPENAPI_PATHS,
       ...NEW_WAVE_OPENAPI_PATHS,
     },

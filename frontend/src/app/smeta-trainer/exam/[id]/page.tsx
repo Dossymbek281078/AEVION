@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import type { Lsr } from "../../lib/types";
 import { findRate } from "../../lib/corpus";
 import { calcLsr, formatKzt } from "../../lib/calc";
@@ -18,8 +18,16 @@ import { isLessonVisited, findLesson } from "../../lib/examLessons";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
 
-export default function ExamTaskPage({ params }: { params: { id: string } }) {
-  const task = findExamTask(params.id);
+export default function ExamTaskPage({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string };
+}) {
+  const resolved =
+    typeof (params as Promise<{ id: string }>).then === "function"
+      ? use(params as Promise<{ id: string }>)
+      : (params as { id: string });
+  const task = findExamTask(resolved.id);
   if (!task) {
     notFound();
   }

@@ -9,20 +9,29 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 import { findExamTask } from "../../../lib/examTasks";
 import { findLesson, markLessonVisited } from "../../../lib/examLessons";
 
-export default function ExamLessonPage({ params }: { params: { id: string } }) {
-  const task = findExamTask(params.id);
-  const lesson = findLesson(params.id);
+export default function ExamLessonPage({
+  params,
+}: {
+  params: Promise<{ id: string }> | { id: string };
+}) {
+  const resolved =
+    typeof (params as Promise<{ id: string }>).then === "function"
+      ? use(params as Promise<{ id: string }>)
+      : (params as { id: string });
+  const taskId = resolved.id;
+  const task = findExamTask(taskId);
+  const lesson = findLesson(taskId);
   if (!task || !lesson) {
     notFound();
   }
 
   useEffect(() => {
-    markLessonVisited(params.id);
-  }, [params.id]);
+    markLessonVisited(taskId);
+  }, [taskId]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -33,7 +42,7 @@ export default function ExamLessonPage({ params }: { params: { id: string } }) {
               ← К списку экзаменов
             </Link>
             <Link
-              href={`/smeta-trainer/exam/${params.id}`}
+              href={`/smeta-trainer/exam/${taskId}`}
               className="text-xs text-blue-600 hover:underline"
             >
               К заданию →
@@ -142,7 +151,7 @@ export default function ExamLessonPage({ params }: { params: { id: string } }) {
             шаблоне и сдайте на «отлично».
           </div>
           <Link
-            href={`/smeta-trainer/exam/${params.id}`}
+            href={`/smeta-trainer/exam/${taskId}`}
             className="inline-block px-6 py-3 bg-emerald-600 text-white rounded text-sm font-bold hover:bg-emerald-700"
           >
             🎯 Готов сдавать экзамен →

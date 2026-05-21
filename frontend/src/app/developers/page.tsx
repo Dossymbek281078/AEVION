@@ -524,7 +524,7 @@ export default function DevelopersPage() {
                 Zero-dependency client for the Hub API.
               </div>
               <div style={{ marginTop: 10, padding: "6px 10px", borderRadius: 6, background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.22)", fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 12, color: "#7c3aed", display: "inline-block" }}>
-                npm i @aevion/catalog-client
+                npm i @aevion-io/catalog-client
               </div>
             </a>
           </div>

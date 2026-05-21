@@ -253,7 +253,7 @@ export default function VersionExplorerPage() {
   const apiBase = getApiBase();
   const fullUrl = `${apiBase}/api/aevion/version`;
   const curl = `curl -s '${fullUrl}' | jq .`;
-  const sdkSnippet = `import { AevionCatalog } from "@aevion/catalog-client";
+  const sdkSnippet = `import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 const info = await cat.openapi();
 // info.aevion.sdk.npm  → published TS clients
@@ -347,7 +347,7 @@ const info = await cat.openapi();
           <CopyCard label="URL" body={fullUrl} copied={copied} onCopy={copy} copyKey="url" />
           <CopyCard label="curl" body={curl} copied={copied} onCopy={copy} copyKey="curl" />
           <CopyCard
-            label="@aevion/catalog-client (same info)"
+            label="@aevion-io/catalog-client (same info)"
             body={sdkSnippet}
             copied={copied}
             onCopy={copy}

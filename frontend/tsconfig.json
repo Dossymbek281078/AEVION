@@ -20,8 +20,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@aevion/catalog-client": ["../packages/aevion-catalog-client/src/index"],
-      "@aevion/catalog-client/*": ["../packages/aevion-catalog-client/src/*"]
+      "@aevion-io/catalog-client": ["../packages/aevion-catalog-client/src/index"],
+      "@aevion-io/catalog-client/*": ["../packages/aevion-catalog-client/src/*"]
     }
   },
   "include": [

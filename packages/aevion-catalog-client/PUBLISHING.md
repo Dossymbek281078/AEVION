@@ -1,6 +1,6 @@
-# Publishing `@aevion/catalog-client`
+# Publishing `@aevion-io/catalog-client`
 
-This document describes how to publish a new version of `@aevion/catalog-client` to npm.
+This document describes how to publish a new version of `@aevion-io/catalog-client` to npm.
 
 ## Prerequisites
 
@@ -62,4 +62,4 @@ Use the CI path for releases — provenance is signed by GitHub Actions and show
 - The `files` field in `package.json` whitelists what gets published (`dist`, `README.md`).
   `.npmignore` is a redundant safety net so test/source/config files never leak even if
   `files` is removed.
-- Public registry URL: https://www.npmjs.com/package/@aevion/catalog-client
+- Public registry URL: https://www.npmjs.com/package/@aevion-io/catalog-client

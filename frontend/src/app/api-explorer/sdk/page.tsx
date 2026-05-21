@@ -305,7 +305,7 @@ function resolveEndpoint(
 
 /** Render a method's SDK call snippet, e.g. `await cat.list({ status: ["mvp"] })`. */
 function renderSdkSnippet(method: MethodDef, args: Record<string, string>): string {
-  const header = `import { AevionCatalog } from "@aevion/catalog-client";\nconst cat = new AevionCatalog();\n\n`;
+  const header = `import { AevionCatalog } from "@aevion-io/catalog-client";\nconst cat = new AevionCatalog();\n\n`;
   switch (method.id) {
     case "list":
     case "csvUrl":
@@ -754,7 +754,7 @@ export default function SdkPlaygroundPage() {
           <p style={{ fontSize: 14, color: "#64748b", margin: 0, lineHeight: 1.6, maxWidth: 720 }}>
             Pick a method from{" "}
             <code style={{ background: "rgba(15,23,42,0.06)", padding: "1px 6px", borderRadius: 4 }}>
-              @aevion/catalog-client
+              @aevion-io/catalog-client
             </code>
             , fill in the args, hit{" "}
             <span
@@ -980,7 +980,7 @@ export default function SdkPlaygroundPage() {
           />
           <CopyCard
             label="npm install"
-            body={`npm i @aevion/catalog-client`}
+            body={`npm i @aevion-io/catalog-client`}
             copied={copied}
             onCopy={copy}
             copyKey="install"
@@ -1169,7 +1169,7 @@ export default function SdkPlaygroundPage() {
             lineHeight: 1.8,
           }}
         >
-          SDK: <code>@aevion/catalog-client</code> ·{" "}
+          SDK: <code>@aevion-io/catalog-client</code> ·{" "}
           <Link href="/api-explorer/catalog" style={{ color: TEAL }}>
             Catalog explorer
           </Link>{" "}

@@ -11,12 +11,12 @@ export const revalidate = 3600;
 /* ----------------------------- metadata ----------------------------- */
 
 export const metadata: Metadata = {
-  title: "@aevion/catalog-client — TypeScript SDK for AEVION Hub",
+  title: "@aevion-io/catalog-client — TypeScript SDK for AEVION Hub",
   description:
-    "Zero-dependency, strict-typed client for the AEVION module catalog API. npm install @aevion/catalog-client.",
+    "Zero-dependency, strict-typed client for the AEVION module catalog API. npm install @aevion-io/catalog-client.",
   alternates: { canonical: "/sdk" },
   openGraph: {
-    title: "@aevion/catalog-client",
+    title: "@aevion-io/catalog-client",
     description: "Zero-dep TypeScript SDK for AEVION Hub.",
     siteName: "AEVION",
   },
@@ -152,9 +152,9 @@ async function readRegistryStats(): Promise<RegistryStatsLite | null> {
 
 /* ----------------------------- static content ----------------------------- */
 
-const INSTALL_LINE = "npm i @aevion/catalog-client";
+const INSTALL_LINE = "npm i @aevion-io/catalog-client";
 
-const QUICK_START = `import { AevionCatalog } from "@aevion/catalog-client";
+const QUICK_START = `import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 const live = await cat.mvpsAndLaunched();   // status: mvp | launched
@@ -426,7 +426,7 @@ export default async function SdkLandingPage() {
               fontFamily: "ui-monospace, SFMono-Regular, monospace",
             }}
           >
-            @aevion/catalog-client
+            @aevion-io/catalog-client
           </h1>
           <p
             style={{
@@ -934,7 +934,7 @@ export default async function SdkLandingPage() {
             lineHeight: 1.7,
           }}
         >
-          SDK: <code style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>@aevion/catalog-client</code>
+          SDK: <code style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>@aevion-io/catalog-client</code>
           {" "}· MIT · <Link href="/developers" style={{ color: TEAL }}>Developers</Link>
           {" "}· <Link href="/changelog" style={{ color: TEAL }}>Platform changelog</Link>
           {" "}· <Link href="/status" style={{ color: TEAL }}>Public status</Link>

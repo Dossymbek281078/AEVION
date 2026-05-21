@@ -97,7 +97,7 @@ export default function CatalogExplorerPage() {
   const apiBase = getApiBase();
   const fullUrl = `${apiBase}/api/aevion/catalog${query}`;
   const curl = `curl -s '${fullUrl}'${format === "json" ? " | jq ." : ""}`;
-  const sdk = `import { AevionCatalog } from "@aevion/catalog-client";
+  const sdk = `import { AevionCatalog } from "@aevion-io/catalog-client";
 const cat = new AevionCatalog();
 const { items } = await cat.list({${
     statuses.length ? `\n  status: [${statuses.map((s) => `"${s}"`).join(", ")}],` : ""
@@ -263,7 +263,7 @@ const { items } = await cat.list({${
               {[
                 { label: "URL", body: fullUrl, key: "url" },
                 { label: "curl", body: curl, key: "curl" },
-                { label: "@aevion/catalog-client", body: sdk, key: "sdk" },
+                { label: "@aevion-io/catalog-client", body: sdk, key: "sdk" },
               ].map((s) => (
                 <div
                   key={s.key}

@@ -1,15 +1,15 @@
-# @aevion/catalog-client
+# @aevion-io/catalog-client
 
 Typed TypeScript client for the AEVION Hub catalog API. Zero dependencies. Node 18+ / modern browsers.
 
 ```bash
-npm install @aevion/catalog-client
+npm install @aevion-io/catalog-client
 ```
 
 ## Quick start
 
 ```ts
-import { AevionCatalog } from "@aevion/catalog-client";
+import { AevionCatalog } from "@aevion-io/catalog-client";
 
 const cat = new AevionCatalog();
 
@@ -248,7 +248,7 @@ import {
   getMultichatPresets, getMultichatProviderStatus, launchMultichatPreset,
   getQMediaRecommendations, getQMediaTrending, getQMediaTracks,
   getMyCoachSessions, getMyCoachGoals, createCoachGoal, completeCoachGoal,
-} from "@aevion/catalog-client";
+} from "@aevion-io/catalog-client";
 
 const all   = await listCatalog();
 const x     = await getModule("qfusionai");

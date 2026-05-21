@@ -6,7 +6,7 @@ SHA references — see `git log` for exact commits.
 
 ---
 
-## [2026-05-14] — @aevion/catalog-client v0.7.0
+## [2026-05-14] — @aevion-io/catalog-client v0.7.0
 
 Extended the SDK with four more typed sub-clients wrapping endpoints
 verified live in production via `curl`.
@@ -64,7 +64,7 @@ ApiKeys, Modules, Pricing GTM, SDK consumers, SEO, and E2E.
 
 ### Highlights
 - 45+ new HTTP endpoints across backend services
-- New SDK release `@aevion/catalog-client` **0.5 → 0.6** (5 namespaced
+- New SDK release `@aevion-io/catalog-client` **0.5 → 0.6** (5 namespaced
   sub-clients, 16 endpoints, 30 tests)
 - 14 planning landings unified under `/eta` countdown + share button
 - 5 Playwright E2E spec files added
@@ -171,7 +171,7 @@ SHA: see git log around 2026-05-13 block 3.
 **Ecosystem**
 - `/activity`, `/graph`, health-matrix, dashboard
 
-**`@aevion/catalog-client` v0.6.0**
+**`@aevion-io/catalog-client` v0.6.0**
 - 5 namespaced sub-clients
 - 16 endpoints exposed
 - 30 unit tests
@@ -220,7 +220,7 @@ SHA: see git log around 2026-05-13 block 4.
 - Live counter
 
 **SDK consumers — wave 1**
-- `qstore`, `qlearn`, `devhub` wired to `@aevion/catalog-client@0.6`
+- `qstore`, `qlearn`, `devhub` wired to `@aevion-io/catalog-client@0.6`
 
 **SEO / JSON-LD**
 - 6 layouts now ship JSON-LD
@@ -262,7 +262,7 @@ SHA: see git log around 2026-05-13 block 5.
 - Sticky audio player in QMedia
 - Auth: password strength meter, JWT expiry chip, /auth/success
 
-### SDK upgrade notes — `@aevion/catalog-client` 0.5 → 0.6
+### SDK upgrade notes — `@aevion-io/catalog-client` 0.5 → 0.6
 
 - New: 5 namespaced sub-clients
 - New: 16 endpoints exposed

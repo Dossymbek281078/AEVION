@@ -1,4 +1,4 @@
-# Examples — @aevion/catalog-client
+# Examples — @aevion-io/catalog-client
 
 Four runnable snippets covering the SDK surface. All point at the live
 `https://api.aevion.app` backend by default; override with

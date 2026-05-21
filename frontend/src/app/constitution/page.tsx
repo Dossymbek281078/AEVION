@@ -896,6 +896,14 @@ export default function ConstitutionPage() {
             </div>
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+              <h3 className="text-lg font-semibold text-[#f5d27a] mb-1">Отпечаток конституции</h3>
+              <div className="text-xs text-[#9aa3c0] mb-2">
+                Восьмиугольник 0-100 по каждому ползунку. Сравнивай силуэты пресетов и стран.
+              </div>
+              <SpiderChart sliders={sliders} shockedSliders={shockedSliders} />
+            </div>
+
+            <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
               <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
                 Сохранить сценарий{savedTotal > 0 ? ` (всего: ${savedTotal})` : ""}
               </h3>
@@ -995,6 +1003,135 @@ export default function ConstitutionPage() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function SpiderChart({
+  sliders,
+  shockedSliders,
+}: {
+  sliders: Sliders;
+  shockedSliders?: Sliders | null;
+}) {
+  const W = 360;
+  const H = 360;
+  const cx = W / 2;
+  const cy = H / 2;
+  const radius = 120;
+  const n = SLIDER_META.length; // 8
+
+  const angleFor = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
+  const pointAt = (i: number, val: number) => {
+    const a = angleFor(i);
+    const r = (val / 100) * radius;
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  };
+
+  const polygonPoints = (vals: number[]) =>
+    vals
+      .map((v, i) => {
+        const p = pointAt(i, v);
+        return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      })
+      .join(" ");
+
+  const valsCurrent = SLIDER_META.map((m) => sliders[m.key]);
+  const valsShocked = shockedSliders ? SLIDER_META.map((m) => shockedSliders[m.key]) : null;
+
+  // Short axis labels for radial layout (full names too long)
+  const SHORT_LABELS: Record<keyof Sliders, string> = {
+    floor: "Пол",
+    ruleOfLaw: "Закон",
+    rotation: "Ротация",
+    transparency: "Прозр.",
+    multiStatus: "Multi-status",
+    skinInGame: "Skin",
+    polycentricity: "Полицентр.",
+    positiveSum: "Pos-sum",
+  };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-[360px] mx-auto block">
+      {/* concentric rings */}
+      {[25, 50, 75, 100].map((pct) => {
+        const r = (pct / 100) * radius;
+        return (
+          <circle
+            key={pct}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke="#d4af37"
+            strokeOpacity={pct === 100 ? 0.4 : 0.15}
+            strokeDasharray={pct === 100 ? undefined : "3 4"}
+          />
+        );
+      })}
+
+      {/* axes + labels */}
+      {SLIDER_META.map((m, i) => {
+        const outer = pointAt(i, 100);
+        const labelPos = pointAt(i, 118);
+        const a = angleFor(i);
+        const anchor =
+          Math.cos(a) > 0.3 ? "start" : Math.cos(a) < -0.3 ? "end" : "middle";
+        return (
+          <g key={m.key}>
+            <line
+              x1={cx}
+              y1={cy}
+              x2={outer.x}
+              y2={outer.y}
+              stroke="#d4af37"
+              strokeOpacity={0.18}
+            />
+            <text
+              x={labelPos.x}
+              y={labelPos.y}
+              fill="#9aa3c0"
+              fontSize="10"
+              textAnchor={anchor}
+              dominantBaseline="middle"
+            >
+              {SHORT_LABELS[m.key]}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* shocked polygon (under current so current is on top) */}
+      {valsShocked && (
+        <polygon
+          points={polygonPoints(valsShocked)}
+          fill="#f472b6"
+          fillOpacity={0.22}
+          stroke="#f472b6"
+          strokeWidth={2}
+          strokeDasharray="4 3"
+        />
+      )}
+
+      {/* current polygon */}
+      <polygon
+        points={polygonPoints(valsCurrent)}
+        fill="#22d3ee"
+        fillOpacity={0.28}
+        stroke="#22d3ee"
+        strokeWidth={2}
+      />
+
+      {/* dots on each vertex */}
+      {valsCurrent.map((v, i) => {
+        const p = pointAt(i, v);
+        return <circle key={i} cx={p.x} cy={p.y} r={3} fill="#22d3ee" />;
+      })}
+      {valsShocked &&
+        valsShocked.map((v, i) => {
+          const p = pointAt(i, v);
+          return <circle key={`s-${i}`} cx={p.x} cy={p.y} r={2.5} fill="#f472b6" />;
+        })}
+    </svg>
   );
 }
 

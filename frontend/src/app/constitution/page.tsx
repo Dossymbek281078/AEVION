@@ -452,6 +452,84 @@ const COUNTRIES: Country[] = [
   { flag: "🇰🇿", name: "Казахстан",   sliders: { floor: 50, ruleOfLaw: 40, rotation: 10, transparency: 30, multiStatus: 30, skinInGame: 35, polycentricity: 25, positiveSum: 60 } },
 ];
 
+type ShockId = "war" | "pandemic" | "crisis" | "tech";
+type Shock = {
+  id: ShockId;
+  icon: string;
+  name: string;
+  desc: string;
+  delta: Partial<Record<keyof Sliders, number>>;
+};
+
+const SHOCKS: Shock[] = [
+  {
+    id: "war",
+    icon: "🪖",
+    name: "Война",
+    desc: "Концентрация власти, цензура, мобилизация. Ломает прозрачность и полицентричность.",
+    delta: {
+      transparency: -30,
+      multiStatus: -25,
+      polycentricity: -25,
+      ruleOfLaw: -15,
+      rotation: -10,
+      floor: -10,
+      positiveSum: -20,
+      skinInGame: +15,
+    },
+  },
+  {
+    id: "pandemic",
+    icon: "🦠",
+    name: "Пандемия",
+    desc: "Чрезвычайные полномочия центра, режут локальную автономию и плюрализм статусов.",
+    delta: {
+      polycentricity: -20,
+      multiStatus: -15,
+      transparency: -10,
+      ruleOfLaw: -5,
+      floor: +5,
+      positiveSum: -15,
+    },
+  },
+  {
+    id: "crisis",
+    icon: "💸",
+    name: "Финансовый кризис",
+    desc: "Пирог резко сжимается. Падают пол снизу и доверие. Возрастает напряжение.",
+    delta: {
+      positiveSum: -35,
+      floor: -15,
+      multiStatus: -10,
+      transparency: -5,
+      skinInGame: +5,
+    },
+  },
+  {
+    id: "tech",
+    icon: "🚀",
+    name: "Техскачок",
+    desc: "Растёт пирог и децентрализация, но регуляция отстаёт и неравенство растёт.",
+    delta: {
+      positiveSum: +30,
+      polycentricity: +15,
+      multiStatus: +10,
+      ruleOfLaw: -5,
+      transparency: -5,
+      floor: -5,
+    },
+  },
+];
+
+function applyShock(s: Sliders, delta: Partial<Record<keyof Sliders, number>>): Sliders {
+  const next = { ...s };
+  for (const key of Object.keys(delta) as Array<keyof Sliders>) {
+    const d = delta[key] ?? 0;
+    next[key] = Math.max(0, Math.min(100, s[key] + d));
+  }
+  return next;
+}
+
 type SavedScenario = {
   id: string;
   title: string;
@@ -465,6 +543,26 @@ export default function ConstitutionPage() {
   const [saved, setSaved] = useState<SavedScenario[]>([]);
   const [busy, setBusy] = useState<boolean>(false);
   const [savedTotal, setSavedTotal] = useState<number>(0);
+  const [activeShock, setActiveShock] = useState<ShockId | null>(null);
+
+  const activeShockObj = useMemo(
+    () => SHOCKS.find((s) => s.id === activeShock) ?? null,
+    [activeShock],
+  );
+  const shockedSliders = useMemo<Sliders | null>(
+    () => (activeShockObj ? applyShock(sliders, activeShockObj.delta) : null),
+    [activeShockObj, sliders],
+  );
+  const shockedRegime = useMemo(
+    () => (shockedSliders ? classify(shockedSliders) : null),
+    [shockedSliders],
+  );
+  const applyShockNow = useCallback(() => {
+    if (shockedSliders) {
+      setSliders(shockedSliders);
+      setActiveShock(null);
+    }
+  }, [shockedSliders]);
 
   useEffect(() => {
     try {
@@ -706,7 +804,23 @@ export default function ConstitutionPage() {
         </section>
 
         <section className="mt-6">
-          <WorldMapScatter sliders={sliders} />
+          <StressTestPanel
+            sliders={sliders}
+            activeShock={activeShock}
+            shockedRegime={shockedRegime}
+            onPick={setActiveShock}
+            onClear={() => setActiveShock(null)}
+            onApply={applyShockNow}
+            currentRegime={regime}
+          />
+        </section>
+
+        <section className="mt-6">
+          <WorldMapScatter
+            sliders={sliders}
+            shockedSliders={shockedSliders}
+            shockLabel={activeShockObj ? `${activeShockObj.icon} ${activeShockObj.name}` : null}
+          />
         </section>
 
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
@@ -754,8 +868,17 @@ function MetricBar({
   );
 }
 
-function WorldMapScatter({ sliders }: { sliders: Sliders }) {
+function WorldMapScatter({
+  sliders,
+  shockedSliders,
+  shockLabel,
+}: {
+  sliders: Sliders;
+  shockedSliders?: Sliders | null;
+  shockLabel?: string | null;
+}) {
   const currentMetrics = computeMetrics(sliders);
+  const shockedMetrics = shockedSliders ? computeMetrics(shockedSliders) : null;
   const W = 720;
   const H = 480;
   const PAD = 56;
@@ -769,6 +892,8 @@ function WorldMapScatter({ sliders }: { sliders: Sliders }) {
 
   const cx = xFor(currentMetrics.eliteFear);
   const cy = yFor(currentMetrics.innovation);
+  const sx = shockedMetrics ? xFor(shockedMetrics.eliteFear) : null;
+  const sy = shockedMetrics ? yFor(shockedMetrics.innovation) : null;
 
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-xl p-5">
@@ -854,6 +979,43 @@ function WorldMapScatter({ sliders }: { sliders: Sliders }) {
           <text x={cx + 12} y={cy + 4} fill="#22d3ee" fontSize="12" fontWeight="bold">
             ты сейчас
           </text>
+
+          {/* shocked scenario — magenta dot with arrow */}
+          {sx !== null && sy !== null && (
+            <g>
+              <defs>
+                <marker
+                  id="shockArrow"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto"
+                >
+                  <path d="M0,0 L10,5 L0,10 z" fill="#f472b6" />
+                </marker>
+              </defs>
+              <line
+                x1={cx}
+                y1={cy}
+                x2={sx}
+                y2={sy}
+                stroke="#f472b6"
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                opacity={0.85}
+                markerEnd="url(#shockArrow)"
+              />
+              <circle cx={sx} cy={sy} r={14} fill="#f472b6" opacity={0.18}>
+                <animate attributeName="r" values="10;18;10" dur="1.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx={sx} cy={sy} r={7} fill="#f472b6" stroke="#0b1736" strokeWidth={2} />
+              <text x={sx + 12} y={sy + 4} fill="#f472b6" fontSize="12" fontWeight="bold">
+                после: {shockLabel ?? "шок"}
+              </text>
+            </g>
+          )}
         </svg>
       </div>
       <p className="text-xs text-[#9aa3c0] mt-3">
@@ -861,6 +1023,117 @@ function WorldMapScatter({ sliders }: { sliders: Sliders }) {
         Чем выше — тем больше драйва и инновации. Страны — приближённая оценка по шкале 0-100; не научный
         рейтинг, а инструмент для интуиции.
       </p>
+    </div>
+  );
+}
+
+function StressTestPanel({
+  sliders,
+  activeShock,
+  shockedRegime,
+  currentRegime,
+  onPick,
+  onClear,
+  onApply,
+}: {
+  sliders: Sliders;
+  activeShock: ShockId | null;
+  shockedRegime: Regime | null;
+  currentRegime: Regime;
+  onPick: (id: ShockId) => void;
+  onClear: () => void;
+  onApply: () => void;
+}) {
+  const active = SHOCKS.find((s) => s.id === activeShock) ?? null;
+  const shockedSliders = active ? applyShock(sliders, active.delta) : null;
+  return (
+    <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-[#f5d27a]">Stress test — что выдержит твоя конституция</h3>
+        <div className="text-xs text-[#9aa3c0]">
+          Применяй шок, смотри на скаттере, как тебя сносит и в какой режим скатываешься
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+        {SHOCKS.map((s) => {
+          const isActive = activeShock === s.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onPick(s.id)}
+              className={`text-left p-3 rounded border transition ${
+                isActive
+                  ? "border-[#f472b6] bg-[#f472b6]/10"
+                  : "border-[#d4af37]/25 hover:bg-[#d4af37]/10"
+              }`}
+            >
+              <div className="text-xl">{s.icon}</div>
+              <div className="font-semibold text-sm mt-1">{s.name}</div>
+              <div className="text-xs text-[#9aa3c0] mt-1 leading-snug">{s.desc}</div>
+            </button>
+          );
+        })}
+      </div>
+      {active && shockedSliders && shockedRegime && (
+        <div className="border-t border-[#d4af37]/20 pt-4">
+          <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+            <div className="text-sm">
+              <span className="text-[#9aa3c0]">было: </span>
+              <span className="text-[#22d3ee] font-semibold">{currentRegime.name}</span>
+              <span className="text-[#9aa3c0] mx-2">→</span>
+              <span className="text-[#9aa3c0]">стало: </span>
+              <span className="text-[#f472b6] font-semibold">{shockedRegime.name}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
+              >
+                Отменить
+              </button>
+              <button
+                type="button"
+                onClick={onApply}
+                className="text-xs px-3 py-1 rounded bg-[#f472b6] text-[#0b1736] font-semibold hover:bg-[#f472b6]/80"
+              >
+                Применить к ползункам
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            {SLIDER_META.map((m) => {
+              const before = sliders[m.key];
+              const after = shockedSliders[m.key];
+              const diff = after - before;
+              if (diff === 0) return null;
+              const sign = diff > 0 ? "+" : "";
+              return (
+                <div
+                  key={m.key}
+                  className="border border-[#d4af37]/15 rounded px-2 py-1 bg-[#050a1a]/50"
+                >
+                  <div className="text-[#9aa3c0] text-[10px] truncate">{m.label}</div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="font-mono">{before}</span>
+                    <span className="text-[#9aa3c0]">→</span>
+                    <span className="font-mono">{after}</span>
+                    <span
+                      className={`font-mono ${
+                        diff > 0 ? "text-emerald-400" : "text-rose-400"
+                      }`}
+                    >
+                      ({sign}
+                      {diff})
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

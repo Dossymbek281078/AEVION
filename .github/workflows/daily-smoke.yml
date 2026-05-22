@@ -150,6 +150,31 @@ jobs:
           path: /tmp/smoke-bank-prod-${{ github.run_id }}.json
           retention-days: 14
 
+  hub-prod-smoke:
+    name: Hub prod smoke (Railway /api/aevion/*)
+    # Cron + manual dispatch only — no per-commit prod hits.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Run hub prod smoke (incl. /sdks stats regression guard)
+        run: node scripts/hub-full-smoke.js
+        env:
+          BASE: https://aevion-production-a70c.up.railway.app
+
   qbuild-prod-smoke:
     name: QBuild prod smoke (Vercel → Railway)
     # Cron + manual dispatch only — no per-commit prod hits.

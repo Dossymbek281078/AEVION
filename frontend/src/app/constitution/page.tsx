@@ -584,7 +584,7 @@ export default function ConstitutionPage() {
               onClick={startTour}
               className="mt-4 px-4 py-2 rounded bg-gradient-to-r from-[#d4af37] to-[#f5d27a] text-[#0b1736] font-semibold hover:opacity-90"
             >
-              ▶ Тур по эволюции — от Феодализма до Open Access за 8 веков
+              ▶ {t("constitution.tour.heading")}
             </button>
           )}
         </header>
@@ -594,13 +594,13 @@ export default function ConstitutionPage() {
             <div className="flex justify-between items-baseline mb-2 flex-wrap gap-2">
               <div>
                 <div className="text-xs uppercase tracking-wide text-[#9aa3c0]">
-                  Шаг {tourStep + 1} из {TOUR.length} · {TOUR[tourStep].year}
+                  {tourStep + 1} / {TOUR.length} · {t(`constitution.tour.${tourStep}.year`)}
                 </div>
                 <h2 className="text-xl md:text-2xl font-bold text-[#d4af37]">
-                  {TOUR[tourStep].era}
+                  {t(`constitution.tour.${tourStep}.era`)}
                 </h2>
                 <div className="text-sm text-[#f5d27a] italic mt-1">
-                  {TOUR[tourStep].title}
+                  {t(`constitution.tour.${tourStep}.title`)}
                 </div>
               </div>
               <button
@@ -608,11 +608,11 @@ export default function ConstitutionPage() {
                 onClick={exitTour}
                 className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
               >
-                Выйти из тура
+                {t("constitution.button.exitTour")}
               </button>
             </div>
             <p className="text-sm text-[#e7ecf8] leading-relaxed">
-              {TOUR[tourStep].narrative}
+              {t(`constitution.tour.${tourStep}.narrative`)}
             </p>
             <div className="flex justify-between items-center mt-4 gap-2 flex-wrap">
               <button
@@ -621,7 +621,7 @@ export default function ConstitutionPage() {
                 disabled={tourStep === 0}
                 className="px-4 py-2 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
               >
-                ← Назад
+                ← {t("constitution.button.back")}
               </button>
               <div className="flex gap-1">
                 {TOUR.map((_, i) => (
@@ -629,7 +629,7 @@ export default function ConstitutionPage() {
                     key={i}
                     type="button"
                     onClick={() => goToTourStep(i)}
-                    aria-label={`Шаг ${i + 1}`}
+                    aria-label={`Step ${i + 1}`}
                     className={`w-2.5 h-2.5 rounded-full transition ${
                       i === tourStep
                         ? "bg-[#d4af37]"
@@ -646,11 +646,11 @@ export default function ConstitutionPage() {
                   onClick={() => goToTourStep(tourStep + 1)}
                   className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold hover:opacity-90 text-sm"
                 >
-                  Дальше →
+                  {t("constitution.button.next")} →
                 </button>
               ) : (
                 <div className="px-4 py-2 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm font-semibold">
-                  Финал · 8 веков пройдено
+                  {t("constitution.tour.final")}
                 </div>
               )}
             </div>
@@ -735,17 +735,21 @@ export default function ConstitutionPage() {
               <div className="text-xs uppercase tracking-wide text-[#9aa3c0]">
                 {t("constitution.regime.heading")}
               </div>
-              <h3 className="text-2xl font-bold text-[#d4af37] mt-1">{regime.name}</h3>
-              <div className="text-sm text-[#9aa3c0] italic">{regime.era}</div>
-              <p className="mt-3">{regime.summary}</p>
+              <h3 className="text-2xl font-bold text-[#d4af37] mt-1">
+                {t(`constitution.regime.${regime.id}.name`)}
+              </h3>
+              <div className="text-sm text-[#9aa3c0] italic">
+                {t(`constitution.regime.${regime.id}.era`)}
+              </div>
+              <p className="mt-3">{t(`constitution.regime.${regime.id}.summary`)}</p>
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div className="border border-emerald-500/30 rounded p-3 bg-emerald-500/5">
-                  <div className="text-emerald-300 text-xs uppercase mb-1">Плюсы</div>
-                  <div>{regime.pros}</div>
+                  <div className="text-emerald-300 text-xs uppercase mb-1">+</div>
+                  <div>{t(`constitution.regime.${regime.id}.pros`)}</div>
                 </div>
                 <div className="border border-rose-500/30 rounded p-3 bg-rose-500/5">
-                  <div className="text-rose-300 text-xs uppercase mb-1">Минусы</div>
-                  <div>{regime.cons}</div>
+                  <div className="text-rose-300 text-xs uppercase mb-1">−</div>
+                  <div>{t(`constitution.regime.${regime.id}.cons`)}</div>
                 </div>
               </div>
             </div>
@@ -1474,15 +1478,15 @@ function StressTestPanel({
   onClear: () => void;
   onApply: () => void;
 }) {
+  const { t } = useI18n();
   const active = SHOCKS.find((s) => s.id === activeShock) ?? null;
   const shockedSliders = active ? applyShock(sliders, active.delta) : null;
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-        <h3 className="text-lg font-semibold text-[#f5d27a]">Stress test — что выдержит твоя конституция</h3>
-        <div className="text-xs text-[#9aa3c0]">
-          Применяй шок, смотри на скаттере, как тебя сносит и в какой режим скатываешься
-        </div>
+        <h3 className="text-lg font-semibold text-[#f5d27a]">
+          {t("constitution.stress.heading")}
+        </h3>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
         {SHOCKS.map((s) => {
@@ -1499,8 +1503,12 @@ function StressTestPanel({
               }`}
             >
               <div className="text-xl">{s.icon}</div>
-              <div className="font-semibold text-sm mt-1">{s.name}</div>
-              <div className="text-xs text-[#9aa3c0] mt-1 leading-snug">{s.desc}</div>
+              <div className="font-semibold text-sm mt-1">
+                {t(`constitution.shock.${s.id}.name`)}
+              </div>
+              <div className="text-xs text-[#9aa3c0] mt-1 leading-snug">
+                {t(`constitution.shock.${s.id}.desc`)}
+              </div>
             </button>
           );
         })}
@@ -1510,10 +1518,14 @@ function StressTestPanel({
           <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
             <div className="text-sm">
               <span className="text-[#9aa3c0]">было: </span>
-              <span className="text-[#22d3ee] font-semibold">{currentRegime.name}</span>
+              <span className="text-[#22d3ee] font-semibold">
+                {t(`constitution.regime.${currentRegime.id}.name`)}
+              </span>
               <span className="text-[#9aa3c0] mx-2">→</span>
               <span className="text-[#9aa3c0]">стало: </span>
-              <span className="text-[#f472b6] font-semibold">{shockedRegime.name}</span>
+              <span className="text-[#f472b6] font-semibold">
+                {t(`constitution.regime.${shockedRegime.id}.name`)}
+              </span>
             </div>
             <div className="flex gap-2">
               <button

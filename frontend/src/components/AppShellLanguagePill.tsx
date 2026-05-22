@@ -5,6 +5,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 export function AppShellLanguagePill() {
   return (
     <div
+      data-app-shell-pill="true"
       style={{
         position: "fixed",
         top: 12,

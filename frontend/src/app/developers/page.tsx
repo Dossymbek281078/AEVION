@@ -125,18 +125,32 @@ const APIS = [
   },
 ];
 
+// Mirrors the live registry at /api/aevion/sdks. Update on every npm publish.
+// Full live grid with download stats + last-published dates lives at /sdks.
 const SDKS = [
   {
-    name: "@aevion/qsign",
+    name: "@aevion-io/fintech-sdk",
     lang: "TypeScript",
-    desc: "Sign, verify, batch, file signing, webhook receiver. Idempotency-key support, retry-aware.",
-    install: "npm install @aevion/qsign",
+    desc: "Typed wrappers for all 6 fintech modules (QPayNet, VeilNetX, QMaskCard, QGood, Z-Tide, QChainGov) + HMAC webhook signing utilities.",
+    install: "npm install @aevion-io/fintech-sdk",
   },
   {
-    name: "@aevion/webhook-receiver",
+    name: "@aevion-io/catalog-client",
     lang: "TypeScript",
-    desc: "HMAC-verified webhook handler with Express/Next/Hono adapters. Replay-safe with idempotency cache.",
-    install: "npm install @aevion/webhook-receiver",
+    desc: "AEVION module catalog API + 9 namespaced sub-clients (QStore, QLearn, QEvents, DevHub, Planet, QCoreAI, Multichat, QMedia, Coach).",
+    install: "npm install @aevion-io/catalog-client",
+  },
+  {
+    name: "@dosymbek/qpaynet-client",
+    lang: "TypeScript",
+    desc: "QPayNet embedded payment infrastructure — HMAC webhooks, idempotent transfers, merchant keys, shareable payment links.",
+    install: "npm install @dosymbek/qpaynet-client",
+  },
+  {
+    name: "@dosymbek/qcoreai-client",
+    lang: "TypeScript",
+    desc: "QCoreAI multi-agent pipeline — sync/streaming chat, agents, prompts, threading, batch runs, export hub.",
+    install: "npm install @dosymbek/qcoreai-client",
   },
 ];
 

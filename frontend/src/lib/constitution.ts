@@ -328,24 +328,32 @@ export const PRESETS: Preset[] = [
   { name: "Кочевая Степь",       sliders: { floor: 40, ruleOfLaw: 45, rotation: 60, transparency: 70, multiStatus: 65, skinInGame: 90, polycentricity: 85, positiveSum: 35 } },
 ];
 
-export type Country = { code: string; flag: string; name: string; sliders: Sliders };
+export type Country = {
+  code: string;
+  /** Russian display name (matches existing UI text). */
+  name: string;
+  /** English topojson-style name used by Globus3D country shapes. */
+  en: string;
+  flag: string;
+  sliders: Sliders;
+};
 
 export const COUNTRIES: Country[] = [
-  { code: "us", flag: "🇺🇸", name: "США",          sliders: { floor: 35, ruleOfLaw: 65, rotation: 25, transparency: 60, multiStatus: 60, skinInGame: 35, polycentricity: 65, positiveSum: 75 } },
-  { code: "de", flag: "🇩🇪", name: "Германия",     sliders: { floor: 75, ruleOfLaw: 85, rotation: 40, transparency: 75, multiStatus: 60, skinInGame: 50, polycentricity: 65, positiveSum: 65 } },
-  { code: "no", flag: "🇳🇴", name: "Норвегия",     sliders: { floor: 90, ruleOfLaw: 90, rotation: 50, transparency: 90, multiStatus: 60, skinInGame: 55, polycentricity: 30, positiveSum: 70 } },
-  { code: "jp", flag: "🇯🇵", name: "Япония",       sliders: { floor: 70, ruleOfLaw: 80, rotation: 25, transparency: 65, multiStatus: 65, skinInGame: 50, polycentricity: 30, positiveSum: 60 } },
-  { code: "sg", flag: "🇸🇬", name: "Сингапур",     sliders: { floor: 65, ruleOfLaw: 80, rotation: 15, transparency: 65, multiStatus: 40, skinInGame: 55, polycentricity: 10, positiveSum: 85 } },
-  { code: "ae", flag: "🇦🇪", name: "ОАЭ",          sliders: { floor: 55, ruleOfLaw: 50, rotation: 5,  transparency: 25, multiStatus: 30, skinInGame: 40, polycentricity: 15, positiveSum: 80 } },
-  { code: "sa", flag: "🇸🇦", name: "Сауд. Аравия", sliders: { floor: 60, ruleOfLaw: 30, rotation: 5,  transparency: 15, multiStatus: 20, skinInGame: 25, polycentricity: 10, positiveSum: 55 } },
-  { code: "ru", flag: "🇷🇺", name: "Россия",       sliders: { floor: 35, ruleOfLaw: 25, rotation: 10, transparency: 20, multiStatus: 30, skinInGame: 30, polycentricity: 25, positiveSum: 50 } },
-  { code: "cn", flag: "🇨🇳", name: "Китай",        sliders: { floor: 50, ruleOfLaw: 35, rotation: 10, transparency: 20, multiStatus: 35, skinInGame: 35, polycentricity: 30, positiveSum: 80 } },
-  { code: "ir", flag: "🇮🇷", name: "Иран",         sliders: { floor: 30, ruleOfLaw: 25, rotation: 15, transparency: 15, multiStatus: 30, skinInGame: 30, polycentricity: 25, positiveSum: 35 } },
-  { code: "kp", flag: "🇰🇵", name: "КНДР",         sliders: { floor: 15, ruleOfLaw: 5,  rotation: 0,  transparency: 5,  multiStatus: 10, skinInGame: 15, polycentricity: 5,  positiveSum: 20 } },
-  { code: "ve", flag: "🇻🇪", name: "Венесуэла",    sliders: { floor: 25, ruleOfLaw: 15, rotation: 10, transparency: 15, multiStatus: 25, skinInGame: 25, polycentricity: 25, positiveSum: 25 } },
-  { code: "in", flag: "🇮🇳", name: "Индия",        sliders: { floor: 35, ruleOfLaw: 55, rotation: 30, transparency: 50, multiStatus: 55, skinInGame: 40, polycentricity: 70, positiveSum: 65 } },
-  { code: "br", flag: "🇧🇷", name: "Бразилия",     sliders: { floor: 40, ruleOfLaw: 45, rotation: 25, transparency: 50, multiStatus: 50, skinInGame: 35, polycentricity: 60, positiveSum: 50 } },
-  { code: "kz", flag: "🇰🇿", name: "Казахстан",    sliders: { floor: 50, ruleOfLaw: 40, rotation: 10, transparency: 30, multiStatus: 30, skinInGame: 35, polycentricity: 25, positiveSum: 60 } },
+  { code: "us", en: "United States",        flag: "🇺🇸", name: "США",          sliders: { floor: 35, ruleOfLaw: 65, rotation: 25, transparency: 60, multiStatus: 60, skinInGame: 35, polycentricity: 65, positiveSum: 75 } },
+  { code: "de", en: "Germany",              flag: "🇩🇪", name: "Германия",     sliders: { floor: 75, ruleOfLaw: 85, rotation: 40, transparency: 75, multiStatus: 60, skinInGame: 50, polycentricity: 65, positiveSum: 65 } },
+  { code: "no", en: "Norway",               flag: "🇳🇴", name: "Норвегия",     sliders: { floor: 90, ruleOfLaw: 90, rotation: 50, transparency: 90, multiStatus: 60, skinInGame: 55, polycentricity: 30, positiveSum: 70 } },
+  { code: "jp", en: "Japan",                flag: "🇯🇵", name: "Япония",       sliders: { floor: 70, ruleOfLaw: 80, rotation: 25, transparency: 65, multiStatus: 65, skinInGame: 50, polycentricity: 30, positiveSum: 60 } },
+  { code: "sg", en: "Singapore",            flag: "🇸🇬", name: "Сингапур",     sliders: { floor: 65, ruleOfLaw: 80, rotation: 15, transparency: 65, multiStatus: 40, skinInGame: 55, polycentricity: 10, positiveSum: 85 } },
+  { code: "ae", en: "United Arab Emirates", flag: "🇦🇪", name: "ОАЭ",          sliders: { floor: 55, ruleOfLaw: 50, rotation: 5,  transparency: 25, multiStatus: 30, skinInGame: 40, polycentricity: 15, positiveSum: 80 } },
+  { code: "sa", en: "Saudi Arabia",         flag: "🇸🇦", name: "Сауд. Аравия", sliders: { floor: 60, ruleOfLaw: 30, rotation: 5,  transparency: 15, multiStatus: 20, skinInGame: 25, polycentricity: 10, positiveSum: 55 } },
+  { code: "ru", en: "Russia",               flag: "🇷🇺", name: "Россия",       sliders: { floor: 35, ruleOfLaw: 25, rotation: 10, transparency: 20, multiStatus: 30, skinInGame: 30, polycentricity: 25, positiveSum: 50 } },
+  { code: "cn", en: "China",                flag: "🇨🇳", name: "Китай",        sliders: { floor: 50, ruleOfLaw: 35, rotation: 10, transparency: 20, multiStatus: 35, skinInGame: 35, polycentricity: 30, positiveSum: 80 } },
+  { code: "ir", en: "Iran",                 flag: "🇮🇷", name: "Иран",         sliders: { floor: 30, ruleOfLaw: 25, rotation: 15, transparency: 15, multiStatus: 30, skinInGame: 30, polycentricity: 25, positiveSum: 35 } },
+  { code: "kp", en: "North Korea",          flag: "🇰🇵", name: "КНДР",         sliders: { floor: 15, ruleOfLaw: 5,  rotation: 0,  transparency: 5,  multiStatus: 10, skinInGame: 15, polycentricity: 5,  positiveSum: 20 } },
+  { code: "ve", en: "Venezuela",            flag: "🇻🇪", name: "Венесуэла",    sliders: { floor: 25, ruleOfLaw: 15, rotation: 10, transparency: 15, multiStatus: 25, skinInGame: 25, polycentricity: 25, positiveSum: 25 } },
+  { code: "in", en: "India",                flag: "🇮🇳", name: "Индия",        sliders: { floor: 35, ruleOfLaw: 55, rotation: 30, transparency: 50, multiStatus: 55, skinInGame: 40, polycentricity: 70, positiveSum: 65 } },
+  { code: "br", en: "Brazil",               flag: "🇧🇷", name: "Бразилия",     sliders: { floor: 40, ruleOfLaw: 45, rotation: 25, transparency: 50, multiStatus: 50, skinInGame: 35, polycentricity: 60, positiveSum: 50 } },
+  { code: "kz", en: "Kazakhstan",           flag: "🇰🇿", name: "Казахстан",    sliders: { floor: 50, ruleOfLaw: 40, rotation: 10, transparency: 30, multiStatus: 30, skinInGame: 35, polycentricity: 25, positiveSum: 60 } },
 ];
 
 export function countryByCode(code: string): Country | undefined {
@@ -356,4 +364,22 @@ export function countryByCode(code: string): Country | undefined {
 export function countryByName(name: string): Country | undefined {
   const lc = name.toLowerCase();
   return COUNTRIES.find((c) => c.name.toLowerCase() === lc);
+}
+
+/** Resolve a topojson-style English country name (e.g. "United States", "Russia"). */
+const GLOBUS_NAME_ALIASES: Record<string, string> = {
+  "USA": "United States",
+  "U.S.A.": "United States",
+  "Russian Federation": "Russia",
+  "S. Korea": "South Korea",
+  "Korea, North": "North Korea",
+  "Korea, South": "South Korea",
+  "Dem. Rep. Korea": "North Korea",
+  "UAE": "United Arab Emirates",
+};
+
+export function countryByGlobusName(name: string): Country | undefined {
+  if (!name) return undefined;
+  const aliased = GLOBUS_NAME_ALIASES[name] ?? name;
+  return COUNTRIES.find((c) => c.en === aliased);
 }

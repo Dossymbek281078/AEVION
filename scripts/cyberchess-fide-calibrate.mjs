@@ -461,15 +461,18 @@ function main() {
   }
 
   console.log("[4/5] Running least-squares fit via normal equations…");
-  // Design matrix: [accuracyPct - 60, opening, tactical, endgame, blunder, |time-30|, 1]
-  // Last column is bias; first 6 are the same features used by `estimateFideFromCPI`.
-  // We center accuracy at baseline 60 (per existing formula) and time at optimal 30.
+  // Design matrix: [accuracyPct - 60, opening, endgame, blunder, |time-30|, 1]
+  // Tactical removed — coefficient collapsed to ≈0 in the last three fits
+  // (4.0 in clipped-weighted, -373 in unweighted with no signal on Elo,
+  // -325 elsewhere) so the column was adding noise without information.
+  // The frontend `estimateFideFromCPIWithFit` ignores missing coefs via
+  // its weights validation, but we still pad with a zero for the missing
+  // tactical slot to keep the wire shape stable.
   const X = rows.map(r => {
-    const [acc, open, tac, end, blu, tim] = r.features;
+    const [acc, open, , end, blu, tim] = r.features;
     return [
       acc - 60,                // accuracy delta vs baseline
       Math.min(10, open),      // opening clamped same as frontend
-      tac,
       end,
       blu,
       -Math.abs(tim - 30),     // time penalty (always ≤ 0)
@@ -507,12 +510,13 @@ function main() {
   }
 
   const coeffs = leastSquaresFit(Xfit, yfit);
-  const [wAcc, wOpen, wTac, wEnd, wBlu, wTime, bias] = coeffs;
+  const [wAcc, wOpen, wEnd, wBlu, wTime, bias] = coeffs;
+  const wTac = 0;  // dropped from design matrix, kept zero in output JSON
 
   console.log("      Fit complete. Coefficients:");
   console.log(`        accuracy:  ${wAcc.toFixed(3)}   (was 35.000)`);
   console.log(`        opening:   ${wOpen.toFixed(3)}   (was 30.000)`);
-  console.log(`        tactical:  ${wTac.toFixed(3)}   (was 250.000)`);
+  console.log(`        tactical:  0.000           (dropped — was noise)`);
   console.log(`        endgame:   ${wEnd.toFixed(3)}   (was 200.000)`);
   console.log(`        blunder:   ${wBlu.toFixed(3)}   (was -500.000)`);
   console.log(`        time:      ${wTime.toFixed(3)}   (was -2.000)`);

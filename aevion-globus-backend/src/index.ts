@@ -48,6 +48,7 @@ import { constitutionAiRouter } from "./routes/constitutionAi";
 import { constitutionPublicRouter } from "./routes/constitutionPublic";
 import { constitutionPdfRouter } from "./routes/constitutionPdf";
 import { constitutionProRouter } from "./routes/constitutionPro";
+import { constitutionAdminRouter, constitutionTelemetry, constitutionBanGate } from "./routes/constitutionAdmin";
 import { planetConstitutionSocialRouter } from "./routes/planetConstitutionSocial";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
@@ -770,6 +771,10 @@ app.use("/api/auth/oauth", authOauthRouter);
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
 app.use("/api/planet", planetPayoutsRouter);
+// Telemetry + ban-gate cover the entire constitution surface
+app.use(["/api/constitution", "/api/planet/constitution-artifacts"], constitutionTelemetry);
+app.use(["/api/constitution", "/api/planet/constitution-artifacts"], constitutionBanGate);
+app.use("/api/admin/constitution", constitutionAdminRouter);
 app.use("/api/planet/constitution-artifacts", planetConstitutionRouter);
 app.use("/api/constitution", constitutionAiRouter);
 app.use("/api/constitution", constitutionPdfRouter);

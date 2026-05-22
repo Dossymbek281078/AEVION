@@ -269,6 +269,9 @@ export default function ConstitutionPage() {
 
   const [signing, setSigning] = useState<boolean>(false);
   const [signError, setSignError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<boolean>(false);
+  const [publishedId, setPublishedId] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [compareAId, setCompareAId] = useState<string | null>(null);
   const [compareBId, setCompareBId] = useState<string | null>(null);
 
@@ -499,6 +502,68 @@ export default function ConstitutionPage() {
       setSignError(err instanceof Error ? err.message : "sign_failed");
     } finally {
       setSigning(false);
+    }
+  }, [title, sliders, regime, metrics]);
+
+  const publishToPlanet = useCallback(async () => {
+    setPublishing(true);
+    setPublishError(null);
+    setPublishedId(null);
+    try {
+      const cleanTitle = title.trim() || "untitled-constitution";
+      const payload = {
+        module: "aevion.constitution",
+        version: 1,
+        title: cleanTitle,
+        regime: { id: regime.id, name: regime.name, era: regime.era },
+        sliders: Object.fromEntries(
+          (Object.keys(sliders) as Array<keyof Sliders>)
+            .sort()
+            .map((k) => [k, sliders[k]]),
+        ),
+        metrics: Object.fromEntries(
+          (Object.keys(metrics) as Array<keyof Metrics>)
+            .sort()
+            .map((k) => [k, metrics[k]]),
+        ),
+        issuedAt: new Date().toISOString(),
+      };
+      const signRes = await fetch("/api-backend/api/qsign/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!signRes.ok) {
+        throw new Error(`QSign HTTP ${signRes.status}`);
+      }
+      const signed = (await signRes.json()) as {
+        payload: unknown;
+        signature: string;
+        algo: string;
+        createdAt: string;
+      };
+      const envelope = {
+        spec: "aevion.constitution/v1+qsign",
+        algo: signed.algo,
+        signedAt: signed.createdAt,
+        signature: signed.signature,
+        payload: signed.payload,
+      };
+      const pubRes = await fetch("/api-backend/api/planet/constitution-artifacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ envelope }),
+      });
+      if (!pubRes.ok) {
+        const text = await pubRes.text().catch(() => "");
+        throw new Error(`Planet HTTP ${pubRes.status}: ${text.slice(0, 120)}`);
+      }
+      const j = (await pubRes.json()) as { artifact?: { id?: string } };
+      if (j.artifact?.id) setPublishedId(j.artifact.id);
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "publish_failed");
+    } finally {
+      setPublishing(false);
     }
   }, [title, sliders, regime, metrics]);
 
@@ -734,10 +799,31 @@ export default function ConstitutionPage() {
                 >
                   {signing ? "..." : "QSign + скачать"}
                 </button>
+                <button
+                  type="button"
+                  onClick={publishToPlanet}
+                  disabled={publishing}
+                  title="QSign sign → POST в Planet artifacts (in-memory stub)"
+                  className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10 disabled:opacity-40"
+                >
+                  {publishing ? "..." : "🌍 Опубликовать на Planet"}
+                </button>
               </div>
               {signError && (
                 <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
                   Ошибка подписи: {signError}
+                </div>
+              )}
+              {publishError && (
+                <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
+                  Planet publish failed: {publishError}
+                </div>
+              )}
+              {publishedId && (
+                <div className="mt-2 text-xs text-emerald-300 border border-emerald-500/40 rounded px-2 py-1 bg-emerald-500/5">
+                  ✓ Опубликовано как Planet-артефакт{" "}
+                  <code className="font-mono">{publishedId.slice(0, 8)}</code>{" "}
+                  <span className="text-[#9aa3c0]">(in-memory stub — переживёт сервер до рестарта)</span>
                 </div>
               )}
               {saved.length > 0 && (

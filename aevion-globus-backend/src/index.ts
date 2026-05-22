@@ -43,6 +43,7 @@ import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
+import { planetConstitutionRouter } from "./routes/planetConstitution";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
@@ -764,6 +765,7 @@ app.use("/api/auth/oauth", authOauthRouter);
 // ==========================
 app.use("/api/planet", planetComplianceRouter);
 app.use("/api/planet", planetPayoutsRouter);
+app.use("/api/planet/constitution-artifacts", planetConstitutionRouter);
 app.use("/api/awards", awardsRouter);
 
 // ==========================

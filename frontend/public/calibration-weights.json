@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-22T04:46:57.480Z",
+  "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\twic-features.csv",
+  "samples": 400,
+  "coefficients": {
+    "accuracy": 7.0143,
+    "opening": 2.0477,
+    "tactical": -272.8623,
+    "endgame": 126.5071,
+    "blunder": 275.9983,
+    "time": 0
+  },
+  "bias": 2121.8076,
+  "fitStats": {
+    "rmseElo": 198.1,
+    "r2": 0.08,
+    "meanTargetElo": 2322.4
+  },
+  "notes": [
+    "Proxy-derived features (no engine eval). Production-grade fit requires per-move Stockfish analysis.",
+    "Accuracy / blunder are coarsely derived from game result (win/draw/loss).",
+    "Bias replaces BASE_ELO (1200) in estimateFideFromCPI.",
+    "Apply weights via ratingCalibrationFit.ts → estimateFideFromCPIWithFit()."
+  ]
+}

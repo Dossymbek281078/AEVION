@@ -13,7 +13,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import {
   loadSscIndex,
   loadSscBook,
@@ -32,8 +32,16 @@ type RegionPrice = {
   row: SscRow;
 };
 
-export default function SscComparePage({ params }: { params: { code: string } }) {
-  const code = decodeURIComponent(params.code);
+export default function SscComparePage({
+  params,
+}: {
+  params: Promise<{ code: string }> | { code: string };
+}) {
+  const { code: rawCode } =
+    typeof (params as Promise<{ code: string }>).then === "function"
+      ? use(params as Promise<{ code: string }>)
+      : (params as { code: string });
+  const code = decodeURIComponent(rawCode);
   const [index, setIndex] = useState<SscBookMeta[] | null>(null);
   const [running, setRunning] = useState(true);
   const [progress, setProgress] = useState({ done: 0, total: 0 });

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { LEVELS } from "../../lib/levels";
 
 interface Props {
-  params: { num: string };
+  params: Promise<{ num: string }>;
 }
 
 const LEVEL_META: Record<string, { role: string; title: string }> = {
@@ -19,8 +19,8 @@ const LEVEL_META: Record<string, { role: string; title: string }> = {
   "5": { role: "Эксперт",        title: "Нахожу ошибки" },
 };
 
-export default function LevelPage({ params }: Props) {
-  const num = params.num;
+export default async function LevelPage({ params }: Props) {
+  const { num } = await params;
   const meta = LEVEL_META[num];
 
   const numInt = parseInt(num);

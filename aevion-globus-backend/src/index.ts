@@ -18,6 +18,7 @@ import { statusRouter } from "./routes/status";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { attachQCoreWebSocket } from "./services/qcoreai/wsServer";
+import { attachConstitutionCollab } from "./services/constitution/collab";
 import { quantumShieldRouter } from "./routes/quantum-shield";
 import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
@@ -916,6 +917,7 @@ const httpServer = app.listen(PORT, () => {
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)
 // but lets clients interject mid-run guidance on the same connection.
 attachQCoreWebSocket(httpServer, "/api/qcoreai/ws");
+attachConstitutionCollab(httpServer, "/api/constitution/collab");
 
 // QCoreAI scheduler — polls for due scheduled batches every minute.
 startScheduler();

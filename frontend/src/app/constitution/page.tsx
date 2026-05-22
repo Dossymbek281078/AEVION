@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { countryByCode } from "@/lib/constitution";
@@ -281,6 +281,96 @@ export default function ConstitutionPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [plan, setPlan] = useState<"free" | "pro" | null>(null);
   const [planLimits, setPlanLimits] = useState<{ savedScenarios: number; aiSuggestPerDay: number } | null>(null);
+  const [collabPeers, setCollabPeers] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [collabSelf, setCollabSelf] = useState<{ id: string; name: string; color: string } | null>(null);
+  const [remoteHighlights, setRemoteHighlights] = useState<Record<string, { color: string; name: string; ts: number }>>({});
+  const collabWsRef = useRef<WebSocket | null>(null);
+
+  // Establish collab WebSocket when ?artifact=X is in URL.
+  useEffect(() => {
+    if (!openedArtifactId) return;
+    const name = (() => {
+      try {
+        const stored = window.localStorage.getItem("constitution.username");
+        if (stored) return stored;
+      } catch { /* ignore */ }
+      const fresh = `user-${Math.random().toString(36).slice(2, 6)}`;
+      try { window.localStorage.setItem("constitution.username", fresh); } catch {}
+      return fresh;
+    })();
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${window.location.host}/api-backend/api/constitution/collab?artifact=${encodeURIComponent(openedArtifactId)}&name=${encodeURIComponent(name)}`;
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      return;
+    }
+    collabWsRef.current = ws;
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String(ev.data)) as Record<string, unknown>;
+        const t = msg.type;
+        if (t === "presence-self" && msg.self) {
+          setCollabSelf(msg.self as { id: string; name: string; color: string });
+        } else if (t === "presence" && Array.isArray(msg.peers)) {
+          setCollabPeers(msg.peers as Array<{ id: string; name: string; color: string }>);
+        } else if (t === "slider" && typeof msg.key === "string") {
+          const key = msg.key as keyof Sliders;
+          const value = Number(msg.value);
+          if (Number.isFinite(value)) {
+            setSliders((s) => ({ ...s, [key]: Math.max(0, Math.min(100, value)) }));
+            setRemoteHighlights((prev) => ({
+              ...prev,
+              [key]: {
+                color: String(msg.color ?? "#22d3ee"),
+                name: String(msg.name ?? "peer"),
+                ts: Date.now(),
+              },
+            }));
+          }
+        } else if (t === "cursor" && msg.key) {
+          const key = String(msg.key) as keyof Sliders;
+          setRemoteHighlights((prev) => ({
+            ...prev,
+            [key]: {
+              color: String(msg.color ?? "#22d3ee"),
+              name: String(msg.name ?? "peer"),
+              ts: Date.now(),
+            },
+          }));
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    ws.onclose = () => {
+      collabWsRef.current = null;
+    };
+    return () => {
+      try { ws?.close(); } catch { /* ignore */ }
+      collabWsRef.current = null;
+      setCollabPeers([]);
+      setCollabSelf(null);
+    };
+  }, [openedArtifactId]);
+
+  // Decay remote highlights after 1.5s
+  useEffect(() => {
+    const t = setInterval(() => {
+      setRemoteHighlights((prev) => {
+        const now = Date.now();
+        const next: typeof prev = {};
+        let changed = false;
+        for (const [k, v] of Object.entries(prev)) {
+          if (now - v.ts < 1500) next[k] = v;
+          else changed = true;
+        }
+        return changed ? next : prev;
+      });
+    }, 500);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -465,7 +555,13 @@ export default function ConstitutionPage() {
   const regime = useMemo(() => classify(sliders), [sliders]);
 
   const setSlider = useCallback(
-    (k: keyof Sliders, v: number) => setSliders((s) => ({ ...s, [k]: v })),
+    (k: keyof Sliders, v: number) => {
+      setSliders((s) => ({ ...s, [k]: v }));
+      const ws = collabWsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try { ws.send(JSON.stringify({ type: "slider", key: k, value: v })); } catch { /* ignore */ }
+      }
+    },
     [],
   );
 
@@ -679,6 +775,25 @@ export default function ConstitutionPage() {
             {t("constitution.title")}
           </h1>
           <p className="text-[#9aa3c0] mt-2 max-w-3xl">{t("constitution.subtitle")}</p>
+          {openedArtifactId && collabPeers.length > 1 && (
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-400/40 text-xs">
+              <span className="text-cyan-300 font-semibold">
+                👀 {collabPeers.length} viewing live
+              </span>
+              <div className="flex -space-x-1">
+                {collabPeers.slice(0, 6).map((p) => (
+                  <span
+                    key={p.id}
+                    title={p.name + (collabSelf?.id === p.id ? " (you)" : "")}
+                    style={{ background: p.color }}
+                    className="w-5 h-5 rounded-full border-2 border-[#0b1736] text-[10px] text-[#0b1736] font-bold flex items-center justify-center"
+                  >
+                    {p.name.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
           {!tourActive && (
             <div className="mt-4 flex flex-wrap gap-2">
               <button
@@ -826,14 +941,18 @@ export default function ConstitutionPage() {
               {localizedSliderMeta.map((m) => {
                 const val = sliders[m.key];
                 const highlighted = tourHighlight.has(m.key);
+                const remote = remoteHighlights[m.key];
                 return (
                   <div
                     key={m.key}
                     className={
                       highlighted
                         ? "rounded-md px-2 py-1 -mx-2 ring-2 ring-emerald-400/60 bg-emerald-500/5 transition"
-                        : ""
+                        : remote
+                          ? "rounded-md px-2 py-1 -mx-2 ring-2 transition"
+                          : ""
                     }
+                    style={remote && !highlighted ? { boxShadow: `0 0 0 2px ${remote.color}55` } : undefined}
                   >
                     <div className="flex justify-between items-baseline">
                       <label htmlFor={`s-${m.key}`} className="font-medium">

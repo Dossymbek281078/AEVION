@@ -285,6 +285,29 @@ export default function ConstitutionPage() {
         if (a) setCompareAId(a);
         if (b) setCompareBId(b);
       }
+      // Deep-link from leaderboard: ?artifact=<id>
+      const artifactId = sp.get("artifact");
+      if (artifactId) {
+        void (async () => {
+          try {
+            const r = await fetch(
+              `/api-backend/api/planet/constitution-artifacts/${encodeURIComponent(artifactId)}`,
+            );
+            if (!r.ok) return;
+            const j = (await r.json()) as {
+              payload?: { sliders?: Sliders; title?: string };
+            };
+            if (j.payload?.sliders) {
+              setSliders({ ...DEFAULT_SLIDERS, ...j.payload.sliders });
+            }
+            if (j.payload?.title) {
+              setTitle(j.payload.title);
+            }
+          } catch {
+            /* ignore — page still works without prefilled sliders */
+          }
+        })();
+      }
     } catch {
       /* ignore */
     }
@@ -579,13 +602,21 @@ export default function ConstitutionPage() {
           </h1>
           <p className="text-[#9aa3c0] mt-2 max-w-3xl">{t("constitution.subtitle")}</p>
           {!tourActive && (
-            <button
-              type="button"
-              onClick={startTour}
-              className="mt-4 px-4 py-2 rounded bg-gradient-to-r from-[#d4af37] to-[#f5d27a] text-[#0b1736] font-semibold hover:opacity-90"
-            >
-              ▶ {t("constitution.tour.heading")}
-            </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={startTour}
+                className="px-4 py-2 rounded bg-gradient-to-r from-[#d4af37] to-[#f5d27a] text-[#0b1736] font-semibold hover:opacity-90"
+              >
+                ▶ {t("constitution.tour.heading")}
+              </button>
+              <Link
+                href="/constitution/leaderboard"
+                className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10"
+              >
+                🌍 Planet Leaderboard →
+              </Link>
+            </div>
           )}
         </header>
 

@@ -277,6 +277,8 @@ export default function ConstitutionPage() {
   const [aiOpen, setAiOpen] = useState<boolean>(false);
   const [aiExplanation, setAiExplanation] = useState<string | null>(null);
   const [openedArtifactId, setOpenedArtifactId] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState<boolean>(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [compareAId, setCompareAId] = useState<string | null>(null);
   const [compareBId, setCompareBId] = useState<string | null>(null);
 
@@ -542,6 +544,42 @@ export default function ConstitutionPage() {
       setSigning(false);
     }
   }, [title, sliders, regime, metrics]);
+
+  const downloadPdf = useCallback(async () => {
+    setPdfBusy(true);
+    setPdfError(null);
+    try {
+      const cleanTitle = title.trim() || "untitled-constitution";
+      const r = await fetch("/api-backend/api/constitution/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cleanTitle,
+          sliders,
+          regime: { id: regime.id, name: regime.name, era: regime.era },
+          artifactId: openedArtifactId ?? undefined,
+        }),
+      });
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        throw new Error(`PDF HTTP ${r.status}: ${text.slice(0, 120)}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const slug = cleanTitle.toLowerCase().replace(/[^a-z0-9а-яё-]+/giu, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "constitution";
+      a.download = `constitution-${slug}-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : "pdf_failed");
+    } finally {
+      setPdfBusy(false);
+    }
+  }, [title, sliders, regime, openedArtifactId]);
 
   const publishToPlanet = useCallback(async () => {
     setPublishing(true);
@@ -888,12 +926,26 @@ export default function ConstitutionPage() {
                   type="button"
                   onClick={publishToPlanet}
                   disabled={publishing}
-                  title="QSign sign → POST в Planet artifacts (in-memory stub)"
+                  title="QSign sign → POST в Planet artifacts"
                   className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10 disabled:opacity-40"
                 >
                   {publishing ? "..." : "🌍 Опубликовать на Planet"}
                 </button>
+                <button
+                  type="button"
+                  onClick={downloadPdf}
+                  disabled={pdfBusy}
+                  title="Брендированный PDF с радаром, метриками и QR-кодом проверки подписи"
+                  className="px-4 py-2 rounded border border-orange-400/60 text-orange-300 font-semibold hover:bg-orange-500/10 disabled:opacity-40"
+                >
+                  {pdfBusy ? "..." : "📄 Скачать PDF"}
+                </button>
               </div>
+              {pdfError && (
+                <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
+                  PDF: {pdfError}
+                </div>
+              )}
               {signError && (
                 <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
                   Ошибка подписи: {signError}

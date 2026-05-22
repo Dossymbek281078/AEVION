@@ -356,6 +356,82 @@ export default function AcquirePage() {
         </div>
       </section>
 
+      {/* PRESS KIT + NDA */}
+      <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#94a3b8", textTransform: "uppercase", marginBottom: 16 }}>
+            Next step · Press kit + NDA
+          </div>
+          <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 900, lineHeight: 1.1, marginBottom: 32, letterSpacing: "-0.02em" }}>
+            Заберите пакет и подпишите NDA.
+          </h2>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+            <div style={{ padding: 28, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#10b981", textTransform: "uppercase", marginBottom: 14 }}>
+                Press kit · 7 markdown files
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 12, lineHeight: 1.3 }}>
+                Полный пакет промо одним архивом
+              </h3>
+              <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, marginBottom: 18 }}>
+                PROMPT (мета-промт) · MASTER PITCH (60s / 3m / 12m) · MODULES (по всем 30+) ·
+                DEAL TERMS · VIDEO STORYBOARD · DEMO FLOW · FINANCIAL APPENDIX · FAQ.
+                Один zip, ~42KB, читается в Cursor/Obsidian/Notepad.
+              </p>
+              <a href="/promo/aevion-acquire-pack.zip" download style={btnPrimary}>
+                Download · aevion-acquire-pack.zip
+              </a>
+            </div>
+
+            <div style={{ padding: 28, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(59,130,246,0.25)", borderRadius: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: "#3b82f6", textTransform: "uppercase", marginBottom: 14 }}>
+                NDA · template + data room access
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 12, lineHeight: 1.3 }}>
+                Запросить NDA + дата-комнату
+              </h3>
+              <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, marginBottom: 18 }}>
+                После подписания NDA — доступ к cap-table, revenue cohorts, legal opinion по
+                AEV-классификации, internal pricing моделям, pilot-customer references.
+                Стандартный шаблон NDA на стороне AEVION; готовы принять template покупателя
+                с встречной редакцией ≤3 правок.
+              </p>
+              <a
+                href={
+                  "mailto:yahiin1978@gmail.com" +
+                  "?subject=" + encodeURIComponent("AEVION acquisition - NDA + data room request") +
+                  "&body=" + encodeURIComponent(
+                    "Здравствуйте,\n\n" +
+                    "Мы заинтересованы в продолжении обсуждения по acquisition AEVION.\n\n" +
+                    "Компания: \n" +
+                    "Контактное лицо: \n" +
+                    "Должность: \n" +
+                    "Юрисдикция: \n" +
+                    "Предпочитаемый шаблон NDA (AEVION-side / собственный): \n" +
+                    "Желаемый timeline DD → SPA: \n\n" +
+                    "Запрос: подписание NDA и доступ к дата-комнате (cap table, revenue cohorts, legal opinion по AEV, pricing-модели, pilot references).\n\n" +
+                    "--"
+                  )
+                }
+                style={{
+                  ...btnPrimary,
+                  background: "linear-gradient(135deg, #3b82f6, #a855f7)",
+                  boxShadow: "0 8px 24px rgba(59,130,246,0.25)",
+                }}
+              >
+                Запросить NDA → yahiin1978@gmail.com
+              </a>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 28, padding: 20, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
+            <strong style={{ color: "#cbd5e1" }}>FAQ для тяжёлых вопросов</strong> —
+            10 ответов по AEV legal status, sanctions, key-person risk, IP carve-outs, defensibility vs Stripe/Microsoft, AI-content moderation, worst-case scenarios — в архиве <code style={{ color: "#10b981", fontFamily: "ui-monospace, monospace" }}>06_FAQ.md</code>.
+          </div>
+        </div>
+      </section>
+
       {/* FOOTER */}
       <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>

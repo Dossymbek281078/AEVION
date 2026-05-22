@@ -802,6 +802,32 @@ interface SdkStats {
 const SDK_STATS_CACHE = new Map<string, { stats: SdkStats; expiresAt: number }>();
 const SDK_STATS_TTL_MS = 3600 * 1000; // 1h
 
+// Track lastPublished we've already observed for each SDK. When a refresh
+// returns a newer timestamp (or first-ever seen), fire-and-forget the
+// /api/revalidate-sdks webhook so Vercel ISR pages update immediately
+// instead of waiting up to an hour. No-op if REVALIDATE_TOKEN is not set.
+const KNOWN_LAST_PUBLISHED = new Map<string, string>();
+
+function maybeRevalidate(observed: Array<{ name: string; lastPublished: string | null }>): void {
+  const token = process.env.REVALIDATE_TOKEN;
+  if (!token) return;
+  let changed = false;
+  for (const { name, lastPublished } of observed) {
+    if (!lastPublished) continue;
+    if (KNOWN_LAST_PUBLISHED.get(name) !== lastPublished) {
+      KNOWN_LAST_PUBLISHED.set(name, lastPublished);
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  const url = process.env.REVALIDATE_SDKS_URL ?? "https://aevion.app/api/revalidate-sdks";
+  void fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(4000),
+  }).catch(() => { /* fire-and-forget */ });
+}
+
 async function fetchSdkStats(pkgName: string): Promise<SdkStats> {
   const cached = SDK_STATS_CACHE.get(pkgName);
   const now = Date.now();
@@ -942,6 +968,7 @@ aevionHubRouter.get("/sdks", async (req, res) => {
       (sum, s) => (sum === null ? null : (s?.downloadsLastWeek ?? 0) + sum),
       0 as number | null,
     );
+    maybeRevalidate(sdks.map((s, i) => ({ name: s.name, lastPublished: stats[i]?.lastPublished ?? null })));
   }
 
   res.set("Cache-Control", "public, max-age=300");

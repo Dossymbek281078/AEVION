@@ -272,6 +272,8 @@ export default function ConstitutionPage() {
   const [publishing, setPublishing] = useState<boolean>(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState<boolean>(false);
+  const [aiExplanation, setAiExplanation] = useState<string | null>(null);
   const [compareAId, setCompareAId] = useState<string | null>(null);
   const [compareBId, setCompareBId] = useState<string | null>(null);
 
@@ -622,6 +624,35 @@ export default function ConstitutionPage() {
               >
                 📊 Аналитика →
               </Link>
+              <button
+                type="button"
+                onClick={() => setAiOpen(true)}
+                className="px-4 py-2 rounded border border-fuchsia-400/60 text-fuchsia-300 font-semibold hover:bg-fuchsia-500/10"
+              >
+                🤖 Спросить ИИ
+              </button>
+            </div>
+          )}
+          {aiOpen && (
+            <AiAdvisorModal
+              onClose={() => setAiOpen(false)}
+              onApply={(s, expl) => {
+                setSliders({ ...DEFAULT_SLIDERS, ...s });
+                setAiExplanation(expl);
+                setAiOpen(false);
+              }}
+            />
+          )}
+          {aiExplanation && (
+            <div className="mt-3 max-w-3xl text-sm text-fuchsia-200 border border-fuchsia-500/30 rounded px-3 py-2 bg-fuchsia-500/5">
+              <span className="font-semibold">🤖 ИИ:</span> {aiExplanation}
+              <button
+                type="button"
+                onClick={() => setAiExplanation(null)}
+                className="ml-3 text-xs text-fuchsia-300 hover:underline"
+              >
+                закрыть
+              </button>
             </div>
           )}
         </header>
@@ -1613,6 +1644,122 @@ function StressTestPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AiAdvisorModal({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void;
+  onApply: (sliders: Sliders, explanation: string) => void;
+}) {
+  const [description, setDescription] = useState<string>("");
+  const [busy, setBusy] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (description.trim().length < 8) {
+      setError("Опиши хотя бы одним предложением — что за общество?");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setProvider(null);
+    try {
+      const r = await fetch("/api-backend/api/constitution/ai-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: description.trim() }),
+      });
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${text.slice(0, 140)}`);
+      }
+      const j = (await r.json()) as {
+        sliders: Sliders;
+        explanation: string;
+        provider?: string;
+      };
+      setProvider(j.provider ?? "unknown");
+      onApply(j.sliders, j.explanation);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ai_failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+    >
+      <div className="bg-[#0b1736] border border-fuchsia-400/40 rounded-xl p-5 max-w-2xl w-full shadow-2xl">
+        <div className="flex justify-between items-baseline mb-3">
+          <h3 className="text-xl font-bold text-fuchsia-300">
+            🤖 AI-советник по конституции
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#9aa3c0] hover:text-white text-xl leading-none"
+            aria-label="Закрыть"
+          >
+            ×
+          </button>
+        </div>
+        <p className="text-sm text-[#9aa3c0] mb-3">
+          Опиши страну/общество/гипотетический строй в свободной форме —
+          ИИ подберёт 8 ползунков и объяснит, почему именно эти значения.
+          Идёт через QCoreAI (Claude/GPT/Gemini в зависимости от настроек
+          backend).
+        </p>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Например: «общество размером с город-государство, где главный приоритет — стабильность через сильную бюрократию, экономика быстро растёт за счёт торговли, но политические права ограничены»"
+          rows={5}
+          className="w-full bg-[#050a1a] border border-fuchsia-400/30 rounded px-3 py-2 text-sm resize-y"
+          maxLength={4000}
+        />
+        <div className="text-right text-xs text-[#9aa3c0] mt-1">
+          {description.length} / 4000
+        </div>
+        {error && (
+          <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
+            {error}
+          </div>
+        )}
+        {provider && (
+          <div className="mt-2 text-xs text-[#9aa3c0]">
+            Provider: <span className="text-fuchsia-300">{provider}</span>
+          </div>
+        )}
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm px-4 py-2 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy || description.trim().length < 8}
+            className="text-sm px-4 py-2 rounded bg-fuchsia-500 text-[#0b1736] font-semibold hover:bg-fuchsia-400 disabled:opacity-40"
+          >
+            {busy ? "Думает…" : "Подобрать ползунки →"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

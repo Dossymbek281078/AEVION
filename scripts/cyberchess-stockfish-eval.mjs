@@ -107,7 +107,12 @@ function extractMoves(chunk) {
     .slice(1)
     .join(" ")
     .replace(/\$\d+/g, "")
-    .replace(/\([^)]*\)/g, "");
+    .replace(/\([^)]*\)/g, "")
+    // Some PGN exporters (pgnmentor, Carlsen.zip) glue move numbers to SAN:
+    // "1.d4 Nf6 2.Nf3" must become "1. d4 Nf6 2. Nf3" so the tokenizer
+    // can split them. Insert a space after any "<digits><dots>" prefix.
+    .replace(/(\d+)\.\.\.\s*/g, "$1... ")  // black move shorthand "1... e5"
+    .replace(/(\d+)\.\s*/g, "$1. ");
 
   // Tokenize while honoring brace-balanced {comments}. Each SAN move is
   // followed by zero or more {…} comments before the next move number.

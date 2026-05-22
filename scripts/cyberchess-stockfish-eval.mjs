@@ -99,16 +99,50 @@ function parseHeader(chunk, name) {
 }
 
 function extractMoves(chunk) {
-  // Strip headers, comments {...}, NAGs $n, variations (...)
+  // Strip headers + variations (), keep {comments} so we can pull [%clk h:m:s].
+  // Returns { moves: string[], clocks: (number|null)[] } where clocks[i] is
+  // the seconds-remaining-on-clock annotation for moves[i], or null if absent.
   const movePart = chunk
     .split(/\n\n/)
     .slice(1)
     .join(" ")
-    .replace(/\{[^}]*\}/g, "")
     .replace(/\$\d+/g, "")
     .replace(/\([^)]*\)/g, "");
-  const tokens = movePart.split(/\s+/).filter(t => t && !/^\d+\.+$/.test(t) && t !== "1-0" && t !== "0-1" && t !== "1/2-1/2" && t !== "*");
-  return tokens;
+
+  // Tokenize while honoring brace-balanced {comments}. Each SAN move is
+  // followed by zero or more {…} comments before the next move number.
+  const moves = [];
+  const clocks = [];
+  const re = /(\{[^}]*\})|(\S+)/g;
+  let m;
+  let pendingClk = null;
+  let lastWasMove = false;
+  while ((m = re.exec(movePart)) !== null) {
+    if (m[1] !== undefined) {
+      // {comment} — extract clock if present
+      const clkMatch = m[1].match(/\[%clk\s+(\d+):(\d+):(\d+(?:\.\d+)?)\]/);
+      if (clkMatch) {
+        const h = parseInt(clkMatch[1], 10);
+        const min = parseInt(clkMatch[2], 10);
+        const sec = parseFloat(clkMatch[3]);
+        const total = h * 3600 + min * 60 + sec;
+        // Comment after a move → annotate that move
+        if (lastWasMove) clocks[clocks.length - 1] = total;
+        else pendingClk = total;
+      }
+    } else {
+      const tok = m[2];
+      if (!tok || /^\d+\.+$/.test(tok) || tok === "1-0" || tok === "0-1" || tok === "1/2-1/2" || tok === "*") {
+        lastWasMove = false;
+        continue;
+      }
+      moves.push(tok);
+      clocks.push(pendingClk);
+      pendingClk = null;
+      lastWasMove = true;
+    }
+  }
+  return { moves, clocks };
 }
 
 /* ─── Stockfish driver via WASM + intercepted console ───────────────── */
@@ -192,7 +226,7 @@ async function evalPosition(engine, fen, depth) {
 
 /* ─── Per-game feature derivation ───────────────────────────────────── */
 
-async function deriveFeaturesForGame(engine, depth, headers, moveTokens, chessjs) {
+async function deriveFeaturesForGame(engine, depth, headers, moveTokens, moveClocks, chessjs) {
   // chessjs is the Chess class from chess.js
   const { Chess } = chessjs;
   const game = new Chess();
@@ -250,10 +284,20 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, chessjs
     else blackCpLosses.push(cpLoss);
   }
 
+  // Logit-linked accuracy: 100 - 8*ln(mean_cp_loss + 1)
+  // Old formula (100 * exp(-mean/100)) saturated:
+  //   mean=0  → 100   mean=1  →  99
+  //   mean=10 →  90   mean=300→   5
+  // collapsing all GM-level play into 95-100% and all club-level into 5-50%.
+  // New formula keeps dynamic range at both tails:
+  //   mean=0  → 100   mean=1  →  94
+  //   mean=10 →  81   mean=300→  54
+  //   mean=1000→ 45   mean=10000→ 27
+  // No floor saturation; differentiates a 99%-mover from a 95%-mover.
   const accuracy = (losses) => {
     if (!losses.length) return 50;
     const mean = losses.reduce((s, x) => s + x, 0) / losses.length;
-    return Math.max(0, Math.min(100, 100 * Math.exp(-mean / 100)));
+    return Math.max(0, Math.min(100, 100 - 8 * Math.log(mean + 1)));
   };
   const blunderRate = (losses) => {
     if (!losses.length) return 0;
@@ -263,7 +307,27 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, chessjs
   const tacticalEff = plyCount > 0 ? Math.min(1, captureOrCheckCount / plyCount) : 0;
   const endgameStrengthWhite = plyCount > 40 ? 0.7 : 0.5;
   const endgameStrengthBlack = plyCount > 40 ? 0.7 : 0.5;
-  const avgMoveTime = 30; // PGN rarely has clocks; matches calibrate.mjs default
+
+  // Per-side avgMoveTime from Lichess [%clk h:m:s] comments (extractMoves
+  // returns moves with clkSec annotations when present). Fallback: 30s.
+  const whiteClkDiffs = [];
+  const blackClkDiffs = [];
+  let prevWhiteClk = null, prevBlackClk = null;
+  for (let i = 0; i < moveClocks.length; i++) {
+    const isWhitePly = i % 2 === 0;
+    const clk = moveClocks[i];
+    if (clk === null) continue;
+    if (isWhitePly) {
+      if (prevWhiteClk !== null) whiteClkDiffs.push(Math.max(0, prevWhiteClk - clk));
+      prevWhiteClk = clk;
+    } else {
+      if (prevBlackClk !== null) blackClkDiffs.push(Math.max(0, prevBlackClk - clk));
+      prevBlackClk = clk;
+    }
+  }
+  const avgClk = (arr) => arr.length ? arr.reduce((s,x)=>s+x,0) / arr.length : 30;
+  const avgMoveTimeWhite = avgClk(whiteClkDiffs);
+  const avgMoveTimeBlack = avgClk(blackClkDiffs);
 
   const result = headers.result;
   const whiteResult = result === "1-0" ? "win" : result === "0-1" ? "loss" : "draw";
@@ -280,7 +344,7 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, chessjs
       tacticalEff,
       endgameStrength: endgameStrengthWhite,
       blunderRate: blunderRate(whiteCpLosses),
-      avgMoveTime,
+      avgMoveTime: avgMoveTimeWhite,
       plies: whiteCpLosses.length,
       meanCpLoss: whiteCpLosses.length ? whiteCpLosses.reduce((s,x)=>s+x,0)/whiteCpLosses.length : 0,
     },
@@ -294,7 +358,7 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, chessjs
       tacticalEff,
       endgameStrength: endgameStrengthBlack,
       blunderRate: blunderRate(blackCpLosses),
-      avgMoveTime,
+      avgMoveTime: avgMoveTimeBlack,
       plies: blackCpLosses.length,
       meanCpLoss: blackCpLosses.length ? blackCpLosses.reduce((s,x)=>s+x,0)/blackCpLosses.length : 0,
     },
@@ -360,7 +424,7 @@ async function main() {
       origStdoutWrite(`  [skip] ${headers.event}: missing elo or result\n`);
       continue;
     }
-    const moves = extractMoves(chunk);
+    const { moves, clocks } = extractMoves(chunk);
     if (moves.length < 2) {
       origStdoutWrite(`  [skip] ${headers.event}: too short (${moves.length} plies)\n`);
       continue;
@@ -377,7 +441,7 @@ async function main() {
     const t0 = Date.now();
     let gameRows;
     try {
-      gameRows = await deriveFeaturesForGame(engine, args.depth, headers, moves, chessjs);
+      gameRows = await deriveFeaturesForGame(engine, args.depth, headers, moves, clocks, chessjs);
     } catch (e) {
       origStdoutWrite(`  [fail] ${headers.event}: ${e.message}\n`);
       continue;

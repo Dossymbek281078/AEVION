@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-22T08:48:52.068Z",
+  "generatedAt": "2026-05-22T08:56:38.112Z",
   "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\combined-features-v2.csv",
   "samples": 1397,
   "coefficients": {
-    "accuracy": 42.5618,
-    "opening": 7.6134,
-    "tactical": -361.2736,
-    "endgame": 939.2971,
-    "blunder": 761.4236,
+    "accuracy": 54.145,
+    "opening": 11.2278,
+    "tactical": -325.1244,
+    "endgame": 1645.6085,
+    "blunder": 677.7617,
     "time": 0
   },
-  "bias": 762.2549,
+  "bias": 153.0261,
   "fitStats": {
-    "rmseElo": 256.86,
-    "r2": 0.507,
+    "rmseElo": 276.15,
+    "r2": 0.4301,
     "meanTargetElo": 1805.5
   },
   "notes": [

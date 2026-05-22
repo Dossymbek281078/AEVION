@@ -33,12 +33,13 @@ import { mkdirSync } from "node:fs";
  * ──────────────────────────────────────────────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null };
+  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pgn") args.pgn = argv[++i];
     else if (a === "--output") args.output = argv[++i];
     else if (a === "--features-csv") args.featuresCsv = argv[++i];
+    else if (a === "--weighted") args.weighted = true;
     else if (a === "--limit") args.limit = Number(argv[++i]) || Infinity;
     else if (a === "--help" || a === "-h") {
       console.log(
@@ -477,7 +478,28 @@ function main() {
   });
   const y = rows.map(r => r.targetFide);
 
-  const coeffs = leastSquaresFit(X, y);
+  // Optional weighted least-squares — counters bracket-density bias in OLS.
+  // Bucket each target Elo into 200-Elo bins, set weight = 1 / count(bucket).
+  // Apply by scaling each row of X and each y entry by sqrt(weight) before
+  // solving — algebraically equivalent to (X^T W X) β = X^T W y.
+  let Xfit = X, yfit = y;
+  if (args.weighted) {
+    const bracket = (elo) => Math.floor(elo / 200);
+    const counts = new Map();
+    for (const v of y) counts.set(bracket(v), (counts.get(bracket(v)) || 0) + 1);
+    // Normalize so mean weight = 1 (keeps coefficient scale comparable to OLS)
+    const w = y.map(v => 1 / counts.get(bracket(v)));
+    const meanW = w.reduce((s,x)=>s+x,0) / w.length;
+    const sqrtW = w.map(wi => Math.sqrt(wi / meanW));
+    Xfit = X.map((row, i) => row.map(v => v * sqrtW[i]));
+    yfit = y.map((v, i) => v * sqrtW[i]);
+    console.log(`      Weighted LS: bucket weights (1/n_bucket)`);
+    [...counts.entries()].sort().forEach(([k, n]) => {
+      console.log(`        bracket ${k*200}-${k*200+199}: n=${String(n).padStart(4)}  weight=${(1/n).toFixed(5)}`);
+    });
+  }
+
+  const coeffs = leastSquaresFit(Xfit, yfit);
   const [wAcc, wOpen, wTac, wEnd, wBlu, wTime, bias] = coeffs;
 
   console.log("      Fit complete. Coefficients:");

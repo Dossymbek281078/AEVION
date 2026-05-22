@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/lib/i18n";
 
 const API = "/api-backend/api/constitution";
 const STORAGE_KEY = "constitution.draft";
@@ -31,11 +32,11 @@ type TourStep = {
 
 const TOUR: TourStep[] = [
   {
-    era: "Р¤РµРѕРґР°Р»РёР·Рј",
-    year: "в‰€1200",
-    title: "РўРѕС‡РєР° РѕС‚СЃС‡С‘С‚Р°",
+    era: "Феодализм",
+    year: "≈1200",
+    title: "Точка отсчёта",
     narrative:
-      "Р’Р»Р°СЃС‚СЊ РЅР°СЃР»РµРґСЃС‚РІРµРЅРЅР°СЏ, Р·Р°РєРѕРЅ С„РѕСЂРјР°Р»СЊРЅС‹Р№ вЂ” РґР»СЏ Р±РµРґРЅС‹С… РѕРґРЅРѕ, РґР»СЏ Р·РЅР°С‚Рё РґСЂСѓРіРѕРµ. РќРёР· РїСЂРёРІСЏР·Р°РЅ Рє Р·РµРјР»Рµ. Р‘СѓРЅС‚ СЂР°Р· РІ РїРѕРєРѕР»РµРЅРёРµ, РѕР±С‹С‡РЅРѕ РЅРёС‡РµРіРѕ РЅРµ РјРµРЅСЏРµС‚. РџРёСЂРѕРі РЅРµ СЂР°СЃС‚С‘С‚. РЎРёР»СѓСЌС‚ вЂ” СѓР·РєРёР№ С€РёРї РїРѕ skin-in-the-game Рё РїРѕР»РёС†РµРЅС‚СЂРёС‡РЅРѕСЃС‚Рё (РєР°Р¶РґС‹Р№ Р±Р°СЂРѕРЅ СЃР°Рј СЃРµР±Рµ РєРѕСЂРѕР»СЊ), РІСЃС‘ РѕСЃС‚Р°Р»СЊРЅРѕРµ РІ РїРѕРґРІР°Р»Рµ.",
+      "Власть наследственная, закон формальный — для бедных одно, для знати другое. Низ привязан к земле. Бунт раз в поколение, обычно ничего не меняет. Пирог не растёт. Силуэт — узкий шип по skin-in-the-game и полицентричности (каждый барон сам себе король), всё остальное в подвале.",
     sliders: {
       floor: 15,
       ruleOfLaw: 35,
@@ -48,11 +49,11 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "РњР°РіРЅР° РљР°СЂС‚Р° + СЂР°РЅРЅРёРµ РїР°СЂР»Р°РјРµРЅС‚С‹",
-    year: "1215вЂ“1700",
-    title: "Р—Р°РєРѕРЅ РЅР°С‡РёРЅР°РµС‚ СЃРІСЏР·С‹РІР°С‚СЊ РІРµСЂС…",
+    era: "Магна Карта + ранние парламенты",
+    year: "1215–1700",
+    title: "Закон начинает связывать верх",
     narrative:
-      "РљРѕСЂРѕР»СЊ РІРїРµСЂРІС‹Рµ РѕР±СЏР·Р°РЅ Р¶РёС‚СЊ РїРѕ РїСЂР°РІРёР»Р°Рј вЂ” Magna Carta 1215, РїРѕС‚РѕРј Р°РЅРіР»РёР№СЃРєРёР№ Habeas Corpus, РїРѕС‚РѕРј Р“РѕР»Р»Р°РЅРґРёСЏ СЃ РµС‘ СЂРµРіРµРЅС‚Р°РјРё. РЎРѕСЃР»РѕРІРЅС‹Рµ СЃРѕР±СЂР°РЅРёСЏ РїСЂРµРІСЂР°С‰Р°СЋС‚СЃСЏ РІ Р·Р°С‡Р°С‚РєРё РїР°СЂР»Р°РјРµРЅС‚Р°. Р­С‚Рѕ РїРµСЂРІС‹Р№ Рё РіР»Р°РІРЅС‹Р№ СЃРґРІРёРі: Р·Р°РєРѕРЅ РїРѕРґРЅРёРјР°РµС‚СЃСЏ РЅР°Рґ РІРµСЂС…РѕРІРЅРѕР№ РІР»Р°СЃС‚СЊСЋ. РџРѕР»Р·СѓРЅРѕРє ruleOfLaw +15.",
+      "Король впервые обязан жить по правилам — Magna Carta 1215, потом английский Habeas Corpus, потом Голландия с её регентами. Сословные собрания превращаются в зачатки парламента. Это первый и главный сдвиг: закон поднимается над верховной властью. Ползунок ruleOfLaw +15.",
     sliders: {
       floor: 18,
       ruleOfLaw: 50,
@@ -65,11 +66,11 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "РџСЂРѕРјС‹С€Р»РµРЅРЅР°СЏ СЂРµРІРѕР»СЋС†РёСЏ",
-    year: "1750вЂ“1850",
-    title: "РџРёСЂРѕРі РЅР°С‡РёРЅР°РµС‚ СЂР°СЃС‚Рё",
+    era: "Промышленная революция",
+    year: "1750–1850",
+    title: "Пирог начинает расти",
     narrative:
-      "Р’РїРµСЂРІС‹Рµ РІ РёСЃС‚РѕСЂРёРё СЌРєРѕРЅРѕРјРёРєР° СЂР°СЃС‚С‘С‚ Р±С‹СЃС‚СЂРµРµ, С‡РµРј РЅР°СЃРµР»РµРЅРёРµ. РџРѕСЏРІР»СЏРµС‚СЃСЏ Р±СѓСЂР¶СѓР° вЂ” РЅРѕРІР°СЏ РѕСЃСЊ СЃС‚Р°С‚СѓСЃР°, РЅРµ РЅР°СЃР»РµРґСЃС‚РІРµРЅРЅР°СЏ. Р“РѕСЂРѕРґР° РЅР°РєР°РїР»РёРІР°СЋС‚ РєР°РїРёС‚Р°Р» Рё Р°РІС‚РѕРЅРѕРјРёСЋ. positiveSum +25 вЂ” РіР»Р°РІРЅРѕРµ СЃРѕР±С‹С‚РёРµ РјРѕРґРµСЂРЅР°. Р‘РµР· СЂР°СЃС‚СѓС‰РµРіРѕ РїРёСЂРѕРіР° РЅРё РѕРґРЅР° СЃР»РµРґСѓСЋС‰Р°СЏ СЂРµС„РѕСЂРјР° РЅРµ Р±С‹Р»Р° Р±С‹ РїРѕР»РёС‚РёС‡РµСЃРєРё РІРѕР·РјРѕР¶РЅРѕР№.",
+      "Впервые в истории экономика растёт быстрее, чем население. Появляется буржуа — новая ось статуса, не наследственная. Города накапливают капитал и автономию. positiveSum +25 — главное событие модерна. Без растущего пирога ни одна следующая реформа не была бы политически возможной.",
     sliders: {
       floor: 22,
       ruleOfLaw: 55,
@@ -82,11 +83,11 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Р’СЃРµРѕР±С‰РµРµ РёР·Р±РёСЂР°С‚РµР»СЊРЅРѕРµ РїСЂР°РІРѕ",
-    year: "1900вЂ“1950",
-    title: "РќРёР· РїРѕР»СѓС‡Р°РµС‚ РіРѕР»РѕСЃ",
+    era: "Всеобщее избирательное право",
+    year: "1900–1950",
+    title: "Низ получает голос",
     narrative:
-      "РЎРЅР°С‡Р°Р»Р° РјСѓР¶С‡РёРЅС‹ Р±РµР· С†РµРЅР·Р°, РїРѕС‚РѕРј Р¶РµРЅС‰РёРЅС‹. Р–СЂРµР±РёР№ СЃС‚Р°СЂС‹С… Р°С„РёРЅСЏРЅ РІРѕР·РІСЂР°С‰Р°РµС‚СЃСЏ РІ РІРёРґРµ СЂРµРіСѓР»СЏСЂРЅС‹С… РІС‹Р±РѕСЂРѕРІ Рё РїР°СЂР»Р°РјРµРЅС‚СЃРєРѕР№ СЂРѕС‚Р°С†РёРё. Р—Р°РєРѕРЅ РїРѕСЃС‚РµРїРµРЅРЅРѕ СЃС‚Р°РЅРѕРІРёС‚СЃСЏ РѕРґРёРЅР°РєРѕРІС‹Рј РґР»СЏ РІСЃРµС… вЂ” СЌС‚Рѕ СѓР¶Рµ Acemoglu/Robinson В«inclusive institutionsВ». rotation +20, ruleOfLaw +15.",
+      "Сначала мужчины без ценза, потом женщины. Жребий старых афинян возвращается в виде регулярных выборов и парламентской ротации. Закон постепенно становится одинаковым для всех — это уже Acemoglu/Robinson «inclusive institutions». rotation +20, ruleOfLaw +15.",
     sliders: {
       floor: 35,
       ruleOfLaw: 70,
@@ -99,11 +100,11 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "РџРѕСЃР»РµРІРѕРµРЅРЅС‹Р№ СЃРѕС†РёР°Р»-РєРѕРЅС‚СЂР°РєС‚",
-    year: "1945вЂ“1980",
-    title: "РџРѕСЏРІР»СЏРµС‚СЃСЏ РїРѕР» СЃРЅРёР·Сѓ",
+    era: "Послевоенный социал-контракт",
+    year: "1945–1980",
+    title: "Появляется пол снизу",
     narrative:
-      "Р‘РµСЃРїР»Р°С‚РЅРѕРµ РѕР±СЂР°Р·РѕРІР°РЅРёРµ, РІСЃРµРѕР±С‰Р°СЏ РјРµРґРёС†РёРЅР°, РїРµРЅСЃРёРё, РїРѕСЃРѕР±РёСЏ. Р‘РѕР»СЊС€РѕР№ С€Р°Рі: РЅРёР· РїРµСЂРµСЃС‚Р°С‘С‚ Р±С‹С‚СЊ РїСЂРёР¶Р°С‚С‹Рј Рє СЃС‚РµРЅРµ в†’ РёСЃС‡РµР·Р°РµС‚ СЌРєР·РёСЃС‚РµРЅС†РёР°Р»СЊРЅР°СЏ РјРѕС‚РёРІР°С†РёСЏ РѕС‚РЅРёРјР°С‚СЊ. РџСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ РіРѕСЃСѓРґР°СЂСЃС‚РІР° СЂР°СЃС‚С‘С‚ вЂ” РЅР°Р»РѕРіРѕРІС‹Рµ СЃРёСЃС‚РµРјС‹, Р±СЋРґР¶РµС‚С‹. РќРµСЃРєРѕР»СЊРєРѕ РѕСЃРµР№ СЃС‚Р°С‚СѓСЃР° Р»РµРіРёС‚РёРјРЅС‹. floor +30 вЂ” СЃР°РјРѕРµ РґРѕСЂРѕРіРѕРµ Рё СЃР°РјРѕРµ СЃС‚Р°Р±РёР»РёР·РёСЂСѓСЋС‰РµРµ РёР·РјРµРЅРµРЅРёРµ.",
+      "Бесплатное образование, всеобщая медицина, пенсии, пособия. Большой шаг: низ перестаёт быть прижатым к стене → исчезает экзистенциальная мотивация отнимать. Прозрачность государства растёт — налоговые системы, бюджеты. Несколько осей статуса легитимны. floor +30 — самое дорогое и самое стабилизирующее изменение.",
     sliders: {
       floor: 65,
       ruleOfLaw: 80,
@@ -116,11 +117,11 @@ const TOUR: TourStep[] = [
     },
   },
   {
-    era: "Р¦РёС„СЂРѕРІР°СЏ РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ + Open Access",
-    year: "2000-СЃРµР№С‡Р°СЃ (Рё РґР°Р»СЊС€Рµ)",
-    title: "Р’СЃРµ С‡РµС‚С‹СЂРµ РѕРїРѕСЂС‹ СЃРѕР±СЂР°РЅС‹",
+    era: "Цифровая прозрачность + Open Access",
+    year: "2000-сейчас (и дальше)",
+    title: "Все четыре опоры собраны",
     narrative:
-      "РћС‚РєСЂС‹С‚С‹Рµ РґРµРєР»Р°СЂР°С†РёРё, РґРѕСЃС‚СѓРї Рє РґР°РЅРЅС‹Рј, РїРѕСЂС‚Р°Р±РµР»СЊРЅС‹Рµ РїСЂР°РІР°, РєРѕРЅРєСѓСЂРµРЅС†РёСЏ СЋСЂРёСЃРґРёРєС†РёР№. РџРѕР»РЅР°СЏ РєР°СЂС‚РёРЅР° РїРѕ North/Wallis/Weingast: РїРѕР»РѕР¶РёС‚РµР»СЊРЅР°СЏ СЃСѓРјРјР° + Р·Р°РєРѕРЅ РЅР°Рґ РІРµСЂС…РѕРј + РїРѕР» СЃРЅРёР·Сѓ + РјРЅРѕР¶РµСЃС‚РІРµРЅРЅС‹Рµ СЃС‚Р°С‚СѓСЃС‹ + СЂРѕС‚Р°С†РёСЏ + РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ. РЎРёР»СѓСЌС‚ РїСЂРµРІСЂР°С‰Р°РµС‚СЃСЏ РІ РїРѕС‡С‚Рё РїСЂР°РІРёР»СЊРЅС‹Р№ РІРѕСЃСЊРјРёСѓРіРѕР»СЊРЅРёРє Р±РѕР»СЊС€РѕРіРѕ СЂР°РґРёСѓСЃР°. Р­Р»РёС‚Р° Р±РѕР»СЊС€Рµ РЅРµ Р±РѕРёС‚СЃСЏ РЅРёР·Р° вЂ” РјРµР¶РґСѓ РЅРёРјРё РїСЂР°РІРёР»Р° Рё РѕР±С‰РёР№ СЂР°СЃС‚СѓС‰РёР№ РїРёСЂРѕРі. Р­С‚Рѕ РїСѓС‚СЊ, РєРѕС‚РѕСЂС‹Р№ РїСЂРѕС€Р»Рё СЃРєР°РЅРґРёРЅР°РІС‹, С‡Р°СЃС‚РёС‡РЅРѕ РїСЂРѕС€Р»Рё РєРѕРЅС‚РёРЅРµРЅС‚Р°Р»СЊРЅР°СЏ Р•РІСЂРѕРїР° Рё РљР°РЅР°РґР°. РћС‚РєСЂС‹С‚С‹Р№ РІРѕРїСЂРѕСЃ вЂ” СѓСЃС‚РѕР№С‡РёРІРѕ Р»Рё СЌС‚Рѕ РІ РєСЂРёР·РёСЃ.",
+      "Открытые декларации, доступ к данным, портабельные права, конкуренция юрисдикций. Полная картина по North/Wallis/Weingast: положительная сумма + закон над верхом + пол снизу + множественные статусы + ротация + прозрачность. Силуэт превращается в почти правильный восьмиугольник большого радиуса. Элита больше не боится низа — между ними правила и общий растущий пирог. Это путь, который прошли скандинавы, частично прошли континентальная Европа и Канада. Открытый вопрос — устойчиво ли это в кризис.",
     sliders: {
       floor: 75,
       ruleOfLaw: 85,
@@ -154,9 +155,9 @@ type Shock = {
 const SHOCKS: Shock[] = [
   {
     id: "war",
-    icon: "рџЄ–",
-    name: "Р’РѕР№РЅР°",
-    desc: "РљРѕРЅС†РµРЅС‚СЂР°С†РёСЏ РІР»Р°СЃС‚Рё, С†РµРЅР·СѓСЂР°, РјРѕР±РёР»РёР·Р°С†РёСЏ. Р›РѕРјР°РµС‚ РїСЂРѕР·СЂР°С‡РЅРѕСЃС‚СЊ Рё РїРѕР»РёС†РµРЅС‚СЂРёС‡РЅРѕСЃС‚СЊ.",
+    icon: "🪖",
+    name: "Война",
+    desc: "Концентрация власти, цензура, мобилизация. Ломает прозрачность и полицентричность.",
     delta: {
       transparency: -30,
       multiStatus: -25,
@@ -170,9 +171,9 @@ const SHOCKS: Shock[] = [
   },
   {
     id: "pandemic",
-    icon: "рџ¦ ",
-    name: "РџР°РЅРґРµРјРёСЏ",
-    desc: "Р§СЂРµР·РІС‹С‡Р°Р№РЅС‹Рµ РїРѕР»РЅРѕРјРѕС‡РёСЏ С†РµРЅС‚СЂР°, СЂРµР¶СѓС‚ Р»РѕРєР°Р»СЊРЅСѓСЋ Р°РІС‚РѕРЅРѕРјРёСЋ Рё РїР»СЋСЂР°Р»РёР·Рј СЃС‚Р°С‚СѓСЃРѕРІ.",
+    icon: "🦠",
+    name: "Пандемия",
+    desc: "Чрезвычайные полномочия центра, режут локальную автономию и плюрализм статусов.",
     delta: {
       polycentricity: -20,
       multiStatus: -15,
@@ -184,9 +185,9 @@ const SHOCKS: Shock[] = [
   },
   {
     id: "crisis",
-    icon: "рџ’ё",
-    name: "Р¤РёРЅР°РЅСЃРѕРІС‹Р№ РєСЂРёР·РёСЃ",
-    desc: "РџРёСЂРѕРі СЂРµР·РєРѕ СЃР¶РёРјР°РµС‚СЃСЏ. РџР°РґР°СЋС‚ РїРѕР» СЃРЅРёР·Сѓ Рё РґРѕРІРµСЂРёРµ. Р’РѕР·СЂР°СЃС‚Р°РµС‚ РЅР°РїСЂСЏР¶РµРЅРёРµ.",
+    icon: "💸",
+    name: "Финансовый кризис",
+    desc: "Пирог резко сжимается. Падают пол снизу и доверие. Возрастает напряжение.",
     delta: {
       positiveSum: -35,
       floor: -15,
@@ -197,9 +198,9 @@ const SHOCKS: Shock[] = [
   },
   {
     id: "tech",
-    icon: "рџљЂ",
-    name: "РўРµС…СЃРєР°С‡РѕРє",
-    desc: "Р Р°СЃС‚С‘С‚ РїРёСЂРѕРі Рё РґРµС†РµРЅС‚СЂР°Р»РёР·Р°С†РёСЏ, РЅРѕ СЂРµРіСѓР»СЏС†РёСЏ РѕС‚СЃС‚Р°С‘С‚ Рё РЅРµСЂР°РІРµРЅСЃС‚РІРѕ СЂР°СЃС‚С‘С‚.",
+    icon: "🚀",
+    name: "Техскачок",
+    desc: "Растёт пирог и децентрализация, но регуляция отстаёт и неравенство растёт.",
     delta: {
       positiveSum: +30,
       polycentricity: +15,
@@ -231,6 +232,15 @@ type SavedScenario = {
 };
 
 export default function ConstitutionPage() {
+  const { t } = useI18n();
+  const localizedSliderMeta = useMemo(
+    () =>
+      SLIDER_META.map((m) => ({
+        ...m,
+        label: t(`constitution.slider.${m.key}.label`),
+      })),
+    [t],
+  );
   const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
   const [title, setTitle] = useState<string>("");
   const [saved, setSaved] = useState<SavedScenario[]>([]);
@@ -464,12 +474,12 @@ export default function ConstitutionPage() {
         payload: signed.payload,
         verify: {
           endpoint: "/api/qsign/verify",
-          hint: "POST { payload, signature } вЂ” must return { valid: true }",
+          hint: "POST { payload, signature } — must return { valid: true }",
         },
       };
       const slug = cleanTitle
         .toLowerCase()
-        .replace(/[^a-z0-9Р°-СЏС‘-]+/giu, "-")
+        .replace(/[^a-z0-9а-яё-]+/giu, "-")
         .replace(/^-+|-+$/g, "")
         .slice(0, 40) || "constitution";
       const ts = signed.createdAt.replace(/[:.]/g, "-");
@@ -497,23 +507,19 @@ export default function ConstitutionPage() {
       <div className="max-w-6xl mx-auto">
         <header className="mb-6">
           <Link href="/" className="text-[#d4af37] hover:underline text-sm">
-            в†ђ AEVION
+            ← AEVION
           </Link>
           <h1 className="text-3xl md:text-4xl font-bold mt-2 text-[#d4af37]">
-            Constitution вЂ” Р›Р°Р±РѕСЂР°С‚РѕСЂРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР° РјРёСЂР°
+            {t("constitution.title")}
           </h1>
-          <p className="text-[#9aa3c0] mt-2 max-w-3xl">
-            Р’РѕСЃРµРјСЊ РїР°СЂР°РјРµС‚СЂРѕРІ вЂ” С‡РµС‚С‹СЂРµ РѕРїРѕСЂС‹, РЅР° РєРѕС‚РѕСЂС‹С… СЌР»РёС‚С‹ РїРµСЂРµСЃС‚Р°СЋС‚ Р±РѕСЏС‚СЊСЃСЏ РЅРёР·Р° Рё РіСЂС‹Р·С‚СЊСЃСЏ РјРµР¶РґСѓ СЃРѕР±РѕР№.
-            Р”РІРёРіР°Р№ РїРѕР»Р·СѓРЅРєРё, СЃРјРѕС‚СЂРё, РІ РєР°РєРѕР№ РёСЃС‚РѕСЂРёС‡РµСЃРєРёР№ СЂРµР¶РёРј СЃРєР°С‚С‹РІР°РµС‚СЃСЏ СЃРёСЃС‚РµРјР°. РЎРѕС…СЂР°РЅРё СЃС†РµРЅР°СЂРёР№ вЂ” СѓРІРёРґРёС€СЊ,
-            С‡С‚Рѕ РІС‹Р±СЂР°Р»Рё РґСЂСѓРіРёРµ.
-          </p>
+          <p className="text-[#9aa3c0] mt-2 max-w-3xl">{t("constitution.subtitle")}</p>
           {!tourActive && (
             <button
               type="button"
               onClick={startTour}
               className="mt-4 px-4 py-2 rounded bg-gradient-to-r from-[#d4af37] to-[#f5d27a] text-[#0b1736] font-semibold hover:opacity-90"
             >
-              в–¶ РўСѓСЂ РїРѕ СЌРІРѕР»СЋС†РёРё вЂ” РѕС‚ Р¤РµРѕРґР°Р»РёР·РјР° РґРѕ Open Access Р·Р° 8 РІРµРєРѕРІ
+              ▶ Тур по эволюции — от Феодализма до Open Access за 8 веков
             </button>
           )}
         </header>
@@ -523,7 +529,7 @@ export default function ConstitutionPage() {
             <div className="flex justify-between items-baseline mb-2 flex-wrap gap-2">
               <div>
                 <div className="text-xs uppercase tracking-wide text-[#9aa3c0]">
-                  РЁР°Рі {tourStep + 1} РёР· {TOUR.length} В· {TOUR[tourStep].year}
+                  Шаг {tourStep + 1} из {TOUR.length} · {TOUR[tourStep].year}
                 </div>
                 <h2 className="text-xl md:text-2xl font-bold text-[#d4af37]">
                   {TOUR[tourStep].era}
@@ -537,7 +543,7 @@ export default function ConstitutionPage() {
                 onClick={exitTour}
                 className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
               >
-                Р’С‹Р№С‚Рё РёР· С‚СѓСЂР°
+                Выйти из тура
               </button>
             </div>
             <p className="text-sm text-[#e7ecf8] leading-relaxed">
@@ -550,7 +556,7 @@ export default function ConstitutionPage() {
                 disabled={tourStep === 0}
                 className="px-4 py-2 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
               >
-                в†ђ РќР°Р·Р°Рґ
+                ← Назад
               </button>
               <div className="flex gap-1">
                 {TOUR.map((_, i) => (
@@ -558,7 +564,7 @@ export default function ConstitutionPage() {
                     key={i}
                     type="button"
                     onClick={() => goToTourStep(i)}
-                    aria-label={`РЁР°Рі ${i + 1}`}
+                    aria-label={`Шаг ${i + 1}`}
                     className={`w-2.5 h-2.5 rounded-full transition ${
                       i === tourStep
                         ? "bg-[#d4af37]"
@@ -575,11 +581,11 @@ export default function ConstitutionPage() {
                   onClick={() => goToTourStep(tourStep + 1)}
                   className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold hover:opacity-90 text-sm"
                 >
-                  Р”Р°Р»СЊС€Рµ в†’
+                  Дальше →
                 </button>
               ) : (
                 <div className="px-4 py-2 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm font-semibold">
-                  Р¤РёРЅР°Р» В· 8 РІРµРєРѕРІ РїСЂРѕР№РґРµРЅРѕ
+                  Финал · 8 веков пройдено
                 </div>
               )}
             </div>
@@ -589,18 +595,20 @@ export default function ConstitutionPage() {
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-[#f5d27a]">Р’РѕСЃРµРјСЊ РїР°СЂР°РјРµС‚СЂРѕРІ</h2>
+              <h2 className="text-xl font-semibold text-[#f5d27a]">
+                {t("constitution.params.heading")}
+              </h2>
               <button
                 type="button"
                 onClick={reset}
                 className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
               >
-                РЎР±СЂРѕСЃ
+                {t("constitution.button.reset")}
               </button>
             </div>
 
             <div className="space-y-4">
-              {SLIDER_META.map((m) => {
+              {localizedSliderMeta.map((m) => {
                 const val = sliders[m.key];
                 const highlighted = tourHighlight.has(m.key);
                 return (
@@ -614,7 +622,7 @@ export default function ConstitutionPage() {
                   >
                     <div className="flex justify-between items-baseline">
                       <label htmlFor={`s-${m.key}`} className="font-medium">
-                        {highlighted && <span className="text-emerald-400 mr-1">в—Џ</span>}
+                        {highlighted && <span className="text-emerald-400 mr-1">●</span>}
                         {m.label}
                       </label>
                       <span className="text-[#d4af37] font-mono text-sm">{val}</span>
@@ -639,7 +647,9 @@ export default function ConstitutionPage() {
             </div>
 
             <div className="mt-5 pt-4 border-t border-[#d4af37]/20">
-              <div className="text-xs text-[#9aa3c0] mb-2">РџСЂРµСЃРµС‚С‹:</div>
+              <div className="text-xs text-[#9aa3c0] mb-2">
+                {t("constitution.button.presets")}
+              </div>
               <div className="flex flex-wrap gap-2">
                 {PRESETS.map((p) => (
                   <button
@@ -658,50 +668,52 @@ export default function ConstitutionPage() {
           <div className="space-y-5">
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-xl p-5">
               <div className="text-xs uppercase tracking-wide text-[#9aa3c0]">
-                РџРѕР»СѓС‡РёРІС€РёР№СЃСЏ СЂРµР¶РёРј
+                {t("constitution.regime.heading")}
               </div>
               <h3 className="text-2xl font-bold text-[#d4af37] mt-1">{regime.name}</h3>
               <div className="text-sm text-[#9aa3c0] italic">{regime.era}</div>
               <p className="mt-3">{regime.summary}</p>
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div className="border border-emerald-500/30 rounded p-3 bg-emerald-500/5">
-                  <div className="text-emerald-300 text-xs uppercase mb-1">РџР»СЋСЃС‹</div>
+                  <div className="text-emerald-300 text-xs uppercase mb-1">Плюсы</div>
                   <div>{regime.pros}</div>
                 </div>
                 <div className="border border-rose-500/30 rounded p-3 bg-rose-500/5">
-                  <div className="text-rose-300 text-xs uppercase mb-1">РњРёРЅСѓСЃС‹</div>
+                  <div className="text-rose-300 text-xs uppercase mb-1">Минусы</div>
                   <div>{regime.cons}</div>
                 </div>
               </div>
             </div>
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
-              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">РЁРµСЃС‚СЊ РёРЅРґРµРєСЃРѕРІ</h3>
-              <MetricBar label="РЎС‚СЂР°С… СЌР»РёС‚ РїРµСЂРµРґ РЅРёР·РѕРј" value={metrics.eliteFear} invert />
-              <MetricBar label="Р“СЂС‹Р·РЅСЏ РІРЅСѓС‚СЂРё СЌР»РёС‚" value={metrics.intraConflict} invert />
-              <MetricBar label="РћР±РёРґР° РЅРёР·Р° РЅР° РІРµСЂС…" value={metrics.resentment} invert />
-              <MetricBar label="РРЅРЅРѕРІР°С†РёСЏ / РґСЂР°Р№РІ" value={metrics.innovation} />
-              <MetricBar label="РЈСЃС‚РѕР№С‡РёРІРѕСЃС‚СЊ" value={metrics.stability} />
-              <MetricBar label="Р›РµРіРёС‚РёРјРЅРѕСЃС‚СЊ" value={metrics.legitimacy} />
+              <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
+                {t("constitution.metrics.heading")}
+              </h3>
+              <MetricBar label="Страх элит перед низом" value={metrics.eliteFear} invert />
+              <MetricBar label="Грызня внутри элит" value={metrics.intraConflict} invert />
+              <MetricBar label="Обида низа на верх" value={metrics.resentment} invert />
+              <MetricBar label="Инновация / драйв" value={metrics.innovation} />
+              <MetricBar label="Устойчивость" value={metrics.stability} />
+              <MetricBar label="Легитимность" value={metrics.legitimacy} />
             </div>
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
-              <h3 className="text-lg font-semibold text-[#f5d27a] mb-1">РћС‚РїРµС‡Р°С‚РѕРє РєРѕРЅСЃС‚РёС‚СѓС†РёРё</h3>
+              <h3 className="text-lg font-semibold text-[#f5d27a] mb-1">Отпечаток конституции</h3>
               <div className="text-xs text-[#9aa3c0] mb-2">
-                Р’РѕСЃСЊРјРёСѓРіРѕР»СЊРЅРёРє 0-100 РїРѕ РєР°Р¶РґРѕРјСѓ РїРѕР»Р·СѓРЅРєСѓ. РЎСЂР°РІРЅРёРІР°Р№ СЃРёР»СѓСЌС‚С‹ РїСЂРµСЃРµС‚РѕРІ Рё СЃС‚СЂР°РЅ.
+                Восьмиугольник 0-100 по каждому ползунку. Сравнивай силуэты пресетов и стран.
               </div>
               <SpiderChart sliders={sliders} shockedSliders={shockedSliders} />
             </div>
 
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
               <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
-                РЎРѕС…СЂР°РЅРёС‚СЊ СЃС†РµРЅР°СЂРёР№{savedTotal > 0 ? ` (РІСЃРµРіРѕ: ${savedTotal})` : ""}
+                Сохранить сценарий{savedTotal > 0 ? ` (всего: ${savedTotal})` : ""}
               </h3>
               <div className="flex flex-wrap gap-2">
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="РќР°Р·РІР°РЅРёРµ (РЅР°РїСЂРёРјРµСЂ, В«РљР°Р·Р°С…СЃС‚Р°РЅ-2050В»)"
+                  placeholder="Название (например, «Казахстан-2050»)"
                   className="flex-1 min-w-[180px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-3 py-2 text-sm"
                   maxLength={120}
                 />
@@ -711,26 +723,26 @@ export default function ConstitutionPage() {
                   disabled={busy || !title.trim()}
                   className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold disabled:opacity-40"
                 >
-                  {busy ? "..." : "РЎРѕС…СЂР°РЅРёС‚СЊ"}
+                  {busy ? "..." : "Сохранить"}
                 </button>
                 <button
                   type="button"
                   onClick={signAndDownload}
                   disabled={signing}
-                  title="QSign HMAC-SHA256: РїРѕРґРїРёСЃР°С‚СЊ С‚РµРєСѓС‰РёР№ СЃС†РµРЅР°СЂРёР№ Рё СЃРєР°С‡Р°С‚СЊ РєР°Рє .signed.json"
+                  title="QSign HMAC-SHA256: подписать текущий сценарий и скачать как .signed.json"
                   className="px-4 py-2 rounded border border-[#d4af37] text-[#d4af37] font-semibold hover:bg-[#d4af37]/10 disabled:opacity-40"
                 >
-                  {signing ? "..." : "QSign + СЃРєР°С‡Р°С‚СЊ"}
+                  {signing ? "..." : "QSign + скачать"}
                 </button>
               </div>
               {signError && (
                 <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
-                  РћС€РёР±РєР° РїРѕРґРїРёСЃРё: {signError}
+                  Ошибка подписи: {signError}
                 </div>
               )}
               {saved.length > 0 && (
                 <div className="mt-4">
-                  <div className="text-xs text-[#9aa3c0] mb-2">РќРµРґР°РІРЅРёРµ СЃС†РµРЅР°СЂРёРё:</div>
+                  <div className="text-xs text-[#9aa3c0] mb-2">Недавние сценарии:</div>
                   <ul className="space-y-1 text-sm">
                     {saved.slice(0, 8).map((it) => (
                       <li
@@ -786,9 +798,9 @@ export default function ConstitutionPage() {
 
         <footer className="mt-8 text-xs text-[#9aa3c0] max-w-3xl">
           <p>
-            РўРµРѕСЂРµС‚РёС‡РµСЃРєР°СЏ РѕСЃРЅРѕРІР°: North / Wallis / Weingast В«Violence and Social OrdersВ»,
-            Acemoglu / Robinson В«Why Nations FailВ», Elinor Ostrom В«Governing the CommonsВ»,
-            Nassim Taleb В«Skin in the GameВ».
+            Теоретическая основа: North / Wallis / Weingast «Violence and Social Orders»,
+            Acemoglu / Robinson «Why Nations Fail», Elinor Ostrom «Governing the Commons»,
+            Nassim Taleb «Skin in the Game».
           </p>
         </footer>
       </div>
@@ -830,13 +842,13 @@ function SpiderChart({
 
   // Short axis labels for radial layout (full names too long)
   const SHORT_LABELS: Record<keyof Sliders, string> = {
-    floor: "РџРѕР»",
-    ruleOfLaw: "Р—Р°РєРѕРЅ",
-    rotation: "Р РѕС‚Р°С†РёСЏ",
-    transparency: "РџСЂРѕР·СЂ.",
+    floor: "Пол",
+    ruleOfLaw: "Закон",
+    rotation: "Ротация",
+    transparency: "Прозр.",
     multiStatus: "Multi-status",
     skinInGame: "Skin",
-    polycentricity: "РџРѕР»РёС†РµРЅС‚СЂ.",
+    polycentricity: "Полицентр.",
     positiveSum: "Pos-sum",
   };
 
@@ -972,8 +984,8 @@ function WorldMapScatter({
   const W = 720;
   const H = 480;
   const PAD = 56;
-  const xFor = (v: number) => PAD + ((100 - v) / 100) * (W - 2 * PAD); // invert: low elite-fear в†’ right
-  const yFor = (v: number) => H - PAD - (v / 100) * (H - 2 * PAD); // high innovation в†’ top
+  const xFor = (v: number) => PAD + ((100 - v) / 100) * (W - 2 * PAD); // invert: low elite-fear → right
+  const yFor = (v: number) => H - PAD - (v / 100) * (H - 2 * PAD); // high innovation → top
 
   const points = COUNTRIES.map((c) => {
     const m = computeMetrics(c.sliders);
@@ -989,10 +1001,10 @@ function WorldMapScatter({
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-lg font-semibold text-[#f5d27a]">
-          Р“РґРµ С‚С‹ РЅР° РєР°СЂС‚Рµ РјРёСЂР°
+          Где ты на карте мира
         </h3>
         <div className="text-xs text-[#9aa3c0]">
-          РѕСЃСЊ X вЂ” СЃС‚СЂР°С… СЌР»РёС‚ РїРµСЂРµРґ РЅРёР·РѕРј (в†ђ&nbsp;РІС‹С€Рµ) В· РѕСЃСЊ Y вЂ” РёРЅРЅРѕРІР°С†РёСЏ / РґСЂР°Р№РІ (в†‘&nbsp;РІС‹С€Рµ)
+          ось X — страх элит перед низом (←&nbsp;выше) · ось Y — инновация / драйв (↑&nbsp;выше)
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -1009,16 +1021,16 @@ function WorldMapScatter({
           <line x1={PAD} y1={yFor(50)} x2={W - PAD} y2={yFor(50)} stroke="#d4af37" strokeOpacity={0.12} strokeDasharray="4 6" />
           {/* quadrant labels */}
           <text x={W - PAD - 8} y={PAD + 14} textAnchor="end" fill="#10b981" fontSize="11" opacity={0.7}>
-            в†— СЃРІРѕР±РѕРґР° + СЂРѕСЃС‚
+            ↗ свобода + рост
           </text>
           <text x={PAD + 8} y={PAD + 14} fill="#f97316" fontSize="11" opacity={0.7}>
-            СЃС‚СЂР°С… + СЂРѕСЃС‚
+            страх + рост
           </text>
           <text x={W - PAD - 8} y={H - PAD - 8} textAnchor="end" fill="#9aa3c0" fontSize="11" opacity={0.7}>
-            СЃРІРѕР±РѕРґР° + Р·Р°СЃС‚РѕР№
+            свобода + застой
           </text>
           <text x={PAD + 8} y={H - PAD - 8} fill="#ef4444" fontSize="11" opacity={0.7}>
-            в†™ СЃС‚СЂР°С… + Р·Р°СЃС‚РѕР№
+            ↙ страх + застой
           </text>
           {/* axis ticks */}
           <text x={PAD} y={H - PAD + 18} fill="#9aa3c0" fontSize="10">100</text>
@@ -1026,7 +1038,7 @@ function WorldMapScatter({
           <text x={PAD - 6} y={PAD + 4} textAnchor="end" fill="#9aa3c0" fontSize="10">100</text>
           <text x={PAD - 6} y={H - PAD} textAnchor="end" fill="#9aa3c0" fontSize="10">0</text>
           <text x={W / 2} y={H - PAD + 32} textAnchor="middle" fill="#d4af37" fontSize="12">
-            СЃС‚СЂР°С… СЌР»РёС‚ РїРµСЂРµРґ РЅРёР·РѕРј в†ђ
+            страх элит перед низом ←
           </text>
           <text
             x={PAD - 28}
@@ -1036,7 +1048,7 @@ function WorldMapScatter({
             fontSize="12"
             transform={`rotate(-90 ${PAD - 28} ${H / 2})`}
           >
-            в†‘ РёРЅРЅРѕРІР°С†РёСЏ / РґСЂР°Р№РІ
+            ↑ инновация / драйв
           </text>
 
           {/* country points */}
@@ -1061,16 +1073,16 @@ function WorldMapScatter({
             </g>
           ))}
 
-          {/* current scenario вЂ” glowing dot */}
+          {/* current scenario — glowing dot */}
           <circle cx={cx} cy={cy} r={14} fill="#22d3ee" opacity={0.18}>
             <animate attributeName="r" values="10;18;10" dur="2.4s" repeatCount="indefinite" />
           </circle>
           <circle cx={cx} cy={cy} r={7} fill="#22d3ee" stroke="#0b1736" strokeWidth={2} />
           <text x={cx + 12} y={cy + 4} fill="#22d3ee" fontSize="12" fontWeight="bold">
-            С‚С‹ СЃРµР№С‡Р°СЃ
+            ты сейчас
           </text>
 
-          {/* shocked scenario вЂ” magenta dot with arrow */}
+          {/* shocked scenario — magenta dot with arrow */}
           {sx !== null && sy !== null && (
             <g>
               <defs>
@@ -1102,16 +1114,16 @@ function WorldMapScatter({
               </circle>
               <circle cx={sx} cy={sy} r={7} fill="#f472b6" stroke="#0b1736" strokeWidth={2} />
               <text x={sx + 12} y={sy + 4} fill="#f472b6" fontSize="12" fontWeight="bold">
-                РїРѕСЃР»Рµ: {shockLabel ?? "С€РѕРє"}
+                после: {shockLabel ?? "шок"}
               </text>
             </g>
           )}
         </svg>
       </div>
       <p className="text-xs text-[#9aa3c0] mt-3">
-        РўРѕС‡РєР° В«С‚С‹ СЃРµР№С‡Р°СЃВ» СЃС‡РёС‚Р°РµС‚СЃСЏ РёР· С‚РµРєСѓС‰РёС… РїРѕР»Р·СѓРЅРєРѕРІ. Р§РµРј РїСЂР°РІРµРµ вЂ” С‚РµРј РјРµРЅСЊС€Рµ СЌР»РёС‚С‹ Р±РѕСЏС‚СЃСЏ РЅРёР·Р°.
-        Р§РµРј РІС‹С€Рµ вЂ” С‚РµРј Р±РѕР»СЊС€Рµ РґСЂР°Р№РІР° Рё РёРЅРЅРѕРІР°С†РёРё. РЎС‚СЂР°РЅС‹ вЂ” РїСЂРёР±Р»РёР¶С‘РЅРЅР°СЏ РѕС†РµРЅРєР° РїРѕ С€РєР°Р»Рµ 0-100; РЅРµ РЅР°СѓС‡РЅС‹Р№
-        СЂРµР№С‚РёРЅРі, Р° РёРЅСЃС‚СЂСѓРјРµРЅС‚ РґР»СЏ РёРЅС‚СѓРёС†РёРё.
+        Точка «ты сейчас» считается из текущих ползунков. Чем правее — тем меньше элиты боятся низа.
+        Чем выше — тем больше драйва и инновации. Страны — приближённая оценка по шкале 0-100; не научный
+        рейтинг, а инструмент для интуиции.
       </p>
     </div>
   );
@@ -1144,40 +1156,40 @@ function ComparePanel({
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-        <h3 className="text-lg font-semibold text-[#f5d27a]">РЎСЂР°РІРЅРёС‚СЊ РґРІР° СЃС†РµРЅР°СЂРёСЏ</h3>
+        <h3 className="text-lg font-semibold text-[#f5d27a]">Сравнить два сценария</h3>
         <div className="text-xs text-[#9aa3c0]">
-          Р’С‹Р±РµСЂРё РґРІР° СЃРѕС…СЂР°РЅС‘РЅРЅС‹С…, СѓРІРёРґРёС€СЊ РїРѕР»Р·СѓРЅРєРё + РјРµС‚СЂРёРєРё + СЂРµР¶РёРјС‹ СЂСЏРґРѕРј. URL ?compare=A,B РјРѕР¶РЅРѕ
-          РїРѕРґРµР»РёС‚СЊСЃСЏ
+          Выбери два сохранённых, увидишь ползунки + метрики + режимы рядом. URL ?compare=A,B можно
+          поделиться
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
         <div>
-          <div className="text-xs uppercase text-[#22d3ee] mb-1">A вЂ” СЃРёРЅРёР№</div>
+          <div className="text-xs uppercase text-[#22d3ee] mb-1">A — синий</div>
           <select
             value={compareA?.id ?? ""}
             onChange={(e) => onPickA(e.target.value || null)}
             className="w-full bg-[#050a1a] border border-[#22d3ee]/40 rounded px-3 py-2 text-sm"
           >
-            <option value="">вЂ” РІС‹Р±СЂР°С‚СЊ СЃС†РµРЅР°СЂРёР№ вЂ”</option>
+            <option value="">— выбрать сценарий —</option>
             {pickable.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.title} {s.regime ? `В· ${s.regime}` : ""}
+                {s.title} {s.regime ? `· ${s.regime}` : ""}
               </option>
             ))}
           </select>
         </div>
         <div>
-          <div className="text-xs uppercase text-[#f472b6] mb-1">B вЂ” СЂРѕР·РѕРІС‹Р№</div>
+          <div className="text-xs uppercase text-[#f472b6] mb-1">B — розовый</div>
           <select
             value={compareB?.id ?? ""}
             onChange={(e) => onPickB(e.target.value || null)}
             className="w-full bg-[#050a1a] border border-[#f472b6]/40 rounded px-3 py-2 text-sm"
           >
-            <option value="">вЂ” РІС‹Р±СЂР°С‚СЊ СЃС†РµРЅР°СЂРёР№ вЂ”</option>
+            <option value="">— выбрать сценарий —</option>
             {pickable.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.title} {s.regime ? `В· ${s.regime}` : ""}
+                {s.title} {s.regime ? `· ${s.regime}` : ""}
               </option>
             ))}
           </select>
@@ -1186,7 +1198,7 @@ function ComparePanel({
 
       {pickable.length === 0 && (
         <div className="text-sm text-[#9aa3c0] italic">
-          РџРѕРєР° РЅРµС‚ СЃРѕС…СЂР°РЅС‘РЅРЅС‹С… СЃС†РµРЅР°СЂРёРµРІ СЃ РїРѕР»РЅС‹РјРё РґР°РЅРЅС‹РјРё. РЎРѕС…СЂР°РЅРё РїР°СЂСѓ РІС‹С€Рµ, Рё РѕРЅРё РїРѕСЏРІСЏС‚СЃСЏ Р·РґРµСЃСЊ.
+          Пока нет сохранённых сценариев с полными данными. Сохрани пару выше, и они появятся здесь.
         </div>
       )}
 
@@ -1197,7 +1209,7 @@ function ComparePanel({
             onClick={onClear}
             className="text-xs px-3 py-1 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
           >
-            РЎР±СЂРѕСЃРёС‚СЊ РІС‹Р±РѕСЂ
+            Сбросить выбор
           </button>
         </div>
       )}
@@ -1213,7 +1225,7 @@ function ComparePanel({
                 <span className="text-emerald-300">+</span> {regimeA.pros}
               </div>
               <div className="text-xs mt-1">
-                <span className="text-rose-300">в€’</span> {regimeA.cons}
+                <span className="text-rose-300">−</span> {regimeA.cons}
               </div>
             </div>
             <div className="border border-[#f472b6]/40 rounded p-3 bg-[#f472b6]/5">
@@ -1224,13 +1236,13 @@ function ComparePanel({
                 <span className="text-emerald-300">+</span> {regimeB.pros}
               </div>
               <div className="text-xs mt-1">
-                <span className="text-rose-300">в€’</span> {regimeB.cons}
+                <span className="text-rose-300">−</span> {regimeB.cons}
               </div>
             </div>
           </div>
 
           <div className="mb-5">
-            <div className="text-xs text-[#9aa3c0] mb-2">РџРѕР»Р·СѓРЅРєРё (A vs B):</div>
+            <div className="text-xs text-[#9aa3c0] mb-2">Ползунки (A vs B):</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
               {SLIDER_META.map((m) => {
                 const va = slidersA[m.key];
@@ -1240,7 +1252,7 @@ function ComparePanel({
                     <div className="flex justify-between text-xs">
                       <span className="truncate">{m.label}</span>
                       <span className="font-mono text-[#9aa3c0]">
-                        <span className="text-[#22d3ee]">{va}</span> В·{" "}
+                        <span className="text-[#22d3ee]">{va}</span> ·{" "}
                         <span className="text-[#f472b6]">{vb}</span>
                       </span>
                     </div>
@@ -1261,16 +1273,16 @@ function ComparePanel({
           </div>
 
           <div className="mb-5">
-            <div className="text-xs text-[#9aa3c0] mb-2">РРЅРґРµРєСЃС‹ вЂ” РґРµР»СЊС‚Р° B РјРёРЅСѓСЃ A:</div>
+            <div className="text-xs text-[#9aa3c0] mb-2">Индексы — дельта B минус A:</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2 text-xs">
               {(
                 [
-                  ["eliteFear", "РЎС‚СЂР°С… СЌР»РёС‚ РїРµСЂРµРґ РЅРёР·РѕРј", true],
-                  ["intraConflict", "Р“СЂС‹Р·РЅСЏ РІРЅСѓС‚СЂРё СЌР»РёС‚", true],
-                  ["resentment", "РћР±РёРґР° РЅРёР·Р° РЅР° РІРµСЂС…", true],
-                  ["innovation", "РРЅРЅРѕРІР°С†РёСЏ / РґСЂР°Р№РІ", false],
-                  ["stability", "РЈСЃС‚РѕР№С‡РёРІРѕСЃС‚СЊ", false],
-                  ["legitimacy", "Р›РµРіРёС‚РёРјРЅРѕСЃС‚СЊ", false],
+                  ["eliteFear", "Страх элит перед низом", true],
+                  ["intraConflict", "Грызня внутри элит", true],
+                  ["resentment", "Обида низа на верх", true],
+                  ["innovation", "Инновация / драйв", false],
+                  ["stability", "Устойчивость", false],
+                  ["legitimacy", "Легитимность", false],
                 ] as Array<[keyof Metrics, string, boolean]>
               ).map(([key, label, invert]) => {
                 const va = metricsA[key];
@@ -1283,7 +1295,7 @@ function ComparePanel({
                     <span className="truncate">{label}</span>
                     <span className="font-mono">
                       <span className="text-[#22d3ee]">{va}</span>
-                      <span className="text-[#9aa3c0] mx-1">в†’</span>
+                      <span className="text-[#9aa3c0] mx-1">→</span>
                       <span className="text-[#f472b6]">{vb}</span>
                       <span
                         className={`ml-2 ${d === 0 ? "text-[#9aa3c0]" : good ? "text-emerald-400" : "text-rose-400"}`}
@@ -1326,7 +1338,7 @@ function MiniCompareScatter({
   return (
     <div>
       <div className="text-xs text-[#9aa3c0] mb-1">
-        A в†’ B РЅР° РєР°СЂС‚Рµ РјРёСЂР° (X вЂ” СЃС‚СЂР°С… СЌР»РёС‚, Y вЂ” РёРЅРЅРѕРІР°С†РёСЏ)
+        A → B на карте мира (X — страх элит, Y — инновация)
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-full">
         <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="#d4af37" strokeOpacity={0.4} />
@@ -1381,9 +1393,9 @@ function StressTestPanel({
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-        <h3 className="text-lg font-semibold text-[#f5d27a]">Stress test вЂ” С‡С‚Рѕ РІС‹РґРµСЂР¶РёС‚ С‚РІРѕСЏ РєРѕРЅСЃС‚РёС‚СѓС†РёСЏ</h3>
+        <h3 className="text-lg font-semibold text-[#f5d27a]">Stress test — что выдержит твоя конституция</h3>
         <div className="text-xs text-[#9aa3c0]">
-          РџСЂРёРјРµРЅСЏР№ С€РѕРє, СЃРјРѕС‚СЂРё РЅР° СЃРєР°С‚С‚РµСЂРµ, РєР°Рє С‚РµР±СЏ СЃРЅРѕСЃРёС‚ Рё РІ РєР°РєРѕР№ СЂРµР¶РёРј СЃРєР°С‚С‹РІР°РµС€СЊСЃСЏ
+          Применяй шок, смотри на скаттере, как тебя сносит и в какой режим скатываешься
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
@@ -1411,10 +1423,10 @@ function StressTestPanel({
         <div className="border-t border-[#d4af37]/20 pt-4">
           <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
             <div className="text-sm">
-              <span className="text-[#9aa3c0]">Р±С‹Р»Рѕ: </span>
+              <span className="text-[#9aa3c0]">было: </span>
               <span className="text-[#22d3ee] font-semibold">{currentRegime.name}</span>
-              <span className="text-[#9aa3c0] mx-2">в†’</span>
-              <span className="text-[#9aa3c0]">СЃС‚Р°Р»Рѕ: </span>
+              <span className="text-[#9aa3c0] mx-2">→</span>
+              <span className="text-[#9aa3c0]">стало: </span>
               <span className="text-[#f472b6] font-semibold">{shockedRegime.name}</span>
             </div>
             <div className="flex gap-2">
@@ -1423,14 +1435,14 @@ function StressTestPanel({
                 onClick={onClear}
                 className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
               >
-                РћС‚РјРµРЅРёС‚СЊ
+                Отменить
               </button>
               <button
                 type="button"
                 onClick={onApply}
                 className="text-xs px-3 py-1 rounded bg-[#f472b6] text-[#0b1736] font-semibold hover:bg-[#f472b6]/80"
               >
-                РџСЂРёРјРµРЅРёС‚СЊ Рє РїРѕР»Р·СѓРЅРєР°Рј
+                Применить к ползункам
               </button>
             </div>
           </div>
@@ -1449,7 +1461,7 @@ function StressTestPanel({
                   <div className="text-[#9aa3c0] text-[10px] truncate">{m.label}</div>
                   <div className="flex items-baseline gap-1">
                     <span className="font-mono">{before}</span>
-                    <span className="text-[#9aa3c0]">в†’</span>
+                    <span className="text-[#9aa3c0]">→</span>
                     <span className="font-mono">{after}</span>
                     <span
                       className={`font-mono ${

@@ -46,7 +46,7 @@
  *   For a 5k-game corpus plan ~3-4 hours; consider depth=10 or sampling.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createRequire } from "node:module";
 
@@ -315,6 +315,29 @@ async function main() {
   const gameChunks = splitGames(raw);
   origStdoutWrite(`  Games:  ${gameChunks.length}\n\n`);
 
+  // Resume-from-checkpoint: if CSV exists, count its existing rows so we can
+  // skip games that have already been processed. Header row excluded.
+  const outAbs = resolve(args.output);
+  const outDir = dirname(outAbs);
+  if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+
+  const headersCsv = ["gameId","side","targetElo","result","accuracyPct","openingDepth","tacticalEff","endgameStrength","blunderRate","avgMoveTime","plies","meanCpLoss"];
+  let existingGamesDone = 0;
+  if (existsSync(outAbs)) {
+    const raw = readFileSync(outAbs, "utf8").trim();
+    const lines = raw ? raw.split(/\r?\n/) : [];
+    // 1 header + 2 rows per game ⇒ floor((N-1)/2) completed games
+    existingGamesDone = Math.max(0, Math.floor((lines.length - 1) / 2));
+    if (existingGamesDone > 0) {
+      origStdoutWrite(`Resume: found ${existingGamesDone} games already in CSV — skipping those.\n`);
+    } else {
+      // Empty/header-only file: rewrite header
+      writeFileSync(outAbs, headersCsv.join(",") + "\n");
+    }
+  } else {
+    writeFileSync(outAbs, headersCsv.join(",") + "\n");
+  }
+
   origStdoutWrite("Loading Stockfish WASM...\n");
   const engine = await makeEngine();
   await uciReady(engine);
@@ -322,8 +345,8 @@ async function main() {
   origStdoutWrite("  engine ready ✓\n\n");
 
   const chessjs = require("../frontend/node_modules/chess.js/dist/cjs/chess.js");
-  const rows = [];
   let processed = 0;
+  let seen = 0;  // counts eligible (parsed, kept) games even if we skip-resume
 
   for (const chunk of gameChunks) {
     if (processed >= args.limit) break;
@@ -343,6 +366,14 @@ async function main() {
       continue;
     }
 
+    // Resume: skip games already represented in the CSV
+    if (seen < existingGamesDone) {
+      seen++;
+      processed++;
+      continue;
+    }
+    seen++;
+
     const t0 = Date.now();
     let gameRows;
     try {
@@ -351,7 +382,12 @@ async function main() {
       origStdoutWrite(`  [fail] ${headers.event}: ${e.message}\n`);
       continue;
     }
-    rows.push(...gameRows);
+
+    // Streaming write: append both rows immediately. If the process dies after
+    // this point, the CSV is still valid up to and including this game.
+    const csvChunk = gameRows.map(r => headersCsv.map(h => r[h]).join(",")).join("\n") + "\n";
+    appendFileSync(outAbs, csvChunk);
+
     const t1 = Date.now();
     origStdoutWrite(
       `  ${headers.event}: white=${gameRows[0].accuracyPct.toFixed(1)}% (${gameRows[0].meanCpLoss.toFixed(0)}cp, ` +
@@ -363,18 +399,7 @@ async function main() {
   }
 
   stopCapture();
-
-  // Write CSV
-  const headersCsv = ["gameId","side","targetElo","result","accuracyPct","openingDepth","tacticalEff","endgameStrength","blunderRate","avgMoveTime","plies","meanCpLoss"];
-  const csv = [
-    headersCsv.join(","),
-    ...rows.map(r => headersCsv.map(h => r[h]).join(","))
-  ].join("\n") + "\n";
-
-  const outDir = dirname(resolve(args.output));
-  if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-  writeFileSync(args.output, csv);
-  origStdoutWrite(`\nWrote ${rows.length} rows → ${args.output}\n`);
+  origStdoutWrite(`\nProcessed ${processed} games → ${outAbs}\n`);
   process.exit(0);
 }
 

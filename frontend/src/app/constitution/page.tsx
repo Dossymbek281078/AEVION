@@ -616,6 +616,12 @@ export default function ConstitutionPage() {
               >
                 🌍 Planet Leaderboard →
               </Link>
+              <Link
+                href="/constitution/stats"
+                className="px-4 py-2 rounded border border-cyan-400/60 text-cyan-300 font-semibold hover:bg-cyan-500/10"
+              >
+                📊 Аналитика →
+              </Link>
             </div>
           )}
         </header>

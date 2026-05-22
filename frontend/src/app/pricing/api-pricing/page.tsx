@@ -78,24 +78,27 @@ export default function PricingApiPage() {
   }, []);
 
   const snippet = `# Установить SDK
-npm install @aevion/sdk
+npm install @aevion-io/fintech-sdk
 
 # В коде
-import { Aevion } from "@aevion/sdk";
-const a = new Aevion({ apiKey: process.env.AEVION_API_KEY });
+import { QPayNet, signWebhookPayload } from "@aevion-io/fintech-sdk";
+const qpaynet = new QPayNet({ apiKey: process.env.AEVION_API_KEY });
 
-// Подписать документ
-const sig = await a.qsign.sign({
-  payload: pdfBuffer,
-  signers: ["alice@acme.io"],
+// Перевод между кошельками
+const tx = await qpaynet.transfer({
+  fromWalletId: "wlt_alice",
+  toWalletId: "wlt_bob",
+  amount: 5000,            // KZT в тийинах (×100)
+  description: "Order #123",
 });
 
-// Зарегистрировать IP-объект
-const obj = await a.qright.register({
-  title: "Aevion mascot v3",
-  kind: "image",
-  hash: sha256,
-});`;
+// Запрос на оплату (генерирует pay-link)
+const req = await qpaynet.requests.create({
+  toWalletId: "wlt_alice",
+  amount: 12500,
+  description: "Invoice #456",
+});
+console.log(req.payUrl);   // https://aevion.app/qpaynet/r/TOKEN`;
 
   return (
     <ProductPageShell maxWidth={1080}>

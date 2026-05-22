@@ -174,6 +174,137 @@ const limiter = rateLimit({
 });
 
 constitutionAiRouter.post(
+  "/ai-suggest-stream",
+  limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response) => {
+    const body = (req.body && typeof req.body === "object")
+      ? (req.body as Record<string, unknown>)
+      : {};
+    const description = typeof body.description === "string"
+      ? body.description.trim()
+      : "";
+    if (!description || description.length < 8) {
+      return res.status(400).json({
+        error: "description_too_short",
+        hint: "Опиши страну/общество одним-двумя предложениями.",
+      });
+    }
+
+    // SSE headers
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const send = (payload: unknown) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+    const heartbeat = setInterval(() => res.write(`:hb\n\n`), 15000);
+    let aborted = false;
+    req.on("close", () => { aborted = true; clearInterval(heartbeat); });
+
+    let buffer = "";
+    let provider = "unknown";
+    try {
+      const port = process.env.PORT || 4001;
+      const upstream = await fetch(`http://127.0.0.1:${port}/api/qcoreai/chat-stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: description.slice(0, 4000) },
+          ],
+        }),
+      });
+      // QCoreAI returns plain JSON (not SSE) when stub mode is active
+      const ct = upstream.headers.get("content-type") || "";
+      if (!ct.startsWith("text/event-stream")) {
+        // Stub fallback or error
+        const stub = stubSuggest(description);
+        send({ kind: "text", text: stub.explanation });
+        send({ kind: "sliders", sliders: stub.sliders, explanation: stub.explanation, provider: "stub-mode" });
+        send({ kind: "done" });
+        res.write("data: [DONE]\n\n");
+        res.end();
+        clearInterval(heartbeat);
+        return;
+      }
+
+      if (!upstream.body) throw new Error("no upstream body");
+      const reader = upstream.body.getReader();
+      const decoder = new TextDecoder();
+      let sseTail = "";
+      while (!aborted) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        sseTail += decoder.decode(value, { stream: true });
+        const lines = sseTail.split("\n");
+        sseTail = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const ev = JSON.parse(data) as {
+              kind?: string;
+              text?: string;
+              providerId?: string;
+              provider?: string;
+              message?: string;
+            };
+            if (ev.kind === "text" && typeof ev.text === "string") {
+              buffer += ev.text;
+              send({ kind: "text", text: ev.text });
+            } else if (ev.kind === "done") {
+              provider = ev.provider ?? ev.providerId ?? provider;
+            } else if (ev.kind === "error") {
+              send({ kind: "error", message: ev.message ?? "unknown" });
+            }
+          } catch {
+            /* ignore non-JSON SSE lines */
+          }
+        }
+      }
+
+      // Stream done — try to parse JSON from buffer
+      const parsed = extractJson(buffer);
+      const result = parseSliders(parsed);
+      if (result) {
+        send({ kind: "sliders", sliders: result.sliders, explanation: result.explanation, provider });
+      } else {
+        const stub = stubSuggest(description);
+        send({
+          kind: "sliders",
+          sliders: stub.sliders,
+          explanation: stub.explanation,
+          provider,
+          note: "AI ответил не JSON; вернули эвристику. Реальный ответ: " + buffer.slice(0, 200),
+        });
+      }
+      send({ kind: "done" });
+      if (!aborted) {
+        res.write("data: [DONE]\n\n");
+        res.end();
+      }
+    } catch (err) {
+      if (!aborted) {
+        send({
+          kind: "error",
+          message: err instanceof Error ? err.message : "stream_failed",
+        });
+        res.write("data: [DONE]\n\n");
+        res.end();
+      }
+    } finally {
+      clearInterval(heartbeat);
+    }
+  },
+);
+
+constitutionAiRouter.post(
   "/ai-suggest",
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
   async (req: Request, res: Response) => {

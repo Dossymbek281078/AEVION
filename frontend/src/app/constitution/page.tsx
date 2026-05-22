@@ -1648,6 +1648,41 @@ function StressTestPanel({
   );
 }
 
+type AiHistoryEntry = {
+  description: string;
+  sliders: Sliders;
+  explanation: string;
+  ts: number;
+  provider?: string;
+};
+
+const AI_HISTORY_KEY = "constitution.ai.history";
+const AI_HISTORY_MAX = 20;
+
+function loadAiHistory(): AiHistoryEntry[] {
+  try {
+    const raw = window.localStorage.getItem(AI_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as AiHistoryEntry[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(0, AI_HISTORY_MAX);
+  } catch {
+    return [];
+  }
+}
+
+function pushAiHistory(entry: AiHistoryEntry): AiHistoryEntry[] {
+  const list = loadAiHistory();
+  list.unshift(entry);
+  const trimmed = list.slice(0, AI_HISTORY_MAX);
+  try {
+    window.localStorage.setItem(AI_HISTORY_KEY, JSON.stringify(trimmed));
+  } catch {
+    /* ignore quota */
+  }
+  return trimmed;
+}
+
 function AiAdvisorModal({
   onClose,
   onApply,
@@ -1659,6 +1694,13 @@ function AiAdvisorModal({
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
+  const [streamText, setStreamText] = useState<string>("");
+  const [history, setHistory] = useState<AiHistoryEntry[]>([]);
+  const [showHistory, setShowHistory] = useState<boolean>(false);
+
+  useEffect(() => {
+    setHistory(loadAiHistory());
+  }, []);
 
   const submit = async () => {
     if (description.trim().length < 8) {
@@ -1668,8 +1710,12 @@ function AiAdvisorModal({
     setBusy(true);
     setError(null);
     setProvider(null);
+    setStreamText("");
+    let finalSliders: Sliders | null = null;
+    let finalExplanation = "";
+    let finalProvider = "unknown";
     try {
-      const r = await fetch("/api-backend/api/constitution/ai-suggest", {
+      const r = await fetch("/api-backend/api/constitution/ai-suggest-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: description.trim() }),
@@ -1678,18 +1724,77 @@ function AiAdvisorModal({
         const text = await r.text().catch(() => "");
         throw new Error(`HTTP ${r.status}: ${text.slice(0, 140)}`);
       }
-      const j = (await r.json()) as {
-        sliders: Sliders;
-        explanation: string;
-        provider?: string;
-      };
-      setProvider(j.provider ?? "unknown");
-      onApply(j.sliders, j.explanation);
+      if (!r.body) throw new Error("no_body");
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let sseTail = "";
+      let acc = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        sseTail += decoder.decode(value, { stream: true });
+        const lines = sseTail.split("\n");
+        sseTail = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          try {
+            const ev = JSON.parse(data) as {
+              kind?: string;
+              text?: string;
+              sliders?: Sliders;
+              explanation?: string;
+              provider?: string;
+              message?: string;
+            };
+            if (ev.kind === "text" && typeof ev.text === "string") {
+              acc += ev.text;
+              setStreamText(acc);
+            } else if (ev.kind === "sliders" && ev.sliders) {
+              finalSliders = ev.sliders;
+              finalExplanation = ev.explanation ?? "";
+              finalProvider = ev.provider ?? "unknown";
+              setProvider(finalProvider);
+            } else if (ev.kind === "error") {
+              setError(ev.message ?? "stream_error");
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (finalSliders) {
+        const entry: AiHistoryEntry = {
+          description: description.trim(),
+          sliders: finalSliders,
+          explanation: finalExplanation,
+          provider: finalProvider,
+          ts: Date.now(),
+        };
+        setHistory(pushAiHistory(entry));
+        onApply(finalSliders, finalExplanation);
+      } else if (!error) {
+        setError("AI не вернул ползунки — попробуй переформулировать описание.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "ai_failed");
     } finally {
       setBusy(false);
     }
+  };
+
+  const applyFromHistory = (entry: AiHistoryEntry) => {
+    onApply(entry.sliders, entry.explanation);
+  };
+
+  const clearHistory = () => {
+    try {
+      window.localStorage.removeItem(AI_HISTORY_KEY);
+    } catch {
+      /* ignore */
+    }
+    setHistory([]);
   };
 
   return (
@@ -1717,10 +1822,53 @@ function AiAdvisorModal({
         </div>
         <p className="text-sm text-[#9aa3c0] mb-3">
           Опиши страну/общество/гипотетический строй в свободной форме —
-          ИИ подберёт 8 ползунков и объяснит, почему именно эти значения.
-          Идёт через QCoreAI (Claude/GPT/Gemini в зависимости от настроек
-          backend).
+          ИИ подберёт 8 ползунков и объяснит выбор. Streaming через
+          QCoreAI: ответ приходит токенами по мере генерации.
         </p>
+        {history.length > 0 && (
+          <div className="mb-3 border border-[#d4af37]/20 rounded">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="w-full text-left px-3 py-2 text-xs text-[#9aa3c0] hover:bg-[#d4af37]/5 flex justify-between"
+            >
+              <span>📜 Прошлые ИИ-сценарии ({history.length})</span>
+              <span>{showHistory ? "▴" : "▾"}</span>
+            </button>
+            {showHistory && (
+              <div className="max-h-48 overflow-y-auto border-t border-[#d4af37]/20">
+                {history.map((h, i) => (
+                  <div
+                    key={h.ts}
+                    className="px-3 py-2 text-xs border-b border-[#d4af37]/10 last:border-b-0 flex justify-between items-start gap-2 hover:bg-[#d4af37]/5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[#e7ecf8] truncate">{h.description}</div>
+                      <div className="text-[#9aa3c0] text-[10px]">
+                        {new Date(h.ts).toLocaleString()}{" "}
+                        {h.provider && <span>· {h.provider}</span>}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applyFromHistory(h)}
+                      className="text-fuchsia-300 hover:underline whitespace-nowrap"
+                    >
+                      Применить →
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={clearHistory}
+                  className="w-full px-3 py-1.5 text-[10px] text-rose-400 hover:bg-rose-500/10"
+                >
+                  Очистить историю
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -1732,6 +1880,12 @@ function AiAdvisorModal({
         <div className="text-right text-xs text-[#9aa3c0] mt-1">
           {description.length} / 4000
         </div>
+        {streamText && busy && (
+          <div className="mt-2 max-h-32 overflow-y-auto border border-fuchsia-400/20 rounded px-3 py-2 bg-fuchsia-500/5 text-xs text-fuchsia-200 font-mono whitespace-pre-wrap">
+            {streamText}
+            <span className="animate-pulse text-fuchsia-300">▌</span>
+          </div>
+        )}
         {error && (
           <div className="mt-2 text-xs text-rose-400 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
             {error}

@@ -26,7 +26,7 @@ const INTEGRATIONS = [
   {
     category: "Developer tools",
     items: [
-      { name: "TypeScript SDK", icon: "📦", desc: "@aevion/fintech-sdk — typed wrappers for all 6 modules, auto-retry, HMAC webhook validation.", status: "live", href: "/developers/fintech/sdk" },
+      { name: "TypeScript SDK", icon: "📦", desc: "@aevion-io/fintech-sdk — typed wrappers for all 6 modules, auto-retry, HMAC webhook validation.", status: "live", href: "/developers/fintech/sdk" },
       { name: "Webhooks", icon: "🔔", desc: "HMAC-signed delivery of payment, score, governance and charity events to your endpoint.", status: "live", href: "/developers/fintech/webhooks" },
       { name: "OpenAPI 3.1 spec", icon: "📄", desc: "Machine-readable spec at /api/openapi.json. Import into Postman, Insomnia, or generate client stubs.", status: "live", href: "/api/openapi.json" },
     ],

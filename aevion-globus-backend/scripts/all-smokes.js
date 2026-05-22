@@ -136,6 +136,10 @@ const SMOKES = [
   { name: "search-prod", script: "search-prod-smoke.js", readOnly: true },
   // Paddle Billing PROD — 15 checks: health/plans/products/transactions + webhook HMAC round-trip.
   { name: "paddle-prod", script: "paddle-prod-smoke.js", readOnly: true, env: { PADDLE_WEBHOOK_SECRET: process.env.PADDLE_WEBHOOK_SECRET || "" } },
+  // DevHub PROD — 47 assertions: all 8 tabs (projects/files/env/deployments/github/templates/agent/snippets)
+  // + 13 media subtabs (TTS/Image/SFX/Music/VoiceClone/STT/Email/Payment/SMS/WhatsApp/Translate/Drive)
+  // Accepts 503 gracefully for unconfigured API keys. Writes one project + snippet then cleans up.
+  { name: "devhub-prod", script: "devhub-prod-smoke.js", readOnly: false },
   // Fintech cross-module — 7-step health + cross-product flow audit. Read-only public + JWT-gated auth check.
   { name: "fintech-cross-module", script: "fintech-cross-module-smoke.mjs", readOnly: true },
   // Fintech E2E flow — full cross-product chain QPayNet → VeilNetX → Z-Tide → QMaskCard.

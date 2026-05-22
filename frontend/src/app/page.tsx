@@ -8,6 +8,7 @@ import Globus3D from "./components/Globus3D";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
 import { PlanetPulse } from "./components/PlanetPulse";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { countryByGlobusName } from "@/lib/constitution";
 
 type ModuleRuntime = {
   tier: "mvp_live" | "platform_api" | "portal_only";
@@ -1035,6 +1036,75 @@ export default function HomePage() {
               >
                 Register object in QRight here
               </button>
+              {selectedGeo.country && (() => {
+                const cc = countryByGlobusName(selectedGeo.country);
+                if (!cc) return null;
+                return (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      padding: 12,
+                      background: "rgba(11,23,54,0.06)",
+                      border: "1px solid rgba(212,175,55,0.3)",
+                      borderRadius: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Constitution отпечаток
+                    </div>
+                    <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                      <a
+                        href={`/constitution?country=${cc.code}`}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "#d4af37",
+                          color: "#0b1736",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          textDecoration: "none",
+                          textAlign: "center",
+                        }}
+                      >
+                        ▸ Применить ползунки {cc.flag}
+                      </a>
+                      <a
+                        href={`/constitution?country=${cc.code}#scatter`}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "transparent",
+                          border: "1px solid rgba(34,211,238,0.5)",
+                          color: "#0891b2",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          textDecoration: "none",
+                          textAlign: "center",
+                        }}
+                      >
+                        ⊙ Сравнить со своим
+                      </a>
+                      <a
+                        href={`/constitution/leaderboard`}
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 8,
+                          background: "transparent",
+                          border: "1px solid rgba(16,185,129,0.4)",
+                          color: "#059669",
+                          fontWeight: 700,
+                          fontSize: 12,
+                          textDecoration: "none",
+                          textAlign: "center",
+                        }}
+                      >
+                        🪞 Похожие сценарии
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </section>
         </div>

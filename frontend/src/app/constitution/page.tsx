@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { countryByCode } from "@/lib/constitution";
 
 const API = "/api-backend/api/constitution";
 const STORAGE_KEY = "constitution.draft";
@@ -288,6 +289,15 @@ export default function ConstitutionPage() {
         const [a, b] = c.split(",").map((s) => s.trim());
         if (a) setCompareAId(a);
         if (b) setCompareBId(b);
+      }
+      // Deep-link from Globus / external: ?country=<code>
+      const countryCode = sp.get("country");
+      if (countryCode) {
+        const cc = countryByCode(countryCode);
+        if (cc) {
+          setSliders({ ...DEFAULT_SLIDERS, ...cc.sliders });
+          setTitle(`${cc.flag} ${cc.name}`);
+        }
       }
       // Deep-link from leaderboard: ?artifact=<id>
       const artifactId = sp.get("artifact");

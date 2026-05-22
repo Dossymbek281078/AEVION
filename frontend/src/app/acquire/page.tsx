@@ -379,9 +379,14 @@ export default function AcquirePage() {
                 DEAL TERMS · VIDEO STORYBOARD · DEMO FLOW · FINANCIAL APPENDIX · FAQ.
                 Один zip, ~42KB, читается в Cursor/Obsidian/Notepad.
               </p>
-              <a href="/promo/aevion-acquire-pack.zip" download style={btnPrimary}>
-                Download · aevion-acquire-pack.zip
-              </a>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <a href="/promo/aevion-acquire-pack.zip" download style={btnPrimary}>
+                  Download · aevion-acquire-pack.zip
+                </a>
+                <Link href="/acquire/print" style={btnGhost}>
+                  Print version (Ctrl+P → PDF)
+                </Link>
+              </div>
             </div>
 
             <div style={{ padding: 28, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(59,130,246,0.25)", borderRadius: 20 }}>

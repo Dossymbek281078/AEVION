@@ -7,6 +7,7 @@ import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 import Globus3D from "./components/Globus3D";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
 import { PlanetPulse } from "./components/PlanetPulse";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 
 type ModuleRuntime = {
   tier: "mvp_live" | "platform_api" | "portal_only";
@@ -1037,6 +1038,53 @@ export default function HomePage() {
             </div>
           </section>
         </div>
+
+        <section
+          style={{
+            maxWidth: 1200,
+            margin: "32px auto 24px",
+            padding: 16,
+            border: "1px solid rgba(212,175,55,0.25)",
+            borderRadius: 12,
+            background: "rgba(248,250,252,0.6)",
+            display: "flex",
+            gap: 24,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <ConstitutionEmbed
+            sliders={{ floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80, multiStatus: 75, skinInGame: 70, polycentricity: 65, positiveSum: 80 }}
+            label="Отпечаток AEVION"
+            size="md"
+          />
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
+              Какой социальный контракт строит AEVION
+            </h2>
+            <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.55, marginBottom: 10 }}>
+              Open Access как философия экосистемы: высокий пол снизу, закон
+              над верхом, ротация, прозрачность, полицентричность. Это не
+              маркетинг — это конкретные 8 ползунков, заложенных в дизайн
+              каждого модуля платформы.
+            </p>
+            <a
+              href="/constitution"
+              style={{
+                display: "inline-block",
+                padding: "10px 16px",
+                borderRadius: 8,
+                background: "#0f172a",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: "none",
+              }}
+            >
+              Построить свою конституцию →
+            </a>
+          </div>
+        </section>
       </div>
     </main>
   );

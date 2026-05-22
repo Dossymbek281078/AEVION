@@ -430,7 +430,11 @@ async function main() {
       continue;
     }
     const { moves, clocks } = extractMoves(chunk);
-    if (moves.length < 2) {
+    // Skip short games: <30 plies almost always means mate-in-N or quick
+    // resignation, which produces noisy accuracy/blunder signal. This was
+    // identified as the main source of Beginner-bracket RMSE inflation
+    // (sub-20-ply games dominated the <1300 Elo sample).
+    if (moves.length < 30) {
       origStdoutWrite(`  [skip] ${headers.event}: too short (${moves.length} plies)\n`);
       continue;
     }

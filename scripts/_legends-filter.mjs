@@ -5,6 +5,28 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 
+// Seedable mulberry32 RNG so opponent Elo sampling is deterministic across runs.
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = makeRng(2026_05_22);
+
+// Box-Muller: standard-normal sample, then scale + shift to (mu, sigma)
+function gaussian(mu, sigma) {
+  const u1 = Math.max(1e-9, rng());
+  const u2 = rng();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return mu + sigma * z;
+}
+function clampInt(v, lo, hi) { return Math.max(lo, Math.min(hi, Math.round(v))); }
+
 // FIDE rating timelines for each star (approximate from FIDE historical lists).
 // Used to tag each game with the star's actual rating at the time of play
 // instead of a flat peak — single-value Elo on hundreds of rows leaves the
@@ -22,6 +44,17 @@ const RATING_TIMELINE = {
     1980: 2725, 1981: 2700, 1982: 2720, 1983: 2710, 1984: 2705, 1985: 2720,
   },
 };
+
+// Opponent Elo distribution per era — realistic top-tournament strength.
+// Previously every opponent was tagged a flat 2400 which froze the IM bracket;
+// real Kasparov/Karpov opponents averaged ~2570, Fischer's averaged ~2530.
+// Sample from Gaussian per game with the seeded RNG, clamp to a sane bracket.
+const OPPONENT_DIST = {
+  Kasparov: { mu: 2570, sigma: 80 },
+  Karpov:   { mu: 2570, sigma: 80 },
+  Fischer:  { mu: 2530, sigma: 80 },
+};
+const OPP_CLAMP = [2300, 2750];
 
 const STARS = [
   { lastname: "Kasparov", file: "C:/Users/user/AppData/Local/Temp/kasparov.pgn" },
@@ -58,7 +91,10 @@ for (const star of STARS) {
     // 400+ resulting rows span ~150 Elo of variance instead of all being
     // pinned at one peak value.
     const starElo = String(timeline[year]);
-    const oppElo = "2400";
+    // Gaussian opponent Elo around realistic era center — unfreezes IM
+    // bracket signal that flat 2400 froze in the previous run.
+    const dist = OPPONENT_DIST[star.lastname];
+    const oppElo = String(clampInt(gaussian(dist.mu, dist.sigma), OPP_CLAMP[0], OPP_CLAMP[1]));
 
     let mod = g;
     // WhiteElo

@@ -39,6 +39,16 @@ let passed = 0; let failed = 0;
 function ok(l, e) { passed++; console.log(`  ✓ ${l}${e ? "  " + e : ""}`); }
 function fail(l, r) { failed++; console.error(`  ✗ ${l}${r ? "  ↳ " + r : ""}`); }
 
+// Some modules return {ok:true, persona:{id:...}} or {data:{id:...}} instead of {id:...} directly.
+function extractId(body) {
+  if (!body || typeof body !== "object") return undefined;
+  if (body.id != null) return String(body.id);
+  for (const val of Object.values(body)) {
+    if (val && typeof val === "object" && val.id != null) return String(val.id);
+  }
+  return undefined;
+}
+
 async function req(method, path, body) {
   const h = { "Content-Type": "application/json" };
   const r = await fetch(`${BASE}${path}`, { method, headers: h, body: body ? JSON.stringify(body) : undefined });
@@ -57,13 +67,14 @@ async function exercise(m) {
 
   // 2. create
   r = await req("POST", `/api/${m.id}/${m.noun}`, m.create);
-  if (r.status === 201 && r.body?.id) ok(`POST /api/${m.id}/${m.noun}`, `id=${r.body.id.slice(0, 8)}…`);
+  const itemId = extractId(r.body);
+  if (r.status === 201 && itemId) ok(`POST /api/${m.id}/${m.noun}`, `id=${itemId.slice(0, 8)}…`);
   else { fail(`create /${m.noun}`, `${r.status} ${JSON.stringify(r.body).slice(0, 80)}`); return; }
-  const itemId = r.body.id;
 
   // 3. fetch the created item
   r = await req("GET", `/api/${m.id}/${m.noun}/${itemId}`);
-  if (r.status === 200 && r.body?.id === itemId) ok(`GET /api/${m.id}/${m.noun}/:id`);
+  const fetchedId = extractId(r.body);
+  if (r.status === 200 && fetchedId === itemId) ok(`GET /api/${m.id}/${m.noun}/:id`);
   else fail(`fetch /${m.noun}/:id`, `${r.status}`);
 
   // 4. stats

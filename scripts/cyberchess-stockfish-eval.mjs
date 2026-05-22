@@ -308,6 +308,18 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, moveClo
     if (!losses.length) return 0;
     return losses.filter(l => l >= 200).length / losses.length;
   };
+  const median = (losses) => {
+    if (!losses.length) return 0;
+    const sorted = [...losses].sort((a, b) => a - b);
+    const n = sorted.length;
+    return n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  };
+  const stddev = (losses) => {
+    if (losses.length < 2) return 0;
+    const mean = losses.reduce((s, x) => s + x, 0) / losses.length;
+    const variance = losses.reduce((s, x) => s + (x - mean) ** 2, 0) / (losses.length - 1);
+    return Math.sqrt(variance);
+  };
 
   const tacticalEff = plyCount > 0 ? Math.min(1, captureOrCheckCount / plyCount) : 0;
   const endgameStrengthWhite = plyCount > 40 ? 0.7 : 0.5;
@@ -352,6 +364,8 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, moveClo
       avgMoveTime: avgMoveTimeWhite,
       plies: whiteCpLosses.length,
       meanCpLoss: whiteCpLosses.length ? whiteCpLosses.reduce((s,x)=>s+x,0)/whiteCpLosses.length : 0,
+      medianCpLoss: median(whiteCpLosses),
+      cpLossStd: stddev(whiteCpLosses),
     },
     {
       gameId: headers.event || "unknown",
@@ -366,6 +380,8 @@ async function deriveFeaturesForGame(engine, depth, headers, moveTokens, moveClo
       avgMoveTime: avgMoveTimeBlack,
       plies: blackCpLosses.length,
       meanCpLoss: blackCpLosses.length ? blackCpLosses.reduce((s,x)=>s+x,0)/blackCpLosses.length : 0,
+      medianCpLoss: median(blackCpLosses),
+      cpLossStd: stddev(blackCpLosses),
     },
   ];
 }
@@ -390,7 +406,7 @@ async function main() {
   const outDir = dirname(outAbs);
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
-  const headersCsv = ["gameId","side","targetElo","result","accuracyPct","openingDepth","tacticalEff","endgameStrength","blunderRate","avgMoveTime","plies","meanCpLoss"];
+  const headersCsv = ["gameId","side","targetElo","result","accuracyPct","openingDepth","tacticalEff","endgameStrength","blunderRate","avgMoveTime","plies","meanCpLoss","medianCpLoss","cpLossStd"];
   let existingGamesDone = 0;
   if (existsSync(outAbs)) {
     const raw = readFileSync(outAbs, "utf8").trim();

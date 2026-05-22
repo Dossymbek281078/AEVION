@@ -72,23 +72,33 @@ function loadRowsFromCsv(path) {
       process.exit(1);
     }
   }
+  // Optional new columns from richer feature extraction. If both present,
+  // calibrate uses an 8-feature design matrix; if absent, falls back to 6.
+  const idxMedian = idx("medianCpLoss");
+  const idxStd = idx("cpLossStd");
+  const hasRich = idxMedian >= 0 && idxStd >= 0;
   const rows = [];
   for (const line of lines) {
     if (!line.trim()) continue;
     const cols = line.split(",");
     const targetFide = parseFloat(cols[idx("targetElo")]);
     if (!Number.isFinite(targetFide) || targetFide < 800 || targetFide > 2900) continue;
+    const feats = [
+      parseFloat(cols[idx("accuracyPct")]),
+      parseFloat(cols[idx("openingDepth")]),
+      parseFloat(cols[idx("tacticalEff")]),
+      parseFloat(cols[idx("endgameStrength")]),
+      parseFloat(cols[idx("blunderRate")]),
+      parseFloat(cols[idx("avgMoveTime")]),
+    ];
+    if (hasRich) {
+      feats.push(parseFloat(cols[idxMedian]));
+      feats.push(parseFloat(cols[idxStd]));
+    }
     rows.push({
       targetFide,
-      features: [
-        parseFloat(cols[idx("accuracyPct")]),
-        parseFloat(cols[idx("openingDepth")]),
-        parseFloat(cols[idx("tacticalEff")]),
-        parseFloat(cols[idx("endgameStrength")]),
-        parseFloat(cols[idx("blunderRate")]),
-        parseFloat(cols[idx("avgMoveTime")]),
-      ],
-      meta: { side: cols[idx("side")] || "?" }
+      features: feats,
+      meta: { side: cols[idx("side")] || "?", rich: hasRich }
     });
   }
   return rows;
@@ -461,16 +471,21 @@ function main() {
   }
 
   console.log("[4/5] Running least-squares fit via normal equations…");
-  // Design matrix: [accuracyPct - 60, opening, endgame, blunder, |time-30|, 1]
-  // Tactical removed — coefficient collapsed to ≈0 in the last three fits
-  // (4.0 in clipped-weighted, -373 in unweighted with no signal on Elo,
-  // -325 elsewhere) so the column was adding noise without information.
-  // The frontend `estimateFideFromCPIWithFit` ignores missing coefs via
-  // its weights validation, but we still pad with a zero for the missing
-  // tactical slot to keep the wire shape stable.
+  // Design matrix.
+  //   Base columns (always present):
+  //     [accuracyPct - 60, opening, endgame, blunder, |time-30|, 1]
+  //   Rich columns (when CSV has medianCpLoss + cpLossStd):
+  //     append [-medianCpLoss, -cpLossStd]
+  // Median is robust to outliers — distinguishes a player whose accuracy
+  // is dragged down by one big blunder from one whose moves are uniformly
+  // weak. Std splits "consistent" from "spiky" players at the same mean.
+  // Both come in with the sign already flipped so positive coefficients
+  // mean "higher Elo" — matches the convention of the existing columns.
+  // Tactical dropped — coefficient was noise across the last 3 fits.
+  const richMode = rows.length > 0 && rows[0].features.length >= 8;
   const X = rows.map(r => {
-    const [acc, open, , end, blu, tim] = r.features;
-    return [
+    const [acc, open, , end, blu, tim, median, std] = r.features;
+    const base = [
       acc - 60,                // accuracy delta vs baseline
       Math.min(10, open),      // opening clamped same as frontend
       end,
@@ -478,8 +493,10 @@ function main() {
       -Math.abs(tim - 30),     // time penalty (always ≤ 0)
       1                        // bias
     ];
+    return richMode ? [...base, -median, -std] : base;
   });
   const y = rows.map(r => r.targetFide);
+  if (richMode) console.log(`      Rich design matrix: 8 features (median + std added)`);
 
   // Optional weighted least-squares — counters bracket-density bias in OLS.
   // Bucket each target Elo into 200-Elo bins, set weight = 1 / count(bucket).
@@ -510,7 +527,10 @@ function main() {
   }
 
   const coeffs = leastSquaresFit(Xfit, yfit);
-  const [wAcc, wOpen, wEnd, wBlu, wTime, bias] = coeffs;
+  // Layout: 6 base + optional 2 rich = up to 8 coeffs.
+  //   richMode false: [wAcc, wOpen, wEnd, wBlu, wTime, bias]
+  //   richMode true:  [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian, wStd]
+  const [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian = 0, wStd = 0] = coeffs;
   const wTac = 0;  // dropped from design matrix, kept zero in output JSON
 
   console.log("      Fit complete. Coefficients:");
@@ -521,6 +541,10 @@ function main() {
   console.log(`        blunder:   ${wBlu.toFixed(3)}   (was -500.000)`);
   console.log(`        time:      ${wTime.toFixed(3)}   (was -2.000)`);
   console.log(`        bias:      ${bias.toFixed(3)}   (was 1200.000 BASE_ELO)`);
+  if (richMode) {
+    console.log(`        median:    ${wMedian.toFixed(3)}   (rich, applied to -medianCpLoss)`);
+    console.log(`        std:       ${wStd.toFixed(3)}   (rich, applied to -cpLossStd)`);
+  }
 
   // Compute predictions + RMSE
   const predicted = X.map(row => row.reduce((s, v, i) => s + v * coeffs[i], 0));
@@ -566,7 +590,8 @@ function main() {
       tactical: round(wTac, 4),
       endgame: round(wEnd, 4),
       blunder: round(wBlu, 4),
-      time: round(wTime, 4)
+      time: round(wTime, 4),
+      ...(richMode ? { median: round(wMedian, 4), std: round(wStd, 4) } : {})
     },
     bias: round(bias, 4),
     fitStats: {

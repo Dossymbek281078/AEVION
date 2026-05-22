@@ -36,6 +36,10 @@ export type CalibrationWeights = {
     endgame: number;
     blunder: number;
     time: number;
+    /** Rich-mode features from richer Stockfish CPI extraction. Optional —
+     *  loadCalibratedWeights accepts both 6-coef and 8-coef payloads. */
+    median?: number;
+    std?: number;
   };
   bias: number;
   fitStats?: {
@@ -129,9 +133,13 @@ function validateWeights(d: unknown): d is CalibrationWeights {
   if (typeof w.bias !== "number") return false;
   if (!w.coefficients || typeof w.coefficients !== "object") return false;
   const c = w.coefficients as Record<string, unknown>;
-  const keys = ["accuracy", "opening", "tactical", "endgame", "blunder", "time"];
-  for (const k of keys) {
+  const required = ["accuracy", "opening", "tactical", "endgame", "blunder", "time"];
+  for (const k of required) {
     if (typeof c[k] !== "number" || !Number.isFinite(c[k] as number)) return false;
+  }
+  // Optional rich keys — if present, must be finite numbers.
+  for (const k of ["median", "std"]) {
+    if (k in c && (typeof c[k] !== "number" || !Number.isFinite(c[k] as number))) return false;
   }
   return true;
 }

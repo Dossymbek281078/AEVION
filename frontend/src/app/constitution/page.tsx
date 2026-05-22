@@ -707,6 +707,12 @@ export default function ConstitutionPage() {
               >
                 🤖 Спросить ИИ
               </button>
+              <Link
+                href="/constitution/api"
+                className="px-4 py-2 rounded border border-orange-400/60 text-orange-300 font-semibold hover:bg-orange-500/10"
+              >
+                {`</> API`}
+              </Link>
             </div>
           )}
           {aiOpen && (

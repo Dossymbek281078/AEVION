@@ -37,7 +37,19 @@ export default function ExamTaskPage({
   const [bestSoFar, setBestSoFar] = useState<number | null>(null);
   const [failedCount, setFailedCount] = useState(0);
   const [lessonOpened, setLessonOpened] = useState(false);
+  const [selectedPosId, setSelectedPosId] = useState<string | null>(null);
   const lessonExists = !!findLesson(task!.id);
+
+  function findSelectedPosition() {
+    if (!selectedPosId) return null;
+    for (const section of lsr.sections) {
+      const pos = section.positions.find((p) => p.id === selectedPosId);
+      if (pos) return { section, pos };
+    }
+    return null;
+  }
+  const selected = findSelectedPosition();
+  const targetHint = selected ? selected.pos.rateCode : null;
 
   useEffect(() => {
     const b = bestAttempt(task!.id);
@@ -180,6 +192,18 @@ export default function ExamTaskPage({
 
   function applyPendingValue(value: number) {
     setLsr((prev) => {
+      if (selectedPosId) {
+        return {
+          ...prev,
+          sections: prev.sections.map((s) => ({
+            ...s,
+            positions: s.positions.map((p) =>
+              p.id === selectedPosId ? { ...p, volume: value } : p,
+            ),
+          })),
+          updatedAt: new Date().toISOString(),
+        };
+      }
       const sections = prev.sections.map((s) => ({ ...s }));
       const target = sections[0];
       if (!target || target.positions.length === 0) return prev;
@@ -198,24 +222,46 @@ export default function ExamTaskPage({
     }
     setLsr((prev) => {
       const sections = prev.sections.map((s) => ({ ...s, positions: [...s.positions] }));
-      const target = sections[0];
+      const targetSectionIdx = selectedPosId
+        ? sections.findIndex((s) => s.positions.some((p) => p.id === selectedPosId))
+        : 0;
+      const target = sections[targetSectionIdx >= 0 ? targetSectionIdx : 0];
       if (!target) return prev;
-      target.positions = [
-        ...target.positions,
-        {
-          id: `from-rates-${Date.now()}`,
-          rateCode,
-          volume: 1,
-          coefficients: [],
-          formula: "добавлено из каталога расценок",
-        },
-      ];
+      const newPos = {
+        id: `from-rates-${Date.now()}`,
+        rateCode,
+        volume: 1,
+        coefficients: [],
+        formula: "добавлено из каталога расценок",
+      };
+      if (selectedPosId) {
+        const insertAt = target.positions.findIndex((p) => p.id === selectedPosId);
+        target.positions = [
+          ...target.positions.slice(0, insertAt + 1),
+          newPos,
+          ...target.positions.slice(insertAt + 1),
+        ];
+      } else {
+        target.positions = [...target.positions, newPos];
+      }
       return { ...prev, sections, updatedAt: new Date().toISOString() };
     });
   }
 
   function applyPendingFormula(formula: string) {
     setLsr((prev) => {
+      if (selectedPosId) {
+        return {
+          ...prev,
+          sections: prev.sections.map((s) => ({
+            ...s,
+            positions: s.positions.map((p) =>
+              p.id === selectedPosId ? { ...p, formula } : p,
+            ),
+          })),
+          updatedAt: new Date().toISOString(),
+        };
+      }
       const sections = prev.sections.map((s) => ({ ...s, positions: [...s.positions] }));
       const target = sections[0];
       if (!target || target.positions.length === 0) return prev;
@@ -232,6 +278,7 @@ export default function ExamTaskPage({
         onApplyValue={applyPendingValue}
         onApplyRate={applyPendingRate}
         onApplyFormula={applyPendingFormula}
+        targetHint={targetHint}
       />
       <div className="max-w-6xl mx-auto">
         <div className="mb-4">
@@ -478,6 +525,7 @@ export default function ExamTaskPage({
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
+                    <th className="px-2 py-1.5 w-6"></th>
                     <th className="px-2 py-1.5 text-left w-36">Шифр</th>
                     <th className="px-2 py-1.5 text-left">Наименование</th>
                     <th className="px-2 py-1.5 text-right w-36">Объём</th>
@@ -491,8 +539,38 @@ export default function ExamTaskPage({
                     const hasCoef = (p.coefficients ?? []).some(
                       (c) => c.kind === "действующий-объект",
                     );
+                    const isSelected = selectedPosId === p.id;
                     return (
-                      <tr key={p.id} className="border-t border-slate-100">
+                      <tr
+                        key={p.id}
+                        className={`border-t border-slate-100 ${
+                          isSelected ? "bg-emerald-50" : ""
+                        }`}
+                      >
+                        <td className="px-2 py-1.5 text-center">
+                          <button
+                            onClick={() =>
+                              setSelectedPosId(isSelected ? null : p.id)
+                            }
+                            className={`w-4 h-4 rounded-full border-2 inline-flex items-center justify-center ${
+                              isSelected
+                                ? "border-emerald-600 bg-emerald-600"
+                                : "border-slate-300 bg-white hover:border-emerald-400"
+                            }`}
+                            title={
+                              isSelected
+                                ? "Получатель передач из /calc, /rates, /cheatsheet — снять"
+                                : "Сделать этой строкой получателя передач из инструментов"
+                            }
+                            aria-label={
+                              isSelected ? "Активная позиция" : "Выбрать как активную"
+                            }
+                          >
+                            {isSelected && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                            )}
+                          </button>
+                        </td>
                         <td className="px-2 py-1.5">
                           <input
                             value={p.rateCode}

@@ -98,10 +98,13 @@ export function PendingCalcValue({
   onApplyValue,
   onApplyRate,
   onApplyFormula,
+  targetHint,
 }: {
   onApplyValue: (value: number) => void;
   onApplyRate?: (rateCode: string) => void;
   onApplyFormula?: (formula: string) => void;
+  /** rateCode of the user-selected target position, or null for default placement */
+  targetHint?: string | null;
 }) {
   const [pending, setPending] = useState<Pending | null>(null);
 
@@ -167,6 +170,15 @@ export function PendingCalcValue({
           {secondary}
           {ageMin > 0 && ` · ${ageMin} мин назад`}
         </div>
+        {targetHint ? (
+          <div className="text-[10px] text-emerald-700 mt-0.5">
+            → применить к: <span className="font-mono">{targetHint}</span>
+          </div>
+        ) : (
+          <div className="text-[10px] text-slate-400 italic mt-0.5">
+            → по умолчанию: последняя позиция первого раздела
+          </div>
+        )}
       </div>
       <button
         onClick={() => {

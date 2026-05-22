@@ -279,6 +279,31 @@ export default function ConstitutionPage() {
   const [openedArtifactId, setOpenedArtifactId] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState<boolean>(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<"free" | "pro" | null>(null);
+  const [planLimits, setPlanLimits] = useState<{ savedScenarios: number; aiSuggestPerDay: number } | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch("/api-backend/api/constitution/me/plan");
+        if (!r.ok) return;
+        const j = (await r.json()) as {
+          plan: "free" | "pro";
+          limits: { savedScenarios: number; aiSuggestPerDay: number };
+        };
+        setPlan(j.plan);
+        setPlanLimits(j.limits);
+      } catch {
+        /* ignore — default to "no plan info, no paywall" */
+      }
+    })();
+  }, []);
+
+  const overSaveLimit =
+    plan === "free" &&
+    planLimits !== null &&
+    planLimits.savedScenarios > 0 &&
+    savedTotal >= planLimits.savedScenarios;
   const [compareAId, setCompareAId] = useState<string | null>(null);
   const [compareBId, setCompareBId] = useState<string | null>(null);
 
@@ -893,9 +918,16 @@ export default function ConstitutionPage() {
               <SpiderChart sliders={sliders} shockedSliders={shockedSliders} />
             </div>
 
+            {overSaveLimit && <ProPaywallBanner savedTotal={savedTotal} limit={planLimits?.savedScenarios ?? 5} />}
+
             <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
               <h3 className="text-lg font-semibold text-[#f5d27a] mb-3">
                 Сохранить сценарий{savedTotal > 0 ? ` (всего: ${savedTotal})` : ""}
+                {plan === "pro" && (
+                  <span className="ml-2 text-xs px-2 py-0.5 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold align-middle">
+                    PRO
+                  </span>
+                )}
               </h3>
               <div className="flex flex-wrap gap-2">
                 <input
@@ -1989,6 +2021,52 @@ function AiAdvisorModal({
           >
             {busy ? "Думает…" : "Подобрать ползунки →"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProPaywallBanner({
+  savedTotal,
+  limit,
+}: {
+  savedTotal: number;
+  limit: number;
+}) {
+  return (
+    <div className="mb-4 bg-gradient-to-r from-fuchsia-900/40 via-purple-900/30 to-cyan-900/40 border border-fuchsia-400/40 rounded-xl p-4">
+      <div className="flex justify-between items-start flex-wrap gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span className="text-xs px-2 py-0.5 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold">
+              PRO
+            </span>
+            <span className="text-fuchsia-200 font-semibold">
+              Constitution Pro · $9 / мес
+            </span>
+          </div>
+          <div className="text-sm text-[#e7ecf8] mt-1">
+            Ты использовал {savedTotal} из {limit} бесплатных сохранений. Pro даёт:
+          </div>
+          <ul className="text-xs text-[#9aa3c0] mt-2 space-y-0.5 list-disc list-inside">
+            <li>Безлимит сохранений в облаке</li>
+            <li>AI-советник без дневного лимита</li>
+            <li>PDF без водяных знаков «unsigned»</li>
+            <li>Цветовые темы (dark gold, monokai, lichess)</li>
+            <li>Embed-виджет для встройки на свой сайт</li>
+          </ul>
+        </div>
+        <div className="flex flex-col gap-2 flex-shrink-0">
+          <a
+            href="/api-backend/api/paddle/checkout-session?product=constitution-pro"
+            className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold text-sm text-center hover:opacity-90"
+          >
+            Upgrade →
+          </a>
+          <span className="text-[10px] text-[#9aa3c0] text-center">
+            Paddle · cancel anytime
+          </span>
         </div>
       </div>
     </div>

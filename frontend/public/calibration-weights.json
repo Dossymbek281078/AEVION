@@ -1,21 +1,21 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-22T08:04:29.615Z",
-  "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\combined-features.csv",
-  "samples": 1327,
+  "generatedAt": "2026-05-22T08:48:52.068Z",
+  "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\combined-features-v2.csv",
+  "samples": 1397,
   "coefficients": {
-    "accuracy": 14.4101,
-    "opening": 9.1843,
-    "tactical": -501.5395,
-    "endgame": 882.4103,
-    "blunder": 1163.1586,
+    "accuracy": 42.5618,
+    "opening": 7.6134,
+    "tactical": -361.2736,
+    "endgame": 939.2971,
+    "blunder": 761.4236,
     "time": 0
   },
-  "bias": 1219.5497,
+  "bias": 762.2549,
   "fitStats": {
-    "rmseElo": 276.14,
-    "r2": 0.4802,
-    "meanTargetElo": 1830.4
+    "rmseElo": 256.86,
+    "r2": 0.507,
+    "meanTargetElo": 1805.5
   },
   "notes": [
     "Proxy-derived features (no engine eval). Production-grade fit requires per-move Stockfish analysis.",

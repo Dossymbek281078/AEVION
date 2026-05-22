@@ -274,6 +274,7 @@ export default function ConstitutionPage() {
   const [publishError, setPublishError] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState<boolean>(false);
   const [aiExplanation, setAiExplanation] = useState<string | null>(null);
+  const [openedArtifactId, setOpenedArtifactId] = useState<string | null>(null);
   const [compareAId, setCompareAId] = useState<string | null>(null);
   const [compareBId, setCompareBId] = useState<string | null>(null);
 
@@ -290,6 +291,7 @@ export default function ConstitutionPage() {
       // Deep-link from leaderboard: ?artifact=<id>
       const artifactId = sp.get("artifact");
       if (artifactId) {
+        setOpenedArtifactId(artifactId);
         void (async () => {
           try {
             const r = await fetch(
@@ -939,6 +941,12 @@ export default function ConstitutionPage() {
             shockLabel={activeShockObj ? `${activeShockObj.icon} ${activeShockObj.name}` : null}
           />
         </section>
+
+        {openedArtifactId && (
+          <section id="comments" className="mt-6">
+            <SocialPanel artifactId={openedArtifactId} />
+          </section>
+        )}
 
         <section className="mt-6">
           <ComparePanel
@@ -1913,6 +1921,208 @@ function AiAdvisorModal({
             {busy ? "Думает…" : "Подобрать ползунки →"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+type SocialComment = {
+  id: string;
+  authorName: string | null;
+  userId: string | null;
+  text: string;
+  createdAt: string;
+};
+type SocialData = {
+  votes: { up: number; down: number; total: number; my: -1 | 0 | 1 };
+  comments: SocialComment[];
+};
+
+function SocialPanel({ artifactId }: { artifactId: string }) {
+  const [data, setData] = useState<SocialData | null>(null);
+  const [text, setText] = useState<string>("");
+  const [authorName, setAuthorName] = useState<string>("");
+  const [busy, setBusy] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(
+        `/api-backend/api/planet/constitution-artifacts/${artifactId}/social`,
+      );
+      if (!r.ok) return;
+      setData((await r.json()) as SocialData);
+    } catch {
+      /* ignore */
+    }
+  }, [artifactId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const castVote = async (vote: 1 | -1) => {
+    const toggleOff = data?.votes.my === vote;
+    try {
+      if (toggleOff) {
+        await fetch(
+          `/api-backend/api/planet/constitution-artifacts/${artifactId}/vote`,
+          { method: "DELETE" },
+        );
+      } else {
+        await fetch(
+          `/api-backend/api/planet/constitution-artifacts/${artifactId}/vote`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ vote }),
+          },
+        );
+      }
+      await load();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const submitComment = async () => {
+    if (text.trim().length < 1) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch(
+        `/api-backend/api/planet/constitution-artifacts/${artifactId}/comment`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: text.trim(),
+            authorName: authorName.trim() || undefined,
+          }),
+        },
+      );
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${t.slice(0, 120)}`);
+      }
+      setText("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "comment_failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-[#f5d27a]">
+          💬 Голосование и обсуждение
+        </h3>
+        <div className="text-xs text-[#9aa3c0]">
+          Артефакт <code className="font-mono">{artifactId.slice(0, 8)}</code>
+        </div>
+      </div>
+      <div className="flex gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => castVote(1)}
+          className={`px-3 py-1.5 rounded text-sm transition ${
+            data?.votes.my === 1
+              ? "bg-emerald-500/30 border border-emerald-400/60 text-emerald-200"
+              : "border border-[#d4af37]/30 hover:bg-emerald-500/10"
+          }`}
+        >
+          👍 {data?.votes.up ?? 0}
+        </button>
+        <button
+          type="button"
+          onClick={() => castVote(-1)}
+          className={`px-3 py-1.5 rounded text-sm transition ${
+            data?.votes.my === -1
+              ? "bg-rose-500/30 border border-rose-400/60 text-rose-200"
+              : "border border-[#d4af37]/30 hover:bg-rose-500/10"
+          }`}
+        >
+          👎 {data?.votes.down ?? 0}
+        </button>
+        <div className="px-3 py-1.5 text-sm text-[#9aa3c0]">
+          Итог:{" "}
+          <span
+            className={`font-semibold ${
+              (data?.votes.total ?? 0) > 0
+                ? "text-emerald-300"
+                : (data?.votes.total ?? 0) < 0
+                  ? "text-rose-300"
+                  : "text-[#9aa3c0]"
+            }`}
+          >
+            {(data?.votes.total ?? 0) > 0 ? "+" : ""}
+            {data?.votes.total ?? 0}
+          </span>
+        </div>
+      </div>
+      <div className="border-t border-[#d4af37]/20 pt-3">
+        <div className="flex gap-2 mb-2 flex-wrap">
+          <input
+            value={authorName}
+            onChange={(e) => setAuthorName(e.target.value)}
+            placeholder="Имя (необязательно)"
+            maxLength={60}
+            className="flex-shrink-0 w-40 bg-[#050a1a] border border-[#d4af37]/30 rounded px-2 py-1.5 text-xs"
+          />
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submitComment();
+              }
+            }}
+            placeholder="Комментарий (Enter — отправить)"
+            maxLength={800}
+            className="flex-1 min-w-[200px] bg-[#050a1a] border border-[#d4af37]/30 rounded px-2 py-1.5 text-sm"
+          />
+          <button
+            type="button"
+            onClick={submitComment}
+            disabled={busy || text.trim().length < 1}
+            className="px-3 py-1.5 rounded bg-[#d4af37] text-[#0b1736] font-semibold text-sm disabled:opacity-40"
+          >
+            {busy ? "..." : "→"}
+          </button>
+        </div>
+        {error && (
+          <div className="text-xs text-rose-400 mb-2 border border-rose-500/30 rounded px-2 py-1 bg-rose-500/5">
+            {error}
+          </div>
+        )}
+        {data?.comments && data.comments.length > 0 ? (
+          <ul className="space-y-2 max-h-80 overflow-y-auto">
+            {data.comments.map((c) => (
+              <li
+                key={c.id}
+                className="border-l-2 border-[#d4af37]/30 pl-3 py-1 text-sm"
+              >
+                <div className="flex justify-between text-xs text-[#9aa3c0] mb-0.5">
+                  <span className="font-semibold text-[#f5d27a]">
+                    {c.authorName ?? (c.userId ? `user-${c.userId.slice(0, 6)}` : "anon")}
+                  </span>
+                  <span>{new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <div className="text-[#e7ecf8] whitespace-pre-wrap break-words">
+                  {c.text}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-xs text-[#9aa3c0] italic py-2">
+            Пока нет комментариев. Будь первым.
+          </div>
+        )}
       </div>
     </div>
   );

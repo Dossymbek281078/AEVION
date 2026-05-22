@@ -46,6 +46,7 @@ import { planetPayoutsRouter } from "./routes/planetPayouts";
 import { planetConstitutionRouter } from "./routes/planetConstitution";
 import { constitutionAiRouter } from "./routes/constitutionAi";
 import { constitutionPublicRouter } from "./routes/constitutionPublic";
+import { planetConstitutionSocialRouter } from "./routes/planetConstitutionSocial";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
 import { smetaTrainerRouter } from "./routes/smeta-trainer";
@@ -770,6 +771,7 @@ app.use("/api/planet", planetPayoutsRouter);
 app.use("/api/planet/constitution-artifacts", planetConstitutionRouter);
 app.use("/api/constitution", constitutionAiRouter);
 app.use("/api/constitution/public", constitutionPublicRouter);
+app.use("/api/planet/constitution-artifacts", planetConstitutionSocialRouter);
 app.use("/api/awards", awardsRouter);
 
 // ==========================

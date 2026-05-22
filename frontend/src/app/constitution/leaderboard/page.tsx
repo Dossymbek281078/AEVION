@@ -89,6 +89,72 @@ export default function ConstitutionLeaderboardPage() {
     });
   }, [items, fullById]);
 
+  // Social stats per artifact (votes/comments counts)
+  const [socialById, setSocialById] = useState<
+    Record<string, { up: number; down: number; my: number; commentCount: number }>
+  >({});
+
+  const loadSocial = useCallback(
+    async (id: string) => {
+      try {
+        const r = await fetch(
+          `/api-backend/api/planet/constitution-artifacts/${id}/social`,
+        );
+        if (!r.ok) return;
+        const j = (await r.json()) as {
+          votes: { up: number; down: number; my: number };
+          comments: unknown[];
+        };
+        setSocialById((prev) => ({
+          ...prev,
+          [id]: {
+            up: j.votes.up,
+            down: j.votes.down,
+            my: j.votes.my,
+            commentCount: Array.isArray(j.comments) ? j.comments.length : 0,
+          },
+        }));
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    items.slice(0, 30).forEach((it) => {
+      if (!(it.id in socialById)) void loadSocial(it.id);
+    });
+  }, [items, socialById, loadSocial]);
+
+  const castVote = useCallback(
+    async (id: string, vote: 1 | -1) => {
+      const cur = socialById[id];
+      const isToggleOff = cur?.my === vote;
+      try {
+        if (isToggleOff) {
+          await fetch(
+            `/api-backend/api/planet/constitution-artifacts/${id}/vote`,
+            { method: "DELETE" },
+          );
+        } else {
+          await fetch(
+            `/api-backend/api/planet/constitution-artifacts/${id}/vote`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ vote }),
+            },
+          );
+        }
+        await loadSocial(id);
+      } catch {
+        /* ignore */
+      }
+    },
+    [socialById, loadSocial],
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
       <div className="max-w-6xl mx-auto">
@@ -168,6 +234,52 @@ export default function ConstitutionLeaderboardPage() {
                         Загрузка отпечатка…
                       </div>
                     )}
+                    {(() => {
+                      const s = socialById[it.id];
+                      if (!s) {
+                        return (
+                          <div className="mt-2 text-xs text-[#9aa3c0] text-center">
+                            …
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="mt-2 flex items-center justify-between text-sm">
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => castVote(it.id, 1)}
+                              className={`px-2 py-1 rounded transition text-xs ${
+                                s.my === 1
+                                  ? "bg-emerald-500/30 border border-emerald-400/60 text-emerald-200"
+                                  : "border border-[#d4af37]/30 hover:bg-emerald-500/10"
+                              }`}
+                              title="Голос «за»"
+                            >
+                              👍 {s.up}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => castVote(it.id, -1)}
+                              className={`px-2 py-1 rounded transition text-xs ${
+                                s.my === -1
+                                  ? "bg-rose-500/30 border border-rose-400/60 text-rose-200"
+                                  : "border border-[#d4af37]/30 hover:bg-rose-500/10"
+                              }`}
+                              title="Голос «против»"
+                            >
+                              👎 {s.down}
+                            </button>
+                          </div>
+                          <Link
+                            href={`/constitution?artifact=${it.id}#comments`}
+                            className="text-xs text-[#9aa3c0] hover:text-[#d4af37]"
+                          >
+                            💬 {s.commentCount}
+                          </Link>
+                        </div>
+                      );
+                    })()}
                     <Link
                       href={`/constitution?artifact=${it.id}`}
                       className="mt-3 px-3 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold text-center text-sm hover:opacity-90"

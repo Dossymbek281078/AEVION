@@ -5,6 +5,14 @@ import { useCallback, useEffect, useState } from "react";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import type { Sliders } from "@/lib/constitution";
 
+type SimilarItem = {
+  id: string;
+  title: string;
+  regimeName: string;
+  similarity: number;
+  sliders: Sliders | null;
+};
+
 type ArtifactSummary = {
   id: string;
   title: string;
@@ -126,6 +134,28 @@ export default function ConstitutionLeaderboardPage() {
       if (!(it.id in socialById)) void loadSocial(it.id);
     });
   }, [items, socialById, loadSocial]);
+
+  const [expandedSimilar, setExpandedSimilar] = useState<string | null>(null);
+  const [similarById, setSimilarById] = useState<Record<string, SimilarItem[]>>({});
+
+  const toggleSimilar = useCallback(async (id: string) => {
+    if (expandedSimilar === id) {
+      setExpandedSimilar(null);
+      return;
+    }
+    setExpandedSimilar(id);
+    if (id in similarById) return;
+    try {
+      const r = await fetch(
+        `/api-backend/api/planet/constitution-artifacts/${id}/similar?limit=3`,
+      );
+      if (!r.ok) return;
+      const j = (await r.json()) as { items: SimilarItem[] };
+      setSimilarById((prev) => ({ ...prev, [id]: j.items ?? [] }));
+    } catch {
+      /* ignore */
+    }
+  }, [expandedSimilar, similarById]);
 
   const castVote = useCallback(
     async (id: string, vote: 1 | -1) => {
@@ -286,6 +316,46 @@ export default function ConstitutionLeaderboardPage() {
                     >
                       Применить ползунки →
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => toggleSimilar(it.id)}
+                      className="mt-1 px-2 py-1 text-xs text-[#9aa3c0] hover:text-[#f5d27a] text-center"
+                    >
+                      {expandedSimilar === it.id ? "Скрыть похожие ▴" : "🪞 Похожие →"}
+                    </button>
+                    {expandedSimilar === it.id && (
+                      <div className="mt-2 border-t border-[#d4af37]/15 pt-2 space-y-1.5">
+                        {!(it.id in similarById) ? (
+                          <div className="text-xs text-[#9aa3c0] text-center py-2">
+                            …
+                          </div>
+                        ) : similarById[it.id].length === 0 ? (
+                          <div className="text-xs text-[#9aa3c0] italic">
+                            Похожих не нашлось
+                          </div>
+                        ) : (
+                          similarById[it.id].map((sim) => (
+                            <Link
+                              key={sim.id}
+                              href={`/constitution?artifact=${sim.id}`}
+                              className="block text-xs px-2 py-1 rounded hover:bg-[#d4af37]/5"
+                            >
+                              <div className="flex justify-between items-baseline">
+                                <span className="truncate text-[#f5d27a]">
+                                  {sim.title}
+                                </span>
+                                <span className="text-emerald-300 font-mono ml-2 flex-shrink-0">
+                                  {Math.round(sim.similarity * 100)}%
+                                </span>
+                              </div>
+                              <div className="text-[#9aa3c0] truncate">
+                                {sim.regimeName}
+                              </div>
+                            </Link>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

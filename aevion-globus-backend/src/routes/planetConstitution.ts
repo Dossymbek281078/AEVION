@@ -344,6 +344,102 @@ planetConstitutionRouter.get(
 );
 
 planetConstitutionRouter.get(
+  "/:id/similar",
+  readLimit as unknown as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id);
+      const limit = Math.max(1, Math.min(20, Number(req.query.limit ?? 6)));
+
+      // Get the source artifact's sliders
+      let source: Artifact | null = ring.find((x) => x.id === id) ?? null;
+      await ensureConstitutionTable();
+      if (!source && dbAvailable) {
+        try {
+          const pool = getPool();
+          const r = await pool.query(
+            `SELECT * FROM planet_constitution_artifacts WHERE "id" = $1`,
+            [id],
+          );
+          if (r.rowCount > 0) source = rowToArtifact(r.rows[0]);
+        } catch {
+          /* fall through */
+        }
+      }
+      if (!source) return res.status(404).json({ error: "not_found" });
+      const srcSliders = source.payload?.sliders;
+      if (!srcSliders || typeof srcSliders !== "object") {
+        return res.status(400).json({ error: "source_missing_sliders" });
+      }
+
+      // Candidate pool: latest 200 from DB (or ring fallback)
+      let pool_: Artifact[] = [];
+      if (dbAvailable) {
+        try {
+          const pool = getPool();
+          const r = await pool.query(
+            `SELECT * FROM planet_constitution_artifacts
+             WHERE "id" != $1
+             ORDER BY "publishedAt" DESC
+             LIMIT 200`,
+            [id],
+          );
+          pool_ = r.rows.map(rowToArtifact);
+        } catch {
+          pool_ = ring.filter((a) => a.id !== id);
+        }
+      } else {
+        pool_ = ring.filter((a) => a.id !== id);
+      }
+
+      const SLIDER_KEYS = [
+        "floor", "ruleOfLaw", "rotation", "transparency",
+        "multiStatus", "skinInGame", "polycentricity", "positiveSum",
+      ] as const;
+      const srcVec = SLIDER_KEYS.map((k) => Number(srcSliders[k]) || 0);
+      const srcMag = Math.sqrt(srcVec.reduce((s, v) => s + v * v, 0));
+
+      const scored = [];
+      for (const a of pool_) {
+        const s = a.payload?.sliders;
+        if (!s) continue;
+        const vec = SLIDER_KEYS.map((k) => Number(s[k]) || 0);
+        const mag = Math.sqrt(vec.reduce((acc, v) => acc + v * v, 0));
+        if (mag === 0 || srcMag === 0) continue;
+        const dot = vec.reduce((acc, v, i) => acc + v * srcVec[i], 0);
+        const sim = dot / (mag * srcMag); // 0..1
+        // Also compute euclidean distance for intuition ("how far")
+        const dist = Math.sqrt(
+          vec.reduce((acc, v, i) => acc + (v - srcVec[i]) ** 2, 0),
+        );
+        scored.push({ artifact: a, sim, dist });
+      }
+      scored.sort((a, b) => b.sim - a.sim);
+      const top = scored.slice(0, limit).map((s) => ({
+        id: s.artifact.id,
+        title: s.artifact.title,
+        regimeId: s.artifact.regimeId,
+        regimeName: s.artifact.regimeName,
+        publishedAt: s.artifact.publishedAt,
+        similarity: Math.round(s.sim * 1000) / 1000,
+        euclideanDistance: Math.round(s.dist),
+        sliders: s.artifact.payload?.sliders ?? null,
+      }));
+      res.json({
+        source: { id, title: source.title },
+        total: scored.length,
+        items: top,
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: "similar_failed",
+        detail: err instanceof Error ? err.message : "unknown",
+      });
+    }
+  },
+);
+
+planetConstitutionRouter.get(
   "/:id",
   readLimit as unknown as (req: Request, res: Response, next: () => void) => void,
   async (req: Request, res: Response) => {

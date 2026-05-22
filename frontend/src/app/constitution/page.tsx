@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 
 const API = "/api-backend/api/constitution";
 const STORAGE_KEY = "constitution.draft";
@@ -941,6 +942,12 @@ export default function ConstitutionPage() {
             shockLabel={activeShockObj ? `${activeShockObj.icon} ${activeShockObj.name}` : null}
           />
         </section>
+
+        {openedArtifactId && (
+          <section className="mt-6">
+            <SimilarPanel artifactId={openedArtifactId} onApply={(s) => setSliders({ ...DEFAULT_SLIDERS, ...s })} />
+          </section>
+        )}
 
         {openedArtifactId && (
           <section id="comments" className="mt-6">
@@ -1921,6 +1928,98 @@ function AiAdvisorModal({
             {busy ? "Думает…" : "Подобрать ползунки →"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+type SimilarItem = {
+  id: string;
+  title: string;
+  regimeId: string;
+  regimeName: string;
+  publishedAt: string;
+  similarity: number;
+  euclideanDistance: number;
+  sliders: Sliders | null;
+};
+
+function SimilarPanel({
+  artifactId,
+  onApply,
+}: {
+  artifactId: string;
+  onApply: (sliders: Sliders) => void;
+}) {
+  const [items, setItems] = useState<SimilarItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api-backend/api/planet/constitution-artifacts/${artifactId}/similar?limit=6`,
+        );
+        if (!r.ok) return;
+        const j = (await r.json()) as { items: SimilarItem[] };
+        if (alive) setItems(j.items ?? []);
+      } catch {
+        /* ignore */
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [artifactId]);
+
+  if (loading && items.length === 0) return null;
+  if (items.length === 0) return null;
+
+  return (
+    <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h3 className="text-lg font-semibold text-[#f5d27a]">
+          🪞 Похожие сценарии
+        </h3>
+        <div className="text-xs text-[#9aa3c0]">
+          cosine similarity по 8-мерным ползункам
+        </div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {items.map((it) => (
+          <div
+            key={it.id}
+            className="flex-shrink-0 border border-[#d4af37]/15 rounded p-2 bg-[#050a1a]/50"
+            style={{ width: 210 }}
+          >
+            {it.sliders && (
+              <ConstitutionEmbed
+                sliders={it.sliders}
+                label={it.title}
+                size="sm"
+              />
+            )}
+            <div className="mt-1 text-xs text-[#9aa3c0]">
+              sim:{" "}
+              <span className="text-emerald-300 font-mono">
+                {Math.round(it.similarity * 100)}%
+              </span>{" "}
+              · dist:{" "}
+              <span className="font-mono">{it.euclideanDistance}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => it.sliders && onApply(it.sliders)}
+              disabled={!it.sliders}
+              className="mt-2 w-full px-2 py-1 rounded bg-[#d4af37]/20 border border-[#d4af37]/40 text-[#f5d27a] text-xs hover:bg-[#d4af37]/30 disabled:opacity-40"
+            >
+              Применить →
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

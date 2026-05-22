@@ -157,6 +157,9 @@ export default function AcquirePage() {
         </div>
       </section>
 
+      {/* PITCH VIDEO/AUDIO */}
+      <PitchMedia />
+
       {/* 15-TABS METAPHOR */}
       <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.015)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px" }}>
@@ -369,6 +372,126 @@ export default function AcquirePage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function PitchMedia() {
+  const [lang, setLang] = useState<"ru" | "en">("ru");
+  const [hasAudio, setHasAudio] = useState<boolean | null>(null);
+  const audioSrc = lang === "ru" ? "/promo/aevion-acquire-ru.mp3" : "/promo/aevion-acquire-en.mp3";
+  const videoSrc = lang === "ru" ? "/promo/aevion-acquire-ru.mp4" : "/promo/aevion-acquire-en.mp4";
+  const scriptSrc = lang === "ru" ? "/promo/script-ru.txt" : "/promo/script-en.txt";
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(audioSrc, { method: "HEAD" })
+      .then(r => { if (!cancelled) setHasAudio(r.ok); })
+      .catch(() => { if (!cancelled) setHasAudio(false); });
+    return () => { cancelled = true; };
+  }, [audioSrc]);
+
+  return (
+    <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 24 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#94a3b8", textTransform: "uppercase", marginBottom: 8 }}>
+              Watch the pitch · 90 seconds
+            </div>
+            <h2 style={{ fontSize: "clamp(24px, 3.5vw, 36px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", margin: 0 }}>
+              Один кабинет вместо пятнадцати.
+            </h2>
+          </div>
+          <div style={{ display: "flex", gap: 4, padding: 4, background: "rgba(255,255,255,0.04)", borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <button
+              type="button"
+              onClick={() => setLang("ru")}
+              style={{
+                padding: "8px 18px",
+                fontSize: 13,
+                fontWeight: 800,
+                borderRadius: 999,
+                border: "none",
+                cursor: "pointer",
+                background: lang === "ru" ? "linear-gradient(135deg,#10b981,#3b82f6)" : "transparent",
+                color: lang === "ru" ? "#0a0e1a" : "#cbd5e1",
+              }}
+            >RU</button>
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              style={{
+                padding: "8px 18px",
+                fontSize: 13,
+                fontWeight: 800,
+                borderRadius: 999,
+                border: "none",
+                cursor: "pointer",
+                background: lang === "en" ? "linear-gradient(135deg,#10b981,#3b82f6)" : "transparent",
+                color: lang === "en" ? "#0a0e1a" : "#cbd5e1",
+              }}
+            >EN</button>
+          </div>
+        </div>
+
+        <div style={{ padding: 28, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20 }}>
+          {/* Video frame (poster from CSS gradient when no .mp4) */}
+          <div style={{
+            position: "relative",
+            aspectRatio: "16 / 9",
+            background: "radial-gradient(circle at 30% 20%, rgba(16,185,129,0.18), transparent 55%), radial-gradient(circle at 70% 80%, rgba(59,130,246,0.18), transparent 55%), #050810",
+            borderRadius: 14,
+            overflow: "hidden",
+            marginBottom: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}>
+            <video
+              key={videoSrc}
+              src={videoSrc}
+              poster="/promo/aevion-acquire-poster.jpg"
+              controls
+              preload="none"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            >
+              <track kind="captions" />
+            </video>
+            <div style={{ position: "absolute", top: 14, left: 14, fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#10b981", textTransform: "uppercase", padding: "4px 10px", background: "rgba(0,0,0,0.4)", borderRadius: 999, border: "1px solid rgba(16,185,129,0.3)" }}>
+              · LIVE · Planet AEVION
+            </div>
+          </div>
+
+          {/* Audio-only fallback (always available once mp3 is generated) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#64748b", textTransform: "uppercase" }}>
+              Audio only · {lang.toUpperCase()}
+            </div>
+            {hasAudio === false ? (
+              <div style={{ padding: 16, background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 12, fontSize: 13, color: "#fbbf24", lineHeight: 1.55 }}>
+                Аудио ещё не сгенерировано (ожидание ElevenLabs).{" "}
+                <a href={scriptSrc} target="_blank" rel="noopener" style={{ color: "#fbbf24", textDecoration: "underline" }}>
+                  Открыть скрипт {lang === "ru" ? "RU" : "EN"} →
+                </a>
+              </div>
+            ) : (
+              <audio
+                key={audioSrc}
+                controls
+                preload="none"
+                src={audioSrc}
+                style={{ width: "100%", borderRadius: 10 }}
+              />
+            )}
+            <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+              90-секундная инвестор-озвучка по сценарию <code style={{ fontFamily: "ui-monospace, monospace", color: "#94a3b8" }}>promo/03_VIDEO_STORYBOARD.md</code>.
+              Дублирующая дорожка на втором языке доступна через переключатель RU/EN выше.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

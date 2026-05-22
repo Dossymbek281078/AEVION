@@ -8,6 +8,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useABVariant } from "@/lib/abVariant";
+import NewStructureShowcase from "./_components/NewStructureShowcase";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
@@ -657,6 +658,10 @@ export default function PricingPage() {
           </button>
         </div>
       )}
+
+      {/* New 3-tier monetization structure (Solo / Bundles / All-Access).
+          Lives above the legacy Paddle tiers until Phase 3 retires them. */}
+      <NewStructureShowcase currency={currency} billingPeriod={period} />
 
       {/* Tier cards */}
       <section

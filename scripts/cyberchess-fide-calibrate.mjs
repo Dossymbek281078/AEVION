@@ -484,18 +484,25 @@ function main() {
   // solving — algebraically equivalent to (X^T W X) β = X^T W y.
   let Xfit = X, yfit = y;
   if (args.weighted) {
+    // Weight floor prevents 1/n exploding when a bucket only has a handful
+    // of samples. Without it, brackets with n=3 dominate the fit; see the
+    // super-final weighted run (c5f48278 commit message) for the failure
+    // mode. Floor of 50 means buckets at or below 50 all share the same
+    // weight cap so they no longer overpower mid-density brackets.
+    const WEIGHT_FLOOR = 50;
     const bracket = (elo) => Math.floor(elo / 200);
     const counts = new Map();
     for (const v of y) counts.set(bracket(v), (counts.get(bracket(v)) || 0) + 1);
-    // Normalize so mean weight = 1 (keeps coefficient scale comparable to OLS)
-    const w = y.map(v => 1 / counts.get(bracket(v)));
+    const w = y.map(v => 1 / Math.max(WEIGHT_FLOOR, counts.get(bracket(v))));
     const meanW = w.reduce((s,x)=>s+x,0) / w.length;
     const sqrtW = w.map(wi => Math.sqrt(wi / meanW));
     Xfit = X.map((row, i) => row.map(v => v * sqrtW[i]));
     yfit = y.map((v, i) => v * sqrtW[i]);
-    console.log(`      Weighted LS: bucket weights (1/n_bucket)`);
+    console.log(`      Weighted LS: 1/max(${WEIGHT_FLOOR}, n_bucket)`);
     [...counts.entries()].sort().forEach(([k, n]) => {
-      console.log(`        bracket ${k*200}-${k*200+199}: n=${String(n).padStart(4)}  weight=${(1/n).toFixed(5)}`);
+      const effN = Math.max(WEIGHT_FLOOR, n);
+      const note = n < WEIGHT_FLOOR ? `  (clipped to ${WEIGHT_FLOOR})` : "";
+      console.log(`        bracket ${k*200}-${k*200+199}: n=${String(n).padStart(4)}  weight=${(1/effN).toFixed(5)}${note}`);
     });
   }
 

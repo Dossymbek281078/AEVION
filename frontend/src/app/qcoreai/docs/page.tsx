@@ -210,8 +210,8 @@ export default function DocsPage() {
             Base URL: <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: 5, fontSize: 12 }}>{apiUrl("/api/qcoreai")}</code>
             &nbsp;·&nbsp;Auth: <code style={{ background: "#f1f5f9", padding: "1px 6px", borderRadius: 5, fontSize: 12 }}>Authorization: Bearer &lt;JWT&gt;</code>
             &nbsp;·&nbsp;
-            <a href="https://www.npmjs.com/package/@aevion/qcoreai-client" target="_blank" rel="noreferrer" style={{ color: "#4338ca", fontWeight: 700, fontSize: 12 }}>
-              npm @aevion/qcoreai-client
+            <a href="https://www.npmjs.com/package/@dosymbek/qcoreai-client" target="_blank" rel="noreferrer" style={{ color: "#4338ca", fontWeight: 700, fontSize: 12 }}>
+              npm @dosymbek/qcoreai-client
             </a>
           </p>
         </div>

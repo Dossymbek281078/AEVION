@@ -169,6 +169,33 @@ async function get(path, expectJson = true) {
     }
   });
 
+  await step("GET /api/aevion/pricing returns solo + bundles + allAccess shape", async () => {
+    const j = await get("/api/aevion/pricing");
+    assert(Array.isArray(j.solo) && j.solo.length >= 30, `solo array missing or short: ${j.solo?.length}`);
+    assert(Array.isArray(j.bundles) && j.bundles.length === 4, `bundles must be 4 (fintech/build/ai/gaming), got ${j.bundles?.length}`);
+    assert(j.allAccess && typeof j.allAccess.modules === "number", "allAccess.modules missing");
+    assert(j.currencyRatesAt, "currencyRatesAt missing");
+    const bundleIds = j.bundles.map((b) => b.id).sort().join(",");
+    assert(bundleIds === "ai,build,fintech,gaming", `unexpected bundle ids: ${bundleIds}`);
+    for (const s of j.solo.slice(0, 5)) {
+      assert(["light", "standard", "heavy"].includes(s.computeTier), `bad computeTier: ${s.computeTier}`);
+      assert(typeof s.monthly?.USD === "number" && s.monthly.USD > 0, `${s.id}: USD price not positive`);
+    }
+  });
+
+  await step("GET /api/aevion/pricing bundles save money vs sum-of-solos", async () => {
+    // Bundle math invariant: each bundle's saveVsSolo.USD must be positive
+    // (bundle costs less than sum of its modules priced à la carte) and
+    // all-access must save more than any single bundle.
+    const j = await get("/api/aevion/pricing");
+    for (const b of j.bundles) {
+      assert(typeof b.saveVsSolo?.USD === "number" && b.saveVsSolo.USD > 0,
+        `bundle ${b.id}: saveVsSolo.USD must be positive, got ${b.saveVsSolo?.USD}`);
+    }
+    assert(j.allAccess.saveVsAllSolo?.USD > 100,
+      `all-access should save >$100/mo vs all-solo, got ${j.allAccess.saveVsAllSolo?.USD}`);
+  });
+
   await step("GET /api/aevion/sdks returns 4 published packages with shape", async () => {
     const j = await get("/api/aevion/sdks");
     assert(j.total === 4, `total=${j.total}, expected 4`);

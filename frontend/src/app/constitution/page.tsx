@@ -452,6 +452,127 @@ const COUNTRIES: Country[] = [
   { flag: "🇰🇿", name: "Казахстан",   sliders: { floor: 50, ruleOfLaw: 40, rotation: 10, transparency: 30, multiStatus: 30, skinInGame: 35, polycentricity: 25, positiveSum: 60 } },
 ];
 
+type TourStep = {
+  era: string;
+  year: string;
+  title: string;
+  narrative: string;
+  sliders: Sliders;
+};
+
+const TOUR: TourStep[] = [
+  {
+    era: "Феодализм",
+    year: "≈1200",
+    title: "Точка отсчёта",
+    narrative:
+      "Власть наследственная, закон формальный — для бедных одно, для знати другое. Низ привязан к земле. Бунт раз в поколение, обычно ничего не меняет. Пирог не растёт. Силуэт — узкий шип по skin-in-the-game и полицентричности (каждый барон сам себе король), всё остальное в подвале.",
+    sliders: {
+      floor: 15,
+      ruleOfLaw: 35,
+      rotation: 5,
+      transparency: 20,
+      multiStatus: 25,
+      skinInGame: 60,
+      polycentricity: 70,
+      positiveSum: 25,
+    },
+  },
+  {
+    era: "Магна Карта + ранние парламенты",
+    year: "1215–1700",
+    title: "Закон начинает связывать верх",
+    narrative:
+      "Король впервые обязан жить по правилам — Magna Carta 1215, потом английский Habeas Corpus, потом Голландия с её регентами. Сословные собрания превращаются в зачатки парламента. Это первый и главный сдвиг: закон поднимается над верховной властью. Ползунок ruleOfLaw +15.",
+    sliders: {
+      floor: 18,
+      ruleOfLaw: 50,
+      rotation: 10,
+      transparency: 30,
+      multiStatus: 30,
+      skinInGame: 55,
+      polycentricity: 60,
+      positiveSum: 30,
+    },
+  },
+  {
+    era: "Промышленная революция",
+    year: "1750–1850",
+    title: "Пирог начинает расти",
+    narrative:
+      "Впервые в истории экономика растёт быстрее, чем население. Появляется буржуа — новая ось статуса, не наследственная. Города накапливают капитал и автономию. positiveSum +25 — главное событие модерна. Без растущего пирога ни одна следующая реформа не была бы политически возможной.",
+    sliders: {
+      floor: 22,
+      ruleOfLaw: 55,
+      rotation: 15,
+      transparency: 35,
+      multiStatus: 45,
+      skinInGame: 55,
+      polycentricity: 55,
+      positiveSum: 55,
+    },
+  },
+  {
+    era: "Всеобщее избирательное право",
+    year: "1900–1950",
+    title: "Низ получает голос",
+    narrative:
+      "Сначала мужчины без ценза, потом женщины. Жребий старых афинян возвращается в виде регулярных выборов и парламентской ротации. Закон постепенно становится одинаковым для всех — это уже Acemoglu/Robinson «inclusive institutions». rotation +20, ruleOfLaw +15.",
+    sliders: {
+      floor: 35,
+      ruleOfLaw: 70,
+      rotation: 35,
+      transparency: 45,
+      multiStatus: 50,
+      skinInGame: 50,
+      polycentricity: 50,
+      positiveSum: 60,
+    },
+  },
+  {
+    era: "Послевоенный социал-контракт",
+    year: "1945–1980",
+    title: "Появляется пол снизу",
+    narrative:
+      "Бесплатное образование, всеобщая медицина, пенсии, пособия. Большой шаг: низ перестаёт быть прижатым к стене → исчезает экзистенциальная мотивация отнимать. Прозрачность государства растёт — налоговые системы, бюджеты. Несколько осей статуса легитимны. floor +30 — самое дорогое и самое стабилизирующее изменение.",
+    sliders: {
+      floor: 65,
+      ruleOfLaw: 80,
+      rotation: 45,
+      transparency: 65,
+      multiStatus: 60,
+      skinInGame: 45,
+      polycentricity: 45,
+      positiveSum: 65,
+    },
+  },
+  {
+    era: "Цифровая прозрачность + Open Access",
+    year: "2000-сейчас (и дальше)",
+    title: "Все четыре опоры собраны",
+    narrative:
+      "Открытые декларации, доступ к данным, портабельные права, конкуренция юрисдикций. Полная картина по North/Wallis/Weingast: положительная сумма + закон над верхом + пол снизу + множественные статусы + ротация + прозрачность. Силуэт превращается в почти правильный восьмиугольник большого радиуса. Элита больше не боится низа — между ними правила и общий растущий пирог. Это путь, который прошли скандинавы, частично прошли континентальная Европа и Канада. Открытый вопрос — устойчиво ли это в кризис.",
+    sliders: {
+      floor: 75,
+      ruleOfLaw: 85,
+      rotation: 65,
+      transparency: 80,
+      multiStatus: 75,
+      skinInGame: 65,
+      polycentricity: 70,
+      positiveSum: 80,
+    },
+  },
+];
+
+function changedKeys(from: Sliders, to: Sliders, threshold = 5): Set<keyof Sliders> {
+  const out = new Set<keyof Sliders>();
+  for (const k of Object.keys(to) as Array<keyof Sliders>) {
+    if (Math.abs(to[k] - from[k]) >= threshold) out.add(k);
+  }
+  return out;
+}
+
 type ShockId = "war" | "pandemic" | "crisis" | "tech";
 type Shock = {
   id: ShockId;
@@ -612,6 +733,20 @@ export default function ConstitutionPage() {
     () => (compareBId ? saved.find((s) => s.id === compareBId) ?? null : null),
     [compareBId, saved],
   );
+
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const tourActive = tourStep !== null;
+  const tourHighlight = useMemo<Set<keyof Sliders>>(() => {
+    if (tourStep === null || tourStep === 0) return new Set();
+    return changedKeys(TOUR[tourStep - 1].sliders, TOUR[tourStep].sliders);
+  }, [tourStep]);
+  const goToTourStep = useCallback((idx: number) => {
+    const clamped = Math.max(0, Math.min(TOUR.length - 1, idx));
+    setTourStep(clamped);
+    setSliders(TOUR[clamped].sliders);
+  }, []);
+  const startTour = useCallback(() => goToTourStep(0), [goToTourStep]);
+  const exitTour = useCallback(() => setTourStep(null), []);
 
   useEffect(() => {
     try {
@@ -803,7 +938,84 @@ export default function ConstitutionPage() {
             Двигай ползунки, смотри, в какой исторический режим скатывается система. Сохрани сценарий — увидишь,
             что выбрали другие.
           </p>
+          {!tourActive && (
+            <button
+              type="button"
+              onClick={startTour}
+              className="mt-4 px-4 py-2 rounded bg-gradient-to-r from-[#d4af37] to-[#f5d27a] text-[#0b1736] font-semibold hover:opacity-90"
+            >
+              ▶ Тур по эволюции — от Феодализма до Open Access за 8 веков
+            </button>
+          )}
         </header>
+
+        {tourActive && tourStep !== null && (
+          <section className="mb-6 border border-[#d4af37]/40 rounded-xl p-5 bg-gradient-to-br from-[#0b1736]/80 to-[#131f3d]/80">
+            <div className="flex justify-between items-baseline mb-2 flex-wrap gap-2">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-[#9aa3c0]">
+                  Шаг {tourStep + 1} из {TOUR.length} · {TOUR[tourStep].year}
+                </div>
+                <h2 className="text-xl md:text-2xl font-bold text-[#d4af37]">
+                  {TOUR[tourStep].era}
+                </h2>
+                <div className="text-sm text-[#f5d27a] italic mt-1">
+                  {TOUR[tourStep].title}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={exitTour}
+                className="text-xs px-3 py-1 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10"
+              >
+                Выйти из тура
+              </button>
+            </div>
+            <p className="text-sm text-[#e7ecf8] leading-relaxed">
+              {TOUR[tourStep].narrative}
+            </p>
+            <div className="flex justify-between items-center mt-4 gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => goToTourStep(tourStep - 1)}
+                disabled={tourStep === 0}
+                className="px-4 py-2 rounded border border-[#d4af37]/40 hover:bg-[#d4af37]/10 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+              >
+                ← Назад
+              </button>
+              <div className="flex gap-1">
+                {TOUR.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => goToTourStep(i)}
+                    aria-label={`Шаг ${i + 1}`}
+                    className={`w-2.5 h-2.5 rounded-full transition ${
+                      i === tourStep
+                        ? "bg-[#d4af37]"
+                        : i < tourStep
+                          ? "bg-[#d4af37]/50"
+                          : "bg-[#d4af37]/15 hover:bg-[#d4af37]/30"
+                    }`}
+                  />
+                ))}
+              </div>
+              {tourStep < TOUR.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => goToTourStep(tourStep + 1)}
+                  className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold hover:opacity-90 text-sm"
+                >
+                  Дальше →
+                </button>
+              ) : (
+                <div className="px-4 py-2 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm font-semibold">
+                  Финал · 8 веков пройдено
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-xl p-5">
@@ -821,10 +1033,19 @@ export default function ConstitutionPage() {
             <div className="space-y-4">
               {SLIDER_META.map((m) => {
                 const val = sliders[m.key];
+                const highlighted = tourHighlight.has(m.key);
                 return (
-                  <div key={m.key}>
+                  <div
+                    key={m.key}
+                    className={
+                      highlighted
+                        ? "rounded-md px-2 py-1 -mx-2 ring-2 ring-emerald-400/60 bg-emerald-500/5 transition"
+                        : ""
+                    }
+                  >
                     <div className="flex justify-between items-baseline">
                       <label htmlFor={`s-${m.key}`} className="font-medium">
+                        {highlighted && <span className="text-emerald-400 mr-1">●</span>}
                         {m.label}
                       </label>
                       <span className="text-[#d4af37] font-mono text-sm">{val}</span>

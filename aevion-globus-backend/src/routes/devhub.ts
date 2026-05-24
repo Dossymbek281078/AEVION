@@ -1839,8 +1839,9 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
       }),
     });
     if (!priceR.ok) {
-      const e = await priceR.text();
-      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 1000)}` });
+      let paddleErr: unknown;
+      try { paddleErr = await priceR.json(); } catch { paddleErr = await priceR.text(); }
+      return res.status(priceR.status).json({ step: "price", productId, paddleError: paddleErr });
     }
     const priceData = await priceR.json() as { data?: { id: string } };
     const priceId = priceData.data?.id;

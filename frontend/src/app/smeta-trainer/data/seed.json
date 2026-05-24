@@ -1,11 +1,23 @@
 {
   "_meta": {
-    "version": "0.4.0",
+    "version": "0.5.0",
     "snbVersion": "учебная-2026-Q2 + ССЦ РК 8.04-08-2025",
     "description": "Учебный корпус AI-тренажёра сметного дела РК. Расход материалов — учебный (для упрощения), цены — реальные ССЦ-2025 для 58% материалов (см. material-ssc-map.json), остальное учебные fallback.",
-    "lastReview": "2026-05-06",
+    "lastReview": "2026-05-24",
     "esnSource": "ЭСН РК 8.04-01-2024 Сб.11,12,15,17,18,21",
-    "priceSource": "ССЦ РК 8.04-08-2025 (Алматы Кн.1+7 + общие Кн.2-6) — обновляется через .github/workflows/update-ksm.yml"
+    "priceSource": "ССЦ РК 8.04-08-2025 (Алматы Кн.1+7 + общие Кн.2-6) — обновляется через .github/workflows/update-ksm.yml",
+    "changelog": [
+      {
+        "version": "0.5.0",
+        "date": "2026-05-24",
+        "notes": "Ставки труда подняты до уровня РК 2026 (2р=950, 3р=1100, 4р=1300, 5р=1500, 6р=1800 ₸/чел.-ч); baseCostPerUnit пересчитан с сохранением исходного НР/СП-ratio; перфоратор → отбойный молоток в ДЕМ-позициях штукатурки/плитки/стяжки/потолков. Шифры не трогали — отдельная миграция."
+      },
+      {
+        "version": "0.5.0",
+        "date": "2026-05-24",
+        "notes": "Ставки труда подняты до уровня РК 2026 (2р=950, 3р=1100, 4р=1300, 5р=1500, 6р=1800 ₸/чел.-ч); baseCostPerUnit пересчитан с сохранением исходного НР/СП-ratio; перфоратор → отбойный молоток в ДЕМ-позициях штукатурки/плитки/стяжки/потолков. Шифры не трогали — отдельная миграция."
+      }
+    ]
   },
   "rates": [
     {
@@ -24,17 +36,17 @@
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 22,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "машины",
-          "name": "Перфоратор электрический",
+          "name": "Отбойный молоток электрический",
           "qtyPerUnit": 8,
           "unit": "маш.-ч",
           "basePrice": 350
         }
       ],
-      "baseCostPerUnit": 6760,
+      "baseCostPerUnit": 23700,
       "technicalNotes": "Объём — площадь стен за вычетом проёмов."
     },
     {
@@ -53,10 +65,10 @@
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         }
       ],
-      "baseCostPerUnit": 1440
+      "baseCostPerUnit": 7600
     },
     {
       "code": "ДЕМ-11-02-001",
@@ -74,17 +86,17 @@
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "машины",
-          "name": "Перфоратор электрический",
+          "name": "Отбойный молоток электрический",
           "qtyPerUnit": 10,
           "unit": "маш.-ч",
           "basePrice": 350
         }
       ],
-      "baseCostPerUnit": 6740,
+      "baseCostPerUnit": 20600,
       "technicalNotes": "Объём — площадь демонтируемой стяжки (без учёта порогов)."
     },
     {
@@ -103,17 +115,17 @@
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 25,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "машины",
-          "name": "Перфоратор электрический",
+          "name": "Отбойный молоток электрический",
           "qtyPerUnit": 12,
           "unit": "маш.-ч",
           "basePrice": 350
         }
       ],
-      "baseCostPerUnit": 8700
+      "baseCostPerUnit": 27950
     },
     {
       "code": "ДЕМ-06-01-001",
@@ -132,10 +144,10 @@
           "name": "Плотник 3 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 390,
+      "baseCostPerUnit": 1650,
       "technicalNotes": "Норма на 1 оконный блок площадью до 2 м²."
     },
     {
@@ -154,10 +166,10 @@
           "name": "Плотник 3 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 312
+      "baseCostPerUnit": 1320
     },
     {
       "code": "ОТД-13-01-001",
@@ -176,7 +188,7 @@
           "name": "Штукатур 4 разряда",
           "qtyPerUnit": 42,
           "unit": "чел.-ч",
-          "basePrice": 250
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -194,7 +206,7 @@
           "basePrice": 16500
         }
       ],
-      "baseCostPerUnit": 54150,
+      "baseCostPerUnit": 98661,
       "technicalNotes": "Объём — площадь стен за вычетом проёмов."
     },
     {
@@ -214,7 +226,7 @@
           "name": "Маляр 4 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -224,7 +236,7 @@
           "basePrice": 75
         }
       ],
-      "baseCostPerUnit": 6585,
+      "baseCostPerUnit": 26025,
       "technicalNotes": "Объём — площадь стен за вычетом проёмов."
     },
     {
@@ -244,7 +256,7 @@
           "name": "Маляр 4 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -261,7 +273,7 @@
           "basePrice": 95
         }
       ],
-      "baseCostPerUnit": 8270,
+      "baseCostPerUnit": 21168,
       "technicalNotes": "Объём считается по площади стен за вычетом проёмов окон и дверей."
     },
     {
@@ -281,7 +293,7 @@
           "name": "Плиточник 5 разряда",
           "qtyPerUnit": 62,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -305,7 +317,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 430060,
+      "baseCostPerUnit": 503365,
       "technicalNotes": "Объём — площадь стен за вычетом проёмов."
     },
     {
@@ -324,7 +336,7 @@
           "name": "Маляр 4 разряда",
           "qtyPerUnit": 0.18,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -334,7 +346,7 @@
           "basePrice": 180
         }
       ],
-      "baseCostPerUnit": 79.2
+      "baseCostPerUnit": 274
     },
     {
       "code": "ОТД-15-07-001",
@@ -353,7 +365,7 @@
           "name": "Монтажник ГКЛ 5 разряда",
           "qtyPerUnit": 55,
           "unit": "чел.-ч",
-          "basePrice": 270
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -384,7 +396,7 @@
           "basePrice": 45
         }
       ],
-      "baseCostPerUnit": 240760
+      "baseCostPerUnit": 336597
     },
     {
       "code": "ОТД-11-02-001",
@@ -404,7 +416,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 24,
           "unit": "чел.-ч",
-          "basePrice": 240
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -422,7 +434,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 84235,
+      "baseCostPerUnit": 109480,
       "technicalNotes": "Толщина 40 мм. Для других толщин — другая норма."
     },
     {
@@ -442,7 +454,7 @@
           "name": "Плиточник 5 разряда",
           "qtyPerUnit": 72,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -466,7 +478,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 544260,
+      "baseCostPerUnit": 629470,
       "technicalNotes": "Объём — площадь пола без учёта плинтуса."
     },
     {
@@ -486,7 +498,7 @@
           "name": "Плотник-отделочник 5 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -510,7 +522,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 339010
+      "baseCostPerUnit": 355849
     },
     {
       "code": "ОТД-06-01-001",
@@ -529,7 +541,7 @@
           "name": "Плотник 5 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -546,7 +558,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 38580
+      "baseCostPerUnit": 42742
     },
     {
       "code": "ОТД-06-02-001",
@@ -565,7 +577,7 @@
           "name": "Монтажник оконных конструкций 5 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 290
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -582,7 +594,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 46248
+      "baseCostPerUnit": 47700
     },
     {
       "code": "ОБС-08-02-001-1",
@@ -601,7 +613,7 @@
           "name": "Каменщик 5 разряда",
           "qtyPerUnit": 4.2,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -633,7 +645,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 44033
+      "baseCostPerUnit": 49075
     },
     {
       "code": "ОБС-08-03-001",
@@ -651,7 +663,7 @@
           "name": "Каменщик 4 разряда",
           "qtyPerUnit": 85,
           "unit": "чел.-ч",
-          "basePrice": 290
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -675,7 +687,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 562350
+      "baseCostPerUnit": 650192
     },
     {
       "code": "КРВ-12-01-001",
@@ -694,7 +706,7 @@
           "name": "Кровельщик 5 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 290
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -725,7 +737,7 @@
           "basePrice": 350
         }
       ],
-      "baseCostPerUnit": 365020
+      "baseCostPerUnit": 399012
     },
     {
       "code": "КРВ-12-02-001",
@@ -743,7 +755,7 @@
           "name": "Кровельщик 4 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 270
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -760,7 +772,7 @@
           "basePrice": 65
         }
       ],
-      "baseCostPerUnit": 351860
+      "baseCostPerUnit": 370400
     },
     {
       "code": "КРВ-12-03-001",
@@ -778,7 +790,7 @@
           "name": "Кровельщик 3 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 250
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -788,7 +800,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 34600
+      "baseCostPerUnit": 38000
     },
     {
       "code": "СНТ-16-01-001",
@@ -807,7 +819,7 @@
           "name": "Сантехник-сварщик 5 разряда",
           "qtyPerUnit": 65,
           "unit": "чел.-ч",
-          "basePrice": 300
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -824,7 +836,7 @@
           "basePrice": 580
         }
       ],
-      "baseCostPerUnit": 322200
+      "baseCostPerUnit": 400200
     },
     {
       "code": "СНТ-16-02-001",
@@ -843,7 +855,7 @@
           "name": "Сантехник 4 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -867,7 +879,7 @@
           "basePrice": 2200
         }
       ],
-      "baseCostPerUnit": 20490
+      "baseCostPerUnit": 23992
     },
     {
       "code": "СНТ-16-03-001",
@@ -887,7 +899,7 @@
           "name": "Сантехник 4 разряда",
           "qtyPerUnit": 38,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -904,7 +916,7 @@
           "basePrice": 780
         }
       ],
-      "baseCostPerUnit": 93520
+      "baseCostPerUnit": 132488
     },
     {
       "code": "СНТ-16-04-001",
@@ -924,7 +936,7 @@
           "name": "Сантехник 4 разряда",
           "qtyPerUnit": 2.4,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -948,7 +960,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 24172
+      "baseCostPerUnit": 26620
     },
     {
       "code": "СНТ-16-05-001",
@@ -967,7 +979,7 @@
           "name": "Сантехник 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -991,7 +1003,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 16410
+      "baseCostPerUnit": 18450
     },
     {
       "code": "ЭЛ-21-04-007",
@@ -1010,7 +1022,7 @@
           "name": "Электромонтажник 4 разряда",
           "qtyPerUnit": 0.25,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -1034,7 +1046,7 @@
           "basePrice": 18
         }
       ],
-      "baseCostPerUnit": 564.7
+      "baseCostPerUnit": 799
     },
     {
       "code": "ЭЛ-21-02-001",
@@ -1053,7 +1065,7 @@
           "name": "Электромонтажник 4 разряда",
           "qtyPerUnit": 0.45,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -1070,7 +1082,7 @@
           "basePrice": 80
         }
       ],
-      "baseCostPerUnit": 1406
+      "baseCostPerUnit": 1865
     },
     {
       "code": "ЭЛ-21-03-001",
@@ -1089,7 +1101,7 @@
           "name": "Электромонтажник 4 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -1099,7 +1111,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 8668
+      "baseCostPerUnit": 9280
     },
     {
       "code": "ЭЛ-21-05-001",
@@ -1119,7 +1131,7 @@
           "name": "Электромонтажник 5 разряда",
           "qtyPerUnit": 4.5,
           "unit": "чел.-ч",
-          "basePrice": 300
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -1136,7 +1148,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 28750
+      "baseCostPerUnit": 34345
     },
     {
       "code": "ЭЛ-21-06-001",
@@ -1155,7 +1167,7 @@
           "name": "Электромонтажник 3 разряда",
           "qtyPerUnit": 0.35,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -1172,7 +1184,7 @@
           "basePrice": 80
         }
       ],
-      "baseCostPerUnit": 1021
+      "baseCostPerUnit": 1315
     },
     {
       "code": "ЭСН15-1115-0202-0801",
@@ -13217,7 +13229,7 @@
           "name": "Машинист экскаватора 6 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -13228,7 +13240,7 @@
           "machinistWageRate": 420
         }
       ],
-      "baseCostPerUnit": 71040,
+      "baseCostPerUnit": 87600,
       "technicalNotes": "Объём в плотном теле. Категория грунта I по СН РК 5.01-01 (песок, рыхлая земля).",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-3"
     },
@@ -13247,7 +13259,7 @@
           "name": "Машинист экскаватора 6 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -13258,7 +13270,7 @@
           "machinistWageRate": 420
         }
       ],
-      "baseCostPerUnit": 94720,
+      "baseCostPerUnit": 116800,
       "technicalNotes": "Категория II — суглинки лёгкие, супеси.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-3"
     },
@@ -13277,7 +13289,7 @@
           "name": "Машинист экскаватора 6 разряда",
           "qtyPerUnit": 22,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -13288,7 +13300,7 @@
           "machinistWageRate": 420
         }
       ],
-      "baseCostPerUnit": 130240,
+      "baseCostPerUnit": 160600,
       "technicalNotes": "Категория III — глины полутвёрдые, влажные суглинки.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-3"
     },
@@ -13308,7 +13320,7 @@
           "name": "Машинист бульдозера 6 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -13327,7 +13339,7 @@
           "machinistWageRate": 420
         }
       ],
-      "baseCostPerUnit": 211480,
+      "baseCostPerUnit": 236358,
       "technicalNotes": "Категория IV — скальные и мёрзлые грунты. Требует рыхления.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-7"
     },
@@ -13346,10 +13358,10 @@
           "name": "Землекоп 3 разряда",
           "qtyPerUnit": 2.4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 528,
+      "baseCostPerUnit": 2640,
       "technicalNotes": "Применяется в стеснённых условиях, у коммуникаций.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-12"
     },
@@ -13368,7 +13380,7 @@
           "name": "Машинист бульдозера 5 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -13387,7 +13399,7 @@
           "machinistWageRate": 380
         }
       ],
-      "baseCostPerUnit": 62080,
+      "baseCostPerUnit": 71075,
       "technicalNotes": "Уплотнение слоями 200-300 мм до Куп ≥ 0.95.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-17"
     },
@@ -13437,7 +13449,7 @@
           "name": "Дорожный рабочий 3 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 240
+          "basePrice": 1100
         },
         {
           "kind": "машины",
@@ -13455,7 +13467,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 2156,
+      "baseCostPerUnit": 2500,
       "technicalNotes": "Толщина 200 мм — стандарт под фундаментные плиты.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-21"
     },
@@ -13476,14 +13488,14 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 3.6,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "труд",
           "name": "Арматурщик 4 разряда",
           "qtyPerUnit": 2.8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -13508,7 +13520,7 @@
           "basePrice": 32000
         }
       ],
-      "baseCostPerUnit": 36016,
+      "baseCostPerUnit": 42218,
       "technicalNotes": "Бетон B25 W4 — стандарт под подземные конструкции. Дополнительно учесть опалубку и арматуру отдельной строкой.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-1"
     },
@@ -13528,7 +13540,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 3.6,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -13546,7 +13558,7 @@
           "basePrice": 36500
         }
       ],
-      "baseCostPerUnit": 39782,
+      "baseCostPerUnit": 43310,
       "technicalNotes": "B30 W6 — повышенной водонепроницаемости. Для подвалов с УГВ.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-1"
     },
@@ -13567,7 +13579,7 @@
           "name": "Плотник-опалубщик 4 разряда",
           "qtyPerUnit": 1.4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -13584,7 +13596,7 @@
           "basePrice": 95000
         }
       ],
-      "baseCostPerUnit": 1063,
+      "baseCostPerUnit": 2435,
       "technicalNotes": "Оборачиваемость фанеры 5-7 циклов, поэтому qtyPerUnit = 1/15 м².",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-8"
     },
@@ -13604,7 +13616,7 @@
           "name": "Плотник-опалубщик 4 разряда",
           "qtyPerUnit": 1.1,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -13622,7 +13634,7 @@
           "basePrice": 320
         }
       ],
-      "baseCostPerUnit": 1797,
+      "baseCostPerUnit": 2875,
       "technicalNotes": "Аренда — за 1 цикл оборачиваемости 2 недели.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-9"
     },
@@ -13642,7 +13654,7 @@
           "name": "Арматурщик 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -13666,7 +13678,7 @@
           "basePrice": 480
         }
       ],
-      "baseCostPerUnit": 395882,
+      "baseCostPerUnit": 403711,
       "technicalNotes": "Расход материала +2% на отходы. Для крупных каркасов используется сварка ОСТ.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-12"
     },
@@ -13686,7 +13698,7 @@
           "name": "Арматурщик 4 разряда",
           "qtyPerUnit": 10,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -13703,7 +13715,7 @@
           "basePrice": 480
         }
       ],
-      "baseCostPerUnit": 409930,
+      "baseCostPerUnit": 419661,
       "technicalNotes": "Расход проволоки выше из-за более частой шага сетки.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-12"
     },
@@ -13723,14 +13735,14 @@
           "name": "Арматурщик 5 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "труд",
           "name": "Сварщик 5 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -13748,7 +13760,7 @@
           "basePrice": 360000
         }
       ],
-      "baseCostPerUnit": 372888,
+      "baseCostPerUnit": 382307,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-12"
     },
     {
@@ -13767,7 +13779,7 @@
           "name": "Бетонщик 3 разряда",
           "qtyPerUnit": 2.2,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -13777,7 +13789,7 @@
           "basePrice": 22000
         }
       ],
-      "baseCostPerUnit": 23452,
+      "baseCostPerUnit": 25300,
       "technicalNotes": "Подбетонка под фундаментную плиту толщ. 100 мм, тощий бетон B7,5.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-3"
     },
@@ -13797,7 +13809,7 @@
           "name": "Машинист копра 6 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 450
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -13823,7 +13835,7 @@
           "basePrice": 95000
         }
       ],
-      "baseCostPerUnit": 113475,
+      "baseCostPerUnit": 115503,
       "technicalNotes": "Шаг свай по проекту. Глубина забивки контролируется отказомером.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.5 §5-7"
     },
@@ -13843,7 +13855,7 @@
           "name": "Машинист буровой 6 разряда",
           "qtyPerUnit": 1.4,
           "unit": "чел.-ч",
-          "basePrice": 450
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -13868,7 +13880,7 @@
           "basePrice": 380000
         }
       ],
-      "baseCostPerUnit": 48830,
+      "baseCostPerUnit": 50723,
       "technicalNotes": "Глинистый раствор для удержания стенок скважины.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.5 §5-12"
     },
@@ -13888,14 +13900,14 @@
           "name": "Каменщик 4 разряда",
           "qtyPerUnit": 5.2,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "труд",
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 5.2,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "материал",
@@ -13912,7 +13924,7 @@
           "basePrice": 14000
         }
       ],
-      "baseCostPerUnit": 21960,
+      "baseCostPerUnit": 31404,
       "technicalNotes": "На 1 м³ кладки — 400 шт кирпича + 0.24 м³ раствора.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-1"
     },
@@ -13931,14 +13943,14 @@
           "name": "Каменщик 4 разряда",
           "qtyPerUnit": 5.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "труд",
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 5.5,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "материал",
@@ -13962,7 +13974,7 @@
           "basePrice": 350
         }
       ],
-      "baseCostPerUnit": 24290,
+      "baseCostPerUnit": 34015,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-2"
     },
     {
@@ -13980,7 +13992,7 @@
           "name": "Каменщик 3 разряда",
           "qtyPerUnit": 2.4,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14004,7 +14016,7 @@
           "basePrice": 380000
         }
       ],
-      "baseCostPerUnit": 26314,
+      "baseCostPerUnit": 28298,
       "technicalNotes": "D500 — конструкционно-теплоизоляц. Расход клея в 4-5 раз меньше раствора.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-8"
     },
@@ -14023,7 +14035,7 @@
           "name": "Каменщик 3 разряда",
           "qtyPerUnit": 0.5,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14033,7 +14045,7 @@
           "basePrice": 2200
         }
       ],
-      "baseCostPerUnit": 2374,
+      "baseCostPerUnit": 2794,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-9"
     },
     {
@@ -14051,7 +14063,7 @@
           "name": "Каменщик 3 разряда",
           "qtyPerUnit": 1.1,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14068,7 +14080,7 @@
           "basePrice": 14000
         }
       ],
-      "baseCostPerUnit": 2522,
+      "baseCostPerUnit": 3446,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-3"
     },
     {
@@ -14085,7 +14097,7 @@
           "name": "Каменщик 5 разряда",
           "qtyPerUnit": 8.5,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -14102,7 +14114,7 @@
           "basePrice": 15500
         }
       ],
-      "baseCostPerUnit": 23165,
+      "baseCostPerUnit": 32289,
       "technicalNotes": "Столбы — несущая часть, требует кирпич М150 и каменщика высш. квалификации.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-6"
     },
@@ -14123,14 +14135,14 @@
           "name": "Монтажник конструкций 5 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "труд",
           "name": "Сварщик 5 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -14155,7 +14167,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 342460,
+      "baseCostPerUnit": 352337,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-1"
     },
     {
@@ -14174,14 +14186,14 @@
           "name": "Монтажник конструкций 5 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "труд",
           "name": "Сварщик 5 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -14199,7 +14211,7 @@
           "basePrice": 315000
         }
       ],
-      "baseCostPerUnit": 333730,
+      "baseCostPerUnit": 340465,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-3"
     },
     {
@@ -14219,7 +14231,7 @@
           "name": "Монтажник конструкций 6 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 450
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -14237,7 +14249,7 @@
           "basePrice": 380000
         }
       ],
-      "baseCostPerUnit": 429400,
+      "baseCostPerUnit": 440125,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-5"
     },
     {
@@ -14256,7 +14268,7 @@
           "name": "Кровельщик 4 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14273,7 +14285,7 @@
           "basePrice": 18
         }
       ],
-      "baseCostPerUnit": 250520,
+      "baseCostPerUnit": 266200,
       "technicalNotes": "Расход профлиста с нахлёстом +5%.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-12"
     },
@@ -14293,7 +14305,7 @@
           "name": "Маляр 4 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14303,7 +14315,7 @@
           "basePrice": 2800
         }
       ],
-      "baseCostPerUnit": 3552,
+      "baseCostPerUnit": 4140,
       "technicalNotes": "Расход состава зависит от требуемого предела огнестойкости.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.13 §13-22"
     },
@@ -14324,7 +14336,7 @@
           "name": "Маляр 3 разряда",
           "qtyPerUnit": 0.25,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14334,7 +14346,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 218,
+      "baseCostPerUnit": 428,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.13 §13-1"
     },
     {
@@ -14353,7 +14365,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -14386,7 +14398,7 @@
           "basePrice": 95
         }
       ],
-      "baseCostPerUnit": 281510,
+      "baseCostPerUnit": 289314,
       "technicalNotes": "Толщина 50 мм — стандарт для внутрирайонных проездов.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-1"
     },
@@ -14405,7 +14417,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 0.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14422,7 +14434,7 @@
           "basePrice": 28000
         }
       ],
-      "baseCostPerUnit": 3080,
+      "baseCostPerUnit": 3570,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-15"
     },
     {
@@ -14441,7 +14453,7 @@
           "name": "Дорожный рабочий 3 разряда",
           "qtyPerUnit": 22,
           "unit": "чел.-ч",
-          "basePrice": 240
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14458,7 +14470,7 @@
           "basePrice": 6500
         }
       ],
-      "baseCostPerUnit": 397780,
+      "baseCostPerUnit": 416653,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-22"
     },
     {
@@ -14476,7 +14488,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 0.05,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -14494,7 +14506,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 546,
+      "baseCostPerUnit": 595,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-28"
     },
     {
@@ -14513,7 +14525,7 @@
           "name": "Изолировщик 4 разряда",
           "qtyPerUnit": 0.35,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14530,7 +14542,7 @@
           "basePrice": 420
         }
       ],
-      "baseCostPerUnit": 1610,
+      "baseCostPerUnit": 1953,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.11 §11-4"
     },
     {
@@ -14549,7 +14561,7 @@
           "name": "Изолировщик 4 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14566,7 +14578,7 @@
           "basePrice": 420
         }
       ],
-      "baseCostPerUnit": 925,
+      "baseCostPerUnit": 1319,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.11 §11-7"
     },
     {
@@ -14585,7 +14597,7 @@
           "name": "Изолировщик 4 разряда",
           "qtyPerUnit": 0.45,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14602,7 +14614,7 @@
           "basePrice": 32
         }
       ],
-      "baseCostPerUnit": 1124,
+      "baseCostPerUnit": 1565,
       "technicalNotes": "Расход дюбелей — 6 шт/м² для надёжного крепления плит.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-8"
     },
@@ -14621,7 +14633,7 @@
           "name": "Изолировщик 3 разряда",
           "qtyPerUnit": 0.2,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14638,7 +14650,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 2999,
+      "baseCostPerUnit": 3166,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-12"
     },
     {
@@ -14657,7 +14669,7 @@
           "name": "Изолировщик 3 разряда",
           "qtyPerUnit": 0.08,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -14674,7 +14686,7 @@
           "basePrice": 250
         }
       ],
-      "baseCostPerUnit": 140,
+      "baseCostPerUnit": 207,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-16"
     },
     {
@@ -14695,14 +14707,14 @@
           "name": "Слесарь-монтажник 5 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "труд",
           "name": "Электромонтажник 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14719,7 +14731,7 @@
           "basePrice": 25000
         }
       ],
-      "baseCostPerUnit": 348680,
+      "baseCostPerUnit": 359600,
       "technicalNotes": "Пусконаладка обязательна с актом газовой службы.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-1"
     },
@@ -14739,7 +14751,7 @@
           "name": "Слесарь-монтажник 5 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -14756,7 +14768,7 @@
           "basePrice": 18000
         }
       ],
-      "baseCostPerUnit": 730080,
+      "baseCostPerUnit": 748000,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-2"
     },
     {
@@ -14775,7 +14787,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14792,7 +14804,7 @@
           "basePrice": 14500
         }
       ],
-      "baseCostPerUnit": 200780,
+      "baseCostPerUnit": 204700,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-8"
     },
     {
@@ -14811,7 +14823,7 @@
           "name": "Слесарь-сантехник 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14835,7 +14847,7 @@
           "basePrice": 350
         }
       ],
-      "baseCostPerUnit": 40350,
+      "baseCostPerUnit": 42800,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-14"
     },
     {
@@ -14855,14 +14867,14 @@
           "name": "Слесарь-монтажник 5 разряда",
           "qtyPerUnit": 24,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "труд",
           "name": "Электромонтажник 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -14880,7 +14892,7 @@
           "basePrice": 1850000
         }
       ],
-      "baseCostPerUnit": 1876240,
+      "baseCostPerUnit": 1910952,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-22"
     },
     {
@@ -14899,7 +14911,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -14909,7 +14921,7 @@
           "basePrice": 285000
         }
       ],
-      "baseCostPerUnit": 286280,
+      "baseCostPerUnit": 290200,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-25"
     },
     {
@@ -14930,7 +14942,7 @@
           "name": "Монтажник лифтов 6 разряда",
           "qtyPerUnit": 160,
           "unit": "чел.-ч",
-          "basePrice": 450
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -14948,7 +14960,7 @@
           "basePrice": 12500000
         }
       ],
-      "baseCostPerUnit": 12708000,
+      "baseCostPerUnit": 12924000,
       "technicalNotes": "Пуско-наладка обязательна с приёмкой ТехНадзора.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-30"
     },
@@ -14968,7 +14980,7 @@
           "name": "Машинист бульдозера 5 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -14979,7 +14991,7 @@
           "machinistWageRate": 380
         }
       ],
-      "baseCostPerUnit": 7320,
+      "baseCostPerUnit": 9000,
       "technicalNotes": "Подготовительные работы перед основными земляными.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-19"
     },
@@ -14998,10 +15010,10 @@
           "name": "Землекоп 3 разряда",
           "qtyPerUnit": 1.8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 396,
+      "baseCostPerUnit": 1980,
       "technicalNotes": "Для столбчатых опор лёгких сооружений.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-32"
     },
@@ -15022,7 +15034,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 0.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -15046,7 +15058,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 5447,
+      "baseCostPerUnit": 5938,
       "technicalNotes": "Промышленный пол для складов с нагрузкой 5-25 т/м².",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-22"
     },
@@ -15066,7 +15078,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 5.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -15084,7 +15096,7 @@
           "basePrice": 36000
         }
       ],
-      "baseCostPerUnit": 39470,
+      "baseCostPerUnit": 44758,
       "technicalNotes": "W8 — для подземных конструкций ниже УГВ. Также добавить опалубку и арматуру отдельно.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-7"
     },
@@ -15105,7 +15117,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 4.8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -15123,7 +15135,7 @@
           "basePrice": 32000
         }
       ],
-      "baseCostPerUnit": 37926,
+      "baseCostPerUnit": 42630,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-15"
     },
     {
@@ -15142,7 +15154,7 @@
           "name": "Бетонщик 5 разряда",
           "qtyPerUnit": 7.2,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -15152,7 +15164,7 @@
           "basePrice": 32000
         }
       ],
-      "baseCostPerUnit": 36016,
+      "baseCostPerUnit": 44080,
       "technicalNotes": "Расход бетона +4% для нивелирования потерь.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-18"
     },
@@ -15173,7 +15185,7 @@
           "name": "Бетонщик 5 разряда",
           "qtyPerUnit": 9.5,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -15183,7 +15195,7 @@
           "basePrice": 32000
         }
       ],
-      "baseCostPerUnit": 36890,
+      "baseCostPerUnit": 47530,
       "technicalNotes": "Самые трудоёмкие из монолитных работ — выше норма на 25%.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-20"
     },
@@ -15203,7 +15215,7 @@
           "name": "Землекоп 3 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -15227,7 +15239,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 3340,
+      "baseCostPerUnit": 3696,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.23 §23-8"
     },
     {
@@ -15247,7 +15259,7 @@
           "name": "Сварщик 5 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 420
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -15264,7 +15276,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 24470,
+      "baseCostPerUnit": 28102,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-22"
     },
     {
@@ -15283,7 +15295,7 @@
           "name": "Сварщик 4 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15300,7 +15312,7 @@
           "basePrice": 28000
         }
       ],
-      "baseCostPerUnit": 8584,
+      "baseCostPerUnit": 9760,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-25"
     },
     {
@@ -15318,7 +15330,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -15336,7 +15348,7 @@
           "basePrice": 7800
         }
       ],
-      "baseCostPerUnit": 275560,
+      "baseCostPerUnit": 283400,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-3"
     },
     {
@@ -15355,7 +15367,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -15373,7 +15385,7 @@
           "basePrice": 32000
         }
       ],
-      "baseCostPerUnit": 295640,
+      "baseCostPerUnit": 307243,
       "technicalNotes": "Пигмент Fe2O3 даёт стойкость красного цвета на 15+ лет.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-12"
     },
@@ -15393,7 +15405,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15417,7 +15429,7 @@
           "basePrice": 28000
         }
       ],
-      "baseCostPerUnit": 29720,
+      "baseCostPerUnit": 31190,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-30"
     },
     {
@@ -15436,7 +15448,7 @@
           "name": "Изолировщик 3 разряда",
           "qtyPerUnit": 0.2,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -15446,7 +15458,7 @@
           "basePrice": 680
         }
       ],
-      "baseCostPerUnit": 745,
+      "baseCostPerUnit": 913,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-30"
     },
     {
@@ -15465,7 +15477,7 @@
           "name": "Изолировщик 5 разряда",
           "qtyPerUnit": 0.3,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -15483,7 +15495,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 3524,
+      "baseCostPerUnit": 3860,
       "technicalNotes": "Лучшие теплозащ. свойства λ=0.024 Вт/м·К, но дорого vs минвата.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-22"
     },
@@ -15504,7 +15516,7 @@
           "name": "Монтажник кондиционеров 4 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15521,7 +15533,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 296170,
+      "baseCostPerUnit": 302050,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-28"
     },
     {
@@ -15541,7 +15553,7 @@
           "name": "Монтажник 5 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -15551,7 +15563,7 @@
           "basePrice": 1850000
         }
       ],
-      "baseCostPerUnit": 1856080,
+      "baseCostPerUnit": 1874000,
       "technicalNotes": "Тепловой насос — для замены газа в загородных домах.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-32"
     },
@@ -15571,7 +15583,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15581,7 +15593,7 @@
           "basePrice": 385000
         }
       ],
-      "baseCostPerUnit": 387560,
+      "baseCostPerUnit": 395400,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-26"
     },
     {
@@ -15599,7 +15611,7 @@
           "name": "Слесарь-сантехник 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15616,7 +15628,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 70140,
+      "baseCostPerUnit": 72100,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-9"
     },
     {
@@ -15635,7 +15647,7 @@
           "name": "Сварщик 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15652,7 +15664,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 7170,
+      "baseCostPerUnit": 8640,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.9 §9-30"
     },
     {
@@ -15671,7 +15683,7 @@
           "name": "Монтажник перегородок 4 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15688,7 +15700,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 2761,
+      "baseCostPerUnit": 3351,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-25"
     },
     {
@@ -15707,7 +15719,7 @@
           "name": "Дорожный рабочий 4 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15717,7 +15729,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 4756,
+      "baseCostPerUnit": 5540,
       "technicalNotes": "Для разделения встречных направлений.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-32"
     },
@@ -15736,7 +15748,7 @@
           "name": "Подсобный рабочий 2 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "материал",
@@ -15746,7 +15758,7 @@
           "basePrice": 85
         }
       ],
-      "baseCostPerUnit": 9890,
+      "baseCostPerUnit": 12200,
       "technicalNotes": "Уход критичен в первые 7 суток для набора прочности.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.6 §6-25"
     },
@@ -15765,7 +15777,7 @@
           "name": "Каменщик 5 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -15782,7 +15794,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 6033,
+      "baseCostPerUnit": 7730,
       "technicalNotes": "Клинкер — премиум-облицовка с гарантией 50+ лет.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-15"
     },
@@ -15802,7 +15814,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15819,7 +15831,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 2462,
+      "baseCostPerUnit": 3050,
       "technicalNotes": "Армопояс распределяет нагрузку и связывает кладку.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-18"
     },
@@ -15839,7 +15851,7 @@
           "name": "Машинист копра 6 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 450
+          "basePrice": 1800
         },
         {
           "kind": "машины",
@@ -15857,7 +15869,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 20040,
+      "baseCostPerUnit": 21648,
       "technicalNotes": "Для котлованов глубиной 4-8 м с близкими грунт. водами.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.5 §5-22"
     },
@@ -15876,7 +15888,7 @@
           "name": "Дорожный рабочий 3 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 240
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -15886,7 +15898,7 @@
           "basePrice": 320
         }
       ],
-      "baseCostPerUnit": 35560,
+      "baseCostPerUnit": 36850,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.1 §1-40"
     },
     {
@@ -15906,7 +15918,7 @@
           "name": "Бетонщик 3 разряда",
           "qtyPerUnit": 0.35,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -15916,7 +15928,7 @@
           "basePrice": 22000
         }
       ],
-      "baseCostPerUnit": 1301,
+      "baseCostPerUnit": 1595,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.11 §11-21"
     },
     {
@@ -15934,7 +15946,7 @@
           "name": "Бетонщик 4 разряда",
           "qtyPerUnit": 0.15,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -15952,7 +15964,7 @@
           "basePrice": 28
         }
       ],
-      "baseCostPerUnit": 2893,
+      "baseCostPerUnit": 3040,
       "technicalNotes": "Механизация ускоряет работу в 5-7 раз vs ручная.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.11 §11-23"
     },
@@ -15972,7 +15984,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -15989,7 +16001,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 54780,
+      "baseCostPerUnit": 58700,
       "technicalNotes": "По НПБ 88 пож. краны через каждые 15-20 м.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.18 §18-12"
     },
@@ -16008,7 +16020,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16025,7 +16037,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 3880,
+      "baseCostPerUnit": 5350,
       "technicalNotes": "Шаг оросителей по НПБ 88: 3×3 м для жилых, 4×4 для офисов.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.18 §18-15"
     },
@@ -16045,7 +16057,7 @@
           "name": "Монтажник 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "машины",
@@ -16063,7 +16075,7 @@
           "basePrice": 850000
         }
       ],
-      "baseCostPerUnit": 865810,
+      "baseCostPerUnit": 879250,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-35"
     },
     {
@@ -16081,7 +16093,7 @@
           "name": "Дорожный рабочий 3 разряда",
           "qtyPerUnit": 0.5,
           "unit": "чел.-ч",
-          "basePrice": 240
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -16091,7 +16103,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 9120,
+      "baseCostPerUnit": 9550,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.27 §27-35"
     },
     {
@@ -16110,7 +16122,7 @@
           "name": "Кровельщик 5 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -16134,7 +16146,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 248120,
+      "baseCostPerUnit": 263509,
       "technicalNotes": "Мембранная кровля — для эксплуатир. крыш, паркингов, ангаров.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.12 §12-22"
     },
@@ -16156,7 +16168,7 @@
           "name": "Кровельщик 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16180,7 +16192,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 3340,
+      "baseCostPerUnit": 4779,
       "technicalNotes": "Green roof — LEED + WELL points. Снижает heat island.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.12 §12-28"
     },
@@ -16201,7 +16213,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16218,7 +16230,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 97760,
+      "baseCostPerUnit": 100700,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.10 §10-15"
     },
     {
@@ -16238,7 +16250,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16255,7 +16267,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 164780,
+      "baseCostPerUnit": 168700,
       "technicalNotes": "Сертификация согласно НПБ 64.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.10 §10-20"
     },
@@ -16276,7 +16288,7 @@
           "name": "Монтажник окон 4 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16293,7 +16305,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 35924,
+      "baseCostPerUnit": 37100,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.10 §10-1"
     },
     {
@@ -16313,7 +16325,7 @@
           "name": "Монтажник кондиционеров 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -16323,7 +16335,7 @@
           "basePrice": 520000
         }
       ],
-      "baseCostPerUnit": 524560,
+      "baseCostPerUnit": 538000,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-29"
     },
     {
@@ -16343,7 +16355,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16353,7 +16365,7 @@
           "basePrice": 45000
         }
       ],
-      "baseCostPerUnit": 45800,
+      "baseCostPerUnit": 48250,
       "technicalNotes": "Обязателен в новостройках с 2010 г. для квартирного учёта.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-40"
     },
@@ -16372,7 +16384,7 @@
           "name": "Каменщик 4 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -16390,7 +16402,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 5506,
+      "baseCostPerUnit": 6290,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.8 §8-22"
     },
     {
@@ -16408,7 +16420,7 @@
           "name": "Маляр 3 разряда",
           "qtyPerUnit": 0.15,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -16418,7 +16430,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 172,
+      "baseCostPerUnit": 298,
       "technicalNotes": "Группа огнестойкости II по НПБ 232.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.13 §13-25"
     },
@@ -16438,7 +16450,7 @@
           "name": "Изолировщик 3 разряда",
           "qtyPerUnit": 0.25,
           "unit": "чел.-ч",
-          "basePrice": 260
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -16455,7 +16467,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 3858,
+      "baseCostPerUnit": 4077,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.26 §26-15"
     },
     {
@@ -16474,7 +16486,7 @@
           "name": "Электромонтажник 4 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16484,7 +16496,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 2073,
+      "baseCostPerUnit": 2465,
       "technicalNotes": "Для предотвращения замерзания труб в неотапливаемых зонах.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.17 §17-35"
     },
@@ -16505,7 +16517,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16515,7 +16527,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 8926,
+      "baseCostPerUnit": 9710,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.23 §23-22"
     },
     {
@@ -16534,7 +16546,7 @@
           "name": "Слесарь-монтажник 4 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -16559,7 +16571,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 51780,
+      "baseCostPerUnit": 55738,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.23 §23-30"
     },
     {
@@ -16578,7 +16590,7 @@
           "name": "Слесарь газовщик 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16588,7 +16600,7 @@
           "basePrice": 22500
         }
       ],
-      "baseCostPerUnit": 22980,
+      "baseCostPerUnit": 24450,
       "technicalNotes": "Обязателен с 2018 г. по программе газификации РК.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.16 §16-42"
     },
@@ -16607,7 +16619,7 @@
           "name": "Слесарь-сантехник 4 разряда",
           "qtyPerUnit": 1,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16617,7 +16629,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 8820,
+      "baseCostPerUnit": 9800,
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.17 §17-38"
     },
     {
@@ -16637,7 +16649,7 @@
           "name": "Землекоп 4 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 320
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -16661,7 +16673,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 5121,
+      "baseCostPerUnit": 5906,
       "technicalNotes": "Дренаж контурный — обязателен при высоком УГВ.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.23 §23-12"
     },
@@ -16681,7 +16693,7 @@
           "name": "Монтажник 5 разряда",
           "qtyPerUnit": 2.2,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -16705,7 +16717,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 25461,
+      "baseCostPerUnit": 27917,
       "technicalNotes": "Премиум-фасад для коммерч. зданий, гарантия 20+ лет.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.15 §15-35"
     },
@@ -16725,7 +16737,7 @@
           "name": "Изолировщик 5 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 380
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -16742,7 +16754,7 @@
           "basePrice": 580
         }
       ],
-      "baseCostPerUnit": 6416,
+      "baseCostPerUnit": 7088,
       "technicalNotes": "Для бассейнов и резервуаров с водой питьевого качества.",
       "esn_ref": "ЭСН РК 8.04-01-2024 Сб.11 §11-12"
     },
@@ -16762,11 +16774,11 @@
           "name": "Рабочий-строитель 2 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "машины",
-          "name": "Перфоратор электрический",
+          "name": "Отбойный молоток электрический",
           "qtyPerUnit": 12,
           "unit": "маш.-ч",
           "basePrice": 400,
@@ -16781,7 +16793,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 13090
+      "baseCostPerUnit": 39740
     },
     {
       "code": "ДЕМ-08-02-001",
@@ -16799,7 +16811,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 40,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "машины",
@@ -16811,14 +16823,14 @@
         },
         {
           "kind": "машины",
-          "name": "Перфоратор электрический",
+          "name": "Отбойный молоток электрический",
           "qtyPerUnit": 16,
           "unit": "маш.-ч",
           "basePrice": 400,
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 26400
+      "baseCostPerUnit": 69422
     },
     {
       "code": "ДЕМ-11-04-001",
@@ -16836,7 +16848,7 @@
           "name": "Рабочий-строитель 2 разряда",
           "qtyPerUnit": 20,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "машины",
@@ -16847,7 +16859,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 10600
+      "baseCostPerUnit": 29581
     },
     {
       "code": "ДЕМ-17-01-001",
@@ -16866,10 +16878,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 264
+      "baseCostPerUnit": 1320
     },
     {
       "code": "ДЕМ-17-02-001",
@@ -16887,10 +16899,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 176
+      "baseCostPerUnit": 880
     },
     {
       "code": "ДЕМ-17-03-001",
@@ -16908,7 +16920,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "машины",
@@ -16919,7 +16931,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 1170
+      "baseCostPerUnit": 4885
     },
     {
       "code": "ДЕМ-16-01-001",
@@ -16937,10 +16949,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 330
+      "baseCostPerUnit": 1650
     },
     {
       "code": "ДЕМ-12-01-001",
@@ -16958,7 +16970,7 @@
           "name": "Рабочий-строитель 2 разряда",
           "qtyPerUnit": 22,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "материал",
@@ -16968,7 +16980,7 @@
           "basePrice": 150
         }
       ],
-      "baseCostPerUnit": 6960
+      "baseCostPerUnit": 23900
     },
     {
       "code": "ДЕМ-12-02-001",
@@ -16986,7 +16998,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -16996,7 +17008,7 @@
           "basePrice": 120
         }
       ],
-      "baseCostPerUnit": 4120
+      "baseCostPerUnit": 18200
     },
     {
       "code": "ДЕМ-05-01-001",
@@ -17014,7 +17026,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "машины",
@@ -17033,7 +17045,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 5160
+      "baseCostPerUnit": 14107
     },
     {
       "code": "ДЕМ-21-01-001",
@@ -17051,10 +17063,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 1760
+      "baseCostPerUnit": 8800
     },
     {
       "code": "ДЕМ-21-02-001",
@@ -17072,10 +17084,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 10,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 2200
+      "baseCostPerUnit": 11000
     },
     {
       "code": "ДЕМ-15-02-001",
@@ -17093,18 +17105,18 @@
           "name": "Рабочий-строитель 2 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "машины",
-          "name": "Перфоратор электрический",
+          "name": "Отбойный молоток электрический",
           "qtyPerUnit": 14,
           "unit": "маш.-ч",
           "basePrice": 400,
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 13440
+      "baseCostPerUnit": 40674
     },
     {
       "code": "ДЕМ-15-03-001",
@@ -17122,10 +17134,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 880
+      "baseCostPerUnit": 4400
     },
     {
       "code": "ДЕМ-06-03-001",
@@ -17143,10 +17155,10 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 1.8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         }
       ],
-      "baseCostPerUnit": 396
+      "baseCostPerUnit": 1980
     },
     {
       "code": "РСМ-13-01-001",
@@ -17165,7 +17177,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17182,7 +17194,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 1149
+      "baseCostPerUnit": 2985
     },
     {
       "code": "РСМ-13-02-001",
@@ -17200,7 +17212,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17217,7 +17229,7 @@
           "basePrice": 16000
         }
       ],
-      "baseCostPerUnit": 2073
+      "baseCostPerUnit": 4624
     },
     {
       "code": "РСМ-09-01-001",
@@ -17235,7 +17247,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17252,7 +17264,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 1649
+      "baseCostPerUnit": 2465
     },
     {
       "code": "РСМ-13-03-001",
@@ -17271,7 +17283,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17288,7 +17300,7 @@
           "basePrice": 3500
         }
       ],
-      "baseCostPerUnit": 22340
+      "baseCostPerUnit": 25910
     },
     {
       "code": "РСМ-12-04-001",
@@ -17306,7 +17318,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17323,7 +17335,7 @@
           "basePrice": 16000
         }
       ],
-      "baseCostPerUnit": 3384
+      "baseCostPerUnit": 6240
     },
     {
       "code": "РСМ-15-04-001",
@@ -17341,7 +17353,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -17358,7 +17370,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 25800
+      "baseCostPerUnit": 35000
     },
     {
       "code": "РСМ-11-05-001",
@@ -17376,7 +17388,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 20,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -17401,7 +17413,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 468000
+      "baseCostPerUnit": 491079
     },
     {
       "code": "РСМ-08-04-001",
@@ -17419,7 +17431,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17436,7 +17448,7 @@
           "basePrice": 16000
         }
       ],
-      "baseCostPerUnit": 44240
+      "baseCostPerUnit": 52400
     },
     {
       "code": "РСМ-09-04-001",
@@ -17454,7 +17466,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17471,7 +17483,7 @@
           "basePrice": 16000
         }
       ],
-      "baseCostPerUnit": 14135
+      "baseCostPerUnit": 26375
     },
     {
       "code": "РСМ-15-05-001",
@@ -17489,7 +17501,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -17506,7 +17518,7 @@
           "basePrice": 2200
         }
       ],
-      "baseCostPerUnit": 117050
+      "baseCostPerUnit": 137750
     },
     {
       "code": "БЛАГ-01-01-001",
@@ -17525,7 +17537,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 45,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -17549,7 +17561,7 @@
           "basePrice": 45000
         }
       ],
-      "baseCostPerUnit": 312200
+      "baseCostPerUnit": 351800
     },
     {
       "code": "БЛАГ-01-02-001",
@@ -17568,7 +17580,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -17593,7 +17605,7 @@
           "basePrice": 180000
         }
       ],
-      "baseCostPerUnit": 333240
+      "baseCostPerUnit": 341425
     },
     {
       "code": "БЛАГ-01-03-001",
@@ -17612,7 +17624,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 30,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -17629,7 +17641,7 @@
           "basePrice": 38000
         }
       ],
-      "baseCostPerUnit": 655200
+      "baseCostPerUnit": 681600
     },
     {
       "code": "БЛАГ-02-01-001",
@@ -17648,7 +17660,7 @@
           "name": "Рабочий-строитель 2 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "материал",
@@ -17665,7 +17677,7 @@
           "basePrice": 12000
         }
       ],
-      "baseCostPerUnit": 287160
+      "baseCostPerUnit": 296400
     },
     {
       "code": "БЛАГ-02-02-001",
@@ -17684,7 +17696,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -17701,7 +17713,7 @@
           "basePrice": 12000
         }
       ],
-      "baseCostPerUnit": 49480
+      "baseCostPerUnit": 53000
     },
     {
       "code": "БЛАГ-03-01-001",
@@ -17719,7 +17731,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 35,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17743,7 +17755,7 @@
           "basePrice": 38000
         }
       ],
-      "baseCostPerUnit": 1321400
+      "baseCostPerUnit": 1357100
     },
     {
       "code": "БЛАГ-04-01-001",
@@ -17761,7 +17773,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -17778,7 +17790,7 @@
           "basePrice": 38000
         }
       ],
-      "baseCostPerUnit": 62350
+      "baseCostPerUnit": 64550
     },
     {
       "code": "БЛАГ-04-02-001",
@@ -17795,7 +17807,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -17812,7 +17824,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 21276
+      "baseCostPerUnit": 21980
     },
     {
       "code": "БЛАГ-05-01-001",
@@ -17830,7 +17842,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -17854,7 +17866,7 @@
           "basePrice": 38000
         }
       ],
-      "baseCostPerUnit": 1396560
+      "baseCostPerUnit": 1421200
     },
     {
       "code": "БЛАГ-02-03-001",
@@ -17872,7 +17884,7 @@
           "name": "Рабочий-строитель 2 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 180
+          "basePrice": 950
         },
         {
           "kind": "материал",
@@ -17889,7 +17901,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 19608
+      "baseCostPerUnit": 20070
     },
     {
       "code": "СКС-01-01-001",
@@ -17907,7 +17919,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17924,7 +17936,7 @@
           "basePrice": 12
         }
       ],
-      "baseCostPerUnit": 46580
+      "baseCostPerUnit": 54740
     },
     {
       "code": "СКС-01-02-001",
@@ -17942,7 +17954,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -17952,7 +17964,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 1962
+      "baseCostPerUnit": 2370
     },
     {
       "code": "СКС-02-01-001",
@@ -17970,7 +17982,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -17980,7 +17992,7 @@
           "basePrice": 185000
         }
       ],
-      "baseCostPerUnit": 185875
+      "baseCostPerUnit": 188750
     },
     {
       "code": "ВН-01-01-001",
@@ -17998,7 +18010,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18015,7 +18027,7 @@
           "basePrice": 8
         }
       ],
-      "baseCostPerUnit": 20460
+      "baseCostPerUnit": 25740
     },
     {
       "code": "ВН-02-01-001",
@@ -18034,7 +18046,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18044,7 +18056,7 @@
           "basePrice": 45000
         }
       ],
-      "baseCostPerUnit": 45420
+      "baseCostPerUnit": 46950
     },
     {
       "code": "ВН-02-02-001",
@@ -18063,7 +18075,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18073,7 +18085,7 @@
           "basePrice": 65000
         }
       ],
-      "baseCostPerUnit": 65560
+      "baseCostPerUnit": 67600
     },
     {
       "code": "ОПС-01-01-001",
@@ -18091,7 +18103,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 7,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18108,7 +18120,7 @@
           "basePrice": 55
         }
       ],
-      "baseCostPerUnit": 17290
+      "baseCostPerUnit": 23450
     },
     {
       "code": "ОПС-02-01-001",
@@ -18126,7 +18138,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.35,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18136,7 +18148,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 927
+      "baseCostPerUnit": 1235
     },
     {
       "code": "ОПС-02-02-001",
@@ -18154,7 +18166,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.35,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18164,7 +18176,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 727
+      "baseCostPerUnit": 1035
     },
     {
       "code": "ОПС-02-03-001",
@@ -18182,7 +18194,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.5,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18192,7 +18204,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 1310
+      "baseCostPerUnit": 1750
     },
     {
       "code": "ОПС-03-01-001",
@@ -18211,7 +18223,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -18228,7 +18240,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 138200
+      "baseCostPerUnit": 152000
     },
     {
       "code": "СКУД-01-01-001",
@@ -18246,7 +18258,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18263,7 +18275,7 @@
           "basePrice": 120
         }
       ],
-      "baseCostPerUnit": 7096
+      "baseCostPerUnit": 8320
     },
     {
       "code": "СКУД-02-01-001",
@@ -18281,7 +18293,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -18291,7 +18303,7 @@
           "basePrice": 38000
         }
       ],
-      "baseCostPerUnit": 39400
+      "baseCostPerUnit": 44000
     },
     {
       "code": "СКУД-03-01-001",
@@ -18310,7 +18322,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18320,7 +18332,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 13004
+      "baseCostPerUnit": 14840
     },
     {
       "code": "СВЗ-01-01-001",
@@ -18339,7 +18351,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18356,7 +18368,7 @@
           "basePrice": 95
         }
       ],
-      "baseCostPerUnit": 31855
+      "baseCostPerUnit": 35425
     },
     {
       "code": "ОВК-01-01-001",
@@ -18375,7 +18387,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -18393,7 +18405,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 861900
+      "baseCostPerUnit": 882619
     },
     {
       "code": "ОВК-01-02-001",
@@ -18411,7 +18423,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18428,7 +18440,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 234440
+      "baseCostPerUnit": 242600
     },
     {
       "code": "ОВК-01-03-001",
@@ -18445,7 +18457,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18455,7 +18467,7 @@
           "basePrice": 38500
         }
       ],
-      "baseCostPerUnit": 39200
+      "baseCostPerUnit": 41750
     },
     {
       "code": "ОВК-02-01-001",
@@ -18474,7 +18486,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18498,7 +18510,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 906840
+      "baseCostPerUnit": 935400
     },
     {
       "code": "ОВК-02-02-001",
@@ -18516,7 +18528,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18533,7 +18545,7 @@
           "basePrice": 180
         }
       ],
-      "baseCostPerUnit": 236640
+      "baseCostPerUnit": 255000
     },
     {
       "code": "ОВК-03-01-001",
@@ -18552,7 +18564,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -18569,7 +18581,7 @@
           "basePrice": 2800
         }
       ],
-      "baseCostPerUnit": 431900
+      "baseCostPerUnit": 448000
     },
     {
       "code": "ОВК-03-02-001",
@@ -18588,7 +18600,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 32,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -18606,7 +18618,7 @@
           "machinistWageRate": 800
         }
       ],
-      "baseCostPerUnit": 2228800
+      "baseCostPerUnit": 2265626
     },
     {
       "code": "ОВК-04-01-001",
@@ -18624,7 +18636,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18634,7 +18646,7 @@
           "basePrice": 2800
         }
       ],
-      "baseCostPerUnit": 2968
+      "baseCostPerUnit": 3580
     },
     {
       "code": "ОВК-05-01-001",
@@ -18652,7 +18664,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 1.8,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -18662,7 +18674,7 @@
           "basePrice": 45500
         }
       ],
-      "baseCostPerUnit": 46130
+      "baseCostPerUnit": 48200
     },
     {
       "code": "ОВК-05-02-001",
@@ -18680,7 +18692,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18690,7 +18702,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 13965
+      "baseCostPerUnit": 17025
     },
     {
       "code": "ОВК-06-01-001",
@@ -18708,7 +18720,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18725,7 +18737,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 101930
+      "baseCostPerUnit": 114250
     },
     {
       "code": "ОВК-07-01-001",
@@ -18743,10 +18755,10 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 2800
+      "baseCostPerUnit": 12000
     },
     {
       "code": "СНТ-18-01-001",
@@ -18765,7 +18777,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18782,7 +18794,7 @@
           "basePrice": 180
         }
       ],
-      "baseCostPerUnit": 26060
+      "baseCostPerUnit": 33100
     },
     {
       "code": "СНТ-18-02-001",
@@ -18801,7 +18813,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -18818,7 +18830,7 @@
           "basePrice": 450
         }
       ],
-      "baseCostPerUnit": 60240
+      "baseCostPerUnit": 70800
     },
     {
       "code": "СНТ-19-01-001",
@@ -18837,7 +18849,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18854,7 +18866,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 14000
+      "baseCostPerUnit": 19100
     },
     {
       "code": "СНТ-19-02-001",
@@ -18872,7 +18884,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18882,7 +18894,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 13060
+      "baseCostPerUnit": 15100
     },
     {
       "code": "СНТ-19-03-001",
@@ -18900,7 +18912,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -18917,7 +18929,7 @@
           "basePrice": 1800
         }
       ],
-      "baseCostPerUnit": 20720
+      "baseCostPerUnit": 22250
     },
     {
       "code": "СНТ-20-01-001",
@@ -18936,7 +18948,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -18947,7 +18959,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 2540
+      "baseCostPerUnit": 5862
     },
     {
       "code": "СНТ-20-02-001",
@@ -18966,7 +18978,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "машины",
@@ -18984,7 +18996,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 25540
+      "baseCostPerUnit": 33964
     },
     {
       "code": "СНТ-21-01-001",
@@ -19003,7 +19015,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19020,7 +19032,7 @@
           "basePrice": 12000
         }
       ],
-      "baseCostPerUnit": 28375
+      "baseCostPerUnit": 31250
     },
     {
       "code": "ОТД-11-05-001",
@@ -19038,7 +19050,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19055,7 +19067,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 381840
+      "baseCostPerUnit": 410400
     },
     {
       "code": "ОТД-11-06-001",
@@ -19074,7 +19086,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19091,7 +19103,7 @@
           "basePrice": 650
         }
       ],
-      "baseCostPerUnit": 79990
+      "baseCostPerUnit": 88150
     },
     {
       "code": "ОТД-13-04-001",
@@ -19109,7 +19121,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19126,7 +19138,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 99900
+      "baseCostPerUnit": 120600
     },
     {
       "code": "ОТД-13-05-001",
@@ -19145,7 +19157,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 48,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19162,7 +19174,7 @@
           "basePrice": 4200
         }
       ],
-      "baseCostPerUnit": 223800
+      "baseCostPerUnit": 279000
     },
     {
       "code": "ОТД-13-06-001",
@@ -19179,7 +19191,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19196,7 +19208,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 88360
+      "baseCostPerUnit": 100600
     },
     {
       "code": "ОТД-15-08-001",
@@ -19215,7 +19227,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 85,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19239,7 +19251,7 @@
           "basePrice": 3500
         }
       ],
-      "baseCostPerUnit": 1961750
+      "baseCostPerUnit": 2059500
     },
     {
       "code": "ОТД-22-01-001",
@@ -19257,7 +19269,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -19274,7 +19286,7 @@
           "basePrice": 180
         }
       ],
-      "baseCostPerUnit": 33880
+      "baseCostPerUnit": 37400
     },
     {
       "code": "ОТД-22-02-001",
@@ -19292,7 +19304,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19309,7 +19321,7 @@
           "basePrice": 45
         }
       ],
-      "baseCostPerUnit": 200520
+      "baseCostPerUnit": 206640
     },
     {
       "code": "ОТД-22-03-001",
@@ -19327,7 +19339,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -19337,7 +19349,7 @@
           "basePrice": 2500
         }
       ],
-      "baseCostPerUnit": 2588
+      "baseCostPerUnit": 2940
     },
     {
       "code": "ОТД-22-04-001",
@@ -19355,7 +19367,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -19372,7 +19384,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 800
+      "baseCostPerUnit": 1504
     },
     {
       "code": "ФАС-23-01-001",
@@ -19392,7 +19404,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 48,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19423,7 +19435,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 629840
+      "baseCostPerUnit": 678800
     },
     {
       "code": "ФАС-23-02-001",
@@ -19442,7 +19454,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 36,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -19466,7 +19478,7 @@
           "basePrice": 55
         }
       ],
-      "baseCostPerUnit": 249520
+      "baseCostPerUnit": 281200
     },
     {
       "code": "ФАС-23-03-001",
@@ -19484,7 +19496,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19501,7 +19513,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 87280
+      "baseCostPerUnit": 103600
     },
     {
       "code": "ФАС-23-04-001",
@@ -19519,7 +19531,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 56,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19543,7 +19555,7 @@
           "basePrice": 28
         }
       ],
-      "baseCostPerUnit": 1066450
+      "baseCostPerUnit": 1130850
     },
     {
       "code": "ФАС-23-05-001",
@@ -19561,7 +19573,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 80,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19585,7 +19597,7 @@
           "basePrice": 180
         }
       ],
-      "baseCostPerUnit": 1203000
+      "baseCostPerUnit": 1295000
     },
     {
       "code": "ФАС-24-01-001",
@@ -19602,7 +19614,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -19619,7 +19631,7 @@
           "basePrice": 1200
         }
       ],
-      "baseCostPerUnit": 29640
+      "baseCostPerUnit": 40200
     },
     {
       "code": "ФАС-24-02-001",
@@ -19637,7 +19649,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19662,7 +19674,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 79440
+      "baseCostPerUnit": 98471
     },
     {
       "code": "ФАС-24-03-001",
@@ -19679,7 +19691,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -19696,7 +19708,7 @@
           "basePrice": 3500
         }
       ],
-      "baseCostPerUnit": 472580
+      "baseCostPerUnit": 484900
     },
     {
       "code": "ФАС-25-01-001",
@@ -19714,7 +19726,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19731,7 +19743,7 @@
           "basePrice": 18000
         }
       ],
-      "baseCostPerUnit": 25800
+      "baseCostPerUnit": 28350
     },
     {
       "code": "ФАС-25-02-001",
@@ -19749,7 +19761,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 4.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19773,7 +19785,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 37700
+      "baseCostPerUnit": 42290
     },
     {
       "code": "ФАС-25-03-001",
@@ -19791,7 +19803,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19808,7 +19820,7 @@
           "basePrice": 16000
         }
       ],
-      "baseCostPerUnit": 14720
+      "baseCostPerUnit": 17780
     },
     {
       "code": "ФАС-26-01-001",
@@ -19826,7 +19838,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19843,7 +19855,7 @@
           "basePrice": 16000
         }
       ],
-      "baseCostPerUnit": 5680
+      "baseCostPerUnit": 7720
     },
     {
       "code": "ФАС-26-02-001",
@@ -19861,7 +19873,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -19885,7 +19897,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 78940
+      "baseCostPerUnit": 87100
     },
     {
       "code": "ФАС-27-01-001",
@@ -19903,7 +19915,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 38,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19928,7 +19940,7 @@
           "machinistWageRate": 800
         }
       ],
-      "baseCostPerUnit": 972400
+      "baseCostPerUnit": 1016317
     },
     {
       "code": "ФАС-28-01-001",
@@ -19946,7 +19958,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 8.5,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -19970,7 +19982,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 83375
+      "baseCostPerUnit": 93150
     },
     {
       "code": "ФАС-28-02-001",
@@ -19988,7 +20000,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 9.5,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -20012,7 +20024,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 88225
+      "baseCostPerUnit": 99150
     },
     {
       "code": "ФАС-29-01-001",
@@ -20031,7 +20043,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -20055,7 +20067,7 @@
           "basePrice": 2200
         }
       ],
-      "baseCostPerUnit": 96700
+      "baseCostPerUnit": 117400
     },
     {
       "code": "ФАС-29-02-001",
@@ -20073,7 +20085,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20091,7 +20103,7 @@
           "machinistWageRate": 800
         }
       ],
-      "baseCostPerUnit": 103420
+      "baseCostPerUnit": 107532
     },
     {
       "code": "ФАС-30-01-001",
@@ -20109,7 +20121,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20126,7 +20138,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 616480
+      "baseCostPerUnit": 632800
     },
     {
       "code": "ФАС-30-02-001",
@@ -20144,7 +20156,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 38,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20168,7 +20180,7 @@
           "basePrice": 320
         }
       ],
-      "baseCostPerUnit": 334840
+      "baseCostPerUnit": 373600
     },
     {
       "code": "ФАС-31-01-001",
@@ -20186,7 +20198,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20203,7 +20215,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 23630
+      "baseCostPerUnit": 27150
     },
     {
       "code": "ФАС-32-01-001",
@@ -20221,7 +20233,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20238,7 +20250,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 279320
+      "baseCostPerUnit": 293600
     },
     {
       "code": "ФАС-33-01-001",
@@ -20255,7 +20267,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20265,7 +20277,7 @@
           "basePrice": 1450
         }
       ],
-      "baseCostPerUnit": 153570
+      "baseCostPerUnit": 158850
     },
     {
       "code": "ФАС-34-01-001",
@@ -20283,7 +20295,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20300,7 +20312,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 185920
+      "baseCostPerUnit": 200200
     },
     {
       "code": "ФАС-34-02-001",
@@ -20318,7 +20330,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20335,7 +20347,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 379260
+      "baseCostPerUnit": 391500
     },
     {
       "code": "КРВ-13-01-001",
@@ -20353,7 +20365,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20377,7 +20389,7 @@
           "basePrice": 250
         }
       ],
-      "baseCostPerUnit": 305470
+      "baseCostPerUnit": 319550
     },
     {
       "code": "КРВ-13-02-001",
@@ -20395,7 +20407,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 22,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20419,7 +20431,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 535060
+      "baseCostPerUnit": 557500
     },
     {
       "code": "КРВ-14-01-001",
@@ -20437,7 +20449,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20454,7 +20466,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 352420
+      "baseCostPerUnit": 366700
     },
     {
       "code": "КРВ-14-02-001",
@@ -20471,7 +20483,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20481,7 +20493,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 87580
+      "baseCostPerUnit": 91100
     },
     {
       "code": "КРВ-15-01-001",
@@ -20499,7 +20511,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.8,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20509,7 +20521,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 4676
+      "baseCostPerUnit": 5380
     },
     {
       "code": "КРВ-16-01-001",
@@ -20527,7 +20539,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20544,7 +20556,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 43290
+      "baseCostPerUnit": 61650
     },
     {
       "code": "КРВ-16-02-001",
@@ -20562,7 +20574,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 24,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20579,7 +20591,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 66730
+      "baseCostPerUnit": 91210
     },
     {
       "code": "КРВ-17-01-001",
@@ -20597,7 +20609,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20607,7 +20619,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 8920
+      "baseCostPerUnit": 10450
     },
     {
       "code": "КРВ-18-01-001",
@@ -20626,7 +20638,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -20643,7 +20655,7 @@
           "basePrice": 32000
         }
       ],
-      "baseCostPerUnit": 321200
+      "baseCostPerUnit": 335000
     },
     {
       "code": "КРВ-19-01-001",
@@ -20661,7 +20673,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20678,7 +20690,7 @@
           "basePrice": 580
         }
       ],
-      "baseCostPerUnit": 69000
+      "baseCostPerUnit": 75120
     },
     {
       "code": "ЗЕМ-03-01-001",
@@ -20697,7 +20709,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 32,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20721,7 +20733,7 @@
           "basePrice": 5500
         }
       ],
-      "baseCostPerUnit": 540560
+      "baseCostPerUnit": 573200
     },
     {
       "code": "ЗЕМ-03-02-001",
@@ -20739,7 +20751,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20756,7 +20768,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 35200
+      "baseCostPerUnit": 37750
     },
     {
       "code": "ЗЕМ-04-01-001",
@@ -20775,7 +20787,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20800,7 +20812,7 @@
           "machinistWageRate": 800
         }
       ],
-      "baseCostPerUnit": 180540
+      "baseCostPerUnit": 209615
     },
     {
       "code": "ЗЕМ-04-02-001",
@@ -20818,7 +20830,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20828,7 +20840,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 1025
+      "baseCostPerUnit": 1553
     },
     {
       "code": "ЗЕМ-05-02-001",
@@ -20847,7 +20859,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -20871,7 +20883,7 @@
           "basePrice": 5500
         }
       ],
-      "baseCostPerUnit": 327970
+      "baseCostPerUnit": 352610
     },
     {
       "code": "ЗЕМ-06-01-001",
@@ -20889,7 +20901,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -20906,7 +20918,7 @@
           "basePrice": 18500
         }
       ],
-      "baseCostPerUnit": 35665
+      "baseCostPerUnit": 43825
     },
     {
       "code": "ЗЕМ-06-02-001",
@@ -20924,7 +20936,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -20948,7 +20960,7 @@
           "basePrice": 1500
         }
       ],
-      "baseCostPerUnit": 84600
+      "baseCostPerUnit": 98400
     },
     {
       "code": "ЗЕМ-07-01-001",
@@ -20966,7 +20978,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "машины",
@@ -20984,7 +20996,7 @@
           "basePrice": 5500
         }
       ],
-      "baseCostPerUnit": 34340
+      "baseCostPerUnit": 45088
     },
     {
       "code": "ЗЕМ-08-01-001",
@@ -21002,7 +21014,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21020,7 +21032,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 302480
+      "baseCostPerUnit": 318843
     },
     {
       "code": "ЗЕМ-09-01-001",
@@ -21037,7 +21049,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "машины",
@@ -21048,7 +21060,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 10040
+      "baseCostPerUnit": 11952
     },
     {
       "code": "ЭЛ-22-01-001",
@@ -21066,7 +21078,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21091,7 +21103,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 32880
+      "baseCostPerUnit": 39114
     },
     {
       "code": "ЭЛ-22-02-001",
@@ -21109,7 +21121,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21127,7 +21139,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 50120
+      "baseCostPerUnit": 62764
     },
     {
       "code": "ЭЛ-23-01-001",
@@ -21145,7 +21157,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21162,7 +21174,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 22950
+      "baseCostPerUnit": 26400
     },
     {
       "code": "ЭЛ-23-02-001",
@@ -21180,7 +21192,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21197,7 +21209,7 @@
           "basePrice": 320
         }
       ],
-      "baseCostPerUnit": 13680
+      "baseCostPerUnit": 21840
     },
     {
       "code": "ЭЛ-24-01-001",
@@ -21216,7 +21228,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21233,7 +21245,7 @@
           "basePrice": 22500
         }
       ],
-      "baseCostPerUnit": 336300
+      "baseCostPerUnit": 357000
     },
     {
       "code": "ЭЛ-24-02-001",
@@ -21251,7 +21263,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21261,7 +21273,7 @@
           "basePrice": 85000
         }
       ],
-      "baseCostPerUnit": 87800
+      "baseCostPerUnit": 97000
     },
     {
       "code": "ЭЛ-24-03-001",
@@ -21280,7 +21292,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21290,7 +21302,7 @@
           "basePrice": 45000
         }
       ],
-      "baseCostPerUnit": 46400
+      "baseCostPerUnit": 51000
     },
     {
       "code": "ЭЛ-25-01-001",
@@ -21308,7 +21320,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 10,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21318,7 +21330,7 @@
           "basePrice": 5800
         }
       ],
-      "baseCostPerUnit": 594400
+      "baseCostPerUnit": 604600
     },
     {
       "code": "ЭЛ-25-02-001",
@@ -21336,7 +21348,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21353,7 +21365,7 @@
           "basePrice": 180
         }
       ],
-      "baseCostPerUnit": 481280
+      "baseCostPerUnit": 495560
     },
     {
       "code": "ЭЛ-26-01-001",
@@ -21371,7 +21383,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21388,7 +21400,7 @@
           "basePrice": 450
         }
       ],
-      "baseCostPerUnit": 208930
+      "baseCostPerUnit": 225250
     },
     {
       "code": "ЭЛ-26-02-001",
@@ -21406,7 +21418,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 3,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21416,7 +21428,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 9550
+      "baseCostPerUnit": 13000
     },
     {
       "code": "ЭЛ-27-01-001",
@@ -21434,7 +21446,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 1,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -21444,7 +21456,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 8720
+      "baseCostPerUnit": 9600
     },
     {
       "code": "ЭЛ-27-02-001",
@@ -21462,7 +21474,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21472,7 +21484,7 @@
           "basePrice": 12500
         }
       ],
-      "baseCostPerUnit": 12920
+      "baseCostPerUnit": 14450
     },
     {
       "code": "ЭЛ-27-03-001",
@@ -21489,7 +21501,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 1,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -21499,7 +21511,7 @@
           "basePrice": 6800
         }
       ],
-      "baseCostPerUnit": 7020
+      "baseCostPerUnit": 7900
     },
     {
       "code": "ЭЛ-28-01-001",
@@ -21517,7 +21529,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21541,7 +21553,7 @@
           "basePrice": 850
         }
       ],
-      "baseCostPerUnit": 61000
+      "baseCostPerUnit": 70200
     },
     {
       "code": "СНТ-22-01-001",
@@ -21559,7 +21571,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21569,7 +21581,7 @@
           "basePrice": 95000
         }
       ],
-      "baseCostPerUnit": 95700
+      "baseCostPerUnit": 98250
     },
     {
       "code": "СНТ-22-02-001",
@@ -21587,7 +21599,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21597,7 +21609,7 @@
           "basePrice": 58000
         }
       ],
-      "baseCostPerUnit": 58560
+      "baseCostPerUnit": 60600
     },
     {
       "code": "СНТ-23-01-001",
@@ -21615,7 +21627,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 6,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21632,7 +21644,7 @@
           "basePrice": 28500
         }
       ],
-      "baseCostPerUnit": 125600
+      "baseCostPerUnit": 132500
     },
     {
       "code": "СНТ-23-02-001",
@@ -21651,7 +21663,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21675,7 +21687,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 541890
+      "baseCostPerUnit": 570450
     },
     {
       "code": "СНТ-24-01-001",
@@ -21693,7 +21705,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21703,7 +21715,7 @@
           "basePrice": 145000
         }
       ],
-      "baseCostPerUnit": 146400
+      "baseCostPerUnit": 151000
     },
     {
       "code": "СНТ-25-01-001",
@@ -21721,7 +21733,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21731,7 +21743,7 @@
           "basePrice": 28500
         }
       ],
-      "baseCostPerUnit": 28920
+      "baseCostPerUnit": 30450
     },
     {
       "code": "СНТ-25-02-001",
@@ -21748,7 +21760,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 0.6,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21758,7 +21770,7 @@
           "basePrice": 3500
         }
       ],
-      "baseCostPerUnit": 3668
+      "baseCostPerUnit": 4280
     },
     {
       "code": "СНТ-26-01-001",
@@ -21775,7 +21787,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.4,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -21785,7 +21797,7 @@
           "basePrice": 2800
         }
       ],
-      "baseCostPerUnit": 2888
+      "baseCostPerUnit": 3240
     },
     {
       "code": "СНТ-26-02-001",
@@ -21802,7 +21814,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 0.3,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -21812,7 +21824,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 1916
+      "baseCostPerUnit": 2180
     },
     {
       "code": "СНТ-27-01-001",
@@ -21830,7 +21842,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -21847,7 +21859,7 @@
           "basePrice": 250
         }
       ],
-      "baseCostPerUnit": 69790
+      "baseCostPerUnit": 80350
     },
     {
       "code": "СНТ-27-02-001",
@@ -21866,7 +21878,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21883,7 +21895,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 208790
+      "baseCostPerUnit": 227150
     },
     {
       "code": "СНТ-28-01-001",
@@ -21901,7 +21913,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21911,7 +21923,7 @@
           "basePrice": 58500
         }
       ],
-      "baseCostPerUnit": 59200
+      "baseCostPerUnit": 61750
     },
     {
       "code": "СНТ-29-01-001",
@@ -21929,7 +21941,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -21939,7 +21951,7 @@
           "basePrice": 45000
         }
       ],
-      "baseCostPerUnit": 46400
+      "baseCostPerUnit": 51000
     },
     {
       "code": "СНТ-29-02-001",
@@ -21957,7 +21969,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 1.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21967,7 +21979,7 @@
           "basePrice": 6800
         }
       ],
-      "baseCostPerUnit": 7220
+      "baseCostPerUnit": 8750
     },
     {
       "code": "СНТ-30-01-001",
@@ -21985,7 +21997,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -21995,7 +22007,7 @@
           "basePrice": 38500
         }
       ],
-      "baseCostPerUnit": 39060
+      "baseCostPerUnit": 41100
     },
     {
       "code": "МНТ-13-01-001",
@@ -22015,7 +22027,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 180,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22033,7 +22045,7 @@
           "machinistWageRate": 800
         }
       ],
-      "baseCostPerUnit": 8621400
+      "baseCostPerUnit": 8828554
     },
     {
       "code": "МНТ-13-02-001",
@@ -22053,7 +22065,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 220,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22071,7 +22083,7 @@
           "machinistWageRate": 800
         }
       ],
-      "baseCostPerUnit": 28664600
+      "baseCostPerUnit": 28917685
     },
     {
       "code": "МНТ-14-01-001",
@@ -22090,7 +22102,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 24,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22100,7 +22112,7 @@
           "basePrice": 1850000
         }
       ],
-      "baseCostPerUnit": 1858400
+      "baseCostPerUnit": 1886000
     },
     {
       "code": "МНТ-14-02-001",
@@ -22119,7 +22131,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 48,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22129,7 +22141,7 @@
           "basePrice": 4800000
         }
       ],
-      "baseCostPerUnit": 4816800
+      "baseCostPerUnit": 4872000
     },
     {
       "code": "МНТ-15-01-001",
@@ -22149,7 +22161,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 96,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22166,7 +22178,7 @@
           "basePrice": 285000
         }
       ],
-      "baseCostPerUnit": 2168600
+      "baseCostPerUnit": 2279000
     },
     {
       "code": "МНТ-16-01-001",
@@ -22185,7 +22197,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22195,7 +22207,7 @@
           "basePrice": 2850000
         }
       ],
-      "baseCostPerUnit": 2859800
+      "baseCostPerUnit": 2892000
     },
     {
       "code": "МНТ-17-01-001",
@@ -22214,7 +22226,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 32,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22224,7 +22236,7 @@
           "basePrice": 1450000
         }
       ],
-      "baseCostPerUnit": 1461200
+      "baseCostPerUnit": 1498000
     },
     {
       "code": "МНТ-18-01-001",
@@ -22242,7 +22254,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 36,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22252,7 +22264,7 @@
           "basePrice": 285000
         }
       ],
-      "baseCostPerUnit": 297600
+      "baseCostPerUnit": 339000
     },
     {
       "code": "МНТ-19-01-001",
@@ -22271,7 +22283,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22288,7 +22300,7 @@
           "basePrice": 4500
         }
       ],
-      "baseCostPerUnit": 316200
+      "baseCostPerUnit": 330000
     },
     {
       "code": "МНТ-20-01-001",
@@ -22307,7 +22319,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 48,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22317,7 +22329,7 @@
           "basePrice": 4500000
         }
       ],
-      "baseCostPerUnit": 4516800
+      "baseCostPerUnit": 4572000
     },
     {
       "code": "ОТД-23-01-001",
@@ -22336,7 +22348,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 18,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22353,7 +22365,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 307550
+      "baseCostPerUnit": 328250
     },
     {
       "code": "ОТД-23-02-001",
@@ -22372,7 +22384,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 12,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22389,7 +22401,7 @@
           "basePrice": 1850
         }
       ],
-      "baseCostPerUnit": 362700
+      "baseCostPerUnit": 376500
     },
     {
       "code": "ОТД-23-03-001",
@@ -22407,7 +22419,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 16,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22425,7 +22437,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 66550
+      "baseCostPerUnit": 85288
     },
     {
       "code": "ОТД-24-01-001",
@@ -22444,7 +22456,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 48,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22468,7 +22480,7 @@
           "basePrice": 185000
         }
       ],
-      "baseCostPerUnit": 2242300
+      "baseCostPerUnit": 2297500
     },
     {
       "code": "ОТД-24-02-001",
@@ -22486,7 +22498,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 28,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22503,7 +22515,7 @@
           "basePrice": 450
         }
       ],
-      "baseCostPerUnit": 523090
+      "baseCostPerUnit": 551650
     },
     {
       "code": "ОТД-25-01-001",
@@ -22521,7 +22533,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 14,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22538,7 +22550,7 @@
           "basePrice": 5500
         }
       ],
-      "baseCostPerUnit": 366920
+      "baseCostPerUnit": 381200
     },
     {
       "code": "ОТД-25-02-001",
@@ -22556,7 +22568,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22574,7 +22586,7 @@
           "machinistWageRate": 200
         }
       ],
-      "baseCostPerUnit": 155840
+      "baseCostPerUnit": 164042
     },
     {
       "code": "ОТД-26-01-001",
@@ -22593,7 +22605,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22603,7 +22615,7 @@
           "basePrice": 185000
         }
       ],
-      "baseCostPerUnit": 185980
+      "baseCostPerUnit": 189550
     },
     {
       "code": "ОТД-26-02-001",
@@ -22621,7 +22633,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 4,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22638,7 +22650,7 @@
           "basePrice": 28500
         }
       ],
-      "baseCostPerUnit": 314900
+      "baseCostPerUnit": 319500
     },
     {
       "code": "ОТД-27-01-001",
@@ -22657,7 +22669,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 58,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22681,7 +22693,7 @@
           "basePrice": 2800
         }
       ],
-      "baseCostPerUnit": 2263800
+      "baseCostPerUnit": 2330500
     },
     {
       "code": "ОТД-27-02-001",
@@ -22699,7 +22711,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 24,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22716,7 +22728,7 @@
           "basePrice": 2200
         }
       ],
-      "baseCostPerUnit": 891320
+      "baseCostPerUnit": 915800
     },
     {
       "code": "ОТД-28-01-001",
@@ -22734,7 +22746,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 8,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22751,7 +22763,7 @@
           "basePrice": 2800
         }
       ],
-      "baseCostPerUnit": 177640
+      "baseCostPerUnit": 185800
     },
     {
       "code": "ОТД-29-01-001",
@@ -22770,7 +22782,7 @@
           "name": "Рабочий-строитель 3 разряда",
           "qtyPerUnit": 1,
           "unit": "чел.-ч",
-          "basePrice": 220
+          "basePrice": 1100
         },
         {
           "kind": "материал",
@@ -22794,7 +22806,7 @@
           "basePrice": 380
         }
       ],
-      "baseCostPerUnit": 1109
+      "baseCostPerUnit": 1989
     },
     {
       "code": "ОТД-29-02-001",
@@ -22813,7 +22825,7 @@
           "name": "Рабочий-строитель 4 разряда",
           "qtyPerUnit": 2.5,
           "unit": "чел.-ч",
-          "basePrice": 280
+          "basePrice": 1300
         },
         {
           "kind": "материал",
@@ -22830,7 +22842,7 @@
           "basePrice": 280
         }
       ],
-      "baseCostPerUnit": 2500
+      "baseCostPerUnit": 5050
     },
     {
       "code": "ОТД-30-01-001",
@@ -22849,7 +22861,7 @@
           "name": "Рабочий-строитель 5 разряда",
           "qtyPerUnit": 3.5,
           "unit": "чел.-ч",
-          "basePrice": 350
+          "basePrice": 1500
         },
         {
           "kind": "материал",
@@ -22866,7 +22878,7 @@
           "basePrice": 8500
         }
       ],
-      "baseCostPerUnit": 27725
+      "baseCostPerUnit": 31750
     }
   ],
   "overheadRules": [

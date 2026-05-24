@@ -18,6 +18,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
+import { validate, AiSuggestSchema } from "../lib/constitutionSchemas";
 
 const SLIDER_KEYS = [
   "floor",
@@ -176,19 +177,9 @@ const limiter = rateLimit({
 constitutionAiRouter.post(
   "/ai-suggest-stream",
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  validate(AiSuggestSchema),
   async (req: Request, res: Response) => {
-    const body = (req.body && typeof req.body === "object")
-      ? (req.body as Record<string, unknown>)
-      : {};
-    const description = typeof body.description === "string"
-      ? body.description.trim()
-      : "";
-    if (!description || description.length < 8) {
-      return res.status(400).json({
-        error: "description_too_short",
-        hint: "Опиши страну/общество одним-двумя предложениями.",
-      });
-    }
+    const { description } = req.body as { description: string };
 
     // SSE headers
     res.status(200);
@@ -307,20 +298,10 @@ constitutionAiRouter.post(
 constitutionAiRouter.post(
   "/ai-suggest",
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  validate(AiSuggestSchema),
   async (req: Request, res: Response) => {
     try {
-      const body = (req.body && typeof req.body === "object")
-        ? (req.body as Record<string, unknown>)
-        : {};
-      const description = typeof body.description === "string"
-        ? body.description.trim()
-        : "";
-      if (!description || description.length < 8) {
-        return res.status(400).json({
-          error: "description_too_short",
-          hint: "Опиши страну/общество одним-двумя предложениями.",
-        });
-      }
+      const { description } = req.body as { description: string };
       let qc: { reply: string; mode: string };
       try {
         qc = await callQCoreAiChat(description);

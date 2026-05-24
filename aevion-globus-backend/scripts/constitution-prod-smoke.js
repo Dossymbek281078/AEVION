@@ -283,6 +283,112 @@ async function callSSE(path, body) {
          `chunks=${sse.chunks} stub=${sse.isStub} ${sse.durationMs}ms`);
     } else fail("SSE /ai-suggest-stream emits sliders event",
                 `ok=${sse.ok} sliders=${sse.gotSliders} reason=${sse.reason || "n/a"}`);
+
+    // AI negative case — too short description
+    const aiShort = await call("POST", "/api/constitution/ai-suggest", { body: { description: "hi" } });
+    if (aiShort.status === 400) ok("POST /ai-suggest short description → 400");
+    else fail("POST /ai-suggest short description → 400", `status ${aiShort.status}`);
+  }
+
+  /* ─── 6. Zod validation — negative cases ──────────────────────────── */
+
+  // Vote — invalid value
+  if (publishedId) {
+    const voteBad = await call("POST", `/api/planet/constitution-artifacts/${publishedId}/vote`, { body: { vote: 99 } });
+    if (voteBad.status === 400) ok("POST /vote invalid value → 400");
+    else fail("POST /vote invalid value → 400", `status ${voteBad.status}`);
+
+    // Vote — missing field
+    const voteMissing = await call("POST", `/api/planet/constitution-artifacts/${publishedId}/vote`, { body: {} });
+    if (voteMissing.status === 400) ok("POST /vote missing field → 400");
+    else fail("POST /vote missing field → 400", `status ${voteMissing.status}`);
+
+    // Comment — empty text
+    const commentEmpty = await call("POST", `/api/planet/constitution-artifacts/${publishedId}/comment`, { body: { text: "" } });
+    if (commentEmpty.status === 400) ok("POST /comment empty text → 400");
+    else fail("POST /comment empty text → 400", `status ${commentEmpty.status}`);
+
+    // Comment — too long
+    const commentLong = await call("POST", `/api/planet/constitution-artifacts/${publishedId}/comment`, { body: { text: "x".repeat(801) } });
+    if (commentLong.status === 400) ok("POST /comment text>800 → 400");
+    else fail("POST /comment text>800 → 400", `status ${commentLong.status}`);
+  } else {
+    fail("Zod vote/comment negative cases — no publishedId", "skip");
+  }
+
+  // Waitlist — invalid email
+  const waitlistBad = await call("POST", "/api/constitution/waitlist/subscribe", { body: { email: "not-an-email" } });
+  if (waitlistBad.status === 400) ok("POST /waitlist/subscribe invalid email → 400");
+  else fail("POST /waitlist/subscribe invalid email → 400", `status ${waitlistBad.status}`);
+
+  // Waitlist — valid email
+  const waitlistOk = await call("POST", "/api/constitution/waitlist/subscribe", { body: { email: `smoke-${ts}@test.aevion.app`, source: "smoke" } });
+  if (waitlistOk.status === 201 && waitlistOk.json?.ok) ok("POST /waitlist/subscribe valid email → 201");
+  else fail("POST /waitlist/subscribe valid email → 201", `status ${waitlistOk.status}`);
+
+  // Artifact publish — missing signature
+  const artifactNoSig = await call("POST", "/api/planet/constitution-artifacts", {
+    body: { envelope: { payload: { title: "no-sig" } } },
+  });
+  if (artifactNoSig.status === 400) ok("POST artifact missing signature → 400");
+  else fail("POST artifact missing signature → 400", `status ${artifactNoSig.status}`);
+
+  /* ─── 7. Edge cases ──────────────────────────────────────────────── */
+
+  // Sliders all zeros
+  const zeroEnvelope = {
+    signature: createHmac("sha256", "smoke-test").update("zeros").digest("hex"),
+    payload: {
+      title: `zeros-${ts}`,
+      sliders: { floor: 0, ruleOfLaw: 0, rotation: 0, transparency: 0,
+                 multiStatus: 0, skinInGame: 0, polycentricity: 0, positiveSum: 0 },
+    },
+  };
+  const publishZero = await call("POST", "/api/planet/constitution-artifacts", { body: { envelope: zeroEnvelope } });
+  if (publishZero.status === 201) ok("POST artifact with all-zero sliders → 201 (valid)");
+  else fail("POST artifact with all-zero sliders → 201", `status ${publishZero.status}`);
+
+  // Sliders all max
+  const maxEnvelope = {
+    signature: createHmac("sha256", "smoke-test").update("maxes").digest("hex"),
+    payload: {
+      title: `maxes-${ts}`,
+      sliders: { floor: 100, ruleOfLaw: 100, rotation: 100, transparency: 100,
+                 multiStatus: 100, skinInGame: 100, polycentricity: 100, positiveSum: 100 },
+    },
+  };
+  const publishMax = await call("POST", "/api/planet/constitution-artifacts", { body: { envelope: maxEnvelope } });
+  if (publishMax.status === 201) ok("POST artifact with all-100 sliders → 201");
+  else fail("POST artifact with all-100 sliders → 201", `status ${publishMax.status}`);
+
+  // GET non-existent artifact
+  const notFound = await call("GET", "/api/planet/constitution-artifacts/00000000-0000-0000-0000-000000000000");
+  if (notFound.status === 404) ok("GET non-existent artifact → 404");
+  else fail("GET non-existent artifact → 404", `status ${notFound.status}`);
+
+  /* ─── 8. Funnel track ─────────────────────────────────────────────── */
+  const funnelOk = await call("POST", "/api/constitution/funnel/track", { body: { event: "page_view", props: { source: "smoke" } } });
+  if (funnelOk.status === 200 && funnelOk.json?.ok) ok("POST /funnel/track page_view → ok");
+  else fail("POST /funnel/track page_view → ok", `status ${funnelOk.status}`);
+
+  const funnelBad = await call("POST", "/api/constitution/funnel/track", { body: { event: "unknown_nonsense_event" } });
+  if (funnelBad.status === 400) ok("POST /funnel/track unknown event → 400");
+  else fail("POST /funnel/track unknown event → 400", `status ${funnelBad.status}`);
+
+  /* ─── 9. PDF ──────────────────────────────────────────────────────── */
+  const pdf = await call("POST", "/api/constitution/pdf", {
+    body: {
+      title: `smoke-pdf-${ts}`,
+      sliders: { floor: 75, ruleOfLaw: 85, rotation: 70, transparency: 80,
+                 multiStatus: 75, skinInGame: 70, polycentricity: 65, positiveSum: 80 },
+      regime: { id: "open-access", name: "Open Access", era: "ideal" },
+    },
+  });
+  // PDF returns binary, check content-type header not json
+  if (pdf.status === 200) {
+    ok("POST /pdf returns 200");
+  } else {
+    fail("POST /pdf returns 200", `status ${pdf.status} body=${(pdf.raw ?? "").slice(0, 120)}`);
   }
 
   /* ─── Summary ─────────────────────────────────────────────────────── */

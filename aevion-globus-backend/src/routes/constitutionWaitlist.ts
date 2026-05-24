@@ -16,6 +16,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 
 type WaitlistRow = {
   email: string;
@@ -72,16 +73,12 @@ const readLimit  = rateLimit({ windowMs: 60_000, max: 30, keyPrefix: "constituti
 constitutionWaitlistRouter.post(
   "/subscribe",
   writeLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,
+  validate(WaitlistSubscribeSchema),
   async (req: Request, res: Response) => {
     try {
-      const body = (req.body && typeof req.body === "object")
-        ? (req.body as Record<string, unknown>)
-        : {};
-      const emailRaw = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-      if (!emailRaw || !EMAIL_RE.test(emailRaw)) {
-        return res.status(400).json({ error: "invalid_email" });
-      }
-      const sourceRaw = typeof body.source === "string" ? body.source.slice(0, 60) : "unknown";
+      const body = req.body as { email: string; source?: string };
+      const emailRaw = body.email.trim().toLowerCase();
+      const sourceRaw = (body.source ?? "unknown").slice(0, 60);
 
       const row: WaitlistRow = {
         email: emailRaw,

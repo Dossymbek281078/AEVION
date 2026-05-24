@@ -24,6 +24,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { validate, VoteSchema, CommentCreateSchema } from "../lib/constitutionSchemas";
 
 type Vote = -1 | 1;
 type CommentRow = {
@@ -108,14 +109,11 @@ export const planetConstitutionSocialRouter = Router({ mergeParams: true });
 planetConstitutionSocialRouter.post(
   "/:id/vote",
   writeLimit as unknown as (req: Request, res: Response, next: () => void) => void,
+  validate(VoteSchema),
   async (req: Request, res: Response) => {
     try {
       const id = String(req.params.id);
-      const body = (req.body && typeof req.body === "object")
-        ? (req.body as Record<string, unknown>)
-        : {};
-      const v = body.vote === 1 || body.vote === -1 ? (body.vote as Vote) : null;
-      if (!v) return res.status(400).json({ error: "vote_must_be_1_or_-1" });
+      const v = (req.body as { vote: Vote }).vote;
       const { key, isAuth } = voterKey(req);
 
       await ensureSocialTables();
@@ -181,17 +179,11 @@ planetConstitutionSocialRouter.delete(
 planetConstitutionSocialRouter.post(
   "/:id/comment",
   writeLimit as unknown as (req: Request, res: Response, next: () => void) => void,
+  validate(CommentCreateSchema),
   async (req: Request, res: Response) => {
     try {
       const id = String(req.params.id);
-      const body = (req.body && typeof req.body === "object")
-        ? (req.body as Record<string, unknown>)
-        : {};
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      const authorNameRaw =
-        typeof body.authorName === "string" ? body.authorName.trim() : "";
-      if (!text) return res.status(400).json({ error: "missing_text" });
-      if (text.length > 800) return res.status(400).json({ error: "text_too_long_max_800" });
+      const { text, authorName: authorNameRaw } = req.body as { text: string; authorName?: string };
       const { key, userId } = voterKey(req);
       const authorName = authorNameRaw
         ? authorNameRaw.slice(0, 60)

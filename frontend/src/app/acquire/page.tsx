@@ -209,7 +209,7 @@ export default function AcquirePage() {
           под одной расчётной единицей (AEV) и одним правовым контуром.
         </p>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 56 }}>
-          <a href="mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag("AEVION acquisition - LOI inquiry", acquireRef.name)) style={btnPrimary}>
+          <a href={"mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag("AEVION acquisition - LOI inquiry", acquireRef.name))} style={btnPrimary}>
             Запросить LOI → yahiin1978@gmail.com
           </a>
           <Link href="/launch-status" style={btnGhost}>Live status</Link>
@@ -530,7 +530,7 @@ export default function AcquirePage() {
             <Link href="/pilot" style={{ display: "inline-flex", alignItems: "center", padding: "12px 20px", fontSize: 13, fontWeight: 800, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "#cbd5e1", borderRadius: 12, textDecoration: "none" }}>
               90-day pilot
             </Link>
-            <a href="mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag("AEVION acquisition - LOI inquiry", acquireRef.name)) style={{ display: "inline-flex", alignItems: "center", padding: "12px 22px", fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg,#10b981,#3b82f6)", color: "#0a0e1a", borderRadius: 12, textDecoration: "none", boxShadow: "0 8px 22px rgba(16,185,129,0.25)" }}>
+            <a href={"mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag("AEVION acquisition - LOI inquiry", acquireRef.name))} style={{ display: "inline-flex", alignItems: "center", padding: "12px 22px", fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg,#10b981,#3b82f6)", color: "#0a0e1a", borderRadius: 12, textDecoration: "none", boxShadow: "0 8px 22px rgba(16,185,129,0.25)" }}>
               Запросить LOI · yahiin1978@gmail.com
             </a>
           </div>

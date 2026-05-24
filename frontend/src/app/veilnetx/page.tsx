@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 type Status = { phase: string; eta: string; version: string; waitlistCount: number };
 
@@ -143,6 +144,7 @@ export default function VeilNetXLanding() {
           </h1>
           <span className="text-[10px] bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded-full">PRE-LAUNCH</span>
         </div>
+        <ModulePricingChip moduleId="veilnetx" theme="dark" />
       </header>
 
       <section className="max-w-5xl mx-auto px-6 py-16 space-y-6">

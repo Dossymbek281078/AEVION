@@ -3,6 +3,7 @@
 import { LevelHome } from "./components/LevelHome";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { ThemeToggle } from "./components/ThemeToggle";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 export default function SmetaTrainerPage() {
   return (
@@ -17,6 +18,9 @@ export default function SmetaTrainerPage() {
         <div className="flex items-center gap-3">
           <div className="text-[10px] text-slate-400 hidden sm:block">
             НДЦС РК 8.01-08-2022 · 499 расценок ЭСН · 5 уровней · 15 экзаменов · Школа №47, Алматы
+          </div>
+          <div className="hidden md:block">
+            <ModulePricingChip moduleId="smeta-trainer" theme="dark" />
           </div>
           <button
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "?" }))}

@@ -3,6 +3,7 @@ import { apiUrl } from "@/lib/apiBase";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface Wallet {
   id: string;
@@ -146,12 +147,13 @@ export default function QPayNetDashboard() {
 
       {/* Public stats — full grid on mobile, single row on desktop */}
       {stats && (
-        <div className="border-b border-slate-800 px-4 sm:px-6 py-3">
+        <div className="border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center sm:gap-6 gap-2 text-[11px] sm:text-xs text-slate-500">
             <span className="flex items-center gap-1.5"><span aria-hidden>💳</span>{stats.activeWallets} <span className="hidden xs:inline sm:inline">кошельков</span></span>
             <span className="flex items-center gap-1.5"><span aria-hidden>⚡</span>{stats.totalTransactions} <span className="hidden xs:inline sm:inline">транзакций</span></span>
             <span className="flex items-center gap-1.5"><span aria-hidden>₸</span><span className="truncate">{fmt(stats.totalDepositedKzt)}</span> <span className="hidden sm:inline">тнг. депозитов</span></span>
           </div>
+          <ModulePricingChip moduleId="qpaynet-embedded" theme="dark" currency="KZT" />
         </div>
       )}
 

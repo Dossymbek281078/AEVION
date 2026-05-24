@@ -4,6 +4,7 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface DocItem {
   id: string;
@@ -126,6 +127,11 @@ export default function QContractHome() {
           </Link>
         </div>
       </header>
+
+      {/* Pricing chip */}
+      <div className="border-b border-slate-800 px-4 sm:px-6 py-2 flex justify-end">
+        <ModulePricingChip moduleId="qcontract" theme="dark" />
+      </div>
 
       {/* Hero */}
       {!token && (

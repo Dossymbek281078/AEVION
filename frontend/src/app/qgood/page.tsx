@@ -7,6 +7,7 @@ import MoodCheckIn from './components/MoodCheckIn';
 import AiChat from './components/AiChat';
 import MoodTrend from './components/MoodTrend';
 import ExerciseCard from './components/ExerciseCard';
+import ModulePricingChip from '@/components/ModulePricingChip';
 
 const USER_ID = 'demo-user';
 
@@ -82,6 +83,9 @@ export default function QGoodPage() {
                 title={backendOk ? 'Backend online' : 'Backend offline'}
               />
             )}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <ModulePricingChip moduleId="qgood" theme="dark" />
           </div>
         </div>
       </div>

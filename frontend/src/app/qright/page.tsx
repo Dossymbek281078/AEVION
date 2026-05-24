@@ -7,6 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { InfoTip } from "@/components/InfoTip";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { Sparkline } from "@/components/Sparkline";
@@ -646,6 +647,10 @@ export default function QRightPage() {
     <main>
       <ProductPageShell maxWidth={860}>
         <Wave1Nav />
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="qright" theme="dark" />
+        </div>
 
         {/* ── Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 24 }}>

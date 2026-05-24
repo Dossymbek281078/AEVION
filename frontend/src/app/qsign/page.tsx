@@ -8,6 +8,7 @@ import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
 
@@ -630,6 +631,9 @@ export default function QSignPage() {
     <main>
       <ProductPageShell maxWidth={1080}>
         <Wave1Nav />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="qsign" theme="dark" />
+        </div>
         <PipelineSteps current="qsign" />
 
         {/* ─── Hero ─── */}

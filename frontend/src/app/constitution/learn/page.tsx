@@ -9,6 +9,7 @@ import {
   type Sliders,
   type SliderMeta,
 } from "@/lib/constitution";
+import { useI18n } from "@/lib/i18n";
 
 type LessonId =
   | "floor"
@@ -212,6 +213,7 @@ function saveProgress(set: Set<LessonId>): void {
 }
 
 export default function ConstitutionLearnPage() {
+  const { t } = useI18n();
   const [progress, setProgress] = useState<Set<LessonId>>(new Set());
   const [openLesson, setOpenLesson] = useState<LessonId | null>(null);
   const [certBusy, setCertBusy] = useState<boolean>(false);
@@ -275,16 +277,15 @@ export default function ConstitutionLearnPage() {
             ← Constitution
           </Link>
           <h1 className="text-3xl md:text-4xl font-bold mt-2 text-[#d4af37]">
-            AEVION Constitution Academy
+            {t("constitution.learn.title")}
           </h1>
           <p className="text-[#9aa3c0] mt-2 max-w-3xl">
-            8 уроков по одному на каждый ползунок. Теория + исторический пример +
-            практическое задание. После 8/8 — сертификат в PDF.
+            {t("constitution.learn.subtitle")}
           </p>
           <div className="mt-3 flex items-center gap-3 flex-wrap">
             <div className="flex-1 max-w-md">
               <div className="text-xs text-[#9aa3c0] mb-1">
-                Прогресс: {progress.size} / {LESSONS.length}
+                {t("constitution.learn.progress")}: {progress.size} / {LESSONS.length}
               </div>
               <div className="h-2 bg-[#050a1a] rounded overflow-hidden">
                 <div
@@ -300,7 +301,7 @@ export default function ConstitutionLearnPage() {
                 disabled={certBusy}
                 className="px-4 py-2 rounded bg-gradient-to-r from-[#d4af37] to-emerald-400 text-[#0b1736] font-bold hover:opacity-90 disabled:opacity-40"
               >
-                🎓 {certBusy ? "..." : "Скачать сертификат"}
+                🎓 {certBusy ? "..." : t("constitution.learn.cert")}
               </button>
             )}
             {progress.size > 0 && (
@@ -309,7 +310,7 @@ export default function ConstitutionLearnPage() {
                 onClick={reset}
                 className="text-xs text-[#9aa3c0] hover:text-rose-300"
               >
-                Сбросить прогресс
+                {t("constitution.learn.reset")}
               </button>
             )}
           </div>
@@ -331,13 +332,15 @@ export default function ConstitutionLearnPage() {
               >
                 <div className="flex items-baseline justify-between mb-2">
                   <div className="text-xs text-[#9aa3c0]">
-                    Урок {lesson.number} · {lesson.pillar}
+                    {t("constitution.learn.lesson")} {lesson.number} · {lesson.pillar}
                   </div>
                   {done && <span className="text-emerald-400 text-sm">✓ Done</span>}
                 </div>
-                <div className="text-xl font-bold text-[#d4af37]">{lesson.title}</div>
+                <div className="text-xl font-bold text-[#d4af37]">
+                  {t(`constitution.lesson.${lesson.id}.title`)}
+                </div>
                 <div className="text-sm text-[#9aa3c0] mt-1 line-clamp-2">
-                  {lesson.theory.slice(0, 120)}…
+                  {t(`constitution.lesson.${lesson.id}.theory`).slice(0, 120)}…
                 </div>
               </button>
             );
@@ -368,6 +371,7 @@ function LessonModal({
   onClose: () => void;
   onComplete: () => void;
 }) {
+  const { t } = useI18n();
   // Pre-fill task sliders
   const [sliders, setSliders] = useState<Sliders>(() => ({
     ...DEFAULT_SLIDERS,
@@ -417,9 +421,11 @@ function LessonModal({
         <div className="flex justify-between items-baseline mb-3">
           <div>
             <div className="text-xs text-[#9aa3c0]">
-              Урок {lesson.number} · {lesson.pillar}
+              {t("constitution.learn.lesson")} {lesson.number} · {lesson.pillar}
             </div>
-            <h3 className="text-2xl font-bold text-[#d4af37]">{lesson.title}</h3>
+            <h3 className="text-2xl font-bold text-[#d4af37]">
+              {t(`constitution.lesson.${lesson.id}.title`)}
+            </h3>
           </div>
           <button
             type="button"
@@ -432,22 +438,30 @@ function LessonModal({
         </div>
 
         <section className="mb-5">
-          <h4 className="text-sm font-semibold text-[#f5d27a] mb-1">Теория</h4>
-          <p className="text-sm text-[#e7ecf8] leading-relaxed">{lesson.theory}</p>
+          <h4 className="text-sm font-semibold text-[#f5d27a] mb-1">
+            {t("constitution.learn.theory_heading")}
+          </h4>
+          <p className="text-sm text-[#e7ecf8] leading-relaxed">
+            {t(`constitution.lesson.${lesson.id}.theory`)}
+          </p>
         </section>
 
         <section className="mb-5 border-l-2 border-[#d4af37]/30 pl-3">
           <h4 className="text-xs uppercase tracking-wider text-[#9aa3c0] mb-1">
-            Исторический пример
+            {t("constitution.learn.example_heading")}
           </h4>
-          <p className="text-sm text-[#e7ecf8] italic">{lesson.example}</p>
+          <p className="text-sm text-[#e7ecf8] italic">
+            {t(`constitution.lesson.${lesson.id}.example`)}
+          </p>
         </section>
 
         <section className="mb-5 bg-[#050a1a]/40 border border-[#d4af37]/20 rounded p-4">
           <h4 className="text-sm font-semibold text-[#f5d27a] mb-2">
-            🎯 Задание
+            {t("constitution.learn.task_heading")}
           </h4>
-          <p className="text-sm text-[#9aa3c0] mb-3">{lesson.task.hint}</p>
+          <p className="text-sm text-[#9aa3c0] mb-3">
+            {t(`constitution.lesson.${lesson.id}.hint`)}
+          </p>
           <div className="mb-3">
             <div className="flex justify-between items-baseline mb-1">
               <label className="font-medium">{meta.label}</label>
@@ -478,10 +492,10 @@ function LessonModal({
               onClick={check}
               className="px-4 py-2 rounded bg-[#d4af37] text-[#0b1736] font-semibold text-sm hover:opacity-90"
             >
-              Проверить →
+              {t("constitution.learn.check")}
             </button>
             {done && (
-              <span className="text-xs text-emerald-400">✓ Урок засчитан раньше</span>
+              <span className="text-xs text-emerald-400">{t("constitution.learn.passed")}</span>
             )}
           </div>
           {checkResult && (

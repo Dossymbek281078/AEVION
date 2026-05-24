@@ -1836,7 +1836,6 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
         product_id: productId,
         description: name.trim().slice(0, 200),
         unit_price: { amount: String(Math.round(amt)), currency_code: currencyCode },
-        billing_cycle: null,
       }),
     });
     if (!priceR.ok) {

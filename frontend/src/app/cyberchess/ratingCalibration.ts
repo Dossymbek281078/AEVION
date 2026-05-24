@@ -148,6 +148,13 @@ export type CPIMetrics = {
   avgMoveTime: number;
   /** Кол-во партий в выборке (для confidence interval) */
   gamesPlayed: number;
+  /** Медиана per-move centipawn loss. Robust к outlier-блундерам.
+   *  Optional — старые callers не предоставляют, predict просто игнорирует
+   *  эту часть если weights без median coef. */
+  medianCpLoss?: number;
+  /** Стандартное отклонение per-move cp loss. Игроки с consistent loss
+   *  vs spiky loss с тем же mean — разные классы. Optional. */
+  cpLossStd?: number;
 };
 
 /**

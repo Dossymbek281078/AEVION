@@ -172,7 +172,18 @@ export function estimateFideFromCPIWithFit(
   const blunderDelta = clamp01(metrics.blunderRate) * w.blunder;
   const timeDelta = -Math.abs(metrics.avgMoveTime - OPTIMAL_MOVE_TIME) * Math.abs(w.time);
 
-  const rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta;
+  // Rich features. Both coef and metric must be present — otherwise the
+  // delta is 0 and we silently fall back to the 6-feature prediction.
+  // Negated to match the design-matrix convention (positive coef ⇒
+  // lower cp loss = higher Elo).
+  const medianDelta = (typeof w.median === "number" && typeof metrics.medianCpLoss === "number")
+    ? -metrics.medianCpLoss * w.median
+    : 0;
+  const stdDelta = (typeof w.std === "number" && typeof metrics.cpLossStd === "number")
+    ? -metrics.cpLossStd * w.std
+    : 0;
+
+  const rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta + medianDelta + stdDelta;
   const fide = Math.max(400, Math.min(3000, Math.round(rawFide)));
 
   const stddev = Math.max(50, 200 - Math.min(150, metrics.gamesPlayed * 1.5));

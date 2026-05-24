@@ -40,6 +40,12 @@ export type CalibrationWeights = {
      *  loadCalibratedWeights accepts both 6-coef and 8-coef payloads. */
     median?: number;
     std?: number;
+    /** Nonlinear features (polynomial expansion + interaction). Applied to
+     *  (accuracyPct-60)², blunderRate², (accuracyPct-60)*blunderRate.
+     *  Optional — null when CSV produced a purely linear fit. */
+    accuracy2?: number;
+    blunder2?: number;
+    accBlu?: number;
   };
   bias: number;
   fitStats?: {
@@ -137,8 +143,8 @@ function validateWeights(d: unknown): d is CalibrationWeights {
   for (const k of required) {
     if (typeof c[k] !== "number" || !Number.isFinite(c[k] as number)) return false;
   }
-  // Optional rich keys — if present, must be finite numbers.
-  for (const k of ["median", "std"]) {
+  // Optional rich + nonlinear keys — if present, must be finite numbers.
+  for (const k of ["median", "std", "accuracy2", "blunder2", "accBlu"]) {
     if (k in c && (typeof c[k] !== "number" || !Number.isFinite(c[k] as number))) return false;
   }
   return true;
@@ -183,7 +189,16 @@ export function estimateFideFromCPIWithFit(
     ? -metrics.cpLossStd * w.std
     : 0;
 
-  const rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta + medianDelta + stdDelta;
+  // Nonlinear terms — polynomial expansion of base features. These are
+  // applied to the centered values (accuracyPct - 60) and blunderRate,
+  // matching the design matrix in cyberchess-fide-calibrate.mjs.
+  const accCentered = metrics.accuracyPct - ACCURACY_BASELINE;
+  const blunderClamped = clamp01(metrics.blunderRate);
+  const acc2Delta = typeof w.accuracy2 === "number" ? accCentered * accCentered * w.accuracy2 : 0;
+  const blu2Delta = typeof w.blunder2 === "number" ? blunderClamped * blunderClamped * w.blunder2 : 0;
+  const accBluDelta = typeof w.accBlu === "number" ? accCentered * blunderClamped * w.accBlu : 0;
+
+  const rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta + medianDelta + stdDelta + acc2Delta + blu2Delta + accBluDelta;
   const fide = Math.max(400, Math.min(3000, Math.round(rawFide)));
 
   const stddev = Math.max(50, 200 - Math.min(150, metrics.gamesPlayed * 1.5));

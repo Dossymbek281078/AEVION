@@ -33,7 +33,7 @@ import { mkdirSync } from "node:fs";
  * ──────────────────────────────────────────────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false, noStd: false };
+  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false, noStd: false, nonlinear: false, floorFit: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pgn") args.pgn = argv[++i];
@@ -41,6 +41,8 @@ function parseArgs(argv) {
     else if (a === "--features-csv") args.featuresCsv = argv[++i];
     else if (a === "--weighted") args.weighted = true;
     else if (a === "--no-std") args.noStd = true;
+    else if (a === "--nonlinear") args.nonlinear = true;
+    else if (a === "--floor-fit") args.floorFit = true;
     else if (a === "--limit") args.limit = Number(argv[++i]) || Infinity;
     else if (a === "--help" || a === "-h") {
       console.log(
@@ -486,22 +488,33 @@ function main() {
   const hasRichCols = rows.length > 0 && rows[0].features.length >= 8;
   const useStd = hasRichCols && !args.noStd;
   const richMode = hasRichCols;  // median always added when CSV has rich cols
+  const nonlin = args.nonlinear;
+  // Nonlinear features added to break the linear-OLS ceiling. Captures
+  //   "99% accuracy + 0% blunder = GM"     (acc² high, acc·blu near zero)
+  //   "80% + 0% blunder = club lucky day"  (acc² mid, acc·blu near zero)
+  // The interaction term separates them.
   const X = rows.map(r => {
     const [acc, open, , end, blu, tim, median, std] = r.features;
+    const accDelta = acc - 60;
     const base = [
-      acc - 60,                // accuracy delta vs baseline
+      accDelta,                // accuracy delta vs baseline
       Math.min(10, open),      // opening clamped same as frontend
       end,
       blu,
       -Math.abs(tim - 30),     // time penalty (always ≤ 0)
       1                        // bias
     ];
-    if (!richMode) return base;
-    return useStd ? [...base, -median, -std] : [...base, -median];
+    let row = base;
+    if (richMode) row = useStd ? [...row, -median, -std] : [...row, -median];
+    if (nonlin) row = [...row, accDelta * accDelta, blu * blu, accDelta * blu];
+    return row;
   });
   const y = rows.map(r => r.targetFide);
-  if (richMode) {
-    console.log(`      Rich design matrix: ${useStd ? "8 features (median + std)" : "7 features (median only; std dropped via --no-std)"}`);
+  if (richMode || nonlin) {
+    const parts = [];
+    parts.push(richMode ? (useStd ? "median+std" : "median") : null);
+    parts.push(nonlin ? "acc² + blu² + acc·blu" : null);
+    console.log(`      Extended design matrix: ${X[0].length} features (extras: ${parts.filter(Boolean).join(", ")})`);
   }
 
   // Optional weighted least-squares — counters bracket-density bias in OLS.
@@ -533,11 +546,24 @@ function main() {
   }
 
   const coeffs = leastSquaresFit(Xfit, yfit);
-  // Layout: 6 base + optional rich = up to 8 coeffs.
-  //   richMode false:                [wAcc, wOpen, wEnd, wBlu, wTime, bias]
-  //   richMode + useStd false:       [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian]
-  //   richMode + useStd true:        [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian, wStd]
-  const [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian = 0, wStd = 0] = coeffs;
+  // Layout: 6 base + optional [median, std] + optional [acc², blu², acc·blu]
+  const wAcc = coeffs[0];
+  const wOpen = coeffs[1];
+  const wEnd = coeffs[2];
+  const wBlu = coeffs[3];
+  const wTime = coeffs[4];
+  const bias = coeffs[5];
+  let next = 6;
+  let wMedian = 0, wStd = 0, wAcc2 = 0, wBlu2 = 0, wAccBlu = 0;
+  if (richMode) {
+    wMedian = coeffs[next++];
+    if (useStd) wStd = coeffs[next++];
+  }
+  if (nonlin) {
+    wAcc2 = coeffs[next++];
+    wBlu2 = coeffs[next++];
+    wAccBlu = coeffs[next++];
+  }
   const wTac = 0;  // dropped from design matrix, kept zero in output JSON
 
   console.log("      Fit complete. Coefficients:");
@@ -550,7 +576,12 @@ function main() {
   console.log(`        bias:      ${bias.toFixed(3)}   (was 1200.000 BASE_ELO)`);
   if (richMode) {
     console.log(`        median:    ${wMedian.toFixed(3)}   (rich, applied to -medianCpLoss)`);
-    console.log(`        std:       ${wStd.toFixed(3)}   (rich, applied to -cpLossStd)`);
+    if (useStd) console.log(`        std:       ${wStd.toFixed(3)}   (rich, applied to -cpLossStd)`);
+  }
+  if (nonlin) {
+    console.log(`        accuracy²: ${wAcc2.toFixed(4)}  (nonlin, applied to (acc-60)²)`);
+    console.log(`        blunder²:  ${wBlu2.toFixed(3)}  (nonlin, applied to blunder²)`);
+    console.log(`        acc·blu:   ${wAccBlu.toFixed(3)}  (nonlin, interaction term)`);
   }
 
   // Compute predictions + RMSE
@@ -599,7 +630,8 @@ function main() {
       blunder: round(wBlu, 4),
       time: round(wTime, 4),
       ...(richMode ? { median: round(wMedian, 4) } : {}),
-      ...(richMode && useStd ? { std: round(wStd, 4) } : {})
+      ...(richMode && useStd ? { std: round(wStd, 4) } : {}),
+      ...(nonlin ? { accuracy2: round(wAcc2, 6), blunder2: round(wBlu2, 4), accBlu: round(wAccBlu, 4) } : {})
     },
     bias: round(bias, 4),
     fitStats: {

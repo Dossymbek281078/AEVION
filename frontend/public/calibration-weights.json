@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-24T10:49:35.999Z",
+  "generatedAt": "2026-05-24T10:57:26.591Z",
   "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\super-rich-full.csv",
   "samples": 3000,
   "coefficients": {
@@ -21,6 +21,28 @@
     "rmseElo": 328.07,
     "r2": 0.6347,
     "meanTargetElo": 2026.5
+  },
+  "floorFit": {
+    "threshold": 2400,
+    "samples": 1063,
+    "coefficients": {
+      "accuracy": 6.0488,
+      "opening": 8.479,
+      "tactical": 0,
+      "endgame": 189.7682,
+      "blunder": -1062.7157,
+      "time": 0,
+      "median": -2.5176,
+      "std": -0.436,
+      "accuracy2": 0.017756,
+      "blunder2": -50.9908,
+      "accBlu": 71.4113
+    },
+    "bias": 2317.4673,
+    "fitStats": {
+      "rmseElo": 121.55,
+      "r2": -0.0254
+    }
   },
   "notes": [
     "Proxy-derived features (no engine eval). Production-grade fit requires per-move Stockfish analysis.",

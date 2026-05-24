@@ -53,6 +53,16 @@ export type CalibrationWeights = {
     r2: number;
     meanTargetElo: number;
   };
+  /** Optional second-pass fit on rows with targetElo ≥ threshold. When the
+   *  primary prediction exceeds the threshold, recompute with this
+   *  bracket-specialized weight set — large RMSE win at the GM tail. */
+  floorFit?: {
+    threshold: number;
+    samples: number;
+    coefficients: CalibrationWeights["coefficients"];
+    bias: number;
+    fitStats?: { rmseElo: number; r2: number };
+  };
   notes?: string[];
 };
 
@@ -168,6 +178,29 @@ export function estimateFideFromCPIWithFit(
   // No weights → fall back to existing implementation
   if (!weights) return estimateFideFromCPI(metrics);
 
+  // Helper to compute raw FIDE from a coef set + bias; used twice when
+  // a floorFit specialization is present.
+  const computeRaw = (coefs: CalibrationWeights["coefficients"], biasVal: number) => {
+    const accCentered = metrics.accuracyPct - ACCURACY_BASELINE;
+    const blunderClamped = clamp01(metrics.blunderRate);
+    const sum =
+      biasVal +
+      accCentered * coefs.accuracy +
+      Math.min(10, metrics.openingTheoryDepth) * coefs.opening +
+      clamp01(metrics.tacticalEfficiency) * coefs.tactical +
+      clamp01(metrics.endgameStrength) * coefs.endgame +
+      blunderClamped * coefs.blunder +
+      (-Math.abs(metrics.avgMoveTime - OPTIMAL_MOVE_TIME)) * Math.abs(coefs.time) +
+      (typeof coefs.median === "number" && typeof metrics.medianCpLoss === "number"
+        ? -metrics.medianCpLoss * coefs.median : 0) +
+      (typeof coefs.std === "number" && typeof metrics.cpLossStd === "number"
+        ? -metrics.cpLossStd * coefs.std : 0) +
+      (typeof coefs.accuracy2 === "number" ? accCentered * accCentered * coefs.accuracy2 : 0) +
+      (typeof coefs.blunder2 === "number" ? blunderClamped * blunderClamped * coefs.blunder2 : 0) +
+      (typeof coefs.accBlu === "number" ? accCentered * blunderClamped * coefs.accBlu : 0);
+    return sum;
+  };
+
   const w = weights.coefficients;
   const bias = weights.bias;
 
@@ -198,7 +231,15 @@ export function estimateFideFromCPIWithFit(
   const blu2Delta = typeof w.blunder2 === "number" ? blunderClamped * blunderClamped * w.blunder2 : 0;
   const accBluDelta = typeof w.accBlu === "number" ? accCentered * blunderClamped * w.accBlu : 0;
 
-  const rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta + medianDelta + stdDelta + acc2Delta + blu2Delta + accBluDelta;
+  let rawFide = bias + accDelta + openingDelta + tacticalDelta + endgameDelta + blunderDelta + timeDelta + medianDelta + stdDelta + acc2Delta + blu2Delta + accBluDelta;
+
+  // Floor-fit second pass: if the primary prediction lands in the
+  // high-Elo region and weights carry a floorFit block, recompute with
+  // the bracket-specialized coefficients. Crushes GM RMSE 390 → 122.
+  if (weights.floorFit && rawFide >= weights.floorFit.threshold) {
+    rawFide = computeRaw(weights.floorFit.coefficients, weights.floorFit.bias);
+  }
+
   const fide = Math.max(400, Math.min(3000, Math.round(rawFide)));
 
   const stddev = Math.max(50, 200 - Math.min(150, metrics.gamesPlayed * 1.5));

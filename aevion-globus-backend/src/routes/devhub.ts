@@ -1836,12 +1836,12 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
         product_id: productId,
         description: name.trim().slice(0, 200),
         unit_price: { amount: String(Math.round(amt)), currency_code: currencyCode },
-        tax_mode: "exclusive",
+        tax_mode: "account_setting",
       }),
     });
     if (!priceR.ok) {
       const e = await priceR.text();
-      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 200)}` });
+      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 500)}` });
     }
     const priceData = await priceR.json() as { data?: { id: string } };
     const priceId = priceData.data?.id;

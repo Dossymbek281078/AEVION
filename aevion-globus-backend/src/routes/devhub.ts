@@ -1786,101 +1786,69 @@ devhubRouter.post("/media/email", async (req, res) => {
   }
 });
 
-// POST /api/devhub/media/payment-link — create Paddle checkout link
+// POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
 devhubRouter.post("/media/payment-link", async (req, res) => {
-  const { name, amountCents, currency = "USD", description, successUrl } = req.body || {};
+  const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
   if (!Number.isFinite(amt) || amt < 50) return res.status(400).json({ error: "amountCents must be ≥ 50" });
 
-  const paddleKey = process.env.PADDLE_API_KEY?.trim();
-  if (!paddleKey) {
+  const lsKey = process.env.LEMON_SQUEEZY_API_KEY?.trim();
+  const storeId = process.env.LEMON_SQUEEZY_STORE_ID?.trim();
+  const variantId = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+
+  if (!lsKey || !storeId || !variantId) {
     return res.status(503).json({
-      error: "Paddle not configured — set PADDLE_API_KEY",
-      setupUrl: "https://vendors.paddle.com/api-key",
+      error: "Lemon Squeezy not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
+      setupUrl: "https://app.lemonsqueezy.com",
     });
   }
 
-  const isSandbox = process.env.PADDLE_SANDBOX !== "false";
-  const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
   const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
 
-  const hdrs = { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" };
-  const currencyCode = String(currency).toUpperCase().slice(0, 3);
-
   try {
-    // Step 1: create a one-time product
-    const prodR = await fetch(`${paddleBase}/products`, {
-      method: "POST",
-      headers: hdrs,
-      body: JSON.stringify({
-        name: name.trim().slice(0, 200),
-        ...(description ? { description: String(description).slice(0, 500) } : {}),
-        tax_category: "standard",
-        type: "standard",
-      }),
-    });
-    if (!prodR.ok) {
-      const e = await prodR.text();
-      return res.status(prodR.status).json({ error: `Paddle product error: ${e.slice(0, 1000)}` });
-    }
-    const prodData = await prodR.json() as { data?: { id: string } };
-    const productId = prodData.data?.id;
-    if (!productId) return res.status(500).json({ error: "no product id from Paddle" });
+    const body = {
+      data: {
+        type: "checkouts",
+        attributes: {
+          checkout_data: { custom_price: Math.round(amt) },
+          checkout_options: { embed: false, media: false, logo: true },
+          product_options: {
+            name: name.trim().slice(0, 200),
+            description: (description || name).trim().slice(0, 500),
+            redirect_url: successUrl || `${frontendUrl}/devhub?payment=success`,
+          },
+          expires_at: null,
+        },
+        relationships: {
+          store: { data: { type: "stores", id: String(storeId) } },
+          variant: { data: { type: "variants", id: String(variantId) } },
+        },
+      },
+    };
 
-    // Step 2: create a price for this product
-    const priceR = await fetch(`${paddleBase}/prices`, {
+    const r = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
       method: "POST",
-      headers: hdrs,
-      body: JSON.stringify({
-        product_id: productId,
-        description: name.trim().slice(0, 200),
-        unit_price: { amount: String(Math.round(amt)), currency_code: currencyCode },
-      }),
+      headers: {
+        Authorization: `Bearer ${lsKey}`,
+        Accept: "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
     });
-    if (!priceR.ok) {
-      const e = await priceR.text();
-      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 1000)}` });
-    }
-    const priceData = await priceR.json() as { data?: { id: string } };
-    const priceId = priceData.data?.id;
-    if (!priceId) return res.status(500).json({ error: "no price id from Paddle" });
 
-    // Step 3: create transaction
-    const txR = await fetch(`${paddleBase}/transactions`, {
-      method: "POST",
-      headers: hdrs,
-      body: JSON.stringify({
-        items: [{ price_id: priceId, quantity: 1 }],
-        checkout: { url: successUrl || `${frontendUrl}/devhub?payment=success` },
-      }),
-    });
-    if (!txR.ok) {
-      let txErrBody: any;
-      try { txErrBody = await txR.json(); } catch { txErrBody = null; }
-      const code = txErrBody?.error?.code ?? "";
-      if (code === "transaction_checkout_not_enabled") {
-        return res.status(403).json({
-          error: "Paddle checkout not yet enabled for this account.",
-          action: "Complete Paddle onboarding at https://vendors.paddle.com — business verification required to enable checkout.",
-          paddleCode: code,
-        });
-      }
-      const detail = txErrBody?.error?.detail ?? JSON.stringify(txErrBody ?? "unknown");
-      return res.status(txR.status).json({ error: `Paddle transaction error: ${detail}` });
+    if (!r.ok) {
+      const errText = await r.text().catch(() => "");
+      return res.status(r.status).json({ error: `Lemon Squeezy error: ${errText.slice(0, 500)}` });
     }
-    const txData = await txR.json() as { data?: { id: string; checkout?: { url: string } } };
-    const tx = txData.data;
-    if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
 
-    res.json({
-      ok: true,
-      provider: "paddle",
-      transactionId: tx.id,
-      productId,
-      priceId,
-      url: tx.checkout?.url ?? `https://checkout.paddle.com/checkout/${tx.id}`,
-    });
+    const data = await r.json() as { data?: { id?: string; attributes?: { url?: string } } };
+    const checkoutUrl = data.data?.attributes?.url;
+    const checkoutId = data.data?.id;
+    if (!checkoutUrl) return res.status(500).json({ error: "no checkout URL from Lemon Squeezy" });
+
+    res.json({ ok: true, provider: "lemonsqueezy", checkoutId, url: checkoutUrl });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Payment link creation failed" });
   }

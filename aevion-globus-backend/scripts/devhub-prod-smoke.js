@@ -222,15 +222,15 @@ async function run() {
   else fail("GET /media/email-templates", `${emailTmpls.status}`);
 
   // ── 18. Media: Payment Link ───────────────────────────────────────────
-  console.log("\n18. Media — Payment (Paddle)");
+  console.log("\n18. Media — Payment (Lemon Squeezy)");
   const payBad = await req("POST", "/api/devhub/media/payment-link", {});
   if (payBad.status === 400) ok("Payment validation gate → 400");
   else fail("Payment validation", `${payBad.status}`);
 
-  const payGood = await req("POST", "/api/devhub/media/payment-link", { name: "Smoke Item", amountCents: 999, currency: "USD" });
+  const payGood = await req("POST", "/api/devhub/media/payment-link", { name: "Smoke Item", amountCents: 999 });
   if (payGood.status === 200 || payGood.status === 201) ok("Payment → configured + 200");
-  else if (payGood.status === 503) ok("Payment → graceful 503 (Paddle key not set)");
-  else if (payGood.status >= 400) ok("Payment → key set, Paddle API error", `${payGood.status}`);
+  else if (payGood.status === 503) ok("Payment → graceful 503 (LS keys not set)");
+  else if (payGood.status >= 400) ok("Payment → key set, LS API error", `${payGood.status}`);
   else fail("Payment unexpected", `${payGood.status}`);
 
   // ── 19. Media: SMS ────────────────────────────────────────────────────

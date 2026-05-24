@@ -8,6 +8,7 @@ import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import PersonaCard from "./components/PersonaCard";
 import CreatePersonaForm from "./components/CreatePersonaForm";
 import AvatarDisplay from "./components/AvatarDisplay";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,10 @@ export default function QPersonaPage() {
           )}
         </div>
       </header>
+
+      <div style={{ maxWidth: "960px", margin: "0 auto", padding: "12px 20px 0", display: "flex", justifyContent: "flex-end" }}>
+        <ModulePricingChip moduleId="qpersona" theme="dark" />
+      </div>
 
       {/* Hero */}
       <section style={{ maxWidth: "960px", margin: "0 auto", padding: "56px 20px 32px" }}>

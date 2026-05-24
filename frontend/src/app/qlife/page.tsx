@@ -8,6 +8,7 @@ import BiomarkerForm from "./components/BiomarkerForm";
 import TrendCard from "./components/TrendCard";
 import PlanCard from "./components/PlanCard";
 import StatsStrip from "./components/StatsStrip";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface BiomarkerRecord {
   id: number;
@@ -62,6 +63,10 @@ export default function QLifePage() {
           </nav>
         </div>
       </header>
+
+      <div style={{ padding: "12px 24px 0", display: "flex", justifyContent: "flex-end", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+        <ModulePricingChip moduleId="qlife" theme="dark" />
+      </div>
 
       {/* Hero */}
       <section style={styles.hero}>

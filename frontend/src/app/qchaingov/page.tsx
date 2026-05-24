@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 type StatusPayload = {
   module: string;
@@ -40,7 +41,10 @@ export default function QChainGovLanding() {
       <header className="border-b border-slate-800/60 px-5 py-3 backdrop-blur sticky top-0 z-30 bg-slate-950/60">
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <Link href="/" className="text-sm text-slate-400 hover:text-white">← AEVION</Link>
-          <div className="text-xs font-mono tracking-[0.2em] text-sky-300">QCHAINGOV</div>
+          <div className="flex items-center gap-3">
+            <ModulePricingChip moduleId="qchaingov" theme="dark" />
+            <div className="text-xs font-mono tracking-[0.2em] text-sky-300">QCHAINGOV</div>
+          </div>
         </div>
       </header>
 

@@ -123,6 +123,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/constitution/pricing",     changeFrequency: "weekly",  priority: 0.8 },
   { path: "/constitution/welcome",     changeFrequency: "monthly", priority: 0.4 },
   { path: "/constitution/showcase",    changeFrequency: "weekly",  priority: 0.85 },
+  { path: "/constitution/status",      changeFrequency: "hourly",  priority: 0.6 },
 ];
 
 const DEFAULT_CHANGE_FREQ: MetadataRoute.Sitemap[number]["changeFrequency"] = "weekly";

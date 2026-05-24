@@ -828,6 +828,12 @@ export default function ConstitutionPage() {
               >
                 {`</> API`}
               </Link>
+              <Link
+                href="/constitution/learn"
+                className="px-4 py-2 rounded border border-emerald-400/60 text-emerald-300 font-semibold hover:bg-emerald-500/10"
+              >
+                🎓 Academy
+              </Link>
             </div>
           )}
           {aiOpen && (

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { countryByCode } from "@/lib/constitution";
+import { useFunnel } from "@/lib/useFunnel";
 
 const API = "/api-backend/api/constitution";
 const STORAGE_KEY = "constitution.draft";
@@ -235,6 +236,8 @@ type SavedScenario = {
 
 export default function ConstitutionPage() {
   const { t } = useI18n();
+  const { track } = useFunnel();
+  useEffect(() => { track("page_view"); }, [track]);
   const localizedSliderMeta = useMemo(
     () =>
       SLIDER_META.map((m) => ({
@@ -482,7 +485,10 @@ export default function ConstitutionPage() {
     setTourStep(clamped);
     setSliders(TOUR[clamped].sliders);
   }, []);
-  const startTour = useCallback(() => goToTourStep(0), [goToTourStep]);
+  const startTour = useCallback(() => {
+    track("tour_started");
+    goToTourStep(0);
+  }, [goToTourStep, track]);
   const exitTour = useCallback(() => setTourStep(null), []);
 
   useEffect(() => {
@@ -557,18 +563,20 @@ export default function ConstitutionPage() {
   const setSlider = useCallback(
     (k: keyof Sliders, v: number) => {
       setSliders((s) => ({ ...s, [k]: v }));
+      track("slider_change", { key: k, value: v });
       const ws = collabWsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
         try { ws.send(JSON.stringify({ type: "slider", key: k, value: v })); } catch { /* ignore */ }
       }
     },
-    [],
+    [track],
   );
 
   const reset = useCallback(() => setSliders(DEFAULT_SLIDERS), []);
 
   const save = useCallback(async () => {
     if (!title.trim()) return;
+    track("save_clicked");
     setBusy(true);
     try {
       const r = await fetch(`${API}/scenarios`, {
@@ -583,6 +591,7 @@ export default function ConstitutionPage() {
         }),
       });
       if (r.ok) {
+        track("save_success", { regime: regime.id });
         setTitle("");
         await loadRecent();
       }
@@ -591,9 +600,10 @@ export default function ConstitutionPage() {
     } finally {
       setBusy(false);
     }
-  }, [title, sliders, regime, metrics, loadRecent]);
+  }, [title, sliders, regime, metrics, loadRecent, track]);
 
   const signAndDownload = useCallback(async () => {
+    track("qsign_clicked");
     setSigning(true);
     setSignError(null);
     try {
@@ -667,6 +677,7 @@ export default function ConstitutionPage() {
   }, [title, sliders, regime, metrics]);
 
   const downloadPdf = useCallback(async () => {
+    track("pdf_download", { regime: regime.id });
     setPdfBusy(true);
     setPdfError(null);
     try {
@@ -703,6 +714,7 @@ export default function ConstitutionPage() {
   }, [title, sliders, regime, openedArtifactId]);
 
   const publishToPlanet = useCallback(async () => {
+    track("planet_publish", { regime: regime.id });
     setPublishing(true);
     setPublishError(null);
     setPublishedId(null);

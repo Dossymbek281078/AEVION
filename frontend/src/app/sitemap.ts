@@ -116,6 +116,10 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/constitution/api",         changeFrequency: "monthly", priority: 0.65 },
   { path: "/constitution/learn",       changeFrequency: "monthly", priority: 0.75 },
   { path: "/constitution/embed",       changeFrequency: "monthly", priority: 0.45 },
+  { path: "/constitution/blog",        changeFrequency: "weekly",  priority: 0.7 },
+  { path: "/constitution/blog/why-norway-90-rule-of-law",   changeFrequency: "monthly", priority: 0.65 },
+  { path: "/constitution/blog/magna-carta-to-open-access",  changeFrequency: "monthly", priority: 0.65 },
+  { path: "/constitution/blog/growing-pie-is-everything",   changeFrequency: "monthly", priority: 0.65 },
 ];
 
 const DEFAULT_CHANGE_FREQ: MetadataRoute.Sitemap[number]["changeFrequency"] = "weekly";

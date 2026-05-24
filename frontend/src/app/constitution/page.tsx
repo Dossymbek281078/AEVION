@@ -834,6 +834,12 @@ export default function ConstitutionPage() {
               >
                 🎓 Academy
               </Link>
+              <Link
+                href="/constitution/blog"
+                className="px-4 py-2 rounded border border-amber-400/60 text-amber-300 font-semibold hover:bg-amber-500/10"
+              >
+                📝 Blog
+              </Link>
             </div>
           )}
           {aiOpen && (

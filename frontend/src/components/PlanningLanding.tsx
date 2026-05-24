@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 export type RelatedModule = {
   id: string;       // route slug, e.g. "psyapp-deps" or "healthai"
@@ -375,12 +376,15 @@ export default function PlanningLanding(props: PlanningLandingProps) {
           </h1>
           <span className={`text-[10px] ${c.pill} ${c.pillText} px-2 py-0.5 rounded-full`}>{props.badge}</span>
         </div>
-        <Link
-          href="https://github.com/Dossymbek281078/AEVION"
-          className="text-xs text-slate-400 hover:text-white"
-        >
-          GitHub →
-        </Link>
+        <div className="flex items-center gap-4">
+          <ModulePricingChip moduleId={props.id} theme="dark" />
+          <Link
+            href="https://github.com/Dossymbek281078/AEVION"
+            className="text-xs text-slate-400 hover:text-white"
+          >
+            GitHub →
+          </Link>
+        </div>
       </header>
 
       <section className="max-w-5xl mx-auto px-6 py-16 space-y-6">

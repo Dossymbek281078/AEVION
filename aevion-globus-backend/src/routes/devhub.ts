@@ -1822,7 +1822,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
     });
     if (!prodR.ok) {
       const e = await prodR.text();
-      return res.status(prodR.status).json({ error: `Paddle product error: ${e.slice(0, 200)}` });
+      return res.status(prodR.status).json({ error: `Paddle product error: ${e.slice(0, 1000)}` });
     }
     const prodData = await prodR.json() as { data?: { id: string } };
     const productId = prodData.data?.id;
@@ -1836,12 +1836,12 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
         product_id: productId,
         description: name.trim().slice(0, 200),
         unit_price: { amount: String(Math.round(amt)), currency_code: currencyCode },
-        tax_mode: "account_setting",
+        billing_cycle: null,
       }),
     });
     if (!priceR.ok) {
       const e = await priceR.text();
-      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 500)}` });
+      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 1000)}` });
     }
     const priceData = await priceR.json() as { data?: { id: string } };
     const priceId = priceData.data?.id;
@@ -1858,7 +1858,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
     });
     if (!txR.ok) {
       const e = await txR.text();
-      return res.status(txR.status).json({ error: `Paddle tx error: ${e.slice(0, 200)}` });
+      return res.status(txR.status).json({ error: `Paddle tx error: ${e.slice(0, 1000)}` });
     }
     const txData = await txR.json() as { data?: { id: string; checkout?: { url: string } } };
     const tx = txData.data;

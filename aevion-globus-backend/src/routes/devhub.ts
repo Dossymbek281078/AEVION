@@ -1817,7 +1817,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
         name: name.trim().slice(0, 200),
         ...(description ? { description: String(description).slice(0, 500) } : {}),
         tax_category: "standard",
-        type: "service",
+        type: "standard",
       }),
     });
     if (!prodR.ok) {

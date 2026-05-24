@@ -71,8 +71,8 @@ const T1_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Демонтаж", category: "демонтажные",
       positions: [
-        { id: "rp1", rateCode: "ДЕМ-15-01-001", volume: 1.08, coefficients: [], formula: "(9×6)×2 / 100 = 1.08" },
-        { id: "rp2", rateCode: "ДЕМ-11-02-001", volume: 1.08, coefficients: [], formula: "(9×6)×2 / 100 = 1.08" },
+        { id: "rp1", rateCode: "ЭСНСб15-01.Д-001", volume: 1.08, coefficients: [], formula: "(9×6)×2 / 100 = 1.08" },
+        { id: "rp2", rateCode: "ЭСНСб11-02.Д-001", volume: 1.08, coefficients: [], formula: "(9×6)×2 / 100 = 1.08" },
       ],
     },
     {
@@ -100,8 +100,8 @@ const T1_STARTER = mkLsr({
     {
       id: "stu-s1", title: "Раздел 1. Демонтаж", category: "демонтажные",
       positions: [
-        { id: "sp1", rateCode: "ДЕМ-15-01-001", volume: 1.08, coefficients: [], formula: "108 / 100" },
-        { id: "sp2", rateCode: "ДЕМ-11-02-001", volume: 1.08, coefficients: [], formula: "108 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб15-01.Д-001", volume: 1.08, coefficients: [], formula: "108 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб11-02.Д-001", volume: 1.08, coefficients: [], formula: "108 / 100" },
       ],
     },
     {
@@ -688,8 +688,8 @@ const T11_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Демонтаж", category: "демонтажные",
       positions: [
-        { id: "rp1", rateCode: "ДЕМ-11-03-001", volume: 0.12, coefficients: [], formula: "Пол 12 м² / 100 (плитка)" },
-        { id: "rp2", rateCode: "ДЕМ-11-02-001", volume: 0.12, coefficients: [], formula: "Стяжка 12 м² / 100" },
+        { id: "rp1", rateCode: "ЭСНСб11-03.Д-001", volume: 0.12, coefficients: [], formula: "Пол 12 м² / 100 (плитка)" },
+        { id: "rp2", rateCode: "ЭСНСб11-02.Д-001", volume: 0.12, coefficients: [], formula: "Стяжка 12 м² / 100" },
       ],
     },
     {
@@ -727,8 +727,8 @@ const T11_STARTER = mkLsr({
     {
       id: "stu-s1", title: "Раздел 1. Демонтаж", category: "демонтажные",
       positions: [
-        { id: "sp1", rateCode: "ДЕМ-11-03-001", volume: 0.12, coefficients: [], formula: "12 / 100" },
-        { id: "sp2", rateCode: "ДЕМ-11-02-001", volume: 0.12, coefficients: [], formula: "12 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб11-03.Д-001", volume: 0.12, coefficients: [], formula: "12 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб11-02.Д-001", volume: 0.12, coefficients: [], formula: "12 / 100" },
       ],
     },
     {

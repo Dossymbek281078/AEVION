@@ -90,10 +90,10 @@ export const LEVEL1_LSR: Lsr = {
       title: "Раздел 1. Демонтажные работы",
       category: "демонтажные",
       positions: [
-        { id: "p1", rateCode: "ДЕМ-15-01-001", volume: 28.80, coefficients: [], formula: "32 кл × 90 м² = 2880 м²; 2880/100 = 28.80 (100 м²)", drawingRef: "ОР-01, 02" },
-        { id: "p2", rateCode: "ДЕМ-11-02-001", volume: 18.00, coefficients: [], formula: "32 кл × 48.75 м² + коридоры 240 м² = 1800 м²; /100 = 18.00", drawingRef: "ОР-01" },
-        { id: "p3", rateCode: "ДЕМ-06-01-001", volume: 64, coefficients: [], formula: "32 кл × 2 окна/кл = 64 шт", drawingRef: "ОР-03" },
-        { id: "p4", rateCode: "ДЕМ-06-02-001", volume: 32, coefficients: [], formula: "32 кл × 1 дверь/кл = 32 шт", drawingRef: "ОР-03" },
+        { id: "p1", rateCode: "ЭСНСб15-01.Д-001", volume: 28.80, coefficients: [], formula: "32 кл × 90 м² = 2880 м²; 2880/100 = 28.80 (100 м²)", drawingRef: "ОР-01, 02" },
+        { id: "p2", rateCode: "ЭСНСб11-02.Д-001", volume: 18.00, coefficients: [], formula: "32 кл × 48.75 м² + коридоры 240 м² = 1800 м²; /100 = 18.00", drawingRef: "ОР-01" },
+        { id: "p3", rateCode: "ЭСНСб10-01.Д-001", volume: 64, coefficients: [], formula: "32 кл × 2 окна/кл = 64 шт", drawingRef: "ОР-03" },
+        { id: "p4", rateCode: "ЭСНСб10-02.Д-001", volume: 32, coefficients: [], formula: "32 кл × 1 дверь/кл = 32 шт", drawingRef: "ОР-03" },
       ],
     },
     {
@@ -161,8 +161,8 @@ export const LEVEL5_LSR: Lsr = {
       title: "Раздел 1. Демонтажные работы",
       category: "общестроительные", // ОШИБКА err-02: должно быть "демонтажные"
       positions: [
-        { id: "pe1", rateCode: "ДЕМ-15-01-001", volume: 28.80, coefficients: [], formula: "32 × 90 = 2880 / 100 (без вычета проёмов)", drawingRef: "ВС-01" },
-        { id: "pe2", rateCode: "ДЕМ-11-02-001", volume: 18.00, coefficients: [], formula: "1800 / 100", drawingRef: "ВС-01" },
+        { id: "pe1", rateCode: "ЭСНСб15-01.Д-001", volume: 28.80, coefficients: [], formula: "32 × 90 = 2880 / 100 (без вычета проёмов)", drawingRef: "ВС-01" },
+        { id: "pe2", rateCode: "ЭСНСб11-02.Д-001", volume: 18.00, coefficients: [], formula: "1800 / 100", drawingRef: "ВС-01" },
       ],
     },
     {

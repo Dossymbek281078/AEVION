@@ -20,7 +20,7 @@ const DOPRABOTY_LSR = {
       title: "Допработы. Ремонт основания перекрытий",
       category: "общестроительные" as const,
       positions: [
-        { id: "dop-p1", rateCode: "ДЕМ-11-02-001", volume: 0.80, coefficients: [], formula: "4 класса × 20 м² / 100" },
+        { id: "dop-p1", rateCode: "ЭСНСб11-02.Д-001", volume: 0.80, coefficients: [], formula: "4 класса × 20 м² / 100" },
         { id: "dop-p2", rateCode: "ОТД-11-02-001", volume: 0.80, coefficients: [], formula: "4 × 20 / 100" },
       ],
     },

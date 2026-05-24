@@ -15,11 +15,11 @@ interface DefectItem {
 }
 
 const TEMPLATE_DEFECTS: Omit<DefectItem, "id" | "room" | "checked">[] = [
-  { defect: "Старая штукатурка требует замены (трещины, отслоения)", rateCode: "ДЕМ-15-01-001", unit: "100 м²", suggestedVolume: 0.84 },
-  { defect: "Напольное покрытие (линолеум/ламинат) изношено", rateCode: "ДЕМ-11-01-002", unit: "100 м²", suggestedVolume: 0.49 },
-  { defect: "Стяжка пола повреждена (трещины, сколы)", rateCode: "ДЕМ-11-02-001", unit: "100 м²", suggestedVolume: 0.49 },
-  { defect: "Деревянные окна — замена на ПВХ", rateCode: "ДЕМ-06-01-001", unit: "шт", suggestedVolume: 2 },
-  { defect: "Дверной блок — замена", rateCode: "ДЕМ-06-02-001", unit: "шт", suggestedVolume: 1 },
+  { defect: "Старая штукатурка требует замены (трещины, отслоения)", rateCode: "ЭСНСб15-01.Д-001", unit: "100 м²", suggestedVolume: 0.84 },
+  { defect: "Напольное покрытие (линолеум/ламинат) изношено", rateCode: "ЭСНСб11-01.Д-002", unit: "100 м²", suggestedVolume: 0.49 },
+  { defect: "Стяжка пола повреждена (трещины, сколы)", rateCode: "ЭСНСб11-02.Д-001", unit: "100 м²", suggestedVolume: 0.49 },
+  { defect: "Деревянные окна — замена на ПВХ", rateCode: "ЭСНСб10-01.Д-001", unit: "шт", suggestedVolume: 2 },
+  { defect: "Дверной блок — замена", rateCode: "ЭСНСб10-02.Д-001", unit: "шт", suggestedVolume: 1 },
   { defect: "Штукатурка стен под чистовую отделку", rateCode: "ОТД-13-01-001", unit: "100 м²", suggestedVolume: 0.84 },
   { defect: "Шпатлёвка стен под окраску", rateCode: "ОТД-15-02-003", unit: "100 м²", suggestedVolume: 0.84 },
   { defect: "Стены требуют окраски водоэмульсионной краской", rateCode: "ОТД-15-04-001", unit: "100 м²", suggestedVolume: 0.84 },

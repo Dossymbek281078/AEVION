@@ -22,8 +22,8 @@ const LSRS: Lsr[] = [
     meta: { lsrNumber: "2-01", objectTitle: "Крыло Б — отделка", strojkaCode: "02-2026-ПВП 20", priceDate: "декабрь 2025 г.", author: "" },
     sections: [
       { id: "l4-s1", title: "Раздел 1. Демонтажные работы", category: "демонтажные", positions: [
-        { id: "l4p1", rateCode: "ДЕМ-15-01-001", volume: 28.80, coefficients: [] },
-        { id: "l4p2", rateCode: "ДЕМ-11-02-001", volume: 18.00, coefficients: [] },
+        { id: "l4p1", rateCode: "ЭСНСб15-01.Д-001", volume: 28.80, coefficients: [] },
+        { id: "l4p2", rateCode: "ЭСНСб11-02.Д-001", volume: 18.00, coefficients: [] },
       ]},
       { id: "l4-s2", title: "Раздел 2. Отделка стен", category: "отделочные", positions: [
         { id: "l4p3", rateCode: "ОТД-13-01-001", volume: 26.99, coefficients: [] },

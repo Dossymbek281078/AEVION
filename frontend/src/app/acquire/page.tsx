@@ -459,17 +459,23 @@ export default function AcquirePage() {
 function PitchMedia() {
   const [lang, setLang] = useState<"ru" | "en">("ru");
   const [hasAudio, setHasAudio] = useState<boolean | null>(null);
+  const [hasVideo, setHasVideo] = useState<boolean | null>(null);
   const audioSrc = lang === "ru" ? "/promo/aevion-acquire-ru.mp3" : "/promo/aevion-acquire-en.mp3";
   const videoSrc = lang === "ru" ? "/promo/aevion-acquire-ru.mp4" : "/promo/aevion-acquire-en.mp4";
   const scriptSrc = lang === "ru" ? "/promo/script-ru.txt" : "/promo/script-en.txt";
 
   useEffect(() => {
     let cancelled = false;
-    fetch(audioSrc, { method: "HEAD" })
-      .then(r => { if (!cancelled) setHasAudio(r.ok); })
-      .catch(() => { if (!cancelled) setHasAudio(false); });
+    Promise.allSettled([
+      fetch(audioSrc, { method: "HEAD" }),
+      fetch(videoSrc, { method: "HEAD" }),
+    ]).then(([a, v]) => {
+      if (cancelled) return;
+      setHasAudio(a.status === "fulfilled" && a.value.ok);
+      setHasVideo(v.status === "fulfilled" && v.value.ok);
+    });
     return () => { cancelled = true; };
-  }, [audioSrc]);
+  }, [audioSrc, videoSrc]);
 
   return (
     <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -529,16 +535,30 @@ function PitchMedia() {
             justifyContent: "center",
             border: "1px solid rgba(255,255,255,0.08)",
           }}>
-            <video
-              key={videoSrc}
-              src={videoSrc}
-              poster="/promo/aevion-acquire-poster.jpg"
-              controls
-              preload="none"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            >
-              <track kind="captions" />
-            </video>
+            {hasVideo ? (
+              <video
+                key={videoSrc}
+                src={videoSrc}
+                poster="/promo/aevion-acquire-poster.jpg"
+                controls
+                preload="metadata"
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              >
+                <track kind="captions" />
+              </video>
+            ) : (
+              <div style={{ textAlign: "center", padding: 24, maxWidth: 560 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.32em", color: "#10b981", textTransform: "uppercase", marginBottom: 14 }}>
+                  · Audio · LIVE · Video drop pending
+                </div>
+                <div style={{ fontSize: "clamp(24px, 3.6vw, 38px)", fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: 12 }}>
+                  Planet <span style={{ background: "linear-gradient(135deg,#10b981,#3b82f6,#a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AEVION</span>.
+                </div>
+                <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>
+                  Озвучка ниже — 90-сек инвестор-питч. Видео-монтаж выкатим следом по сценарию <code style={{ fontFamily: "ui-monospace, monospace", color: "#cbd5e1" }}>promo/09_DAVINCI_EDL.md</code>.
+                </div>
+              </div>
+            )}
             <div style={{ position: "absolute", top: 14, left: 14, fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#10b981", textTransform: "uppercase", padding: "4px 10px", background: "rgba(0,0,0,0.4)", borderRadius: 999, border: "1px solid rgba(16,185,129,0.3)" }}>
               · LIVE · Planet AEVION
             </div>

@@ -1805,44 +1805,73 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
   const paddleBase = isSandbox ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
   const frontendUrl = (process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "");
 
+  const hdrs = { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" };
+  const currencyCode = String(currency).toUpperCase().slice(0, 3);
+
   try {
-    const txBody: Record<string, unknown> = {
-      items: [{
-        quantity: 1,
-        price: {
-          name: name.trim().slice(0, 200),
-          ...(description ? { description: String(description).slice(0, 500) } : {}),
-          unit_price: {
-            amount: String(Math.round(amt)),
-            currency_code: String(currency).toUpperCase().slice(0, 3),
-          },
-          tax_mode: "exclusive",
-        },
-      }],
-      checkout: {
-        url: successUrl || `${frontendUrl}/devhub?payment=success`,
-      },
-    };
-
-    const r = await fetch(`${paddleBase}/transactions`, {
+    // Step 1: create a one-time product
+    const prodR = await fetch(`${paddleBase}/products`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${paddleKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(txBody),
+      headers: hdrs,
+      body: JSON.stringify({
+        name: name.trim().slice(0, 200),
+        ...(description ? { description: String(description).slice(0, 500) } : {}),
+        tax_category: "standard",
+        type: "service",
+      }),
     });
-
-    if (!r.ok) {
-      const errText = await r.text();
-      return res.status(r.status).json({ error: `Paddle error: ${errText.slice(0, 300)}` });
+    if (!prodR.ok) {
+      const e = await prodR.text();
+      return res.status(prodR.status).json({ error: `Paddle product error: ${e.slice(0, 200)}` });
     }
-    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
-    const tx = data.data;
+    const prodData = await prodR.json() as { data?: { id: string } };
+    const productId = prodData.data?.id;
+    if (!productId) return res.status(500).json({ error: "no product id from Paddle" });
+
+    // Step 2: create a price for this product
+    const priceR = await fetch(`${paddleBase}/prices`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({
+        product_id: productId,
+        name: name.trim().slice(0, 200),
+        unit_price: { amount: String(Math.round(amt)), currency_code: currencyCode },
+        billing_cycle: null,
+        tax_mode: "exclusive",
+      }),
+    });
+    if (!priceR.ok) {
+      const e = await priceR.text();
+      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 200)}` });
+    }
+    const priceData = await priceR.json() as { data?: { id: string } };
+    const priceId = priceData.data?.id;
+    if (!priceId) return res.status(500).json({ error: "no price id from Paddle" });
+
+    // Step 3: create transaction
+    const txR = await fetch(`${paddleBase}/transactions`, {
+      method: "POST",
+      headers: hdrs,
+      body: JSON.stringify({
+        items: [{ price_id: priceId, quantity: 1 }],
+        checkout: { url: successUrl || `${frontendUrl}/devhub?payment=success` },
+      }),
+    });
+    if (!txR.ok) {
+      const e = await txR.text();
+      return res.status(txR.status).json({ error: `Paddle tx error: ${e.slice(0, 200)}` });
+    }
+    const txData = await txR.json() as { data?: { id: string; checkout?: { url: string } } };
+    const tx = txData.data;
     if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
 
     res.json({
       ok: true,
       provider: "paddle",
       transactionId: tx.id,
-      url: tx.checkout?.url ?? `${paddleBase.replace("api.", "")}/checkout/${tx.id}`,
+      productId,
+      priceId,
+      url: tx.checkout?.url ?? `https://checkout.paddle.com/checkout/${tx.id}`,
     });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Payment link creation failed" });
@@ -1871,6 +1900,9 @@ devhubRouter.post("/media/image", async (req, res) => {
     });
   }
 
+  // gpt-image-1 quality values: low/medium/high/auto (not standard/hd)
+  const gptQuality = quality === "hd" ? "high" : quality === "standard" ? "medium" : (quality || "medium");
+
   try {
     const r = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
@@ -1880,17 +1912,20 @@ devhubRouter.post("/media/image", async (req, res) => {
         prompt: prompt.trim(),
         n: 1,
         size,
-        quality: quality === "hd" ? "hd" : "standard",
+        quality: gptQuality,
       }),
     });
     if (!r.ok) {
       const errText = await r.text();
       return res.status(r.status).json({ error: `DALL-E error: ${errText.slice(0, 300)}` });
     }
-    const data = await r.json() as { data: Array<{ url: string; revised_prompt?: string }> };
+    // gpt-image-1 returns b64_json, not url
+    const data = await r.json() as { data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
     const first = data.data?.[0];
-    if (!first?.url) return res.status(500).json({ error: "no image returned" });
-    res.json({ ok: true, url: first.url, revisedPrompt: first.revised_prompt || null });
+    if (!first) return res.status(500).json({ error: "no image returned" });
+    const imageUrl = first.url ?? (first.b64_json ? `data:image/png;base64,${first.b64_json}` : null);
+    if (!imageUrl) return res.status(500).json({ error: "no image data in response" });
+    res.json({ ok: true, url: imageUrl, revisedPrompt: first.revised_prompt || null });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "Image generation failed" });
   }

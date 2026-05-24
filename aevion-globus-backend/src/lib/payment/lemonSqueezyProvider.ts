@@ -40,6 +40,7 @@ import type {
   PaymentResult,
   PaymentStatus,
 } from "./provider";
+import { resolveLemonSqueezyVariant } from "../../data/lemonSqueezyVariants";
 
 const LS_BASE = "https://api.lemonsqueezy.com/v1";
 
@@ -107,7 +108,11 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
 
   async createIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
     const storeId = requiredEnv("LEMON_SQUEEZY_STORE_ID");
-    const variantId = requiredEnv("LEMON_SQUEEZY_DEFAULT_VARIANT_ID");
+    // Reference-based mapping first ("bundle:fintech", "all-access" → published
+    // variant), env DEFAULT acts as the catch-all when the slot isn't filled
+    // yet OR when reference doesn't match any known bundle.
+    const mapped = resolveLemonSqueezyVariant(input.reference);
+    const variantId = mapped?.variantId ?? requiredEnv("LEMON_SQUEEZY_DEFAULT_VARIANT_ID");
     const intentId = randomUUID();
     const base = publicBaseUrl();
 

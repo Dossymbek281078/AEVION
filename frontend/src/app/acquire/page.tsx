@@ -437,6 +437,36 @@ export default function AcquirePage() {
         </div>
       </section>
 
+      {/* STICKY LOI BAR */}
+      <div style={{
+        position: "sticky",
+        bottom: 0,
+        zIndex: 50,
+        background: "linear-gradient(180deg, rgba(5,8,16,0) 0%, rgba(5,8,16,0.94) 30%, #050810 100%)",
+        borderTop: "1px solid rgba(16,185,129,0.25)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+      }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 24px", display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#10b981", textTransform: "uppercase" }}>
+              Acquisition floor · $1B net · Senior Advisor 24m
+            </div>
+            <div style={{ fontSize: 13, color: "#cbd5e1" }}>
+              Готовы подписать LOI с восемью пунктами в 5 рабочих дней. Также — <Link href="/pilot" style={{ color: "#10b981", textDecoration: "underline" }}>90-day pilot</Link> с 100% credit против acquisition.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/pilot" style={{ display: "inline-flex", alignItems: "center", padding: "12px 20px", fontSize: 13, fontWeight: 800, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "#cbd5e1", borderRadius: 12, textDecoration: "none" }}>
+              90-day pilot
+            </Link>
+            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20acquisition%20-%20LOI%20inquiry" style={{ display: "inline-flex", alignItems: "center", padding: "12px 22px", fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg,#10b981,#3b82f6)", color: "#0a0e1a", borderRadius: 12, textDecoration: "none", boxShadow: "0 8px 22px rgba(16,185,129,0.25)" }}>
+              Запросить LOI · yahiin1978@gmail.com
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* FOOTER */}
       <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
@@ -449,6 +479,7 @@ export default function AcquirePage() {
             <Link href="/constitution" style={{ color: "#94a3b8", textDecoration: "none" }}>Constitution</Link>
             <Link href="/devhub" style={{ color: "#94a3b8", textDecoration: "none" }}>DevHub</Link>
             <Link href="/planet" style={{ color: "#94a3b8", textDecoration: "none" }}>Planet</Link>
+            <Link href="/pilot" style={{ color: "#94a3b8", textDecoration: "none" }}>90-day pilot</Link>
           </div>
         </div>
       </section>

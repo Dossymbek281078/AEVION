@@ -84,7 +84,7 @@ import PlayerStatsDashboard from "./PlayerStatsDashboard";
 import AvatarPicker from "./AvatarPicker";
 import FideCalibrationPanel from "./FideCalibrationPanel";
 import ClockPressureDrill from "./ClockPressureDrill";
-import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage } from "./ratingCalibration";
+import { calibrateFromGames, estimateFideFromCPI, saveEstimateToStorage, loadEstimateFromStorage, type SavedGameForCPI } from "./ratingCalibration";
 import AntiCheatPanel from "./AntiCheatPanel";
 import { analyzeGameForCheating, buildReport, updateSessionBaseline, type AntiCheatResult } from "./anticheat";
 import { BehaviorTracker } from "./behaviorTracker";
@@ -968,7 +968,11 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(savedGames.length<3)return;
     try{
-      const est=estimateFideFromCPI(calibrateFromGames(savedGames));
+      // SavedGame.analysis[].quality is open `string`; SavedGameForCPI expects
+      // a narrow union ("blunder"|"mistake"|...). calibrateFromGames only
+      // compares quality via === against those literals, so the runtime is
+      // identical — cast through unknown to bypass TS structural strictness.
+      const est=estimateFideFromCPI(calibrateFromGames(savedGames as unknown as SavedGameForCPI[]));
       saveEstimateToStorage(est.fide);
     }catch{}
   },[savedGames]);
@@ -4031,7 +4035,7 @@ export default function CyberChessPage(){
   const runAnalysis=useCallback(async(depth=16)=>{
     if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}
     sAnalyzing(true);sAnalysis([]);
-    const results:{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]=[];
+    const results:{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]=[];
     let prevCp=0;
     for(let i=0;i<fenHist.length;i++){
       const fen=fenHist[i];const turn=fen.split(" ")[1];
@@ -4049,7 +4053,7 @@ export default function CyberChessPage(){
         else if(drop>=150)quality="mistake";
         else if(drop>=70)quality="inacc";
         else if(drop<=-50)quality="great";
-        results.push({move:i,cp,mate,quality});
+        results.push({move:i,cp,mate,quality,cpLoss:Math.max(0,drop)});
       }
       prevCp=cp;
     }
@@ -5910,8 +5914,8 @@ export default function CyberChessPage(){
           <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <div style={{display:"flex",gap:2,flexShrink:0,marginTop:2}}>
-              <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
-              <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+              <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface1,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+              <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface1,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
             </div>
           </div>
 
@@ -11975,7 +11979,7 @@ ${question.trim()}`;
     <FideCalibrationPanel
       open={showFidePanel}
       onClose={()=>sShowFidePanel(false)}
-      initialMetrics={calibrateFromGames(savedGames)}
+      initialMetrics={calibrateFromGames(savedGames as unknown as SavedGameForCPI[])}
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />

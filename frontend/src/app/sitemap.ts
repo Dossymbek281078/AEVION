@@ -109,6 +109,13 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/developers/fintech/rate-limits", changeFrequency: "monthly", priority: 0.5 },
   // Launch status
   { path: "/launch-status", changeFrequency: "hourly", priority: 0.5 },
+  // Constitution module
+  { path: "/constitution",             changeFrequency: "daily",   priority: 0.9 },
+  { path: "/constitution/leaderboard", changeFrequency: "hourly",  priority: 0.8 },
+  { path: "/constitution/stats",       changeFrequency: "daily",   priority: 0.7 },
+  { path: "/constitution/api",         changeFrequency: "monthly", priority: 0.65 },
+  { path: "/constitution/learn",       changeFrequency: "monthly", priority: 0.75 },
+  { path: "/constitution/embed",       changeFrequency: "monthly", priority: 0.45 },
 ];
 
 const DEFAULT_CHANGE_FREQ: MetadataRoute.Sitemap[number]["changeFrequency"] = "weekly";

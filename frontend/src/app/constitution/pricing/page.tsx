@@ -119,9 +119,35 @@ const FAQS: Array<{ q: string; a: string }> = [
 
 export default function ConstitutionPricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [showWaitlist, setShowWaitlist] = useState<boolean>(false);
   const { track } = useFunnel();
 
   useEffect(() => { track("page_view", { source: "pricing" }); }, [track]);
+
+  // Waitlist modal triggers: 30s on page OR exit-intent (mouseleave at top)
+  useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = !!window.localStorage.getItem("constitution.waitlist.dismissed");
+    } catch { /* ignore */ }
+    if (dismissed) return;
+    const timer = window.setTimeout(() => setShowWaitlist(true), 30_000);
+    const onMouseLeave = (e: MouseEvent) => {
+      if (e.clientY < 5) setShowWaitlist(true);
+    };
+    document.addEventListener("mouseleave", onMouseLeave);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("mouseleave", onMouseLeave);
+    };
+  }, []);
+
+  const closeWaitlist = () => {
+    setShowWaitlist(false);
+    try {
+      window.localStorage.setItem("constitution.waitlist.dismissed", new Date().toISOString());
+    } catch { /* ignore */ }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
@@ -263,6 +289,123 @@ export default function ConstitutionPricingPage() {
             .
           </p>
         </footer>
+      </div>
+      {showWaitlist && <WaitlistModal onClose={closeWaitlist} />}
+    </div>
+  );
+}
+
+function WaitlistModal({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState<string>("");
+  const [busy, setBusy] = useState<boolean>(false);
+  const [done, setDone] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Email не похож на email");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api-backend/api/constitution/waitlist/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, source: "pricing-modal" }),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`HTTP ${r.status}: ${t.slice(0, 120)}`);
+      }
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "subscribe_failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+    >
+      <div className="bg-[#0b1736] border border-fuchsia-400/40 rounded-xl p-6 max-w-md w-full">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <div className="text-3xl mb-2">📨</div>
+            <h3 className="text-xl font-bold text-fuchsia-300">
+              Подпишись на лонч Pro
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#9aa3c0] hover:text-white text-xl"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        {!done ? (
+          <>
+            <p className="text-sm text-[#9aa3c0] mb-4">
+              Получишь letter с 30% early-bird скидкой за первый месяц + weekly
+              digest «топ-5 конституций недели». Anti-spam: 1 письмо в неделю максимум.
+            </p>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              maxLength={120}
+              className="w-full bg-[#050a1a] border border-fuchsia-400/30 rounded px-3 py-2 text-sm mb-2"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void submit();
+                }
+              }}
+            />
+            {error && (
+              <div className="text-xs text-rose-400 mb-2">{error}</div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-sm px-3 py-1.5 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
+              >
+                Не сейчас
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={busy || !email.includes("@")}
+                className="px-4 py-1.5 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] font-bold text-sm disabled:opacity-40"
+              >
+                {busy ? "..." : "Подписаться →"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-emerald-300 mb-3">
+              ✓ Готово. Письмо с подтверждением придёт через минуту-две.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full px-4 py-2 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-sm"
+            >
+              Окей, закрыть
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

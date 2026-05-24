@@ -33,13 +33,14 @@ import { mkdirSync } from "node:fs";
  * ──────────────────────────────────────────────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false };
+  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false, noStd: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pgn") args.pgn = argv[++i];
     else if (a === "--output") args.output = argv[++i];
     else if (a === "--features-csv") args.featuresCsv = argv[++i];
     else if (a === "--weighted") args.weighted = true;
+    else if (a === "--no-std") args.noStd = true;
     else if (a === "--limit") args.limit = Number(argv[++i]) || Infinity;
     else if (a === "--help" || a === "-h") {
       console.log(
@@ -482,7 +483,9 @@ function main() {
   // Both come in with the sign already flipped so positive coefficients
   // mean "higher Elo" — matches the convention of the existing columns.
   // Tactical dropped — coefficient was noise across the last 3 fits.
-  const richMode = rows.length > 0 && rows[0].features.length >= 8;
+  const hasRichCols = rows.length > 0 && rows[0].features.length >= 8;
+  const useStd = hasRichCols && !args.noStd;
+  const richMode = hasRichCols;  // median always added when CSV has rich cols
   const X = rows.map(r => {
     const [acc, open, , end, blu, tim, median, std] = r.features;
     const base = [
@@ -493,10 +496,13 @@ function main() {
       -Math.abs(tim - 30),     // time penalty (always ≤ 0)
       1                        // bias
     ];
-    return richMode ? [...base, -median, -std] : base;
+    if (!richMode) return base;
+    return useStd ? [...base, -median, -std] : [...base, -median];
   });
   const y = rows.map(r => r.targetFide);
-  if (richMode) console.log(`      Rich design matrix: 8 features (median + std added)`);
+  if (richMode) {
+    console.log(`      Rich design matrix: ${useStd ? "8 features (median + std)" : "7 features (median only; std dropped via --no-std)"}`);
+  }
 
   // Optional weighted least-squares — counters bracket-density bias in OLS.
   // Bucket each target Elo into 200-Elo bins, set weight = 1 / count(bucket).
@@ -527,9 +533,10 @@ function main() {
   }
 
   const coeffs = leastSquaresFit(Xfit, yfit);
-  // Layout: 6 base + optional 2 rich = up to 8 coeffs.
-  //   richMode false: [wAcc, wOpen, wEnd, wBlu, wTime, bias]
-  //   richMode true:  [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian, wStd]
+  // Layout: 6 base + optional rich = up to 8 coeffs.
+  //   richMode false:                [wAcc, wOpen, wEnd, wBlu, wTime, bias]
+  //   richMode + useStd false:       [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian]
+  //   richMode + useStd true:        [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian, wStd]
   const [wAcc, wOpen, wEnd, wBlu, wTime, bias, wMedian = 0, wStd = 0] = coeffs;
   const wTac = 0;  // dropped from design matrix, kept zero in output JSON
 
@@ -591,7 +598,8 @@ function main() {
       endgame: round(wEnd, 4),
       blunder: round(wBlu, 4),
       time: round(wTime, 4),
-      ...(richMode ? { median: round(wMedian, 4), std: round(wStd, 4) } : {})
+      ...(richMode ? { median: round(wMedian, 4) } : {}),
+      ...(richMode && useStd ? { std: round(wStd, 4) } : {})
     },
     bias: round(bias, 4),
     fitStats: {

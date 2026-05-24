@@ -1,0 +1,290 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useFunnel } from "@/lib/useFunnel";
+
+type Tier = {
+  id: "free" | "pro" | "team";
+  name: string;
+  price: string;
+  period: string;
+  tagline: string;
+  features: string[];
+  cta: string;
+  ctaHref: string;
+  highlight?: boolean;
+};
+
+const TIERS: Tier[] = [
+  {
+    id: "free",
+    name: "Free",
+    price: "$0",
+    period: "forever",
+    tagline: "Для исследования и первых сценариев",
+    features: [
+      "До 5 сохранённых сценариев",
+      "AI-советник — 10 запросов в день",
+      "Базовый PDF (с водяным знаком unsigned)",
+      "Все ползунки, режимы, scatter, Globus",
+      "Academy — все 8 уроков",
+      "Сохранение в localStorage (черновик)",
+    ],
+    cta: "Открыть редактор →",
+    ctaHref: "/constitution",
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "$9",
+    period: "/ мес",
+    tagline: "Безлимит + AI без cap + clean PDF",
+    features: [
+      "♾ Безлимитные сохранения в облаке",
+      "♾ AI-советник без дневного лимита",
+      "🎨 PDF без водяных знаков, кастомные темы",
+      "🌐 Embed-виджет на свой сайт",
+      "📊 Личная аналитика моих сценариев",
+      "🎯 Priority support через email",
+      "Всё из Free",
+    ],
+    cta: "Upgrade to Pro →",
+    ctaHref: "/api-backend/api/paddle/checkout-session?product=constitution-pro",
+    highlight: true,
+  },
+  {
+    id: "team",
+    name: "Team",
+    price: "$49",
+    period: "/ мес",
+    tagline: "Для классов, think-tanks, исследовательских групп",
+    features: [
+      "👥 5 seats (доп. seat — $7/mo)",
+      "🔐 Admin dashboard (роли + биллинг)",
+      "🤝 Shared scenarios между seats",
+      "📥 CSV-экспорт всех scenarios команды",
+      "🔗 Privately-branded embed (свой логотип)",
+      "🎓 Academy с прогрессом по seat'ам",
+      "🎯 Priority support через Slack",
+      "Всё из Pro × 5",
+    ],
+    cta: "Get Team →",
+    ctaHref: "/api-backend/api/paddle/checkout-session?product=constitution-team",
+  },
+];
+
+const FAQS: Array<{ q: string; a: string }> = [
+  {
+    q: "Чем Pro отличается от Free?",
+    a: "Free ограничен 5 сохранёнными сценариями и 10 AI-запросами в день. PDF в Free имеет водяной знак «unsigned draft», если не подписан через QSign. Pro снимает все эти лимиты, добавляет кастомные темы, embed-виджет без watermark, и личную аналитику.",
+  },
+  {
+    q: "Можно ли отменить подписку в любой момент?",
+    a: "Да. Оплата идёт через Paddle, в личном кабинете в любой момент можно отменить — доступ к Pro/Team сохраняется до конца оплаченного периода. Никаких автопродлений без подтверждения, никаких скрытых периодов.",
+  },
+  {
+    q: "Что значит «5 seats» в Team?",
+    a: "Один Team-аккаунт даёт 5 индивидуальных Pro-логинов с общим биллингом и админкой. Идеально для университетского класса (преподаватель + 4 ассистента), think-tank или 5-человечной исследовательской группы. Дополнительный seat стоит $7/mo.",
+  },
+  {
+    q: "Что такое QSign и зачем подписывать сценарий?",
+    a: "QSign — это HMAC-SHA256 подпись от AEVION-инфраструктуры. Подписанный сценарий получает уникальный signature hex, который можно перепроверить через /api/qsign/verify в любой момент. Это значит, что один и тот же сценарий у двух разных пользователей получает одинаковую подпись — артефакт становится верифицируемым.",
+  },
+  {
+    q: "Можно ли использовать Constitution в учебных курсах?",
+    a: "Да. Team-план специально для этого. У преподавателя и студентов отдельные аккаунты, общие сценарии, прогресс по Academy на каждого. Если есть особые требования (large class, white-label), напишите на support@aevion.app — посчитаем кастомно.",
+  },
+  {
+    q: "Что делать если AI-советник не работает?",
+    a: "Constitution использует QCoreAI с настройкой 5 провайдеров (Claude, GPT-4, Gemini, DeepSeek, Grok). Если ни один не настроен — возвращается эвристический stub. На Pro доступны все провайдеры с приоритетом скорости и качества.",
+  },
+  {
+    q: "Какие данные хранятся?",
+    a: "Сценарии: title, sliders (8 чисел), вычисленный regime, метрики, timestamp. Никаких персональных данных мы не запрашиваем. Опубликованные на Planet артефакты добавляют QSign-подпись (HMAC-SHA256) и публичный publishedAt. Анонимные голоса хешируются через fingerprint(IP+UA) — мы не храним сырой IP.",
+  },
+  {
+    q: "Есть ли образовательный grant?",
+    a: "Да. Для университетов, исследовательских центров и некоммерческих организаций мы даём Team-план бесплатно при подтверждении через .edu/.org email. Заявка: support@aevion.app с темой «Education grant».",
+  },
+  {
+    q: "Можно ли self-host Constitution?",
+    a: "Код открыт — backend на Express + Postgres, frontend на Next.js. Развернуть на своём Railway/Vercel — около часа. Hosted SaaS даёт: Pro-фичи, поддержку, авто-обновления, общий Planet leaderboard со всеми пользователями. Self-host подойдёт если у тебя >100 seats или нужен on-prem.",
+  },
+  {
+    q: "Как работает embed на чужом сайте?",
+    a: "На Free доступен base embed с AEVION watermark. На Pro/Team — clean embed без бренда, можно даже свой логотип на Team. Iframe-snippet: <iframe src=\"https://aevion.app/constitution/embed?preset=nordic&theme=light\" width=580 height=500>. URL-params: ?artifact, ?sliders, ?preset, ?country, ?theme, ?compact.",
+  },
+];
+
+export default function ConstitutionPricingPage() {
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const { track } = useFunnel();
+
+  useEffect(() => { track("page_view", { source: "pricing" }); }, [track]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b1736] via-[#131f3d] to-[#050a1a] text-[#e7ecf8] p-6">
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-10 text-center">
+          <Link href="/constitution" className="text-[#d4af37] hover:underline text-sm">
+            ← Constitution
+          </Link>
+          <h1 className="text-3xl md:text-5xl font-bold mt-2 text-[#d4af37]">
+            Constitution Pricing
+          </h1>
+          <p className="text-[#9aa3c0] mt-3 max-w-2xl mx-auto">
+            Free на старт. $9/мес — безлимит. $49/мес — для команды. Отмена в любой момент,
+            без скрытых периодов.
+          </p>
+        </header>
+
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
+          {TIERS.map((tier) => (
+            <div
+              key={tier.id}
+              className={`relative bg-[#0b1736]/60 border rounded-2xl p-6 ${
+                tier.highlight
+                  ? "border-fuchsia-400/60 ring-2 ring-fuchsia-400/30 scale-[1.02]"
+                  : "border-[#d4af37]/25"
+              }`}
+            >
+              {tier.highlight && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] text-xs font-bold px-3 py-1 rounded-full">
+                  ★ MOST POPULAR
+                </div>
+              )}
+              <div className="text-center">
+                <div className="text-xs uppercase tracking-wider text-[#9aa3c0]">
+                  {tier.name}
+                </div>
+                <div className="mt-2 flex items-baseline justify-center gap-1">
+                  <span className="text-5xl font-bold text-[#d4af37]">{tier.price}</span>
+                  <span className="text-sm text-[#9aa3c0]">{tier.period}</span>
+                </div>
+                <div className="text-sm text-[#f5d27a] mt-2">{tier.tagline}</div>
+              </div>
+              <ul className="mt-5 space-y-2 text-sm">
+                {tier.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-emerald-400 mt-0.5">✓</span>
+                    <span className="text-[#e7ecf8]">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={tier.ctaHref}
+                onClick={() => {
+                  if (tier.id !== "free") track("upgrade_click", { tier: tier.id });
+                }}
+                className={`mt-6 block text-center px-4 py-3 rounded-lg font-bold transition ${
+                  tier.highlight
+                    ? "bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] hover:opacity-90"
+                    : "border border-[#d4af37]/40 text-[#d4af37] hover:bg-[#d4af37]/10"
+                }`}
+              >
+                {tier.cta}
+              </a>
+            </div>
+          ))}
+        </section>
+
+        <section className="bg-[#0b1736]/40 border border-[#d4af37]/15 rounded-xl p-6 mb-12">
+          <h2 className="text-xl font-bold text-[#f5d27a] mb-4 text-center">
+            Comparison
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#d4af37]/20">
+                  <th className="text-left py-2 text-[#9aa3c0] font-normal">Feature</th>
+                  <th className="py-2 text-[#d4af37]">Free</th>
+                  <th className="py-2 text-[#f472b6]">Pro</th>
+                  <th className="py-2 text-cyan-300">Team</th>
+                </tr>
+              </thead>
+              <tbody className="text-[#e7ecf8]">
+                <CompareRow feature="Сохранённые сценарии" free="5" pro="♾" team="♾" />
+                <CompareRow feature="AI-советник (запросов/день)" free="10" pro="♾" team="♾" />
+                <CompareRow feature="PDF без watermark" free="—" pro="✓" team="✓" />
+                <CompareRow feature="Custom темы" free="—" pro="✓" team="✓" />
+                <CompareRow feature="Embed-виджет" free="watermarked" pro="clean" team="branded" />
+                <CompareRow feature="Seats" free="1" pro="1" team="5+" />
+                <CompareRow feature="Admin dashboard" free="—" pro="—" team="✓" />
+                <CompareRow feature="Shared scenarios" free="—" pro="—" team="✓" />
+                <CompareRow feature="CSV-экспорт" free="—" pro="✓" team="✓" />
+                <CompareRow feature="Priority support" free="—" pro="Email" team="Slack" />
+                <CompareRow feature="Real-time collab" free="✓" pro="✓" team="✓" />
+                <CompareRow feature="Academy + сертификат" free="✓" pro="✓" team="✓" />
+                <CompareRow feature="Planet publish" free="✓" pro="✓" team="✓" />
+                <CompareRow feature="Public REST API" free="✓ (240/min)" pro="✓ (240/min)" team="✓ (1200/min)" />
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-bold text-[#f5d27a] mb-4 text-center">FAQ</h2>
+          <div className="max-w-3xl mx-auto space-y-2">
+            {FAQS.map((faq, i) => {
+              const open = openFaq === i;
+              return (
+                <div
+                  key={i}
+                  className="bg-[#0b1736]/60 border border-[#d4af37]/20 rounded-lg overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    className="w-full text-left px-4 py-3 flex justify-between items-center hover:bg-[#d4af37]/5"
+                  >
+                    <span className="font-medium">{faq.q}</span>
+                    <span className="text-[#d4af37] text-xl flex-shrink-0 ml-3">
+                      {open ? "−" : "+"}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="px-4 pb-4 text-sm text-[#9aa3c0] leading-relaxed border-t border-[#d4af37]/10">
+                      <div className="pt-3">{faq.a}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <footer className="mt-12 text-center text-xs text-[#9aa3c0]">
+          <p>
+            Платежи через Paddle. Cancel anytime. 14-day money-back guarantee. Вопросы —{" "}
+            <a href="mailto:support@aevion.app" className="text-[#d4af37] hover:underline">
+              support@aevion.app
+            </a>
+            .
+          </p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function CompareRow({
+  feature,
+  free,
+  pro,
+  team,
+}: {
+  feature: string;
+  free: string;
+  pro: string;
+  team: string;
+}) {
+  return (
+    <tr className="border-b border-[#d4af37]/10">
+      <td className="py-2 text-[#9aa3c0]">{feature}</td>
+      <td className="text-center py-2 font-mono">{free}</td>
+      <td className="text-center py-2 font-mono text-[#f472b6]">{pro}</td>
+      <td className="text-center py-2 font-mono text-cyan-300">{team}</td>
+    </tr>
+  );
+}

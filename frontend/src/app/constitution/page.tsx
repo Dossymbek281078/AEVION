@@ -852,6 +852,12 @@ export default function ConstitutionPage() {
               >
                 📝 Blog
               </Link>
+              <Link
+                href="/constitution/pricing"
+                className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-[#0b1736] font-bold hover:opacity-90"
+              >
+                💎 Pricing
+              </Link>
             </div>
           )}
           {aiOpen && (

@@ -120,6 +120,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/constitution/blog/why-norway-90-rule-of-law",   changeFrequency: "monthly", priority: 0.65 },
   { path: "/constitution/blog/magna-carta-to-open-access",  changeFrequency: "monthly", priority: 0.65 },
   { path: "/constitution/blog/growing-pie-is-everything",   changeFrequency: "monthly", priority: 0.65 },
+  { path: "/constitution/pricing",     changeFrequency: "weekly",  priority: 0.8 },
 ];
 
 const DEFAULT_CHANGE_FREQ: MetadataRoute.Sitemap[number]["changeFrequency"] = "weekly";

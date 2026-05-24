@@ -108,7 +108,7 @@
 **Ответ:** Pre-revenue в большинстве линий **по сознательному выбору**.
 
 - Приоритет последних 18 месяцев — **shipping breadth** (30+ модулей в проде).
-- Монетизация в части модулей включена (CyberChess Premium 500/5000 AEV tiers, QPayNet KYC через Stripe-rails, QBuild ATS pilot-deals).
+- Монетизация в части модулей включена (CyberChess Premium 500/5000 AEV tiers, QPayNet KYC через процессинговые рельсы (Stripe / Adyen / local processors), QBuild ATS pilot-deals).
 - **Revenue acceleration зависит от capital-injection и distribution-leverage** — именно того, что приходит со сделкой с стратегическим покупателем.
 - Mid-case proj $1.6B ARR к 2030 — см. `05_FINANCIAL_APPENDIX.md`.
 

@@ -70,7 +70,7 @@ verifiable. Daily smoke 24/24, transparent health board.
 For Visa, the relevant pillars:
 
   - AEVION Bank + Payments Rail + QPayNet — embedded BaaS with KYC/AML
-    already wired through Stripe-rails. Visa Direct ecosystem extension.
+    already wired through payment processor rails (Stripe / Adyen). Visa Direct ecosystem extension.
   - QSign v2 + QRight — trust infrastructure for an era when every digital
     transaction needs provenance.
   - DevHub — single AEV-billed workspace across nine SaaS integrations.

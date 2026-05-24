@@ -330,7 +330,11 @@ export default function FideCalibrationPanel({
           </div>
 
           {SLIDERS.map((s) => {
-            const val = metrics[s.key];
+            // CPIMetrics has optional fields (medianCpLoss, cpLossStd) so TS
+            // widens metrics[s.key] to number | undefined even though every
+            // SLIDERS entry references a required key. Default to 0 to satisfy
+            // strict null checks without narrowing SliderConfig's key type.
+            const val = metrics[s.key] ?? 0;
             const displayVal = s.step < 1
               ? val.toFixed(2)
               : Math.round(val).toString();

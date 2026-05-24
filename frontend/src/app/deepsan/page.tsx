@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import StatsBar from "./components/StatsBar";
 import TaskCard, { type Task, type Priority } from "./components/TaskCard";
@@ -249,7 +250,8 @@ export default function DeepSanPage() {
         >
           ← AEVION · DeepSan
         </Link>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <ModulePricingChip moduleId="deepsan" theme="dark" />
           <span
             style={{
               fontSize: "11px",

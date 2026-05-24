@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { SubmitIdeaForm } from "./components/SubmitIdeaForm";
@@ -147,6 +148,9 @@ export default function StartupExchangePage() {
     <>
       <Wave1Nav />
       <ProductPageShell>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="startup-exchange" theme="light" />
+        </div>
         {/* Hero */}
         <div style={{ marginBottom: 24 }}>
           <div

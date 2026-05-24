@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ThreatModelSelector from "./components/ThreatModelSelector";
 import RoutingSimulator from "./components/RoutingSimulator";
@@ -80,6 +81,8 @@ export default function ShadowNetPage() {
           >
             simulator
           </span>
+          <span style={{ flex: 1 }} />
+          <ModulePricingChip moduleId="shadownet" theme="dark" />
         </div>
       </header>
 

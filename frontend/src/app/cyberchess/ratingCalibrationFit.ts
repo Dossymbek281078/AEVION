@@ -63,6 +63,16 @@ export type CalibrationWeights = {
     bias: number;
     fitStats?: { rmseElo: number; r2: number };
   };
+  /** Mirror of floorFit for the Beginner end. When the primary prediction
+   *  falls below the threshold, recompute with these low-Elo specialist
+   *  coefficients — prevents nonlinear over-correction clamping to 400. */
+  ceilingFit?: {
+    threshold: number;
+    samples: number;
+    coefficients: CalibrationWeights["coefficients"];
+    bias: number;
+    fitStats?: { rmseElo: number; r2: number };
+  };
   notes?: string[];
 };
 
@@ -238,6 +248,14 @@ export function estimateFideFromCPIWithFit(
   // the bracket-specialized coefficients. Crushes GM RMSE 390 → 122.
   if (weights.floorFit && rawFide >= weights.floorFit.threshold) {
     rawFide = computeRaw(weights.floorFit.coefficients, weights.floorFit.bias);
+  }
+
+  // Ceiling-fit second pass: mirror for the Beginner end. Nonlinear
+  // terms can over-penalize at low Elo, pushing raw predictions below
+  // 400 (the clamp). The specialist fit uses coefs trained only on
+  // <threshold rows so it stays well-calibrated at the bottom.
+  if (weights.ceilingFit && rawFide < weights.ceilingFit.threshold) {
+    rawFide = computeRaw(weights.ceilingFit.coefficients, weights.ceilingFit.bias);
   }
 
   const fide = Math.max(400, Math.min(3000, Math.round(rawFide)));

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-05-24T10:57:26.591Z",
+  "generatedAt": "2026-05-24T14:17:07.039Z",
   "sourceFile": "C:\\Users\\user\\AppData\\Local\\Temp\\super-rich-full.csv",
   "samples": 3000,
   "coefficients": {
@@ -42,6 +42,28 @@
     "fitStats": {
       "rmseElo": 121.55,
       "r2": -0.0254
+    }
+  },
+  "ceilingFit": {
+    "threshold": 1500,
+    "samples": 632,
+    "coefficients": {
+      "accuracy": -2.1134,
+      "opening": -4.6855,
+      "tactical": 0,
+      "endgame": 205.5233,
+      "blunder": -1182.8029,
+      "time": 0,
+      "median": 1.3454,
+      "std": -0.186,
+      "accuracy2": -0.02108,
+      "blunder2": 2784.7057,
+      "accBlu": 64.5194
+    },
+    "bias": 1248.7381,
+    "fitStats": {
+      "rmseElo": 114.81,
+      "r2": 0.0295
     }
   },
   "notes": [

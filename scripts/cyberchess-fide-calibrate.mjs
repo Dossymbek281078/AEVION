@@ -33,7 +33,7 @@ import { mkdirSync } from "node:fs";
  * ──────────────────────────────────────────────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false, noStd: false, nonlinear: false, floorFit: false };
+  const args = { pgn: null, output: null, limit: Infinity, featuresCsv: null, weighted: false, noStd: false, nonlinear: false, floorFit: false, ceilingFit: false };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--pgn") args.pgn = argv[++i];
@@ -43,6 +43,7 @@ function parseArgs(argv) {
     else if (a === "--no-std") args.noStd = true;
     else if (a === "--nonlinear") args.nonlinear = true;
     else if (a === "--floor-fit") args.floorFit = true;
+    else if (a === "--ceiling-fit") args.ceilingFit = true;
     else if (a === "--limit") args.limit = Number(argv[++i]) || Infinity;
     else if (a === "--help" || a === "-h") {
       console.log(
@@ -615,71 +616,74 @@ function main() {
     console.log(`        ${b.name.padEnd(24)} n=${String(indices.length).padStart(5)}  RMSE=${rmseB.toFixed(1)}`);
   }
 
-  // Optional second pass: restrict to high-Elo rows (>= 2400) and refit
-  // with the same feature layout. The frontend applies these coefficients
-  // when the first-pass prediction lands above the threshold — fixes the
-  // top-bracket pull-toward-mean that lifts GM RMSE 350+ in the global fit.
-  let floorFitBlock = null;
-  if (args.floorFit) {
-    const FLOOR_THRESHOLD = 2400;
-    const hiIdx = y.map((v, i) => v >= FLOOR_THRESHOLD ? i : -1).filter(i => i >= 0);
-    if (hiIdx.length < 30) {
-      console.log(`[4b/5] --floor-fit: only ${hiIdx.length} rows ≥${FLOOR_THRESHOLD} — skipping (need ≥30)`);
-    } else {
-      console.log(`[4b/5] Floor-fit pass on ${hiIdx.length} rows ≥${FLOOR_THRESHOLD}…`);
-      const Xhi = hiIdx.map(i => X[i]);
-      const yhi = hiIdx.map(i => y[i]);
-      // Apply the same weighted-LS scaling to the floor subset (re-counts
-      // buckets within the subset so weights make sense for that range).
-      let XhiFit = Xhi, yhiFit = yhi;
-      if (args.weighted) {
-        const WEIGHT_FLOOR = 50;
-        const bracket = (elo) => Math.floor(elo / 200);
-        const counts2 = new Map();
-        for (const v of yhi) counts2.set(bracket(v), (counts2.get(bracket(v)) || 0) + 1);
-        const wRaw = yhi.map(v => 1 / Math.max(WEIGHT_FLOOR, counts2.get(bracket(v))));
-        const meanW2 = wRaw.reduce((s,x)=>s+x,0) / wRaw.length;
-        const sqrtW = wRaw.map(wi => Math.sqrt(wi / meanW2));
-        XhiFit = Xhi.map((row, i) => row.map(v => v * sqrtW[i]));
-        yhiFit = yhi.map((v, i) => v * sqrtW[i]);
-      }
-      const coeffsHi = leastSquaresFit(XhiFit, yhiFit);
-      // Same layout: [acc, open, end, blu, time, bias, median?, std?, acc², blu², acc·blu?]
-      const predictedHi = Xhi.map(row => row.reduce((s, v, i) => s + v * coeffsHi[i], 0));
-      const rmseHi = rmse(predictedHi, yhi);
-      const meanHi = yhi.reduce((s, v) => s + v, 0) / yhi.length;
-      const ssTotHi = yhi.reduce((s, v) => s + (v - meanHi) ** 2, 0);
-      const ssResHi = predictedHi.reduce((s, v, i) => s + (v - yhi[i]) ** 2, 0);
-      const r2Hi = 1 - ssResHi / ssTotHi;
-      console.log(`      Floor fit: RMSE=${rmseHi.toFixed(1)}  R²=${r2Hi.toFixed(4)}  bias=${coeffsHi[5].toFixed(2)}`);
-
-      let n = 6;
-      const floorCoefs = {
-        accuracy: round(coeffsHi[0], 4),
-        opening: round(coeffsHi[1], 4),
-        tactical: 0,
-        endgame: round(coeffsHi[2], 4),
-        blunder: round(coeffsHi[3], 4),
-        time: round(coeffsHi[4], 4),
-      };
-      if (richMode) {
-        floorCoefs.median = round(coeffsHi[n++], 4);
-        if (useStd) floorCoefs.std = round(coeffsHi[n++], 4);
-      }
-      if (nonlin) {
-        floorCoefs.accuracy2 = round(coeffsHi[n++], 6);
-        floorCoefs.blunder2 = round(coeffsHi[n++], 4);
-        floorCoefs.accBlu = round(coeffsHi[n++], 4);
-      }
-      floorFitBlock = {
-        threshold: FLOOR_THRESHOLD,
-        samples: hiIdx.length,
-        coefficients: floorCoefs,
-        bias: round(coeffsHi[5], 4),
-        fitStats: { rmseElo: round(rmseHi, 2), r2: round(r2Hi, 4) },
-      };
+  // Optional second-pass bracket fits. floor-fit restricts to high-Elo
+  // rows (≥2400) to fix the GM-bracket pull-toward-mean; ceiling-fit
+  // mirrors it on the low end (<1500) where nonlinear over-corrections
+  // pushed Beginner predictions into the 400-Elo clamp.
+  function runBracketFit(label, indicesPredicate, thresholdValue, stepName) {
+    const idxs = y.map((v, i) => indicesPredicate(v) ? i : -1).filter(i => i >= 0);
+    if (idxs.length < 30) {
+      console.log(`[${stepName}] --${label}: only ${idxs.length} matching rows — skipping (need ≥30)`);
+      return null;
     }
+    console.log(`[${stepName}] ${label} pass on ${idxs.length} rows…`);
+    const Xb = idxs.map(i => X[i]);
+    const yb = idxs.map(i => y[i]);
+    let XbFit = Xb, ybFit = yb;
+    if (args.weighted) {
+      const WEIGHT_FLOOR = 50;
+      const bracket = (elo) => Math.floor(elo / 200);
+      const cnts = new Map();
+      for (const v of yb) cnts.set(bracket(v), (cnts.get(bracket(v)) || 0) + 1);
+      const wRaw = yb.map(v => 1 / Math.max(WEIGHT_FLOOR, cnts.get(bracket(v))));
+      const meanW = wRaw.reduce((s,x)=>s+x,0) / wRaw.length;
+      const sqrtW = wRaw.map(wi => Math.sqrt(wi / meanW));
+      XbFit = Xb.map((row, i) => row.map(v => v * sqrtW[i]));
+      ybFit = yb.map((v, i) => v * sqrtW[i]);
+    }
+    const cb = leastSquaresFit(XbFit, ybFit);
+    const predB = Xb.map(row => row.reduce((s, v, i) => s + v * cb[i], 0));
+    const rmseB = rmse(predB, yb);
+    const meanB = yb.reduce((s, v) => s + v, 0) / yb.length;
+    const ssTotB = yb.reduce((s, v) => s + (v - meanB) ** 2, 0);
+    const ssResB = predB.reduce((s, v, i) => s + (v - yb[i]) ** 2, 0);
+    const r2B = 1 - ssResB / ssTotB;
+    console.log(`      ${label}: RMSE=${rmseB.toFixed(1)}  R²=${r2B.toFixed(4)}  bias=${cb[5].toFixed(2)}`);
+    let n = 6;
+    const coefs = {
+      accuracy: round(cb[0], 4),
+      opening: round(cb[1], 4),
+      tactical: 0,
+      endgame: round(cb[2], 4),
+      blunder: round(cb[3], 4),
+      time: round(cb[4], 4),
+    };
+    if (richMode) {
+      coefs.median = round(cb[n++], 4);
+      if (useStd) coefs.std = round(cb[n++], 4);
+    }
+    if (nonlin) {
+      coefs.accuracy2 = round(cb[n++], 6);
+      coefs.blunder2 = round(cb[n++], 4);
+      coefs.accBlu = round(cb[n++], 4);
+    }
+    return {
+      threshold: thresholdValue,
+      samples: idxs.length,
+      coefficients: coefs,
+      bias: round(cb[5], 4),
+      fitStats: { rmseElo: round(rmseB, 2), r2: round(r2B, 4) },
+    };
   }
+
+  const FLOOR_THRESHOLD = 2400;
+  const CEILING_THRESHOLD = 1500;
+  const floorFitBlock = args.floorFit
+    ? runBracketFit("floor-fit", v => v >= FLOOR_THRESHOLD, FLOOR_THRESHOLD, "4b/5")
+    : null;
+  const ceilingFitBlock = args.ceilingFit
+    ? runBracketFit("ceiling-fit", v => v < CEILING_THRESHOLD, CEILING_THRESHOLD, "4c/5")
+    : null;
 
   console.log("[5/5] Writing output JSON…");
 
@@ -706,6 +710,7 @@ function main() {
       meanTargetElo: round(meanY, 1),
     },
     ...(floorFitBlock ? { floorFit: floorFitBlock } : {}),
+    ...(ceilingFitBlock ? { ceilingFit: ceilingFitBlock } : {}),
     notes: [
       "Proxy-derived features (no engine eval). Production-grade fit requires per-move Stockfish analysis.",
       "Accuracy / blunder are coarsely derived from game result (win/draw/loss).",

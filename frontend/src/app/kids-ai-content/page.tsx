@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import LanguageSelector, { type KidsLang } from "./components/LanguageSelector";
 import LessonCard, { type LessonSummary } from "./components/LessonCard";
 import LessonDetail from "./components/LessonDetail";
@@ -269,11 +270,14 @@ export default function KidsAiContentPage() {
         <Link href="/" style={{ color: "#92400e", textDecoration: "none", fontWeight: 700 }}>
           ← AEVION · Kids AI
         </Link>
-        <span style={{ fontSize: 13, color: "#a16207" }}>
-          {completed.size > 0
-            ? `🌟 Пройдено: ${completed.size}`
-            : "🛡 Безопасно для детей"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <ModulePricingChip moduleId="kids-ai-content" theme="light" />
+          <span style={{ fontSize: 13, color: "#a16207" }}>
+            {completed.size > 0
+              ? `🌟 Пройдено: ${completed.size}`
+              : "🛡 Безопасно для детей"}
+          </span>
+        </div>
       </header>
 
       <section style={heroStyle}>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import CapsuleForm, { type CategoryOption } from "./components/CapsuleForm";
 import CapsuleCard, { type CapsulePreview } from "./components/CapsuleCard";
@@ -180,8 +181,11 @@ export default function LifeBoxPage() {
         <Link href="/" style={{ color: palette.inkDim, fontSize: 13, textDecoration: "none" }}>
           ← AEVION
         </Link>
-        <div style={{ fontFamily: "monospace", color: palette.goldSoft, letterSpacing: "0.15em", fontSize: 13 }}>
-          ✦ LIFEBOX ✦
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <ModulePricingChip moduleId="lifebox" theme="dark" />
+          <div style={{ fontFamily: "monospace", color: palette.goldSoft, letterSpacing: "0.15em", fontSize: 13 }}>
+            ✦ LIFEBOX ✦
+          </div>
         </div>
       </header>
 

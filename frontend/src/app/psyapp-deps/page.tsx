@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import Onboarding from "./components/Onboarding";
 import StreakCounter from "./components/StreakCounter";
@@ -104,6 +105,7 @@ export default function PsyAppDepsPage() {
                 Сменить псевдоним
               </button>
             ) : null}
+            <ModulePricingChip moduleId="psyapp-deps" theme="dark" />
           </nav>
         </div>
       </header>

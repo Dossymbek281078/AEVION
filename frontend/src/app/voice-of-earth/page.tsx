@@ -4,6 +4,7 @@ import { CSSProperties, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import Filters, { LangFilter, MoodFilter } from "./components/Filters";
 import StatsBar, { Stats } from "./components/StatsBar";
 import TrackCard, { Track } from "./components/TrackCard";
@@ -333,7 +334,8 @@ export default function VoiceOfEarthPage() {
           >
             ← AEVION
           </Link>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <ModulePricingChip moduleId="voice-of-earth" theme="light" />
             <span style={{ fontWeight: 700, color: "#3a2a14" }}>VoE</span>
             <span
               style={{

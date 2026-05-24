@@ -210,3 +210,36 @@ jobs:
           name: qbuild-prod-smoke-${{ github.run_id }}
           path: /tmp/smoke-qbuild-prod-${{ github.run_id }}.json
           retention-days: 14
+
+  constitution-prod-smoke:
+    name: Constitution prod smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: aevion-globus-backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: aevion-globus-backend/package-lock.json
+
+      - name: Install backend deps
+        run: npm install --ignore-scripts
+
+      - name: Run Constitution prod smoke
+        run: node scripts/constitution-prod-smoke.js
+        env:
+          BASE: ${{ secrets.CONSTITUTION_SMOKE_BASE || 'https://aevion.app/api-backend' }}
+          SKIP_AI: "1"
+          ARTIFACT: /tmp/constitution-smoke-${{ github.run_id }}.json
+
+      - name: Upload smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: constitution-prod-smoke-${{ github.run_id }}
+          path: /tmp/constitution-smoke-${{ github.run_id }}.json
+          retention-days: 30

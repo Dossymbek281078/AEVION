@@ -1839,9 +1839,8 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
       }),
     });
     if (!priceR.ok) {
-      let paddleErr: unknown;
-      try { paddleErr = await priceR.json(); } catch { paddleErr = await priceR.text(); }
-      return res.status(priceR.status).json({ step: "price", productId, paddleError: paddleErr });
+      const e = await priceR.text();
+      return res.status(priceR.status).json({ error: `Paddle price error: ${e.slice(0, 1000)}` });
     }
     const priceData = await priceR.json() as { data?: { id: string } };
     const priceId = priceData.data?.id;
@@ -1857,8 +1856,18 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
       }),
     });
     if (!txR.ok) {
-      const e = await txR.text();
-      return res.status(txR.status).json({ error: `Paddle tx error: ${e.slice(0, 1000)}` });
+      let txErrBody: any;
+      try { txErrBody = await txR.json(); } catch { txErrBody = null; }
+      const code = txErrBody?.error?.code ?? "";
+      if (code === "transaction_checkout_not_enabled") {
+        return res.status(403).json({
+          error: "Paddle checkout not yet enabled for this account.",
+          action: "Complete Paddle onboarding at https://vendors.paddle.com — business verification required to enable checkout.",
+          paddleCode: code,
+        });
+      }
+      const detail = txErrBody?.error?.detail ?? JSON.stringify(txErrBody ?? "unknown");
+      return res.status(txR.status).json({ error: `Paddle transaction error: ${detail}` });
     }
     const txData = await txR.json() as { data?: { id: string; checkout?: { url: string } } };
     const tx = txData.data;

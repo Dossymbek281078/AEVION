@@ -238,6 +238,20 @@ export default function ConstitutionPage() {
   const { t } = useI18n();
   const { track } = useFunnel();
   useEffect(() => { track("page_view"); }, [track]);
+
+  // Auto-redirect first-time visitors to /welcome (unless they came via deep-link)
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const hasDeepLink = sp.has("artifact") || sp.has("country") || sp.has("compare");
+      const onboarded = window.localStorage.getItem("constitution.onboarded");
+      if (!onboarded && !hasDeepLink) {
+        window.location.replace("/constitution/welcome");
+      }
+    } catch {
+      /* ignore — bail out, let the user use the editor */
+    }
+  }, []);
   const localizedSliderMeta = useMemo(
     () =>
       SLIDER_META.map((m) => ({

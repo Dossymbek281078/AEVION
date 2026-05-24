@@ -253,7 +253,7 @@ function svS(v:{w:number;l:number;d:number}){try{localStorage.setItem(SK,JSON.st
 function gRank(e:number){return[...RANKS].reverse().find(r=>e>=r.min)||RANKS[0]}
 
 /* ═══ Game History ═══ */
-type SavedGame = {id:string;date:string;moves:string[];result:string;playerColor:"w"|"b";aiLevel:string;rating:number;tc:string;category:"Bullet"|"Blitz"|"Rapid"|"Classical";opening?:string};
+type SavedGame = {id:string;date:string;moves:string[];result:string;playerColor:"w"|"b";aiLevel:string;rating:number;tc:string;category:"Bullet"|"Blitz"|"Rapid"|"Classical";opening?:string;analysis?:Array<{ply:number;quality:string;cpLoss?:number}>};
 const GK="aevion_chess_games_v1";
 function loadGames():SavedGame[]{try{return JSON.parse(localStorage.getItem(GK)||"[]")}catch{return[]}}
 function saveGame(g:SavedGame){try{const all=loadGames();all.unshift(g);if(all.length>200)all.length=200;localStorage.setItem(GK,JSON.stringify(all))}catch{}}
@@ -2423,7 +2423,19 @@ export default function CyberChessPage(){
       sOver(r);snd("x");sOn(false);sPms([]);
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
-      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name};
+      // Include per-move cp-loss analysis for richer FIDE calibration.
+      // `analysis` state holds Stockfish eval entries: {move, cp, mate, quality}.
+      // We map to SavedGame.analysis shape, computing cpLoss as deviation from
+      // best move (stored as |cp| with sign representing who benefits).
+      const analysisEntries = analysis.length > 0
+        ? analysis.map((a, i) => {
+            const nextCp = analysis[i + 1]?.cp ?? a.cp;
+            // cpLoss = how many centipawns worse than best move (always ≥ 0)
+            const cpLoss = Math.max(0, Math.abs(a.cp) - Math.abs(nextCp));
+            return {ply: a.move, quality: a.quality, cpLoss};
+          })
+        : undefined;
+      const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name,...(analysisEntries?{analysis:analysisEntries}:{})};
       saveGame(sg);sSavedGames(loadGames())}
     return true},[game,rat,lv.elo,lv.name,pCol,aiC,pT,aT,showToast,bk,sts,tab,pzCurrent,pzAttempt,guessMode,guessResult,guessBest,guessBestSan,aiI,tc.ini,addChessy,unlockAch,hotseat,dailyState,currentEndgame]);
 

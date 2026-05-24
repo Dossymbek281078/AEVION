@@ -2228,7 +2228,7 @@ function ProPaywallBanner({
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
           <a
-            href="/api-backend/api/paddle/checkout-session?product=constitution-pro"
+            href="/api-backend/api/constitution/checkout/go/pro"
             className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold text-sm text-center hover:opacity-90"
           >
             Upgrade →

@@ -45,7 +45,10 @@ const PRO_LIMITS = {
   embedSnippet: true,
 } as const;
 
-const PADDLE_PRICE_ID = process.env.PADDLE_CONSTITUTION_PRO_PRICE_ID || "pri_constitution_pro_monthly";
+// LemonSqueezy replaces Paddle (Paddle verification blocked).
+// Variant IDs configured in Railway env:
+//   LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID
+//   LEMON_SQUEEZY_CONSTITUTION_TEAM_VARIANT_ID
 
 function resolvePlan(req: Request): {
   plan: "free" | "pro";
@@ -86,9 +89,10 @@ constitutionProRouter.get(
         ? {
             price: "$9 / month",
             checkout: {
-              provider: "paddle",
-              priceId: PADDLE_PRICE_ID,
-              hint: "POST /api/paddle/checkout-session (when Paddle verification clears)",
+              provider: "lemonsqueezy",
+              endpoint: "/api/constitution/checkout/session",
+              hint: "POST { tier: 'pro' | 'team' } → { checkoutUrl }",
+              directLink: "/api/constitution/checkout/go/pro",
             },
             features: [
               "Unlimited saved scenarios",

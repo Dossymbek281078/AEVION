@@ -50,7 +50,7 @@ const TIERS: Tier[] = [
       "Всё из Free",
     ],
     cta: "Upgrade to Pro →",
-    ctaHref: "/api-backend/api/paddle/checkout-session?product=constitution-pro",
+    ctaHref: "/api-backend/api/constitution/checkout/go/pro",
     highlight: true,
   },
   {
@@ -70,7 +70,7 @@ const TIERS: Tier[] = [
       "Всё из Pro × 5",
     ],
     cta: "Get Team →",
-    ctaHref: "/api-backend/api/paddle/checkout-session?product=constitution-team",
+    ctaHref: "/api-backend/api/constitution/checkout/go/team",
   },
 ];
 

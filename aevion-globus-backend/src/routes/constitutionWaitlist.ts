@@ -17,6 +17,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
+import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
 
 type WaitlistRow = {
   email: string;
@@ -102,6 +103,9 @@ constitutionWaitlistRouter.post(
       }
       if (!memList.has(row.email)) memList.set(row.email, row);
 
+      // Fire-and-forget confirmation email via Brevo
+      void sendWaitlistConfirm(row.email).catch(() => { /* ignore */ });
+
       res.status(201).json({ ok: true, storage });
     } catch (err) {
       res.status(500).json({
@@ -176,11 +180,48 @@ function aggregateBySource(rows: WaitlistRow[]): Array<{ source: string; count: 
  * Call from cron scheduler (already exists in qcoreai.ts) every Sunday.
  */
 export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: number }> {
-  // TODO: wire when Pro launches:
-  // 1. SELECT top-5 artifacts published in last 7d (most votes)
-  // 2. For each waitlist subscriber:
-  //    - Render HTML with regime + radar + link to /constitution/leaderboard
-  //    - POST to email provider
-  //    - Track via constitution_events (event: digest_sent)
-  return { sent: 0, skipped: 0 };
+  try {
+    // 1. Get top-5 artifacts by votes in last 7 days
+    await ensureWaitlistTable();
+    let topArtifacts: Array<{ title: string; regimeName: string; url: string; votes: number }> = [];
+    if (dbAvailable) {
+      try {
+        const pool = getPool();
+        const rows = await pool.query(`
+          SELECT a."title", a."regimeName",
+                 COALESCE(SUM(CASE WHEN v."vote" = 1 THEN 1 ELSE 0 END), 0) AS up_votes
+          FROM planet_constitution_artifacts a
+          LEFT JOIN planet_constitution_votes v ON v."artifactId" = a."id"
+          WHERE a."publishedAt" > NOW() - INTERVAL '7 days'
+          GROUP BY a."id", a."title", a."regimeName"
+          ORDER BY up_votes DESC
+          LIMIT 5
+        `);
+        topArtifacts = rows.rows.map((r: Record<string, unknown>) => ({
+          title: String(r.title),
+          regimeName: String(r.regimeName),
+          url: `https://aevion.app/constitution/leaderboard`,
+          votes: Number(r.up_votes),
+        }));
+      } catch { /* fall through */ }
+    }
+    if (!topArtifacts.length) return { sent: 0, skipped: 1 };
+
+    // 2. Get waitlist subscribers
+    let subscribers: Array<{ email: string }> = Array.from(memList.values());
+    if (dbAvailable) {
+      try {
+        const pool = getPool();
+        const r = await pool.query(`SELECT "email" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
+        subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email) }));
+      } catch { /* fall through */ }
+    }
+    if (!subscribers.length) return { sent: 0, skipped: 0 };
+
+    const weekOf = new Date().toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
+    const { sent, errors } = await sendDigestEmail(subscribers, topArtifacts, weekOf);
+    return { sent, skipped: errors };
+  } catch {
+    return { sent: 0, skipped: 0 };
+  }
 }

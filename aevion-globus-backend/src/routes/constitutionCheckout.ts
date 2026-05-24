@@ -1,0 +1,180 @@
+/**
+ * Constitution checkout — LemonSqueezy (primary, Paddle blocked).
+ *
+ *   POST /api/constitution/checkout/session { tier: "pro"|"team", email? }
+ *   → { checkoutUrl, tier, provider: "lemonsqueezy" }
+ *
+ * Required env:
+ *   LEMON_SQUEEZY_API_KEY                      (from LS Settings → API)
+ *   LEMON_SQUEEZY_STORE_ID                     (numeric, from LS dashboard)
+ *   LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID  (e.g. 123456)
+ *   LEMON_SQUEEZY_CONSTITUTION_TEAM_VARIANT_ID (e.g. 123457)
+ *   AEVION_PUBLIC_BASE_URL = https://aevion.app
+ *
+ * How to get variant IDs:
+ *   1. LS Dashboard → Store → Products
+ *   2. Create product "Constitution Pro" (one-off or monthly recurring)
+ *   3. Click product → Variants tab → copy variant ID from URL /variants/{id}
+ *
+ * Fallback (stub):
+ *   If LEMON_SQUEEZY_API_KEY is missing, returns a stub response so the
+ *   frontend stays functional during development.
+ */
+
+import { Router, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
+import { rateLimit } from "../lib/rateLimit";
+
+type Tier = "pro" | "team";
+
+const TIER_NAMES: Record<Tier, string> = {
+  pro:  "Constitution Pro · $9/mo",
+  team: "Constitution Team · $49/mo",
+};
+
+const TIER_PRICES_USD: Record<Tier, number> = {
+  pro:  9,
+  team: 49,
+};
+
+function lsVariantId(tier: Tier): string | null {
+  const key = tier === "pro"
+    ? "LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID"
+    : "LEMON_SQUEEZY_CONSTITUTION_TEAM_VARIANT_ID";
+  return process.env[key] ?? null;
+}
+
+function lsApiKey(): string | null { return process.env.LEMON_SQUEEZY_API_KEY ?? null; }
+function lsStoreId(): string | null { return process.env.LEMON_SQUEEZY_STORE_ID ?? null; }
+function publicBase(): string {
+  return (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+}
+
+async function createLsCheckout(
+  tier: Tier,
+  email?: string,
+  intentId = randomUUID(),
+): Promise<{ checkoutUrl: string; checkoutId: string }> {
+  const variantId = lsVariantId(tier);
+  const apiKey = lsApiKey();
+  const storeId = lsStoreId();
+  if (!apiKey || !storeId || !variantId) {
+    throw new Error(
+      `LemonSqueezy not configured. Required: LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_CONSTITUTION_${tier.toUpperCase()}_VARIANT_ID`,
+    );
+  }
+  const base = publicBase();
+  const body = {
+    data: {
+      type: "checkouts",
+      attributes: {
+        checkout_options: {
+          embed: false,
+          media: false,
+          logo: true,
+        },
+        checkout_data: {
+          email: email ?? undefined,
+          custom: {
+            intentId,
+            tier,
+            source: "constitution-pricing",
+          },
+        },
+        product_options: {
+          name: TIER_NAMES[tier],
+          receipt_link_url: `${base}/constitution/pricing`,
+          redirect_url: `${base}/constitution?upgrade=success&tier=${tier}`,
+        },
+      },
+      relationships: {
+        store: { data: { type: "stores", id: String(storeId) } },
+        variant: { data: { type: "variants", id: String(variantId) } },
+      },
+    },
+  };
+  const res = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/vnd.api+json",
+      "Content-Type": "application/vnd.api+json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`LemonSqueezy API ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const j = (await res.json()) as {
+    data?: { id?: string; attributes?: { url?: string } };
+  };
+  const checkoutUrl = j.data?.attributes?.url;
+  const checkoutId = j.data?.id ?? "";
+  if (!checkoutUrl) throw new Error("LemonSqueezy: no checkout URL in response");
+  return { checkoutUrl, checkoutId };
+}
+
+export const constitutionCheckoutRouter = Router();
+
+const limiter = rateLimit({ windowMs: 60_000, max: 20, keyPrefix: "constitution-checkout" });
+
+constitutionCheckoutRouter.post(
+  "/session",
+  limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response) => {
+    try {
+      const body = (req.body && typeof req.body === "object")
+        ? (req.body as Record<string, unknown>)
+        : {};
+      const tier = (body.tier === "team" ? "team" : "pro") as Tier;
+      const email = typeof body.email === "string" ? body.email.trim() : undefined;
+
+      // Stub mode — no API key configured
+      if (!lsApiKey()) {
+        return res.json({
+          checkoutUrl: `${publicBase()}/constitution/pricing?stub=1&tier=${tier}`,
+          tier,
+          tierName: TIER_NAMES[tier],
+          priceUsd: TIER_PRICES_USD[tier],
+          provider: "stub",
+          note: "LemonSqueezy not configured. Set LEMON_SQUEEZY_API_KEY to activate.",
+        });
+      }
+
+      const { checkoutUrl, checkoutId } = await createLsCheckout(tier, email);
+      res.json({
+        checkoutUrl,
+        checkoutId,
+        tier,
+        tierName: TIER_NAMES[tier],
+        priceUsd: TIER_PRICES_USD[tier],
+        provider: "lemonsqueezy",
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: "checkout_failed",
+        detail: err instanceof Error ? err.message : "unknown",
+        hint: "Убедись что LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID и LEMON_SQUEEZY_CONSTITUTION_PRO/TEAM_VARIANT_ID в env Railway",
+      });
+    }
+  },
+);
+
+/** Convenience GET → redirect to checkout (for email links, QR codes, etc.) */
+constitutionCheckoutRouter.get(
+  "/go/:tier",
+  limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response) => {
+    const tier = (req.params.tier === "team" ? "team" : "pro") as Tier;
+    if (!lsApiKey()) {
+      return res.redirect(`${publicBase()}/constitution/pricing`);
+    }
+    try {
+      const { checkoutUrl } = await createLsCheckout(tier);
+      res.redirect(303, checkoutUrl);
+    } catch {
+      res.redirect(`${publicBase()}/constitution/pricing?error=checkout_failed`);
+    }
+  },
+);

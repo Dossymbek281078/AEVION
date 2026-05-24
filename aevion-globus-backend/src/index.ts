@@ -53,6 +53,7 @@ import { constitutionAdminRouter, constitutionTelemetry, constitutionBanGate } f
 import { constitutionFunnelTrackRouter, constitutionFunnelAdminRouter } from "./routes/constitutionFunnel";
 import { constitutionWaitlistRouter, constitutionWaitlistAdminRouter } from "./routes/constitutionWaitlist";
 import { constitutionStatusRouter, startUptimeChecker } from "./routes/constitutionStatus";
+import { constitutionCheckoutRouter } from "./routes/constitutionCheckout";
 import { planetConstitutionSocialRouter } from "./routes/planetConstitutionSocial";
 import { bankTestRouter } from "./routes/bankTest";
 import { metricsRouter } from "./routes/metrics";
@@ -784,6 +785,7 @@ app.use("/api/constitution/funnel", constitutionFunnelTrackRouter);
 app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
 app.use("/api/admin/constitution/waitlist", constitutionWaitlistAdminRouter);
 app.use("/api/constitution/status", constitutionStatusRouter);
+app.use("/api/constitution/checkout", constitutionCheckoutRouter);
 app.use("/api/planet/constitution-artifacts", planetConstitutionRouter);
 app.use("/api/constitution", constitutionAiRouter);
 app.use("/api/constitution", constitutionPdfRouter);

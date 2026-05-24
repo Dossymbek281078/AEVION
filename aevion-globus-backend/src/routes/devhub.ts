@@ -1834,9 +1834,8 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
       headers: hdrs,
       body: JSON.stringify({
         product_id: productId,
-        name: name.trim().slice(0, 200),
+        description: name.trim().slice(0, 200),
         unit_price: { amount: String(Math.round(amt)), currency_code: currencyCode },
-        billing_cycle: null,
         tax_mode: "exclusive",
       }),
     });

@@ -20,13 +20,13 @@ const TEMPLATE_DEFECTS: Omit<DefectItem, "id" | "room" | "checked">[] = [
   { defect: "Стяжка пола повреждена (трещины, сколы)", rateCode: "ЭСНСб11-02.Д-001", unit: "100 м²", suggestedVolume: 0.49 },
   { defect: "Деревянные окна — замена на ПВХ", rateCode: "ЭСНСб10-01.Д-001", unit: "шт", suggestedVolume: 2 },
   { defect: "Дверной блок — замена", rateCode: "ЭСНСб10-02.Д-001", unit: "шт", suggestedVolume: 1 },
-  { defect: "Штукатурка стен под чистовую отделку", rateCode: "ОТД-13-01-001", unit: "100 м²", suggestedVolume: 0.84 },
-  { defect: "Шпатлёвка стен под окраску", rateCode: "ОТД-15-02-003", unit: "100 м²", suggestedVolume: 0.84 },
-  { defect: "Стены требуют окраски водоэмульсионной краской", rateCode: "ОТД-15-04-001", unit: "100 м²", suggestedVolume: 0.84 },
-  { defect: "Устройство новой стяжки пола (40 мм)", rateCode: "ОТД-11-02-001", unit: "100 м²", suggestedVolume: 0.49 },
-  { defect: "Укладка нового напольного покрытия (ламинат)", rateCode: "ОТД-11-04-002", unit: "100 м²", suggestedVolume: 0.49 },
-  { defect: "Система отопления — замена радиаторов", rateCode: "СНТ-16-02-001", unit: "шт", suggestedVolume: 2 },
-  { defect: "Электроосвещение — замена светильников", rateCode: "ЭЛ-21-03-001", unit: "шт", suggestedVolume: 2 },
+  { defect: "Штукатурка стен под чистовую отделку", rateCode: "ЭСНСб15-13-01-001", unit: "100 м²", suggestedVolume: 0.84 },
+  { defect: "Шпатлёвка стен под окраску", rateCode: "ЭСНСб15-15-02-003", unit: "100 м²", suggestedVolume: 0.84 },
+  { defect: "Стены требуют окраски водоэмульсионной краской", rateCode: "ЭСНСб15-15-04-001", unit: "100 м²", suggestedVolume: 0.84 },
+  { defect: "Устройство новой стяжки пола (40 мм)", rateCode: "ЭСНСб15-11-02-001", unit: "100 м²", suggestedVolume: 0.49 },
+  { defect: "Укладка нового напольного покрытия (ламинат)", rateCode: "ЭСНСб15-11-04-002", unit: "100 м²", suggestedVolume: 0.49 },
+  { defect: "Система отопления — замена радиаторов", rateCode: "ЭСНСб17-16-02-001", unit: "шт", suggestedVolume: 2 },
+  { defect: "Электроосвещение — замена светильников", rateCode: "ЭСНСб21-21-03-001", unit: "шт", suggestedVolume: 2 },
 ];
 
 interface Props {

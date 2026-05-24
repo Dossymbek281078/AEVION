@@ -101,8 +101,8 @@ export const LEVEL1_LSR: Lsr = {
       title: "Раздел 2. Штукатурно-шпатлёвочные работы",
       category: "отделочные",
       positions: [
-        { id: "p5", rateCode: "ОТД-13-01-001", volume: 26.99, coefficients: [], formula: "(32 × 90.33) / 100 = 28.91 — уже оштукатурены 2 стены; нетто = 26.99 (100 м²)", drawingRef: "ОР-02" },
-        { id: "p6", rateCode: "ОТД-15-02-003", volume: 26.99, coefficients: [], formula: "Площадь под шпатлёвку = площадь под окраску = 2699 м² / 100 = 26.99", drawingRef: "ОР-02" },
+        { id: "p5", rateCode: "ЭСНСб15-13-01-001", volume: 26.99, coefficients: [], formula: "(32 × 90.33) / 100 = 28.91 — уже оштукатурены 2 стены; нетто = 26.99 (100 м²)", drawingRef: "ОР-02" },
+        { id: "p6", rateCode: "ЭСНСб15-15-02-003", volume: 26.99, coefficients: [], formula: "Площадь под шпатлёвку = площадь под окраску = 2699 м² / 100 = 26.99", drawingRef: "ОР-02" },
       ],
     },
     {
@@ -110,8 +110,8 @@ export const LEVEL1_LSR: Lsr = {
       title: "Раздел 3. Окраска",
       category: "отделочные",
       positions: [
-        { id: "p7", rateCode: "ОТД-15-04-001", volume: 26.99, coefficients: [], formula: "Стены нетто: 32 × (90 − 3.78 − 1.89) = 2699 м² / 100 = 26.99", drawingRef: "ОР-02" },
-        { id: "p8", rateCode: "ОТД-15-06-005", volume: 217.6, coefficients: [], formula: "Откосы окон: 64 × (2.1+1.8)×2 × 0.15 = 74.9 м² + двери 32 × 2.1×2×0.15 = 20.2 м²; потолки откосов: 98.5 м²", drawingRef: "ОР-03" },
+        { id: "p7", rateCode: "ЭСНСб15-15-04-001", volume: 26.99, coefficients: [], formula: "Стены нетто: 32 × (90 − 3.78 − 1.89) = 2699 м² / 100 = 26.99", drawingRef: "ОР-02" },
+        { id: "p8", rateCode: "ЭСНСб15-15-06-005", volume: 217.6, coefficients: [], formula: "Откосы окон: 64 × (2.1+1.8)×2 × 0.15 = 74.9 м² + двери 32 × 2.1×2×0.15 = 20.2 м²; потолки откосов: 98.5 м²", drawingRef: "ОР-03" },
       ],
     },
     {
@@ -119,8 +119,8 @@ export const LEVEL1_LSR: Lsr = {
       title: "Раздел 4. Полы",
       category: "отделочные",
       positions: [
-        { id: "p9", rateCode: "ОТД-11-02-001", volume: 18.00, coefficients: [], formula: "1800 м² (весь этаж) / 100 = 18.00", drawingRef: "ОР-01" },
-        { id: "p10", rateCode: "ОТД-11-04-002", volume: 15.60, coefficients: [], formula: "Только классы: 32 × 48.75 = 1560 м²; /100 = 15.60", drawingRef: "ОР-01" },
+        { id: "p9", rateCode: "ЭСНСб15-11-02-001", volume: 18.00, coefficients: [], formula: "1800 м² (весь этаж) / 100 = 18.00", drawingRef: "ОР-01" },
+        { id: "p10", rateCode: "ЭСНСб15-11-04-002", volume: 15.60, coefficients: [], formula: "Только классы: 32 × 48.75 = 1560 м²; /100 = 15.60", drawingRef: "ОР-01" },
       ],
     },
     {
@@ -128,8 +128,8 @@ export const LEVEL1_LSR: Lsr = {
       title: "Раздел 5. Окна и двери",
       category: "отделочные",
       positions: [
-        { id: "p11", rateCode: "ОТД-06-02-001", volume: 143.36, coefficients: [], formula: "64 окна × 1.4×1.6 = 143.36 м²", drawingRef: "ОР-03" },
-        { id: "p12", rateCode: "ОТД-06-01-001", volume: 32, coefficients: [], formula: "32 двери", drawingRef: "ОР-03" },
+        { id: "p11", rateCode: "ЭСНСб15-06-02-001", volume: 143.36, coefficients: [], formula: "64 окна × 1.4×1.6 = 143.36 м²", drawingRef: "ОР-03" },
+        { id: "p12", rateCode: "ЭСНСб15-06-01-001", volume: 32, coefficients: [], formula: "32 двери", drawingRef: "ОР-03" },
       ],
     },
   ],
@@ -170,8 +170,8 @@ export const LEVEL5_LSR: Lsr = {
       title: "Раздел 2. Штукатурно-шпатлёвочные работы",
       category: "отделочные",
       positions: [
-        { id: "pe3", rateCode: "ОТД-13-01-001", volume: 28.80, coefficients: [], formula: "32 × 90 = 2880 / 100 (без вычета проёмов — ОШИБКА err-01)", drawingRef: "ВС-02" },
-        { id: "pe4", rateCode: "ОТД-15-02-003", volume: 28.80, coefficients: [], formula: "28.80", drawingRef: "ВС-02" },
+        { id: "pe3", rateCode: "ЭСНСб15-13-01-001", volume: 28.80, coefficients: [], formula: "32 × 90 = 2880 / 100 (без вычета проёмов — ОШИБКА err-01)", drawingRef: "ВС-02" },
+        { id: "pe4", rateCode: "ЭСНСб15-15-02-003", volume: 28.80, coefficients: [], formula: "28.80", drawingRef: "ВС-02" },
       ],
     },
     {
@@ -179,8 +179,8 @@ export const LEVEL5_LSR: Lsr = {
       title: "Раздел 3. Окраска и облицовка",
       category: "отделочные",
       positions: [
-        { id: "pe5", rateCode: "ОТД-15-04-001", volume: 28.80, coefficients: [], formula: "28.80 (100 м²)", drawingRef: "ВС-02" },
-        { id: "pe6", rateCode: "ОТД-15-02-003", volume: 28.80, coefficients: [], formula: "ОШИБКА err-03: дублирует раздел 2", drawingRef: "ВС-02" },
+        { id: "pe5", rateCode: "ЭСНСб15-15-04-001", volume: 28.80, coefficients: [], formula: "28.80 (100 м²)", drawingRef: "ВС-02" },
+        { id: "pe6", rateCode: "ЭСНСб15-15-02-003", volume: 28.80, coefficients: [], formula: "ОШИБКА err-03: дублирует раздел 2", drawingRef: "ВС-02" },
       ],
     },
     {
@@ -188,8 +188,8 @@ export const LEVEL5_LSR: Lsr = {
       title: "Раздел 4. Полы",
       category: "отделочные",
       positions: [
-        { id: "pe7", rateCode: "ОТД-11-02-001", volume: 18.00, coefficients: [], formula: "1800 / 100", drawingRef: "ВС-01" },
-        { id: "pe8", rateCode: "ОТД-11-04-002", volume: 15.60, coefficients: [], formula: "1560 / 100", drawingRef: "ВС-01" },
+        { id: "pe7", rateCode: "ЭСНСб15-11-02-001", volume: 18.00, coefficients: [], formula: "1800 / 100", drawingRef: "ВС-01" },
+        { id: "pe8", rateCode: "ЭСНСб15-11-04-002", volume: 15.60, coefficients: [], formula: "1560 / 100", drawingRef: "ВС-01" },
       ],
     },
     {
@@ -198,9 +198,9 @@ export const LEVEL5_LSR: Lsr = {
       category: "электромонтажные",
       positions: [
         // ОШИБКА err-05: volume должен быть в "100 м" (1.5), здесь стоит 150 штук
-        { id: "pe9", rateCode: "ЭЛ-21-04-007", volume: 150, coefficients: [], formula: "150 шт кабеля (ОШИБКА: ед.изм. должна быть м, объём — 150 м = 1.5 (100 м))", drawingRef: "ЭС-01" },
-        { id: "pe10", rateCode: "ЭЛ-21-02-001", volume: 96, coefficients: [], formula: "32 кл × 3 розетки = 96 шт", drawingRef: "ЭС-01" },
-        { id: "pe11", rateCode: "ЭЛ-21-03-001", volume: 64, coefficients: [], formula: "32 кл × 2 светильника = 64 шт", drawingRef: "ЭС-01" },
+        { id: "pe9", rateCode: "ЭСНСб21-21-04-007", volume: 150, coefficients: [], formula: "150 шт кабеля (ОШИБКА: ед.изм. должна быть м, объём — 150 м = 1.5 (100 м))", drawingRef: "ЭС-01" },
+        { id: "pe10", rateCode: "ЭСНСб21-21-02-001", volume: 96, coefficients: [], formula: "32 кл × 3 розетки = 96 шт", drawingRef: "ЭС-01" },
+        { id: "pe11", rateCode: "ЭСНСб21-21-03-001", volume: 64, coefficients: [], formula: "32 кл × 2 светильника = 64 шт", drawingRef: "ЭС-01" },
       ],
     },
   ],

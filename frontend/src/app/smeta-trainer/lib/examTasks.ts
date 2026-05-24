@@ -78,14 +78,14 @@ const T1_REFERENCE = mkLsr({
     {
       id: "ref-s2", title: "Раздел 2. Штукатурка/окраска стен", category: "отделочные",
       positions: [
-        { id: "rp3", rateCode: "ОТД-13-01-001", volume: 1.85, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" }], formula: "(2×(9+6)×3.3)×2 − 12.74 = 185.26 / 100 = 1.85" },
-        { id: "rp4", rateCode: "ОТД-15-04-001", volume: 1.85, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" }], formula: "185.26 / 100 = 1.85" },
+        { id: "rp3", rateCode: "ЭСНСб15-13-01-001", volume: 1.85, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" }], formula: "(2×(9+6)×3.3)×2 − 12.74 = 185.26 / 100 = 1.85" },
+        { id: "rp4", rateCode: "ЭСНСб15-15-04-001", volume: 1.85, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" }], formula: "185.26 / 100 = 1.85" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Полы", category: "отделочные",
       positions: [
-        { id: "rp5", rateCode: "ОТД-11-04-002", volume: 1.08, coefficients: [], formula: "108 / 100 = 1.08" },
+        { id: "rp5", rateCode: "ЭСНСб15-11-04-002", volume: 1.08, coefficients: [], formula: "108 / 100 = 1.08" },
       ],
     },
   ],
@@ -107,14 +107,14 @@ const T1_STARTER = mkLsr({
     {
       id: "stu-s2", title: "Раздел 2. Отделка стен", category: "отделочные",
       positions: [
-        { id: "sp3", rateCode: "ОТД-13-01-001", volume: 1.98, coefficients: [], formula: "(2×(9+6)×3.3)×2 / 100 — без вычета проёмов" },
-        { id: "sp4", rateCode: "ОТД-15-04-001", volume: 1.98, coefficients: [], formula: "1.98 (брутто)" },
+        { id: "sp3", rateCode: "ЭСНСб15-13-01-001", volume: 1.98, coefficients: [], formula: "(2×(9+6)×3.3)×2 / 100 — без вычета проёмов" },
+        { id: "sp4", rateCode: "ЭСНСб15-15-04-001", volume: 1.98, coefficients: [], formula: "1.98 (брутто)" },
       ],
     },
     {
       id: "stu-s3", title: "Раздел 3. Полы", category: "отделочные",
       positions: [
-        { id: "sp5", rateCode: "ОТД-11-04-002", volume: 1.08, coefficients: [], formula: "108 / 100" },
+        { id: "sp5", rateCode: "ЭСНСб15-11-04-002", volume: 1.08, coefficients: [], formula: "108 / 100" },
       ],
     },
   ],
@@ -142,14 +142,14 @@ const T2_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Подготовительные слои", category: "кровельные",
       positions: [
-        { id: "rp1", rateCode: "КРВ-12-03-001", volume: 3.75, coefficients: [], formula: "15×25 = 375 / 100 = 3.75 (пароизоляция)" },
-        { id: "rp2", rateCode: "КРВ-12-02-001", volume: 3.75, coefficients: [], formula: "375 / 100 = 3.75 (утепление 100мм)" },
+        { id: "rp1", rateCode: "ЭСНСб12-12-03-001", volume: 3.75, coefficients: [], formula: "15×25 = 375 / 100 = 3.75 (пароизоляция)" },
+        { id: "rp2", rateCode: "ЭСНСб12-12-02-001", volume: 3.75, coefficients: [], formula: "375 / 100 = 3.75 (утепление 100мм)" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Кровельный ковёр", category: "кровельные",
       positions: [
-        { id: "rp3", rateCode: "КРВ-12-01-001", volume: 3.75, coefficients: [], formula: "375 / 100 = 3.75 (2 слоя наплавляемого)" },
+        { id: "rp3", rateCode: "ЭСНСб12-12-01-001", volume: 3.75, coefficients: [], formula: "375 / 100 = 3.75 (2 слоя наплавляемого)" },
       ],
     },
   ],
@@ -164,9 +164,9 @@ const T2_STARTER = mkLsr({
     {
       id: "stu-s1", title: "Раздел 1. Кровельный пирог", category: "кровельные",
       positions: [
-        { id: "sp1", rateCode: "КРВ-12-03-001", volume: 3.75, coefficients: [], formula: "375 / 100" },
-        // ОШИБКА: пропущено утепление (КРВ-12-02-001)
-        { id: "sp2", rateCode: "КРВ-12-01-001", volume: 3.75, coefficients: [], formula: "375 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб12-12-03-001", volume: 3.75, coefficients: [], formula: "375 / 100" },
+        // ОШИБКА: пропущено утепление (ЭСНСб12-12-02-001)
+        { id: "sp2", rateCode: "ЭСНСб12-12-01-001", volume: 3.75, coefficients: [], formula: "375 / 100" },
       ],
     },
   ],
@@ -194,22 +194,22 @@ const T3_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Земляные работы", category: "земляные",
       positions: [
-        { id: "rp1", rateCode: "ЗЕМ-01-01-002", volume: 1.20, coefficients: [], formula: "8×10×1.5 = 120 м³ / 100 = 1.20" },
-        { id: "rp2", rateCode: "ЗЕМ-01-03-001", volume: 0.40, coefficients: [], formula: "Обратная засыпка пазух ~40 м³ / 100 = 0.40" },
+        { id: "rp1", rateCode: "ЭСНСб01-01-01-002", volume: 1.20, coefficients: [], formula: "8×10×1.5 = 120 м³ / 100 = 1.20" },
+        { id: "rp2", rateCode: "ЭСНСб01-01-03-001", volume: 0.40, coefficients: [], formula: "Обратная засыпка пазух ~40 м³ / 100 = 0.40" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Подготовка и опалубка", category: "общестроительные",
       positions: [
-        { id: "rp3", rateCode: "ФУН-05-03-001", volume: 8.00, coefficients: [], formula: "80 м² × 0.1 = 8.0 м³ (подготовка)" },
-        { id: "rp4", rateCode: "ФУН-05-02-001", volume: 14.4, coefficients: [], formula: "(8+10)×2×0.4 = 14.4 м² (опалубка по периметру)" },
+        { id: "rp3", rateCode: "ЭСНСб06-05-03-001", volume: 8.00, coefficients: [], formula: "80 м² × 0.1 = 8.0 м³ (подготовка)" },
+        { id: "rp4", rateCode: "ЭСНСб06-05-02-001", volume: 14.4, coefficients: [], formula: "(8+10)×2×0.4 = 14.4 м² (опалубка по периметру)" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Армирование и бетон", category: "общестроительные",
       positions: [
-        { id: "rp5", rateCode: "ФУН-06-01-001", volume: 2.40, coefficients: [], formula: "75 кг/м³ × 32 м³ ≈ 2.4 т" },
-        { id: "rp6", rateCode: "ФУН-05-01-001", volume: 32.0, coefficients: [], formula: "80 м² × 0.4 = 32 м³" },
+        { id: "rp5", rateCode: "ЭСНСб06-06-01-001", volume: 2.40, coefficients: [], formula: "75 кг/м³ × 32 м³ ≈ 2.4 т" },
+        { id: "rp6", rateCode: "ЭСНСб06-05-01-001", volume: 32.0, coefficients: [], formula: "80 м² × 0.4 = 32 м³" },
       ],
     },
   ],
@@ -225,17 +225,17 @@ const T3_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Земля", category: "земляные",
       // ОШИБКА: использована грунт I категории (хотя задание прямо говорит II)
       positions: [
-        { id: "sp1", rateCode: "ЗЕМ-01-01-001", volume: 1.20, coefficients: [], formula: "8×10×1.5 / 100" },
-        { id: "sp2", rateCode: "ЗЕМ-01-03-001", volume: 0.40, coefficients: [], formula: "Засыпка 40 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб01-01-01-001", volume: 1.20, coefficients: [], formula: "8×10×1.5 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб01-01-03-001", volume: 0.40, coefficients: [], formula: "Засыпка 40 / 100" },
       ],
     },
     {
       id: "stu-s2", title: "Раздел 2. Бетон", category: "общестроительные",
       // ОШИБКА: пропущена опалубка (formworkMissing должно сработать)
       positions: [
-        { id: "sp3", rateCode: "ФУН-05-03-001", volume: 8.00, coefficients: [], formula: "80 × 0.1 = 8" },
-        { id: "sp4", rateCode: "ФУН-06-01-001", volume: 2.40, coefficients: [], formula: "2.4 т" },
-        { id: "sp5", rateCode: "ФУН-05-01-001", volume: 32.0, coefficients: [], formula: "80 × 0.4 = 32" },
+        { id: "sp3", rateCode: "ЭСНСб06-05-03-001", volume: 8.00, coefficients: [], formula: "80 × 0.1 = 8" },
+        { id: "sp4", rateCode: "ЭСНСб06-06-01-001", volume: 2.40, coefficients: [], formula: "2.4 т" },
+        { id: "sp5", rateCode: "ЭСНСб06-05-01-001", volume: 32.0, coefficients: [], formula: "80 × 0.4 = 32" },
       ],
     },
   ],
@@ -263,21 +263,21 @@ const T4_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Кабельные сети", category: "электромонтажные",
       positions: [
-        { id: "rp1", rateCode: "ЭЛ-21-04-007", volume: 120, coefficients: [], formula: "120 м кабеля ВВГнг 3×2.5" },
+        { id: "rp1", rateCode: "ЭСНСб21-21-04-007", volume: 120, coefficients: [], formula: "120 м кабеля ВВГнг 3×2.5" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Установочные изделия", category: "электромонтажные",
       positions: [
-        { id: "rp2", rateCode: "ЭЛ-21-02-001", volume: 12, coefficients: [], formula: "12 розеток" },
-        { id: "rp3", rateCode: "ЭЛ-21-06-001", volume: 6, coefficients: [], formula: "6 выключателей" },
-        { id: "rp4", rateCode: "ЭЛ-21-03-001", volume: 8, coefficients: [], formula: "8 светильников LED" },
+        { id: "rp2", rateCode: "ЭСНСб21-21-02-001", volume: 12, coefficients: [], formula: "12 розеток" },
+        { id: "rp3", rateCode: "ЭСНСб21-21-06-001", volume: 6, coefficients: [], formula: "6 выключателей" },
+        { id: "rp4", rateCode: "ЭСНСб21-21-03-001", volume: 8, coefficients: [], formula: "8 светильников LED" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Распределительный щит", category: "электромонтажные",
       positions: [
-        { id: "rp5", rateCode: "ЭЛ-21-05-001", volume: 1, coefficients: [], formula: "1 щит на 12 автоматов" },
+        { id: "rp5", rateCode: "ЭСНСб21-21-05-001", volume: 1, coefficients: [], formula: "1 щит на 12 автоматов" },
       ],
     },
   ],
@@ -293,11 +293,11 @@ const T4_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Электромонтаж", category: "электромонтажные",
       // ОШИБКА: занижена длина кабеля (45 м вместо 120 м — типичный «по прямой» расчёт)
       positions: [
-        { id: "sp1", rateCode: "ЭЛ-21-04-007", volume: 45, coefficients: [], formula: "По прямой между приборами" },
-        { id: "sp2", rateCode: "ЭЛ-21-02-001", volume: 12, coefficients: [], formula: "12 розеток" },
-        { id: "sp3", rateCode: "ЭЛ-21-06-001", volume: 6, coefficients: [], formula: "6 выключателей" },
-        { id: "sp4", rateCode: "ЭЛ-21-03-001", volume: 8, coefficients: [], formula: "8 светильников" },
-        { id: "sp5", rateCode: "ЭЛ-21-05-001", volume: 1, coefficients: [], formula: "1 щит" },
+        { id: "sp1", rateCode: "ЭСНСб21-21-04-007", volume: 45, coefficients: [], formula: "По прямой между приборами" },
+        { id: "sp2", rateCode: "ЭСНСб21-21-02-001", volume: 12, coefficients: [], formula: "12 розеток" },
+        { id: "sp3", rateCode: "ЭСНСб21-21-06-001", volume: 6, coefficients: [], formula: "6 выключателей" },
+        { id: "sp4", rateCode: "ЭСНСб21-21-03-001", volume: 8, coefficients: [], formula: "8 светильников" },
+        { id: "sp5", rateCode: "ЭСНСб21-21-05-001", volume: 1, coefficients: [], formula: "1 щит" },
       ],
     },
   ],
@@ -325,21 +325,21 @@ const T5_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Водопровод", category: "сантехнические",
       positions: [
-        { id: "rp1", rateCode: "СНТ-16-03-001", volume: 0.24, coefficients: [], formula: "24 м (ХВС 12 + ГВС 12) / 100" },
+        { id: "rp1", rateCode: "ЭСНСб17-16-03-001", volume: 0.24, coefficients: [], formula: "24 м (ХВС 12 + ГВС 12) / 100" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Сантехприборы", category: "сантехнические",
       positions: [
-        { id: "rp2", rateCode: "СНТ-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
-        { id: "rp3", rateCode: "СНТ-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
+        { id: "rp2", rateCode: "ЭСНСб17-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
+        { id: "rp3", rateCode: "ЭСНСб17-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Облицовка", category: "отделочные",
       positions: [
-        { id: "rp4", rateCode: "ОТД-15-05-001", volume: 0.205, coefficients: [], formula: "2×(2.0+1.8)×2.7 = 20.5 м² / 100" },
-        { id: "rp5", rateCode: "ОТД-11-03-001", volume: 0.036, coefficients: [], formula: "2.0×1.8 = 3.6 м² / 100" },
+        { id: "rp4", rateCode: "ЭСНСб15-15-05-001", volume: 0.205, coefficients: [], formula: "2×(2.0+1.8)×2.7 = 20.5 м² / 100" },
+        { id: "rp5", rateCode: "ЭСНСб15-11-03-001", volume: 0.036, coefficients: [], formula: "2.0×1.8 = 3.6 м² / 100" },
       ],
     },
   ],
@@ -355,16 +355,16 @@ const T5_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Сантехника", category: "сантехнические",
       // ОШИБКА: учтён только один контур труб (12 м вместо 24 м — забыли ГВС)
       positions: [
-        { id: "sp1", rateCode: "СНТ-16-03-001", volume: 0.12, coefficients: [], formula: "ХВС 12 м / 100 (забыли ГВС)" },
-        { id: "sp2", rateCode: "СНТ-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
-        { id: "sp3", rateCode: "СНТ-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
+        { id: "sp1", rateCode: "ЭСНСб17-16-03-001", volume: 0.12, coefficients: [], formula: "ХВС 12 м / 100 (забыли ГВС)" },
+        { id: "sp2", rateCode: "ЭСНСб17-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
+        { id: "sp3", rateCode: "ЭСНСб17-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
       ],
     },
     {
       id: "stu-s2", title: "Раздел 2. Плитка", category: "отделочные",
       positions: [
-        { id: "sp4", rateCode: "ОТД-15-05-001", volume: 0.205, coefficients: [], formula: "20.5 / 100" },
-        { id: "sp5", rateCode: "ОТД-11-03-001", volume: 0.036, coefficients: [], formula: "3.6 / 100" },
+        { id: "sp4", rateCode: "ЭСНСб15-15-05-001", volume: 0.205, coefficients: [], formula: "20.5 / 100" },
+        { id: "sp5", rateCode: "ЭСНСб15-11-03-001", volume: 0.036, coefficients: [], formula: "3.6 / 100" },
       ],
     },
   ],
@@ -391,20 +391,20 @@ const T6_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Подготовка", category: "отделочные",
       positions: [
-        { id: "rp1", rateCode: "ОТД-13-01-001", volume: 1.44, coefficients: [], formula: "Стены: 2×(10+10)×3.6 = 144 м² / 100" },
-        { id: "rp2", rateCode: "ОТД-15-04-001", volume: 1.44, coefficients: [], formula: "Окраска 144 / 100" },
+        { id: "rp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.44, coefficients: [], formula: "Стены: 2×(10+10)×3.6 = 144 м² / 100" },
+        { id: "rp2", rateCode: "ЭСНСб15-15-04-001", volume: 1.44, coefficients: [], formula: "Окраска 144 / 100" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Потолок", category: "отделочные",
       positions: [
-        { id: "rp3", rateCode: "ОТД-15-07-001", volume: 1.00, coefficients: [], formula: "10×10 = 100 м² / 100" },
+        { id: "rp3", rateCode: "ЭСНСб15-15-07-001", volume: 1.00, coefficients: [], formula: "10×10 = 100 м² / 100" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Светильники", category: "электромонтажные",
       positions: [
-        { id: "rp4", rateCode: "ЭЛ-21-03-001", volume: 25, coefficients: [], formula: "25 встроенных LED светильников 600×600" },
+        { id: "rp4", rateCode: "ЭСНСб21-21-03-001", volume: 25, coefficients: [], formula: "25 встроенных LED светильников 600×600" },
       ],
     },
   ],
@@ -419,14 +419,14 @@ const T6_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Отделка", category: "отделочные",
       // ОШИБКА: окраска без штукатурки (нет подготовки поверхности)
       positions: [
-        { id: "sp1", rateCode: "ОТД-15-04-001", volume: 1.44, coefficients: [], formula: "144 / 100" },
-        { id: "sp2", rateCode: "ОТД-15-07-001", volume: 1.00, coefficients: [], formula: "100 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб15-15-04-001", volume: 1.44, coefficients: [], formula: "144 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб15-15-07-001", volume: 1.00, coefficients: [], formula: "100 / 100" },
       ],
     },
     {
       id: "stu-s2", title: "Раздел 2. Электрика", category: "электромонтажные",
       positions: [
-        { id: "sp3", rateCode: "ЭЛ-21-03-001", volume: 25, coefficients: [], formula: "25 светильников" },
+        { id: "sp3", rateCode: "ЭСНСб21-21-03-001", volume: 25, coefficients: [], formula: "25 светильников" },
       ],
     },
   ],
@@ -453,8 +453,8 @@ const T7_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Подкровельный пирог", category: "кровельные",
       positions: [
-        { id: "rp1", rateCode: "КРВ-12-03-001", volume: 1.11, coefficients: [], formula: "96/cos30° = 111 м² / 100" },
-        { id: "rp2", rateCode: "КРВ-12-02-001", volume: 1.11, coefficients: [], formula: "111 / 100" },
+        { id: "rp1", rateCode: "ЭСНСб12-12-03-001", volume: 1.11, coefficients: [], formula: "96/cos30° = 111 м² / 100" },
+        { id: "rp2", rateCode: "ЭСНСб12-12-02-001", volume: 1.11, coefficients: [], formula: "111 / 100" },
       ],
     },
     {
@@ -475,8 +475,8 @@ const T7_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Кровля", category: "кровельные",
       // ОШИБКА: площадь в плане без учёта уклона (96 вместо 111)
       positions: [
-        { id: "sp1", rateCode: "КРВ-12-03-001", volume: 0.96, coefficients: [], formula: "8×12 = 96 / 100 (в плане)" },
-        { id: "sp2", rateCode: "КРВ-12-02-001", volume: 0.96, coefficients: [], formula: "96 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб12-12-03-001", volume: 0.96, coefficients: [], formula: "8×12 = 96 / 100 (в плане)" },
+        { id: "sp2", rateCode: "ЭСНСб12-12-02-001", volume: 0.96, coefficients: [], formula: "96 / 100" },
         { id: "sp3", rateCode: "ЭСН12-1112-0106-0102", volume: 96, coefficients: [], formula: "96 м² в плане" },
       ],
     },
@@ -504,21 +504,21 @@ const T8_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Земляные работы", category: "земляные",
       positions: [
-        { id: "rp1", rateCode: "ЗЕМ-01-01-002", volume: 5.18, coefficients: [], formula: "24×36×0.6 = 518 м³ (под ростверк) / 100" },
+        { id: "rp1", rateCode: "ЭСНСб01-01-01-002", volume: 5.18, coefficients: [], formula: "24×36×0.6 = 518 м³ (под ростверк) / 100" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Сваи", category: "общестроительные",
       positions: [
-        { id: "rp2", rateCode: "ФУН-07-01-001", volume: 90, coefficients: [], formula: "90 свай С90.30 шагом 4 м" },
+        { id: "rp2", rateCode: "ЭСНСб06-07-01-001", volume: 90, coefficients: [], formula: "90 свай С90.30 шагом 4 м" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Ростверк", category: "общестроительные",
       positions: [
-        { id: "rp3", rateCode: "ФУН-05-02-001", volume: 86.4, coefficients: [], formula: "(24+36)×2×0.6 опалубка = 72 + внутр. 14.4 = 86.4 м²" },
-        { id: "rp4", rateCode: "ФУН-06-01-001", volume: 3.20, coefficients: [], formula: "75 кг/м³ × 43 м³ ≈ 3.2 т" },
-        { id: "rp5", rateCode: "ФУН-05-01-001", volume: 43.2, coefficients: [], formula: "(24×36)×0.05 = 43.2 м³ (ростверк h=0.6 контур)" },
+        { id: "rp3", rateCode: "ЭСНСб06-05-02-001", volume: 86.4, coefficients: [], formula: "(24+36)×2×0.6 опалубка = 72 + внутр. 14.4 = 86.4 м²" },
+        { id: "rp4", rateCode: "ЭСНСб06-06-01-001", volume: 3.20, coefficients: [], formula: "75 кг/м³ × 43 м³ ≈ 3.2 т" },
+        { id: "rp5", rateCode: "ЭСНСб06-05-01-001", volume: 43.2, coefficients: [], formula: "(24×36)×0.05 = 43.2 м³ (ростверк h=0.6 контур)" },
       ],
     },
   ],
@@ -532,17 +532,17 @@ const T8_STARTER = mkLsr({
     {
       id: "stu-s1", title: "Раздел 1. Земля", category: "земляные",
       positions: [
-        { id: "sp1", rateCode: "ЗЕМ-01-01-002", volume: 5.18, coefficients: [], formula: "518 / 100" },
+        { id: "sp1", rateCode: "ЭСНСб01-01-01-002", volume: 5.18, coefficients: [], formula: "518 / 100" },
       ],
     },
     {
       id: "stu-s2", title: "Раздел 2. Фундамент", category: "общестроительные",
       // ОШИБКА: занижено количество свай (60 вместо 90)
       positions: [
-        { id: "sp2", rateCode: "ФУН-07-01-001", volume: 60, coefficients: [], formula: "60 свай (шаг 6 м вместо 4 м)" },
-        { id: "sp3", rateCode: "ФУН-05-02-001", volume: 86.4, coefficients: [], formula: "86.4 опалубка" },
-        { id: "sp4", rateCode: "ФУН-06-01-001", volume: 3.20, coefficients: [], formula: "3.2 т" },
-        { id: "sp5", rateCode: "ФУН-05-01-001", volume: 43.2, coefficients: [], formula: "43.2 м³" },
+        { id: "sp2", rateCode: "ЭСНСб06-07-01-001", volume: 60, coefficients: [], formula: "60 свай (шаг 6 м вместо 4 м)" },
+        { id: "sp3", rateCode: "ЭСНСб06-05-02-001", volume: 86.4, coefficients: [], formula: "86.4 опалубка" },
+        { id: "sp4", rateCode: "ЭСНСб06-06-01-001", volume: 3.20, coefficients: [], formula: "3.2 т" },
+        { id: "sp5", rateCode: "ЭСНСб06-05-01-001", volume: 43.2, coefficients: [], formula: "43.2 м³" },
       ],
     },
   ],
@@ -569,14 +569,14 @@ const T9_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Кабельная разводка", category: "электромонтажные",
       positions: [
-        { id: "rp1", rateCode: "ЭЛ-21-04-007", volume: 180, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" }], formula: "180 м кабеля" },
+        { id: "rp1", rateCode: "ЭСНСб21-21-04-007", volume: 180, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" }], formula: "180 м кабеля" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Светильники", category: "электромонтажные",
       positions: [
-        { id: "rp2", rateCode: "ЭЛ-21-03-001", volume: 12, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Действующий объект" }], formula: "12 LED антивандальных" },
-        { id: "rp3", rateCode: "ЭЛ-21-06-001", volume: 4, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Действующий объект" }], formula: "4 проходных выключателя" },
+        { id: "rp2", rateCode: "ЭСНСб21-21-03-001", volume: 12, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Действующий объект" }], formula: "12 LED антивандальных" },
+        { id: "rp3", rateCode: "ЭСНСб21-21-06-001", volume: 4, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Действующий объект" }], formula: "4 проходных выключателя" },
       ],
     },
   ],
@@ -591,9 +591,9 @@ const T9_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Электрика", category: "электромонтажные",
       // ОШИБКА: не применён К=1.15 действующего объекта
       positions: [
-        { id: "sp1", rateCode: "ЭЛ-21-04-007", volume: 180, coefficients: [], formula: "180 м" },
-        { id: "sp2", rateCode: "ЭЛ-21-03-001", volume: 12, coefficients: [], formula: "12 светильников" },
-        { id: "sp3", rateCode: "ЭЛ-21-06-001", volume: 4, coefficients: [], formula: "4 выключателя" },
+        { id: "sp1", rateCode: "ЭСНСб21-21-04-007", volume: 180, coefficients: [], formula: "180 м" },
+        { id: "sp2", rateCode: "ЭСНСб21-21-03-001", volume: 12, coefficients: [], formula: "12 светильников" },
+        { id: "sp3", rateCode: "ЭСНСб21-21-06-001", volume: 4, coefficients: [], formula: "4 выключателя" },
       ],
     },
   ],
@@ -620,20 +620,20 @@ const T10_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Котельная", category: "монтаж-оборудования",
       positions: [
-        { id: "rp1", rateCode: "МНТ-12-01-001", volume: 1, coefficients: [], formula: "1 газовый котёл 24 кВт" },
-        { id: "rp2", rateCode: "МНТ-12-09-001", volume: 1, coefficients: [], formula: "1 бак-аккумулятор 200 л (косвенник)" },
+        { id: "rp1", rateCode: "ЭСНСб07-12-01-001", volume: 1, coefficients: [], formula: "1 газовый котёл 24 кВт" },
+        { id: "rp2", rateCode: "ЭСНСб07-12-09-001", volume: 1, coefficients: [], formula: "1 бак-аккумулятор 200 л (косвенник)" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Трубопроводы", category: "сантехнические",
       positions: [
-        { id: "rp3", rateCode: "СНТ-16-01-001", volume: 0.80, coefficients: [], formula: "40 м подача + 40 м обратка = 80 м / 100" },
+        { id: "rp3", rateCode: "ЭСНСб17-16-01-001", volume: 0.80, coefficients: [], formula: "40 м подача + 40 м обратка = 80 м / 100" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Радиаторы", category: "сантехнические",
       positions: [
-        { id: "rp4", rateCode: "СНТ-16-02-001", volume: 12, coefficients: [], formula: "12 чугунных радиаторов" },
+        { id: "rp4", rateCode: "ЭСНСб17-16-02-001", volume: 12, coefficients: [], formula: "12 чугунных радиаторов" },
       ],
     },
   ],
@@ -648,10 +648,10 @@ const T10_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Отопление", category: "сантехнические",
       // ОШИБКА: учтена только подача (40 м), забыли обратку
       positions: [
-        { id: "sp1", rateCode: "МНТ-12-01-001", volume: 1, coefficients: [], formula: "1 котёл" },
-        { id: "sp2", rateCode: "МНТ-12-09-001", volume: 1, coefficients: [], formula: "1 бойлер" },
-        { id: "sp3", rateCode: "СНТ-16-01-001", volume: 0.40, coefficients: [], formula: "40 м труб (только подача)" },
-        { id: "sp4", rateCode: "СНТ-16-02-001", volume: 12, coefficients: [], formula: "12 радиаторов" },
+        { id: "sp1", rateCode: "ЭСНСб07-12-01-001", volume: 1, coefficients: [], formula: "1 котёл" },
+        { id: "sp2", rateCode: "ЭСНСб07-12-09-001", volume: 1, coefficients: [], formula: "1 бойлер" },
+        { id: "sp3", rateCode: "ЭСНСб17-16-01-001", volume: 0.40, coefficients: [], formula: "40 м труб (только подача)" },
+        { id: "sp4", rateCode: "ЭСНСб17-16-02-001", volume: 12, coefficients: [], formula: "12 радиаторов" },
       ],
     },
   ],
@@ -695,8 +695,8 @@ const T11_REFERENCE = mkLsr({
     {
       id: "ref-s2", title: "Раздел 2. Полы", category: "отделочные",
       positions: [
-        { id: "rp3", rateCode: "ОТД-11-02-001", volume: 0.12, coefficients: [], formula: "12 / 100 (новая стяжка)" },
-        { id: "rp4", rateCode: "ОТД-11-03-001", volume: 0.12, coefficients: [], formula: "12 / 100 (плитка пола)" },
+        { id: "rp3", rateCode: "ЭСНСб15-11-02-001", volume: 0.12, coefficients: [], formula: "12 / 100 (новая стяжка)" },
+        { id: "rp4", rateCode: "ЭСНСб15-11-03-001", volume: 0.12, coefficients: [], formula: "12 / 100 (плитка пола)" },
       ],
     },
     {
@@ -704,16 +704,16 @@ const T11_REFERENCE = mkLsr({
       positions: [
         // Стены брутто: 2×(3+4)×2.7 = 37.8 м². Проёмы 1.4×1.6 + 0.8×2.1 = 3.92. Нетто 33.88
         // Минус фартук 5 м² (под плитку) = 28.88 → окраска 0.29 (100 м²)
-        { id: "rp5", rateCode: "ОТД-13-01-001", volume: 0.289, coefficients: [], formula: "37.8 − проёмы 3.92 − фартук 5 = 28.88 / 100" },
-        { id: "rp6", rateCode: "ОТД-15-04-001", volume: 0.289, coefficients: [], formula: "28.88 / 100" },
-        { id: "rp7", rateCode: "ОТД-15-05-001", volume: 0.05, coefficients: [], formula: "Фартук 5 м² / 100" },
+        { id: "rp5", rateCode: "ЭСНСб15-13-01-001", volume: 0.289, coefficients: [], formula: "37.8 − проёмы 3.92 − фартук 5 = 28.88 / 100" },
+        { id: "rp6", rateCode: "ЭСНСб15-15-04-001", volume: 0.289, coefficients: [], formula: "28.88 / 100" },
+        { id: "rp7", rateCode: "ЭСНСб15-15-05-001", volume: 0.05, coefficients: [], formula: "Фартук 5 м² / 100" },
       ],
     },
     {
       id: "ref-s4", title: "Раздел 4. Электрика и сантехника", category: "электромонтажные",
       positions: [
-        { id: "rp8", rateCode: "ЭЛ-21-02-001", volume: 6, coefficients: [], formula: "6 розеток" },
-        { id: "rp9", rateCode: "СНТ-16-05-001", volume: 1, coefficients: [], formula: "Новый смеситель + умывальник" },
+        { id: "rp8", rateCode: "ЭСНСб21-21-02-001", volume: 6, coefficients: [], formula: "6 розеток" },
+        { id: "rp9", rateCode: "ЭСНСб17-16-05-001", volume: 1, coefficients: [], formula: "Новый смеситель + умывальник" },
       ],
     },
   ],
@@ -735,22 +735,22 @@ const T11_STARTER = mkLsr({
       id: "stu-s2", title: "Раздел 2. Полы", category: "отделочные",
       positions: [
         // ОШИБКА: пропущена новая стяжка перед плиткой
-        { id: "sp3", rateCode: "ОТД-11-03-001", volume: 0.12, coefficients: [], formula: "12 / 100" },
+        { id: "sp3", rateCode: "ЭСНСб15-11-03-001", volume: 0.12, coefficients: [], formula: "12 / 100" },
       ],
     },
     {
       id: "stu-s3", title: "Раздел 3. Стены", category: "отделочные",
       // ОШИБКА: не выделили фартук, всё в окраску. Объём 0.378 без вычета.
       positions: [
-        { id: "sp4", rateCode: "ОТД-13-01-001", volume: 0.378, coefficients: [], formula: "37.8 / 100 (с фартуком, без проёмов)" },
-        { id: "sp5", rateCode: "ОТД-15-04-001", volume: 0.378, coefficients: [], formula: "37.8 / 100" },
+        { id: "sp4", rateCode: "ЭСНСб15-13-01-001", volume: 0.378, coefficients: [], formula: "37.8 / 100 (с фартуком, без проёмов)" },
+        { id: "sp5", rateCode: "ЭСНСб15-15-04-001", volume: 0.378, coefficients: [], formula: "37.8 / 100" },
       ],
     },
     {
       id: "stu-s4", title: "Раздел 4. Электрика и сантехника", category: "электромонтажные",
       positions: [
-        { id: "sp6", rateCode: "ЭЛ-21-02-001", volume: 6, coefficients: [], formula: "6 розеток" },
-        { id: "sp7", rateCode: "СНТ-16-05-001", volume: 1, coefficients: [], formula: "1 смеситель" },
+        { id: "sp6", rateCode: "ЭСНСб21-21-02-001", volume: 6, coefficients: [], formula: "6 розеток" },
+        { id: "sp7", rateCode: "ЭСНСб17-16-05-001", volume: 1, coefficients: [], formula: "1 смеситель" },
       ],
     },
   ],
@@ -783,9 +783,9 @@ const T12_REFERENCE = mkLsr({
     {
       id: "ref-s2", title: "Раздел 2. Пирог", category: "кровельные",
       positions: [
-        { id: "rp2", rateCode: "КРВ-12-03-001", volume: 10.0, coefficients: [], formula: "1000 / 100 пароизоляция" },
-        { id: "rp3", rateCode: "КРВ-12-02-001", volume: 10.0, coefficients: [], formula: "1000 / 100 утепление" },
-        { id: "rp4", rateCode: "КРВ-12-01-001", volume: 10.0, coefficients: [], formula: "1000 / 100 наплавляемое 2 слоя" },
+        { id: "rp2", rateCode: "ЭСНСб12-12-03-001", volume: 10.0, coefficients: [], formula: "1000 / 100 пароизоляция" },
+        { id: "rp3", rateCode: "ЭСНСб12-12-02-001", volume: 10.0, coefficients: [], formula: "1000 / 100 утепление" },
+        { id: "rp4", rateCode: "ЭСНСб12-12-01-001", volume: 10.0, coefficients: [], formula: "1000 / 100 наплавляемое 2 слоя" },
       ],
     },
   ],
@@ -801,9 +801,9 @@ const T12_STARTER = mkLsr({
       // ОШИБКА: единица для профлиста — м², студент написал 10 как будто это 100 м²
       positions: [
         { id: "sp1", rateCode: "ЭСН12-1112-0107-0103", volume: 10, coefficients: [], formula: "10 (100 м²)?" },
-        { id: "sp2", rateCode: "КРВ-12-03-001", volume: 10.0, coefficients: [], formula: "1000 / 100" },
-        { id: "sp3", rateCode: "КРВ-12-02-001", volume: 10.0, coefficients: [], formula: "1000 / 100" },
-        { id: "sp4", rateCode: "КРВ-12-01-001", volume: 10.0, coefficients: [], formula: "1000 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб12-12-03-001", volume: 10.0, coefficients: [], formula: "1000 / 100" },
+        { id: "sp3", rateCode: "ЭСНСб12-12-02-001", volume: 10.0, coefficients: [], formula: "1000 / 100" },
+        { id: "sp4", rateCode: "ЭСНСб12-12-01-001", volume: 10.0, coefficients: [], formula: "1000 / 100" },
       ],
     },
   ],
@@ -830,23 +830,23 @@ const T13_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Земля", category: "земляные",
       positions: [
-        { id: "rp1", rateCode: "ЗЕМ-01-01-002", volume: 3.36, coefficients: [], formula: "12×10×2.8 = 336 / 100" },
+        { id: "rp1", rateCode: "ЭСНСб01-01-01-002", volume: 3.36, coefficients: [], formula: "12×10×2.8 = 336 / 100" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Стены и перекрытие", category: "общестроительные",
       positions: [
         // Стены: (12+10)×2×2.8 = 123.2 м² внешняя × 0.25 = 30.8 м³
-        { id: "rp2", rateCode: "ФУН-05-02-001", volume: 246.4, coefficients: [], formula: "Опалубка стен (2 стороны): 123.2 × 2 = 246.4 м²" },
-        { id: "rp3", rateCode: "ФУН-06-01-001", volume: 2.5, coefficients: [], formula: "Арматура ~80 кг/м³ × 30.8 = 2.5 т" },
-        { id: "rp4", rateCode: "ФУН-05-05-001", volume: 30.8, coefficients: [], formula: "30.8 м³ стены подвала" },
-        { id: "rp5", rateCode: "ФУН-05-06-001", volume: 24.0, coefficients: [], formula: "120 м² × 0.2 = 24 м³ перекрытие" },
+        { id: "rp2", rateCode: "ЭСНСб06-05-02-001", volume: 246.4, coefficients: [], formula: "Опалубка стен (2 стороны): 123.2 × 2 = 246.4 м²" },
+        { id: "rp3", rateCode: "ЭСНСб06-06-01-001", volume: 2.5, coefficients: [], formula: "Арматура ~80 кг/м³ × 30.8 = 2.5 т" },
+        { id: "rp4", rateCode: "ЭСНСб06-05-05-001", volume: 30.8, coefficients: [], formula: "30.8 м³ стены подвала" },
+        { id: "rp5", rateCode: "ЭСНСб06-05-06-001", volume: 24.0, coefficients: [], formula: "120 м² × 0.2 = 24 м³ перекрытие" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Гидроизоляция", category: "кровельные",
       positions: [
-        { id: "rp6", rateCode: "ИЗО-11-01-001", volume: 123.2, coefficients: [], formula: "Наружная поверхность стен 123.2 м²" },
+        { id: "rp6", rateCode: "ЭСНСб26-11-01-001", volume: 123.2, coefficients: [], formula: "Наружная поверхность стен 123.2 м²" },
       ],
     },
   ],
@@ -861,11 +861,11 @@ const T13_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Подвал", category: "общестроительные",
       // ОШИБКА: пропущена гидроизоляция наружных стен (для подвала — критично)
       positions: [
-        { id: "sp1", rateCode: "ЗЕМ-01-01-002", volume: 3.36, coefficients: [], formula: "336 / 100" },
-        { id: "sp2", rateCode: "ФУН-05-02-001", volume: 246.4, coefficients: [], formula: "246.4 опалубка" },
-        { id: "sp3", rateCode: "ФУН-06-01-001", volume: 2.5, coefficients: [], formula: "2.5 т" },
-        { id: "sp4", rateCode: "ФУН-05-05-001", volume: 30.8, coefficients: [], formula: "30.8 м³" },
-        { id: "sp5", rateCode: "ФУН-05-06-001", volume: 24.0, coefficients: [], formula: "24 м³" },
+        { id: "sp1", rateCode: "ЭСНСб01-01-01-002", volume: 3.36, coefficients: [], formula: "336 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб06-05-02-001", volume: 246.4, coefficients: [], formula: "246.4 опалубка" },
+        { id: "sp3", rateCode: "ЭСНСб06-06-01-001", volume: 2.5, coefficients: [], formula: "2.5 т" },
+        { id: "sp4", rateCode: "ЭСНСб06-05-05-001", volume: 30.8, coefficients: [], formula: "30.8 м³" },
+        { id: "sp5", rateCode: "ЭСНСб06-05-06-001", volume: 24.0, coefficients: [], formula: "24 м³" },
       ],
     },
   ],
@@ -892,13 +892,13 @@ const T14_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Стояки", category: "электромонтажные",
       positions: [
-        { id: "rp1", rateCode: "ЭЛ-21-04-007", volume: 360, coefficients: [{ kind: "высота", value: 1.20, justification: "Работа на высоте ≥ 8 м, СН РК 8.02-12" }], formula: "360 м стояков" },
+        { id: "rp1", rateCode: "ЭСНСб21-21-04-007", volume: 360, coefficients: [{ kind: "высота", value: 1.20, justification: "Работа на высоте ≥ 8 м, СН РК 8.02-12" }], formula: "360 м стояков" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Этажные щиты", category: "электромонтажные",
       positions: [
-        { id: "rp2", rateCode: "ЭЛ-21-05-001", volume: 12, coefficients: [{ kind: "высота", value: 1.20, justification: "Высота ≥ 8 м" }], formula: "12 этажных щитов" },
+        { id: "rp2", rateCode: "ЭСНСб21-21-05-001", volume: 12, coefficients: [{ kind: "высота", value: 1.20, justification: "Высота ≥ 8 м" }], formula: "12 этажных щитов" },
       ],
     },
   ],
@@ -913,8 +913,8 @@ const T14_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Электромонтаж", category: "электромонтажные",
       // ОШИБКА: не применён коэффициент высоты
       positions: [
-        { id: "sp1", rateCode: "ЭЛ-21-04-007", volume: 360, coefficients: [], formula: "360 м" },
-        { id: "sp2", rateCode: "ЭЛ-21-05-001", volume: 12, coefficients: [], formula: "12 щитов" },
+        { id: "sp1", rateCode: "ЭСНСб21-21-04-007", volume: 360, coefficients: [], formula: "360 м" },
+        { id: "sp2", rateCode: "ЭСНСб21-21-05-001", volume: 12, coefficients: [], formula: "12 щитов" },
       ],
     },
   ],
@@ -941,23 +941,23 @@ const T15_REFERENCE = mkLsr({
     {
       id: "ref-s1", title: "Раздел 1. Тёплый пол", category: "сантехнические",
       positions: [
-        { id: "rp1", rateCode: "СНТ-16-03-001", volume: 0.80, coefficients: [], formula: "80 м PEX / 100" },
-        { id: "rp2", rateCode: "МНТ-12-10-001", volume: 1, coefficients: [], formula: "1 циркуляционный насос Grundfos" },
+        { id: "rp1", rateCode: "ЭСНСб17-16-03-001", volume: 0.80, coefficients: [], formula: "80 м PEX / 100" },
+        { id: "rp2", rateCode: "ЭСНСб07-12-10-001", volume: 1, coefficients: [], formula: "1 циркуляционный насос Grundfos" },
       ],
     },
     {
       id: "ref-s2", title: "Раздел 2. Сантехприборы", category: "сантехнические",
       positions: [
-        { id: "rp3", rateCode: "СНТ-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
-        { id: "rp4", rateCode: "СНТ-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
+        { id: "rp3", rateCode: "ЭСНСб17-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
+        { id: "rp4", rateCode: "ЭСНСб17-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
       ],
     },
     {
       id: "ref-s3", title: "Раздел 3. Облицовка", category: "отделочные",
       positions: [
         // Стены: 2×(4+2.5)×2.7 = 35.1 м² нетто (без проёмов для упрощения) → 0.351
-        { id: "rp5", rateCode: "ОТД-15-05-001", volume: 0.351, coefficients: [], formula: "35.1 / 100" },
-        { id: "rp6", rateCode: "ОТД-11-03-001", volume: 0.10, coefficients: [], formula: "4×2.5 = 10 м² / 100" },
+        { id: "rp5", rateCode: "ЭСНСб15-15-05-001", volume: 0.351, coefficients: [], formula: "35.1 / 100" },
+        { id: "rp6", rateCode: "ЭСНСб15-11-03-001", volume: 0.10, coefficients: [], formula: "4×2.5 = 10 м² / 100" },
       ],
     },
   ],
@@ -972,16 +972,16 @@ const T15_STARTER = mkLsr({
       id: "stu-s1", title: "Раздел 1. Сантехника", category: "сантехнические",
       // ОШИБКА: пропущен циркуляционный насос (без него тёплый пол не работает!)
       positions: [
-        { id: "sp1", rateCode: "СНТ-16-03-001", volume: 0.80, coefficients: [], formula: "80 / 100" },
-        { id: "sp2", rateCode: "СНТ-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
-        { id: "sp3", rateCode: "СНТ-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
+        { id: "sp1", rateCode: "ЭСНСб17-16-03-001", volume: 0.80, coefficients: [], formula: "80 / 100" },
+        { id: "sp2", rateCode: "ЭСНСб17-16-04-001", volume: 1, coefficients: [], formula: "1 унитаз" },
+        { id: "sp3", rateCode: "ЭСНСб17-16-05-001", volume: 1, coefficients: [], formula: "1 умывальник" },
       ],
     },
     {
       id: "stu-s2", title: "Раздел 2. Облицовка", category: "отделочные",
       positions: [
-        { id: "sp4", rateCode: "ОТД-15-05-001", volume: 0.351, coefficients: [], formula: "35.1 / 100" },
-        { id: "sp5", rateCode: "ОТД-11-03-001", volume: 0.10, coefficients: [], formula: "10 / 100" },
+        { id: "sp4", rateCode: "ЭСНСб15-15-05-001", volume: 0.351, coefficients: [], formula: "35.1 / 100" },
+        { id: "sp5", rateCode: "ЭСНСб15-11-03-001", volume: 0.10, coefficients: [], formula: "10 / 100" },
       ],
     },
   ],
@@ -1035,7 +1035,7 @@ export const EXAM_TASKS: ExamTask[] = [
     starter: T3_STARTER,
     hints: [
       "В задании указана II категория грунта — используйте соответствующий шифр",
-      "Монолитная плита требует опалубку по периметру (ФУН-05-02-001)",
+      "Монолитная плита требует опалубку по периметру (ЭСНСб06-05-02-001)",
     ],
   },
   {
@@ -1082,8 +1082,8 @@ export const EXAM_TASKS: ExamTask[] = [
     reference: T6_REFERENCE,
     starter: T6_STARTER,
     hints: [
-      "Перед окраской — штукатурка (ОТД-13-01-001) и шпатлёвка",
-      "Подвесной потолок Армстронг — отдельная позиция (ОТД-15-07-001)",
+      "Перед окраской — штукатурка (ЭСНСб15-13-01-001) и шпатлёвка",
+      "Подвесной потолок Армстронг — отдельная позиция (ЭСНСб15-15-07-001)",
     ],
   },
   {
@@ -1162,8 +1162,8 @@ export const EXAM_TASKS: ExamTask[] = [
     reference: T11_REFERENCE,
     starter: T11_STARTER,
     hints: [
-      "После демонтажа старой стяжки нужно устроить новую (ОТД-11-02-001)",
-      "Фартук кухни — отдельная плитка (ОТД-15-05-001), а окрашивается только остаток стены",
+      "После демонтажа старой стяжки нужно устроить новую (ЭСНСб15-11-02-001)",
+      "Фартук кухни — отдельная плитка (ЭСНСб15-15-05-001), а окрашивается только остаток стены",
     ],
   },
   {
@@ -1189,7 +1189,7 @@ export const EXAM_TASKS: ExamTask[] = [
     difficulty: "сложная",
     durationMin: 35,
     icon: "🏛",
-    hiddenError: "Пропущена гидроизоляция наружных стен подвала (ИЗО-11-01-001)",
+    hiddenError: "Пропущена гидроизоляция наружных стен подвала (ЭСНСб26-11-01-001)",
     object: T13_OBJECT,
     reference: T13_REFERENCE,
     starter: T13_STARTER,
@@ -1226,7 +1226,7 @@ export const EXAM_TASKS: ExamTask[] = [
     reference: T15_REFERENCE,
     starter: T15_STARTER,
     hints: [
-      "Тёплый водяной пол требует циркуляционного насоса (МНТ-12-10-001)",
+      "Тёплый водяной пол требует циркуляционного насоса (ЭСНСб07-12-10-001)",
       "Это не дополнительная позиция, а обязательная — без неё система не работает",
     ],
   },

@@ -32,29 +32,29 @@ export function applyDemoFill(lsr: Lsr): Lsr {
         case "l2-s2": return {
           ...s,
           positions: [
-            { id: "d-sht-1", rateCode: "ОТД-13-01-001", volume: 26.99, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "ЕНиР прил. 1 п. 2" }], formula: "2699 м² / 100 = 26.99", drawingRef: "ОР-06" },
-            { id: "d-sht-2", rateCode: "ОТД-15-02-003", volume: 26.99, coefficients: [], formula: "26.99 (100 м²)", drawingRef: "ОР-06" },
+            { id: "d-sht-1", rateCode: "ЭСНСб15-13-01-001", volume: 26.99, coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "ЕНиР прил. 1 п. 2" }], formula: "2699 м² / 100 = 26.99", drawingRef: "ОР-06" },
+            { id: "d-sht-2", rateCode: "ЭСНСб15-15-02-003", volume: 26.99, coefficients: [], formula: "26.99 (100 м²)", drawingRef: "ОР-06" },
           ],
         };
         case "l2-s3": return {
           ...s,
           positions: [
-            { id: "d-okr-1", rateCode: "ОТД-15-04-001", volume: 26.99, coefficients: [], formula: "2699 м² / 100 = 26.99", drawingRef: "ОР-06" },
-            { id: "d-okr-2", rateCode: "ОТД-15-06-005", volume: 217.6, coefficients: [], formula: "Откосы окон: 64×(2×(2.1+1.8)×0.15)=74.9 + двери 32×(2×2.1×0.15)=20.2 + потолки 122.5 = 217.6 м²", drawingRef: "ОР-07" },
+            { id: "d-okr-1", rateCode: "ЭСНСб15-15-04-001", volume: 26.99, coefficients: [], formula: "2699 м² / 100 = 26.99", drawingRef: "ОР-06" },
+            { id: "d-okr-2", rateCode: "ЭСНСб15-15-06-005", volume: 217.6, coefficients: [], formula: "Откосы окон: 64×(2×(2.1+1.8)×0.15)=74.9 + двери 32×(2×2.1×0.15)=20.2 + потолки 122.5 = 217.6 м²", drawingRef: "ОР-07" },
           ],
         };
         case "l2-s4": return {
           ...s,
           positions: [
-            { id: "d-pol-1", rateCode: "ОТД-11-02-001", volume: 18.00, coefficients: [], formula: "1800 м² / 100 = 18.00", drawingRef: "ОР-05" },
-            { id: "d-pol-2", rateCode: "ОТД-11-04-002", volume: 15.60, coefficients: [], formula: "32 кл × 48.75 м² = 1560 / 100 = 15.60", drawingRef: "ОР-05" },
+            { id: "d-pol-1", rateCode: "ЭСНСб15-11-02-001", volume: 18.00, coefficients: [], formula: "1800 м² / 100 = 18.00", drawingRef: "ОР-05" },
+            { id: "d-pol-2", rateCode: "ЭСНСб15-11-04-002", volume: 15.60, coefficients: [], formula: "32 кл × 48.75 м² = 1560 / 100 = 15.60", drawingRef: "ОР-05" },
           ],
         };
         case "l2-s5": return {
           ...s,
           positions: [
-            { id: "d-okna-1", rateCode: "ОТД-06-02-001", volume: 143.36, coefficients: [], formula: "64 окна × 1.4×1.6 м² = 143.36 м²", drawingRef: "ОР-07" },
-            { id: "d-okna-2", rateCode: "ОТД-06-01-001", volume: 32,     coefficients: [], formula: "32 двери × 1 шт = 32 шт", drawingRef: "ОР-07" },
+            { id: "d-okna-1", rateCode: "ЭСНСб15-06-02-001", volume: 143.36, coefficients: [], formula: "64 окна × 1.4×1.6 м² = 143.36 м²", drawingRef: "ОР-07" },
+            { id: "d-okna-2", rateCode: "ЭСНСб15-06-01-001", volume: 32,     coefficients: [], formula: "32 двери × 1 шт = 32 шт", drawingRef: "ОР-07" },
           ],
         };
         default: return s;

@@ -802,7 +802,7 @@ export default function CyberChessPage(){
   const[gamesSearch,sGamesSearch]=useState<string>("");
   const[gamesSort,sGamesSort]=useState<"date"|"rating"|"length"|"result">("date");
   const[gamesResult,sGamesResult]=useState<"all"|"win"|"loss"|"draw">("all");
-  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder"}[]>([]);
+  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   // Hover-scrub: when user hovers a move in the move list, board previews that position
@@ -2016,17 +2016,18 @@ export default function CyberChessPage(){
       });
     };
 
-    const classifyMove=(prevCp:number,currCp:number,turn:string)=>{
+    const classifyMove=(prevCp:number,currCp:number,turn:string):{quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}=>{
       const moverWasWhite=turn==="b";
       const prevFromMover=moverWasWhite?prevCp:-prevCp;
       const currFromMover=moverWasWhite?currCp:-currCp;
       const drop=prevFromMover-currFromMover;
+      const cpLoss=Math.max(0,drop); // negative drop = improvement, clamp to 0
       let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
       if(drop>=300)quality="blunder";
       else if(drop>=150)quality="mistake";
       else if(drop>=70)quality="inacc";
       else if(drop<=-50)quality="great";
-      return quality;
+      return {quality,cpLoss};
     };
 
     (async()=>{
@@ -2040,7 +2041,8 @@ export default function CyberChessPage(){
           const fen=fenHist[i+1];if(!fen)break;
           const ev=await evalAt(fen,8);
           const turn=fen.split(" ")[1];
-          results.push({move:i+1,cp:ev.cp,mate:ev.mate,quality:classifyMove(prevCp,ev.cp,turn)});
+          const cm=classifyMove(prevCp,ev.cp,turn);
+          results.push({move:i+1,cp:ev.cp,mate:ev.mate,...cm});
           prevCp=ev.cp;
           if(cancelled)return;
           sAnalysis([...results]);
@@ -2061,7 +2063,8 @@ export default function CyberChessPage(){
         const fen=fenHist[i+1];if(!fen)break;
         const ev=await evalAt(fen,18);
         const turn=fen.split(" ")[1];
-        results2[i]={move:i+1,cp:ev.cp,mate:ev.mate,quality:classifyMove(prevCp2,ev.cp,turn)};
+        const cm2=classifyMove(prevCp2,ev.cp,turn);
+        results2[i]={move:i+1,cp:ev.cp,mate:ev.mate,...cm2};
         prevCp2=ev.cp;
         if(cancelled){sRefiningAnalysis(false);return;}
         sAnalysis([...results2]);
@@ -2424,16 +2427,11 @@ export default function CyberChessPage(){
       // Save to history
       const cat=tc.ini<=0?"Classical":tc.ini<=120?"Bullet":tc.ini<=300?"Blitz":tc.ini<=900?"Rapid":"Classical";
       // Include per-move cp-loss analysis for richer FIDE calibration.
-      // `analysis` state holds Stockfish eval entries: {move, cp, mate, quality}.
-      // We map to SavedGame.analysis shape, computing cpLoss as deviation from
-      // best move (stored as |cp| with sign representing who benefits).
+      // cpLoss is now computed correctly inside classifyMove (prevFromMover -
+      // currFromMover with proper side-to-move flip) and stored directly on
+      // the analysis state entries, so we just read it here.
       const analysisEntries = analysis.length > 0
-        ? analysis.map((a, i) => {
-            const nextCp = analysis[i + 1]?.cp ?? a.cp;
-            // cpLoss = how many centipawns worse than best move (always ≥ 0)
-            const cpLoss = Math.max(0, Math.abs(a.cp) - Math.abs(nextCp));
-            return {ply: a.move, quality: a.quality, cpLoss};
-          })
+        ? analysis.map(a => ({ply: a.move, quality: a.quality, cpLoss: a.cpLoss}))
         : undefined;
       const sg:SavedGame={id:Date.now().toString(36),date:new Date().toISOString(),moves:[...hist,mv.san],result:r,playerColor:pCol,aiLevel:hotseat?"Human vs Human":lv.name,rating:rat,tc:`${Math.floor(tc.ini/60)}+${tc.inc}`,category:cat as any,opening:currentOpening?.name,...(analysisEntries?{analysis:analysisEntries}:{})};
       saveGame(sg);sSavedGames(loadGames())}

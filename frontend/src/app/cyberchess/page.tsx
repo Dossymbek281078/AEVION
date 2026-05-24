@@ -630,6 +630,13 @@ export default function CyberChessPage(){
   const[repertoireOpen,sRepertoireOpen]=useState(false);
   const[boardArt,sBoardArt]=useState<BoardArtId>(()=>{try{return(localStorage.getItem("aevion_chess_art_v1")||"off") as BoardArtId}catch{return"off"}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_art_v1",boardArt)}catch{}},[boardArt]);
+  const[boardScale,sBoardScale]=useState<number>(()=>{try{const v=parseFloat(localStorage.getItem("cc_board_scale_v1")||"1");return isNaN(v)?1:Math.max(0.5,Math.min(1.5,v))}catch{return 1}});
+  useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
+  const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
+  useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
+  const baseBoardPx=Math.max(320,Math.min(720,vhPx-200,vwPx-360));
+  const boardPx=Math.round(baseBoardPx*boardScale);
+  const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
   const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
@@ -696,6 +703,7 @@ export default function CyberChessPage(){
   // Reset on newG; appended on each move via execTime(). Index aligns with hist.
   const moveTimesRef=useRef<number[]>([]);
   const lastMoveStartRef=useRef<number>(Date.now());
+  const boardResizeRef=useRef<{startX:number;startY:number;startScale:number}|null>(null);
   const[moveTimes,sMoveTimes]=useState<number[]>([]);
   // F2-phase: AEVION CPI per-move metrics collector. Pure data, no UI.
   // Filled on each successful exec(), drained on game-end into applyGameToCPI().
@@ -1793,6 +1801,14 @@ export default function CyberChessPage(){
       if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){
         e.preventDefault();
         sPalOpen(o=>!o);
+      }
+      if((e.ctrlKey||e.metaKey)&&(e.key==="="||e.key==="+")){
+        e.preventDefault();
+        sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))));
+      }
+      if((e.ctrlKey||e.metaKey)&&e.key==="-"){
+        e.preventDefault();
+        sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))));
       }
     };
     window.addEventListener("keydown",h);
@@ -5551,7 +5567,7 @@ export default function CyberChessPage(){
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
             border:"1px solid #93c5fd",
-            width:"min(calc(100vh - 130px),calc(100vw - 288px))",
+            width:bw,
             display:"flex",alignItems:"center",gap:SPACE[2],
           }}>
             <span style={{fontSize:16}}>{activeLesson.emoji}</span>
@@ -5573,7 +5589,6 @@ export default function CyberChessPage(){
             const wMat=capB.reduce((s,c)=>s+pieceVal(c),0);
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
-            const bw="min(calc(100vh - 130px),calc(100vw - 288px))";
             const PRow=({isAI,time,isActive,lowTime,captures,advantage}:{isAI:boolean;time:number;isActive:boolean;lowTime:boolean;captures:string[];advantage:number})=>{
               const name=isAI?al.name+" AI":"Вы";
               const elo=isAI?al.elo:rat;
@@ -5627,7 +5642,7 @@ export default function CyberChessPage(){
           {/* Recent-moves chip-row removed — list lives in the right panel.
               The premove queue moved to the TOP of that move list (right panel). */}
 
-          <div translate="no" style={{display:"flex",width:"min(calc(100vh - 130px),calc(100vw - 288px))",gap:4}}>
+          <div translate="no" style={{display:"flex",width:bw,gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
             {sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach")&&(()=>{
@@ -5721,7 +5736,7 @@ export default function CyberChessPage(){
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
-              className={`${bk<=2&&on?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
+              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
@@ -5882,9 +5897,23 @@ export default function CyberChessPage(){
                 <span style={{opacity:0.7,fontSize:10,fontWeight:700,marginRight:6,letterSpacing:0.5}}>⌨ ХОД</span>
                 {sanBuf}<span style={{opacity:0.6,animation:"cc-fade-in 0.6s ease-out infinite alternate"}}>_</span>
               </div>}
+              {/* Drag-corner resize handle */}
+              <div
+                title="Потяни чтобы изменить размер доски"
+                style={{position:"absolute",bottom:0,right:0,width:14,height:14,cursor:"nwse-resize",zIndex:8,opacity:0.35,background:"radial-gradient(circle at 70% 70%, rgba(255,255,255,0.6) 0%, transparent 70%)",borderBottomRightRadius:6}}
+                onPointerDown={e=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);boardResizeRef.current={startX:e.clientX,startY:e.clientY,startScale:boardScale};}}
+                onPointerMove={e=>{if(!boardResizeRef.current)return;const delta=(e.clientX-boardResizeRef.current.startX+e.clientY-boardResizeRef.current.startY)/2;const newPx=Math.max(320,Math.min(800,baseBoardPx*boardResizeRef.current.startScale+delta));sBoardScale(parseFloat((newPx/baseBoardPx).toFixed(3)));}}
+                onPointerUp={()=>{boardResizeRef.current=null;}}
+              />
             </div>
           </div>
-          <div style={{display:"flex",paddingLeft:23,width:"min(calc(100vh - 130px),calc(100vw - 288px))"}}><div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div></div>
+          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
+            <div style={{display:"flex",gap:2,flexShrink:0,marginTop:2}}>
+              <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+              <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+            </div>
+          </div>
 
           {/* Нижняя player row (свой игрок) — chess.com style */}
           {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
@@ -5897,7 +5926,7 @@ export default function CyberChessPage(){
             const myLow=pT.time<30000&&on&&!over;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
-              width:"min(calc(100vh - 130px),calc(100vw - 288px))",
+              width:bw,
               padding:"5px 0",marginTop:2,gap:8,
               borderLeft:myT&&on&&!over?`3px solid ${CC.brand}`:"3px solid transparent",
               paddingLeft:6,transition:"border-color 200ms",

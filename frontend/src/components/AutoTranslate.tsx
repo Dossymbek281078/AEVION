@@ -274,25 +274,48 @@ const dict: Record<string, string> = {
 // Cache of sorted keys per dict to avoid re-sorting on every render
 const sortedRuKeys = Object.keys(dict).sort((a, b) => b.length - a.length);
 
-// Build EN→LANG reverse map from the structured translations dict.
-// Cached per language — computed once, reused on subsequent renders.
-const langDictCache = new Map<Lang, { d: Record<string, string>; k: string[] }>();
+// Build SOURCE→TARGET reverse map from the structured translations dict.
+// Cached per (source, target) pair — most pages have RU-literal JSX (no t()
+// hook), so RU→EN and RU→KK matter just as much as EN→*. Without RU as a
+// source, ~515 RU-literal pages silently fail to translate when user picks
+// EN or KK from the switcher.
+const langDictCache = new Map<string, { d: Record<string, string>; k: string[] }>();
 
-function getLangDict(lang: Lang): { d: Record<string, string>; k: string[] } {
-  if (langDictCache.has(lang)) return langDictCache.get(lang)!;
+type SourceLang = "en" | "ru";
+
+function getLangDict(target: Lang, source: SourceLang = "en"): { d: Record<string, string>; k: string[] } {
+  const cacheKey = `${source}->${target}`;
+  if (langDictCache.has(cacheKey)) return langDictCache.get(cacheKey)!;
   const tbl = translations as Record<string, Record<string, string>>;
-  const enTbl = tbl["en"] ?? {};
-  const langTbl = tbl[lang] ?? {};
+  const srcTbl = tbl[source] ?? {};
+  const langTbl = tbl[target] ?? {};
   const d: Record<string, string> = {};
-  for (const key of Object.keys(enTbl)) {
-    const en = enTbl[key];
+  for (const key of Object.keys(srcTbl)) {
+    const src = srcTbl[key];
     const tr = langTbl[key];
-    if (en && tr && en !== tr) d[en] = tr;
+    if (src && tr && src !== tr) d[src] = tr;
   }
   const k = Object.keys(d).sort((a, b) => b.length - a.length);
   const entry = { d, k };
-  langDictCache.set(lang, entry);
+  langDictCache.set(cacheKey, entry);
   return entry;
+}
+
+// Inverted RU→EN dict from the hardcoded EN→RU dict at the top of this
+// file. That dict was authored for EN-literal pages (legacy assumption);
+// reusing it inverted gives ~200 free RU→EN pairs covering common UI words.
+// Built lazily once on first lang switch.
+let ruToEnInlineCache: { d: Record<string, string>; k: string[] } | null = null;
+function getRuToEnInline(): { d: Record<string, string>; k: string[] } {
+  if (ruToEnInlineCache) return ruToEnInlineCache;
+  const d: Record<string, string> = {};
+  for (const en of Object.keys(dict)) {
+    const ru = dict[en];
+    if (ru && en && ru !== en && !(ru in d)) d[ru] = en;
+  }
+  const k = Object.keys(d).sort((a, b) => b.length - a.length);
+  ruToEnInlineCache = { d, k };
+  return ruToEnInlineCache;
 }
 
 function translateText(text: string, d: Record<string, string>, keys: string[]): string {
@@ -342,10 +365,33 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const obs = useRef<MutationObserver | null>(null);
   useEffect(() => {
-    if (!ref.current || lang === "en") return;
-    // RU: use the comprehensive hardcoded dict; other langs: use reverse map from translations
-    const activeDict = lang === "ru" ? dict : getLangDict(lang).d;
-    const activeKeys = lang === "ru" ? sortedRuKeys : getLangDict(lang).k;
+    if (!ref.current) return;
+    // Build a composite dict for the active target language. RU-literal pages
+    // (most of the codebase — t() hooks are <1% adoption) need RU as the
+    // source; EN-literal pages need EN. Merge both maps so the same walker
+    // handles either.
+    let activeDict: Record<string, string> = {};
+    let activeKeys: string[] = [];
+    if (lang === "ru") {
+      // page is likely EN-literal → translate to RU. Use the hardcoded dict
+      // (richer than the structured i18n-data.ts main block).
+      activeDict = dict;
+      activeKeys = sortedRuKeys;
+    } else if (lang === "en") {
+      // page is likely RU-literal → translate to EN. Combine inverted
+      // hardcoded dict + RU→EN from i18n-data.ts.
+      const inline = getRuToEnInline();
+      const structured = getLangDict("en", "ru");
+      activeDict = { ...inline.d, ...structured.d };
+      activeKeys = Object.keys(activeDict).sort((a, b) => b.length - a.length);
+    } else {
+      // page may be EN-literal (translate EN→target) OR RU-literal (RU→target).
+      // Build both maps; longer keys win in the walker so cross-talk is safe.
+      const en = getLangDict(lang, "en");
+      const ru = getLangDict(lang, "ru");
+      activeDict = { ...en.d, ...ru.d };
+      activeKeys = Object.keys(activeDict).sort((a, b) => b.length - a.length);
+    }
     if (activeKeys.length === 0) return;
     walk(ref.current, activeDict, activeKeys);
     obs.current = new MutationObserver(ms => {

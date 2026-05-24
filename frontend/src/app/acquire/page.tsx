@@ -5,6 +5,57 @@ import { useEffect, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 
+const KNOWN_REFS: Record<string, string> = {
+  stripe: "Stripe",
+  visa: "Visa",
+  microsoft: "Microsoft",
+  plaid: "Plaid",
+  google: "Google",
+  adyen: "Adyen",
+  paypal: "PayPal",
+  block: "Block",
+  cloudflare: "Cloudflare",
+  atlassian: "Atlassian",
+  servicenow: "ServiceNow",
+  salesforce: "Salesforce",
+  aws: "AWS",
+  pif: "PIF / Sanabil",
+  mubadala: "Mubadala",
+  temasek: "Temasek",
+  sequoia: "Sequoia",
+  a16z: "Andreessen Horowitz",
+  softbank: "SoftBank",
+  kaspi: "Kaspi.kz",
+  halyk: "Halyk Bank",
+};
+const REF_STORAGE_KEY = "aevion_acquire_ref_v1";
+
+function useAcquireRef(): { key: string | null; name: string | null } {
+  const [key, setKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let next: string | null = null;
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("ref");
+      if (fromUrl) {
+        next = fromUrl.toLowerCase().split("-")[0] ?? null;
+        if (next) localStorage.setItem(REF_STORAGE_KEY, next);
+      } else {
+        next = localStorage.getItem(REF_STORAGE_KEY);
+      }
+    } catch {
+      // ignore — sandboxed iframes, blocked localStorage, etc.
+    }
+    setKey(next);
+  }, []);
+  if (!key) return { key: null, name: null };
+  return { key, name: KNOWN_REFS[key] ?? null };
+}
+
+function withRefTag(subject: string, refName: string | null): string {
+  return refName ? `${subject} [via ${refName}]` : subject;
+}
+
 type Pillar = {
   id: string;
   title: string;
@@ -100,6 +151,7 @@ const DEAL_TERMS = [
 export default function AcquirePage() {
   const [registry, setRegistry] = useState<RegistryStats | null>(null);
   const [planetCount, setPlanetCount] = useState<number | null>(null);
+  const acquireRef = useAcquireRef();
 
   useEffect(() => {
     Promise.allSettled([
@@ -121,6 +173,24 @@ export default function AcquirePage() {
 
       {/* HERO */}
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "100px 24px 80px" }}>
+        {acquireRef.name && (
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 18,
+            padding: "8px 16px",
+            background: "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12))",
+            border: "1px solid rgba(16,185,129,0.35)",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#cbd5e1",
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: "#10b981", boxShadow: "0 0 0 4px rgba(16,185,129,0.18)" }} aria-hidden />
+            Hello, <span style={{ color: "#10b981", fontWeight: 800 }}>{acquireRef.name}</span> team — this brief was prepared for you.
+          </div>
+        )}
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 24 }}>
           Acquisition Brief · Floor $1 000 000 000 net · Senior Advisor seat
         </div>
@@ -139,7 +209,7 @@ export default function AcquirePage() {
           под одной расчётной единицей (AEV) и одним правовым контуром.
         </p>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 56 }}>
-          <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20acquisition%20-%20LOI%20inquiry" style={btnPrimary}>
+          <a href="mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag("AEVION acquisition - LOI inquiry", acquireRef.name)) style={btnPrimary}>
             Запросить LOI → yahiin1978@gmail.com
           </a>
           <Link href="/launch-status" style={btnGhost}>Live status</Link>
@@ -460,7 +530,7 @@ export default function AcquirePage() {
             <Link href="/pilot" style={{ display: "inline-flex", alignItems: "center", padding: "12px 20px", fontSize: 13, fontWeight: 800, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)", color: "#cbd5e1", borderRadius: 12, textDecoration: "none" }}>
               90-day pilot
             </Link>
-            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20acquisition%20-%20LOI%20inquiry" style={{ display: "inline-flex", alignItems: "center", padding: "12px 22px", fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg,#10b981,#3b82f6)", color: "#0a0e1a", borderRadius: 12, textDecoration: "none", boxShadow: "0 8px 22px rgba(16,185,129,0.25)" }}>
+            <a href="mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag("AEVION acquisition - LOI inquiry", acquireRef.name)) style={{ display: "inline-flex", alignItems: "center", padding: "12px 22px", fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg,#10b981,#3b82f6)", color: "#0a0e1a", borderRadius: 12, textDecoration: "none", boxShadow: "0 8px 22px rgba(16,185,129,0.25)" }}>
               Запросить LOI · yahiin1978@gmail.com
             </a>
           </div>

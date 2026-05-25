@@ -11882,71 +11882,158 @@ ${question.trim()}`;
     {over&&!setup&&showGameOver&&!on&&(()=>{
       const isWin=over.includes("win")||over.includes("Win")||over.includes("победа")||over.includes("Победа");
       const isDraw=over.includes("ничья")||over.includes("Ничья")||over.includes("Draw")||over.includes("draw");
-      const isLoss=!isWin&&!isDraw;
+      const accentClr=isWin?"#759900":isDraw?"#888":"#c03030";
+      const glowClr=isWin?"rgba(117,153,0,0.5)":isDraw?"rgba(120,120,120,0.4)":"rgba(180,30,30,0.5)";
+      const calcSideAcc=(moves:{quality:string}[])=>{
+        if(!moves.length)return 0;
+        const g=moves.filter(m=>m.quality==="great").length;
+        const go=moves.filter(m=>m.quality==="good").length;
+        const ia=moves.filter(m=>m.quality==="inacc").length;
+        const mk=moves.filter(m=>m.quality==="mistake").length;
+        const bl=moves.filter(m=>m.quality==="blunder").length;
+        return Math.round(100*(g*1+go*0.85+ia*0.6+mk*0.3+bl*0)/moves.length);
+      };
+      const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
+      const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);
+      const myAcc=calcSideAcc(myMoves);
+      const oppAcc=calcSideAcc(oppMoves);
+      const myGreat=myMoves.filter(m=>m.quality==="great").length;
+      const myGood=myMoves.filter(m=>m.quality==="good").length;
+      const myInacc=myMoves.filter(m=>m.quality==="inacc").length;
+      const myMistake=myMoves.filter(m=>m.quality==="mistake").length;
+      const myBlunder=myMoves.filter(m=>m.quality==="blunder").length;
+      const myTotal=myMoves.length||1;
+      // Circular accuracy ring
+      const R=40,circ=2*Math.PI*R;
+      const accArc=(pct:number)=>circ*(1-pct/100);
+      const accRingClr=myAcc>=85?"#10b981":myAcc>=65?"#f59e0b":"#ef4444";
+      // Eval mini graph
+      const EW=320,EH=36,Emid=EH/2;
+      const epts=analysis.length>=4?analysis.map((a,i)=>({
+        x:i/(analysis.length-1||1)*EW,
+        y:Emid-Math.max(-Emid+2,Math.min(Emid-2,a.cp/100*1.5)),
+      })):[];
+      const epoly=epts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+      const efill=epts.length?epts.map((p,i)=>i===0?`M${p.x.toFixed(1)},${Emid} L${p.x.toFixed(1)},${p.y.toFixed(1)}`:` L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("")+` L${EW},${Emid} L0,${Emid} Z`:"";
+      const qualRows=[
+        {label:"Отлично",count:myGreat,clr:"#f59e0b",sym:"★"},
+        {label:"Хорошо",count:myGood,clr:"#10b981",sym:"✓"},
+        {label:"Неточность",count:myInacc,clr:"#818cf8",sym:"?!"},
+        {label:"Ошибка",count:myMistake,clr:"#f97316",sym:"?"},
+        {label:"Зевок",count:myBlunder,clr:"#ef4444",sym:"??"},
+      ];
       return(
         <div style={{
           position:"fixed",inset:0,zIndex:500,
-          background:isWin
-            ?"radial-gradient(ellipse at center, rgba(117,153,0,0.92) 0%, rgba(15,13,10,0.97) 70%)"
-            :isDraw
-            ?"radial-gradient(ellipse at center, rgba(100,100,100,0.92) 0%, rgba(15,13,10,0.97) 70%)"
-            :"radial-gradient(ellipse at center, rgba(200,40,40,0.88) 0%, rgba(15,13,10,0.97) 70%)",
-          display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-          backdropFilter:"blur(3px)",
-          animation:"cc-board-enter 400ms ease-out both",
-        }}>
-          <div style={{fontSize:80,marginBottom:16,animation:"pop 600ms cubic-bezier(0.34,1.56,0.64,1) both"}}>
-            {isWin?"🏆":isDraw?"🤝":"💀"}
-          </div>
-          <div style={{fontSize:36,fontWeight:900,color:"#fff",marginBottom:8,letterSpacing:0.5}}>
-            {isWin?"Победа!":isDraw?"Ничья":"Поражение"}
-          </div>
-          <div style={{fontSize:16,color:"rgba(255,255,255,0.75)",marginBottom:16}}>{over}</div>
-          {/* Game summary — populated by auto-analysis (depth 10) */}
-          {analysis.length>0&&(()=>{
-            const playerMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
-            const blunders=playerMoves.filter(m=>m.quality==="blunder").length;
-            const mistakes=playerMoves.filter(m=>m.quality==="mistake").length;
-            const great=playerMoves.filter(m=>m.quality==="great").length;
-            const totalCpl=playerMoves.reduce((s,m)=>s+Math.max(0,m.cp),0);
-            const accuracy=playerMoves.length>0?Math.max(0,Math.min(100,Math.round(100-totalCpl/Math.max(1,playerMoves.length)/3))):0;
-            return(
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginBottom:20}}>
-                <div style={{padding:"6px 14px",borderRadius:20,background:"rgba(255,255,255,0.1)",color:"#fff",fontSize:13,fontWeight:700}}>
-                  📊 {accuracy}% точность
-                </div>
-                {great>0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(245,158,11,0.25)",color:"#fbbf24",fontSize:13,fontWeight:700}}>
-                  ⭐ {great} отл.
-                </div>}
-                {mistakes>0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(249,115,22,0.25)",color:"#fb923c",fontSize:13,fontWeight:700}}>
-                  ? {mistakes} ошибок
-                </div>}
-                {blunders>0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(239,68,68,0.25)",color:"#f87171",fontSize:13,fontWeight:700}}>
-                  ?? {blunders} зевков
-                </div>}
-                {blunders===0&&mistakes===0&&<div style={{padding:"6px 14px",borderRadius:20,background:"rgba(16,185,129,0.25)",color:"#34d399",fontSize:13,fontWeight:700}}>
-                  ✓ Чистая партия
+          background:"rgba(8,6,4,0.88)",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          backdropFilter:"blur(8px)",
+          animation:"cc-board-enter 350ms ease-out both",
+        }} onClick={()=>sShowGameOver(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{
+            width:420,maxWidth:"calc(100vw - 32px)",
+            background:"#141210",border:`1px solid ${accentClr}55`,
+            borderRadius:20,overflow:"hidden",
+            boxShadow:`0 0 60px ${glowClr}, 0 32px 80px rgba(0,0,0,0.8)`,
+            animation:"pop 500ms cubic-bezier(0.34,1.56,0.64,1) both",
+          }}>
+            {/* Header strip */}
+            <div style={{
+              background:`linear-gradient(135deg,${accentClr}22,${accentClr}08)`,
+              borderBottom:`1px solid ${accentClr}33`,
+              padding:"20px 24px 16px",
+              display:"flex",alignItems:"center",gap:14,
+            }}>
+              <div style={{fontSize:48,lineHeight:1,flexShrink:0}}>{isWin?"🏆":isDraw?"🤝":"💀"}</div>
+              <div>
+                <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:0.3}}>{isWin?"Победа!":isDraw?"Ничья":"Поражение"}</div>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.55)",marginTop:2}}>{over}</div>
+                {currentOpening&&<div style={{marginTop:5,display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:9,fontWeight:900,padding:"2px 5px",borderRadius:3,background:accentClr,color:"#fff",fontFamily:"ui-monospace,monospace",letterSpacing:0.8}}>{currentOpening.eco}</span>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:700}}>{currentOpening.name}</span>
                 </div>}
               </div>
-            );
-          })()}
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center"}}>
-            <button onClick={()=>{sShowGameOver(false);sSetup(true);sOn(false);}} style={{
-              padding:"12px 28px",borderRadius:12,border:"none",
-              background:"#759900",color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer",
-              boxShadow:"0 4px 16px rgba(117,153,0,0.5)",
-            }}>▶ Новая игра</button>
-            <button onClick={()=>{sShowGameOver(false);sTab("analysis");sShowAnal(true);}} style={{
-              padding:"12px 24px",borderRadius:12,border:"2px solid rgba(255,255,255,0.3)",
-              background:"transparent",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",
-            }}>📊 Анализ</button>
-            <button onClick={()=>sShowGameOver(false)} style={{
-              padding:"12px 20px",borderRadius:12,border:"1px solid rgba(255,255,255,0.2)",
-              background:"transparent",color:"rgba(255,255,255,0.5)",fontSize:13,cursor:"pointer",
-            }}>✕ Закрыть</button>
-          </div>
-          <div style={{marginTop:24,fontSize:13,color:"rgba(255,255,255,0.5)"}}>
-            {hist.length} ходов · {tc.ini>0?tc.name:"без таймера"}
+            </div>
+
+            {/* Stats body */}
+            {analysis.length>0&&<div style={{padding:"16px 24px"}}>
+
+              {/* Accuracy row: my ring + opp ring */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-around",marginBottom:16}}>
+                {/* My accuracy ring */}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                  <svg width={96} height={96}>
+                    <circle cx={48} cy={48} r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={8}/>
+                    <circle cx={48} cy={48} r={R} fill="none" stroke={accRingClr} strokeWidth={8}
+                      strokeDasharray={circ} strokeDashoffset={accArc(myAcc)}
+                      strokeLinecap="round" transform="rotate(-90 48 48)"
+                      style={{transition:"stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)"}}/>
+                    <text x={48} y={52} textAnchor="middle" fill="#fff" fontSize={18} fontWeight={900} fontFamily="ui-monospace,monospace">{myAcc}%</text>
+                  </svg>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontWeight:700}}>Вы ({pCol==="w"?"♙":"♟"})</div>
+                </div>
+                {/* Center divider */}
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontWeight:700,textAlign:"center"}}>
+                  <div style={{fontSize:22,marginBottom:4}}>vs</div>
+                  <div>{hist.length} ходов</div>
+                  <div style={{marginTop:2}}>{tc.ini>0?tc.name:"∞"}</div>
+                </div>
+                {/* Opp accuracy ring */}
+                {oppMoves.length>0&&(()=>{
+                  const oppRingClr=oppAcc>=85?"#10b981":oppAcc>=65?"#f59e0b":"#ef4444";
+                  return<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                    <svg width={96} height={96}>
+                      <circle cx={48} cy={48} r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={8}/>
+                      <circle cx={48} cy={48} r={R} fill="none" stroke={oppRingClr} strokeWidth={8}
+                        strokeDasharray={circ} strokeDashoffset={accArc(oppAcc)}
+                        strokeLinecap="round" transform="rotate(-90 48 48)"
+                        style={{transition:"stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)"}}/>
+                      <text x={48} y={52} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize={18} fontWeight={900} fontFamily="ui-monospace,monospace">{oppAcc}%</text>
+                    </svg>
+                    <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontWeight:700}}>Соперник ({pCol==="w"?"♟":"♙"})</div>
+                  </div>;
+                })()}
+              </div>
+
+              {/* Quality breakdown bars */}
+              <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:14}}>
+                {qualRows.map(row=><div key={row.label} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{width:28,fontSize:10,fontWeight:800,color:row.clr,fontFamily:"ui-monospace,monospace",textAlign:"right",flexShrink:0}}>{row.sym}</div>
+                  <div style={{flex:1,height:5,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${row.count/myTotal*100}%`,background:row.clr,borderRadius:3,transition:"width 1s ease-out"}}/>
+                  </div>
+                  <div style={{width:20,fontSize:11,fontWeight:700,color:row.count>0?"#fff":"rgba(255,255,255,0.2)",textAlign:"right",flexShrink:0}}>{row.count}</div>
+                  <div style={{width:56,fontSize:10,color:"rgba(255,255,255,0.4)",flexShrink:0}}>{row.label}</div>
+                </div>)}
+              </div>
+
+              {/* Mini eval graph */}
+              {epts.length>=4&&<div style={{borderRadius:8,overflow:"hidden",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)"}}>
+                <svg width={EW} height={EH} style={{display:"block",width:"100%",height:EH}}>
+                  <line x1={0} y1={Emid} x2={EW} y2={Emid} stroke="rgba(255,255,255,0.08)" strokeWidth={1} strokeDasharray="4,4"/>
+                  <path d={efill} fill="rgba(16,185,129,0.10)" stroke="none"/>
+                  <polyline points={epoly} fill="none" stroke="#10b981" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round"/>
+                </svg>
+              </div>}
+
+            </div>}
+
+            {/* Buttons */}
+            <div style={{padding:"0 24px 20px",display:"flex",gap:10,flexWrap:"wrap"}}>
+              <button onClick={()=>{sShowGameOver(false);sSetup(true);sOn(false);}} style={{
+                flex:1,padding:"11px 0",borderRadius:10,border:"none",
+                background:accentClr,color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer",
+                boxShadow:`0 4px 14px ${glowClr}`,minWidth:100,
+              }}>▶ Новая игра</button>
+              <button onClick={()=>{sShowGameOver(false);sTab("analysis");sShowAnal(true);}} style={{
+                flex:1,padding:"11px 0",borderRadius:10,border:"1px solid rgba(255,255,255,0.18)",
+                background:"rgba(255,255,255,0.07)",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",minWidth:80,
+              }}>📊 Анализ</button>
+              <button onClick={()=>sShowGameOver(false)} style={{
+                padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",
+                background:"transparent",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",
+              }}>✕</button>
+            </div>
           </div>
         </div>
       );

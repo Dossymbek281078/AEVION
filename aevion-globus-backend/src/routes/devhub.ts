@@ -1811,7 +1811,7 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
       data: {
         type: "checkouts",
         attributes: {
-          checkout_data: { custom_price: Math.round(amt) },
+          custom_price: Math.round(amt),
           checkout_options: { embed: false, media: false, logo: true },
           product_options: {
             name: name.trim().slice(0, 200),

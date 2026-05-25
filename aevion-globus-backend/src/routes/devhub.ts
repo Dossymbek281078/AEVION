@@ -1818,7 +1818,6 @@ devhubRouter.post("/media/payment-link", async (req, res) => {
             description: (description || name).trim().slice(0, 500),
             redirect_url: successUrl || `${frontendUrl}/devhub?payment=success`,
           },
-          expires_at: null,
         },
         relationships: {
           store: { data: { type: "stores", id: String(storeId) } },

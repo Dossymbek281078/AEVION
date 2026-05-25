@@ -617,6 +617,7 @@ export default function CyberChessPage(){
     }catch{}
   },[hist, game, bk]);
   const[think,sThink]=useState(false);
+  const[hintLoading,sHintLoading]=useState(false);
   const[capW,sCapW]=useState<string[]>([]);
   const[capB,sCapB]=useState<string[]>([]);
   const[promo,sPromo]=useState<{from:Square;to:Square}|null>(null);
@@ -6195,6 +6196,16 @@ export default function CyberChessPage(){
               if(needChessy)spendChessy(3,"takeback");
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
             }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
+            {sfOk&&myT&&!hotseat&&<Btn size="md" variant="secondary" className="cc-game-btn" loading={hintLoading} onClick={()=>{
+              if(hintLoading)return;
+              if(!sfR.current?.ready()){showToast("SF загружается…","error");return}
+              sHintLoading(true);
+              sfR.current.go(game.fen(),14,(f,t)=>{
+                sHintLoading(false);
+                sArrows([{from:f as Square,to:t as Square,c:"#22c55e"}]);
+                window.setTimeout(()=>sArrows(a=>a.filter(x=>!(x.from===f&&x.to===t&&x.c==="#22c55e"))),5000);
+              });
+            }}>💡 Hint</Btn>}
           </div>}
           {over&&fenHist.length>2&&<div style={{display:"flex",gap:6,marginTop:SPACE[1],flexWrap:"wrap"}}>
             <Btn size="sm" variant="accent" onClick={()=>{

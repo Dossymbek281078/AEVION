@@ -6260,6 +6260,7 @@ export default function CyberChessPage(){
               </div>
               {analysis.length>=2&&(()=>{
                 const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
+                const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);
                 if(!myMoves.length)return null;
                 const great=myMoves.filter(m=>m.quality==="great").length;
                 const good=myMoves.filter(m=>m.quality==="good").length;
@@ -6268,10 +6269,24 @@ export default function CyberChessPage(){
                 const blunder=myMoves.filter(m=>m.quality==="blunder").length;
                 const acc=Math.round(100*(great*1+good*0.85+inacc*0.6+mistake*0.3+blunder*0)/(myMoves.length));
                 const accColor=acc>=85?"#10b981":acc>=65?"#f59e0b":"#ef4444";
-                return <div style={{fontSize:10,marginTop:2,display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{color:CC.textMute}}>Точность</span>
-                  <span style={{fontWeight:900,color:accColor,fontFamily:"ui-monospace,monospace"}}>{acc}%</span>
-                  {blunder>0&&<span style={{color:"#ef4444",fontWeight:700}}>·{blunder}??</span>}
+                const avgCpl=myMoves.length>0?Math.round(myMoves.reduce((s,m)=>s+m.cpLoss,0)/myMoves.length):0;
+                const oppG=oppMoves.filter(m=>m.quality==="great").length;
+                const oppGo=oppMoves.filter(m=>m.quality==="good").length;
+                const oppIa=oppMoves.filter(m=>m.quality==="inacc").length;
+                const oppMk=oppMoves.filter(m=>m.quality==="mistake").length;
+                const oppBl=oppMoves.filter(m=>m.quality==="blunder").length;
+                const oppAcc=oppMoves.length>0?Math.round(100*(oppG*1+oppGo*0.85+oppIa*0.6+oppMk*0.3+oppBl*0)/oppMoves.length):0;
+                return <div style={{fontSize:10,marginTop:2,display:"flex",flexDirection:"column",gap:2}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{color:CC.textMute}}>Точность</span>
+                    <span style={{fontWeight:900,color:accColor,fontFamily:"ui-monospace,monospace"}}>{acc}%</span>
+                    {oppMoves.length>=2&&<span style={{color:CC.textMute,fontSize:9}}>vs {oppAcc}%</span>}
+                    {blunder>0&&<span style={{color:"#ef4444",fontWeight:700,marginLeft:2}}>·{blunder}??</span>}
+                  </div>
+                  {avgCpl>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{color:CC.textMute}}>Ø потеря</span>
+                    <span style={{fontWeight:800,color:avgCpl<30?"#10b981":avgCpl<80?"#f59e0b":"#ef4444",fontFamily:"ui-monospace,monospace"}}>{avgCpl} сp</span>
+                  </div>}
                 </div>;
               })()}
             </div>
@@ -7368,7 +7383,17 @@ export default function CyberChessPage(){
                   const wAnnot=moveAnnotations[wIdx];const bAnnot=moveAnnotations[bIdx];
                   const annotColor=(s?:string)=>ANNOT_SYMS.find(a=>a.s===s)?.c||T.text;
                   const openAnnot=(ply:number,e:React.MouseEvent)=>{if(tab!=="analysis")return;e.preventDefault();e.stopPropagation();sAnnotPicker({ply,x:Math.min(e.clientX,window.innerWidth-140),y:Math.min(e.clientY,window.innerHeight-120)});};
+                  // Phase divider — insert a full-width label at known phase transitions
+                  const phaseDivider=i===0?null:i===12?{label:"Миттельшпиль",icon:"⚔"}:i===24?{label:"Эндшпиль",icon:"♚"}:null;
                   return <React.Fragment key={i}>
+                    {phaseDivider&&<div style={{gridColumn:"1 / -1",padding:"4px 10px",
+                      background:`linear-gradient(90deg,${CC.surface2},transparent)`,
+                      borderTop:`1px solid ${CC.border}`,borderBottom:`1px solid ${CC.border}`,
+                      display:"flex",alignItems:"center",gap:5,
+                    }}>
+                      <span style={{fontSize:10}}>{phaseDivider.icon}</span>
+                      <span style={{fontSize:9,fontWeight:900,letterSpacing:0.8,textTransform:"uppercase" as const,color:CC.textMute}}>{phaseDivider.label}</span>
+                    </div>}
                     {/* Move number */}
                     <span data-pair-idx={i} data-active={isActivePair?"1":undefined}
                       style={{color:CC.textMute,fontWeight:700,textAlign:"center",padding:"3px 0",

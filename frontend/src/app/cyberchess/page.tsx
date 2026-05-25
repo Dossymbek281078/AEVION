@@ -5697,6 +5697,17 @@ export default function CyberChessPage(){
                 </div>
                 <div style={{fontSize:9,fontWeight:900,letterSpacing:1,padding:"2px 5px",borderRadius:4,lineHeight:1,...pipStyle(botSide)}}>{botSide}</div>
                 <div style={{fontSize:8,fontWeight:900,color:absCp<20?CC.textMute:isWhiteBetter?CC.accent:CC.danger,letterSpacing:0.5,textAlign:"center",marginTop:2}}>{strengthLabel}</div>
+                {evalMate===0&&(()=>{
+                  // Win/Draw/Loss probabilities via sigmoid (Lichess formula)
+                  const wProb=Math.round(100/(1+Math.exp(-0.004*evalCp)));
+                  const lProb=Math.round(100/(1+Math.exp(0.004*evalCp)));
+                  const dProb=Math.max(0,100-wProb-lProb);
+                  return <div style={{width:28,height:28,borderRadius:6,overflow:"hidden",display:"flex",flexDirection:"column",border:`1px solid ${CC.border}`}} title={`W${wProb}% D${dProb}% L${lProb}%`}>
+                    <div style={{flex:wProb,background:"#f8fafc",minHeight:wProb<5?0:undefined}}/>
+                    <div style={{flex:dProb,background:"#6b7280",minHeight:dProb<5?0:undefined}}/>
+                    <div style={{flex:lProb,background:"#1e293b",minHeight:lProb<5?0:undefined}}/>
+                  </div>;
+                })()}
               </div>);
             })()}
             <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingRight:6,paddingLeft:2,width:16}}>{rws.map(r=><div key={r} style={{fontSize:11,color:CC.textMute,fontWeight:800,textAlign:"center",fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5}}>{8-r}</div>)}</div>

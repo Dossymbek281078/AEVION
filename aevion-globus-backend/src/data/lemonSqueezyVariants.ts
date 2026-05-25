@@ -33,10 +33,11 @@ export interface LemonSqueezyVariant {
   label: string;
 }
 
+// monthlyUsd MUST mirror BUNDLE_USD / ALL_ACCESS_USD in modulePricing.ts.
 export const LEMON_SQUEEZY_BUNDLE_VARIANTS: Record<BundleId, LemonSqueezyVariant> = {
-  fintech: { variantId: null, monthlyUsd: 19, label: "Fintech bundle" },
+  fintech: { variantId: null, monthlyUsd: 29, label: "Fintech bundle" },
   build:   { variantId: null, monthlyUsd: 19, label: "Build & IP bundle" },
-  ai:      { variantId: null, monthlyUsd: 19, label: "AI bundle" },
+  ai:      { variantId: null, monthlyUsd: 29, label: "AI bundle" },
   gaming:  { variantId: null, monthlyUsd: 19, label: "Gaming & UX bundle" },
 };
 
@@ -45,6 +46,9 @@ export const LEMON_SQUEEZY_ALL_ACCESS_VARIANT: LemonSqueezyVariant = {
   monthlyUsd: 59,
   label: "All-Access (every paid module)",
 };
+
+/** A checkout/subscription target: one of the 4 bundles or all-access. */
+export type LemonSqueezyReference = BundleId | "all-access";
 
 /**
  * Resolves the right LS variant for a checkout reference like "bundle:ai"
@@ -55,5 +59,21 @@ export function resolveLemonSqueezyVariant(reference: string): LemonSqueezyVaria
   if (reference === "all-access") return LEMON_SQUEEZY_ALL_ACCESS_VARIANT;
   const m = reference.match(/^bundle:(fintech|build|ai|gaming)$/);
   if (m) return LEMON_SQUEEZY_BUNDLE_VARIANTS[m[1] as BundleId];
+  return null;
+}
+
+/**
+ * Reverse lookup: given a numeric LS variant_id from a webhook payload,
+ * return which bundle / all-access it maps to. Returns null while the
+ * variant IDs are still unset (stub) OR for an unrecognised id — the
+ * webhook handler then falls back to a generic "pro" activation.
+ */
+export function referenceForVariantId(variantId: string | number | null | undefined): LemonSqueezyReference | null {
+  if (variantId == null) return null;
+  const id = String(variantId);
+  if (LEMON_SQUEEZY_ALL_ACCESS_VARIANT.variantId === id) return "all-access";
+  for (const key of Object.keys(LEMON_SQUEEZY_BUNDLE_VARIANTS) as BundleId[]) {
+    if (LEMON_SQUEEZY_BUNDLE_VARIANTS[key].variantId === id) return key;
+  }
   return null;
 }

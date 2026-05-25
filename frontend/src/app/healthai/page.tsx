@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { useI18n } from "@/lib/i18n";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -23,7 +24,6 @@ const BACKEND =
 
 const LS_PROFILE_ID = "aevion:healthai:profileId";
 const LS_TAB = "aevion:healthai:tab";
-const LS_LOCALE = "aevion:locale";
 const LS_AUTH_TOKEN = "aevion:auth:token";
 const LS_NOTIF_OPTIN = "aevion:healthai:notif";
 
@@ -446,19 +446,8 @@ function t(key: string, lang: Lang, vars?: Record<string, string | number>): str
   return v;
 }
 
-function detectLocale(): Lang {
-  if (typeof window === "undefined") return "en";
-  try {
-    const stored = window.localStorage.getItem(LS_LOCALE);
-    if (stored === "ru" || stored === "en") return stored;
-  } catch {}
-  const lang =
-    typeof navigator !== "undefined" && navigator.language
-      ? navigator.language.toLowerCase()
-      : "en";
-  if (lang.startsWith("ru")) return "ru";
-  return "en";
-}
+// detectLocale removed — useI18n provides the global lang. Local storage
+// key "aevion:locale" was abandoned with the local switcher.
 
 type Tab = "profile" | "check" | "log" | "trends" | "history" | "screener" | "plan" | "cycle";
 
@@ -615,7 +604,10 @@ export default function HealthAIPage() {
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [lang, setLang] = useState<Lang>("en");
+  // Sync with global i18n switcher (pill / SiteHeader). Local STR dict only
+  // has en/ru — fall back to "ru" for kk and to "en" for any other lang.
+  const { lang: globalLang } = useI18n();
+  const lang: Lang = globalLang === "ru" || globalLang === "kk" ? "ru" : "en";
   const [notifPerm, setNotifPerm] = useState<"unsupported" | "default" | "granted" | "denied">("default");
   const [notifOptIn, setNotifOptIn] = useState(false);
   type Referral = {
@@ -633,7 +625,6 @@ export default function HealthAIPage() {
   const [referralsLoading, setReferralsLoading] = useState(false);
   const [referralCountry, setReferralCountry] = useState<string>("");
   useEffect(() => {
-    setLang(detectLocale());
     if (typeof window !== "undefined") {
       if ("Notification" in window) {
         setNotifPerm(Notification.permission as typeof notifPerm);
@@ -710,12 +701,9 @@ export default function HealthAIPage() {
       icon: "/favicon.ico",
     });
   };
-  const switchLang = (next: Lang) => {
-    setLang(next);
-    try {
-      window.localStorage.setItem(LS_LOCALE, next);
-    } catch {}
-  };
+  // switchLang removed — global pill/SiteHeader is the single source of
+  // truth for language (useI18n hooked above). Local switcher buttons in
+  // the hero header were dropped together with this function.
 
   // Profile draft
   const [age, setAge] = useState("");
@@ -1549,41 +1537,9 @@ export default function HealthAIPage() {
               {t("subtitle", lang)}
             </span>
             <div style={{ flex: 1 }} />
-            <div
-              role="group"
-              aria-label="Locale"
-              style={{
-                display: "flex",
-                gap: 0,
-                border: "1px solid rgba(120,160,220,0.3)",
-                borderRadius: 999,
-                overflow: "hidden",
-                fontSize: 11,
-                fontWeight: 800,
-              }}
-            >
-              {(["en", "ru"] as const).map((l) => {
-                const active = l === lang;
-                return (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => switchLang(l)}
-                    style={{
-                      padding: "5px 12px",
-                      background: active ? "rgba(94,234,212,0.22)" : "transparent",
-                      color: active ? "#5eead4" : "#94a3b8",
-                      border: "none",
-                      cursor: "pointer",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {l}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Local en/ru toggle removed — global pill / SiteHeader is the
+                single source of truth for language. useI18n() reads it; this
+                page falls back to "ru" for kk and "en" for other langs. */}
           </div>
           <p style={{ margin: "6px 0 0", fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>
             {t("hero", lang)}

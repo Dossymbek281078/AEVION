@@ -12,9 +12,22 @@
  */
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 import { rates as ALL_RATES } from "../lib/corpus";
 import { formatKzt } from "../lib/calc";
+
+const PENDING_RATE_KEY = "smeta-trainer:pending-rate-code";
+
+function sendRateToExam(rateCode: string, title: string, unit: string) {
+  if (typeof window === "undefined") return;
+  const payload = { kind: "rate", rateCode, title, unit, at: Date.now() };
+  try {
+    window.localStorage.setItem(PENDING_RATE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 type SortMode = "code" | "title" | "price-asc" | "price-desc";
 
@@ -43,6 +56,17 @@ const CATEGORY_COLOR: Record<string, string> = {
 };
 
 export default function RatesCatalogPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 p-6 text-slate-500 text-sm">Загрузка каталога…</div>}>
+      <RatesCatalogPageInner />
+    </Suspense>
+  );
+}
+
+function RatesCatalogPageInner() {
+  const searchParams = useSearchParams();
+  const fromExam = searchParams?.get("from") === "exam";
+  const examId = searchParams?.get("examId") ?? null;
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [unitFilter, setUnitFilter] = useState<string>("all");
@@ -138,6 +162,24 @@ export default function RatesCatalogPage() {
             🧮 Калькулятор →
           </Link>
         </div>
+
+        {fromExam && (
+          <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3 mb-4 flex items-center gap-3 text-xs text-emerald-900">
+            <span className="text-lg">🎯</span>
+            <div className="flex-1">
+              <strong>Режим из экзамена.</strong> Нажмите «📤 В смету» в нужной строке — расценка
+              появится во вкладке с экзаменом как новая позиция, объём по умолчанию 1.
+            </div>
+            {examId && (
+              <Link
+                href={`/smeta-trainer/exam/${examId}`}
+                className="shrink-0 text-emerald-700 underline hover:text-emerald-900"
+              >
+                ← вернуться
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Фильтры */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
@@ -262,7 +304,7 @@ export default function RatesCatalogPage() {
                   <th className="px-2 py-2 w-32">Категория</th>
                   <th className="px-2 py-2 text-center w-20">Ед.</th>
                   <th className="px-2 py-2 text-right w-32">Цена за ед.</th>
-                  <th className="px-2 py-2 text-center w-12"></th>
+                  <th className="px-2 py-2 text-center w-24"></th>
                 </tr>
               </thead>
               <tbody>
@@ -286,8 +328,22 @@ export default function RatesCatalogPage() {
                         <td className="px-2 py-2 text-right font-mono font-semibold text-emerald-700">
                           {formatKzt(r.baseCostPerUnit)}
                         </td>
-                        <td className="px-2 py-2 text-center text-slate-400">
-                          {expanded ? "▼" : "▶"}
+                        <td
+                          className="px-2 py-2 text-center text-slate-400"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            {fromExam && (
+                              <SendToExamButton
+                                rateCode={r.code}
+                                title={r.title}
+                                unit={r.unit}
+                              />
+                            )}
+                            <span className="text-slate-400">
+                              {expanded ? "▼" : "▶"}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                       {expanded && <RateExpandedRow rate={r} />}
@@ -306,6 +362,35 @@ export default function RatesCatalogPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function SendToExamButton({
+  rateCode,
+  title,
+  unit,
+}: {
+  rateCode: string;
+  title: string;
+  unit: string;
+}) {
+  const [sent, setSent] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        sendRateToExam(rateCode, title, unit);
+        setSent(true);
+        setTimeout(() => setSent(false), 2000);
+      }}
+      className={`px-2 py-1 text-[10px] font-bold rounded ${
+        sent
+          ? "bg-emerald-700 text-white"
+          : "bg-emerald-600 text-white hover:bg-emerald-700"
+      }`}
+      title="Передать расценку в открытую вкладку с экзаменом"
+    >
+      {sent ? "✓" : "📤 В смету"}
+    </button>
   );
 }
 

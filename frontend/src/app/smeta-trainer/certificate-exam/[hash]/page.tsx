@@ -8,7 +8,7 @@
  * (QR кодирует full URL текущей страницы, по которому можно восстановить payload).
  */
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
@@ -30,8 +30,16 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function CertificatePage({ params }: { params: { hash: string } }) {
-  const payload = decodePayload(params.hash);
+export default function CertificatePage({
+  params,
+}: {
+  params: Promise<{ hash: string }> | { hash: string };
+}) {
+  const { hash } =
+    typeof (params as Promise<{ hash: string }>).then === "function"
+      ? use(params as Promise<{ hash: string }>)
+      : (params as { hash: string });
+  const payload = decodePayload(hash);
   if (!payload) {
     notFound();
   }
@@ -39,11 +47,11 @@ export default function CertificatePage({ params }: { params: { hash: string } }
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const url = `${window.location.origin}/smeta-trainer/certificate-exam/${params.hash}`;
+    const url = `${window.location.origin}/smeta-trainer/certificate-exam/${hash}`;
     QRCode.toDataURL(url, { width: 220, margin: 1, errorCorrectionLevel: "M" })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(""));
-  }, [params.hash]);
+  }, [hash]);
 
   const serial = certificateSerial(payload!);
   const tierLabel =

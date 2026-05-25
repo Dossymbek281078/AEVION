@@ -22,17 +22,17 @@ const LSRS: Lsr[] = [
     meta: { lsrNumber: "2-01", objectTitle: "Крыло Б — отделка", strojkaCode: "02-2026-ПВП 20", priceDate: "декабрь 2025 г.", author: "" },
     sections: [
       { id: "l4-s1", title: "Раздел 1. Демонтажные работы", category: "демонтажные", positions: [
-        { id: "l4p1", rateCode: "ДЕМ-15-01-001", volume: 28.80, coefficients: [] },
-        { id: "l4p2", rateCode: "ДЕМ-11-02-001", volume: 18.00, coefficients: [] },
+        { id: "l4p1", rateCode: "ЭСНСб15-01.Д-001", volume: 28.80, coefficients: [] },
+        { id: "l4p2", rateCode: "ЭСНСб11-02.Д-001", volume: 18.00, coefficients: [] },
       ]},
       { id: "l4-s2", title: "Раздел 2. Отделка стен", category: "отделочные", positions: [
-        { id: "l4p3", rateCode: "ОТД-13-01-001", volume: 26.99, coefficients: [] },
-        { id: "l4p4", rateCode: "ОТД-15-02-003", volume: 26.99, coefficients: [] },
-        { id: "l4p5", rateCode: "ОТД-15-04-001", volume: 26.99, coefficients: [] },
+        { id: "l4p3", rateCode: "ЭСНСб15-13-01-001", volume: 26.99, coefficients: [] },
+        { id: "l4p4", rateCode: "ЭСНСб15-15-02-003", volume: 26.99, coefficients: [] },
+        { id: "l4p5", rateCode: "ЭСНСб15-15-04-001", volume: 26.99, coefficients: [] },
       ]},
       { id: "l4-s3", title: "Раздел 3. Полы", category: "отделочные", positions: [
-        { id: "l4p6", rateCode: "ОТД-11-02-001", volume: 18.00, coefficients: [] },
-        { id: "l4p7", rateCode: "ОТД-11-04-002", volume: 15.60, coefficients: [] },
+        { id: "l4p6", rateCode: "ЭСНСб15-11-02-001", volume: 18.00, coefficients: [] },
+        { id: "l4p7", rateCode: "ЭСНСб15-11-04-002", volume: 15.60, coefficients: [] },
       ]},
     ],
     createdAt: "2026-05-01T00:00:00Z",
@@ -48,9 +48,9 @@ const LSRS: Lsr[] = [
     meta: { lsrNumber: "4-01", objectTitle: "Кровля — ремонт", strojkaCode: "02-2026-ПВП 20", priceDate: "декабрь 2025 г.", author: "" },
     sections: [
       { id: "l4k-s1", title: "Раздел 1. Кровельные работы", category: "кровельные", positions: [
-        { id: "l4k1", rateCode: "КРВ-12-01-001", volume: 5.40, coefficients: [], formula: "5400 м² / 1000 (площадь здания)" },
-        { id: "l4k2", rateCode: "КРВ-12-02-001", volume: 5.40, coefficients: [] },
-        { id: "l4k3", rateCode: "КРВ-12-03-001", volume: 5.40, coefficients: [] },
+        { id: "l4k1", rateCode: "ЭСНСб12-12-01-001", volume: 5.40, coefficients: [], formula: "5400 м² / 1000 (площадь здания)" },
+        { id: "l4k2", rateCode: "ЭСНСб12-12-02-001", volume: 5.40, coefficients: [] },
+        { id: "l4k3", rateCode: "ЭСНСб12-12-03-001", volume: 5.40, coefficients: [] },
       ]},
     ],
     createdAt: "2026-05-01T00:00:00Z",
@@ -66,13 +66,13 @@ const LSRS: Lsr[] = [
     meta: { lsrNumber: "5-01", objectTitle: "Сантехника — замена", strojkaCode: "02-2026-ПВП 20", priceDate: "декабрь 2025 г.", author: "" },
     sections: [
       { id: "l4sn-s1", title: "Раздел 1. Отопление", category: "сантехнические", positions: [
-        { id: "l4sn1", rateCode: "СНТ-16-01-001", volume: 3.20, coefficients: [], formula: "320 м трубы отопления / 100" },
-        { id: "l4sn2", rateCode: "СНТ-16-02-001", volume: 64, coefficients: [], formula: "32 кл × 2 радиатора" },
+        { id: "l4sn1", rateCode: "ЭСНСб17-16-01-001", volume: 3.20, coefficients: [], formula: "320 м трубы отопления / 100" },
+        { id: "l4sn2", rateCode: "ЭСНСб17-16-02-001", volume: 64, coefficients: [], formula: "32 кл × 2 радиатора" },
       ]},
       { id: "l4sn-s2", title: "Раздел 2. ХВС и санприборы", category: "сантехнические", positions: [
-        { id: "l4sn3", rateCode: "СНТ-16-03-001", volume: 1.80, coefficients: [] },
-        { id: "l4sn4", rateCode: "СНТ-16-04-001", volume: 12, coefficients: [], formula: "3 санузла × 4 унитаза" },
-        { id: "l4sn5", rateCode: "СНТ-16-05-001", volume: 12, coefficients: [] },
+        { id: "l4sn3", rateCode: "ЭСНСб17-16-03-001", volume: 1.80, coefficients: [] },
+        { id: "l4sn4", rateCode: "ЭСНСб17-16-04-001", volume: 12, coefficients: [], formula: "3 санузла × 4 унитаза" },
+        { id: "l4sn5", rateCode: "ЭСНСб17-16-05-001", volume: 12, coefficients: [] },
       ]},
     ],
     createdAt: "2026-05-01T00:00:00Z",
@@ -88,13 +88,13 @@ const LSRS: Lsr[] = [
     meta: { lsrNumber: "6-01", objectTitle: "Электромонтаж", strojkaCode: "02-2026-ПВП 20", priceDate: "декабрь 2025 г.", author: "" },
     sections: [
       { id: "l4el-s1", title: "Раздел 1. Кабельные трассы", category: "электромонтажные", positions: [
-        { id: "l4el1", rateCode: "ЭЛ-21-04-007", volume: 960, coefficients: [], formula: "32 кл × 30 м = 960 м" },
+        { id: "l4el1", rateCode: "ЭСНСб21-21-04-007", volume: 960, coefficients: [], formula: "32 кл × 30 м = 960 м" },
       ]},
       { id: "l4el-s2", title: "Раздел 2. Розетки, выключатели, светильники", category: "электромонтажные", positions: [
-        { id: "l4el2", rateCode: "ЭЛ-21-02-001", volume: 96, coefficients: [] },
-        { id: "l4el3", rateCode: "ЭЛ-21-06-001", volume: 64, coefficients: [] },
-        { id: "l4el4", rateCode: "ЭЛ-21-03-001", volume: 64, coefficients: [] },
-        { id: "l4el5", rateCode: "ЭЛ-21-05-001", volume: 4, coefficients: [], formula: "4 этажа × 1 щит" },
+        { id: "l4el2", rateCode: "ЭСНСб21-21-02-001", volume: 96, coefficients: [] },
+        { id: "l4el3", rateCode: "ЭСНСб21-21-06-001", volume: 64, coefficients: [] },
+        { id: "l4el4", rateCode: "ЭСНСб21-21-03-001", volume: 64, coefficients: [] },
+        { id: "l4el5", rateCode: "ЭСНСб21-21-05-001", volume: 4, coefficients: [], formula: "4 этажа × 1 щит" },
       ]},
     ],
     createdAt: "2026-05-01T00:00:00Z",

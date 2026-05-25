@@ -812,6 +812,8 @@ export default function CyberChessPage(){
   const[gamesResult,sGamesResult]=useState<"all"|"win"|"loss"|"draw">("all");
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
+  const[qFlash,sQFlash]=useState<{quality:"great"|"good"|"inacc"|"mistake"|"blunder";key:number}|null>(null);
+  const prevAnalysisLenRef=useRef(0);
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   // Hover-scrub: when user hovers a move in the move list, board previews that position
   // without disturbing the canonical browseIdx. previewIdx===null = no preview active.
@@ -3175,6 +3177,21 @@ export default function CyberChessPage(){
     const t=setTimeout(()=>runAnalysis(),400);
     return()=>clearTimeout(t);
   },[over,tab,sfOk,fenHist.length]);
+
+  /* ── Live move-quality flash — badge on board after analysis updates ── */
+  useEffect(()=>{
+    if(analysis.length<=prevAnalysisLenRef.current){prevAnalysisLenRef.current=analysis.length;return;}
+    const latest=analysis[analysis.length-1];
+    const ply=analysis.length;
+    const isPlayerMove=pCol==="w"?ply%2===1:ply%2===0;
+    if(isPlayerMove&&on&&!over&&(tab==="play"||tab==="coach")&&latest.quality!=="good"){
+      sQFlash({quality:latest.quality,key:Date.now()});
+      const t=window.setTimeout(()=>sQFlash(null),2800);
+      prevAnalysisLenRef.current=analysis.length;
+      return()=>window.clearTimeout(t);
+    }
+    prevAnalysisLenRef.current=analysis.length;
+  },[analysis.length]);
 
   /* ── Live Voice Commentary — Coach speaks after every move when enabled. ── */
   const lastCommentaryBkRef=useRef<number>(-1);
@@ -5856,6 +5873,26 @@ export default function CyberChessPage(){
               {turnFlashKey>0&&<div key={`tflash-${turnFlashKey}`}
                 className="cc-turn-flash"
                 style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:6,borderRadius:6}}/>}
+              {/* Move quality flash badge — brief overlay after live analysis */}
+              {qFlash&&(()=>{
+                const qBg=qFlash.quality==="blunder"?"rgba(220,38,38,0.92)":qFlash.quality==="mistake"?"rgba(234,88,12,0.92)":qFlash.quality==="inacc"?"rgba(99,102,241,0.88)":"rgba(245,158,11,0.92)";
+                const qSym=qFlash.quality==="blunder"?"??":qFlash.quality==="mistake"?"?":qFlash.quality==="inacc"?"?!":"★";
+                const qLabel=qFlash.quality==="blunder"?"Зевок":qFlash.quality==="mistake"?"Ошибка":qFlash.quality==="inacc"?"Неточность":"Блестяще!";
+                return <div key={`qf-${qFlash.key}`} style={{
+                  position:"absolute",bottom:12,left:"50%",transform:"translateX(-50%)",
+                  pointerEvents:"none",zIndex:9,
+                  display:"flex",alignItems:"center",gap:6,
+                  padding:"7px 16px",borderRadius:999,
+                  background:qBg,color:"#fff",
+                  fontSize:13,fontWeight:900,letterSpacing:0.3,
+                  boxShadow:"0 4px 20px rgba(0,0,0,0.45)",
+                  animation:"cc-qflash-in 2.8s cubic-bezier(0.34,1.56,0.64,1) forwards",
+                  whiteSpace:"nowrap",
+                }}>
+                  <span style={{fontSize:16,fontFamily:"ui-monospace,monospace"}}>{qSym}</span>
+                  <span>{qLabel}</span>
+                </div>;
+              })()}
               {/* Hover halo — теперь imperative DOM-нода в useBoardInput,
                   чтобы не триггерить ре-рендер 8000-строчного дерева на каждом
                   пересечении клетки во время drag. */}

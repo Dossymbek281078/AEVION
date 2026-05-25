@@ -616,6 +616,15 @@ button:focus:not(:focus-visible) {
   100% { transform: translateX(-50%); }
 }
 
+/* Move quality flash badge — pop in, hold, fade out */
+@keyframes cc-qflash-in {
+  0%   { opacity:0; transform:translateX(-50%) translateY(8px) scale(0.85); }
+  12%  { opacity:1; transform:translateX(-50%) translateY(0) scale(1.05); }
+  20%  { transform:translateX(-50%) translateY(0) scale(1); }
+  75%  { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+  100% { opacity:0; transform:translateX(-50%) translateY(-4px) scale(0.9); }
+}
+
 /* Desktop: cc-main-row занимает всю высоту viewport чтобы не было пустоты снизу */
 .cc-main-row {
   min-height: calc(100vh - 110px);

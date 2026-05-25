@@ -12,11 +12,13 @@ import {
   type Sliders,
 } from "@/lib/constitution";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
+import { useI18n } from "@/lib/i18n";
 
 const ONBOARDED_KEY = "constitution.onboarded";
 
 export default function ConstitutionWelcomePage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
   const [pickedCountry, setPickedCountry] = useState<Country | null>(null);
   const [sliders, setSliders] = useState<Sliders>(DEFAULT_SLIDERS);
@@ -62,11 +64,11 @@ export default function ConstitutionWelcomePage() {
             onClick={skip}
             className="text-xs text-[#9aa3c0] hover:text-[#d4af37]"
           >
-            Пропустить →
+            {t("constitution.welcome.skip")}
           </button>
         </div>
 
-        {step === 0 && <StepGreeting onNext={() => setStep(1)} />}
+        {step === 0 && <StepGreeting onNext={() => setStep(1)} t={t} />}
 
         {step === 1 && (
           <StepPickCountry
@@ -79,6 +81,7 @@ export default function ConstitutionWelcomePage() {
               }
             }}
             onBack={() => setStep(0)}
+            t={t}
           />
         )}
 
@@ -89,6 +92,7 @@ export default function ConstitutionWelcomePage() {
             onChange={setSliders}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
+            t={t}
           />
         )}
 
@@ -97,6 +101,7 @@ export default function ConstitutionWelcomePage() {
             country={pickedCountry}
             sliders={sliders}
             onFinish={() => finish(true)}
+            t={t}
           />
         )}
       </div>
@@ -104,31 +109,30 @@ export default function ConstitutionWelcomePage() {
   );
 }
 
-function StepGreeting({ onNext }: { onNext: () => void }) {
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+function StepGreeting({ onNext, t }: { onNext: () => void; t: TFn }) {
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-2xl p-8 text-center">
       <div className="text-6xl mb-4">🌍</div>
       <h1 className="text-3xl md:text-4xl font-bold text-[#d4af37] mb-3">
-        Привет. Это Constitution.
+        {t("constitution.welcome.greeting.title")}
       </h1>
       <p className="text-[#9aa3c0] mb-2">
-        Лаборатория устройства мира на 8 ползунках.
+        {t("constitution.welcome.greeting.subtitle")}
       </p>
       <p className="text-[#e7ecf8] mb-6 max-w-xl mx-auto leading-relaxed">
-        Каждое общество — это комбинация 8 параметров: пол снизу, верховенство
-        закона, ротация, прозрачность, multi-status, skin-in-game,
-        полицентричность, положительная сумма. Подкрути их — увидишь, в какой
-        исторический режим скатывается твоё общество.
+        {t("constitution.welcome.greeting.intro")}
       </p>
       <p className="text-xs text-[#9aa3c0] mb-6">
-        ~2 минуты на короткий тур. Можешь пропустить в любой момент.
+        {t("constitution.welcome.greeting.duration")}
       </p>
       <button
         type="button"
         onClick={onNext}
         className="px-6 py-3 rounded-lg bg-[#d4af37] text-[#0b1736] font-bold hover:opacity-90"
       >
-        Начать →
+        {t("constitution.welcome.greeting.start")}
       </button>
     </div>
   );
@@ -139,22 +143,24 @@ function StepPickCountry({
   onPick,
   onNext,
   onBack,
+  t,
 }: {
   picked: Country | null;
   onPick: (c: Country) => void;
   onNext: () => void;
   onBack: () => void;
+  t: TFn;
 }) {
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-2xl p-6 md:p-8">
       <div className="text-xs uppercase tracking-wider text-[#9aa3c0] mb-1">
-        Шаг 2 из 4
+        {t("constitution.welcome.step2.label")}
       </div>
       <h2 className="text-2xl md:text-3xl font-bold text-[#d4af37] mb-2">
-        Выбери близкую тебе страну
+        {t("constitution.welcome.pickCountry.title")}
       </h2>
       <p className="text-sm text-[#9aa3c0] mb-5">
-        Стартовая точка — ползунки текущей системы. Дальше можно менять.
+        {t("constitution.welcome.pickCountry.subtitle")}
       </p>
       <div className="grid grid-cols-3 md:grid-cols-5 gap-2 mb-5">
         {COUNTRIES.map((c) => {
@@ -182,7 +188,7 @@ function StepPickCountry({
           onClick={onBack}
           className="text-sm px-4 py-2 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
         >
-          ← Назад
+          {t("constitution.welcome.back")}
         </button>
         <button
           type="button"
@@ -190,7 +196,7 @@ function StepPickCountry({
           disabled={!picked}
           className="px-5 py-2 rounded bg-[#d4af37] text-[#0b1736] font-bold disabled:opacity-40"
         >
-          Дальше →
+          {t("constitution.welcome.next")}
         </button>
       </div>
     </div>
@@ -203,12 +209,14 @@ function StepMiniTask({
   onChange,
   onNext,
   onBack,
+  t,
 }: {
   country: Country;
   sliders: Sliders;
   onChange: (s: Sliders) => void;
   onNext: () => void;
   onBack: () => void;
+  t: TFn;
 }) {
   // Target ползунок: подбираем тот, где у страны самое слабое место
   const weakestKey = useMemo<keyof Sliders>(() => {
@@ -227,14 +235,13 @@ function StepMiniTask({
   return (
     <div className="bg-[#0b1736]/60 border border-[#d4af37]/30 rounded-2xl p-6 md:p-8">
       <div className="text-xs uppercase tracking-wider text-[#9aa3c0] mb-1">
-        Шаг 3 из 4 · {country.flag} {country.name}
+        {t("constitution.welcome.step3.label", { flag: country.flag, country: country.name })}
       </div>
       <h2 className="text-2xl md:text-3xl font-bold text-[#d4af37] mb-2">
-        Подкрути «{meta.label}»
+        {t("constitution.welcome.miniTask.title", { label: meta.label })}
       </h2>
       <p className="text-sm text-[#9aa3c0] mb-1">
-        Это самый слабый ползунок текущей системы ({country.name}: {baseline}).
-        Попробуй сдвинуть и посмотри, как меняется регим.
+        {t("constitution.welcome.miniTask.subtitle", { country: country.name, baseline })}
       </p>
       <p className="text-xs text-[#9aa3c0] italic mb-5">{meta.hint}</p>
 
@@ -242,7 +249,10 @@ function StepMiniTask({
         <div className="flex justify-between items-baseline mb-1">
           <label className="font-medium">{meta.label}</label>
           <span className="text-[#d4af37] font-mono">
-            {current} <span className="text-xs text-[#9aa3c0]">(было {baseline})</span>
+            {current}{" "}
+            <span className="text-xs text-[#9aa3c0]">
+              {t("constitution.welcome.miniTask.was", { baseline })}
+            </span>
           </span>
         </div>
         <input
@@ -262,7 +272,9 @@ function StepMiniTask({
       </div>
 
       <div className="bg-[#050a1a]/40 border border-[#d4af37]/15 rounded p-3 mb-5">
-        <div className="text-xs text-[#9aa3c0] mb-1">Получился режим:</div>
+        <div className="text-xs text-[#9aa3c0] mb-1">
+          {t("constitution.welcome.miniTask.resulting")}
+        </div>
         <div className="text-[#f5d27a] font-bold">{regime.name}</div>
         <div className="text-xs text-[#9aa3c0] italic">{regime.era}</div>
       </div>
@@ -273,14 +285,16 @@ function StepMiniTask({
           onClick={onBack}
           className="text-sm px-4 py-2 rounded border border-[#d4af37]/30 hover:bg-[#d4af37]/10"
         >
-          ← Назад
+          {t("constitution.welcome.back")}
         </button>
         <button
           type="button"
           onClick={onNext}
           className="px-5 py-2 rounded bg-[#d4af37] text-[#0b1736] font-bold"
         >
-          {moved ? "Готово →" : "Двинул — дальше →"}
+          {moved
+            ? t("constitution.welcome.miniTask.done")
+            : t("constitution.welcome.miniTask.donePrompt")}
         </button>
       </div>
     </div>
@@ -291,10 +305,12 @@ function StepDone({
   country,
   sliders,
   onFinish,
+  t,
 }: {
   country: Country;
   sliders: Sliders;
   onFinish: () => void;
+  t: TFn;
 }) {
   const regime = useMemo(() => classify(sliders), [sliders]);
 
@@ -302,18 +318,16 @@ function StepDone({
     <div className="bg-[#0b1736]/60 border border-emerald-400/40 rounded-2xl p-6 md:p-8 text-center">
       <div className="text-5xl mb-3">🎉</div>
       <h2 className="text-2xl md:text-3xl font-bold text-emerald-300 mb-2">
-        Готово!
+        {t("constitution.welcome.done.title")}
       </h2>
       <p className="text-[#9aa3c0] mb-5">
-        Ты только что построил свой первый сценарий на основе {country.flag}{" "}
-        {country.name}. Текущий режим:
+        {t("constitution.welcome.done.body", { flag: country.flag, country: country.name })}
       </p>
       <div className="my-5 flex justify-center">
         <ConstitutionEmbed sliders={sliders} label={regime.name} size="md" />
       </div>
       <p className="text-sm text-[#e7ecf8] max-w-md mx-auto mb-6 leading-relaxed">
-        Дальше можешь крутить все 8 ползунков, проходить туры, сохранять
-        сценарии в Planet, или начать с Academy (8 коротких уроков).
+        {t("constitution.welcome.done.next")}
       </p>
       <div className="flex justify-center gap-3 flex-wrap">
         <button
@@ -321,7 +335,7 @@ function StepDone({
           onClick={onFinish}
           className="px-6 py-3 rounded-lg bg-[#d4af37] text-[#0b1736] font-bold hover:opacity-90"
         >
-          Открыть редактор →
+          {t("constitution.welcome.done.openEditor")}
         </button>
         <Link
           href="/constitution/learn"
@@ -332,7 +346,7 @@ function StepDone({
           }}
           className="px-6 py-3 rounded-lg border border-emerald-400/40 text-emerald-300 font-semibold hover:bg-emerald-500/10"
         >
-          🎓 В Academy
+          {t("constitution.welcome.done.toAcademy")}
         </Link>
       </div>
     </div>

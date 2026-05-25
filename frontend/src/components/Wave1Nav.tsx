@@ -150,8 +150,6 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <AevPill variant={variant} />
       <RiskPill variant={variant} />
       {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
-      <span style={{ color: sep }} aria-hidden>|</span>
-      <LanguageSwitcher />
     </nav>
   );
 }

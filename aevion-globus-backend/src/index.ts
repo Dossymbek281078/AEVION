@@ -705,6 +705,79 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       "/api/paddle/subscription/{id}": { get: { summary: "Paddle subscription status by ID" } },
       "/api/paddle/customer/{email}": { get: { summary: "Paddle customer lookup by email" } },
+      // Lemon Squeezy — recurring subscription webhook
+      "/api/lemonsqueezy/webhook": {
+        post: {
+          summary:
+            "Lemon Squeezy subscription webhook — verifies x-signature (HMAC-SHA256), maps subscription_* events to plan provisioning",
+          description:
+            "Activation events (subscription_created, subscription_updated, subscription_resumed, subscription_unpaused) call provisionSubscription: All-Access variant → 'business' tier, any bundle variant → 'pro', unrecognised/unset variant → 'pro'. Deactivation events (subscription_cancelled, subscription_expired, subscription_paused) write a tierId:'free' downgrade record. Other subscription_* events are acknowledged but ignored. Signature is HMAC-SHA256 of the raw body keyed by LEMON_SQUEEZY_WEBHOOK_SECRET, compared to the x-signature header; when the secret is unset the route is a 200 no-op stub. Delivery is at-least-once — handler dedups on subscription id + event + timestamp.",
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    meta: {
+                      type: "object",
+                      properties: {
+                        event_name: {
+                          type: "string",
+                          enum: [
+                            "subscription_created",
+                            "subscription_updated",
+                            "subscription_resumed",
+                            "subscription_unpaused",
+                            "subscription_cancelled",
+                            "subscription_expired",
+                            "subscription_paused",
+                          ],
+                        },
+                        custom_data: {
+                          type: "object",
+                          properties: {
+                            reference: { type: "string", example: "bundle:fintech" },
+                            email: { type: "string", format: "email" },
+                          },
+                        },
+                      },
+                      required: ["event_name"],
+                    },
+                    data: {
+                      type: "object",
+                      properties: {
+                        id: { type: "string" },
+                        attributes: {
+                          type: "object",
+                          properties: {
+                            user_email: { type: "string", format: "email" },
+                            variant_id: { type: "integer" },
+                            status: { type: "string", example: "active" },
+                            renews_at: { type: "string", format: "date-time", nullable: true },
+                            ends_at: { type: "string", format: "date-time", nullable: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  required: ["meta"],
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Acknowledged. Body indicates the action taken: { ok, action: 'activated'|'downgraded', tierId? } | { ok, ignored } | { ok, deduped } | { ok, mode: 'stub' }",
+            },
+            "400": { description: "Body is not JSON, or subscription event missing user_email" },
+            "401": { description: "x-signature header missing or HMAC mismatch" },
+            "500": { description: "Provisioning failed — LS will retry (dedup entry released)" },
+          },
+        },
+      },
       // Pricing — subscription self-service
       "/api/pricing/subscription/me": {
         get: { summary: "Latest subscription for authenticated user (JWT)" },

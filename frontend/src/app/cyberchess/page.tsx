@@ -5562,7 +5562,7 @@ export default function CyberChessPage(){
       })()}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"flex-start",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>
@@ -5913,7 +5913,9 @@ export default function CyberChessPage(){
           </div>
           <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
-            <div style={{display:"flex",gap:2,flexShrink:0,marginTop:2}}>
+            <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+              {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} onClick={()=>sBoardTheme(i)} style={{width:14,height:14,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:"2px solid transparent",background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.25)":"scale(1)"}}/>)}
+              <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
               <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface1,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
               <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface1,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
             </div>
@@ -6174,7 +6176,7 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 252px",width:252,minWidth:0,maxWidth:252,display:"flex",flexDirection:"column",gap:8}}>
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 252px",width:252,minWidth:0,maxWidth:252,display:"flex",flexDirection:"column",gap:8,overflowY:"auto",maxHeight:"100%"}}>
           {/* ── Live Stats Card — top of sidebar, visible during active game ── */}
           {on&&!setup&&(tab==="play"||tab==="coach")&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.md,
@@ -6208,6 +6210,22 @@ export default function CyberChessPage(){
               <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
                 Ход {Math.ceil(hist.length/2)} · {tc.ini>0?tc.name:"без таймера"}
               </div>
+              {analysis.length>=2&&(()=>{
+                const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
+                if(!myMoves.length)return null;
+                const great=myMoves.filter(m=>m.quality==="great").length;
+                const good=myMoves.filter(m=>m.quality==="good").length;
+                const inacc=myMoves.filter(m=>m.quality==="inacc").length;
+                const mistake=myMoves.filter(m=>m.quality==="mistake").length;
+                const blunder=myMoves.filter(m=>m.quality==="blunder").length;
+                const acc=Math.round(100*(great*1+good*0.85+inacc*0.6+mistake*0.3+blunder*0)/(myMoves.length));
+                const accColor=acc>=85?"#10b981":acc>=65?"#f59e0b":"#ef4444";
+                return <div style={{fontSize:10,marginTop:2,display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{color:CC.textMute}}>Точность</span>
+                  <span style={{fontWeight:900,color:accColor,fontFamily:"ui-monospace,monospace"}}>{acc}%</span>
+                  {blunder>0&&<span style={{color:"#ef4444",fontWeight:700}}>·{blunder}??</span>}
+                </div>;
+              })()}
             </div>
             {/* Last move quality badge */}
             {(()=>{
@@ -7317,8 +7335,8 @@ export default function CyberChessPage(){
                       style={{
                         color:wIsBrowsed?CC.brand:CC.text,fontWeight:wIsBrowsed?900:600,
                         padding:"3px 6px",fontSize:12,
-                        background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:"transparent",
-                        borderLeft:wIsPreview?`3px solid ${CC.gold}`:wIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
+                        borderLeft:wIsPreview?`3px solid ${CC.gold}`:wIsBrowsed?`3px solid ${CC.brand}`:wQ&&wQ!=="good"?`3px solid ${qColor(wQ)}`:"3px solid transparent",
+                        background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:wQ==="blunder"?"rgba(239,68,68,0.07)":wQ==="mistake"?"rgba(249,115,22,0.07)":wQ==="inacc"?"rgba(99,102,241,0.05)":wQ==="great"?"rgba(245,158,11,0.06)":"transparent",
                         cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
@@ -7342,8 +7360,8 @@ export default function CyberChessPage(){
                       style={{
                         color:bIsBrowsed?CC.brand:CC.textDim,fontWeight:bIsBrowsed?900:500,
                         padding:"3px 6px",fontSize:12,
-                        background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:"transparent",
-                        borderLeft:bIsPreview?`3px solid ${CC.gold}`:bIsBrowsed?`3px solid ${CC.brand}`:"3px solid transparent",
+                        borderLeft:bIsPreview?`3px solid ${CC.gold}`:bIsBrowsed?`3px solid ${CC.brand}`:bQ&&bQ!=="good"?`3px solid ${qColor(bQ)}`:"3px solid transparent",
+                        background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:bQ==="blunder"?"rgba(239,68,68,0.07)":bQ==="mistake"?"rgba(249,115,22,0.07)":bQ==="inacc"?"rgba(99,102,241,0.05)":bQ==="great"?"rgba(245,158,11,0.06)":"transparent",
                         cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
@@ -7393,6 +7411,27 @@ export default function CyberChessPage(){
               <span style={{color:CC.textMute}}>·</span>
               <span style={{color:"#ef4444",fontWeight:800}}>??</span><span>зевок</span>
             </div>}
+            {analysis.length>=4&&(()=>{
+              const W=232,H=44,mid=H/2;
+              const pts=analysis.map((a,i)=>({x:i/(analysis.length-1||1)*W,y:mid-Math.max(-mid+2,Math.min(mid-2,a.cp/100*1.8))}));
+              const poly=pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+              const fill=pts.map((p,i)=>i===0?`M${p.x.toFixed(1)},${mid} L${p.x.toFixed(1)},${p.y.toFixed(1)}`:` L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("")+` L${W},${mid} L0,${mid} Z`;
+              const curPly=browseIdx>=0?browseIdx:analysis.length-1;
+              const cx=pts[Math.min(curPly,pts.length-1)]?.x??0;
+              const cy=pts[Math.min(curPly,pts.length-1)]?.y??mid;
+              return <div style={{padding:"6px 10px 8px",borderTop:`1px solid ${CC.border}`}}>
+                <div style={{fontSize:10,color:CC.textMute,fontWeight:700,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
+                  <span>Оценка по ходам</span>
+                  <span style={{fontFamily:"ui-monospace,monospace",color:analysis[Math.min(curPly,analysis.length-1)]?.cp>=0?CC.brand:CC.danger}}>{analysis[Math.min(curPly,analysis.length-1)]?.mate?`M${Math.abs(analysis[Math.min(curPly,analysis.length-1)].mate)}`:(analysis[Math.min(curPly,analysis.length-1)]?.cp/100).toFixed(2)}</span>
+                </div>
+                <svg width={W} height={H} style={{display:"block",borderRadius:4,overflow:"visible"}}>
+                  <line x1={0} y1={mid} x2={W} y2={mid} stroke={CC.border} strokeWidth={1} strokeDasharray="3,3"/>
+                  <path d={fill} fill="rgba(5,150,105,0.12)" stroke="none"/>
+                  <polyline points={poly} fill="none" stroke={CC.brand} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round"/>
+                  <circle cx={cx} cy={cy} r={3} fill={CC.brand} stroke="#fff" strokeWidth={1.5}/>
+                </svg>
+              </div>;
+            })()}
           </div>
 
           {/* Scratch / Analysis-during-play — relocated here per UX feedback (was above

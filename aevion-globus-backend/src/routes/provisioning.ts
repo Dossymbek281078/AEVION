@@ -62,6 +62,55 @@ export function countSubscriptions(): number {
   }
 }
 
+/**
+ * Latest subscription record for an email (case-insensitive). The store is
+ * append-only and latest-wins, so a later "free" downgrade record (written by
+ * the LS subscription webhook on cancel/expire) correctly supersedes an
+ * earlier paid record. Returns null if the email has no records.
+ */
+export function readLatestSubscription(email: string): Subscription | null {
+  const target = email.trim().toLowerCase();
+  if (!target) return null;
+  try {
+    if (!existsSync(SUBS_FILE)) return null;
+    const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+    let latest: Subscription | null = null;
+    for (const line of lines) {
+      try {
+        const sub = JSON.parse(line) as Subscription;
+        if (sub.email?.toLowerCase() === target) latest = sub;
+      } catch {
+        // skip malformed
+      }
+    }
+    return latest;
+  } catch {
+    return null;
+  }
+}
+
+export interface ActivePlan {
+  /** Latest subscription tier for the email, or "free" if none/expired. */
+  tierId: TierId;
+  validUntil: string | null;
+  /** true when tierId is a paid tier AND validUntil hasn't passed. */
+  active: boolean;
+  source: string | null;
+}
+
+/**
+ * Resolves the effective plan for an email from the subscription store.
+ * Single source of truth for "what has this user paid for" — used by the
+ * pricing self-service endpoint and the Constitution Pro server gate.
+ */
+export function getActivePlan(email: string): ActivePlan {
+  const sub = readLatestSubscription(email);
+  if (!sub) return { tierId: "free", validUntil: null, active: false, source: null };
+  const expired = sub.validUntil ? new Date(sub.validUntil).getTime() < Date.now() : false;
+  const active = sub.tierId !== "free" && !expired;
+  return { tierId: sub.tierId, validUntil: sub.validUntil ?? null, active, source: sub.source ?? null };
+}
+
 interface EmailPayload {
   to: string;
   subject: string;

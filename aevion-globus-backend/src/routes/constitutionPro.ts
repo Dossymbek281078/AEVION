@@ -7,7 +7,8 @@
  * Plan resolution (in priority order):
  *   1. JWT payload.plan === "pro"  → pro
  *   2. JWT payload.email in CONSTITUTION_PRO_ALLOWLIST (comma-separated env) → pro
- *   3. Otherwise → free
+ *   3. Active paid subscription in the store (getActivePlan, by email) → pro
+ *   4. Otherwise → free
  *
  * Limits per tier:
  *   free: max 5 saved scenarios in cloud, AI 10/day soft-limit, PDF must
@@ -15,14 +16,16 @@
  *   pro:  unlimited saves, AI without daily cap, clean PDF, "embed on
  *         your site" code snippets, custom color themes.
  *
- * Paddle wiring: this endpoint is the integration point. Once Paddle
- * verification clears (project_aevion_paddle), the webhook handler will
- * set payload.plan on JWT issuance — no code change needed here.
+ * Subscription wiring: step 3 reads the same subscription store the LS
+ * webhook provisions into, so a paid bundle/All-Access (or the Constitution
+ * Pro/Team products) flips this gate to "pro" without needing the plan baked
+ * into the JWT. A later "free" downgrade record supersedes it on cancel.
  */
 
 import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { getActivePlan } from "./provisioning";
 
 const PRO_ALLOWLIST = (process.env.CONSTITUTION_PRO_ALLOWLIST || "")
   .split(",")
@@ -62,6 +65,13 @@ function resolvePlan(req: Request): {
   if (p.plan === "pro") return { plan: "pro", reason: "jwt-plan", email };
   if (email && PRO_ALLOWLIST.includes(email)) {
     return { plan: "pro", reason: "allowlist", email };
+  }
+  if (email) {
+    const active = getActivePlan(email);
+    // Any paid tier (pro/business/enterprise) unlocks Constitution Pro.
+    if (active.active && active.tierId !== "free") {
+      return { plan: "pro", reason: `subscription:${active.tierId}`, email };
+    }
   }
   return { plan: "free", reason: "default", email };
 }

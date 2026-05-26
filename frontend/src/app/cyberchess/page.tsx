@@ -607,6 +607,7 @@ export default function CyberChessPage(){
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
   const[showGameOver,sShowGameOver]=useState(false);
+  const[aiReview,sAiReview]=useState<{text:string;loading:boolean}>({text:"",loading:false});
   const[hist,sHist]=useState<string[]>([]);
   // Persist live game (SAN history + FEN) to localStorage on every move —
   // /cyberchess/repertoire reads it for AutoDetect ECO + Lichess real stats.
@@ -2574,7 +2575,7 @@ export default function CyberChessPage(){
   },[over,hist.length]);
 
   /* ── Show game-over overlay when over is set ── */
-  useEffect(()=>{if(over){sShowGameOver(true)}},[over]);
+  useEffect(()=>{if(over){sShowGameOver(true);sAiReview({text:"",loading:false});}},[over]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -12277,6 +12278,31 @@ ${question.trim()}`;
                 </div>)}
               </div>
 
+              {/* AI Game Review */}
+              <div style={{marginBottom:10}}>
+                {!aiReview.text&&!aiReview.loading&&<button onClick={async()=>{
+                  sAiReview({text:"",loading:true});
+                  try{
+                    const myBlunders=analysis.filter((a,i)=>(pCol==="w"?i%2===0:i%2===1)&&(a.quality==="blunder"||a.quality==="mistake"));
+                    const moves=hist.slice(0,30).join(" ");
+                    const prompt=`Ты шахматный тренер. Партия: ${moves}. Всего ходов: ${hist.length}. Моя точность: ${myAcc}%. ${myBlunders.length>0?`Мои ошибки на ходах: ${myBlunders.map((_,k)=>Math.floor(k/2)+1).slice(0,3).join(", ")}.`:""} Результат: ${over}. Дай краткий (3-4 предложения) разбор на русском языке: главный вывод, 1-2 конкретных рекомендации.`;
+                    const res=await fetch("/api/qcoreai/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"user",content:prompt}]})});
+                    const d=await res.json().catch(()=>null);
+                    sAiReview({text:d?.reply||"Тренер не отвечает — попробуй позже.",loading:false});
+                  }catch{sAiReview({text:"Тренер недоступен.",loading:false});}
+                }} style={{
+                  width:"100%",padding:"8px 0",borderRadius:8,border:"1px solid rgba(124,58,237,0.4)",
+                  background:"rgba(124,58,237,0.12)",color:"#c4b5fd",fontSize:12,fontWeight:800,cursor:"pointer",
+                }}>🤖 Разбор от тренера</button>}
+                {aiReview.loading&&<div style={{padding:"10px 12px",borderRadius:8,background:"rgba(124,58,237,0.08)",border:"1px solid rgba(124,58,237,0.2)",fontSize:11,color:"#a78bfa",textAlign:"center"}}>⏳ Тренер анализирует партию…</div>}
+                {aiReview.text&&!aiReview.loading&&<div style={{padding:"10px 12px",borderRadius:8,background:"rgba(124,58,237,0.08)",border:"1px solid rgba(124,58,237,0.25)",fontSize:11,color:"#e9d5ff",lineHeight:1.6}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,alignItems:"center"}}>
+                    <span style={{fontSize:10,fontWeight:900,color:"#a78bfa",letterSpacing:0.5,textTransform:"uppercase" as const}}>🤖 Тренер говорит</span>
+                    <button onClick={()=>sAiReview({text:"",loading:false})} style={{fontSize:10,color:"#6d28d9",background:"none",border:"none",cursor:"pointer",padding:"0 2px"}}>✕</button>
+                  </div>
+                  {aiReview.text}
+                </div>}
+              </div>
               {/* Mini eval graph */}
               {epts.length>=4&&<div style={{borderRadius:8,overflow:"hidden",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)"}}>
                 <svg width={EW} height={EH} style={{display:"block",width:"100%",height:EH}}>

@@ -92,6 +92,7 @@ import AiPersonalityPicker from "./AiPersonalityPicker";
 import SpectatorChat from "./SpectatorChat";
 import { selectMoveByPersonality, findPersonality, loadStoredPersonalityId, type CandidateMove } from "./aiPersonalities";
 import { CHESS_SOUND_PRESETS, playChessSound, loadSoundPreset, saveSoundPreset } from "./chessSounds";
+import QRCode from "qrcode";
 import { generatePositionExplanation, explainMove, spotTactics, identifyOpening, getPhaseAdvice, OPENING_THEORY, TACTIC_MOTIVES, POSITION_TYPES, TRAINING_METHODOLOGIES } from "./chessCoachEngine";
 import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette";
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
@@ -822,6 +823,8 @@ export default function CyberChessPage(){
   const[showOpeningCard,sShowOpeningCard]=useState(false);
   const[openingCardShownPly,sOpeningCardShownPly]=useState(-1);
   const[savedGames,sSavedGames]=useState<SavedGame[]>([]);
+  const[qrDataUrl,sQrDataUrl]=useState<string|null>(null);
+  const[moveTooltip,sMoveTooltip]=useState<{ply:number;x:number;y:number}|null>(null);
   const[gamesFilter,sGamesFilter]=useState<string>("all");
   // Library v2: full-text search across opening + AI level + result + sort modes
   const[gamesSearch,sGamesSearch]=useState<string>("");
@@ -6221,6 +6224,20 @@ export default function CyberChessPage(){
                           background:"rgba(99,102,241,0.07)",color:"#818cf8",fontSize:13,fontWeight:800,cursor:"pointer"}}>
                         📊
                       </button>
+                      <button onClick={async()=>{
+                        try{
+                          const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;
+                          const result=over.includes("You win")?"1-0":over.includes("AI wins")?"0-1":"1/2-1/2";
+                          const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
+                          const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
+                          const dataUrl=await QRCode.toDataURL(url,{width:220,margin:2,color:{dark:"#bababa",light:"#161512"}});
+                          sQrDataUrl(dataUrl);
+                        }catch{showToast("QR не удалось создать","error")}
+                      }} title="QR-код партии"
+                        style={{padding:"8px 13px",borderRadius:8,border:"1px solid rgba(255,255,255,0.12)",
+                          background:"rgba(255,255,255,0.05)",color:"#878481",fontSize:13,fontWeight:800,cursor:"pointer"}}>
+                        QR
+                      </button>
                     </div>
                     <div style={{fontSize:10,color:"#3d3b39",marginTop:-4}}>N — новая партия</div>
                   </div>
@@ -7759,9 +7776,9 @@ export default function CyberChessPage(){
                       {i+1}
                     </span>
                     {/* White move */}
-                    <span onMouseEnter={()=>{if(white)previewMove(wIdx)}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
+                    <span onMouseEnter={e=>{if(white)previewMove(wIdx);if(analysis[wIdx])sMoveTooltip({ply:wIdx,x:e.clientX,y:e.clientY});}} onMouseLeave={()=>sMoveTooltip(null)} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
                       onDoubleClick={e=>{if(tab!=="analysis"||!white)return;e.preventDefault();e.stopPropagation();sCommentEditPly(commentEditPly===wIdx?null:wIdx);sCommentEditVal(moveComments[wIdx]||"");}}
-                      title={tab==="analysis"?"ПКМ — аннотация · Двойной клик — заметка":undefined}
+                      title={undefined}
                       style={{
                         color:wIsBrowsed?CC.brand:CC.text,fontWeight:wIsBrowsed?900:600,
                         padding:"3px 6px",fontSize:12,
@@ -7788,9 +7805,9 @@ export default function CyberChessPage(){
                       </span>}
                     </span>
                     {/* Black move */}
-                    <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
+                    <span onMouseEnter={e=>{if(black)previewMove(bIdx);if(analysis[bIdx])sMoveTooltip({ply:bIdx,x:e.clientX,y:e.clientY});}} onMouseLeave={()=>sMoveTooltip(null)} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
                       onDoubleClick={e=>{if(tab!=="analysis"||!black)return;e.preventDefault();e.stopPropagation();sCommentEditPly(commentEditPly===bIdx?null:bIdx);sCommentEditVal(moveComments[bIdx]||"");}}
-                      title={tab==="analysis"&&black?"ПКМ — аннотация · Двойной клик — заметка":undefined}
+                      title={undefined}
                       style={{
                         color:bIsBrowsed?CC.brand:CC.textDim,fontWeight:bIsBrowsed?900:500,
                         padding:"3px 6px",fontSize:12,
@@ -12548,6 +12565,19 @@ ${question.trim()}`;
                 flex:1,padding:"11px 0",borderRadius:10,border:"1px solid rgba(255,255,255,0.18)",
                 background:"rgba(255,255,255,0.07)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",minWidth:70,
               }}>📊 Анализ</button>
+              <button onClick={async()=>{
+                try{
+                  const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;
+                  const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
+                  const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
+                  const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
+                  const dataUrl=await QRCode.toDataURL(url,{width:220,margin:2,color:{dark:"#bababa",light:"#161512"}});
+                  sQrDataUrl(dataUrl);sShowGameOver(false);
+                }catch{showToast("QR не удалось создать","error")}
+              }} style={{
+                padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",
+                background:"transparent",color:"rgba(255,255,255,0.45)",fontSize:13,cursor:"pointer",fontWeight:700,
+              }}>QR</button>
               <button onClick={()=>sShowGameOver(false)} style={{
                 padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",
                 background:"transparent",color:"rgba(255,255,255,0.35)",fontSize:13,cursor:"pointer",
@@ -12629,6 +12659,44 @@ ${question.trim()}`;
       </div>
     )}
     <MusicPlayer open={showMusicPlayer} onClose={()=>sShowMusicPlayer(false)}/>
+    {/* QR modal */}
+    {qrDataUrl&&<div style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>sQrDataUrl(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#1e1c19",border:"1px solid #3d3b39",borderRadius:16,padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:12,boxShadow:"0 24px 64px rgba(0,0,0,0.7)"}}>
+        <div style={{fontSize:13,fontWeight:900,color:"#bababa",letterSpacing:-0.2}}>📱 QR-код партии</div>
+        <img src={qrDataUrl} alt="QR code" style={{width:220,height:220,borderRadius:8,imageRendering:"pixelated"}}/>
+        <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center"}}>Отсканируй чтобы открыть партию</div>
+        <button onClick={()=>{const a=document.createElement("a");a.href=qrDataUrl;a.download="chess-qr.png";a.click();}} style={{padding:"8px 18px",borderRadius:8,border:"1px solid rgba(117,153,0,0.4)",background:"rgba(117,153,0,0.1)",color:"#a3c832",fontSize:12,fontWeight:800,cursor:"pointer"}}>⬇ Скачать PNG</button>
+        <button onClick={()=>sQrDataUrl(null)} style={{position:"absolute",top:12,right:12,background:"none",border:"none",color:"#5d5b59",cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+      </div>
+    </div>}
+    {/* Move tooltip — rich hover popup showing quality + cpLoss */}
+    {moveTooltip&&(()=>{
+      const ev=analysis[moveTooltip.ply];
+      if(!ev)return null;
+      const qMap:{[k:string]:[string,string]}={brilliant:["!! Блестяще","#06b6d4"],great:["⭐ Отлично","#f59e0b"],good:["✓ Хорошо","#10b981"],inacc:["?! Неточность","#6366f1"],mistake:["? Ошибка","#f97316"],blunder:["?? Зевок","#ef4444"]};
+      const[qlabel,qcol]=qMap[ev.quality]||["","#bababa"];
+      const evalStr=ev.mate!==0?`M${Math.abs(ev.mate)}`:`${ev.cp>=0?"+":""}${(ev.cp/100).toFixed(2)}`;
+      const mt=moveTimes[moveTooltip.ply];
+      return <div style={{
+        position:"fixed",left:Math.min(moveTooltip.x+12,window.innerWidth-160),top:Math.max(moveTooltip.y-8,8),
+        zIndex:800,pointerEvents:"none",
+        background:"rgba(18,16,12,0.97)",border:"1px solid #3d3b39",
+        borderRadius:8,padding:"7px 11px",minWidth:130,maxWidth:160,
+        boxShadow:"0 8px 24px rgba(0,0,0,0.6)",
+        fontSize:11,
+      }}>
+        {qlabel&&<div style={{color:qcol,fontWeight:900,marginBottom:3}}>{qlabel}</div>}
+        <div style={{color:"#878481",display:"flex",justifyContent:"space-between"}}>
+          <span>Оценка</span><span style={{color:"#bababa",fontFamily:"ui-monospace,monospace",fontWeight:700}}>{evalStr}</span>
+        </div>
+        {ev.cpLoss>0&&<div style={{color:"#878481",display:"flex",justifyContent:"space-between"}}>
+          <span>Потеря</span><span style={{color:ev.cpLoss>=100?"#ef4444":ev.cpLoss>=50?"#f97316":"#9ca3af",fontFamily:"ui-monospace,monospace",fontWeight:700}}>-{ev.cpLoss} cp</span>
+        </div>}
+        {mt!=null&&<div style={{color:"#878481",display:"flex",justifyContent:"space-between"}}>
+          <span>Время</span><span style={{color:"#bababa",fontFamily:"ui-monospace,monospace",fontWeight:700}}>{mt<10000?(mt/1000).toFixed(1)+"s":Math.round(mt/1000)+"s"}</span>
+        </div>}
+      </div>;
+    })()}
     <AchievementPanel
       open={showAchievements}
       onClose={()=>sShowAchievements(false)}

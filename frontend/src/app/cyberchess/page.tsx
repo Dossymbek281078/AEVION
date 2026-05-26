@@ -825,6 +825,7 @@ export default function CyberChessPage(){
   const[savedGames,sSavedGames]=useState<SavedGame[]>([]);
   const[qrDataUrl,sQrDataUrl]=useState<string|null>(null);
   const[moveTooltip,sMoveTooltip]=useState<{ply:number;x:number;y:number}|null>(null);
+  const[engineHintArrow,sEngineHintArrow]=useState<{from:string;to:string}|null>(null);
   const[gamesFilter,sGamesFilter]=useState<string>("all");
   // Library v2: full-text search across opening + AI level + result + sort modes
   const[gamesSearch,sGamesSearch]=useState<string>("");
@@ -5946,7 +5947,7 @@ export default function CyberChessPage(){
                 };
                 return <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:5}}>
                   <defs>
-                    {["#22c55e","#ef4444","#3b82f6","#eab308"].map(c=><marker key={c} id={`ah-${c.slice(1)}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={c}/></marker>)}
+                    {["#22c55e","#ef4444","#3b82f6","#eab308","#06b6d4"].map(c=><marker key={c} id={`ah-${c.slice(1)}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill={c}/></marker>)}
                   </defs>
                   {sqHL.map((h,i)=>{const[x,y]=sqXY(h.sq);return <circle key={i} cx={x} cy={y} r="5.5" fill="none" stroke={h.c} strokeWidth="1" opacity="0.85"/>;})}
                   {arrows.map((a,i)=>{const[x1,y1]=sqXY(a.from);const[x2,y2]=sqXY(a.to);
@@ -5976,6 +5977,17 @@ export default function CyberChessPage(){
                     return <>
                       <circle cx={px1} cy={py1} r="5.5" fill={`${pc}22`} stroke={pc} strokeWidth="0.8"/>
                       <line x1={px1} y1={py1} x2={ptx} y2={pty} stroke={pc} strokeWidth="2.5" strokeLinecap="round" markerEnd={`url(#ah-${pc.slice(1)})`} opacity="0.85"/>
+                    </>;
+                  })()}
+                  {/* Engine hint arrow — best continuation from hovered move-list position */}
+                  {engineHintArrow&&tab==="analysis"&&(()=>{
+                    const[ex1,ey1]=sqXY(engineHintArrow.from as Square);
+                    const[ex2,ey2]=sqXY(engineHintArrow.to as Square);
+                    const edx=ex2-ex1,edy=ey2-ey1,elen=Math.max(0.01,Math.hypot(edx,edy));
+                    const etx=ex2-(edx/elen)*3.5,ety=ey2-(edy/elen)*3.5;
+                    return <>
+                      <circle cx={ex1} cy={ey1} r="5.8" fill="rgba(6,182,212,0.18)" stroke="#06b6d4" strokeWidth="0.9"/>
+                      <line x1={ex1} y1={ey1} x2={etx} y2={ety} stroke="#06b6d4" strokeWidth="2.6" strokeLinecap="round" markerEnd="url(#ah-06b6d4)" opacity="0.85"/>
                     </>;
                   })()}
                   {/* Premove drag preview arrow — shown while dragging on opponent's turn */}
@@ -7803,7 +7815,7 @@ export default function CyberChessPage(){
                       {i+1}
                     </span>
                     {/* White move */}
-                    <span onMouseEnter={e=>{if(white)previewMove(wIdx);if(analysis[wIdx])sMoveTooltip({ply:wIdx,x:e.clientX,y:e.clientY});}} onMouseLeave={()=>sMoveTooltip(null)} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
+                    <span onMouseEnter={e=>{if(white)previewMove(wIdx);if(analysis[wIdx])sMoveTooltip({ply:wIdx,x:e.clientX,y:e.clientY});if(tab==="analysis"&&white&&fenHist[wIdx+1]&&sfR.current?.ready()){sEngineHintArrow(null);sfR.current.go(fenHist[wIdx+1],10,(f,t)=>{if(f&&t)sEngineHintArrow({from:f,to:t});});}}} onMouseLeave={()=>{sMoveTooltip(null);sEngineHintArrow(null);}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
                       onDoubleClick={e=>{if(tab!=="analysis"||!white)return;e.preventDefault();e.stopPropagation();sCommentEditPly(commentEditPly===wIdx?null:wIdx);sCommentEditVal(moveComments[wIdx]||"");}}
                       title={undefined}
                       style={{
@@ -7832,7 +7844,7 @@ export default function CyberChessPage(){
                       </span>}
                     </span>
                     {/* Black move */}
-                    <span onMouseEnter={e=>{if(black)previewMove(bIdx);if(analysis[bIdx])sMoveTooltip({ply:bIdx,x:e.clientX,y:e.clientY});}} onMouseLeave={()=>sMoveTooltip(null)} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
+                    <span onMouseEnter={e=>{if(black)previewMove(bIdx);if(analysis[bIdx])sMoveTooltip({ply:bIdx,x:e.clientX,y:e.clientY});if(tab==="analysis"&&black&&fenHist[bIdx+1]&&sfR.current?.ready()){sEngineHintArrow(null);sfR.current.go(fenHist[bIdx+1],10,(f,t)=>{if(f&&t)sEngineHintArrow({from:f,to:t});});}}} onMouseLeave={()=>{sMoveTooltip(null);sEngineHintArrow(null);}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
                       onDoubleClick={e=>{if(tab!=="analysis"||!black)return;e.preventDefault();e.stopPropagation();sCommentEditPly(commentEditPly===bIdx?null:bIdx);sCommentEditVal(moveComments[bIdx]||"");}}
                       title={undefined}
                       style={{

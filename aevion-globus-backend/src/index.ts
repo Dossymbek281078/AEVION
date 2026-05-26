@@ -127,6 +127,18 @@ app.use(express.json({
     (req as unknown as { rawBody?: Buffer }).rawBody = buf;
   },
 }));
+// Gumroad pings arrive as application/x-www-form-urlencoded. express.json
+// ignores that content-type, so without this parser req.rawBody is never
+// populated for form posts and /api/gumroad/webhook reads an empty body
+// (→ every real ping silently ignored as no_email). Same verify hook stashes
+// the raw bytes for the provider's optional HMAC signature check.
+app.use(express.urlencoded({
+  extended: false,
+  limit: "1mb",
+  verify: (req, _res, buf) => {
+    (req as unknown as { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 
 // Health-check. Both /health (legacy) and /api/health (the path the
 // frontend + diagnostics page have always probed against) return the
@@ -776,6 +788,47 @@ app.get("/api/openapi.json", (_req, res) => {
             "400": { description: "Body is not JSON, or subscription event missing user_email" },
             "401": { description: "x-signature header missing or HMAC mismatch" },
             "500": { description: "Provisioning failed — LS will retry (dedup entry released)" },
+          },
+        },
+      },
+      // Gumroad — platform-wide ping webhook (form-encoded)
+      "/api/gumroad/webhook": {
+        post: {
+          summary:
+            "Gumroad ping webhook (application/x-www-form-urlencoded) — maps sale/refund/cancel to plan provisioning",
+          description:
+            "Gumroad sends form-encoded pings for all AEVION products. product_id is matched against GUMROAD_PRODUCT_<ID>=<reference> env to pick the tier (all-access/business → 'business', else 'pro'); unmatched falls back to constitution-pro. A paid sale calls provisionSubscription (writes subscriptions.jsonl, same store /me/plan and the Pro gates read); refunded/disputed/subscription_cancelled/subscription_failed write a tierId:'free' downgrade record. Missing email → ignored. Optional HMAC: if GUMROAD_WEBHOOK_SECRET is set, x-gumroad-signature (or a signature field) must match HMAC-SHA256 of the raw body. Dedup on sale_id + status.",
+          security: [],
+          requestBody: {
+            required: true,
+            content: {
+              "application/x-www-form-urlencoded": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    sale_id: { type: "string" },
+                    email: { type: "string", format: "email" },
+                    product_id: { type: "string" },
+                    short_product_id: { type: "string" },
+                    is_recurring_billing: { type: "string", example: "true" },
+                    refunded: { type: "string", example: "false" },
+                    disputed: { type: "string", example: "false" },
+                    subscription_cancelled: { type: "string" },
+                    subscription_failed: { type: "string" },
+                    sale_timestamp: { type: "string", format: "date-time" },
+                  },
+                  required: ["email"],
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description:
+                "Acknowledged: { ok, action: 'activated'|'downgraded', tierId? } | { ok, ignored } | { ok, deduped }",
+            },
+            "400": { description: "Webhook body could not be parsed" },
+            "500": { description: "Provisioning failed — dedup entry released for retry" },
           },
         },
       },

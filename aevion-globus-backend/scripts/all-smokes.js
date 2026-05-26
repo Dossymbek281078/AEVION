@@ -144,6 +144,10 @@ const SMOKES = [
   // shape (savedScenarios/aiSuggestPerDay/pdfRequiresSign), publish-route
   // validation gates, ai-suggest liveness. Doesn't trigger 402/429.
   { name: "constitution-pro-prod", script: "constitution-pro-prod-smoke.js", readOnly: true },
+  // Gumroad ping webhook — form-encoded paid/refund/no-email/dedup. Also
+  // guards the express.urlencoded body-parser fix (form pings must reach the
+  // handler with a populated body). Signs with GUMROAD_WEBHOOK_SECRET if set.
+  { name: "gumroad-webhook", script: "gumroad-webhook-smoke.js", readOnly: false, env: { GUMROAD_WEBHOOK_SECRET: process.env.GUMROAD_WEBHOOK_SECRET || "" } },
   // DevHub PROD — 47 assertions: all 8 tabs (projects/files/env/deployments/github/templates/agent/snippets)
   // + 13 media subtabs (TTS/Image/SFX/Music/VoiceClone/STT/Email/Payment/SMS/WhatsApp/Translate/Drive)
   // Accepts 503 gracefully for unconfigured API keys. Writes one project + snippet then cleans up.

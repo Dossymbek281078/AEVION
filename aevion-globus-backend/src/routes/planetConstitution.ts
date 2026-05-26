@@ -19,6 +19,14 @@ import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
+import { resolvePlan, checkSaveLimit, FREE_SAVE_LIMIT } from "../lib/constitutionGate";
+
+const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+
+// Free-tier publish counter for the in-memory fallback (DB-down) path. The
+// DB COUNT is the source of truth when Postgres is up; this keeps the gate
+// roughly working in degraded mode. Keyed by lowercased owner email.
+const memOwnerCounts = new Map<string, number>();
 
 type ArtifactPayload = {
   title?: string;
@@ -65,6 +73,10 @@ async function ensureConstitutionTable(): Promise<void> {
         ON planet_constitution_artifacts ("publishedAt" DESC);
       CREATE INDEX IF NOT EXISTS idx_constitution_regime
         ON planet_constitution_artifacts ("regimeId", "publishedAt" DESC);
+      ALTER TABLE planet_constitution_artifacts
+        ADD COLUMN IF NOT EXISTS "ownerEmail" TEXT;
+      CREATE INDEX IF NOT EXISTS idx_constitution_owner
+        ON planet_constitution_artifacts ("ownerEmail");
     `);
     dbAvailable = true;
   } catch {
@@ -96,6 +108,27 @@ function rowToArtifact(row: Record<string, unknown>): Artifact {
 function cachePush(a: Artifact): void {
   ring.unshift(a);
   if (ring.length > MAX_CACHE) ring.length = MAX_CACHE;
+}
+
+/**
+ * How many artifacts this owner email has already published. DB COUNT is
+ * authoritative; falls back to the in-memory counter when Postgres is down.
+ * Never reads into a public response — owner email stays server-side.
+ */
+async function countOwnerArtifacts(email: string): Promise<number> {
+  if (dbAvailable) {
+    try {
+      const pool = getPool();
+      const r = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM planet_constitution_artifacts WHERE "ownerEmail" = $1`,
+        [email],
+      );
+      return Number(r.rows[0]?.n ?? 0);
+    } catch {
+      // fall through to memory counter
+    }
+  }
+  return memOwnerCounts.get(email) ?? 0;
 }
 
 export const planetConstitutionRouter = Router();
@@ -132,6 +165,24 @@ planetConstitutionRouter.post(
       if (!signature) return res.status(400).json({ error: "missing_signature" });
       if (!payload) return res.status(400).json({ error: "missing_payload" });
 
+      // Free-tier publish cap (Pro = unlimited). Enforced per owner email;
+      // anonymous publishes (no JWT) keep the prior open behaviour since they
+      // can't be attributed across sessions.
+      const { plan, email } = resolvePlan(req);
+      if (plan === "free" && email) {
+        const used = await countOwnerArtifacts(email);
+        if (!checkSaveLimit(plan, used).allowed) {
+          return res.status(402).json({
+            error: "free_save_limit",
+            plan: "free",
+            limit: FREE_SAVE_LIMIT,
+            used,
+            upgradeUrl: `${PUBLIC_BASE}/constitution/pricing`,
+            message: `Free-тариф: до ${FREE_SAVE_LIMIT} опубликованных конституций. Upgrade → Pro для безлимита.`,
+          });
+        }
+      }
+
       const title = typeof payload.title === "string" && payload.title
         ? payload.title.slice(0, 160)
         : "untitled-constitution";
@@ -156,8 +207,8 @@ planetConstitutionRouter.post(
           const pool = getPool();
           await pool.query(
             `INSERT INTO planet_constitution_artifacts
-               ("id","title","regimeId","regimeName","algo","signature","signedAt","publishedAt","payload")
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
+               ("id","title","regimeId","regimeName","algo","signature","signedAt","publishedAt","payload","ownerEmail")
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
             [
               artifact.id,
               artifact.title,
@@ -168,6 +219,7 @@ planetConstitutionRouter.post(
               artifact.signedAt,
               artifact.publishedAt,
               JSON.stringify(artifact.payload),
+              email ?? null,
             ],
           );
           storage = "postgres";
@@ -176,6 +228,7 @@ planetConstitutionRouter.post(
         }
       }
       cachePush(artifact);
+      if (email) memOwnerCounts.set(email, (memOwnerCounts.get(email) ?? 0) + 1);
 
       res.status(201).json({
         artifact,

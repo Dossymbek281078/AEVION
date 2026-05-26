@@ -12364,39 +12364,70 @@ ${question.trim()}`;
     {showQuickSetupModal && (
       <div style={{
         position:"fixed", inset:0, zIndex:600,
-        background:"rgba(10,8,5,0.8)", backdropFilter:"blur(4px)",
+        background:"rgba(10,8,5,0.82)", backdropFilter:"blur(6px)",
         display:"flex", alignItems:"center", justifyContent:"center",
         padding:16,
       }} onClick={()=>sShowQuickSetupModal(false)}>
         <div onClick={e=>e.stopPropagation()} style={{
           background:"#1e1c19", border:"1px solid #3d3b39",
-          borderRadius:16, padding:24, width:"100%", maxWidth:480,
-          boxShadow:"0 24px 64px rgba(0,0,0,0.6)",
+          borderRadius:16, padding:24, width:"100%", maxWidth:440,
+          boxShadow:"0 24px 64px rgba(0,0,0,0.7)",
         }}>
-          <h2 style={{margin:"0 0 20px",fontSize:20,fontWeight:900,color:"#bababa"}}>⚡ Новая партия</h2>
-          {/* Time control chips — compact row */}
+          <h2 style={{margin:"0 0 20px",fontSize:19,fontWeight:900,color:"#bababa",letterSpacing:-0.3}}>⚡ Новая партия</h2>
+          {/* Time control chips */}
           <div style={{marginBottom:16}}>
             <div style={{fontSize:10,fontWeight:900,color:"#5d5b59",letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:8}}>Контроль времени</div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {["1+0","2+1","3+0","5+0","10+0","15+10"].map(tc=>(
-                <button key={tc} style={{
-                  padding:"6px 12px", borderRadius:8,
-                  border:"1px solid #3d3b39", background:"#262421",
-                  color:"#bababa", cursor:"pointer", fontSize:13, fontWeight:700,
-                }}>{tc}</button>
-              ))}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap" as const}}>
+              {([
+                {label:"1+0",idx:0},
+                {label:"2+1",idx:4},
+                {label:"3+0",idx:6},
+                {label:"5+0",idx:9},
+                {label:"10+0",idx:12},
+                {label:"15+10",idx:-1,cm:15,ci:10},
+              ] as Array<{label:string;idx:number;cm?:number;ci?:number}>).map(({label,idx,cm,ci})=>{
+                const active=cm!=null?(useCustom&&customMin===cm&&customInc===ci):(!useCustom&&tcI===idx);
+                return <button key={label} onClick={()=>{
+                  if(cm!=null){sUseCustom(true);sCustomMin(cm);sCustomInc(ci as number);}
+                  else{sTcI(idx);sUseCustom(false);}
+                }} style={{
+                  padding:"6px 13px",borderRadius:8,
+                  border:active?"1px solid rgba(117,153,0,0.7)":"1px solid #3d3b39",
+                  background:active?"rgba(117,153,0,0.14)":"#262421",
+                  color:active?"#a3c832":"#bababa",
+                  cursor:"pointer",fontSize:13,fontWeight:700,
+                  transition:"border-color 0.12s,background 0.12s,color 0.12s",
+                }}>{label}</button>;
+              })}
             </div>
           </div>
-          {/* Quick Start */}
-          <button onClick={()=>{newG(); sShowQuickSetupModal(false);}} style={{
-            width:"100%", padding:"14px", borderRadius:10,
-            background:"#759900", border:"none", color:"#fff",
-            fontSize:16, fontWeight:900, cursor:"pointer",
-            boxShadow:"0 4px 16px rgba(117,153,0,0.4)",
-          }}>▶ Играть</button>
-          <button onClick={()=>sShowQuickSetupModal(false)} style={{
-            display:"block", margin:"12px auto 0", background:"none",
-            border:"none", color:"#5d5b59", cursor:"pointer", fontSize:13,
+          {/* Difficulty chips */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:10,fontWeight:900,color:"#5d5b59",letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:8}}>Сложность</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap" as const}}>
+              {ALS.map((al,i)=>{
+                const active=aiI===i;
+                return <button key={i} onClick={()=>sAiI(i)} style={{
+                  padding:"5px 11px",borderRadius:8,
+                  border:active?`1px solid ${al.color}60`:"1px solid #3d3b39",
+                  background:active?`${al.color}1a`:"#262421",
+                  color:active?al.color:"#878481",
+                  cursor:"pointer",fontSize:12,fontWeight:700,
+                  transition:"border-color 0.12s,background 0.12s,color 0.12s",
+                }}>{al.name}</button>;
+              })}
+            </div>
+          </div>
+          {/* Play button */}
+          <button onClick={()=>{newG();sShowQuickSetupModal(false);}} style={{
+            width:"100%",padding:"14px",borderRadius:10,
+            background:"#759900",border:"none",color:"#fff",
+            fontSize:16,fontWeight:900,cursor:"pointer",
+            boxShadow:"0 4px 16px rgba(117,153,0,0.35)",
+          }}>▶ Играть · {useCustom?`${customMin}+${customInc}`:(TCS[tcI]?.name||"?")} · {ALS[aiI]?.name}</button>
+          <button onClick={()=>{sShowQuickSetupModal(false);sTab("play");sSetup(true);}} style={{
+            display:"block",margin:"12px auto 0",background:"none",
+            border:"none",color:"#5d5b59",cursor:"pointer",fontSize:13,
           }}>Расширенные настройки →</button>
         </div>
       </div>

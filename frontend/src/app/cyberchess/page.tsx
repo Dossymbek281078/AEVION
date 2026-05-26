@@ -12279,15 +12279,20 @@ ${question.trim()}`;
             </div>}
 
             {/* Buttons */}
-            <div style={{padding:"0 24px 20px",display:"flex",gap:10,flexWrap:"wrap"}}>
+            <div style={{padding:"0 24px 20px",display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button onClick={()=>{sShowGameOver(false);const swapped=pCol==="w"?"b":"w" as ChessColor;newG(swapped);}} style={{
+                flex:1.2,padding:"11px 0",borderRadius:10,border:"none",
+                background:"#1d4ed8",color:"#fff",fontSize:13,fontWeight:900,cursor:"pointer",
+                boxShadow:"0 4px 14px rgba(29,78,216,0.4)",minWidth:90,
+              }}>🔁 Реванш</button>
               <button onClick={()=>{sShowGameOver(false);sSetup(true);sOn(false);}} style={{
                 flex:1,padding:"11px 0",borderRadius:10,border:"none",
-                background:accentClr,color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer",
-                boxShadow:`0 4px 14px ${glowClr}`,minWidth:100,
-              }}>▶ Новая игра</button>
+                background:accentClr,color:"#fff",fontSize:13,fontWeight:900,cursor:"pointer",
+                boxShadow:`0 4px 14px ${glowClr}`,minWidth:80,
+              }}>▶ Новая</button>
               <button onClick={()=>{sShowGameOver(false);sTab("analysis");sShowAnal(true);}} style={{
                 flex:1,padding:"11px 0",borderRadius:10,border:"1px solid rgba(255,255,255,0.18)",
-                background:"rgba(255,255,255,0.07)",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",minWidth:80,
+                background:"rgba(255,255,255,0.07)",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",minWidth:70,
               }}>📊 Анализ</button>
               <button onClick={()=>sShowGameOver(false)} style={{
                 padding:"11px 14px",borderRadius:10,border:"1px solid rgba(255,255,255,0.1)",

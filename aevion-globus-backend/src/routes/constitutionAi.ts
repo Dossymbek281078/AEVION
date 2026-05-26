@@ -19,6 +19,7 @@
 import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import { validate, AiSuggestSchema } from "../lib/constitutionSchemas";
+import { aiRateGate } from "../lib/constitutionGate";
 
 const SLIDER_KEYS = [
   "floor",
@@ -177,6 +178,7 @@ const limiter = rateLimit({
 constitutionAiRouter.post(
   "/ai-suggest-stream",
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  aiRateGate as unknown as (req: Request, res: Response, next: () => void) => void,
   validate(AiSuggestSchema),
   async (req: Request, res: Response) => {
     const { description } = req.body as { description: string };
@@ -298,6 +300,7 @@ constitutionAiRouter.post(
 constitutionAiRouter.post(
   "/ai-suggest",
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
+  aiRateGate as unknown as (req: Request, res: Response, next: () => void) => void,
   validate(AiSuggestSchema),
   async (req: Request, res: Response) => {
     try {

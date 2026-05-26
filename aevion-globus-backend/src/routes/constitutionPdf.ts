@@ -21,6 +21,7 @@ import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
+import { resolvePlan } from "../lib/constitutionGate";
 
 const SLIDER_KEYS = [
   "floor", "ruleOfLaw", "rotation", "transparency",
@@ -278,6 +279,24 @@ constitutionPdfRouter.post(
           40, H - 30,
           { width: W - 80, align: "center", lineBreak: false },
         );
+
+      // Watermark for free tier (unsigned PDF without Pro plan)
+      const { plan } = resolvePlan(req);
+      const isSigned = Boolean(signature);
+      if (plan === "free" && !isSigned) {
+        // Diagonal watermark — Constitution Pro removes it
+        doc.save();
+        doc.rotate(-45, { origin: [W / 2, H / 2] });
+        doc.fillColor("#d4af37").fillOpacity(0.08).fontSize(64).font("Helvetica-Bold")
+          .text("FREE TIER", 60, H / 2 - 40, { width: W - 120, align: "center", lineBreak: false });
+        doc.restore();
+        doc.fillColor("#94a3b8").fontSize(9).font("Helvetica-Oblique").fillOpacity(0.9)
+          .text(
+            "Watermark-free PDF available on Constitution Pro · aevion.app/constitution/pricing",
+            40, H - 50,
+            { width: W - 80, align: "center", lineBreak: false },
+          );
+      }
 
       doc.end();
     } catch (err) {

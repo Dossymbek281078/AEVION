@@ -63,6 +63,17 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   }
 
   const { result, eventId } = parsed;
+
+  // Reject a bad HMAC explicitly. parseWebhook signals a signature mismatch
+  // via reason:"invalid_signature" with an emptied raw — without this guard
+  // that would fall through to the no_email branch and answer 200, masking a
+  // forged/misconfigured ping as a benign "no email" and telling Gumroad the
+  // delivery succeeded. 401 makes rejection observable and retryable.
+  if (result.reason === "invalid_signature") {
+    console.warn("[gumroad/webhook] invalid signature — rejecting 401");
+    return res.status(401).json({ ok: false, error: "invalid_signature" });
+  }
+
   const raw = result.raw as Record<string, string> | null ?? {};
 
   const saleId = raw.sale_id ?? raw.id ?? eventId ?? "";

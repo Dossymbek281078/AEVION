@@ -82,6 +82,22 @@ async function ping(fields) {
     ? ok("replayed paid ping → 200 deduped")
     : ko("replayed paid ping → deduped", `${replay.status} ${JSON.stringify(replay.json)}`);
 
+  // ── bad signature → 401 (only meaningful when backend enforces a secret) ─────
+  if (SECRET) {
+    const raw = new URLSearchParams({ sale_id: `${SALE}_bad`, email: EMAIL, product_id: "TESTPROD" }).toString();
+    const res = await fetch(`${BASE}${PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "x-gumroad-signature": "deadbeefbadsignature" },
+      body: raw,
+    });
+    let json; try { json = await res.json(); } catch { json = {}; }
+    (res.status === 401 && json.error === "invalid_signature")
+      ? ok("bad signature → 401 invalid_signature (not silently ignored)")
+      : ko("bad signature → 401", `${res.status} ${JSON.stringify(json)}`);
+  } else {
+    console.log("  [skip] bad-signature leg — GUMROAD_WEBHOOK_SECRET not in env");
+  }
+
   console.log(`\n[gumroad-webhook-smoke] ${pass} passed, ${fail} failed`);
   if (fail > 0) {
     console.error("\nFailures:");

@@ -828,6 +828,7 @@ app.get("/api/openapi.json", (_req, res) => {
                 "Acknowledged: { ok, action: 'activated'|'downgraded', tierId? } | { ok, ignored } | { ok, deduped }",
             },
             "400": { description: "Webhook body could not be parsed" },
+            "401": { description: "Signature mismatch (GUMROAD_WEBHOOK_SECRET set and x-gumroad-signature invalid)" },
             "500": { description: "Provisioning failed — dedup entry released for retry" },
           },
         },

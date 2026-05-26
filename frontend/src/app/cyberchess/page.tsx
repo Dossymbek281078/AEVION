@@ -5912,7 +5912,32 @@ export default function CyberChessPage(){
                       <line x1={px1} y1={py1} x2={ptx} y2={pty} stroke={pc} strokeWidth="2.5" strokeLinecap="round" markerEnd={`url(#ah-${pc.slice(1)})`} opacity="0.85"/>
                     </>;
                   })()}
+                  {/* Premove drag preview arrow — shown while dragging on opponent's turn */}
+                  {!myT&&ghostFrom&&dragHover&&ghostFrom!==dragHover&&(()=>{
+                    const[ax1,ay1]=sqXY(ghostFrom);
+                    const[ax2,ay2]=sqXY(dragHover);
+                    const adx=ax2-ax1,ady=ay2-ay1,alen=Math.max(0.01,Math.hypot(adx,ady));
+                    const atx=ax2-(adx/alen)*3.5,aty=ay2-(ady/alen)*3.5;
+                    return <>
+                      <circle cx={ax1} cy={ay1} r="5.8" fill="rgba(37,99,235,0.15)" stroke="#3b82f6" strokeWidth="0.9" strokeDasharray="3 2"/>
+                      <line x1={ax1} y1={ay1} x2={atx} y2={aty} stroke="#3b82f6" strokeWidth="2.2" strokeLinecap="round" markerEnd="url(#ah-3b82f6)" opacity="0.72"/>
+                    </>;
+                  })()}
                 </svg>;
+              })()}
+              {/* Premove drag target highlight — blue square border on hover target */}
+              {!myT&&ghostFrom&&dragHover&&(()=>{
+                const dhf=FILES.indexOf(dragHover[0]);
+                const dhr=8-parseInt(dragHover[1]);
+                const dhc=flip?7-dhf:dhf;const dhrr=flip?7-dhr:dhr;
+                return <div style={{
+                  position:"absolute",left:`${dhc*12.5}%`,top:`${dhrr*12.5}%`,
+                  width:"12.5%",height:"12.5%",
+                  pointerEvents:"none",zIndex:7,
+                  background:"rgba(37,99,235,0.18)",
+                  border:"2px solid rgba(59,130,246,0.7)",
+                  boxSizing:"border-box",
+                }}/>;
               })()}
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
                 const realP=game.get(sq);
@@ -6337,17 +6362,23 @@ export default function CyberChessPage(){
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Resign?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=Math.max(100,rat-Math.max(5,Math.round((rat-lv.elo)*0.1+10)));sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Resign</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Offer draw?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("AI declined","error")}}>½ Draw</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
-              if(hist.length<2){showToast("No moves","error");return}
+              if(hist.length<2){showToast("Ходов нет","error");return}
               if(think){showToast("AI думает — подожди","error");return}
-              const needChessy=tab==="play"&&!hotseat;
-              if(needChessy&&chessy.balance<3){showToast("Недостаточно Chessy (нужно 3)","error");return}
+              if(!hotseat){
+                // Probability-based AI acceptance: Beginner=100% ... Master=0%
+                const prob=Math.max(0,(5-aiI)/5);
+                if(Math.random()>prob){
+                  showToast(`${ALS[aiI].name} отклонил запрос ↩`,"error");
+                  return;
+                }
+              }
               const u1=game.undo();
-              if(!u1){showToast("Takeback failed","error");return}
+              if(!u1){showToast("Undo failed","error");return}
               const u2=game.undo();
-              if(!u2){try{game.move(u1.san)}catch{}showToast("Takeback failed","error");return;}
-              if(needChessy)spendChessy(3,"takeback");
+              if(!u2){try{game.move(u1.san)}catch{}showToast("Undo failed","error");return;}
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
-            }}>Take back{tab==="play"&&!hotseat?" · 3":""}</Btn>
+              showToast("↩ Ход отменён","success");
+            }}>↩ Undo</Btn>
             {sfOk&&myT&&!hotseat&&<Btn size="md" variant="secondary" className="cc-game-btn" loading={hintLoading} onClick={()=>{
               if(hintLoading)return;
               if(!sfR.current?.ready()){showToast("SF загружается…","error");return}

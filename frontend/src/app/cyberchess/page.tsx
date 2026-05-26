@@ -225,9 +225,13 @@ function best(c:Chess,d:number,rn:number):Move|null{const mv=c.moves({verbose:tr
 
 /* ═══ Sound — neutral percussive (filtered noise bursts, no melody) ═══ */
 const MK="aevion_chess_mute_v1";
+const SK_MOVES="aevion_snd_moves_v1",SK_CLOCK="aevion_snd_clock_v1",SK_UI="aevion_snd_ui_v1";
 let _muted:boolean|null=null;
 function isMuted(){if(_muted===null){try{_muted=typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{_muted=false}}return !!_muted}
 function setMuted(v:boolean){_muted=v;try{localStorage.setItem(MK,v?"1":"0")}catch{}}
+function isSndMoves(){try{const v=typeof window!=="undefined"?localStorage.getItem(SK_MOVES):null;return v===null||v==="1"}catch{return true}}
+function isSndClock(){try{const v=typeof window!=="undefined"?localStorage.getItem(SK_CLOCK):null;return v===null||v==="1"}catch{return true}}
+function isSndUi(){try{const v=typeof window!=="undefined"?localStorage.getItem(SK_UI):null;return v===null||v==="1"}catch{return true}}
 // Shared AudioContext — creating one per sound leaks and trips browser limits.
 let _audioCtx:AudioContext|null=null;
 function getAudioCtx():AudioContext|null{
@@ -238,7 +242,13 @@ function getAudioCtx():AudioContext|null{
 }
 // snd проксирует в playChessSound с текущим preset из localStorage. Сам preset
 // меняется через Settings → "Звуки фигур". Если "silent" — функция просто выходит.
-function snd(t:string){if(isMuted())return;try{
+function snd(t:string){if(isMuted())return;
+  const isMoveEvt=(t==="move"||t==="capture"||t==="check"||t==="castle"||t==="premove"||t==="cancel");
+  const isClockEvt=(t==="x");
+  if(isMoveEvt&&!isSndMoves())return;
+  if(isClockEvt&&!isSndClock())return;
+  if(!isMoveEvt&&!isClockEvt&&!isSndUi())return;
+  try{
   const preset=loadSoundPreset();
   const evt=(t==="move"||t==="capture"||t==="check"||t==="castle"||t==="premove"||t==="cancel"||t==="x")?t:"move";
   playChessSound(preset,evt);
@@ -594,6 +604,9 @@ export default function CyberChessPage(){
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
   const[muted,sMuted]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem(MK)==="1"}catch{return false}});
+  const[sndMoves,sSndMoves]=useState(()=>{try{const v=typeof window!=="undefined"?localStorage.getItem(SK_MOVES):null;return v===null||v==="1"}catch{return true}});
+  const[sndClock,sSndClock]=useState(()=>{try{const v=typeof window!=="undefined"?localStorage.getItem(SK_CLOCK):null;return v===null||v==="1"}catch{return true}});
+  const[sndUi,sSndUi]=useState(()=>{try{const v=typeof window!=="undefined"?localStorage.getItem(SK_UI):null;return v===null||v==="1"}catch{return true}});
   useEffect(()=>{setMuted(muted)},[muted]);
   const[voiceListening,sVoiceListening]=useState(false);
   const voiceRecRef=useRef<any>(null);
@@ -815,6 +828,7 @@ export default function CyberChessPage(){
   const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[qFlash,sQFlash]=useState<{quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";key:number}|null>(null);
+  const[openingBoardFlash,sOpeningBoardFlash]=useState<{name:string;eco:string;key:number}|null>(null);
   const prevAnalysisLenRef=useRef(0);
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   // Hover-scrub: when user hovers a move in the move list, board previews that position
@@ -1921,6 +1935,17 @@ export default function CyberChessPage(){
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[hist.length,currentOpening,on,over,setup]);
+  // Opening board flash — fires once per unique opening name during a live game
+  const prevOpeningNameRef=useRef<string|null>(null);
+  useEffect(()=>{
+    if(!currentOpening||!on||over||setup)return;
+    if(currentOpening.name===prevOpeningNameRef.current)return;
+    prevOpeningNameRef.current=currentOpening.name;
+    const k=Date.now();
+    sOpeningBoardFlash({name:currentOpening.name,eco:currentOpening.eco,key:k});
+    const t=window.setTimeout(()=>sOpeningBoardFlash(null),3200);
+    return()=>window.clearTimeout(t);
+  },[currentOpening?.name,on,over,setup]);// eslint-disable-line react-hooks/exhaustive-deps
   // Lazy Stockfish init: грузим WASM только когда пользователь начинает играть или
   // открывает Analysis/Coach. На setup screen Stockfish не нужен.
   function ensureSF(){
@@ -6022,6 +6047,22 @@ export default function CyberChessPage(){
                   <span>{qLabel}</span>
                 </div>;
               })()}
+              {/* Opening name flash — top-center overlay when opening is first identified */}
+              {openingBoardFlash&&<div key={`of-${openingBoardFlash.key}`} style={{
+                position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",
+                pointerEvents:"none",zIndex:9,
+                display:"flex",alignItems:"center",gap:7,
+                padding:"7px 16px",borderRadius:999,
+                background:"rgba(30,28,22,0.92)",
+                border:"1px solid rgba(117,153,0,0.5)",
+                color:"#fff",fontSize:12,fontWeight:800,letterSpacing:0.2,
+                boxShadow:"0 4px 18px rgba(0,0,0,0.45)",
+                animation:"cc-qflash-in 3.2s cubic-bezier(0.34,1.56,0.64,1) forwards",
+                whiteSpace:"nowrap" as const,maxWidth:"90%",overflow:"hidden",textOverflow:"ellipsis",
+              }}>
+                <span style={{fontSize:9,fontWeight:900,color:"#759900",letterSpacing:1,textTransform:"uppercase" as const,flexShrink:0}}>♟ {openingBoardFlash.eco}</span>
+                <span style={{color:"#d4d0c8"}}>{openingBoardFlash.name}</span>
+              </div>}
               {/* Hover halo — теперь imperative DOM-нода в useBoardInput,
                   чтобы не триггерить ре-рендер 8000-строчного дерева на каждом
                   пересечении клетки во время drag. */}
@@ -11752,7 +11793,12 @@ ${question.trim()}`;
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🔊 Звук</div>
-            <Row label="Звук в игре" desc="Хлопки фигур, шах, мат, сигналы." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
+            <Row label="Звук в игре" desc="Мастер-переключатель всех звуков. M для быстрого toggle." checked={!muted} onChange={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Mute","info")}}/>
+            {!muted&&<div style={{paddingLeft:16,display:"flex",flexDirection:"column",gap:2}}>
+              <Row label="↳ Звуки ходов" desc="Ход, взятие, рокировка, шах, премув." checked={sndMoves} onChange={()=>{const nv=!sndMoves;sSndMoves(nv);try{localStorage.setItem(SK_MOVES,nv?"1":"0")}catch{}}}/>
+              <Row label="↳ Финальный сигнал" desc="Звук при мате, просрочке, сдаче." checked={sndClock} onChange={()=>{const nv=!sndClock;sSndClock(nv);try{localStorage.setItem(SK_CLOCK,nv?"1":"0")}catch{}}}/>
+              <Row label="↳ UI-события" desc="Уведомления, ачивки, toast-звуки." checked={sndUi} onChange={()=>{const nv=!sndUi;sSndUi(nv);try{localStorage.setItem(SK_UI,nv?"1":"0")}catch{}}}/>
+            </div>}
             <Row label="Голосовые комментарии" desc="Coach зачитывает важные моменты партии (Chrome)." checked={liveCommentary} onChange={()=>sLiveCommentary(v=>!v)}/>
             <Row label="Голос на Master Games" desc="Чтение разбора и заметок к ходам в библиотеке мастеров." checked={masterVoice} onChange={()=>{
               if(masterVoice&&typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();

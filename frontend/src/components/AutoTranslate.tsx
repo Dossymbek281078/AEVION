@@ -318,22 +318,48 @@ function getRuToEnInline(): { d: Record<string, string>; k: string[] } {
   return ruToEnInlineCache;
 }
 
+// A character is "letter-like" if substring containment inside a word would
+// be a false positive. Cover Latin, Cyrillic (RU + KK extras), digits.
+function isLetterLike(ch: string | undefined): boolean {
+  if (!ch) return false;
+  const code = ch.charCodeAt(0);
+  if (code >= 0x0030 && code <= 0x0039) return true; // 0-9
+  if (code >= 0x0041 && code <= 0x005a) return true; // A-Z
+  if (code >= 0x0061 && code <= 0x007a) return true; // a-z
+  if (code >= 0x0400 && code <= 0x04ff) return true; // Cyrillic block (covers RU + KK)
+  return false;
+}
+
 function translateText(text: string, d: Record<string, string>, keys: string[]): string {
   // Walk left-to-right, at each position try longest key match; consume matched
   // region so later shorter keys can't corrupt it (e.g., "TypeScript" must not
   // be re-matched as "Type" + "Script"). Keys are pre-sorted longest-first.
+  //
+  // Word-boundary guard: a key only matches if neither the char before nor the
+  // char after is letter-like. Without this, short keys ("or", "По", "Да")
+  // corrupt long words ("important" → "imp немесе tant", "Подписи" → start
+  // collision). Mega-dict 2026-05-26 (91cfdcad) shipped without this check
+  // and broke /pricing — see revert 4504c296.
   let result = "";
   let i = 0;
   const n = text.length;
   while (i < n) {
     let matched = false;
     for (const k of keys) {
-      if (text.startsWith(k, i)) {
-        result += d[k];
-        i += k.length;
-        matched = true;
-        break;
-      }
+      if (!text.startsWith(k, i)) continue;
+      const prev = i > 0 ? text[i - 1] : undefined;
+      const next = i + k.length < n ? text[i + k.length] : undefined;
+      // First/last char of key determines what "letter-like" means for the
+      // boundary side — if key STARTS with a letter, require non-letter
+      // before; if key starts with non-letter (emoji/symbol), any prev is OK.
+      const keyStartsLetter = isLetterLike(k[0]);
+      const keyEndsLetter = isLetterLike(k[k.length - 1]);
+      if (keyStartsLetter && isLetterLike(prev)) continue;
+      if (keyEndsLetter && isLetterLike(next)) continue;
+      result += d[k];
+      i += k.length;
+      matched = true;
+      break;
     }
     if (!matched) {
       result += text[i];

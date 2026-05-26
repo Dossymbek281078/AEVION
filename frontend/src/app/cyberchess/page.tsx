@@ -4734,6 +4734,33 @@ export default function CyberChessPage(){
               </svg>;
             })()}
             <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ELO <b style={{color:CC.gold}}>{rat}</b></span>
+            {/* Accuracy trend sparkline — last 10 saved games */}
+            {savedGames.filter(g=>g.analysis&&g.analysis.length>0).length>=3&&(()=>{
+              const gms=savedGames.filter(g=>g.analysis&&g.analysis.length>0).slice(0,10).reverse();
+              const accs=gms.map(g=>{
+                const myMvs=g.analysis!.filter(m=>g.playerColor==="w"?m.ply%2===0:m.ply%2===1);
+                if(!myMvs.length)return 50;
+                const gr=myMvs.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
+                const go=myMvs.filter(m=>m.quality==="good").length;
+                const ia=myMvs.filter(m=>m.quality==="inacc").length;
+                const mk=myMvs.filter(m=>m.quality==="mistake").length;
+                const bl=myMvs.filter(m=>m.quality==="blunder").length;
+                return Math.round(100*(gr*1+go*0.85+ia*0.6+mk*0.3+bl*0)/myMvs.length);
+              });
+              const W2=48,H2=16,pad2=2;
+              const mn2=Math.min(...accs),mx2=Math.max(...accs);const rng2=Math.max(mx2-mn2,20);
+              const x2=(i:number)=>pad2+(i/(accs.length-1||1))*(W2-pad2*2);
+              const y2=(v:number)=>H2-pad2-(v-mn2)/rng2*(H2-pad2*2);
+              const last2=accs[accs.length-1];
+              const col2=last2>=75?"#10b981":last2>=50?"#f59e0b":"#ef4444";
+              return<React.Fragment>
+                <svg width={W2} height={H2} style={{flexShrink:0,opacity:0.85}} aria-hidden>
+                  <polyline points={accs.map((v,i)=>`${x2(i).toFixed(1)},${y2(v).toFixed(1)}`).join(" ")} fill="none" stroke={col2} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx={x2(accs.length-1).toFixed(1)} cy={y2(last2).toFixed(1)} r={2.5} fill={col2}/>
+                </svg>
+                <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ACC <b style={{color:col2}}>{last2}%</b></span>
+              </React.Fragment>;
+            })()}
             {/* F2-phase: CPI dashboard quick-link */}
             <Link href="/cyberchess/cpi/dashboard" style={{
               display:"inline-flex",alignItems:"center",gap:4,
@@ -12512,6 +12539,45 @@ ${question.trim()}`;
                   <div style={{width:56,fontSize:10,color:"rgba(255,255,255,0.4)",flexShrink:0}}>{row.label}</div>
                 </div>)}
               </div>
+
+              {/* Blunder map */}
+              {(myMistake+myBlunder)>0&&(()=>{
+                const hm:Record<string,{b:number,m:number}>={};
+                analysis.forEach(a=>{
+                  if(pCol==="w"?a.move%2!==0:a.move%2!==1)return;
+                  if(a.quality!=="blunder"&&a.quality!=="mistake")return;
+                  const san=hist[a.move];if(!san)return;
+                  if(san.startsWith("O-O"))return;
+                  const dst=san.match(/([a-h][1-8])(?:=[QRBN])?[+#]?$/);
+                  if(!dst)return;
+                  const sq=dst[1];
+                  if(!hm[sq])hm[sq]={b:0,m:0};
+                  if(a.quality==="blunder")hm[sq].b++;else hm[sq].m++;
+                });
+                const files=["a","b","c","d","e","f","g","h"];
+                const ranks=pCol==="w"?[8,7,6,5,4,3,2,1]:[1,2,3,4,5,6,7,8];
+                const fOrd=pCol==="w"?files:[...files].reverse();
+                return<div style={{marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:900,color:"rgba(255,255,255,0.3)",letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:6}}>Карта ошибок</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:1.5,borderRadius:4,overflow:"hidden",border:"1px solid rgba(255,255,255,0.05)"}}>
+                    {ranks.map(rank=>fOrd.map(file=>{
+                      const sq=`${file}${rank}`;
+                      const cell=hm[sq];
+                      const isLight=(files.indexOf(file)+rank)%2===0;
+                      let bg=isLight?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.18)";
+                      if(cell?.b>0)bg=`rgba(239,68,68,${Math.min(0.9,0.35+cell.b*0.28)})`;
+                      else if(cell?.m>0)bg=`rgba(249,115,22,${Math.min(0.85,0.28+cell.m*0.22)})`;
+                      return<div key={sq} title={cell?`${sq}: ${cell.b>0?cell.b+" зевков":""}${cell.b>0&&cell.m>0?" ":""}${cell.m>0?cell.m+" ошибок":""}`:sq} style={{aspectRatio:"1",background:bg,display:"flex",alignItems:"center",justifyContent:"center",minHeight:18}}>
+                        {cell&&(cell.b+cell.m)>1&&<span style={{fontSize:7,fontWeight:900,color:"rgba(255,255,255,0.9)",fontFamily:"ui-monospace,monospace",lineHeight:1}}>{cell.b+cell.m}</span>}
+                      </div>;
+                    }))}
+                  </div>
+                  <div style={{display:"flex",gap:10,marginTop:5,fontSize:9,color:"rgba(255,255,255,0.4)"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:1,background:"rgba(239,68,68,0.7)",display:"inline-block"}}/>Зевок</span>
+                    <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:1,background:"rgba(249,115,22,0.6)",display:"inline-block"}}/>Ошибка</span>
+                  </div>
+                </div>;
+              })()}
 
               {/* AI Game Review */}
               <div style={{marginBottom:10}}>

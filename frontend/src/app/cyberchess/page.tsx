@@ -2575,7 +2575,8 @@ export default function CyberChessPage(){
   },[over,hist.length]);
 
   /* ── Show game-over overlay when over is set ── */
-  useEffect(()=>{if(over){sShowGameOver(true);sAiReview({text:"",loading:false});}},[over]);
+  // Board overlay is now the primary post-game UX; full modal opens on demand via 📊 button
+  useEffect(()=>{if(over){sAiReview({text:"",loading:false});}},[over]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -2674,7 +2675,7 @@ export default function CyberChessPage(){
           }
         }catch{showToast("Не удалось скопировать","error")}
       }
-      if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on)){e.preventDefault();newGRef.current()}}
+      if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on||!!c.over)){e.preventDefault();newGRef.current()}}
       if(e.key==="r"||e.key==="R"){e.preventDefault();sRepertoireOpen(v=>!v)}
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
@@ -3893,7 +3894,7 @@ export default function CyberChessPage(){
     showToast(`⚔ ${opp.name} (${opp.elo}) — ${opp.style}${variantLabel}. ${opp.motto}`,"info");
   },[(chessy.owned.master_ai||isPro),tournament,newG,showToast]);
   const newGRef=useRef(newG);useEffect(()=>{newGRef.current=newG});
-  const kbCtxRef=useRef({tab,on,setup});useEffect(()=>{kbCtxRef.current={tab,on,setup}});
+  const kbCtxRef=useRef({tab,on,setup,over});useEffect(()=>{kbCtxRef.current={tab,on,setup,over}});
   const loadEndgame=(eg:Endgame)=>{
     try{
       const g=new Chess(eg.fen);setGame(g);sBk(k=>k+1);
@@ -6041,6 +6042,55 @@ export default function CyberChessPage(){
                 <span style={{opacity:0.7,fontSize:10,fontWeight:700,marginRight:6,letterSpacing:0.5}}>⌨ ХОД</span>
                 {sanBuf}<span style={{opacity:0.6,animation:"cc-fade-in 0.6s ease-out infinite alternate"}}>_</span>
               </div>}
+              {/* Post-game inline overlay — appears on the board after game ends for instant rematch/new */}
+              {over&&!setup&&tab==="play"&&!showGameOver&&(()=>{
+                const isWin=over.includes("You win")||over.includes("timed out — you")||over.includes("timed out");
+                const isDraw=over.includes("Draw")||over.includes("draw")||over.includes("Ничья")||over.includes("ничья")||over.includes("1/2");
+                const accentCol=isWin?"#22c55e":isDraw?"#f59e0b":"#ef4444";
+                const resultLabel=isWin?"Вы выиграли":isDraw?"Ничья":"Вы проиграли";
+                const resultIcon=isWin?"🏆":isDraw?"½":"💀";
+                return <div style={{
+                  position:"absolute",inset:0,zIndex:20,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  background:"rgba(8,7,5,0.68)",backdropFilter:"blur(3px)",
+                  borderRadius:6,
+                  animation:"cc-board-enter 280ms ease-out both",
+                  pointerEvents:"auto",
+                }}>
+                  <div style={{
+                    background:"rgba(18,16,12,0.96)",border:`1px solid ${accentCol}30`,
+                    borderRadius:14,padding:"18px 22px",
+                    display:"flex",flexDirection:"column",alignItems:"center",gap:10,
+                    boxShadow:`0 0 48px ${accentCol}18, 0 8px 32px rgba(0,0,0,0.55)`,
+                    minWidth:200,maxWidth:"80%",
+                  }}>
+                    <div style={{display:"flex",alignItems:"center",gap:9}}>
+                      <span style={{fontSize:28,lineHeight:1}}>{resultIcon}</span>
+                      <span style={{fontSize:17,fontWeight:900,color:accentCol,letterSpacing:-0.3}}>{resultLabel}</span>
+                    </div>
+                    <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center",maxWidth:190,lineHeight:1.4}}>{over}</div>
+                    <div style={{display:"flex",gap:7,marginTop:2,flexWrap:"wrap" as const,justifyContent:"center"}}>
+                      <button onClick={()=>{const swapped=pCol==="w"?"b" as ChessColor:"w" as ChessColor;newG(swapped);}}
+                        style={{padding:"8px 15px",borderRadius:8,border:"1px solid rgba(117,153,0,0.5)",
+                          background:"rgba(117,153,0,0.13)",color:"#a3c832",fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                        🔁 Реванш
+                      </button>
+                      <button onClick={()=>{newG();}}
+                        style={{padding:"8px 15px",borderRadius:8,border:"1px solid rgba(255,255,255,0.14)",
+                          background:"rgba(255,255,255,0.05)",color:"#bababa",fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap" as const}}>
+                        ▶ Новая
+                      </button>
+                      <button onClick={()=>{sShowGameOver(true);}}
+                        title="Полные результаты"
+                        style={{padding:"8px 13px",borderRadius:8,border:"1px solid rgba(99,102,241,0.3)",
+                          background:"rgba(99,102,241,0.07)",color:"#818cf8",fontSize:13,fontWeight:800,cursor:"pointer"}}>
+                        📊
+                      </button>
+                    </div>
+                    <div style={{fontSize:10,color:"#3d3b39",marginTop:-4}}>N — новая партия</div>
+                  </div>
+                </div>;
+              })()}
               {/* Drag-corner resize handle */}
               <div
                 title="Потяни чтобы изменить размер доски"

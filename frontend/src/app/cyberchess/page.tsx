@@ -2834,9 +2834,11 @@ export default function CyberChessPage(){
     const ai=lv.name;
     for(const m of top){
       const num=Math.floor(m.ply/2)+1;const dot=m.ply%2===0?"":"…";
-      if(m.type==="user_blunder")lines.push(`На ${num}${dot}-м ходу ты допустил серьёзную ошибку — это могло стоить партии.`);
+      if(m.type==="user_brilliant")lines.push(`БЛЕСТЯЩИЙ ход на ${num}-м — ты нашёл жертву или тактику, которую движок не видел сразу!`);
+      else if(m.type==="user_blunder")lines.push(`На ${num}${dot}-м ходу ты допустил серьёзную ошибку — это могло стоить партии.`);
       else if(m.type==="user_mistake")lines.push(`Неточность на ${num}${dot}-м ходу слегка осложнила твою позицию.`);
       else if(m.type==="user_great")lines.push(`На ${num}-м ходу ты нашёл сильный ход — позиция получила импульс.`);
+      else if(m.type==="ai_brilliant")lines.push(`${ai} сыграл блестяще на ${num}-м — будь внимательнее к жертвам!`);
       else if(m.type==="ai_blunder")lines.push(`${ai} допустил блундер на ${num}-м — это был твой шанс.`);
       else if(m.type==="ai_great")lines.push(`${ai} ответил сильным ходом на ${num}-м.`);
       else if(m.type==="mate_threat")lines.push(`К ${num}-му ходу на доске возникла матовая угроза.`);
@@ -12123,6 +12125,7 @@ ${question.trim()}`;
       const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);
       const myAcc=calcSideAcc(myMoves);
       const oppAcc=calcSideAcc(oppMoves);
+      const myBrilliant=myMoves.filter(m=>m.quality==="brilliant").length;
       const myGreat=myMoves.filter(m=>m.quality==="great").length;
       const myGood=myMoves.filter(m=>m.quality==="good").length;
       const myInacc=myMoves.filter(m=>m.quality==="inacc").length;
@@ -12142,6 +12145,7 @@ ${question.trim()}`;
       const epoly=epts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
       const efill=epts.length?epts.map((p,i)=>i===0?`M${p.x.toFixed(1)},${Emid} L${p.x.toFixed(1)},${p.y.toFixed(1)}`:` L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join("")+` L${EW},${Emid} L0,${Emid} Z`:"";
       const qualRows=[
+        ...(myBrilliant>0?[{label:"Блестяще",count:myBrilliant,clr:"#06b6d4",sym:"!!"}]:[]),
         {label:"Отлично",count:myGreat,clr:"#f59e0b",sym:"★"},
         {label:"Хорошо",count:myGood,clr:"#10b981",sym:"✓"},
         {label:"Неточность",count:myInacc,clr:"#818cf8",sym:"?!"},

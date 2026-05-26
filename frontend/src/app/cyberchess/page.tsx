@@ -6063,6 +6063,51 @@ export default function CyberChessPage(){
                 <span style={{fontSize:9,fontWeight:900,color:"#759900",letterSpacing:1,textTransform:"uppercase" as const,flexShrink:0}}>♟ {openingBoardFlash.eco}</span>
                 <span style={{color:"#d4d0c8"}}>{openingBoardFlash.name}</span>
               </div>}
+              {/* Game-phase badge — top-right corner, persistent during active play */}
+              {on&&!over&&tab==="play"&&(()=>{
+                const pc=bd.flat().filter(Boolean).length;
+                if(pc>24)return null; // still in opening, no badge
+                const isEndgame=pc<=12;
+                const phaseLabel=isEndgame?"Эндшпиль":"Миттельшпиль";
+                const phaseIcon=isEndgame?"♟":"⚔";
+                const phaseColor=isEndgame?"#22d3ee":"#f59e0b";
+                const phaseBg=isEndgame?"rgba(6,182,212,0.12)":"rgba(245,158,11,0.1)";
+                return <div style={{
+                  position:"absolute",top:6,right:6,
+                  pointerEvents:"none",zIndex:8,
+                  display:"flex",alignItems:"center",gap:4,
+                  padding:"3px 8px",borderRadius:999,
+                  background:phaseBg,border:`1px solid ${phaseColor}40`,
+                  color:phaseColor,fontSize:10,fontWeight:800,letterSpacing:0.3,
+                  whiteSpace:"nowrap" as const,
+                }}>
+                  <span>{phaseIcon}</span><span>{phaseLabel}</span>
+                </div>;
+              })()}
+              {/* Move-streak counter — bottom-right corner, ≥3 consecutive good/great/brilliant */}
+              {on&&!over&&tab==="play"&&(()=>{
+                const myA=analysis.filter(a=>pCol==="w"?a.move%2===0:a.move%2===1);
+                if(myA.length<3)return null;
+                let streak=0;
+                for(let k=myA.length-1;k>=0;k--){
+                  const q=myA[k].quality;
+                  if(q==="blunder"||q==="mistake"||q==="inacc")break;
+                  streak++;
+                }
+                if(streak<3)return null;
+                return <div style={{
+                  position:"absolute",bottom:8,right:8,
+                  pointerEvents:"none",zIndex:9,
+                  display:"flex",alignItems:"center",gap:3,
+                  padding:"4px 10px",borderRadius:999,
+                  background:"rgba(249,115,22,0.16)",
+                  border:"1px solid rgba(249,115,22,0.45)",
+                  color:"#fb923c",fontSize:13,fontWeight:900,letterSpacing:-0.3,
+                  boxShadow:"0 2px 12px rgba(249,115,22,0.25)",
+                }}>
+                  <span style={{fontSize:15}}>🔥</span><span>{streak}</span>
+                </div>;
+              })()}
               {/* Hover halo — теперь imperative DOM-нода в useBoardInput,
                   чтобы не триггерить ре-рендер 8000-строчного дерева на каждом
                   пересечении клетки во время drag. */}

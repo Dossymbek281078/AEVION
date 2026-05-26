@@ -140,6 +140,10 @@ const SMOKES = [
   // and (with LEMON_SQUEEZY_WEBHOOK_SECRET) activate/downgrade/ignore/400/dedup.
   // Self-skips gracefully in stub mode or when the secret isn't in env.
   { name: "ls-webhook", script: "ls-webhook-smoke.js", readOnly: false, env: { LEMON_SQUEEZY_WEBHOOK_SECRET: process.env.LEMON_SQUEEZY_WEBHOOK_SECRET || "" } },
+  // Constitution Pro gate (prod contract) — read-only: /me/plan free-limit
+  // shape (savedScenarios/aiSuggestPerDay/pdfRequiresSign), publish-route
+  // validation gates, ai-suggest liveness. Doesn't trigger 402/429.
+  { name: "constitution-pro-prod", script: "constitution-pro-prod-smoke.js", readOnly: true },
   // DevHub PROD — 47 assertions: all 8 tabs (projects/files/env/deployments/github/templates/agent/snippets)
   // + 13 media subtabs (TTS/Image/SFX/Music/VoiceClone/STT/Email/Payment/SMS/WhatsApp/Translate/Drive)
   // Accepts 503 gracefully for unconfigured API keys. Writes one project + snippet then cleans up.

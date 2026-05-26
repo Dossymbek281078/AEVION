@@ -5965,18 +5965,19 @@ export default function CyberChessPage(){
                 const qBg=qFlash.quality==="brilliant"?"rgba(6,182,212,0.92)":qFlash.quality==="blunder"?"rgba(220,38,38,0.92)":qFlash.quality==="mistake"?"rgba(234,88,12,0.92)":qFlash.quality==="inacc"?"rgba(99,102,241,0.88)":"rgba(245,158,11,0.92)";
                 const qSym=qFlash.quality==="brilliant"?"!!":qFlash.quality==="blunder"?"??":qFlash.quality==="mistake"?"?":qFlash.quality==="inacc"?"?!":"★";
                 const qLabel=qFlash.quality==="brilliant"?"БЛЕСТЯЩЕ!!":qFlash.quality==="blunder"?"Зевок":qFlash.quality==="mistake"?"Ошибка":qFlash.quality==="inacc"?"Неточность":"Отлично!";
+                const isBrilliant=qFlash.quality==="brilliant";
                 return <div key={`qf-${qFlash.key}`} style={{
                   position:"absolute",bottom:12,left:"50%",transform:"translateX(-50%)",
                   pointerEvents:"none",zIndex:9,
                   display:"flex",alignItems:"center",gap:6,
-                  padding:"7px 16px",borderRadius:999,
+                  padding:isBrilliant?"10px 22px":"7px 16px",borderRadius:999,
                   background:qBg,color:"#fff",
-                  fontSize:13,fontWeight:900,letterSpacing:0.3,
+                  fontSize:isBrilliant?16:13,fontWeight:900,letterSpacing:0.3,
                   boxShadow:"0 4px 20px rgba(0,0,0,0.45)",
-                  animation:"cc-qflash-in 2.8s cubic-bezier(0.34,1.56,0.64,1) forwards",
+                  animation:isBrilliant?"cc-brilliant-in 3.2s ease forwards, cc-brilliant-glow 0.8s ease-in-out 0.2s 3":"cc-qflash-in 2.8s cubic-bezier(0.34,1.56,0.64,1) forwards",
                   whiteSpace:"nowrap",
                 }}>
-                  <span style={{fontSize:16,fontFamily:"ui-monospace,monospace"}}>{qSym}</span>
+                  <span style={{fontSize:isBrilliant?20:16,fontFamily:"ui-monospace,monospace"}}>{qSym}</span>
                   <span>{qLabel}</span>
                 </div>;
               })()}
@@ -6348,12 +6349,13 @@ export default function CyberChessPage(){
                 const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
                 const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);
                 if(!myMoves.length)return null;
+                const brilliant=myMoves.filter(m=>m.quality==="brilliant").length;
                 const great=myMoves.filter(m=>m.quality==="great").length;
                 const good=myMoves.filter(m=>m.quality==="good").length;
                 const inacc=myMoves.filter(m=>m.quality==="inacc").length;
                 const mistake=myMoves.filter(m=>m.quality==="mistake").length;
                 const blunder=myMoves.filter(m=>m.quality==="blunder").length;
-                const acc=Math.round(100*(great*1+good*0.85+inacc*0.6+mistake*0.3+blunder*0)/(myMoves.length));
+                const acc=Math.round(100*((brilliant+great)*1+good*0.85+inacc*0.6+mistake*0.3+blunder*0)/(myMoves.length));
                 const accColor=acc>=85?"#10b981":acc>=65?"#f59e0b":"#ef4444";
                 const avgCpl=myMoves.length>0?Math.round(myMoves.reduce((s,m)=>s+m.cpLoss,0)/myMoves.length):0;
                 const oppG=oppMoves.filter(m=>m.quality==="great").length;
@@ -6381,6 +6383,7 @@ export default function CyberChessPage(){
               const lastQ=analysis.length>0?analysis[analysis.length-1]?.quality:null;
               if(!lastQ||lastQ==="good")return null;
               const qMap:{[k:string]:[string,string,string]}={
+                brilliant:["!!","#06b6d4","rgba(6,182,212,0.12)"],
                 great:["⭐","#f59e0b","rgba(245,158,11,0.12)"],
                 inacc:["?!","#6366f1","rgba(99,102,241,0.12)"],
                 mistake:["?","#f97316","rgba(249,115,22,0.12)"],
@@ -7531,7 +7534,10 @@ export default function CyberChessPage(){
                           📌
                         </button>}
                       </span>
-                      {wEval&&<span style={{fontSize:10,color:wEval.cp>0?CC.brand:wEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>}
+                      {wEval&&<span style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:0}}>
+                        <span style={{fontSize:10,color:wEval.cp>0?CC.brand:wEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{wEval.mate!==0?`M${Math.abs(wEval.mate)}`:(wEval.cp/100).toFixed(1)}</span>
+                        {wEval.cpLoss>=30&&<span style={{fontSize:8,color:wQ==="blunder"?"#ef4444":wQ==="mistake"?"#f97316":"#9ca3af",fontFamily:"ui-monospace,monospace",lineHeight:1}}>-{wEval.cpLoss}</span>}
+                      </span>}
                     </span>
                     {/* Black move */}
                     <span onMouseEnter={()=>{if(black)previewMove(bIdx)}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
@@ -7556,7 +7562,10 @@ export default function CyberChessPage(){
                           📌
                         </button>}
                       </span>
-                      {bEval&&<span style={{fontSize:10,color:bEval.cp>0?CC.brand:bEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>}
+                      {bEval&&<span style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:0}}>
+                        <span style={{fontSize:10,color:bEval.cp>0?CC.brand:bEval.cp<0?CC.danger:CC.textMute,fontWeight:700,fontFamily:"ui-monospace,monospace"}}>{bEval.mate!==0?`M${Math.abs(bEval.mate)}`:(bEval.cp/100).toFixed(1)}</span>
+                        {bEval.cpLoss>=30&&<span style={{fontSize:8,color:bQ==="blunder"?"#ef4444":bQ==="mistake"?"#f97316":"#9ca3af",fontFamily:"ui-monospace,monospace",lineHeight:1}}>-{bEval.cpLoss}</span>}
+                      </span>}
                     </span>
                     {/* Inline comment editor — spans full grid row when active */}
                     {tab==="analysis"&&(commentEditPly===wIdx||commentEditPly===bIdx)&&<div style={{gridColumn:"1 / -1",padding:"4px 8px",background:"#f0f0ff",borderBottom:"1px solid #c7d2fe",display:"flex",gap:4,alignItems:"flex-start"}}>

@@ -649,6 +649,21 @@ button:focus:not(:focus-visible) {
   100% { opacity:0; transform:translateX(-50%) translateY(-4px) scale(0.9); }
 }
 
+@keyframes cc-brilliant-in {
+  0%   { opacity:0; transform:translateX(-50%) translateY(10px) scale(0.7); filter:brightness(2); }
+  8%   { opacity:1; transform:translateX(-50%) translateY(-4px) scale(1.18); filter:brightness(1.5); }
+  16%  { transform:translateX(-50%) translateY(2px) scale(1.04); filter:brightness(1.1); }
+  24%  { transform:translateX(-50%) translateY(0) scale(1); filter:brightness(1); }
+  72%  { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
+  88%  { opacity:0.9; transform:translateX(-50%) translateY(-2px) scale(1.02); }
+  100% { opacity:0; transform:translateX(-50%) translateY(-8px) scale(0.92); }
+}
+
+@keyframes cc-brilliant-glow {
+  0%,100% { box-shadow: 0 4px 24px rgba(6,182,212,0.5), 0 0 0 0 rgba(6,182,212,0.4); }
+  50%      { box-shadow: 0 6px 32px rgba(6,182,212,0.8), 0 0 0 6px rgba(6,182,212,0.1); }
+}
+
 /* Desktop: cc-main-row занимает всю высоту viewport чтобы не было пустоты снизу */
 .cc-main-row {
   min-height: calc(100vh - 110px);

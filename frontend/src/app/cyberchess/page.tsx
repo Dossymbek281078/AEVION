@@ -826,6 +826,8 @@ export default function CyberChessPage(){
   // Eval delta badge — brief "+1.8" or "-2.3" badge in board corner after significant swing
   const[evalDelta,sEvalDelta]=useState<{d:number;key:number}|null>(null);
   const prevEvalForDeltaRef=useRef<number>(0);
+  // Best missed move arrow — shown in analysis/browse when current ply was a blunder/mistake
+  const[bestMissedArrow,sBestMissedArrow]=useState<{from:string;to:string}|null>(null);
   // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
   const[lichessLoading,sLichessLoading]=useState(false);
   // Command palette (Ctrl/Cmd+K) — fuzzy-search any action without hunting menus.
@@ -3253,7 +3255,18 @@ export default function CyberChessPage(){
   /* ── Clear annotations on tab switch, on a new move, and on history browse ── */
   useEffect(()=>{clearAnnotations()},[tab,clearAnnotations]);
   useEffect(()=>{clearAnnotations()},[bk,clearAnnotations]);
-  useEffect(()=>{clearAnnotations()},[browseIdx,clearAnnotations]);
+  useEffect(()=>{clearAnnotations();sBestMissedArrow(null)},[browseIdx,clearAnnotations]);
+
+  /* ── Best missed move arrow — auto-show in analysis when browsing a blunder/mistake ── */
+  useEffect(()=>{
+    if(tab!=="analysis"||browseIdx<0)return;
+    const ply=browseIdx;
+    const entry=analysis[ply];
+    if(!entry||!(entry.quality==="blunder"||entry.quality==="mistake"))return;
+    const fen=fenHist[ply]; // position BEFORE the blunder
+    if(!fen||!sfR.current?.ready())return;
+    sfR.current.go(fen,14,(f,t)=>sBestMissedArrow({from:f,to:t}));
+  },[browseIdx,tab,analysis,fenHist]);
 
   /* ── Replay auto-advance ── */
   useEffect(()=>{
@@ -5855,6 +5868,17 @@ export default function CyberChessPage(){
                     const tx=x2-(dx/len)*3.5,ty=y2-(dy/len)*3.5;
                     return <line key={i} x1={x1} y1={y1} x2={tx} y2={ty} stroke={a.c} strokeWidth="1.8" strokeLinecap="round" markerEnd={`url(#ah-${a.c.slice(1)})`} opacity="0.85"/>;
                   })}
+                  {/* Best missed move arrow — shown when browsing a blunder/mistake in analysis */}
+                  {bestMissedArrow&&(()=>{
+                    const[bx1,by1]=sqXY(bestMissedArrow.from as Square);
+                    const[bx2,by2]=sqXY(bestMissedArrow.to as Square);
+                    const bdx=bx2-bx1,bdy=by2-by1,blen=Math.max(0.01,Math.hypot(bdx,bdy));
+                    const btx=bx2-(bdx/blen)*3.5,bty=by2-(bdy/blen)*3.5;
+                    return <>
+                      <circle cx={bx1} cy={by1} r="5.5" fill="rgba(34,197,94,0.18)" stroke="#22c55e" strokeWidth="0.8"/>
+                      <line x1={bx1} y1={by1} x2={btx} y2={bty} stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" markerEnd="url(#ah-22c55e)" opacity="0.7" strokeDasharray="none"/>
+                    </>;
+                  })()}
                 </svg>;
               })()}
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;

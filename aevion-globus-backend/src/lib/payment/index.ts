@@ -3,12 +3,14 @@ import { stubPaymentProvider } from "./stubProvider";
 import { stripePaymentProvider } from "./stripeProvider";
 import { paddlePaymentProvider } from "./paddlePaymentProvider";
 import { lemonSqueezyPaymentProvider } from "./lemonSqueezyProvider";
+import { gumroadPaymentProvider } from "./gumroadProvider";
 
 export * from "./provider";
 export { stubPaymentProvider, __resetStubPaymentIntents } from "./stubProvider";
 export { stripePaymentProvider } from "./stripeProvider";
 export { paddlePaymentProvider } from "./paddlePaymentProvider";
 export { lemonSqueezyPaymentProvider } from "./lemonSqueezyProvider";
+export { gumroadPaymentProvider } from "./gumroadProvider";
 
 export function getPaymentProvider(): PaymentProvider {
   const id = (process.env.BUREAU_PAYMENT_PROVIDER || "stub").toLowerCase();
@@ -17,6 +19,8 @@ export function getPaymentProvider(): PaymentProvider {
     case "lemon-squeezy":
     case "lemon_squeezy":
       return lemonSqueezyPaymentProvider;
+    case "gumroad":
+      return gumroadPaymentProvider;
     case "paddle":
       return paddlePaymentProvider;
     case "stripe":
@@ -25,7 +29,7 @@ export function getPaymentProvider(): PaymentProvider {
       return stubPaymentProvider;
     default:
       throw new Error(
-        `Unknown BUREAU_PAYMENT_PROVIDER=${id}. Supported: stub, stripe, paddle, lemonsqueezy.`,
+        `Unknown BUREAU_PAYMENT_PROVIDER=${id}. Supported: stub, stripe, paddle, lemonsqueezy, gumroad.`,
       );
   }
 }

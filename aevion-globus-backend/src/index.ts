@@ -26,6 +26,7 @@ import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
+import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
 import { healthaiRouter } from "./routes/healthai";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
@@ -840,6 +841,7 @@ app.use("/api/pricing", pricingRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/pricing/events", eventsRouter);
 app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
+app.use("/api/gumroad", gumroadWebhookRouter);
 // ==========================
 // Auth
 // ==========================

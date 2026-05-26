@@ -24,6 +24,7 @@
 import { Router, type Request, type Response } from "express";
 import { randomUUID } from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
+import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 
 type Tier = "pro" | "team";
 
@@ -130,32 +131,55 @@ constitutionCheckoutRouter.post(
       const tier = (body.tier === "team" ? "team" : "pro") as Tier;
       const email = typeof body.email === "string" ? body.email.trim() : undefined;
 
-      // Stub mode — no API key configured
-      if (!lsApiKey()) {
+      // Provider priority: LemonSqueezy (if configured) → Gumroad → stub
+      const hasLs = Boolean(lsApiKey());
+      const gumroadPermalink = process.env[`GUMROAD_CONSTITUTION_${tier.toUpperCase()}_PERMALINK`]
+        ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK;
+      const hasGumroad = Boolean(gumroadPermalink);
+
+      if (!hasLs && !hasGumroad) {
         return res.json({
           checkoutUrl: `${publicBase()}/constitution/pricing?stub=1&tier=${tier}`,
           tier,
           tierName: TIER_NAMES[tier],
           priceUsd: TIER_PRICES_USD[tier],
           provider: "stub",
-          note: "LemonSqueezy not configured. Set LEMON_SQUEEZY_API_KEY to activate.",
+          note: "No payment provider configured. Set LEMON_SQUEEZY_API_KEY or GUMROAD_CONSTITUTION_PRO_PERMALINK.",
         });
       }
 
-      const { checkoutUrl, checkoutId } = await createLsCheckout(tier, email);
+      if (hasLs) {
+        const { checkoutUrl, checkoutId } = await createLsCheckout(tier, email);
+        return res.json({
+          checkoutUrl,
+          checkoutId,
+          tier,
+          tierName: TIER_NAMES[tier],
+          priceUsd: TIER_PRICES_USD[tier],
+          provider: "lemonsqueezy",
+        });
+      }
+
+      // Gumroad fallback
+      const intent = await gumroadPaymentProvider.createIntent({
+        reference: `constitution-${tier}`,
+        amountCents: TIER_PRICES_USD[tier] * 100,
+        currency: "USD",
+        description: TIER_NAMES[tier],
+        email,
+      });
       res.json({
-        checkoutUrl,
-        checkoutId,
+        checkoutUrl: intent.checkoutUrl,
         tier,
         tierName: TIER_NAMES[tier],
         priceUsd: TIER_PRICES_USD[tier],
-        provider: "lemonsqueezy",
+        provider: "gumroad",
       });
     } catch (err) {
       res.status(500).json({
         error: "checkout_failed",
         detail: err instanceof Error ? err.message : "unknown",
-        hint: "Убедись что LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID и LEMON_SQUEEZY_CONSTITUTION_PRO/TEAM_VARIANT_ID в env Railway",
+        hint: "Configure LEMON_SQUEEZY_API_KEY or GUMROAD_CONSTITUTION_PRO_PERMALINK in Railway env",
       });
     }
   },
@@ -167,12 +191,27 @@ constitutionCheckoutRouter.get(
   limiter as unknown as (req: Request, res: Response, next: () => void) => void,
   async (req: Request, res: Response) => {
     const tier = (req.params.tier === "team" ? "team" : "pro") as Tier;
-    if (!lsApiKey()) {
+    const hasLs = Boolean(lsApiKey());
+    const hasGumroad = Boolean(
+      process.env[`GUMROAD_CONSTITUTION_${tier.toUpperCase()}_PERMALINK`]
+      ?? process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK
+    );
+    if (!hasLs && !hasGumroad) {
       return res.redirect(`${publicBase()}/constitution/pricing`);
     }
     try {
-      const { checkoutUrl } = await createLsCheckout(tier);
-      res.redirect(303, checkoutUrl);
+      if (hasLs) {
+        const { checkoutUrl } = await createLsCheckout(tier);
+        return res.redirect(303, checkoutUrl);
+      }
+      // Gumroad
+      const intent = await gumroadPaymentProvider.createIntent({
+        reference: `constitution-${tier}`,
+        amountCents: TIER_PRICES_USD[tier] * 100,
+        currency: "USD",
+        description: TIER_NAMES[tier],
+      });
+      res.redirect(303, intent.checkoutUrl);
     } catch {
       res.redirect(`${publicBase()}/constitution/pricing?error=checkout_failed`);
     }

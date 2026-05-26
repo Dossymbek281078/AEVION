@@ -7375,7 +7375,7 @@ export default function CyberChessPage(){
               <span style={{fontSize:10,fontWeight:900,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>
                 Ходы {hist.length>0&&<span style={{color:T.accent,fontWeight:900}}>{Math.ceil(hist.length/2)}</span>}
-                {currentOpening&&hist.length>0&&hist.length<=30&&<span style={{
+                {currentOpening&&hist.length>0&&<span style={{
                   marginLeft:4,fontSize:10,fontWeight:700,color:T.accent,
                   letterSpacing:0.3,textTransform:"none" as const,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const,maxWidth:130,
@@ -7384,6 +7384,9 @@ export default function CyberChessPage(){
                 {refiningAnalysis&&<span style={{marginLeft:8,fontSize:10,color:T.purple,fontWeight:700,letterSpacing:"normal",textTransform:"none" as const,animation:"pulse 1.4s ease-in-out infinite"}}>⚡ уточняю d18...</span>}
               </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.name,black:pCol==="b"?"Вы":lv.name,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скопировать PGN в буфер">📋</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.name,black:pCol==="b"?"Вы":lv.name,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${new Date().toISOString().slice(0,10)}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скачать PGN">⬇</button>
+                <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
                 <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
                 <button onClick={()=>{
@@ -7417,7 +7420,19 @@ export default function CyberChessPage(){
                 },80);
               }}
               style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
-              {hist.length?<div style={{display:"grid",gridTemplateColumns:"26px 1fr 1fr",fontSize:12,fontFamily:"monospace"}}>
+              {hist.length?(()=>{
+                // Smart phase detection: find first pair where major+minor pieces drop thresholds
+                const cntMM=(fen:string)=>(fen.split(" ")[0].match(/[nbrqNBRQ]/g)||[]).length;
+                let midDiv=-1,endDiv=-1;
+                for(let pi=1;pi<Math.ceil(hist.length/2);pi++){
+                  const cur=fenHist[pi*2]?cntMM(fenHist[pi*2]):16;
+                  const prev=fenHist[(pi-1)*2]?cntMM(fenHist[(pi-1)*2]):16;
+                  if(midDiv<0&&pi>=5&&prev>=12&&cur<12)midDiv=pi;
+                  if(endDiv<0&&pi>=8&&prev>6&&cur<=6)endDiv=pi;
+                }
+                if(midDiv<0&&hist.length>=24)midDiv=12;
+                if(endDiv<0&&hist.length>=48)endDiv=24;
+                return <div style={{display:"grid",gridTemplateColumns:"26px 1fr 1fr",fontSize:12,fontFamily:"monospace"}}>
                 {Array.from({length:Math.ceil(hist.length/2)}).map((_,i)=>{
                   const white=hist[i*2],black=hist[i*2+1];
                   const wIdx=i*2,bIdx=i*2+1;
@@ -7452,8 +7467,8 @@ export default function CyberChessPage(){
                   const wAnnot=moveAnnotations[wIdx];const bAnnot=moveAnnotations[bIdx];
                   const annotColor=(s?:string)=>ANNOT_SYMS.find(a=>a.s===s)?.c||T.text;
                   const openAnnot=(ply:number,e:React.MouseEvent)=>{if(tab!=="analysis")return;e.preventDefault();e.stopPropagation();sAnnotPicker({ply,x:Math.min(e.clientX,window.innerWidth-140),y:Math.min(e.clientY,window.innerHeight-120)});};
-                  // Phase divider — insert a full-width label at known phase transitions
-                  const phaseDivider=i===0?null:i===12?{label:"Миттельшпиль",icon:"⚔"}:i===24?{label:"Эндшпиль",icon:"♚"}:null;
+                  // Phase divider — insert a full-width label at detected phase transitions
+                  const phaseDivider=i===0?null:i===midDiv?{label:"Миттельшпиль",icon:"⚔"}:i===endDiv?{label:"Эндшпиль",icon:"♚"}:null;
                   return <React.Fragment key={i}>
                     {phaseDivider&&<div style={{gridColumn:"1 / -1",padding:"4px 10px",
                       background:`linear-gradient(90deg,${CC.surface2},transparent)`,
@@ -7534,7 +7549,7 @@ export default function CyberChessPage(){
                     {tab==="analysis"&&commentEditPly!==bIdx&&moveComments[bIdx]&&<div onDoubleClick={()=>{sCommentEditPly(bIdx);sCommentEditVal(moveComments[bIdx]||"");}} style={{gridColumn:"1 / -1",padding:"2px 10px 3px",background:"#f5f3ff",borderBottom:"1px solid #e0e7ff",fontSize:10,color:"#4338ca",fontStyle:"italic",lineHeight:1.4,cursor:"text"}}>💬 {moveComments[bIdx]}</div>}
                   </React.Fragment>;
                 })}
-              </div>:<div style={{padding:"28px 18px",textAlign:"center",color:CC.textMute}}>
+              </div>;})():<div style={{padding:"28px 18px",textAlign:"center",color:CC.textMute}}>
                 <div style={{fontSize:32,marginBottom:SPACE[2],opacity:0.6}}>♟</div>
                 <div style={{fontSize:13,fontWeight:700,color:CC.textDim}}>Пока нет ходов</div>
                 <div style={{fontSize:11,color:CC.textMute,marginTop:4,lineHeight:1.5}}>
@@ -7553,6 +7568,41 @@ export default function CyberChessPage(){
               <span style={{color:CC.textMute}}>·</span>
               <span style={{color:"#ef4444",fontWeight:800}}>??</span><span>зевок</span>
             </div>}
+            {analysis.length>=2&&hist.length>=2&&(()=>{
+              const calcAcc=(moves:{quality:string}[])=>{
+                if(!moves.length)return 0;
+                const g=moves.filter(m=>m.quality==="great").length;
+                const go=moves.filter(m=>m.quality==="good").length;
+                const ia=moves.filter(m=>m.quality==="inacc").length;
+                const mk=moves.filter(m=>m.quality==="mistake").length;
+                const bl=moves.filter(m=>m.quality==="blunder").length;
+                return Math.round(100*(g*1+go*0.85+ia*0.6+mk*0.3)/moves.length);
+              };
+              const wMoves=analysis.filter((_,i)=>i%2===0);
+              const bMoves=analysis.filter((_,i)=>i%2!==0);
+              const wAcc=calcAcc(wMoves);const bAcc=calcAcc(bMoves);
+              const acClr=(a:number)=>a>=85?"#10b981":a>=65?"#f59e0b":"#ef4444";
+              const myAcc=pCol==="w"?wAcc:bAcc;const oppAcc=pCol==="w"?bAcc:wAcc;
+              return <div style={{padding:"5px 10px 4px",borderTop:`1px solid ${CC.border}`,display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:10,color:CC.textMute,fontWeight:700,flexShrink:0}}>Точность</span>
+                <div style={{flex:1,display:"flex",flexDirection:"column",gap:2}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:9,color:CC.textMute,width:10,textAlign:"right"}}>{pCol==="w"?"⚪":"⚫"}</span>
+                    <div style={{flex:1,height:4,borderRadius:2,background:"rgba(0,0,0,0.06)",overflow:"hidden"}}>
+                      <div style={{width:`${myAcc}%`,height:"100%",background:acClr(myAcc),borderRadius:2,transition:"width 0.6s ease"}}/>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:800,color:acClr(myAcc),minWidth:28,textAlign:"right"}}>{myAcc}%</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:4}}>
+                    <span style={{fontSize:9,color:CC.textMute,width:10,textAlign:"right"}}>{pCol==="w"?"⚫":"⚪"}</span>
+                    <div style={{flex:1,height:4,borderRadius:2,background:"rgba(0,0,0,0.06)",overflow:"hidden"}}>
+                      <div style={{width:`${oppAcc}%`,height:"100%",background:acClr(oppAcc),borderRadius:2,transition:"width 0.6s ease"}}/>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:800,color:acClr(oppAcc),minWidth:28,textAlign:"right"}}>{oppAcc}%</span>
+                  </div>
+                </div>
+              </div>;
+            })()}
             {analysis.length>=4&&(()=>{
               const W=232,H=44,mid=H/2;
               const pts=analysis.map((a,i)=>({x:i/(analysis.length-1||1)*W,y:mid-Math.max(-mid+2,Math.min(mid-2,a.cp/100*1.8))}));

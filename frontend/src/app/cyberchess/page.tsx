@@ -6379,16 +6379,31 @@ export default function CyberChessPage(){
                 const oppMk=oppMoves.filter(m=>m.quality==="mistake").length;
                 const oppBl=oppMoves.filter(m=>m.quality==="blunder").length;
                 const oppAcc=oppMoves.length>0?Math.round(100*(oppG*1+oppGo*0.85+oppIa*0.6+oppMk*0.3+oppBl*0)/oppMoves.length):0;
+                // Consecutive good-move streak (no mistakes/blunders)
+                let streak=0;
+                for(let k=myMoves.length-1;k>=0;k--){
+                  const q=myMoves[k].quality;
+                  if(q==="blunder"||q==="mistake"||q==="inacc")break;
+                  streak++;
+                }
                 return <div style={{fontSize:10,marginTop:2,display:"flex",flexDirection:"column",gap:2}}>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
                     <span style={{color:CC.textMute}}>Точность</span>
                     <span style={{fontWeight:900,color:accColor,fontFamily:"ui-monospace,monospace"}}>{acc}%</span>
                     {oppMoves.length>=2&&<span style={{color:CC.textMute,fontSize:9}}>vs {oppAcc}%</span>}
                     {blunder>0&&<span style={{color:"#ef4444",fontWeight:700,marginLeft:2}}>·{blunder}??</span>}
+                    {streak>=3&&<span style={{color:"#f97316",fontWeight:900,marginLeft:"auto",fontSize:9,background:"rgba(249,115,22,0.1)",padding:"1px 4px",borderRadius:4}}>🔥{streak}</span>}
                   </div>
                   {avgCpl>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
                     <span style={{color:CC.textMute}}>Ø потеря</span>
                     <span style={{fontWeight:800,color:avgCpl<30?"#10b981":avgCpl<80?"#f59e0b":"#ef4444",fontFamily:"ui-monospace,monospace"}}>{avgCpl} сp</span>
+                  </div>}
+                  {myMoves.length>=4&&<div style={{display:"flex",gap:1,alignItems:"flex-end",height:12,marginTop:2}}>
+                    {myMoves.map((m,k)=>{
+                      const c=m.quality==="brilliant"?"#06b6d4":m.quality==="great"?"#f59e0b":m.quality==="good"?"#10b981":m.quality==="inacc"?"#818cf8":m.quality==="mistake"?"#f97316":"#ef4444";
+                      const h=m.quality==="blunder"?12:m.quality==="mistake"?10:m.quality==="inacc"?8:m.quality==="good"?6:m.quality==="great"?5:4;
+                      return<div key={k} style={{flex:1,height:h,background:c,borderRadius:1,minWidth:2}} title={`${Math.floor(k/2)+1}: ${m.quality}`}/>;
+                    })}
                   </div>}
                 </div>;
               })()}

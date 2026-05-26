@@ -823,6 +823,9 @@ export default function CyberChessPage(){
   // Tracks the previous rating so we can compute the signed delta (+/- N).
   const[ratDelta,sRatDelta]=useState<{d:number;newRat:number;ts:number}|null>(null);
   const ratPrevRef=useRef<number|null>(null);
+  // Eval delta badge — brief "+1.8" or "-2.3" badge in board corner after significant swing
+  const[evalDelta,sEvalDelta]=useState<{d:number;key:number}|null>(null);
+  const prevEvalForDeltaRef=useRef<number>(0);
   // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
   const[lichessLoading,sLichessLoading]=useState(false);
   // Command palette (Ctrl/Cmd+K) — fuzzy-search any action without hunting menus.
@@ -1693,6 +1696,21 @@ export default function CyberChessPage(){
     }
     prevMyTRef.current=myT;
   },[myT,on,over,hotseat]);
+  // Eval delta badge — show when eval shifts significantly after a move in play mode
+  useEffect(()=>{
+    if(!on||over||tab!=="play"||evalMate!==0)return;
+    const prev=prevEvalForDeltaRef.current;
+    const delta=evalCp-prev;
+    // From mover's perspective: positive = improvement for white, negative = loss
+    // Only show when shift ≥ 75 cp and it's after a move (bk changed)
+    if(Math.abs(delta)>=75){
+      sEvalDelta({d:delta,key:Date.now()});
+      const t=window.setTimeout(()=>sEvalDelta(null),2200);
+      prevEvalForDeltaRef.current=evalCp;
+      return()=>window.clearTimeout(t);
+    }
+    prevEvalForDeltaRef.current=evalCp;
+  },[evalCp]);
   const hR=useRef<HTMLDivElement>(null),sfR=useRef<SF|null>(null);
   const moveListScrollRef=useRef<HTMLDivElement>(null);
   // Hover-scrub snapshot — captured FEN+browseIdx at the moment hover started; restored on leave.
@@ -5628,15 +5646,20 @@ export default function CyberChessPage(){
                     title={!isAI&&chessy.owned.avatar_emoji?"Сменить аватар":undefined}
                     style={{width:32,height:32,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
                     background:isAI?al.color+"22":"rgba(255,255,255,0.08)",
-                    border:`1px solid ${isAI?al.color+"44":CC.border}`,
+                    border:isAI&&think?`2px solid ${al.color}`:`1px solid ${isAI?al.color+"44":CC.border}`,
                     fontSize:16,flexShrink:0,
-                    cursor:!isAI&&chessy.owned.avatar_emoji?"pointer":"default"}}>
+                    cursor:!isAI&&chessy.owned.avatar_emoji?"pointer":"default",
+                    boxShadow:isAI&&think?`0 0 10px ${al.color}55`:"none",
+                    animation:isAI&&think?"cc-think-pulse 1.4s ease-in-out infinite":undefined,
+                    transition:"box-shadow 300ms,border-color 300ms",
+                    }}>
                     {isAI?"🤖":avatarEmoji}
                   </div>
                   <div style={{minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:5}}>
                       <span style={{fontSize:13,fontWeight:800,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
                       <span style={{fontSize:10,fontWeight:700,color:isAI?al.color:CC.accent,background:isAI?al.color+"18":CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{elo}</span>
+                      {isAI&&think&&<span style={{fontSize:9,color:al.color,fontWeight:700,letterSpacing:2,animation:"cc-dots 1.2s ease-in-out infinite"}}>●●●</span>}
                     </div>
                     {/* Захваченные фигуры + advantage */}
                     <div style={{display:"flex",alignItems:"center",gap:2,marginTop:1,flexWrap:"wrap"}}>
@@ -5885,6 +5908,17 @@ export default function CyberChessPage(){
               {turnFlashKey>0&&<div key={`tflash-${turnFlashKey}`}
                 className="cc-turn-flash"
                 style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:6,borderRadius:6}}/>}
+              {/* Eval delta badge — brief +N.N / -N.N in board corner after significant shift */}
+              {evalDelta&&<div key={`ed-${evalDelta.key}`} style={{
+                position:"absolute",top:8,right:8,
+                pointerEvents:"none",zIndex:9,
+                padding:"4px 9px",borderRadius:999,
+                background:evalDelta.d>0?"rgba(16,185,129,0.92)":"rgba(239,68,68,0.92)",
+                color:"#fff",fontSize:12,fontWeight:900,fontFamily:"ui-monospace,monospace",
+                boxShadow:"0 2px 8px rgba(0,0,0,0.35)",
+                animation:"cc-evdelta-in 2.2s ease-out forwards",
+                whiteSpace:"nowrap",
+              }}>{evalDelta.d>0?"+":""}{(evalDelta.d/100).toFixed(1)}</div>}
               {/* Move quality flash badge — brief overlay after live analysis */}
               {qFlash&&(()=>{
                 const qBg=qFlash.quality==="blunder"?"rgba(220,38,38,0.92)":qFlash.quality==="mistake"?"rgba(234,88,12,0.92)":qFlash.quality==="inacc"?"rgba(99,102,241,0.88)":"rgba(245,158,11,0.92)";

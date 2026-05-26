@@ -616,6 +616,30 @@ button:focus:not(:focus-visible) {
   100% { transform: translateX(-50%); }
 }
 
+/* Eval delta badge — slide in from top-right, hold, fade */
+@keyframes cc-evdelta-in {
+  0%   { opacity:0; transform: translateY(-6px) scale(0.9); }
+  10%  { opacity:1; transform: translateY(0) scale(1.05); }
+  20%  { transform: translateY(0) scale(1); }
+  70%  { opacity:1; }
+  100% { opacity:0; }
+}
+
+/* AI thinking pulse — avatar border glow */
+@keyframes cc-think-pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%     { opacity: 0.75; transform: scale(1.06); }
+}
+
+/* Thinking dots ●●● sequential fade */
+@keyframes cc-dots {
+  0%,20%  { opacity: 1; }
+  40%     { opacity: 0.3; }
+  60%     { opacity: 1; }
+  80%     { opacity: 0.3; }
+  100%    { opacity: 1; }
+}
+
 /* Move quality flash badge — pop in, hold, fade out */
 @keyframes cc-qflash-in {
   0%   { opacity:0; transform:translateX(-50%) translateY(8px) scale(0.85); }

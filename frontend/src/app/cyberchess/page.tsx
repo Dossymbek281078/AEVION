@@ -830,6 +830,8 @@ export default function CyberChessPage(){
   const[bestMissedArrow,sBestMissedArrow]=useState<{from:string;to:string}|null>(null);
   // Hover arrow from engine PV lines — transient, cleared on mouse-leave
   const[pvHoverArrow,sPvHoverArrow]=useState<{from:string;to:string;c:string}|null>(null);
+  // Eval graph hover — show crosshair + tooltip; null when not hovering
+  const[evalGraphHover,sEvalGraphHover]=useState<number|null>(null);
   // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
   const[lichessLoading,sLichessLoading]=useState(false);
   // Command palette (Ctrl/Cmd+K) — fuzzy-search any action without hunting menus.
@@ -7195,8 +7197,8 @@ export default function CyberChessPage(){
                   <div style={{fontSize:22,fontWeight:900,color:accColor(acc),lineHeight:1,fontFamily:"monospace"}}>{acc}%</div>
                 </div>
                 <div style={{fontSize:10,color:color==="w"?T.dim:"#94a3b8",fontWeight:700,marginBottom:6}}>Потеря сантипешек: <b style={{color:color==="w"?T.text:"#f1f5f9"}}>{acpl}</b></div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4}}>
-                  {[["!",s.great,T.accent,"great"],["○",s.good,color==="w"?T.dim:"#94a3b8","good"],["?!",s.inacc,"#ca8a04","inacc"],["?",s.mistake,"#ea580c","mistake"],["??",s.blunder,T.danger,"blunder"]].map(([sym,v,col,k])=>(
+                <div style={{display:"grid",gridTemplateColumns:`repeat(${s.brilliant>0?6:5},1fr)`,gap:4}}>
+                  {([...(s.brilliant>0?[["!!",s.brilliant,"#06b6d4","brilliant"]]:[])] as [string,number,string,string][]).concat([["!",s.great,T.accent,"great"],["○",s.good,color==="w"?T.dim:"#94a3b8","good"],["?!",s.inacc,"#ca8a04","inacc"],["?",s.mistake,"#ea580c","mistake"],["??",s.blunder,T.danger,"blunder"]]).map(([sym,v,col,k])=>(
                     <div key={k as string} style={{padding:"5px 2px",borderRadius:5,background:color==="w"?"#f9fafb":"#0f172a",textAlign:"center",border:`1px solid ${color==="w"?T.border:"#334155"}`}}>
                       <div style={{fontSize:11,fontWeight:900,color:col as string,lineHeight:1}}>{sym as string}</div>
                       <div style={{fontSize:13,fontWeight:900,color:color==="w"?T.text:"#f1f5f9",lineHeight:1.2,marginTop:2}}>{v as number}</div>
@@ -7211,20 +7213,46 @@ export default function CyberChessPage(){
                   <span>📈 График оценки</span>
                   <span style={{fontSize:10,color:"#64748b"}}>{analysis.length} ходов</span>
                 </div>
-                <svg viewBox={`0 0 ${Math.max(100,analysis.length*4)} 80`} preserveAspectRatio="none" style={{width:"100%",height:80,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 50%,#1e293b 100%)",borderRadius:6}}>
-                  <line x1="0" y1="40" x2={analysis.length*4} y2="40" stroke="#475569" strokeWidth="0.5" strokeDasharray="2,2"/>
-                  {/* White area above midline */}
-                  <polygon fill="rgba(5,150,105,0.25)" points={`0,40 ${graphPoints.map(p=>`${p.i*4},${40-p.v*3.5}`).join(" ")} ${(analysis.length-1)*4},40`}/>
-                  {/* Line */}
-                  <polyline fill="none" stroke="#10b981" strokeWidth="1.5" points={graphPoints.map(p=>`${p.i*4},${40-p.v*3.5}`).join(" ")}/>
-                  {/* Mistake/blunder dots */}
-                  {graphPoints.map(p=>{
-                    if(p.quality==="blunder")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="2" fill="#ef4444"/>;
-                    if(p.quality==="mistake")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="1.8" fill="#f97316"/>;
-                    if(p.quality==="great")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="1.5" fill="#10b981"/>;
-                    return null;
-                  })}
-                </svg>
+                {(()=>{
+                  const gW=Math.max(100,analysis.length*4);
+                  const navigateToGraphIdx=(clientX:number,rect:DOMRect)=>{
+                    const frac=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+                    const idx=Math.round(frac*(analysis.length-1));
+                    try{const g=new Chess(fenHist[idx+1]);setGame(g);sBk(k=>k+1);sBrowseIdx(idx);sLm(null);sSel(null);sVm(new Set());}catch{}
+                  };
+                  const hoverIdx=evalGraphHover;
+                  const hoverP=hoverIdx!=null?graphPoints[hoverIdx]:null;
+                  const hoverX=hoverIdx!=null?hoverIdx*4:null;
+                  const hoverY=hoverP!=null?40-hoverP.v*3.5:null;
+                  const browseX=browseIdx>=0&&browseIdx<analysis.length?browseIdx*4:null;
+                  return <svg viewBox={`0 0 ${gW} 80`} preserveAspectRatio="none"
+                    style={{width:"100%",height:80,background:"linear-gradient(180deg,#1e293b 0%,#0f172a 50%,#1e293b 100%)",borderRadius:6,cursor:"pointer",display:"block"}}
+                    onMouseMove={e=>{const r=e.currentTarget.getBoundingClientRect();const frac=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));sEvalGraphHover(Math.round(frac*(analysis.length-1)));}}
+                    onMouseLeave={()=>sEvalGraphHover(null)}
+                    onClick={e=>{navigateToGraphIdx(e.clientX,e.currentTarget.getBoundingClientRect());}}>
+                    <line x1="0" y1="40" x2={gW} y2="40" stroke="#475569" strokeWidth="0.5" strokeDasharray="2,2"/>
+                    <polygon fill="rgba(5,150,105,0.25)" points={`0,40 ${graphPoints.map(p=>`${p.i*4},${40-p.v*3.5}`).join(" ")} ${(analysis.length-1)*4},40`}/>
+                    <polyline fill="none" stroke="#10b981" strokeWidth="1.5" points={graphPoints.map(p=>`${p.i*4},${40-p.v*3.5}`).join(" ")}/>
+                    {graphPoints.map(p=>{
+                      if(p.quality==="brilliant")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="2.2" fill="#06b6d4"/>;
+                      if(p.quality==="blunder")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="2" fill="#ef4444"/>;
+                      if(p.quality==="mistake")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="1.8" fill="#f97316"/>;
+                      if(p.quality==="great")return<circle key={p.i} cx={p.i*4} cy={40-p.v*3.5} r="1.5" fill="#10b981"/>;
+                      return null;
+                    })}
+                    {/* Current browse position marker */}
+                    {browseX!=null&&<line x1={browseX} y1="0" x2={browseX} y2="80" stroke="#22d3ee" strokeWidth="0.8" opacity="0.7"/>}
+                    {/* Hover crosshair */}
+                    {hoverX!=null&&hoverY!=null&&hoverP!=null&&<>
+                      <line x1={hoverX} y1="0" x2={hoverX} y2="80" stroke="#fff" strokeWidth="0.6" opacity="0.5"/>
+                      <circle cx={hoverX} cy={hoverY} r="3.5" fill="#fff" opacity="0.9"/>
+                      <rect x={Math.min(hoverX+3,gW-60)} y={hoverY<35?hoverY+5:hoverY-22} width="56" height="16" rx="3" fill="rgba(0,0,0,0.75)"/>
+                      <text x={Math.min(hoverX+31,gW-31)} y={hoverY<35?hoverY+16:hoverY-9} textAnchor="middle" fill="#fff" fontSize="9" fontFamily="ui-monospace,monospace" fontWeight="700">
+                        {`M${Math.floor(hoverIdx!/2)+1} ${hoverP.v>9?"M∞":hoverP.v<-9?"M∞":(hoverP.v>0?"+":"")}${Math.round(hoverP.v*10)/10}`}
+                      </text>
+                    </>}
+                  </svg>;
+                })()}
               </div>
               {/* Per-side stats */}
               <div style={{display:"flex",gap:8}}>
@@ -7525,10 +7553,11 @@ export default function CyberChessPage(){
                         cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
-                      <span style={{display:"flex",alignItems:"center",gap:3}}>
+                      <span style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap" as const}}>
                         {white||""}
                         {wAnnot&&<span style={{color:annotColor(wAnnot),fontWeight:900,fontSize:11}}>{wAnnot}</span>}
                         {!wAnnot&&wQ&&<span style={{color:qColor(wQ),fontWeight:900,fontSize:11}}>{qIcon(wQ)}</span>}
+                        {moveTimes[wIdx]!=null&&<span style={{fontSize:8,color:moveTimes[wIdx]<3000?"#f97316":moveTimes[wIdx]<10000?"#ca8a04":"#64748b",fontFamily:"ui-monospace,monospace",lineHeight:1,opacity:0.8}}>{moveTimes[wIdx]<10000?(moveTimes[wIdx]/1000).toFixed(1)+"s":Math.round(moveTimes[wIdx]/1000)+"s"}</span>}
                         {moveComments[wIdx]&&<span style={{fontSize:9,color:"#6366f1"}}>💬</span>}
                         {(wQ==="blunder"||wQ==="mistake")&&over&&fenHist[wIdx]&&<button
                           onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[wIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(wIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(`📌 Позиция хода ${Math.floor(wIdx/2)+1} — найди лучший ход!`,"info");}}
@@ -7553,10 +7582,11 @@ export default function CyberChessPage(){
                         cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
-                      <span style={{display:"flex",alignItems:"center",gap:3}}>
+                      <span style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap" as const}}>
                         {black||""}
                         {bAnnot&&<span style={{color:annotColor(bAnnot),fontWeight:900,fontSize:11}}>{bAnnot}</span>}
                         {!bAnnot&&bQ&&<span style={{color:qColor(bQ),fontWeight:900,fontSize:11}}>{qIcon(bQ)}</span>}
+                        {moveTimes[bIdx]!=null&&<span style={{fontSize:8,color:moveTimes[bIdx]<3000?"#f97316":moveTimes[bIdx]<10000?"#ca8a04":"#64748b",fontFamily:"ui-monospace,monospace",lineHeight:1,opacity:0.8}}>{moveTimes[bIdx]<10000?(moveTimes[bIdx]/1000).toFixed(1)+"s":Math.round(moveTimes[bIdx]/1000)+"s"}</span>}
                         {moveComments[bIdx]&&<span style={{fontSize:9,color:"#6366f1"}}>💬</span>}
                         {(bQ==="blunder"||bQ==="mistake")&&over&&fenHist[bIdx]&&<button
                           onClick={e=>{e.stopPropagation();try{const g=new Chess(fenHist[bIdx]);setGame(g);sBk(k=>k+1);sBrowseIdx(bIdx-1);sLm(null);sSel(null);sVm(new Set());sTab("analysis");}catch{}sShowGameOver(false);showToast(`📌 Позиция хода ${Math.floor(bIdx/2)+1} — найди лучший ход!`,"info");}}

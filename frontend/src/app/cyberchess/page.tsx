@@ -828,6 +828,8 @@ export default function CyberChessPage(){
   const prevEvalForDeltaRef=useRef<number>(0);
   // Best missed move arrow — shown in analysis/browse when current ply was a blunder/mistake
   const[bestMissedArrow,sBestMissedArrow]=useState<{from:string;to:string}|null>(null);
+  // Hover arrow from engine PV lines — transient, cleared on mouse-leave
+  const[pvHoverArrow,sPvHoverArrow]=useState<{from:string;to:string;c:string}|null>(null);
   // Lichess Daily Puzzle — fetched once per day via public API; cached for instant reload.
   const[lichessLoading,sLichessLoading]=useState(false);
   // Command palette (Ctrl/Cmd+K) — fuzzy-search any action without hunting menus.
@@ -5879,6 +5881,18 @@ export default function CyberChessPage(){
                       <line x1={bx1} y1={by1} x2={btx} y2={bty} stroke="#22c55e" strokeWidth="2.2" strokeLinecap="round" markerEnd="url(#ah-22c55e)" opacity="0.7" strokeDasharray="none"/>
                     </>;
                   })()}
+                  {/* PV hover arrow — from engine lines panel hover */}
+                  {pvHoverArrow&&(()=>{
+                    const[px1,py1]=sqXY(pvHoverArrow.from as Square);
+                    const[px2,py2]=sqXY(pvHoverArrow.to as Square);
+                    const pdx=px2-px1,pdy=py2-py1,plen=Math.max(0.01,Math.hypot(pdx,pdy));
+                    const ptx=px2-(pdx/plen)*3.5,pty=py2-(pdy/plen)*3.5;
+                    const pc=pvHoverArrow.c;
+                    return <>
+                      <circle cx={px1} cy={py1} r="5.5" fill={`${pc}22`} stroke={pc} strokeWidth="0.8"/>
+                      <line x1={px1} y1={py1} x2={ptx} y2={pty} stroke={pc} strokeWidth="2.5" strokeLinecap="round" markerEnd={`url(#ah-${pc.slice(1)})`} opacity="0.85"/>
+                    </>;
+                  })()}
                 </svg>;
               })()}
               {rws.flatMap(r=>cls.map(c=>{const sq=`${FILES[c]}${8-r}` as Square;const p=bd[r][c];const lt=(r+c)%2===0;
@@ -7236,7 +7250,13 @@ export default function CyberChessPage(){
                 const uciMoves=line.moves;
                 const baseFen=analFen||game.fen();
                 const bestSan=sanMoves[0]||uciMoves[0]||"";
-                return(<div key={i} style={{padding:"5px 10px",borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:8,background:i===0?"rgba(5,150,105,0.03)":"transparent"}}>
+                const pvColors=["#22c55e","#3b82f6","#eab308"];
+                const pvC=pvColors[i]||"#94a3b8";
+                const pvFrom=uciMoves[0]?.slice(0,2)||"";const pvTo=uciMoves[0]?.slice(2,4)||"";
+                return(<div key={i}
+                  onMouseEnter={()=>{if(pvFrom&&pvTo)sPvHoverArrow({from:pvFrom,to:pvTo,c:pvC});}}
+                  onMouseLeave={()=>sPvHoverArrow(null)}
+                  style={{padding:"5px 10px",borderBottom:i<mpvLines.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:8,background:i===0?"rgba(5,150,105,0.03)":"transparent",cursor:"default",transition:"background 120ms"}}>
                   <div style={{minWidth:20,height:20,borderRadius:4,background:i===0?T.accent:i===1?T.blue:T.dim,color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
                   <div style={{minWidth:40,padding:"2px 5px",borderRadius:4,background:isPos?"#065f46":"#1e293b",color:"#fff",fontSize:11,fontWeight:900,fontFamily:"monospace",textAlign:"center",flexShrink:0}}>{isPos?"+":""}{evalStr}</div>
                   <div style={{flex:1,minWidth:0,display:"flex",flexWrap:"wrap",gap:2,alignItems:"baseline",overflow:"hidden"}}>

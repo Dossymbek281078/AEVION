@@ -12234,6 +12234,13 @@ ${question.trim()}`;
               <div>
                 <div style={{fontSize:26,fontWeight:900,color:"#fff",letterSpacing:0.3}}>{isWin?"Победа!":isDraw?"Ничья":"Поражение"}</div>
                 <div style={{fontSize:13,color:"rgba(255,255,255,0.55)",marginTop:2}}>{over}</div>
+                {ratDelta&&<div style={{marginTop:5,display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:6,
+                  background:ratDelta.d>0?"rgba(16,185,129,0.2)":"rgba(239,68,68,0.2)",
+                  border:`1px solid ${ratDelta.d>0?"rgba(16,185,129,0.4)":"rgba(239,68,68,0.4)"}`}}>
+                  <span style={{fontSize:14,fontWeight:900,color:ratDelta.d>0?"#4ade80":"#f87171"}}>{ratDelta.d>0?"+":""}{ratDelta.d}</span>
+                  <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontWeight:700}}>→</span>
+                  <span style={{fontSize:13,fontWeight:900,color:"rgba(255,255,255,0.85)",fontFamily:"ui-monospace,monospace"}}>{ratDelta.newRat}</span>
+                </div>}
                 {currentOpening&&<div style={{marginTop:5,display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:9,fontWeight:900,padding:"2px 5px",borderRadius:3,background:accentClr,color:"#fff",fontFamily:"ui-monospace,monospace",letterSpacing:0.8}}>{currentOpening.eco}</span>
                   <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:700}}>{currentOpening.name}</span>

@@ -24,13 +24,7 @@
 
 import { Router, type Request, type Response } from "express";
 import { rateLimit } from "../lib/rateLimit";
-import { verifyBearerOptional } from "../lib/authJwt";
-import { getActivePlan } from "./provisioning";
-
-const PRO_ALLOWLIST = (process.env.CONSTITUTION_PRO_ALLOWLIST || "")
-  .split(",")
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
+import { resolvePlan } from "../lib/constitutionGate";
 
 const FREE_LIMITS = {
   savedScenarios: 5,
@@ -52,29 +46,9 @@ const PRO_LIMITS = {
 // Variant IDs configured in Railway env:
 //   LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID
 //   LEMON_SQUEEZY_CONSTITUTION_TEAM_VARIANT_ID
-
-function resolvePlan(req: Request): {
-  plan: "free" | "pro";
-  reason: string;
-  email: string | null;
-} {
-  const payload = verifyBearerOptional(req);
-  if (!payload) return { plan: "free", reason: "no-token", email: null };
-  const p = payload as Record<string, unknown>;
-  const email = typeof p.email === "string" ? p.email.toLowerCase() : null;
-  if (p.plan === "pro") return { plan: "pro", reason: "jwt-plan", email };
-  if (email && PRO_ALLOWLIST.includes(email)) {
-    return { plan: "pro", reason: "allowlist", email };
-  }
-  if (email) {
-    const active = getActivePlan(email);
-    // Any paid tier (pro/business/enterprise) unlocks Constitution Pro.
-    if (active.active && active.tierId !== "free") {
-      return { plan: "pro", reason: `subscription:${active.tierId}`, email };
-    }
-  }
-  return { plan: "free", reason: "default", email };
-}
+//
+// Plan resolution lives in lib/constitutionGate.resolvePlan — shared with the
+// requirePro / aiRateGate server gates so /me/plan can't drift from enforcement.
 
 export const constitutionProRouter = Router();
 

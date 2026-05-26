@@ -19,19 +19,30 @@ const ALLOWLIST = (process.env.CONSTITUTION_PRO_ALLOWLIST || "")
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
-export type PlanInfo = { plan: "free" | "pro"; email: string | null };
+export type PlanInfo = { plan: "free" | "pro"; email: string | null; reason: string };
 
+/**
+ * Single source of truth for Constitution plan resolution. Used by both the
+ * server-side gates (requirePro / aiRateGate) and the /me/plan endpoint the
+ * frontend reads — keep them on this one resolver so the paywall the user
+ * sees can never disagree with what the server actually enforces.
+ *
+ * Priority: JWT plan=pro → email allowlist → active paid subscription → free.
+ */
 export function resolvePlan(req: Request): PlanInfo {
   const payload = verifyBearerOptional(req);
-  const p = (payload ?? {}) as Record<string, unknown>;
+  if (!payload) return { plan: "free", email: null, reason: "no-token" };
+  const p = payload as Record<string, unknown>;
   const email = typeof p.email === "string" ? p.email.toLowerCase() : null;
-  if (p.plan === "pro") return { plan: "pro", email };
-  if (email && ALLOWLIST.includes(email)) return { plan: "pro", email };
+  if (p.plan === "pro") return { plan: "pro", email, reason: "jwt-plan" };
+  if (email && ALLOWLIST.includes(email)) return { plan: "pro", email, reason: "allowlist" };
   if (email) {
     const active = getActivePlan(email);
-    if (active.active && active.tierId !== "free") return { plan: "pro", email };
+    if (active.active && active.tierId !== "free") {
+      return { plan: "pro", email, reason: `subscription:${active.tierId}` };
+    }
   }
-  return { plan: "free", email };
+  return { plan: "free", email, reason: "default" };
 }
 
 function upgradeResponse(res: Response): void {

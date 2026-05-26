@@ -811,9 +811,9 @@ export default function CyberChessPage(){
   const[gamesSearch,sGamesSearch]=useState<string>("");
   const[gamesSort,sGamesSort]=useState<"date"|"rating"|"length"|"result">("date");
   const[gamesResult,sGamesResult]=useState<"all"|"win"|"loss"|"draw">("all");
-  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]>([]);
+  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
-  const[qFlash,sQFlash]=useState<{quality:"great"|"good"|"inacc"|"mistake"|"blunder";key:number}|null>(null);
+  const[qFlash,sQFlash]=useState<{quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";key:number}|null>(null);
   const prevAnalysisLenRef=useRef(0);
   const[browseIdx,sBrowseIdx]=useState(-1); // -1 = live position, 0+ = viewing that move
   // Hover-scrub: when user hovers a move in the move list, board previews that position
@@ -2061,16 +2061,17 @@ export default function CyberChessPage(){
       });
     };
 
-    const classifyMove=(prevCp:number,currCp:number,turn:string):{quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}=>{
+    const classifyMove=(prevCp:number,currCp:number,turn:string):{quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}=>{
       const moverWasWhite=turn==="b";
       const prevFromMover=moverWasWhite?prevCp:-prevCp;
       const currFromMover=moverWasWhite?currCp:-currCp;
       const drop=prevFromMover-currFromMover;
       const cpLoss=Math.max(0,drop); // negative drop = improvement, clamp to 0
-      let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
+      let quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder"="good";
       if(drop>=300)quality="blunder";
       else if(drop>=150)quality="mistake";
       else if(drop>=70)quality="inacc";
+      else if(drop<=-100&&Math.abs(prevFromMover)<300)quality="brilliant";
       else if(drop<=-50)quality="great";
       return {quality,cpLoss};
     };
@@ -2825,6 +2826,7 @@ export default function CyberChessPage(){
       const a=analysis[i];const isUserMove=userIsWhite?i%2===0:i%2===1;
       if(a.quality==="blunder")moments.push({ply:i,type:isUserMove?"user_blunder":"ai_blunder",sev:3});
       else if(a.quality==="mistake")moments.push({ply:i,type:isUserMove?"user_mistake":"ai_mistake",sev:2});
+      else if(a.quality==="brilliant")moments.push({ply:i,type:isUserMove?"user_brilliant":"ai_brilliant",sev:3});
       else if(a.quality==="great")moments.push({ply:i,type:isUserMove?"user_great":"ai_great",sev:2});
       if(a.mate!==0&&Math.abs(a.mate)<=3)moments.push({ply:i,type:"mate_threat",sev:3});
     }
@@ -4086,7 +4088,7 @@ export default function CyberChessPage(){
   const runAnalysis=useCallback(async(depth=16)=>{
     if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}
     sAnalyzing(true);sAnalysis([]);
-    const results:{move:number;cp:number;mate:number;quality:"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]=[];
+    const results:{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]=[];
     let prevCp=0;
     for(let i=0;i<fenHist.length;i++){
       const fen=fenHist[i];const turn=fen.split(" ")[1];
@@ -4099,10 +4101,11 @@ export default function CyberChessPage(){
         // Move was by the side that just played (opposite of current turn)
         const moverWasWhite=turn==="b";const prev=moverWasWhite?prevCp:-prevCp;const curr=moverWasWhite?cp:-cp;
         const drop=prev-curr;
-        let quality:"great"|"good"|"inacc"|"mistake"|"blunder"="good";
+        let quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder"="good";
         if(drop>=300)quality="blunder";
         else if(drop>=150)quality="mistake";
         else if(drop>=70)quality="inacc";
+        else if(drop<=-100&&Math.abs(prevCp<300?prevCp:-prevCp)<300)quality="brilliant";
         else if(drop<=-50)quality="great";
         results.push({move:i,cp,mate,quality,cpLoss:Math.max(0,drop)});
       }
@@ -5959,9 +5962,9 @@ export default function CyberChessPage(){
               }}>{evalDelta.d>0?"+":""}{(evalDelta.d/100).toFixed(1)}</div>}
               {/* Move quality flash badge — brief overlay after live analysis */}
               {qFlash&&(()=>{
-                const qBg=qFlash.quality==="blunder"?"rgba(220,38,38,0.92)":qFlash.quality==="mistake"?"rgba(234,88,12,0.92)":qFlash.quality==="inacc"?"rgba(99,102,241,0.88)":"rgba(245,158,11,0.92)";
-                const qSym=qFlash.quality==="blunder"?"??":qFlash.quality==="mistake"?"?":qFlash.quality==="inacc"?"?!":"★";
-                const qLabel=qFlash.quality==="blunder"?"Зевок":qFlash.quality==="mistake"?"Ошибка":qFlash.quality==="inacc"?"Неточность":"Блестяще!";
+                const qBg=qFlash.quality==="brilliant"?"rgba(6,182,212,0.92)":qFlash.quality==="blunder"?"rgba(220,38,38,0.92)":qFlash.quality==="mistake"?"rgba(234,88,12,0.92)":qFlash.quality==="inacc"?"rgba(99,102,241,0.88)":"rgba(245,158,11,0.92)";
+                const qSym=qFlash.quality==="brilliant"?"!!":qFlash.quality==="blunder"?"??":qFlash.quality==="mistake"?"?":qFlash.quality==="inacc"?"?!":"★";
+                const qLabel=qFlash.quality==="brilliant"?"БЛЕСТЯЩЕ!!":qFlash.quality==="blunder"?"Зевок":qFlash.quality==="mistake"?"Ошибка":qFlash.quality==="inacc"?"Неточность":"Отлично!";
                 return <div key={`qf-${qFlash.key}`} style={{
                   position:"absolute",bottom:12,left:"50%",transform:"translateX(-50%)",
                   pointerEvents:"none",zIndex:9,
@@ -7152,8 +7155,8 @@ export default function CyberChessPage(){
           {/* Game Stats — per-side breakdown with eval graph */}
           {showAnal&&analysis.length>0&&(()=>{
             // Per-side stats
-            const wStats={great:0,good:0,inacc:0,mistake:0,blunder:0,totalLoss:0,count:0};
-            const bStats={great:0,good:0,inacc:0,mistake:0,blunder:0,totalLoss:0,count:0};
+            const wStats={brilliant:0,great:0,good:0,inacc:0,mistake:0,blunder:0,totalLoss:0,count:0};
+            const bStats={brilliant:0,great:0,good:0,inacc:0,mistake:0,blunder:0,totalLoss:0,count:0};
             for(let i=0;i<analysis.length;i++){
               const isWhite=i%2===0;
               const stats=isWhite?wStats:bStats;
@@ -7464,8 +7467,8 @@ export default function CyberChessPage(){
                   const wEval=analysis[wIdx];const bEval=analysis[bIdx];
                   const wQ=wEval?.quality;const bQ=bEval?.quality;
                   // Realtime quality badges — symbol + colour per category
-                  const qIcon=(q?:string)=>q==="blunder"?"??":q==="mistake"?"?":q==="inacc"?"?!":q==="good"?"✓":q==="great"?"⭐":"";
-                  const qColor=(q?:string)=>q==="blunder"?"#ef4444":q==="mistake"?"#f97316":q==="inacc"?"#6366f1":q==="good"?"#10b981":q==="great"?"#f59e0b":"";
+                  const qIcon=(q?:string)=>q==="brilliant"?"!!":q==="blunder"?"??":q==="mistake"?"?":q==="inacc"?"?!":q==="good"?"✓":q==="great"?"⭐":"";
+                  const qColor=(q?:string)=>q==="brilliant"?"#06b6d4":q==="blunder"?"#ef4444":q==="mistake"?"#f97316":q==="inacc"?"#6366f1":q==="good"?"#10b981":q==="great"?"#f59e0b":"";
                   // Hover-scrub: snapshot canonical state on first enter, then preview.
                   // Click promotes preview to canonical (browseIdx) and clears the snapshot.
                   // GATED: disabled during an active live game (when `on && !over` — i.e. clock is
@@ -7513,7 +7516,7 @@ export default function CyberChessPage(){
                         color:wIsBrowsed?CC.brand:CC.text,fontWeight:wIsBrowsed?900:600,
                         padding:"3px 6px",fontSize:12,
                         borderLeft:wIsPreview?`3px solid ${CC.gold}`:wIsBrowsed?`3px solid ${CC.brand}`:wQ&&wQ!=="good"?`3px solid ${qColor(wQ)}`:"3px solid transparent",
-                        background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:wQ==="blunder"?"rgba(239,68,68,0.07)":wQ==="mistake"?"rgba(249,115,22,0.07)":wQ==="inacc"?"rgba(99,102,241,0.05)":wQ==="great"?"rgba(245,158,11,0.06)":"transparent",
+                        background:wIsPreview?CC.goldSoft:wIsBrowsed?CC.brandSoft:wQ==="brilliant"?"rgba(6,182,212,0.08)":wQ==="blunder"?"rgba(239,68,68,0.07)":wQ==="mistake"?"rgba(249,115,22,0.07)":wQ==="inacc"?"rgba(99,102,241,0.05)":wQ==="great"?"rgba(245,158,11,0.06)":"transparent",
                         cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
@@ -7538,7 +7541,7 @@ export default function CyberChessPage(){
                         color:bIsBrowsed?CC.brand:CC.textDim,fontWeight:bIsBrowsed?900:500,
                         padding:"3px 6px",fontSize:12,
                         borderLeft:bIsPreview?`3px solid ${CC.gold}`:bIsBrowsed?`3px solid ${CC.brand}`:bQ&&bQ!=="good"?`3px solid ${qColor(bQ)}`:"3px solid transparent",
-                        background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:bQ==="blunder"?"rgba(239,68,68,0.07)":bQ==="mistake"?"rgba(249,115,22,0.07)":bQ==="inacc"?"rgba(99,102,241,0.05)":bQ==="great"?"rgba(245,158,11,0.06)":"transparent",
+                        background:bIsPreview?CC.goldSoft:bIsBrowsed?CC.brandSoft:bQ==="brilliant"?"rgba(6,182,212,0.08)":bQ==="blunder"?"rgba(239,68,68,0.07)":bQ==="mistake"?"rgba(249,115,22,0.07)":bQ==="inacc"?"rgba(99,102,241,0.05)":bQ==="great"?"rgba(245,158,11,0.06)":"transparent",
                         cursor:black?"pointer":"default",display:"flex",justifyContent:"space-between",alignItems:"center",
                         transition:"background 100ms",
                       }}>
@@ -7578,6 +7581,8 @@ export default function CyberChessPage(){
               </div>}
             </div>
             {analysis.length>0&&hist.length>0&&<div style={{padding:"4px 10px 5px",borderTop:`1px solid ${CC.border}`,fontSize:11,color:CC.textDim,lineHeight:1.6,display:"flex",flexWrap:"wrap",gap:"0 8px"}}>
+              <span style={{color:"#06b6d4",fontWeight:800}}>!!</span><span>блеск</span>
+              <span style={{color:CC.textMute}}>·</span>
               <span style={{color:"#f59e0b",fontWeight:800}}>⭐</span><span>отлично</span>
               <span style={{color:CC.textMute}}>·</span>
               <span style={{color:"#10b981",fontWeight:800}}>✓</span><span>хорошо</span>
@@ -7591,7 +7596,7 @@ export default function CyberChessPage(){
             {analysis.length>=2&&hist.length>=2&&(()=>{
               const calcAcc=(moves:{quality:string}[])=>{
                 if(!moves.length)return 0;
-                const g=moves.filter(m=>m.quality==="great").length;
+                const g=moves.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
                 const go=moves.filter(m=>m.quality==="good").length;
                 const ia=moves.filter(m=>m.quality==="inacc").length;
                 const mk=moves.filter(m=>m.quality==="mistake").length;
@@ -12098,7 +12103,7 @@ ${question.trim()}`;
       const glowClr=isWin?"rgba(117,153,0,0.5)":isDraw?"rgba(120,120,120,0.4)":"rgba(180,30,30,0.5)";
       const calcSideAcc=(moves:{quality:string}[])=>{
         if(!moves.length)return 0;
-        const g=moves.filter(m=>m.quality==="great").length;
+        const g=moves.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
         const go=moves.filter(m=>m.quality==="good").length;
         const ia=moves.filter(m=>m.quality==="inacc").length;
         const mk=moves.filter(m=>m.quality==="mistake").length;

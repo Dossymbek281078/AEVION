@@ -631,6 +631,8 @@ export default function CyberChessPage(){
     }catch{}
   },[hist, game, bk]);
   const[think,sThink]=useState(false);
+  const[thinkSecs,sThinkSecs]=useState(0);
+  const thinkStartRef=useRef<number>(0);
   const[hintLoading,sHintLoading]=useState(false);
   const[capW,sCapW]=useState<string[]>([]);
   const[capB,sCapB]=useState<string[]>([]);
@@ -2602,6 +2604,15 @@ export default function CyberChessPage(){
   /* ── Show game-over overlay when over is set ── */
   // Board overlay is now the primary post-game UX; full modal opens on demand via 📊 button
   useEffect(()=>{if(over){sAiReview({text:"",loading:false});}},[over]);
+
+  /* ── AI think-time ticker ── */
+  useEffect(()=>{
+    if(!think){sThinkSecs(0);return;}
+    thinkStartRef.current=Date.now();
+    sThinkSecs(0);
+    const iv=setInterval(()=>sThinkSecs(Math.floor((Date.now()-thinkStartRef.current)/1000)),1000);
+    return()=>clearInterval(iv);
+  },[think]);
 
   /* ── Premove execution ── */
   const doPremove=useCallback(()=>{
@@ -5851,7 +5862,7 @@ export default function CyberChessPage(){
                 sSqHL(hl=>{const i=hl.findIndex(x=>x.sq===sq&&x.c===col);if(i>=0)return hl.filter((_,j)=>j!==i);const other=hl.filter(x=>x.sq!==sq);return [...other,{sq,c:col}]});
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
-              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
+              className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}${pT.time<30&&pT.time>0&&myT&&on&&!over&&tc.ini>0?" cc-clock-pressure":""}`}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
@@ -6084,6 +6095,19 @@ export default function CyberChessPage(){
                   <span>{phaseIcon}</span><span>{phaseLabel}</span>
                 </div>;
               })()}
+              {/* AI think-time badge — top-left corner while AI is thinking */}
+              {think&&on&&!over&&tab==="play"&&!hotseat&&<div style={{
+                position:"absolute",top:6,left:6,
+                pointerEvents:"none",zIndex:8,
+                display:"flex",alignItems:"center",gap:5,
+                padding:"3px 8px",borderRadius:999,
+                background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",
+                color:"#f59e0b",fontSize:10,fontWeight:800,letterSpacing:0.3,
+                whiteSpace:"nowrap" as const,
+              }}>
+                <span style={{animation:"cc-dots 1.2s ease-in-out infinite",letterSpacing:1}}>●</span>
+                <span>AI {thinkSecs}s</span>
+              </div>}
               {/* Move-streak counter — bottom-right corner, ≥3 consecutive good/great/brilliant */}
               {on&&!over&&tab==="play"&&(()=>{
                 const myA=analysis.filter(a=>pCol==="w"?a.move%2===0:a.move%2===1);
@@ -6230,7 +6254,7 @@ export default function CyberChessPage(){
             const bottomIsMe=pCol==="w";
             const myCaptures=bottomIsMe?capB:capW;
             const myAdvantage=bottomIsMe?Math.max(0,wMat2-bMat2):Math.max(0,bMat2-wMat2);
-            const myLow=pT.time<30000&&on&&!over;
+            const myLow=pT.time<30&&pT.time>0&&on&&!over&&tc.ini>0;
             return <div style={{
               display:"flex",alignItems:"center",justifyContent:"space-between",
               width:bw,

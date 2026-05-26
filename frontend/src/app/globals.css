@@ -605,6 +605,15 @@ button:focus:not(:focus-visible) {
   50%     { opacity: 0.55; }
 }
 
+/* Цейтнот (<30s на ходу): пульсирующая красная рамка вокруг доски */
+@keyframes cc-clock-pressure {
+  0%,100% { box-shadow: 0 0 0 2px rgba(220,38,38,0.25), inset 0 0 0 2px rgba(220,38,38,0.15); }
+  50%     { box-shadow: 0 0 0 4px rgba(220,38,38,0.70), inset 0 0 0 3px rgba(220,38,38,0.40), 0 0 20px rgba(220,38,38,0.30); }
+}
+.cc-clock-pressure {
+  animation: cc-clock-pressure 0.9s ease-in-out infinite;
+}
+
 /* Новая игра: фигуры fade-in */
 @keyframes cc-piece-appear {
   from { opacity:0; transform: translateY(-4px); }

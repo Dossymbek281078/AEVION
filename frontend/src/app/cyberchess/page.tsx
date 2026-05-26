@@ -5706,8 +5706,18 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
-          {/* Recent-moves chip-row removed — list lives in the right panel.
-              The premove queue moved to the TOP of that move list (right panel). */}
+          {/* Browse-mode banner: visible when history browsing during a live game */}
+          {browseIdx>=0&&on&&!over&&<div style={{
+            width:bw,display:"flex",alignItems:"center",gap:8,
+            padding:"5px 10px",marginBottom:2,borderRadius:6,
+            background:"rgba(245,158,11,0.12)",border:"1px solid rgba(245,158,11,0.35)",
+          }}>
+            <span style={{fontSize:11,color:"#b45309",fontWeight:800,flex:1}}>⏪ Просмотр истории · ход {browseIdx+1}/{hist.length}</span>
+            <button onClick={()=>{try{const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}catch{}}}
+              style={{padding:"2px 8px",borderRadius:4,border:"1px solid rgba(245,158,11,0.5)",background:"rgba(245,158,11,0.15)",color:"#92400e",fontSize:11,fontWeight:900,cursor:"pointer"}}>
+              ↩ К игре
+            </button>
+          </div>}
 
           <div translate="no" style={{display:"flex",width:bw,gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.

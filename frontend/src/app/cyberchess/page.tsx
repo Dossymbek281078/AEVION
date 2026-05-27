@@ -6303,6 +6303,36 @@ export default function CyberChessPage(){
             </div>
           </div>
 
+          {/* ─── Replay bar — analysis quality timeline ─── */}
+          {tab==="analysis"&&hist.length>0&&(()=>{
+            const qClr=(q?:string)=>q==="brilliant"?"#06b6d4":q==="great"?"#f59e0b":q==="good"?"#10b981":q==="inacc"?"#6366f1":q==="mistake"?"#f97316":q==="blunder"?"#ef4444":"#3d3b39";
+            const qLabel=(q?:string)=>q==="brilliant"?"!!":q==="great"?"⭐":q==="good"?"✓":q==="inacc"?"?!":q==="mistake"?"?":q==="blunder"?"??":"·";
+            const cur=browseIdx<0?hist.length-1:browseIdx;
+            return<div style={{width:bw,marginTop:3,display:"flex",flexDirection:"column",gap:2,paddingLeft:23}}>
+              <div style={{display:"flex",height:6,borderRadius:3,overflow:"hidden",gap:"1px",cursor:"pointer"}}>
+                {hist.map((_,ply)=>{
+                  const ev=analysis[ply];
+                  const isW=ply%2===0;
+                  const col=ev?qClr(ev.quality):(isW?"rgba(255,255,255,0.12)":"rgba(0,0,0,0.25)");
+                  const isCur=ply===cur;
+                  return<div key={ply}
+                    title={`Ход ${Math.floor(ply/2)+1}${isW?" (бел)":" (чёрн)"}: ${hist[ply]}${ev?" "+qLabel(ev.quality):""}`}
+                    onClick={()=>sBrowseIdx(ply)}
+                    style={{flex:1,background:col,position:"relative",transition:"opacity 100ms",
+                      opacity:ply<=cur?1:0.35,
+                      outline:isCur?"2px solid rgba(255,255,255,0.7)":"none",outlineOffset:-1,
+                    }}
+                  />;
+                })}
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:"#5d5b59",fontWeight:700,fontFamily:"ui-monospace,monospace",paddingRight:0}}>
+                <span>1</span>
+                {hist.length>8&&<span style={{position:"relative",left:`${Math.round(cur/Math.max(hist.length-1,1)*100)}%`,transform:"translateX(-50%)",color:"#bababa",fontWeight:900,fontSize:9,userSelect:"none"}}>{Math.floor(cur/2)+1}</span>}
+                <span>{Math.ceil(hist.length/2)}</span>
+              </div>
+            </div>;
+          })()}
+
           {/* Нижняя player row (свой игрок) — chess.com style */}
           {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
             const PV2:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};

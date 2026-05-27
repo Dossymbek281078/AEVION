@@ -93,12 +93,29 @@ export default function PartnerPage() {
           Получаете 70% компании. Основатель остаётся Chief Innovation Officer с 30% —
           и продолжает генерировать следующую волну идей.
         </p>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 40 }}>
           <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20inquiry" style={btnPrimary}>
             Запросить LOI · yahiin1978@gmail.com
           </a>
           <Link href="/partner#deal" style={btnGhost}>Условия сделки</Link>
           <Link href="/transparency" style={btnGhost}>Live health-board</Link>
+          <Link href="/partner/print" style={btnGhost}>PDF brief →</Link>
+        </div>
+
+        {/* ROI CALLOUT — самое важное число для инвестора */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 1, background: "rgba(255,255,255,0.06)", borderRadius: 20, overflow: "hidden", border: "1px solid rgba(16,185,129,0.25)" }}>
+          {[
+            { label: "Вы вкладываете", val: "$170M", sub: "$110M secondary + $60M в компанию", color: "#94a3b8" },
+            { label: "Ваша доля", val: "70%", sub: "компании при implied $275M pre-money", color: "#10b981" },
+            { label: "ROI год 3", val: "6–9×", sub: "$1.0–1.6B company · ваши 70% = $700M–$1.1B", color: "#3b82f6" },
+            { label: "ROI год 5", val: "16–24×", sub: "$3.9–5.9B company · ваши 70% = $2.7–4.1B", color: "#a855f7" },
+          ].map((c, i) => (
+            <div key={c.label} style={{ padding: "24px 28px", background: i === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.03)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#64748b", textTransform: "uppercase", marginBottom: 8 }}>{c.label}</div>
+              <div style={{ fontSize: 36, fontWeight: 900, color: c.color, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: 6 }}>{c.val}</div>
+              <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>{c.sub}</div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -227,7 +244,7 @@ export default function PartnerPage() {
             <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20request&body=Hello,%0A%0AWe%20are%20interested%20in%20the%20AEVION%20Innovation%20Partnership.%0A%0AOrganisation:%0AContact:%0AInvestment%20capacity:%0ATeam%20we%20can%20bring:%0APreferred%20jurisdiction:%0ATimeline:%0A%0A--" style={btnPrimary}>
               Запросить LOI · yahiin1978@gmail.com
             </a>
-            <Link href="/partner#deal" style={btnGhost}>Скачать PDF brief</Link>
+            <Link href="/partner/print" style={btnGhost}>PDF brief (Ctrl+P)</Link>
           </div>
         </div>
       </section>
@@ -238,6 +255,7 @@ export default function PartnerPage() {
           <div style={{ fontSize: 12, color: "#64748b" }}>AEVION · Innovation Partnership · Confidential · 2026</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
             <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
+            <Link href="/partner/print" style={{ color: "#94a3b8", textDecoration: "none" }}>PDF brief</Link>
             <Link href="/acquire" style={{ color: "#94a3b8", textDecoration: "none" }}>Acquisition brief</Link>
             <Link href="/pilot" style={{ color: "#94a3b8", textDecoration: "none" }}>90-day pilot</Link>
           </div>

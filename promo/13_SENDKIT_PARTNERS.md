@@ -1,9 +1,14 @@
-# Partner send-kit — PIF · Mubadala · Baiterek
+# Partner send-kit — PIF · Mubadala · ADQ
 
 > Три финальных письма под Innovation Partnership ($170M / 70% / CIO-модель).
 > Структура каждого: subject + body + 3 reply-шаблона + send-чеклист.
-> Язык — английский (PIF, Mubadala) и русский (Baiterek).
+> Язык — английский для всех трёх (международные партнёры).
 > **Читай своими глазами перед каждой отправкой. Это черновики, не финал.**
+>
+> ⚠️ **Правило безопасности идей:** никогда не отправлять в государственные
+> или квазигосударственные фонды KZ (Baiterek, QazTech, AIFC) — высокий риск
+> копирования идей без партнёрства. Только международные частные и суверенные
+> фонды, для которых IP-protection является стандартом практики.
 
 ---
 
@@ -225,115 +230,120 @@ Brief: https://aevion.app/partner?ref=mubadala-fu1
 
 ---
 
-## ПИСЬМО 3 — Baiterek / QazTech Ventures (Казахстан)
+## ПИСЬМО 3 — ADQ / Abu Dhabi Developmental Holding (ОАЭ)
 
-> Самый реалистичный первый контакт — ты местный, говоришь по-русски,
-> нет барьеров юрисдикции, государство заинтересовано в нацтехстеке.
+> ADQ — суверенный фонд Абу-Даби ($110B+ AUM), фокус на tech-инфраструктуре
+> и diversification. Работает параллельно с Mubadala, отдельный LP.
+> Прямая синергия: ADQ активно строит digital economy в MENA.
 
-**Subject:** `AEVION — Технологическое партнёрство / $170M / 70% доля / CIO-модель`
+**Subject:** `AEVION Partnership — digital infrastructure play for MENA ($170M / 70%)`
 
-**To:** `info@qaztech.kz` (QazTech Ventures) / `management@baiterek.gov.kz`
-**Alt:** AIFC (Astana International Financial Centre) — `info@aifc.kz` — они коннектят с казфондами
+**To:** через форму adq.ae → «Investment Enquiry» / `invest@adq.ae`
+**Alt:** через ADGM (Abu Dhabi Global Market) ecosystem — они коннектят с ADQ tech team
 
 ```
-Уважаемая команда QazTech Ventures,
+ADQ Investment Team,
 
-AEVION — технологическая компания из Астаны с готовой технической базой
-в пяти доменах: пост-квантовые подписи, AI-маршрутизатор, цифровой банк,
-IP-реестр, платформа для разработчиков. Один основатель, 30+ модулей в
-проде, нулевая выручка. Ищем партнёра с командой и капиталом.
+AEVION is a technology company from Kazakhstan with a production-ready
+foundation across five domains: post-quantum signatures, AI routing,
+digital banking, IP registry, developer platform. One founder, 30+
+live modules, zero revenue today. Seeking an execution partner.
 
-Предложение:
+Partnership structure:
+  $170M total — $110M secondary (founder nets $100M, DIFC 0% CGT) +
+  $60M primary into company.
+  ADQ receives: 70% equity.
+  Founder stays as Chief Innovation Officer: 30% + $2M advisor fee/year.
+  Implied pre-money: ~$275M.
 
-  $170M общий чек:
-  — $110M secondary → основатель получает $100M net (DIFC, 0% CGT)
-  — $60M primary в компанию — найм команды, операции
-  Партнёр получает: 70% компании
-  Основатель остаётся: Chief Innovation Officer, 30%, advisor fee $2M/год
+Why ADQ / MENA fit:
 
-Почему это важно для KZ:
+  1. Digital banking infrastructure
+     AEVION Bank: DIFC-licenseable digital bank, Shariah-compliant
+     structure ready. ADQ's financial services portfolio = natural fit.
+     ARR potential: $200M+ by year 5.
 
-  1. QSign (ML-DSA-65 FIPS 204) — первая в регионе готовая
-     пост-квантовая электронная подпись. Готова стать национальной
-     инфраструктурой e-government. Потенциал: $20-50M/год госконтракт.
+  2. Post-quantum signatures as MENA standard
+     QSign (ML-DSA-65 FIPS 204 GA) — ready now, competition is 12-18
+     months behind. First-mover for UAE / KSA government e-signature
+     infrastructure. National contract potential: $20-100M/year.
 
-  2. AEVION Bank — готовая база для лицензированного цифрового банка
-     в КЗ (лицензия АФК/АРРФР). Потенциал: $200M+ ARR к году 5.
+  3. Developer platform for the region
+     AEVION DevHub — 9 integrations live, zero viable MENA-compliant
+     competitors to Zapier/Make. SMB developer market in UAE/KSA
+     is underserved. ARR potential: $50-150M/year.
 
-  3. QRight (Патентное бюро v2) — IP-реестр с аттестацией в реальном
-     времени. Интеграция с национальным патентным ведомством КЗ —
-     технически готово, нужны GR-связи.
+  4. AI API for government sector
+     QCoreAI (5+ AI providers, 490 tests passing) — last-mile AI
+     for governments where Anthropic/OpenAI have compliance gaps.
 
-  4. Geopolitical position — AEVION работает без западных санкционных
-     ограничений. Для MENA и CIS-рынков это стратегический плюс.
+Year 5 scenario: $490M ARR, $3.9-5.9B valuation. ADQ 70%: $2.7-4.1B.
+ROI: 16-24× on a $170M entry.
 
-Финансовый сценарий: $490M ARR к году 5 → оценка $3.9-5.9B.
-Ваши 70%: $2.7-4.1B. ROI >20x на горизонте 5 лет.
+Full brief + live health-board: https://aevion.app/partner?ref=adq
+30-min call this week?
 
-Детальный брифинг: https://aevion.app/partner
-Готов к звонку в любое удобное время на этой неделе.
-
-С уважением,
-Досымбек Жакия, основатель & CIO @ AEVION
+— Dosymbek Zhakiya, Founder & CIO @ AEVION
 yahiin1978@gmail.com
 ```
 
 ### Reply — POSITIVE
 
 ```
-Благодарю за быстрый ответ.
+Thank you for the quick reply.
 
-Готов к звонку:
-  • [день, время Астана]
-  • [день, время Астана]
-  • [день, время Астана]
+Available for a 30-minute call:
+  • [Day, time UAE (GST)]
+  • [Day, time UAE (GST)]
+  • [Day, time UAE (GST)]
 
-Zoom / очно в Астане — как удобнее.
+Zoom / Teams / in-person Abu Dhabi if preferred.
 
-Для подготовки: https://aevion.app/partner (брифинг, можно распечатать)
-Состояние модулей live: https://aevion.app/transparency
+Before the call:
+  1. https://aevion.app/partner — full brief, printable
+  2. https://aevion.app/transparency — live health-board
 
-— Досымбек
+— Dosymbek
+yahiin1978@gmail.com
 ```
 
 ### Reply — PUSHBACK
 
 ```
-Спасибо за честный ответ.
+Appreciate the honest reply.
 
-Три варианта продолжить без обязательств:
+Three ways to keep the conversation low-commitment:
 
-  1. 90-дневный пилот — Trust $50K / Dev $75K / Financial $100K.
-     Плата засчитывается 100% при будущем партнёрстве.
+  1. 90-day pilot on one pillar (Trust $50K / Dev $75K / Financial $100K).
+     Full fee credited against future partnership.
      https://aevion.app/pilot
 
-  2. Ежеквартальный апдейт — 5 строк о том, что зашипали.
-     Без звонков, отвечаете только если стало актуально.
+  2. Quarterly update — 5-line email, no calls required.
+     Reply only if something becomes relevant.
 
-  3. Связать с другим фондом или институтом внутри Baiterek/QazTech —
-     ваша рекомендация для нас ценна как любая прямая сделка.
+  3. Introduction to a more relevant team within ADQ's portfolio —
+     even a referral is genuinely valuable.
 
-В любом случае — спасибо.
+Thank you either way.
 
-— Досымбек
+— Dosymbek
 ```
 
 ### Reply — SILENCE 30 days
 
+**Subject:** `Re: AEVION Partnership — Q3 checkpoint`
+
 ```
-Тема: Re: AEVION Partnership — квартальный апдейт
+Following up once on the AEVION brief from May 27, 2026.
 
-Возвращаюсь один раз к письму от 27 мая 2026.
+Two verified updates since then:
 
-Два подтверждённых обновления за этот месяц:
+  1. [UPDATE 1 — verifiable fact, e.g. "QSign SDK downloaded by 400+ teams"]
+  2. [UPDATE 2 — verifiable fact]
 
-  1. [ФАКТ 1 — проверяемая цифра, например «QSign SDK скачан 300+ командами»]
-  2. [ФАКТ 2 — проверяемая цифра]
+Brief: https://aevion.app/partner?ref=adq-fu1
 
-Если момент по-прежнему неподходящий — ответ не нужен.
-Брифинг: https://aevion.app/partner?ref=baiterek-fu1
-
-— Досымбек
+— Dosymbek
 ```
 
 ---
@@ -342,12 +352,13 @@ Zoom / очно в Астане — как удобнее.
 
 - [ ] Прочитал письмо вслух — нет запинок
 - [ ] Дата отправки: **вторник, среда или четверг**
-- [ ] Время: 8:00-10:00 по времени получателя (Эр-Рияд +3, Абу-Даби +4, Астана +5)
+- [ ] Время: 8:00-10:00 по времени получателя (Эр-Рияд +3, Абу-Даби +4)
 - [ ] Plain-text mode в Gmail — никакого HTML, никаких подписей с лого
 - [ ] Нет attachments — всё по ссылке aevion.app/partner
 - [ ] Ссылка `aevion.app/partner` работает (проверить перед отправкой)
 - [ ] Записал дату отправки в таблицу
 - [ ] Три временных слота готовы для reply-шаблона POSITIVE
+- [ ] ⚠️ Не отправлять в KZ госструктуры (Baiterek, QazTech, AIFC) — риск кражи идей
 
 ---
 
@@ -355,18 +366,26 @@ Zoom / очно в Астане — как удобнее.
 
 | День | Действие |
 |------|---------|
-| **D-0 (сегодня)** | Отправить **Baiterek** — ближайший, понятный рынок, русскоязычный |
-| **D+3** | Отправить **Mubadala** (DIFC angle) |
-| **D+7** | Отправить **PIF/Sanabil** (Vision 2030 angle) |
-| **D+7-14** | Если Baiterek ответил → фокус на нём, остальные пауза |
+| **D-0 (сегодня)** | Отправить **Mubadala** — DIFC прямая синергия с Banking + QSign |
+| **D+3** | Отправить **ADQ** — второй UAE sovereign fund, digital infra focus |
+| **D+7** | Отправить **PIF/Sanabil** — Vision 2030 angle (самый крупный) |
+| **D+7-14** | Если Mubadala ответил → фокус на нём, остальные пауза |
 | **D+28-30** | Follow-up по молчащим (шаблон Silence, по одному) |
-| **D+45** | Если ноль ответов — пересмотреть subject/первый абзац |
+| **D+45** | Если ноль ответов — пересмотреть subject / попробовать SoftBank Vision Fund |
 
-**Почему Baiterek первым:**
-- Ты местный — нет языкового/культурного барьера
-- Казахстанский госфонд заинтересован в нацтехстеке
-- QSign как e-government инфраструктура = прямой интерес
-- Самый короткий путь до первого звонка
+**Почему Mubadala первым:**
+- DIFC jurisdiction = их home turf (это плюс, а не риск)
+- AEVION Bank + DIFC license = прямой ответ на их портфельную стратегию
+- UAE финтех регулятор (CBUAE) активно смотрит на post-quantum cryptography
+- После positive reply — ADQ и PIF видят, что уже есть интерес → создаёт urgency
+
+**Почему НЕ KZ государственные структуры:**
+В Казахстане существует задокументированный риск того, что государственные или
+квазигосударственные структуры используют pitch-материалы как roadmap для
+собственной разработки без партнёрства с автором. Идеи не защищены до
+подписания NDA + term sheet с эскроу-условиями. С международными фондами
+(PIF, Mubadala, ADQ) этот риск минимален — они профессиональные инвесторы,
+их reputation зависит от честности сделок.
 
 ---
 

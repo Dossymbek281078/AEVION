@@ -370,7 +370,10 @@ export default function VoiceCoach({
         await playTTS(text, ctrl.signal);
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return;
-        setErrorMsg((e as Error)?.message ?? 'Ошибка коуча');
+        const msg = (e as Error)?.message ?? '';
+        // Don't surface network/API errors as scary text — just go silent
+        if (msg.includes('404') || msg.includes('fetch') || msg.includes('network') || msg.toLowerCase().includes('failed')) return;
+        setErrorMsg('Коуч временно недоступен');
       } finally {
         setIsLoadingComment(false);
       }

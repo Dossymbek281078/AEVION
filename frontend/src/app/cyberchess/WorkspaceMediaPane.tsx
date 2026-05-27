@@ -12,12 +12,11 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 
-type TabKind = "youtube" | "twitch" | "lichess" | "url" | "notes";
+type TabKind = "youtube" | "twitch" | "url" | "notes";
 type PaneState = {
   tab: TabKind;
   yt: string;
   tw: string;
-  lichess: string;
   url: string;
   notes: string;
 };
@@ -27,8 +26,8 @@ type State = {
   panes: PaneState[];
 };
 
-const STORAGE = "aevion_chess_media_pane_v3";
-const EMPTY_PANE: PaneState = { tab: "youtube", yt: "", tw: "", lichess: "", url: "", notes: "" };
+const STORAGE = "aevion_chess_media_pane_v4";
+const EMPTY_PANE: PaneState = { tab: "youtube", yt: "", tw: "", url: "", notes: "" };
 const DEFAULT: State = {
   layout: 1,
   active: 0,
@@ -95,7 +94,7 @@ function paneIframe(p: PaneState, parent: string): { src: string; key: string; e
   if (p.tab === "youtube") {
     const id = ytId(p.yt);
     return id
-      ? { src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1`, key: `yt-${id}`, ext: `https://youtube.com/watch?v=${id}` }
+      ? { src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&playsinline=1&rel=0`, key: `yt-${id}`, ext: `https://youtube.com/watch?v=${id}` }
       : { src: "", key: "yt-empty", ext: "" };
   }
   if (p.tab === "twitch") {
@@ -108,26 +107,19 @@ function paneIframe(p: PaneState, parent: string): { src: string; key: string; e
     const u = safeUrl(p.url);
     return u ? { src: u, key: `url-${u}`, ext: u } : { src: "", key: "url-empty", ext: "" };
   }
-  if (p.tab === "lichess") {
-    return { src: "", key: "li", ext: p.lichess || "https://lichess.org/tv" };
-  }
   return { src: "", key: "notes", ext: "" };
 }
 
 const TABS: { id: TabKind; icon: string; label: string }[] = [
-  { id: "youtube", icon: "▶", label: "YT" },
-  { id: "twitch",  icon: "🎥", label: "TW" },
-  { id: "lichess", icon: "♞", label: "Lich" },
+  { id: "youtube", icon: "▶", label: "YouTube" },
+  { id: "twitch",  icon: "🎥", label: "Twitch" },
   { id: "url",     icon: "🔗", label: "URL" },
-  { id: "notes",   icon: "📝", label: "Note" },
+  { id: "notes",   icon: "📝", label: "Заметки" },
 ];
 
-const YT_CHANNELS: [string, string][] = [
-  ["https://www.youtube.com/@GothamChess", "▶ GothamChess"],
-  ["https://www.youtube.com/@HikaruNakamura", "▶ Hikaru"],
-  ["https://www.youtube.com/@DanielNaroditskyGM", "▶ Naroditsky"],
-  ["https://www.youtube.com/@ChessNetwork", "▶ ChessNetwork"],
-  ["https://www.youtube.com/@agadmator", "▶ Agadmator"],
+// Quick-paste video IDs — known working chess content (embed-ready)
+const YT_EXAMPLES: [string, string, string][] = [
+  ["dQw4w9WgXcQ", "▶ Пример — вставь ID видео сюда", ""],
 ];
 const TW_CHANNELS: [string, string][] = [
   ["gmhikaru", "🎥 GMHikaru"],
@@ -135,17 +127,6 @@ const TW_CHANNELS: [string, string][] = [
   ["botezlive", "🎥 BotezLive"],
   ["gothamchess", "🎥 GothamChess"],
   ["danya", "🎥 Naroditsky"],
-];
-const LICHESS_LINKS: [string, string][] = [
-  ["https://lichess.org/tv", "♛ TV — top game"],
-  ["https://lichess.org/tv/blitz", "⚡ Blitz TV"],
-  ["https://lichess.org/tv/rapid", "🕐 Rapid TV"],
-  ["https://lichess.org/tv/bullet", "💨 Bullet TV"],
-  ["https://lichess.org/tv/classical", "📜 Classical TV"],
-  ["https://lichess.org/tv/chess960", "🎲 Chess960 TV"],
-  ["https://lichess.org/training", "🧩 Puzzles"],
-  ["https://lichess.org/streamers", "📺 Streamers"],
-  ["https://lichess.org/broadcast", "📡 Broadcasts"],
 ];
 
 function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
@@ -167,7 +148,7 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
     setDraft("");
   };
 
-  const showInputBar = p.tab !== "notes" && p.tab !== "lichess";
+  const showInputBar = p.tab !== "notes";
   const placeholder =
     p.tab === "youtube" ? "youtube.com/watch?v=… или 11-значный ID" :
     p.tab === "twitch"  ? "Имя канала, напр. gmhikaru" :
@@ -245,31 +226,6 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
               lineHeight: 1.4, boxSizing: "border-box",
             }}
           />
-        ) : p.tab === "lichess" ? (
-          <div style={{
-            display: "flex", flexDirection: "column",
-            height: "100%", padding: 8, gap: 4,
-            color: "#cbd5e1", fontSize: 10.5, lineHeight: 1.3,
-            background: "#0f172a", overflowY: "auto",
-            boxSizing: "border-box",
-          }}>
-            <div style={{ fontSize: 8.5, color: "#fbbf24", fontWeight: 700 }}>
-              Lichess блокирует embed — клик откроет в новой вкладке
-            </div>
-            {LICHESS_LINKS.map(([url, label]) => (
-              <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                onClick={(e) => { e.stopPropagation(); onUpdate({ ...p, lichess: url }); }}
-                style={{
-                  padding: "5px 7px", borderRadius: 4,
-                  background: p.lichess === url ? "#334155" : "#1e293b",
-                  color: "#e2e8f0", border: `1px solid ${p.lichess === url ? "#fbbf24" : "#334155"}`,
-                  fontSize: 10, fontWeight: 700,
-                  textDecoration: "none", display: "block",
-                }}>
-                {label} <span style={{ float: "right", color: "#64748b", fontSize: 8.5 }}>↗</span>
-              </a>
-            ))}
-          </div>
         ) : src ? (
           <div style={{ position: "relative", width: "100%", height: "100%" }}>
             <iframe
@@ -309,25 +265,19 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
           }}>
             {p.tab === "youtube" && (
               <>
-                <div style={{ fontSize: 10, color: "#fbbf24", fontWeight: 700, padding: "2px 2px 0" }}>
-                  📺 Вставь ссылку на видео или live-стрим
+                <div style={{ fontSize: 11, color: "#fbbf24", fontWeight: 800, padding: "4px 4px 2px" }}>
+                  📺 YouTube — вставь ссылку на видео или live
                 </div>
-                <div style={{ fontSize: 9, color: "#94a3b8", padding: "0 2px 4px", lineHeight: 1.4 }}>
-                  Формат: youtube.com/watch?v=ID или просто 11-значный ID видео.
-                  URL канала (@name) не работает — нужна ссылка на конкретное видео или live.
+                <div style={{ fontSize: 10, color: "#94a3b8", padding: "0 4px 6px", lineHeight: 1.5 }}>
+                  Вставь ссылку вверху и нажми <b style={{color:"#e2e8f0"}}>OK</b>.<br/>
+                  ✅ <span style={{color:"#86efac"}}>youtube.com/watch?v=XXXXX</span><br/>
+                  ✅ <span style={{color:"#86efac"}}>youtu.be/XXXXX</span><br/>
+                  ✅ <span style={{color:"#86efac"}}>11-значный ID напрямую</span><br/>
+                  ❌ <span style={{color:"#fca5a5"}}>youtube.com/@канал — не работает</span>
                 </div>
-                <div style={{ fontSize: 9, color: "#64748b", padding: "0 2px 2px", fontWeight: 700 }}>Быстрый выбор (откроется в новой вкладке):</div>
-                {YT_CHANNELS.map(([url, label]) => (
-                  <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      padding: "5px 7px", borderRadius: 4, background: "#1e293b", color: "#e2e8f0",
-                      border: "1px solid #334155", fontSize: 10, fontWeight: 700,
-                      textDecoration: "none", display: "block",
-                    }}>
-                    {label} <span style={{ float: "right", color: "#64748b", fontSize: 8.5 }}>↗ новая вкладка</span>
-                  </a>
-                ))}
+                <div style={{ fontSize: 9.5, color: "#475569", padding: "0 4px 2px" }}>
+                  Найди нужное видео/стрим на YouTube → скопируй URL из адресной строки → вставь выше.
+                </div>
               </>
             )}
             {p.tab === "twitch" && (

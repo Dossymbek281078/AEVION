@@ -119,8 +119,8 @@ const CLASSIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "classic-lichess", name: "Lichess стиль", emoji: "♞", category: "classic",
-    desc: "Знакомый сухой клац как у lichess.org.",
+    id: "classic-lichess", name: "Классический сухой", emoji: "♞", category: "classic",
+    desc: "Чёткий сухой клац — минималистичный стиль.",
     events: {
       move:    [noiseMove(1600, 0.20, 0.05)],
       capture: [noiseMove(800, 0.30, 0.08), noiseMove(1200, 0.14, 0.05)],

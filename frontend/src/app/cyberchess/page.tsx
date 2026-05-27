@@ -415,7 +415,8 @@ const BG_PRESETS: BgPreset[] = [
 
 type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string;premium?:string};
 const BOARD_THEMES: BoardTheme[] = [
-  {name:"Classic",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
+  {name:"AEVION",light:"#e8e0d5",dark:"#5d8a6e",border:"#4a7a5e",icon:"⚡"},
+  {name:"Янтарь",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
   {name:"Emerald",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
   {name:"Ocean",light:"#dee3e6",dark:"#5b8baf",border:"#4a7a9b",icon:"🌊"},
   {name:"Purple",light:"#e8dff0",dark:"#9370ab",border:"#7b5e99",icon:"💜"},
@@ -4618,7 +4619,7 @@ export default function CyberChessPage(){
           юзер: «лишние кнопки сверху». Навигация на главном экране — через hero-карточки
           PLY/PZL/MST. Эта полоска появляется когда юзер уже внутри Puzzles/Coach/Analysis
           и ему нужен путь обратно. */}
-      {!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(()=>{
+      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(()=>{
         const switchTab=(t:"play"|"puzzles"|"analysis"|"coach")=>{
           const fromPuzzle=tab==="puzzles"&&pzCurrent;
           sTab(t);

@@ -23,12 +23,14 @@
 ```
 Sanabil Investment Team,
 
-AEVION is a technology company from Kazakhstan with a completed foundation
-across five domains: post-quantum signatures, AI routing, digital banking,
-IP registry, developer platform. One founder, 30+ live modules, zero revenue.
+Code is replicable. The person who generated 30+ production modules across
+five domains in 6 months — cannot be replicated. That's AEVION.
+
+One founder. 30+ live modules across post-quantum signatures, AI routing,
+digital banking, IP registry, and developer platform. Zero revenue.
 
 This is not a pitch for capital to continue building. It's a partnership
-offer where you bring the execution team and we bring the ideas.
+offer where you bring the execution team and we bring the thinking.
 
 What Sanabil gets:
   70% of AEVION for $170M total
@@ -137,6 +139,9 @@ yahiin1978@gmail.com
 
 ```
 Mubadala Investment Company,
+
+Code can be replicated. The founder who built 30+ production modules in 6 months
+cannot. That's what you're investing in.
 
 AEVION is a Kazakhstan-based technology company with a ready foundation
 in digital finance, post-quantum trust infrastructure, and developer tooling.

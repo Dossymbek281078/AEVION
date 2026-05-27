@@ -244,10 +244,15 @@ Brief: https://aevion.app/partner?ref=mubadala-fu1
 ```
 ADQ Investment Team,
 
-AEVION is a technology company from Kazakhstan with a production-ready
-foundation across five domains: post-quantum signatures, AI routing,
-digital banking, IP registry, developer platform. One founder, 30+
-live modules, zero revenue today. Seeking an execution partner.
+One question before the brief: can you build something like QSign yourself?
+Yes. Any competent team could, in 3-6 months with AI assistance.
+
+The question isn't "can you build QSign." The question is: who builds
+the next QSign while your team is still finishing this one?
+
+AEVION's founder generated 30+ production modules across five domains in 6 months.
+That's not development velocity — that's ideation velocity. Zero revenue today.
+Seeking an execution partner.
 
 Partnership structure:
   $170M total — $110M secondary (founder nets $100M, DIFC 0% CGT) +

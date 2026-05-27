@@ -75,23 +75,24 @@ export default function PartnerPage() {
       {/* HERO */}
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "100px 24px 80px" }}>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.28em", color: "#10b981", textTransform: "uppercase", marginBottom: 20 }}>
-          Innovation Partnership · Not Acquisition · $100M Net to Founder
+          Innovation Partnership · $170M · 70% equity · CIO stays
         </div>
-        <h1 style={{ fontSize: "clamp(38px, 6.5vw, 76px)", fontWeight: 900, lineHeight: 1.04, letterSpacing: "-0.03em", marginBottom: 24 }}>
-          Идеи — у нас.<br />
-          Команда и капитал — у вас.<br />
+        <h1 style={{ fontSize: "clamp(36px, 6vw, 72px)", fontWeight: 900, lineHeight: 1.04, letterSpacing: "-0.03em", marginBottom: 24 }}>
+          Код копируется.<br />
           <span style={{ background: "linear-gradient(135deg, #10b981, #3b82f6, #a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            Результат — общий.
+            Мышление — нет.
           </span>
         </h1>
-        <p style={{ fontSize: 20, color: "#cbd5e1", maxWidth: 800, lineHeight: 1.6, marginBottom: 16 }}>
-          AEVION — инновационная лаборатория с готовой технической базой (30+ модулей, post-quantum подписи, AI-маршрутизатор, цифровой банк, IP-реестр).
-          Один основатель. Ноль выручки. <strong style={{ color: "#f8fafc" }}>Идеи, которые ни у кого больше нет.</strong>
+        <p style={{ fontSize: 20, color: "#cbd5e1", maxWidth: 820, lineHeight: 1.6, marginBottom: 16 }}>
+          Любой технический продукт воспроизводим. Вопрос в другом: кто придумает
+          следующий QSign, пока конкуренты копируют этот?
+          <strong style={{ color: "#f8fafc" }}> За 6 месяцев один основатель создал 30+ продуктов в 5 доменах.
+          Это не скорость разработки — это скорость мышления. Она не нанимается.</strong>
         </p>
-        <p style={{ fontSize: 18, color: "#94a3b8", maxWidth: 780, lineHeight: 1.6, marginBottom: 36 }}>
-          Предложение: вы вкладываете $170M и приводите команду 50-100 инженеров.
-          Получаете 70% компании. Основатель остаётся Chief Innovation Officer с 30% —
-          и продолжает генерировать следующую волну идей.
+        <p style={{ fontSize: 17, color: "#94a3b8", maxWidth: 780, lineHeight: 1.6, marginBottom: 36 }}>
+          Предложение: вы вкладываете $170M и приводите команду инженеров.
+          Получаете 70% компании + доступ к непрерывному потоку идей от CIO.
+          Мы вместе строим то, что по отдельности ни вы, ни я не построим за те же деньги и время.
         </p>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 40 }}>
           <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20inquiry" style={btnPrimary}>
@@ -126,24 +127,24 @@ export default function PartnerPage() {
             Почему эта модель лучше acquisition
           </div>
           <h2 style={{ fontSize: "clamp(26px, 4vw, 42px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 36 }}>
-            Идеи — дефицитный ресурс. Инженеров — можно нанять.
+            Вы платите не за код. За человека, который думает иначе.
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
             {[
               {
-                t: "Что вы получаете", d: "70% компании + непрерывный поток идей от основателя. Не разовая покупка — живой CIO, который думает иначе.",
+                t: "Что вы покупаете", d: "Не код — мышление. 30+ продуктов за 6 месяцев = доказательство скорости идей. Следующие 30 придут, пока конкуренты копируют первые 30.",
                 accent: "#10b981",
               },
               {
-                t: "Что вы экономите", d: "18 месяцев разработки и $15-30M на создание технической базы — уже сделано. QSign FIPS 204 в проде, единственный в регионе.",
+                t: "Что уже защищено", d: "Авторское право (179 стран, Бернская конвенция), prior art через QRight, коммерческая тайна через QShield. Юридически — сегодня.",
                 accent: "#3b82f6",
               },
               {
-                t: "Почему основатель остаётся", d: "30% доли + CIO-роль + $2M advisor fee/год. При оценке $4B в год 5 — его 30% = $1.2B. Это сильная мотивация.",
+                t: "Почему основатель остаётся", d: "30% доли + $2M/год advisor fee + CIO-роль. При $4B оценке в году 5 — его 30% = $1.2B. Уходить невыгодно ни ему, ни вам.",
                 accent: "#a855f7",
               },
               {
-                t: "Финансовая безопасность", d: "DIFC Dubai: 0% capital gains, английское право, DIFC Courts. $100M net — через эскроу, независимый банк, при закрытии сделки.",
+                t: "Финансовая безопасность", d: "DIFC Dubai: 0% CGT, английское право, DIFC Courts. $100M net основателю — через эскроу, независимый банк, при закрытии сделки.",
                 accent: "#f59e0b",
               },
             ].map(c => (

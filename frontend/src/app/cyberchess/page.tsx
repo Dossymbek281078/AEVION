@@ -1858,11 +1858,11 @@ export default function CyberChessPage(){
       }
       if((e.ctrlKey||e.metaKey)&&(e.key==="="||e.key==="+")){
         e.preventDefault();
-        sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))));
+        sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))));
       }
       if((e.ctrlKey||e.metaKey)&&e.key==="-"){
         e.preventDefault();
-        sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))));
+        sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))));
       }
     };
     window.addEventListener("keydown",h);
@@ -6299,8 +6299,9 @@ export default function CyberChessPage(){
             <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
               {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} onClick={()=>sBoardTheme(i)} style={{width:14,height:14,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:"2px solid transparent",background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.25)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
-              <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface1,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
-              <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.05).toFixed(2))))} style={{width:18,height:18,borderRadius:4,border:"none",background:CC.surface1,color:CC.textMute,fontSize:13,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+              <button title="Уменьшить доску (Ctrl+-)" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:22,height:22,borderRadius:4,border:"none",background:CC.surface1,color:CC.text,fontSize:14,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+              <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
+              <button title="Увеличить доску (Ctrl+=)" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:22,height:22,borderRadius:4,border:"none",background:CC.surface1,color:CC.text,fontSize:14,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
             </div>
           </div>
 
@@ -6382,6 +6383,7 @@ export default function CyberChessPage(){
           <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Flip</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>New Game</Btn>
+            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Mirror Mode выключен","info");}else{sMirrorActive(true);showToast("🪞 Mirror Mode — AI играет как ты","info");}}} title="Mirror Mode — AI копирует твой стиль">🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -12858,9 +12860,9 @@ ${question.trim()}`;
       surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
       text={CC.text} textDim={CC.textDim} accent={CC.brand}
     />
-    {/* Mirror Mode floating panel — bottom-left when play tab is active */}
-    {on&&!setup&&tab==="play"&&(
-      <div style={{position:"fixed",bottom:80,left:16,zIndex:40}}>
+    {/* Mirror Mode floating panel — only when mirror is actually active */}
+    {on&&!setup&&tab==="play"&&mirrorActive&&(
+      <div style={{position:"fixed",bottom:56,right:16,zIndex:40}}>
         <MirrorModePanel
           profile={mirrorProfile}
           active={mirrorActive}

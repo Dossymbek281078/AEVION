@@ -198,6 +198,13 @@ export default function VoiceCoach({
   const [isLoadingComment, setIsLoadingComment] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('cc_voice_coach_collapsed') !== '0'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('cc_voice_coach_collapsed', collapsed ? '1' : '0'); } catch {}
+  }, [collapsed]);
+
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [showChat, setShowChat] = useState<boolean>(false);
   const [chatTurns, setChatTurns] = useState<ChatTurn[]>([]);
@@ -649,6 +656,36 @@ export default function VoiceCoach({
     fontSize: 12,
   };
 
+  if (collapsed) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Развернуть AI Voice Coach"
+        onClick={() => setCollapsed(false)}
+        onKeyDown={(e) => e.key === 'Enter' && setCollapsed(false)}
+        style={{
+          position: 'fixed', right: 16, bottom: 16, zIndex: 9999,
+          background: 'rgba(15,18,28,0.88)', color: '#e6edf3',
+          border: '1px solid rgba(99,130,200,0.35)',
+          borderRadius: 8, backdropFilter: 'blur(8px)',
+          padding: '5px 12px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 12, fontWeight: 700,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+          userSelect: 'none',
+        }}
+      >
+        <span style={{ fontSize: 14 }}>🎙️</span>
+        <span style={{ color: '#9aa4b2' }}>AI Коуч</span>
+        {isSpeaking && <span style={{ color: '#7ee787', fontSize: 11 }}>🔊 говорит</span>}
+        {isLoadingComment && <span style={{ color: '#9aa4b2', fontSize: 11 }}>⏳</span>}
+        {muted && <span style={{ color: '#6b7280', fontSize: 10 }}>MUTE</span>}
+        <span style={{ color: '#4b5563', fontSize: 10, marginLeft: 2 }}>▲</span>
+      </div>
+    );
+  }
+
   return (
     <div style={panelStyle} role="region" aria-label="AI Voice Coach">
       <div style={headerStyle}>
@@ -692,6 +729,14 @@ export default function VoiceCoach({
             title={muted ? 'Включить голос' : 'Выключить голос'}
           >
             {muted ? 'Mute' : 'On'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            style={btnBase}
+            title="Свернуть"
+          >
+            ▼
           </button>
         </div>
       </div>

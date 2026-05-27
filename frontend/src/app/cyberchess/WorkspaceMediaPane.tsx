@@ -136,7 +136,11 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
   onSelect: () => void;
   onUpdate: (next: PaneState) => void;
 }) {
-  const [draft, setDraft] = useState("");
+  const currentTabVal = (tab: TabKind) =>
+    tab === "youtube" ? p.yt : tab === "twitch" ? p.tw : tab === "url" ? p.url : "";
+  const [draft, setDraft] = useState(() => currentTabVal(p.tab));
+  // Sync draft when tab or saved value changes
+  useEffect(() => { setDraft(currentTabVal(p.tab)); }, [p.tab, p.yt, p.tw, p.url]); // eslint-disable-line react-hooks/exhaustive-deps
   const parent = typeof window !== "undefined" ? window.location.hostname : "localhost";
   const { src, key, ext } = paneIframe(p, parent);
 
@@ -356,7 +360,7 @@ export default function WorkspaceMediaPane() {
 
   return (
     <div style={{
-      width: "min(640px, 44vw)", minWidth: 360, maxWidth: 760, alignSelf: "stretch",
+      width: "min(300px, 22vw)", minWidth: 240, maxWidth: 360, alignSelf: "stretch",
       display: "flex", flexDirection: "column",
       borderRadius: 10, overflow: "hidden",
       background: "#0f172a", color: "#e2e8f0",

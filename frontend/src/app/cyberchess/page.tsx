@@ -653,7 +653,7 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
-  const baseBoardPx=Math.max(320,Math.min(720,vhPx-200,vwPx-360));
+  const baseBoardPx=Math.max(300,Math.min(720,vhPx-400,vwPx-360));
   const boardPx=Math.round(baseBoardPx*boardScale);
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
@@ -4347,7 +4347,7 @@ export default function CyberChessPage(){
     backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
   } : {};
   const hasBg=bgPreset!=="none"&&!!bgPreset;
-  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,minHeight:"100vh",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
+  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,height:"100vh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
@@ -4694,7 +4694,7 @@ export default function CyberChessPage(){
           else if(r===streakType)streak++;
           else break;
         }
-        return<div style={{marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
 
           {/* ─── Session stats pill strip ─── */}
           {totalGames>0&&<div style={{
@@ -5691,7 +5691,7 @@ export default function CyberChessPage(){
       })()}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flexShrink:0}}>

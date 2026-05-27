@@ -825,7 +825,8 @@ export default function CyberChessPage(){
   const[savedGames,sSavedGames]=useState<SavedGame[]>([]);
   const[qrDataUrl,sQrDataUrl]=useState<string|null>(null);
   const[moveTooltip,sMoveTooltip]=useState<{ply:number;x:number;y:number}|null>(null);
-  const[engineHintArrow,sEngineHintArrow]=useState<{from:string;to:string}|null>(null);
+  const[engineHintArrow,sEngineHintArrow]=useState<{from:string;to:string;san:string;fen:string}|null>(null);
+  const[engineHintLoading,sEngineHintLoading]=useState(false);
   const[gamesFilter,sGamesFilter]=useState<string>("all");
   // Library v2: full-text search across opening + AI level + result + sort modes
   const[gamesSearch,sGamesSearch]=useState<string>("");
@@ -7815,7 +7816,7 @@ export default function CyberChessPage(){
                       {i+1}
                     </span>
                     {/* White move */}
-                    <span onMouseEnter={e=>{if(white)previewMove(wIdx);if(analysis[wIdx])sMoveTooltip({ply:wIdx,x:e.clientX,y:e.clientY});if(tab==="analysis"&&white&&fenHist[wIdx+1]&&sfR.current?.ready()){sEngineHintArrow(null);sfR.current.go(fenHist[wIdx+1],10,(f,t)=>{if(f&&t)sEngineHintArrow({from:f,to:t});});}}} onMouseLeave={()=>{sMoveTooltip(null);sEngineHintArrow(null);}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
+                    <span onMouseEnter={e=>{if(white)previewMove(wIdx);if(analysis[wIdx])sMoveTooltip({ply:wIdx,x:e.clientX,y:e.clientY});if(tab==="analysis"&&white&&fenHist[wIdx+1]&&sfR.current?.ready()){const hf=fenHist[wIdx+1];sEngineHintArrow(null);sEngineHintLoading(true);sfR.current.go(hf,10,(f,t,promo)=>{sEngineHintLoading(false);if(f&&t){try{const ch=new Chess(hf);const mv=ch.move({from:f as Square,to:t as Square,...(promo?{promotion:promo as PieceSymbol}:{})});sEngineHintArrow({from:f,to:t,san:mv?.san||f+t,fen:hf});}catch{sEngineHintArrow({from:f,to:t,san:f+t,fen:hf});}}});}}} onMouseLeave={()=>{sMoveTooltip(null);sEngineHintArrow(null);sEngineHintLoading(false);}} onClick={()=>{if(white)commitMove(wIdx)}} onContextMenu={e=>openAnnot(wIdx,e)}
                       onDoubleClick={e=>{if(tab!=="analysis"||!white)return;e.preventDefault();e.stopPropagation();sCommentEditPly(commentEditPly===wIdx?null:wIdx);sCommentEditVal(moveComments[wIdx]||"");}}
                       title={undefined}
                       style={{
@@ -7844,7 +7845,7 @@ export default function CyberChessPage(){
                       </span>}
                     </span>
                     {/* Black move */}
-                    <span onMouseEnter={e=>{if(black)previewMove(bIdx);if(analysis[bIdx])sMoveTooltip({ply:bIdx,x:e.clientX,y:e.clientY});if(tab==="analysis"&&black&&fenHist[bIdx+1]&&sfR.current?.ready()){sEngineHintArrow(null);sfR.current.go(fenHist[bIdx+1],10,(f,t)=>{if(f&&t)sEngineHintArrow({from:f,to:t});});}}} onMouseLeave={()=>{sMoveTooltip(null);sEngineHintArrow(null);}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
+                    <span onMouseEnter={e=>{if(black)previewMove(bIdx);if(analysis[bIdx])sMoveTooltip({ply:bIdx,x:e.clientX,y:e.clientY});if(tab==="analysis"&&black&&fenHist[bIdx+1]&&sfR.current?.ready()){const hf=fenHist[bIdx+1];sEngineHintArrow(null);sEngineHintLoading(true);sfR.current.go(hf,10,(f,t,promo)=>{sEngineHintLoading(false);if(f&&t){try{const ch=new Chess(hf);const mv=ch.move({from:f as Square,to:t as Square,...(promo?{promotion:promo as PieceSymbol}:{})});sEngineHintArrow({from:f,to:t,san:mv?.san||f+t,fen:hf});}catch{sEngineHintArrow({from:f,to:t,san:f+t,fen:hf});}}});}}} onMouseLeave={()=>{sMoveTooltip(null);sEngineHintArrow(null);sEngineHintLoading(false);}} onClick={()=>{if(black)commitMove(bIdx)}} onContextMenu={e=>openAnnot(bIdx,e)}
                       onDoubleClick={e=>{if(tab!=="analysis"||!black)return;e.preventDefault();e.stopPropagation();sCommentEditPly(commentEditPly===bIdx?null:bIdx);sCommentEditVal(moveComments[bIdx]||"");}}
                       title={undefined}
                       style={{
@@ -12772,6 +12773,14 @@ ${question.trim()}`;
         </div>}
         {mt!=null&&<div style={{color:"#878481",display:"flex",justifyContent:"space-between"}}>
           <span>Время</span><span style={{color:"#bababa",fontFamily:"ui-monospace,monospace",fontWeight:700}}>{mt<10000?(mt/1000).toFixed(1)+"s":Math.round(mt/1000)+"s"}</span>
+        </div>}
+        {(ev.quality==="blunder"||ev.quality==="mistake")&&<div style={{marginTop:5,paddingTop:5,borderTop:"1px solid rgba(255,255,255,0.08)"}}>
+          <div style={{color:"#878481",display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+            <span>🔮 движок</span>
+            {engineHintArrow&&engineHintArrow.fen===fenHist[moveTooltip.ply+1]
+              ?<span style={{color:"#06b6d4",fontFamily:"ui-monospace,monospace",fontWeight:900,fontSize:12}}>{engineHintArrow.san}</span>
+              :<span style={{color:"#5d5b59",fontFamily:"ui-monospace,monospace",animation:engineHintLoading?"cc-dots 1.2s ease-in-out infinite":undefined}}>{engineHintLoading?"…":"—"}</span>}
+          </div>
         </div>}
       </div>;
     })()}

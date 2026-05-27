@@ -162,26 +162,31 @@ export default function PartnerPage() {
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#94a3b8", textTransform: "uppercase", marginBottom: 16 }}>
           Проверьте прямо сейчас — без НДА, без нашего слова
         </div>
-        <h2 style={{ fontSize: "clamp(24px, 3.5vw, 38px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 28 }}>
-          Всё, что мы заявляем — верифицируется за 5 минут.
+        <h2 style={{ fontSize: "clamp(24px, 3.5vw, 38px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 12 }}>
+          Это не готовые продукты. Это доказательства скорости мышления.
         </h2>
+        <p style={{ fontSize: 16, color: "#94a3b8", marginBottom: 28, lineHeight: 1.6, maxWidth: 780 }}>
+          Каждый модуль — MVP: концепция подтверждена, фундамент заложен, polish — работа вашей команды.
+          Правильный вопрос не «готово ли это прямо сейчас», а
+          {" "}<strong style={{ color: "#f8fafc" }}>«что ваша команда сделает из этого за 6 месяцев?»</strong>
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginBottom: 24 }}>
           {[
-            { label: "Сыграть против AI (Stockfish 18)", href: "https://aevion.app/cyberchess", note: "Полноценная игра, работает в браузере", color: "#10b981" },
-            { label: "Health-board всех модулей", href: "https://aevion.app/transparency", note: "Daily smoke 24/24, live статусы", color: "#3b82f6" },
-            { label: "Учредительный документ v1", href: "https://aevion.app/constitution", note: "QSign-атестация, AI-советник, 3 языка", color: "#8b5cf6" },
-            { label: "30+ модулей в JSON", href: "https://aevion-production-a70c.up.railway.app/api/aevion/registry", note: "GET /api/aevion/registry → полный реестр", color: "#f59e0b" },
-            { label: "OpenAPI 3.1 спецификация", href: "https://aevion-production-a70c.up.railway.app/api/openapi.json", note: "Все задокументированные endpoints", color: "#ec4899" },
-            { label: "AEVION Bank — 30+ экранов", href: "https://aevion.app/bank", note: "Banking-grade UI — без команды", color: "#06b6d4" },
+            { label: "130+ PR · 500+ коммитов на GitHub", href: "https://github.com/Dossymbek281078/AEVION", note: "Объём работы одного человека — верифицируется по git log", color: "#10b981" },
+            { label: "GET /api/aevion/registry", href: "https://aevion-production-a70c.up.railway.app/api/aevion/registry", note: "JSON реестр 30+ модулей с реальными backend-ами", color: "#3b82f6" },
+            { label: "QSign v2 — postquantum подпись", href: "https://aevion.app/qsign", note: "ML-DSA-65 FIPS 204 в production — единственный в регионе", color: "#8b5cf6" },
+            { label: "Constitution v1 — атестация", href: "https://aevion.app/constitution", note: "Реальный документ с QSign-envelope, AI-советник работает", color: "#f59e0b" },
+            { label: "Transparency board", href: "https://aevion.app/transparency", note: "Daily smoke 24/24 — ничего не скрыто", color: "#ec4899" },
+            { label: "OpenAPI 3.1 spec", href: "https://aevion-production-a70c.up.railway.app/api/openapi.json", note: "Все задокументированные endpoints backend-а", color: "#06b6d4" },
           ].map(item => (
-            <a key={item.label} href={item.href} target="_blank" rel="noopener" style={{ padding: "18px 20px", background: "rgba(255,255,255,0.03)", border: `1px solid ${item.color}30`, borderRadius: 16, textDecoration: "none", display: "flex", flexDirection: "column", gap: 6, transition: "border-color 200ms" }}>
+            <a key={item.label} href={item.href} target="_blank" rel="noopener" style={{ padding: "18px 20px", background: "rgba(255,255,255,0.03)", border: `1px solid ${item.color}30`, borderRadius: 16, textDecoration: "none", display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: item.color }}>↗ {item.label}</div>
               <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>{item.note}</div>
             </a>
           ))}
         </div>
         <div style={{ padding: 18, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
-          Полный Tech DD пакет (curl-команды, архитектура, честная оценка каждого продукта, GitHub):
+          Полный Tech DD пакет — честный статус каждого продукта, curl-команды, архитектура, что именно нужна команда для запуска каждого:
           {" "}<a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Tech%20DD%20request" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>запросить по email →</a>
         </div>
       </section>

@@ -4614,66 +4614,39 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Identity tab nav — pill-bar с цветовыми маркерами раздела.
-          Скрыт на главном экране (setup+play) и во время активной игры/решения пазла —
-          юзер: «лишние кнопки сверху». Навигация на главном экране — через hero-карточки
-          PLY/PZL/MST. Эта полоска появляется когда юзер уже внутри Puzzles/Coach/Analysis
-          и ему нужен путь обратно. */}
-      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(()=>{
-        const switchTab=(t:"play"|"puzzles"|"analysis"|"coach")=>{
-          const fromPuzzle=tab==="puzzles"&&pzCurrent;
-          sTab(t);
-          if(t==="play")sSetup(true);
-          else if(t==="puzzles"){sOver(null);ldPz(0);}
-          else if(t==="coach"){
-            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sOver(null);sOn(false);sSetup(false);sPms([]);sPmSel(null);sPCol("w");sFlip(false);
-          }
-          else if(t==="analysis"&&fromPuzzle){
-            const g=new Chess();setGame(g);sBk(k=>k+1);sHist([]);sFenHist([g.fen()]);sLm(null);sSel(null);sVm(new Set());sPzCurrent(null);sPzAttempt("idle");sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol("w");sFlip(false);
-          }
-        };
-        const sep=()=><div style={{width:1,height:22,background:CC.border,margin:"0 4px",alignSelf:"center"}}/>;
-        return <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-            <SymTab sym={SYM.play}     active={tab==="play"}     onClick={()=>switchTab("play")}/>
-            {sep()}
-            <SymTab sym={SYM.puzzle}   active={tab==="puzzles"}  onClick={()=>switchTab("puzzles")} count={PUZZLES.length}/>
-            <SymTab sym={SYM.coach}    active={tab==="coach"}    onClick={()=>switchTab("coach")}/>
-            {sep()}
-            <SymTab sym={SYM.analysis} active={tab==="analysis"} onClick={()=>switchTab("analysis")}/>
-          </div>
-          <div style={{flex:1}}/>
-          <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel: chess + YouTube/Twitch streams" className="cc-focus-ring" style={{
-            display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
-            borderRadius:RADIUS.full,border:"1px solid #c4b5fd",
-            background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",color:CC.accent,
-            fontSize:13,fontWeight:800,cursor:"pointer",
-            boxShadow:"0 2px 6px rgba(124,58,237,0.18)"
-          }}>
-            <span>📺</span><span>Multi-panel</span>
+      {/* Workspace quick-bar — PiP + Multi-panel + stream toggle; compact 1 row */}
+      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(
+        <div style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,flexWrap:"nowrap"}}>
+          <button onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
+            title={wsPreset==="stream"?"Скрыть медиа-панель (YT/Twitch)":"Открыть медиа-панель (YT/Twitch)"}
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
+              border:`1px solid ${wsPreset==="stream"?CC.brand:CC.border}`,
+              background:wsPreset==="stream"?CC.brandSoft:CC.surface1,
+              color:wsPreset==="stream"?CC.brand:CC.textDim,
+              fontSize:11,fontWeight:800,cursor:"pointer",transition:"all 0.12s",whiteSpace:"nowrap"}}>
+            <span>📺</span><span>{wsPreset==="stream"?"Медиа ✓":"Медиа"}</span>
           </button>
-          {/* Floating PiP — выпустить стрим во всплывающее перетаскиваемое окно поверх доски.
-              Если уже открыт — скрываем; если нет — спрашиваем URL и открываем. */}
           <button onClick={()=>{
             if(pip.open){pip.hide();return}
-            const url=window.prompt("YouTube или Twitch URL для floating PiP:","https://www.twitch.tv/gmhikaru");
-            if(!url)return;
-            const src=detectMediaSource(url.trim());
-            if(!src){showToast("Не распознал ссылку — нужен YouTube или Twitch URL","error");return}
-            pip.show(src);
-          }} title="Picture-in-Picture: floating stream window over the board" className="cc-focus-ring" style={{
-            display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",marginLeft:6,
-            borderRadius:RADIUS.full,
-            border:`1px solid ${pip.open?"#fb923c":"#c4b5fd"}`,
-            background:pip.open?"linear-gradient(135deg,#fff7ed,#ffedd5)":"linear-gradient(135deg,#f5f3ff,#ede9fe)",
-            color:pip.open?"#9a3412":CC.accent,
-            fontSize:13,fontWeight:800,cursor:"pointer",
-            boxShadow:pip.open?"0 2px 6px rgba(251,146,60,0.25)":"0 2px 6px rgba(124,58,237,0.18)"
-          }}>
-            <span>{pip.open?"⏏":"📺"}</span><span>{pip.open?"Скрыть PiP":"PiP стрим"}</span>
+            const url=window.prompt("YouTube или Twitch URL для PiP-окна:","https://www.twitch.tv/gmhikaru");
+            if(!url)return;const src=detectMediaSource(url.trim());
+            if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
+          }} title="Floating PiP — видео поверх доски"
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
+              border:`1px solid ${pip.open?"#fb923c":CC.border}`,
+              background:pip.open?"rgba(251,146,60,0.1)":CC.surface1,
+              color:pip.open?"#ea580c":CC.textDim,
+              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <span>{pip.open?"⏏":"⊡"}</span><span>PiP</span>
           </button>
-        </div>;
-      })()}
+          <button onClick={()=>sShowMultiPanel(true)} title="Multi-panel (несколько стримов)"
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,
+              border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,
+              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <span>⊞</span><span>Панели</span>
+          </button>
+        </div>
+      )}
 
       {/* LAUNCHPAD DASHBOARD */}
       {setup&&tab==="play"&&!streamerMode&&(()=>{
@@ -5630,65 +5603,30 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* In-game dashboard chips — quick access во время игры, не уходя в модалки.
-          Скрыт в setup (там есть hero-карточки) и в streamer mode. */}
-      {!streamerMode&&!setup&&on&&tab==="play"&&(()=>{
-        // Primary chips — always visible. Secondary — behind ⋯ toggle.
-        const primary=[
-          {label:"📊 Анализ",  hint:"Открыть анализ позиции",    onClick:()=>{sTab("analysis")}},
-          {label:"🧠 Коуч",    hint:"AI-коуч + объяснения",       onClick:()=>{sTab("coach")}},
-          {label:"🧩 Пазлы",   hint:"Случайная тактика",          onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-          {label:"⚡ Rush",    hint:"Скоростные пазлы",            onClick:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(0)}},
-          {label:"⏱ Drill",   hint:"30 сек на ход",               onClick:()=>sShowClockDrill(true)},
-          {label:"🎲 Варианты",hint:"12 вариантов шахмат",         onClick:()=>sShowVariants(true)},
-          {label:spectatorPublish?"📡 Live●":"📡 Стрим",
-           hint:spectatorPublish?"Стрим идёт — клик выключить":"Включить стрим для зрителей",
-           onClick:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
-          {label:`🛡${acResult?` ${acResult.suspicionScore}`:""}`,
-           hint:"Анти-чит анализ последней партии",
-           onClick:()=>{if(acResult)sShowAcPanel(true);else showToast("Сыграй партию","info")}},
-        ];
-        const secondary=[
-          {label:"📅 Daily",    hint:"Пазл дня",             onClick:()=>{window.location.href="/cyberchess/daily"}},
-          {label:"📖 Дебюты",  hint:"Репертуар",             onClick:()=>{window.location.href="/cyberchess/repertoire"}},
-          {label:"🏆 Турниры", hint:"Bracket + запись",       onClick:()=>{window.location.href="/cyberchess/tournaments"}},
-          {label:"🤝 Матчмейкинг",hint:"Найти соперника",    onClick:()=>{window.location.href="/cyberchess/matchmaking"}},
-          {label:"👀 Зрители",  hint:"Live-партии",           onClick:()=>{window.location.href="/cyberchess/spectator"}},
-          {label:"🎞 Replay",  hint:"Архив трансляций",       onClick:()=>{window.location.href="/cyberchess/replays"}},
-          {label:"📐 FIDE",    hint:"Оценка рейтинга",        onClick:()=>sShowFidePanel(true)},
-          {label:"🎭 Стиль AI",hint:"10 AI personalities",   onClick:()=>sShowAiPersonalityPicker(true)},
-          {label:mirrorActive?"🪞 ON":"🪞 Mirror",hint:"AI играет как ты",onClick:()=>{if(!mirrorProfile){showToast("Нужно 3+ партии","info");return;}sMirrorActive(v=>!v);}},
-          {label:"🏆 Ачивки", hint:"Каталог ачивок",          onClick:()=>sShowAchievements(true)},
-          {label:"📊 Стат",    hint:"Дашборд W/L/дебюты",    onClick:()=>sShowStatsDashboard(true)},
-          {label:"🎵 Музыка",  hint:"Фоновая музыка",         onClick:()=>sShowMusicPlayer(true)},
-          ...(matchmakingId?[{label:"📡 P2P",hint:"Скопировать ссылку зрителям",onClick:()=>{const gid=mmSpectatorGameIdRef.current||`mm_${matchmakingId}`;navigator.clipboard?.writeText(`${window.location.origin}/cyberchess/spectator/${gid}`).catch(()=>{});sObsStreamed(n=>n+1);showToast("Ссылка скопирована","success")}}]:[]),
-          {label:"⚙ Настройки",hint:"Звуки, темы, опции",    onClick:()=>sShowSettings(true)},
-        ];
-        const chipStyle={
-          padding:"3px 8px",borderRadius:RADIUS.full,
-          background:CC.surface1,border:`1px solid ${CC.border}`,color:CC.text,
-          fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" as const,
-          transition:`background ${MOTION.fast}`,lineHeight:1.5,
-        };
-        return <div style={{
-          display:"flex",flexWrap:"wrap",alignItems:"center",gap:4,
-          padding:"5px 8px",marginBottom:8,
-          background:CC.surface2,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,
-        }}>
-          {primary.map((c,i)=><button key={i} onClick={c.onClick} title={c.hint} style={chipStyle}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fff"}}
+      {/* In-game quick bar — compact 1 row, 5 key actions. Everything else via Ctrl+K. */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&(
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
+          {([
+            {icon:"📊",label:"Анализ",  hint:"Анализ позиции",     act:()=>sTab("analysis")},
+            {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            act:()=>sTab("coach")},
+            {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+            {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
+            {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", act:()=>sPalOpen(true)},
+          ] as {icon:string;label:string;hint:string;act:()=>void}[]).map((c,i)=>(
+            <button key={i} onClick={c.act} title={c.hint} style={{
+              display:"inline-flex",alignItems:"center",gap:4,
+              padding:"4px 10px",borderRadius:7,
+              border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
+              fontSize:11,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
+              transition:`background 80ms`,
+            }}
+            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface2}}
             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface1}}>
-            {c.label}
-          </button>)}
-          <div style={{width:1,height:16,background:CC.border,margin:"0 2px",flexShrink:0}}/>
-          {secondary.map((c,i)=><button key={`s${i}`} onClick={c.onClick} title={c.hint}
-            style={{...chipStyle,color:CC.textDim}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fff";(e.currentTarget as HTMLElement).style.color=CC.text}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=CC.surface1;(e.currentTarget as HTMLElement).style.color=CC.textDim}}>
-            {c.label}
-          </button>)}
-        </div>;
-      })()}
+              <span>{c.icon}</span><span>{c.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>

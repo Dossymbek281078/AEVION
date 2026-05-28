@@ -1534,6 +1534,8 @@ export default function CyberChessPage(){
   const[fideOpened,sFideOpened]=useState<number>(()=>{try{return parseInt(localStorage.getItem("cc_fide_opened_v1")||"0")||0}catch{return 0}});
   const[acResult,sAcResult]=useState<AntiCheatResult|null>(null);
   const[showAcPanel,sShowAcPanel]=useState(false);
+  // Right-panel sub-tab during play — splits long scroll into focused views
+  const[rpTab,sRpTab]=useState<"moves"|"info"|"coach">("moves");
   useEffect(()=>{
     if(showFidePanel&&fideOpened===0){
       sFideOpened(1);
@@ -6545,9 +6547,26 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 252px",width:252,minWidth:0,maxWidth:252,display:"flex",flexDirection:"column",gap:8,overflowY:"auto",maxHeight:"100%"}}>
-          {/* ── Live Stats Card — top of sidebar, visible during active game ── */}
-          {on&&!setup&&(tab==="play"||tab==="coach")&&<div style={{
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 252px",width:252,minWidth:0,maxWidth:252,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
+          {/* ── Right panel sub-tabs (play mode only) ── */}
+          {on&&!setup&&tab==="play"&&<div style={{
+            display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,
+            background:CC.surface1,flexShrink:0,
+          }}>
+            {([
+              {id:"moves" as const,label:"Ходы"},
+              {id:"info"  as const,label:"Инфо"},
+              {id:"coach" as const,label:"Коуч"},
+            ]).map(t=>(
+              <button key={t.id} onClick={()=>sRpTab(t.id)} style={{
+                flex:1,padding:"7px 4px",border:"none",borderBottom:rpTab===t.id?`2px solid ${CC.brand}`:"2px solid transparent",
+                background:"transparent",color:rpTab===t.id?CC.brand:CC.textDim,
+                fontSize:11,fontWeight:rpTab===t.id?900:700,cursor:"pointer",transition:"color 0.1s",
+              }}>{t.label}</button>
+            ))}
+          </div>}
+          {/* ── Live Stats Card — shown in Info sub-tab or Coach tab ── */}
+          {on&&!setup&&(tab==="coach"||(tab==="play"&&rpTab==="info"))&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
             display:"flex",alignItems:"center",gap:10,
@@ -6646,11 +6665,8 @@ export default function CyberChessPage(){
               }}>{icon}</div>;
             })()}
           </div>}
-          {/* ─── Tools card ─── relocated from under-board strip to declutter the playing area.
-              Heatmap + Whisper always available; Share/Reel/SVG appear when game is over;
-              History appears when user has saved games. */}
-          {/* Tools toolbar — compact icon row, без заголовка */}
-          <div style={{
+          {/* ─── Tools card — always visible except when play+active+non-moves sub-tab ── */}
+          {(!(tab==="play"&&on&&!over)||rpTab==="moves")&&<div style={{
             display:"flex",gap:4,flexWrap:"wrap",
             padding:"6px 8px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
@@ -6698,15 +6714,13 @@ export default function CyberChessPage(){
                   showToast("SVG скачан — открой в браузере чтобы поделиться","success");
                 }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Share SVG</Btn>
               </>}
-          </div>
+          </div>}
           {/* Daily Mission widget — hidden during an active vs-computer game and during P2P
               (it reads as "noise" when user is focused on the board). Shown in puzzles tab
               and when no game is in progress (between matches). */}
           {((tab==="puzzles"&&!on)||(tab==="play"&&!on&&!p2pMode))&&<DailyMission onReward={addChessy} onNavigate={sTab}/>}
-          {/* Coach Predictions: shows opponent's likely next moves while AI thinks.
-              Now also visible in Coach tab so the AI explains predictions during learning sessions.
-              Hidden in P2P (no analytics during human-vs-human matches per design). */}
-          {(tab==="play"||tab==="coach")&&on&&!over&&!hotseat&&!p2pMode&&sfOk&&<CoachPredictions
+          {/* Coach Predictions: in play mode only show in coach sub-tab */}
+          {(tab==="coach"||(tab==="play"&&rpTab==="coach"))&&on&&!over&&!hotseat&&!p2pMode&&sfOk&&<CoachPredictions
             fen={game.fen()}
             opponentColor={pCol==="w"?"b":"w"}
             isOpponentTurn={game.turn()!==pCol}
@@ -6720,7 +6734,7 @@ export default function CyberChessPage(){
               explanation card. Available in Coach tab + Play tab when game is on. */}
           {/* Coach Quick Actions доступны без SF — "Объясни" и "Слабости" работают на эвристике.
               "Найди план" и "Тактика" сами проверяют sfR.current?.ready() */}
-          {tab==="coach"&&on&&!over&&!setup&&<div style={{
+          {(tab==="coach"||(tab==="play"&&rpTab==="coach"))&&on&&!over&&!setup&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.lg,
             background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
             display:"flex",flexDirection:"column",gap:8
@@ -7176,8 +7190,8 @@ export default function CyberChessPage(){
                 color:"#fff",cursor:"pointer"}}>Стоп</button>
           </div>}
 
-          {/* ── Game Insights — auto summary after analysis completes ── */}
-          {over&&(tab==="play"||tab==="coach")&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>3&&(()=>{
+          {/* ── Game Insights — info sub-tab (play) or coach tab ── */}
+          {over&&(tab==="coach"||(tab==="play"&&rpTab==="info"))&&analysis.length>=Math.max(1,hist.length-1)&&analysis.length>3&&(()=>{
             const isWin=over.includes("win")||over.includes("win!");
             const isDraw=over.includes("draw")||over.includes("Draw")||over.includes("Stalemate");
             const isLoss=!isWin&&!isDraw;
@@ -7220,9 +7234,8 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
-          {/* ── Time-per-move analytics ── per-ply time chart with red flags for time-management coach.
-              Visible after game ends with ≥4 moves recorded. Coach-style insights below the chart. */}
-          {over&&(tab==="play"||tab==="coach")&&moveTimes.length>=4&&(()=>{
+          {/* ── Time-per-move analytics — info sub-tab (play) or coach tab ── */}
+          {over&&(tab==="coach"||(tab==="play"&&rpTab==="info"))&&moveTimes.length>=4&&(()=>{
             // Filter to user's plies only (every other ply starting from pCol==="w" ? 0 : 1).
             const userIsWhite=pCol==="w";
             const myPlyTimes=moveTimes.map((t,i)=>({t,i,isUser:userIsWhite?i%2===0:i%2===1})).filter(x=>x.isUser).map(x=>({t:x.t,ply:x.i}));
@@ -7278,8 +7291,8 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
-          {/* ── Blunder Rewind — переиграть свои ошибки как пазлы ── */}
-          {over&&(tab==="play"||tab==="coach")&&analysis.length>0&&(()=>{
+          {/* ── Blunder Rewind — info sub-tab (play) or coach tab ── */}
+          {over&&(tab==="coach"||(tab==="play"&&rpTab==="info"))&&analysis.length>0&&(()=>{
             const userIsWhite=pCol==="w";
             const myErrors=analysis.map((a,i)=>({a,i}))
               .filter(x=>{
@@ -7650,7 +7663,8 @@ export default function CyberChessPage(){
           </button>}
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Analyzing…</div>}
 
-          <div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+          {/* Move list + premoves — hidden in info/coach sub-tabs during active play */}
+          {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
             {/* Premove queue — sits ABOVE the move list so the user can see what's queued.
                 Each chip has a per-premove ✕ for surgical removal; the toolbar at the right
                 has ↶ (undo last) and ✕ (clear all). User feedback: clicking the chip's ✕
@@ -7935,7 +7949,7 @@ export default function CyberChessPage(){
                 </svg>
               </div>;
             })()}
-          </div>
+          </div>}
 
           {/* Scratch / Analysis-during-play — relocated here per UX feedback (was above
               the move list, now below it so the move list sits closer to the top of the

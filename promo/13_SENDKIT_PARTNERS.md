@@ -23,14 +23,22 @@
 ```
 Sanabil Investment Team,
 
-Code is replicable. The person who generated 30+ production modules across
-five domains in 6 months — cannot be replicated. That's AEVION.
+I hope you had a blessed Eid al-Adha.
 
-One founder. 30+ live modules across post-quantum signatures, AI routing,
-digital banking, IP registry, and developer platform. Zero revenue.
+I'm not a programmer. I'm a Financial Director and construction business
+owner in Kazakhstan who spent a decade watching millions disappear into
+fraudulent permits, stolen design documents, and untraceable payments.
+A chess candidate master who thinks in patterns and plays 10 moves ahead.
+
+Using AI, I built 30+ working solutions to these problems in 6 months.
+Not because I write fast code — because I understood the problem for 10 years.
+One of them — QSign — is the only post-quantum digital signature product
+in Central Asia (FIPS 204, GA).
 
 This is not a pitch for capital to continue building. It's a partnership
-offer where you bring the execution team and we bring the thinking.
+offer where you bring the execution team and I bring the thinking that
+built 30 products nobody asked me to build — because I couldn't stop seeing
+the problems.
 
 What Sanabil gets:
   70% of AEVION for $170M total
@@ -140,12 +148,19 @@ yahiin1978@gmail.com
 ```
 Mubadala Investment Company,
 
-Code can be replicated. The founder who built 30+ production modules in 6 months
-cannot. That's what you're investing in.
+I hope you had a blessed Eid al-Adha.
 
-AEVION is a Kazakhstan-based technology company with a ready foundation
-in digital finance, post-quantum trust infrastructure, and developer tooling.
-One founder, 30+ live modules, zero revenue, seeking an execution partner.
+I'm not a programmer. I'm a Financial Director and construction business
+owner in Kazakhstan — the industry where fraudulent permits, stolen design
+documents, and opaque payment chains cost billions annually. A chess
+candidate master who spent 10 years watching this problem from the inside.
+
+Using AI, I turned that decade of frustration into 30+ working prototypes
+in 6 months: post-quantum signatures, digital banking, IP registry,
+developer platform. One person. No engineering team. Zero VC funding.
+
+AEVION is now seeking an execution partner. You bring the team.
+I bring the thinking that never stops generating.
 
 Partnership terms:
   $170M total — $110M secondary (founder nets $100M, DIFC 0% CGT) +
@@ -249,15 +264,21 @@ Brief: https://aevion.app/partner?ref=mubadala-fu1
 ```
 ADQ Investment Team,
 
-One question before the brief: can you build something like QSign yourself?
-Yes. Any competent team could, in 3-6 months with AI assistance.
+I hope you had a blessed Eid al-Adha.
 
-The question isn't "can you build QSign." The question is: who builds
-the next QSign while your team is still finishing this one?
+A question first: can your team build something like QSign?
+Yes — in 3-6 months. But while they're building QSign, who builds
+the next one? And the one after that?
 
-AEVION's founder generated 30+ production modules across five domains in 6 months.
-That's not development velocity — that's ideation velocity. Zero revenue today.
-Seeking an execution partner.
+That's the offer on the table.
+
+I'm Dosymbek Zhakiya — Financial Director and construction business owner
+in Kazakhstan. A chess candidate master. A person who for 10 years worked
+inside one of the world's most opaque industries and saw exactly what
+trust infrastructure should look like — but didn't exist.
+
+With AI tools, I built 30+ working prototypes in 6 months. Not development
+speed — idea speed. The bottleneck is execution. That's where ADQ comes in.
 
 Partnership structure:
   $170M total — $110M secondary (founder nets $100M, DIFC 0% CGT) +

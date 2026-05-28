@@ -223,6 +223,61 @@ export default function PartnerPage() {
         </div>
       </section>
 
+      {/* FOUNDER */}
+      <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#94a3b8", textTransform: "uppercase", marginBottom: 16 }}>
+            Кто за этим стоит
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 48, alignItems: "start" }}>
+            {/* Left — identity */}
+            <div>
+              <div style={{ width: 80, height: 80, borderRadius: "50%", background: "linear-gradient(135deg, #10b981, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, fontWeight: 900, color: "#0a0e1a", marginBottom: 20 }}>
+                Д
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#f8fafc", marginBottom: 6 }}>Досымбек Жакия</div>
+              <div style={{ fontSize: 13, color: "#10b981", fontWeight: 700, marginBottom: 16 }}>Founder & Chief Innovation Officer</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  { icon: "🏗", text: "Финдиректор + владелец строительных компаний (КЗ)" },
+                  { icon: "♟", text: "Кандидат в мастера по шахматам" },
+                  { icon: "🧠", text: "30+ продуктов за 6 мес — без команды разработчиков" },
+                  { icon: "📍", text: "Астана, Казахстан" },
+                ].map(item => (
+                  <div key={item.text} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 16, lineHeight: 1.5 }}>{item.icon}</span>
+                    <span style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.5 }}>{item.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Right — story */}
+            <div>
+              <h2 style={{ fontSize: "clamp(22px, 3vw, 32px)", fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.02em", marginBottom: 20, color: "#f8fafc" }}>
+                «Я не искал проблему.<br />Я в ней работал.»
+              </h2>
+              <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.7, marginBottom: 16 }}>
+                Строительная отрасль — одна из самых непрозрачных в мире. Проектная документация стоит
+                сотни тысяч долларов и защищена лишь бумажной печатью. Экспертные заключения подписываются
+                людьми которых нет. Платежи теряются в цепочках субподрядчиков. Я работал <em>внутри</em> этой
+                системы — как финансовый директор и владелец проектных компаний.
+              </p>
+              <p style={{ fontSize: 16, color: "#cbd5e1", lineHeight: 1.7, marginBottom: 16 }}>
+                Мне не нужно было проводить исследование рынка. Проблема была моей ежедневной реальностью.
+                Когда появились AI-инструменты, я смог наконец строить то, что видел годами.{" "}
+                <strong style={{ color: "#f8fafc" }}>За 6 месяцев — 30+ рабочих модулей. Не потому что я быстро пишу код.
+                Потому что я 10 лет понимал задачу.</strong>
+              </p>
+              <div style={{ padding: 20, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 14, fontSize: 14, color: "#94a3b8", lineHeight: 1.6, fontStyle: "italic" }}>
+                «Шахматы научили думать паттернами и играть на 10 ходов вперёд.
+                Строительство показало где система врёт и почему.
+                AI дал руки, чтобы наконец это исправить.»
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FINANCIAL SCENARIO */}
       <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "72px 24px" }}>

@@ -842,6 +842,12 @@ app.get("/api/openapi.json", (_req, res) => {
       "/api/pricing/subscription/me": {
         get: { summary: "Latest subscription for authenticated user (JWT)" },
       },
+      "/api/pricing/subscriptions/purge": {
+        post: {
+          summary: "Admin: purge all subscriptions.jsonl records by email (GDPR / test cleanup)",
+          description: "Requires X-Admin-Token. Body: { email }. Atomic .tmp+rename rewrite. Returns { ok, email, removed, remaining }.",
+        },
+      },
       "/api/pricing/cases": { get: { summary: "Customer case stories with ROI metrics" } },
       ...FINTECH_OPENAPI_PATHS,
       ...NEW_WAVE_OPENAPI_PATHS,

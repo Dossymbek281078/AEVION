@@ -23,7 +23,7 @@ import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
-import { sendEmail } from "./provisioning";
+import { sendEmail, purgeSubscriptions } from "./provisioning";
 
 export const pricingRouter = Router();
 
@@ -1424,5 +1424,36 @@ pricingRouter.get("/subscription/me", (req, res) => {
   } catch (e) {
     console.error("[subscription/me] read failed", e);
     res.status(500).json({ error: "read_failed" });
+  }
+});
+
+/**
+ * POST /api/pricing/subscriptions/purge
+ * Body: { email }
+ * Header: x-admin-token
+ *
+ * Removes every subscriptions.jsonl record for this email (case-insensitive).
+ * Atomic rewrite via .tmp + rename. Returns { ok, removed, remaining }.
+ *
+ * Use cases: GDPR removal, clearing test verify-pings, support hand-edits.
+ */
+pricingRouter.post("/subscriptions/purge", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) return res.status(401).json({ error: "admin_token_not_configured" });
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ error: "invalid_email" });
+  }
+
+  try {
+    const { removed, remaining } = purgeSubscriptions(email);
+    res.json({ ok: true, email, removed, remaining });
+  } catch (e) {
+    console.error("[subscriptions/purge] failed", e);
+    res.status(500).json({ error: "purge_failed" });
   }
 });

@@ -9,7 +9,7 @@
  * GTM-уровень: запись подписки + welcome-email.
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import type { TierId, BillingPeriod } from "../data/pricing";
 
@@ -50,6 +50,43 @@ export function writeSubscription(sub: Subscription): void {
   } catch (e) {
     console.error("[provisioning] writeSubscription failed", e);
   }
+}
+
+/**
+ * Remove every subscription record matching this email (case-insensitive)
+ * from the store. Rewrites the JSONL atomically via .tmp + rename so a crash
+ * mid-rewrite can't leave a half-truncated file. Returns counts of removed
+ * vs. kept records. No-op (0/0) when the file doesn't exist.
+ *
+ * Used by the admin purge endpoint for GDPR removal and to clear test
+ * records left by verify pings.
+ */
+export function purgeSubscriptions(email: string): { removed: number; remaining: number } {
+  const target = email.trim().toLowerCase();
+  if (!target) return { removed: 0, remaining: 0 };
+  if (!existsSync(SUBS_FILE)) return { removed: 0, remaining: 0 };
+  const lines = readFileSync(SUBS_FILE, "utf8").split("\n").filter((l) => l.trim().length > 0);
+  const kept: string[] = [];
+  let removed = 0;
+  for (const line of lines) {
+    try {
+      const sub = JSON.parse(line) as Subscription;
+      if (sub.email?.toLowerCase() === target) {
+        removed += 1;
+        continue;
+      }
+    } catch {
+      // keep malformed lines — they were already in the store and we don't
+      // want to silently drop unparseable data during a purge by email
+    }
+    kept.push(line);
+  }
+  const tmp = SUBS_FILE + ".tmp";
+  const out = kept.length === 0 ? "" : kept.join("\n") + "\n";
+  ensureDir();
+  writeFileSync(tmp, out, "utf8");
+  renameSync(tmp, SUBS_FILE);
+  return { removed, remaining: kept.length };
 }
 
 export function countSubscriptions(): number {

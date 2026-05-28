@@ -653,7 +653,7 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
-  const baseBoardPx=Math.max(300,Math.min(720,vhPx-400,vwPx-360));
+  const baseBoardPx=Math.max(300,Math.min(720,vhPx-400,vwPx-280));
   const boardPx=Math.round(baseBoardPx*boardScale);
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
@@ -5634,7 +5634,7 @@ export default function CyberChessPage(){
       {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
-        <div style={{flexShrink:0}}>
+        <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
           {/* ─── Active Lesson banner — shown when user loaded a position from a Coach Lesson ─── */}
           {activeLesson&&<div style={{
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,

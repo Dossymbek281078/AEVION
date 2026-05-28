@@ -36,7 +36,9 @@ function resolveReferenceFromProductId(productId: string): string {
 }
 
 function tierForReference(ref: string): "pro" | "business" {
-  if (ref === "all-access" || ref.includes("all-access") || ref.includes("business")) return "business";
+  // "team" tier (e.g. constitution-team) is the multi-seat plan above Pro
+  // and unlocks the same Pro features as All-Access — map to "business".
+  if (ref === "all-access" || ref.includes("all-access") || ref.includes("business") || ref.includes("team")) return "business";
   return "pro";
 }
 

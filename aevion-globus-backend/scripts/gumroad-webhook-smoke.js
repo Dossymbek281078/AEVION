@@ -54,6 +54,15 @@ async function ping(fields) {
 (async () => {
   console.log(`\nGumroad webhook smoke → ${BASE}${PATH}\n`);
 
+  // ── GET liveness probe (browser-friendly) ───────────────────────────────────
+  {
+    const r = await fetch(`${BASE}${PATH}`);
+    let json; try { json = await r.json(); } catch { json = {}; }
+    (r.status === 200 && json.endpoint === "gumroad webhook")
+      ? ok("GET liveness → 200 JSON manifest")
+      : ko("GET liveness → 200", `${r.status} ${JSON.stringify(json)}`);
+  }
+
   // ── paid → activated ────────────────────────────────────────────────────────
   const paid = await ping({ sale_id: SALE, email: EMAIL, product_id: "TESTPROD", sale_timestamp: new Date().toISOString() });
   if (paid.status === 200 && paid.json.action === "activated" && paid.json.tierId) {

@@ -44,6 +44,20 @@ function isConstitutionProduct(ref: string): boolean {
   return ref.includes("constitution");
 }
 
+// Liveness probe — Gumroad sends only POST, but a GET in the browser used to
+// answer "Cannot GET" which looks like the URL is broken when configuring the
+// webhook. Return a tiny JSON manifest instead so admins can sanity-check the
+// endpoint by visiting it.
+gumroadWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
+  res.json({
+    ok: true,
+    endpoint: "gumroad webhook",
+    accepts: "POST application/x-www-form-urlencoded",
+    signed: Boolean(process.env.GUMROAD_WEBHOOK_SECRET),
+    info: "Gumroad sends sale/refund pings here as POST form-encoded. GET is for liveness check only.",
+  });
+});
+
 gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // Gumroad sends form-encoded — grab raw body for signature check
   const rawBuf = (req as unknown as { rawBody?: Buffer }).rawBody;

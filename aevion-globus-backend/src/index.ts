@@ -793,6 +793,11 @@ app.get("/api/openapi.json", (_req, res) => {
       },
       // Gumroad — platform-wide ping webhook (form-encoded)
       "/api/gumroad/webhook": {
+        get: {
+          summary: "Gumroad webhook liveness probe — returns JSON manifest (real Gumroad pings come on POST)",
+          security: [],
+          responses: { "200": { description: "Tiny JSON: { ok, endpoint, accepts, signed, info }" } },
+        },
         post: {
           summary:
             "Gumroad ping webhook (application/x-www-form-urlencoded) — maps sale/refund/cancel to plan provisioning",

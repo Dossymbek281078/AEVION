@@ -2228,13 +2228,15 @@ function ProPaywallBanner({
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
           <a
-            href="/api-backend/api/constitution/checkout/go/pro"
+            href="https://aevion.gumroad.com/l/pyiaz"
+            target="_blank"
+            rel="noopener noreferrer"
             className="px-4 py-2 rounded bg-gradient-to-r from-fuchsia-500 to-cyan-500 text-white font-bold text-sm text-center hover:opacity-90"
           >
             Upgrade →
           </a>
           <span className="text-[10px] text-[#9aa3c0] text-center">
-            Paddle · cancel anytime
+            Gumroad · cancel anytime
           </span>
         </div>
       </div>

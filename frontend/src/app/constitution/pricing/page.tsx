@@ -50,7 +50,7 @@ const TIERS: Tier[] = [
       "Всё из Free",
     ],
     cta: "Upgrade to Pro →",
-    ctaHref: "/api-backend/api/constitution/checkout/go/pro",
+    ctaHref: "https://aevion.gumroad.com/l/pyiaz",
     highlight: true,
   },
   {
@@ -70,7 +70,7 @@ const TIERS: Tier[] = [
       "Всё из Pro × 5",
     ],
     cta: "Get Team →",
-    ctaHref: "/api-backend/api/constitution/checkout/go/team",
+    ctaHref: "https://aevion.gumroad.com/l/wjvquw",
   },
 ];
 
@@ -81,7 +81,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "Можно ли отменить подписку в любой момент?",
-    a: "Да. Оплата идёт через Paddle, в личном кабинете в любой момент можно отменить — доступ к Pro/Team сохраняется до конца оплаченного периода. Никаких автопродлений без подтверждения, никаких скрытых периодов.",
+    a: "Да. Оплата идёт через Gumroad, в личном кабинете в любой момент можно отменить — доступ к Pro/Team сохраняется до конца оплаченного периода. Никаких автопродлений без подтверждения, никаких скрытых периодов.",
   },
   {
     q: "Что значит «5 seats» в Team?",
@@ -200,6 +200,8 @@ export default function ConstitutionPricingPage() {
               </ul>
               <a
                 href={tier.ctaHref}
+                target={tier.id !== "free" ? "_blank" : undefined}
+                rel={tier.id !== "free" ? "noopener noreferrer" : undefined}
                 onClick={() => {
                   if (tier.id !== "free") track("upgrade_click", { tier: tier.id });
                 }}
@@ -282,7 +284,7 @@ export default function ConstitutionPricingPage() {
 
         <footer className="mt-12 text-center text-xs text-[#9aa3c0]">
           <p>
-            Платежи через Paddle. Cancel anytime. 14-day money-back guarantee. Вопросы —{" "}
+            Платежи через Gumroad. Cancel anytime. 14-day money-back guarantee. Вопросы —{" "}
             <a href="mailto:support@aevion.app" className="text-[#d4af37] hover:underline">
               support@aevion.app
             </a>

@@ -77,7 +77,7 @@ Vision 2030 — это не только нефтяные деньги. Это �
 Добавить одним предложением в начало:
 
 ```
-I hope you and your family had a blessed Eid al-Adha.
+Eid Mubarak!
 ```
 
 Не больше. Показывает уважение — не льстит.

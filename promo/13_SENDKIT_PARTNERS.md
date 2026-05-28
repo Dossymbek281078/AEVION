@@ -23,7 +23,7 @@
 ```
 Sanabil Investment Team,
 
-I hope you had a blessed Eid al-Adha.
+Eid Mubarak!
 
 I'm not a programmer. I'm a Financial Director and construction business
 owner in Kazakhstan who spent a decade watching millions disappear into
@@ -148,7 +148,7 @@ yahiin1978@gmail.com
 ```
 Mubadala Investment Company,
 
-I hope you had a blessed Eid al-Adha.
+Eid Mubarak!
 
 I'm not a programmer. I'm a Financial Director and construction business
 owner in Kazakhstan — the industry where fraudulent permits, stolen design
@@ -264,7 +264,7 @@ Brief: https://aevion.app/partner?ref=mubadala-fu1
 ```
 ADQ Investment Team,
 
-I hope you had a blessed Eid al-Adha.
+Eid Mubarak!
 
 A question first: can your team build something like QSign?
 Yes — in 3-6 months. But while they're building QSign, who builds

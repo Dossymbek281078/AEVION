@@ -820,6 +820,31 @@ export default function PricingPage() {
               )}
               {tier.id !== "enterprise" && tier.id !== "free" && (
                 <>
+                  <a
+                    href="https://aevion.gumroad.com/l/xpxzam"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "8px 16px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      borderRadius: 8,
+                      border: isHighlight
+                        ? "1px solid rgba(255,255,255,0.2)"
+                        : "1px solid rgba(13,148,136,0.4)",
+                      cursor: "pointer",
+                      background: "transparent",
+                      color: isHighlight ? "#5eead4" : "#0d9488",
+                      marginBottom: 6,
+                      textAlign: "center",
+                      textDecoration: "none",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    Buy All-Access on Gumroad →
+                  </a>
                   <button
                     style={{
                       width: "100%",

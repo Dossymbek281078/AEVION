@@ -109,6 +109,13 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   const reference = resolveReferenceFromProductId(productId);
 
+  // Products from other services (book platform etc.) share this Gumroad account
+  // but don't need AEVION subscription provisioning — skip them silently.
+  if (reference === "external") {
+    console.log(`[gumroad/webhook] external product ${productId} — skipping`);
+    return res.json({ ok: true, ignored: "external_product" });
+  }
+
   try {
     if (refunded || failed) {
       // Downgrade to free

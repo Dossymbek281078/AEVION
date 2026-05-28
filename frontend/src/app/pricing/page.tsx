@@ -994,10 +994,28 @@ export default function PricingPage() {
                   </span>
                 ))}
               </div>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 12 }}>
                 {displayPrice(b.priceMonthly)}
                 <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> /мес</span>
               </div>
+              <a
+                href="https://aevion.gumroad.com/l/xpxzam"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "block",
+                  textAlign: "center",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  background: "linear-gradient(135deg, #0d9488, #0891b2)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textDecoration: "none",
+                }}
+              >
+                Get Access →
+              </a>
             </div>
           ))}
         </div>

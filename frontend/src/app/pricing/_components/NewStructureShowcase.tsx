@@ -172,6 +172,25 @@ export default function NewStructureShowcase({ currency, billingPeriod }: Props)
               <div style={{ fontSize: 12, color: color, fontWeight: 600 }}>
                 Saves {fmt(save, currency)}/мес vs solo
               </div>
+              <a
+                href="https://aevion.gumroad.com/l/xpxzam"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "block",
+                  textAlign: "center",
+                  padding: "8px 0",
+                  borderRadius: 8,
+                  background: color,
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textDecoration: "none",
+                  marginTop: "auto",
+                }}
+              >
+                Get Access →
+              </a>
             </article>
           );
         })}
@@ -207,11 +226,30 @@ export default function NewStructureShowcase({ currency, billingPeriod }: Props)
           <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
             Saves {fmt(allAccessSave, currency)}/мес vs all-solo
           </div>
+          <a
+            href="https://aevion.gumroad.com/l/xpxzam"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-block",
+              marginTop: 14,
+              padding: "10px 24px",
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.18)",
+              border: "2px solid rgba(255,255,255,0.5)",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: 14,
+              textDecoration: "none",
+            }}
+          >
+            Get All-Access →
+          </a>
         </div>
       </article>
 
       <p style={{ marginTop: 18, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
-        Source: <code>/api/aevion/pricing</code> · rates updated {new Date(data.currencyRatesAt).toLocaleDateString("ru-RU")} · Solo прайс по модулю — на странице самого модуля. Checkout — через тарифы ниже до Phase 3.
+        Source: <code>/api/aevion/pricing</code> · rates updated {new Date(data.currencyRatesAt).toLocaleDateString("ru-RU")} · Solo прайс по модулю — на странице самого модуля. Оплата через Gumroad.
       </p>
     </section>
   );

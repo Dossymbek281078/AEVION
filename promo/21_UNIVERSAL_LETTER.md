@@ -9,6 +9,73 @@
 
 ---
 
+## ★ FINAL SEND-READY — Mubadala Capital Ventures (первый таргет)
+
+> Это версия для отправки первой. Отшлифована под Mubadala. Скопируй, проверь чеклист, отправь.
+
+**To:** через mubadala.ae → «Contact / Investment Enquiry», либо `communications@mubadala.ae`
+**Alt warm path:** DIFC FinTech Hive (fintechhive.ae) — они напрямую коннектят с Mubadala tech team
+**Subject:** `The idea is mine. The team is yours. The life — ours.`
+**Send:** вторник-четверг, 08:00–10:00 GST (Абу-Даби). Plain-text. Без attachments.
+
+```
+Mubadala Capital team,
+
+Eid Mubarak.
+
+A note on fit before anything else: AEVION Bank is built to be structured
+as a DIFC-licensed, Shariah-compliant digital bank — your home jurisdiction,
+your portfolio thesis. But that is one of five domains, so let me start with
+who is writing.
+
+I am not a programmer. I am a Financial Director and construction-business
+owner in Kazakhstan who spent ten years watching trust fail — forged permits,
+stolen designs, untraceable payments — and losing money to it. Abu Dhabi's
+mega-projects run on the same fragile paper trust, only at 1000× the scale.
+When AI tools arrived, I stopped asking why the system lies and started
+building the answer. In six months, alone, I built 30+ working modules across
+five domains: post-quantum signatures, digital banking, IP attestation, an
+AI gateway, a developer layer.
+
+You will ask: where are the sales? There are none — and that is the entire
+point. Sales are what a team builds from an idea. I have brought the idea,
+and proven I generate ideas faster than teams execute them. The one thing
+I cannot conjure alone is execution at scale.
+
+The idea is mine. The team is yours. The life — ours.
+
+That idea sits where three irreversible shifts meet: trust after quantum
+(every signature on earth must be reissued — NIST FIPS 204), banking without
+branches (1.4 billion people in markets the West forgot), and authorship in
+the age of AI (who made this, and when?). Whoever owns the layer beneath these
+owns a toll booth on the digital economy.
+
+In a year when machines write code, engineers are hired in a week, and capital
+is everywhere — the only scarce resource left is the idea. You are not buying
+30 products; products are copied. You are buying the engine that produced them,
+and the right to everything it produces next.
+
+I am not selling and walking away. I keep a major stake and stay as Chief
+Innovation Officer for years. I earn only when you earn. So whatever brought
+you here — proof, scale, or a mind that sees what others don't — our goal is
+the same one.
+
+Thirty minutes this week?
+
+— Dosymbek Zhakiya
+Founder & Chief Innovation Officer, AEVION
+yahiin1978@gmail.com · https://aevion.app/partner
+```
+
+**Что отшлифовано под Mubadala vs универсал:**
+- Первый абзац — DIFC + Shariah digital bank как «ваша юрисдикция, ваш тезис» (их home turf).
+- В founder-абзац вшита строка про мегапроекты Абу-Даби «на том же хрупком бумажном доверии,
+  только в 1000× масштабе» — превращает твой строительный инсайт в ИХ боль.
+- Всё остальное (триада, no-sales aikido, три сдвига, scarcity, сходимость) — без изменений,
+  работает на всех троих.
+
+---
+
 ## ПИСЬМО (EN — для отправки)
 
 **Subject:** `The idea is mine. The team is yours. The life — ours.`

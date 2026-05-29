@@ -75,24 +75,24 @@ export default function PartnerPage() {
       {/* HERO */}
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "100px 24px 80px" }}>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.28em", color: "#10b981", textTransform: "uppercase", marginBottom: 20 }}>
-          Innovation Partnership · $170M · 70% equity · CIO stays
+          Innovation Partnership · Вы покупаете двигатель идей, не снимок
         </div>
-        <h1 style={{ fontSize: "clamp(36px, 6vw, 72px)", fontWeight: 900, lineHeight: 1.04, letterSpacing: "-0.03em", marginBottom: 24 }}>
-          Код копируется.<br />
+        <h1 style={{ fontSize: "clamp(34px, 5.5vw, 68px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-0.03em", marginBottom: 24 }}>
+          Инструментов в мире — избыток.<br />
           <span style={{ background: "linear-gradient(135deg, #10b981, #3b82f6, #a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            Мышление — нет.
+            Идей такого калибра — нет.
           </span>
         </h1>
         <p style={{ fontSize: 20, color: "#cbd5e1", maxWidth: 820, lineHeight: 1.6, marginBottom: 16 }}>
-          Любой технический продукт воспроизводим. Вопрос в другом: кто придумает
-          следующий QSign, пока конкуренты копируют этот?
-          <strong style={{ color: "#f8fafc" }}> За 6 месяцев один основатель создал 30+ продуктов в 5 доменах.
-          Это не скорость разработки — это скорость мышления. Она не нанимается.</strong>
+          AI пишет код. Инженеры нанимаются за неделю. Капитал — в избытке.
+          <strong style={{ color: "#f8fafc" }}> Единственный дефицитный ресурс — идея: что строить,
+          почему сейчас, и как связать то, что другие видят по отдельности.</strong>
         </p>
-        <p style={{ fontSize: 17, color: "#94a3b8", maxWidth: 780, lineHeight: 1.6, marginBottom: 36 }}>
-          Предложение: вы вкладываете $170M и приводите команду инженеров.
-          Получаете 70% компании + доступ к непрерывному потоку идей от CIO.
-          Мы вместе строим то, что по отдельности ни вы, ни я не построим за те же деньги и время.
+        <p style={{ fontSize: 17, color: "#94a3b8", maxWidth: 800, lineHeight: 1.6, marginBottom: 36 }}>
+          Вы покупаете не 30 продуктов и не QSign — это копируется. Вы покупаете
+          доказанную машину генерации идей (30+ модулей за 6 месяцев, один человек)
+          и право владеть всем, что она произведёт дальше. Вы приводите команду и капитал.
+          Двигатель остаётся в компании как CIO — навсегда.
         </p>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 40 }}>
           <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20inquiry" style={btnPrimary}>

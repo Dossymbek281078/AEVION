@@ -25,6 +25,7 @@
 import { Router, type Request, type Response } from "express";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import { getPool } from "../lib/dbPool";
 
 export const gumroadWebhookRouter = Router();
 
@@ -116,6 +117,50 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (reference === "external") {
     console.log(`[gumroad/webhook] external product ${productId} — skipping`);
     return res.json({ ok: true, ignored: "external_product" });
+  }
+
+  // Bureau Verified one-time upgrade: match by email to the latest pending
+  // BureauVerification row (KYC approved but payment not yet confirmed).
+  if (reference === "bureau-verified") {
+    if (refunded || failed) {
+      console.log(`[gumroad/webhook] bureau ${result.status} for ${email} — ignored (one-time, no downgrade)`);
+      return res.json({ ok: true, ignored: `bureau_${result.status}` });
+    }
+    if (result.status === "paid") {
+      try {
+        const pool = getPool();
+        const intentId = `gumroad:sale:${saleId}`;
+        const { rowCount } = await pool.query(
+          `UPDATE "BureauVerification"
+              SET "paymentStatus" = 'paid',
+                  "paymentProvider" = 'gumroad',
+                  "paymentIntentId" = $1
+            WHERE "email" = $2
+              AND "kycStatus" = 'approved'
+              AND "paymentStatus" = 'unpaid'
+              AND "id" = (
+                SELECT "id" FROM "BureauVerification"
+                 WHERE "email" = $2
+                   AND "kycStatus" = 'approved'
+                   AND "paymentStatus" = 'unpaid'
+                 ORDER BY "createdAt" DESC
+                 LIMIT 1
+              )`,
+          [intentId, email],
+        );
+        if ((rowCount ?? 0) > 0) {
+          console.log(`[gumroad/webhook] bureau paid — marked verification for ${email}`);
+          return res.json({ ok: true, action: "bureau_verified", email });
+        } else {
+          console.warn(`[gumroad/webhook] bureau paid — no pending verification for ${email}`);
+          return res.json({ ok: true, action: "bureau_no_match", email });
+        }
+      } catch (err) {
+        console.error("[gumroad/webhook] bureau DB error:", err instanceof Error ? err.message : err);
+        return res.status(500).json({ ok: false, error: "bureau_db_failed" });
+      }
+    }
+    return res.json({ ok: true, ignored: result.status });
   }
 
   try {

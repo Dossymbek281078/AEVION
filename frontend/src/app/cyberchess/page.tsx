@@ -4518,8 +4518,10 @@ export default function CyberChessPage(){
           </button>
         </div>
 
-        {/* Утилиты в шапке — только настройки/help/mute. Стрим, голос, варианты —
-            переехали в большие дашборд-тайлы на лендинге. */}
+        {/* Утилиты в шапке — единый кластер справа (настройки/help/звук/музыка/медиа/фулскрин).
+            Сгруппированы во flexShrink:0 контейнер, чтобы держались вместе и не разлетались
+            по строкам при wrap (фидбэк: шестерёнка/медиа «терялись где-то внизу»). */}
+        <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
         <Btn
           variant="secondary"
           size="sm"
@@ -4596,6 +4598,7 @@ export default function CyberChessPage(){
           }}
           className="cc-mobile-sidebar-btn"
         >☰</button>
+        </div>
       </div>}
 
       {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.

@@ -136,7 +136,8 @@ const FIFTEEN_TABS = [
 ];
 
 const DEAL_TERMS = [
-  { label: "Floor price", value: "$1 000 000 000 USD net (после налогов)" },
+  { label: "Цена (постоянна)", value: "$10.5M за 1% · оценка ≈ $1.05B · одинакова на всех уровнях" },
+  { label: "Флагман (95%)", value: "$1 000 000 000 USD net (полный выкуп, после налогов)" },
   { label: "Структура", value: "70% closing · 20% retention 12 мес · 10% performance 24 мес" },
   { label: "Должность основателя", value: "Senior Advisor on AEVION matters · 24 мес · 20-30ч/мес" },
   { label: "Право вето", value: "AEV cap supply и Constitution v1 — только с письменного согласия Advisor" },

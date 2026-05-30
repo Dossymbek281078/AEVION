@@ -42,24 +42,26 @@ const IDEAS = [
 ];
 
 const DEAL = [
-  { label: "Общий чек инвестора", value: "~$170M" },
-  { label: "Secondary (основателю)", value: "$110M gross → $100M net (DIFC 0% CGT)" },
-  { label: "Primary (в компанию)", value: "$60M — найм, операции, масштаб" },
-  { label: "Доля инвестора", value: "70%" },
-  { label: "Доля основателя", value: "30% + Chief Innovation Officer" },
-  { label: "Implied pre-money valuation", value: "~$275M" },
+  { label: "Цена (постоянна)", value: "$10.5M за 1% · единая оценка ≈ $1.05B" },
+  { label: "Партнёрский вход", value: "25–49% = $263M–$516M (по той же цене за процент)" },
+  { label: "Доля основателя", value: "51–75% + Chief Innovation Officer / CEO" },
+  { label: "Куда идут деньги", value: "Primary (найм, масштаб) + опц. secondary основателю" },
+  { label: "Оценка post-money", value: "≈ $1.05B (та же на всех уровнях лестницы)" },
   { label: "Команда от инвестора", value: "50-100 инженеров в течение 18 мес" },
   { label: "Advisor fee основателя", value: "$2M/год" },
-  { label: "Вето основателя", value: "Изменение core IP и продуктовых направлений" },
+  { label: "Вето основателя", value: "AEV cap (21M) + Constitution v1 + продуктовые направления" },
   { label: "Юрисдикция", value: "DIFC Dubai (0% CGT, английское право)" },
   { label: "Эксклюзивность", value: "60 дней + breakup fee $5M" },
+  { label: "Полный выкуп", value: "95% за $1B net — верхний уровень той же лестницы (/acquire)" },
   { label: "Контакт", value: "yahiin1978@gmail.com" },
 ];
 
+// Valuation holds at the ~$1.05B strategic entry floor in early years, then the
+// 10× ARR multiple overtakes it from year 3 — so no down-round vs. entry.
 const SCENARIO = [
-  { year: "Год 1", arr: "$15-30M", val: "$120-240M", color: "#10b981" },
-  { year: "Год 3", arr: "$130M", val: "$1.0-1.6B", color: "#3b82f6" },
-  { year: "Год 5", arr: "$490M", val: "$3.9-5.9B", color: "#a855f7" },
+  { year: "Год 1", arr: "$15-30M", val: "≈ $1.05B", color: "#10b981" },
+  { year: "Год 3", arr: "$130M", val: "$1.3B", color: "#3b82f6" },
+  { year: "Год 5", arr: "$360-490M", val: "$3.6-4.9B", color: "#a855f7" },
 ];
 
 export default function PartnerPage() {
@@ -106,10 +108,10 @@ export default function PartnerPage() {
         {/* ROI CALLOUT — самое важное число для инвестора */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 1, background: "rgba(255,255,255,0.06)", borderRadius: 20, overflow: "hidden", border: "1px solid rgba(16,185,129,0.25)" }}>
           {[
-            { label: "Вы вкладываете", val: "$170M", sub: "$110M secondary + $60M в компанию", color: "#94a3b8" },
-            { label: "Ваша доля", val: "70%", sub: "компании при implied $275M pre-money", color: "#10b981" },
-            { label: "ROI год 3", val: "6–9×", sub: "$1.0–1.6B company · ваши 70% = $700M–$1.1B", color: "#3b82f6" },
-            { label: "ROI год 5", val: "16–24×", sub: "$3.9–5.9B company · ваши 70% = $2.7–4.1B", color: "#a855f7" },
+            { label: "Цена за 1%", val: "$10.5M", sub: "постоянна — оценка ≈ $1.05B на всех уровнях", color: "#94a3b8" },
+            { label: "Партнёрский вход", val: "25–49%", sub: "$263M–$516M · основатель сохраняет 51–75%", color: "#10b981" },
+            { label: "Оценка сегодня", val: "$1.05B", sub: "стратегический floor pre-revenue", color: "#3b82f6" },
+            { label: "ROI к году 5", val: "3.4–4.7×", sub: "$3.6–4.9B company · одинаков на любой доле", color: "#a855f7" },
           ].map((c, i) => (
             <div key={c.label} style={{ padding: "24px 28px", background: i === 0 ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.03)" }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#64748b", textTransform: "uppercase", marginBottom: 8 }}>{c.label}</div>
@@ -140,11 +142,11 @@ export default function PartnerPage() {
                 accent: "#3b82f6",
               },
               {
-                t: "Почему основатель остаётся", d: "30% доли + $2M/год advisor fee + CIO-роль. При $4B оценке в году 5 — его 30% = $1.2B. Уходить невыгодно ни ему, ни вам.",
+                t: "Почему основатель остаётся", d: "Сохраняет 51–75% + $2M/год advisor fee + CIO/CEO. При $4.9B оценке в году 5 его доля = $2.5–3.7B. Уходить невыгодно ни ему, ни вам.",
                 accent: "#a855f7",
               },
               {
-                t: "Финансовая безопасность", d: "DIFC Dubai: 0% CGT, английское право, DIFC Courts. $100M net основателю — через эскроу, независимый банк, при закрытии сделки.",
+                t: "Финансовая безопасность", d: "DIFC Dubai: 0% CGT, английское право, DIFC Courts. Опциональный secondary-транш основателю (часть чека) — через эскроу, независимый банк, при закрытии.",
                 accent: "#f59e0b",
               },
             ].map(c => (
@@ -285,7 +287,7 @@ export default function PartnerPage() {
             Финансовый сценарий
           </div>
           <h2 style={{ fontSize: "clamp(26px, 4vw, 42px)", fontWeight: 900, lineHeight: 1.1, letterSpacing: "-0.02em", marginBottom: 36 }}>
-            При команде 80-100 человек и $60M в операции.
+            При команде 80-100 человек и primary-капитале в рост.
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
             {SCENARIO.map(s => (
@@ -299,8 +301,8 @@ export default function PartnerPage() {
             ))}
           </div>
           <div style={{ padding: 22, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, fontSize: 14, color: "#94a3b8", lineHeight: 1.6 }}>
-            При оценке $4B в год 5: <strong style={{ color: "#10b981" }}>ваши 70% = $2.8B</strong> · <strong style={{ color: "#3b82f6" }}>доля основателя 30% = $1.2B</strong> (сверх $100M уже полученных).
-            Мультипликатор 8x для SaaS+fintech консервативен — Stripe торгуется на 15-20x.
+            Вход по $10.5M за 1% (оценка $1.05B). При $4.9B в год 5: <strong style={{ color: "#10b981" }}>доля 49% = $2.4B (ROI 4.7×)</strong> · <strong style={{ color: "#3b82f6" }}>основатель 51% = $2.5B</strong>.
+            ROI одинаков на любой доле — цена за процент постоянна. Мультипликатор 10× ARR консервативен (Stripe 15-20×).
           </div>
         </div>
       </section>

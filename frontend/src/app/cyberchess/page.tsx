@@ -5632,7 +5632,7 @@ export default function CyberChessPage(){
       )}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
@@ -7977,6 +7977,68 @@ export default function CyberChessPage(){
           </div>}
 
           {tab==="puzzles"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {/* ── Mode Selector — FIRST so Puzzle Rush is immediately visible ── */}
+            <Card padding={SPACE[2]} tone="surface1">
+              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
+                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Custom"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
+                  const active=pzMode===m;
+                  return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
+                    style={{padding:"8px 4px",borderRadius:RADIUS.md,
+                      border:active?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,
+                      background:active?CC.accentSoft:CC.surface1,color:active?CC.accent:CC.textDim,
+                      fontSize:12,fontWeight:800,cursor:"pointer",
+                      display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
+                    <span style={{fontSize:16}}>{ic}</span>
+                    <span style={{fontSize:10,fontWeight:800}}>{label}</span>
+                  </button>;
+                })}
+              </div>
+              {/* Custom duration input — пресеты + произвольное число секунд (любой контроль). */}
+              {pzMode==="custom"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность · любой контроль</div>
+                <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
+                  {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
+                    const active=pzCustomSec===sec;
+                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);sPzTimeLeft(sec);showToast(`Custom ${label}`,"info")}}
+                      style={{padding:"5px 10px",borderRadius:RADIUS.sm,
+                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
+                        fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
+                  })}
+                  <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
+                  <input type="number" min={30} max={3600} step={30}
+                    value={pzCustomSec}
+                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
+                    style={{width:78,padding:"5px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12,fontFamily:"ui-monospace,monospace",fontWeight:800,color:CC.text,background:CC.surface1}}/>
+                </div>
+              </div>}
+              {/* Rush duration selector — виден только когда выбран Rush */}
+              {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
+                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
+                  {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,"10 мин"]] as const).map(([sec,label])=>{
+                    const active=rushDuration===sec;
+                    return <button key={sec} onClick={()=>{sRushDuration(sec);if(rushActive){sPzTimeLeft(sec);sRushScore(0);sRushStreak(0);sRushBestStreak(0)}}}
+                      style={{padding:"6px 4px",borderRadius:RADIUS.sm,
+                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
+                        fontSize:11,fontWeight:800,cursor:"pointer",
+                        transition:`all ${MOTION.fast} ${MOTION.ease}`}}>{label}</button>;
+                  })}
+                  <input type="number" min={30} max={1800} step={30}
+                    value={[90,180,300,600].includes(rushDuration)?"":rushDuration}
+                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=1800)sRushDuration(v)}}
+                    placeholder="свой"
+                    title="Custom (30-1800 сек)"
+                    style={{padding:"6px 4px",borderRadius:RADIUS.sm,
+                      border:![90,180,300,600].includes(rushDuration)?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
+                      background:CC.surface1,color:CC.text,fontSize:11,fontWeight:800,textAlign:"center",
+                      width:"100%",outline:"none"}}/>
+                </div>
+              </div>}
+            </Card>
             {/* ── ScoreCard: session stats ── */}
             {(pzSolvedCount>0||pzFailedCount>0)&&<div style={{borderRadius:10,background:"linear-gradient(135deg,#f0f9ff,#e0f2fe)",border:"1px solid #bae6fd",padding:"10px 14px"}}>
               <div style={{fontSize:10,fontWeight:800,color:"#0369a1",letterSpacing:"0.08em",textTransform:"uppercase" as const,marginBottom:8}}>📊 Сессия</div>
@@ -8222,68 +8284,7 @@ export default function CyberChessPage(){
               </div>
             </div>
 
-            {/* ── Mode Selector ── */}
-            <Card padding={SPACE[2]} tone="surface1">
-              <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?`Rush ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · +1..+3с per solve`:pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Custom"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
-                  const active=pzMode===m;
-                  return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
-                    style={{padding:"8px 4px",borderRadius:RADIUS.md,
-                      border:active?`2px solid ${CC.accent}`:`1px solid ${CC.border}`,
-                      background:active?CC.accentSoft:CC.surface1,color:active?CC.accent:CC.textDim,
-                      fontSize:12,fontWeight:800,cursor:"pointer",
-                      display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                      transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
-                    <span style={{fontSize:16}}>{ic}</span>
-                    <span style={{fontSize:10,fontWeight:800}}>{label}</span>
-                  </button>;
-                })}
-              </div>
-              {/* Custom duration input — пресеты + произвольное число секунд (любой контроль). */}
-              {pzMode==="custom"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
-                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность · любой контроль</div>
-                <div style={{display:"flex",gap:SPACE[1],flexWrap:"wrap",alignItems:"center"}}>
-                  {([[60,"1 мин"],[120,"2 мин"],[600,"10 мин"],[1200,"20 мин"],[1800,"30 мин"]] as const).map(([sec,label])=>{
-                    const active=pzCustomSec===sec;
-                    return <button key={sec} onClick={()=>{sPzCustomSec(sec);sPzTimeLeft(sec);showToast(`Custom ${label}`,"info")}}
-                      style={{padding:"5px 10px",borderRadius:RADIUS.sm,
-                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
-                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
-                        fontSize:11,fontWeight:800,cursor:"pointer"}}>{label}</button>;
-                  })}
-                  <span style={{fontSize:11,color:CC.textMute,marginLeft:4}}>сек:</span>
-                  <input type="number" min={30} max={3600} step={30}
-                    value={pzCustomSec}
-                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=3600){sPzCustomSec(v);sPzTimeLeft(v)}}}
-                    style={{width:78,padding:"5px 8px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,fontSize:12,fontFamily:"ui-monospace,monospace",fontWeight:800,color:CC.text,background:CC.surface1}}/>
-                </div>
-              </div>}
-              {/* Rush duration selector — виден только когда выбран Rush */}
-              {pzMode==="rush"&&<div style={{marginTop:SPACE[2],paddingTop:SPACE[2],borderTop:`1px dashed ${CC.border}`}}>
-                <div style={{fontSize:9,fontWeight:900,letterSpacing:1.2,color:CC.textMute,textTransform:"uppercase" as const,marginBottom:6}}>Длительность Rush</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
-                  {([[90,"1:30"],[180,"3 мин"],[300,"5 мин"],[600,"10 мин"]] as const).map(([sec,label])=>{
-                    const active=rushDuration===sec;
-                    return <button key={sec} onClick={()=>{sRushDuration(sec);if(rushActive){sPzTimeLeft(sec);sRushScore(0);sRushStreak(0);sRushBestStreak(0)}}}
-                      style={{padding:"6px 4px",borderRadius:RADIUS.sm,
-                        border:active?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
-                        background:active?"rgba(5,150,105,0.10)":CC.surface1,color:active?CC.brand:CC.textDim,
-                        fontSize:11,fontWeight:800,cursor:"pointer",
-                        transition:`all ${MOTION.fast} ${MOTION.ease}`}}>{label}</button>;
-                  })}
-                  <input type="number" min={30} max={1800} step={30}
-                    value={[90,180,300,600].includes(rushDuration)?"":rushDuration}
-                    onChange={e=>{const v=parseInt(e.target.value);if(!isNaN(v)&&v>=30&&v<=1800)sRushDuration(v)}}
-                    placeholder="свой"
-                    title="Custom (30-1800 сек)"
-                    style={{padding:"6px 4px",borderRadius:RADIUS.sm,
-                      border:![90,180,300,600].includes(rushDuration)?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,
-                      background:CC.surface1,color:CC.text,fontSize:11,fontWeight:800,textAlign:"center",
-                      width:"100%",outline:"none"}}/>
-                </div>
-              </div>}
-            </Card>
+            {/* Mode Selector relocated to top of puzzles panel for Rush discoverability */}
 
             {/* ── Collapsible Filters ── */}
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
@@ -12863,7 +12864,9 @@ ${question.trim()}`;
       lastMove={lm ? {san: hist[hist.length-1] || "", from: lm.from, to: lm.to} : null}
       eval={typeof evalCp === "number" ? {cp: evalCp, mate: evalMate || 0} : null}
     />
-    {showProjectsBanner&&!streamerMode&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
+        игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
+    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

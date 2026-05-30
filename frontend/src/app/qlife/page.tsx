@@ -8,6 +8,8 @@ import BiomarkerForm from "./components/BiomarkerForm";
 import TrendCard from "./components/TrendCard";
 import PlanCard from "./components/PlanCard";
 import StatsStrip from "./components/StatsStrip";
+import WeeklyTrendsChart from "./components/WeeklyTrendsChart";
+import BiomarkerHistory from "./components/BiomarkerHistory";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface BiomarkerRecord {
@@ -98,6 +100,16 @@ export default function QLifePage() {
           <BiomarkerForm onLogged={handleLogged} />
           <TrendCard biomarkers={biomarkers} loading={bLoading} />
         </div>
+      </section>
+
+      {/* Weekly trend charts (uses /biomarkers/trends endpoint) */}
+      <section style={styles.section}>
+        <WeeklyTrendsChart refreshKey={statsKey} />
+      </section>
+
+      {/* History log */}
+      <section style={styles.section}>
+        <BiomarkerHistory biomarkers={biomarkers} loading={bLoading} />
       </section>
 
       {/* AI Plan */}

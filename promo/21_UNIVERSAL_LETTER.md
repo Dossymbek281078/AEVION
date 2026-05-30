@@ -9,6 +9,144 @@
 
 ---
 
+## ★★ ОФФЕР-ВЫБОР — одно письмо, три типа, единая цена (ОСНОВНАЯ ВЕРСИЯ)
+
+> Эта версия добавляет к нарративу **оффер с выбором входа по постоянной цене**.
+> Скептик берёт малую де-рискованную долю, визионер — партнёрскую, идея-first/покупатель — полный выкуп.
+> Никакого торга по оценке — только выбор глубины. Это снимает главный спор скептика (оценку)
+> и даёт каждому типу его собственную дверь в один и тот же актив.
+
+**Subject:** `One price. You choose how much of the engine you own.`
+**Send:** вторник-четверг, 08:00–10:00 по времени адресата. Plain-text, без attachments. Ссылка одна — /acquire.
+
+### ПИСЬМО (EN — send-ready)
+
+```
+[Name / Investment Team],
+
+I am not a programmer. I am a Financial Director and construction-business owner
+in Kazakhstan who spent ten years watching trust fail — forged permits, stolen
+designs, untraceable payments — and losing money to it. When AI tools arrived,
+I stopped asking why the system lies and started building the answer. In six
+months, alone, I built 30+ working modules across five domains: post-quantum
+signatures, digital banking, IP attestation, an AI gateway, a developer layer.
+
+You will ask: where are the sales? There are none — and that is the entire point.
+Sales are what a team builds from an idea. I have brought the idea, and proven I
+generate ideas faster than teams execute them. The one thing I cannot conjure
+alone is execution at scale.
+
+The idea is mine. The team is yours. The life — ours.
+
+That idea sits where three irreversible shifts meet: trust after quantum (every
+signature on earth must be reissued — NIST FIPS 204), banking without branches
+(1.4 billion people in markets the West forgot), and authorship in the age of AI
+(who made this, and when?). Whoever owns the layer beneath these owns a toll
+booth on the digital economy.
+
+So I am not handing you one fixed deal to take or leave. I bring one price and
+let you choose your depth. AEVION is valued at ~$1.05B, and the price is constant:
+$10.5M per 1%. You decide only how much you buy:
+
+  - Proof before scale? Enter at 1-10% ($10.5M-$105M). It funds the build; I keep
+    control and skin in the game; we tie the tranches to milestones.
+  - Build the future with me? Take a partner stake of 25-49% ($263M-$516M).
+    Shared board, I stay CEO/CIO.
+  - Own the engine outright? 95% for $1B net to me; I keep 5% and stay as Chief
+    Innovation Officer for years.
+
+The price per percent never changes — there is nothing to haggle but the size of
+your conviction. And I earn only when you earn; I am not selling and walking away.
+So whatever brought you here — proof, scale, or a mind that sees what others don't
+— our goal is the same one. The only open question is how much of it you want to own.
+
+The full ladder, live and verifiable, is at https://aevion.app/acquire.
+
+Thirty minutes this week?
+
+— Dosymbek Zhakiya
+Founder & Chief Innovation Officer, AEVION
+yahiin1978@gmail.com · https://aevion.app/acquire
+```
+
+### ПИСЬМО (RU — референс / для русскоязычных)
+
+```
+[Имя / Инвестиционная команда],
+
+Я не программист. Я финансовый директор и владелец строительного бизнеса в
+Казахстане, который 10 лет смотрел как рушится доверие — поддельные экспертизы,
+украденные проекты, непрозрачные платежи — и терял на этом деньги. Когда
+появились AI-инструменты, я перестал спрашивать «почему система врёт» и начал
+строить ответ. За 6 месяцев в одиночку — 30+ работающих модулей в пяти доменах:
+постквантовые подписи, цифровой банк, IP-реестр, AI-шлюз, dev-платформа.
+
+Вы спросите: где продажи? Их нет — и в этом вся суть. Продажи — это то, что
+команда строит из идеи. Я принёс идею и доказал, что генерирую идеи быстрее,
+чем команды их воплощают. Единственное, что я не могу создать в одиночку —
+исполнение в масштабе.
+
+Идея — моя. Команда — ваша. Жизнь — наша.
+
+Эта идея стоит на пересечении трёх необратимых сдвигов: доверие после кванта
+(каждая подпись на земле должна быть перевыпущена — NIST FIPS 204), банкинг без
+офисов (1.4 млрд человек на рынках, которые Запад забыл), и авторство в эпоху AI
+(кто это создал и когда?). Кто владеет слоем под ними — владеет будкой сбора
+пошлины на всей цифровой экономике.
+
+Поэтому я не даю вам одну фиксированную сделку «бери или уходи». Я даю одну цену
+и право выбрать глубину. AEVION оценена в ~$1.05B, и цена постоянна: $10.5M за 1%.
+Вы решаете только сколько берёте:
+
+  - Нужны доказательства до масштаба? Вход 1-10% ($10.5M-$105M). Деньги идут в
+    рост; я сохраняю контроль и шкуру в игре; транши привязываем к майлстоунам.
+  - Хотите строить будущее вместе? Партнёрская доля 25-49% ($263M-$516M).
+    Совместный борд, я остаюсь CEO/CIO.
+  - Хотите владеть двигателем целиком? 95% за $1B net мне; я оставляю 5% и
+    остаюсь Chief Innovation Officer на годы.
+
+Цена за процент не меняется — торговать не о чем, кроме размера вашей убеждённости.
+И я зарабатываю только когда зарабатываете вы; я не продаю и не ухожу. Что бы вас
+сюда ни привело — доказательства, масштаб или мышление, которое видит то, чего не
+видят другие — наша цель одна. Открыт только один вопрос: какой долей вы хотите владеть.
+
+Полная лестница, живая и проверяемая, — на https://aevion.app/acquire.
+
+Тридцать минут на этой неделе?
+
+— Досымбек Жакия
+Основатель и Chief Innovation Officer, AEVION
+yahiin1978@gmail.com · https://aevion.app/acquire
+```
+
+### Единая ценовая лестница (приложение к письму = /acquire)
+
+| Доля инвестору | Цена (= доля × $10.5M) | Доля основателю | Стоимость доли осн.¹ | Характер | Роль основателя |
+|---|---|---|---|---|---|
+| 1% | $10.5M | 99% | $1 042M | primary | Founder-CEO · полный контроль |
+| 10% | $105M | 90% | $947M | primary | Founder-CEO |
+| 25% | $263M | 75% | $789M | primary | Founder-CEO · борд-место инвестору |
+| 49% | $516M | 51% | $537M | primary + secondary | Founder-CEO/CIO |
+| 75% | $789M | 25% | $263M | secondary-heavy | Founder-CIO · advisor |
+| **95%** | **$1 000M net** | **5%** | **$53M + $1B net** | secondary · выкуп | Senior Advisor · 24 мес |
+
+¹ Оценка post-money ≈ $1.05B константа. Цена за 1% = $10.5M на всех уровнях. Стоимость доли осн. = доля осн. × оценка.
+Флагман $1B — net основателю (DIFC 0% CGT либо gross-up на стороне покупателя).
+
+### Разбор: кто какой вход выбирает сам (для тебя, не для инвестора)
+
+| Тип инвестора | Какой вход выбирает сам | Почему оффер-выбор его обезоруживает |
+|---|---|---|
+| **Скептик** | 1-10% ($10.5M-$105M), транши под майлстоуны | Спорить не о чем: цена фиксирована, оценка не торгуется. Он входит малой де-рискованной долей, я сохраняю шкуру — его осторожность удовлетворена самой структурой. |
+| **Визионер** | 25-49% партнёрская | Он берёт значимую долю будущего по дешёвой ранней цене и строит его со мной. «Дёшево до того, как очевидно». |
+| **Идея-first / стратег / суверенный фонд** | 95% полный выкуп | Покупает двигатель целиком; я остаюсь CIO как гарантия, что двигатель не остановится. $1B net мне. |
+
+**Ключевой приём оффера-выбора:** единая цена за процент убирает торг по оценке (главное оружие скептика)
+и превращает разговор из «сколько это стоит» в «сколько ты хочешь взять». Каждый тип сам выбирает свою дверь —
+мы никому ничего не навязали, но всех привели в один актив, и на каждом уровне мой интерес = его интерес.
+
+---
+
 ## ★ FINAL SEND-READY — Mubadala Capital Ventures (первый таргет)
 
 > Это версия для отправки первой. Отшлифована под Mubadala. Скопируй, проверь чеклист, отправь.

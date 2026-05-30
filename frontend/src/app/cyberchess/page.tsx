@@ -4438,24 +4438,12 @@ export default function CyberChessPage(){
           <span style={{fontSize:13,lineHeight:1}}>⭐</span>
           <span>{bookmarks.length}</span>
         </button>}
-        {/* Workspace switcher — always visible in the header. Hint shown via tooltip on each chip. */}
-        <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
-
         <div style={{flex:1}}/>
 
-        {/* Locale switcher (RU/EN/KK) — для новых компонентов (Spectator/Replay/Matchmaking/FidePanel/AiPicker) */}
-        <LocaleSwitcher
-          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
-          text={CC.text} textDim={CC.textDim} brand={CC.brand}
-        />
-
-        {/* AEVION ecosystem mini-hub — переход в другие продукты без покидания CyberChess */}
-        <AevionMiniHub
-          onVisit={trackEcosystemVisit}
-          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
-          text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
-        />
-
+        {/* ══ ЗОНА «ПРОФИЛЬ» — рейтинг + Chessy ══ */}
+        <div className="cc-hzone" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
+          <div style={{fontSize:8,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textMute,lineHeight:1}}>Профиль</div>
+          <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
         {/* Rating badge */}
         <div style={{
           display:"flex",alignItems:"center",gap:SPACE[2],padding:"4px 12px 4px 4px",
@@ -4517,11 +4505,13 @@ export default function CyberChessPage(){
             <Icon.Help width={14} height={14}/>
           </button>
         </div>
+          </div>
+        </div>
 
-        {/* Утилиты в шапке — единый кластер справа (настройки/help/звук/музыка/медиа/фулскрин).
-            Сгруппированы во flexShrink:0 контейнер, чтобы держались вместе и не разлетались
-            по строкам при wrap (фидбэк: шестерёнка/медиа «терялись где-то внизу»). */}
-        <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
+        {/* ══ ЗОНА «ИНСТРУМЕНТЫ» — настройки/медиа/музыка/звук/фулскрин ══ */}
+        <div className="cc-hzone" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
+          <div style={{fontSize:8,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textMute,lineHeight:1}}>Инструменты</div>
+        <div style={{display:"inline-flex",alignItems:"center",gap:4,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
         <Btn
           variant="secondary"
           size="sm"
@@ -4598,6 +4588,24 @@ export default function CyberChessPage(){
           }}
           className="cc-mobile-sidebar-btn"
         >☰</button>
+        </div>
+        </div>
+
+        {/* ══ ЗОНА «НАВИГАЦИЯ» — layout / язык / экосистема ══ */}
+        <div className="cc-hzone" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flexShrink:0}}>
+          <div style={{fontSize:8,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,color:CC.textMute,lineHeight:1}}>Навигация</div>
+          <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
+        <WorkspaceToolbar preset={wsPreset} onChange={(p)=>{sWsPreset(p);showToast(`Workspace: ${p}`,"info")}}/>
+        <LocaleSwitcher
+          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+          text={CC.text} textDim={CC.textDim} brand={CC.brand}
+        />
+        <AevionMiniHub
+          onVisit={trackEcosystemVisit}
+          surface1={CC.surface1} surface2={CC.surface2} border={CC.border}
+          text={CC.text} textDim={CC.textDim} textMute={CC.textMute} brand={CC.brand}
+        />
+          </div>
         </div>
       </div>}
 

@@ -8,6 +8,7 @@ import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import PersonaCard from "./components/PersonaCard";
 import CreatePersonaForm from "./components/CreatePersonaForm";
 import AvatarDisplay from "./components/AvatarDisplay";
+import EditPersonaPanel from "./components/EditPersonaPanel";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export default function QPersonaPage() {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryError, setGalleryError] = useState<string | null>(null);
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+  const [editing, setEditing] = useState(false);
   const [stats, setStats] = useState<{ total: number; latest: string[] } | null>(null);
 
   // Load gallery
@@ -233,7 +235,36 @@ export default function QPersonaPage() {
         {/* View single persona */}
         {tab === "view" && selectedPersona && (
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <PersonaCard persona={selectedPersona} />
+            {editing ? (
+              <EditPersonaPanel
+                persona={selectedPersona}
+                onUpdated={(p) => {
+                  setSelectedPersona(p);
+                  setPersonas((prev) => prev.map((x) => (x.alias === p.alias ? p : x)));
+                }}
+                onClose={() => setEditing(false)}
+              />
+            ) : (
+              <>
+                <PersonaCard persona={selectedPersona} />
+                <button
+                  onClick={() => setEditing(true)}
+                  style={{
+                    alignSelf: "flex-start",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    background: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✎ Edit persona
+                </button>
+              </>
+            )}
 
             {/* Share link box */}
             <div style={{

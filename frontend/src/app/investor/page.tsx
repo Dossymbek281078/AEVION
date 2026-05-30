@@ -424,13 +424,26 @@ export default function InvestorPage() {
             <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
-            Seed round open · $5M · contact: [add email]
+            Seed round open · $5M · contact:{" "}
+            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20seed%20round%20inquiry" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
+              yahiin1978@gmail.com
+            </a>
           </p>
         </div>
       </section>
 
-      <footer style={{ textAlign: "center", padding: "24px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 12, color: "#334155" }}>
-        AEVION · aevion.app · github.com/Dossymbek281078/AEVION
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px", display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 12, color: "#334155" }}>
+            AEVION · aevion.app · github.com/Dossymbek281078/AEVION
+          </div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
+            <Link href="/partner" style={{ color: "#94a3b8", textDecoration: "none" }}>Innovation Partnership</Link>
+            <Link href="/acquire" style={{ color: "#94a3b8", textDecoration: "none" }}>Acquisition brief</Link>
+            <Link href="/pilot" style={{ color: "#94a3b8", textDecoration: "none" }}>90-day pilot</Link>
+            <Link href="/transparency" style={{ color: "#94a3b8", textDecoration: "none" }}>Live health-board</Link>
+          </div>
+        </div>
       </footer>
     </div>
   );

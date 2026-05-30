@@ -148,6 +148,36 @@ const DEAL_TERMS = [
   { label: "Контакт", value: "yahiin1978@gmail.com" },
 ];
 
+type EntryTier = {
+  id: string;
+  name: string;
+  check: string;
+  investorPct: string;
+  founderPct: string;
+  founderStake: string;
+  kind: string;
+  role: string;
+  accent: string;
+  flagship?: boolean;
+};
+
+// Constant-price "choose your stake" ladder. ONE post-money valuation
+// (~$1.053B) → a FIXED price of ~$10.53M per 1% across every tier. The flagship
+// is $1B net for 95% (founder keeps 5%); every other tier is just a different
+// amount bought at the SAME per-percent price. check = investorPct × $10.526M.
+// founderStake = founderPct × $1052.6M. Small slice = primary (growth capital,
+// founder keeps control); 95% = secondary (full buyout, founder → advisor).
+const VALUATION_LABEL = "$1.05B";
+const PRICE_PER_PCT = "$10.5M";
+const ENTRY_TIERS: EntryTier[] = [
+  { id: "angel", name: "Angel · 1%", check: "$10.5M", investorPct: "1%", founderPct: "99%", founderStake: "$1 042M", kind: "Primary · капитал в рост", role: "Founder-CEO · полный контроль", accent: "#10b981" },
+  { id: "minority", name: "Minority · 10%", check: "$105M", investorPct: "10%", founderPct: "90%", founderStake: "$947M", kind: "Primary · капитал в рост", role: "Founder-CEO · полный контроль", accent: "#22c55e" },
+  { id: "strategic", name: "Strategic · 25%", check: "$263M", investorPct: "25%", founderPct: "75%", founderStake: "$789M", kind: "Primary", role: "Founder-CEO · борд-место инвестору", accent: "#3b82f6" },
+  { id: "partner", name: "Partner · 49%", check: "$516M", investorPct: "49%", founderPct: "51%", founderStake: "$537M", kind: "Primary + secondary", role: "Founder-CEO/CIO", accent: "#8b5cf6" },
+  { id: "control", name: "Control · 75%", check: "$789M", investorPct: "75%", founderPct: "25%", founderStake: "$263M", kind: "Secondary-heavy", role: "Founder-CIO · advisor", accent: "#f59e0b" },
+  { id: "full", name: "Full acquisition · 95%", check: "$1 000M net", investorPct: "95%", founderPct: "5%", founderStake: "$53M + $1B net", kind: "Secondary · полный выкуп", role: "Senior Advisor · 24 мес", accent: "#ec4899", flagship: true },
+];
+
 export default function AcquirePage() {
   const [registry, setRegistry] = useState<RegistryStats | null>(null);
   const [planetCount, setPlanetCount] = useState<number | null>(null);
@@ -192,7 +222,7 @@ export default function AcquirePage() {
           </div>
         )}
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 24 }}>
-          Acquisition Brief · Floor $1 000 000 000 net · Senior Advisor seat
+          Acquisition Brief · $10.5M за 1% · вход $10M – $1B net · Senior Advisor
         </div>
         <h1 style={{ fontSize: "clamp(40px, 7vw, 84px)", fontWeight: 900, lineHeight: 1.02, letterSpacing: "-0.03em", marginBottom: 24 }}>
           Все деньги.<br />
@@ -382,7 +412,75 @@ export default function AcquirePage() {
           </div>
           <p style={{ fontSize: 14, color: "#94a3b8", marginTop: 24, maxWidth: 760, lineHeight: 1.6 }}>
             AEVION = Plaid + GitHub + ранний Stripe + Figma + on-chain notary в одном контуре.
-            <strong style={{ color: "#f1f5f9" }}> $1B — нижняя граница</strong>, оптимизированная на быстрый closing.
+            <strong style={{ color: "#f1f5f9" }}> $1B — верхний уровень (полный выкуп, 95%)</strong>; войти можно от $10.5M (1%) по той же цене — см. «Выбор входа» выше.
+          </p>
+        </div>
+      </section>
+
+      {/* CHOOSE YOUR ENTRY — tiered ladder */}
+      <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 24px" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 16 }}>
+            Выбор входа · от $10M до $1B
+          </div>
+          <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 900, lineHeight: 1.1, marginBottom: 16, letterSpacing: "-0.02em" }}>
+            Пять входов. Один актив. Вы выбираете глубину.
+          </h2>
+          <p style={{ fontSize: 18, color: "#cbd5e1", maxWidth: 860, lineHeight: 1.6, marginBottom: 20 }}>
+            Цена одна и постоянная: <strong style={{ color: "#f8fafc" }}>{PRICE_PER_PCT} за 1% при единой оценке {VALUATION_LABEL}.</strong>{" "}
+            Вы выбираете только <em>сколько</em> покупаете — цена за процент не меняется ни на одном уровне.
+            Малая доля — капитал в рост (primary), я остаюсь за рулём. 95% — полный выкуп (secondary), я ухожу в Senior Advisor.
+          </p>
+          <div style={{ display: "inline-flex", flexWrap: "wrap", marginBottom: 32, borderRadius: 14, overflow: "hidden", border: "1px solid rgba(16,185,129,0.3)" }}>
+            <div style={{ padding: "14px 22px", background: "rgba(16,185,129,0.10)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>Оценка · post-money</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.02em" }}>{VALUATION_LABEL}</div>
+            </div>
+            <div style={{ padding: "14px 22px", background: "rgba(59,130,246,0.10)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", color: "#64748b", textTransform: "uppercase", marginBottom: 4 }}>Цена за 1% · фиксирована</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#10b981", letterSpacing: "-0.02em" }}>{PRICE_PER_PCT}</div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+            {ENTRY_TIERS.map(t => (
+              <div key={t.id} style={{ padding: 24, background: t.flagship ? "linear-gradient(160deg, rgba(236,72,153,0.10), rgba(168,85,247,0.06))" : "rgba(255,255,255,0.03)", border: `1px solid ${t.accent}${t.flagship ? "55" : "30"}`, borderRadius: 20, position: "relative", overflow: "hidden" }}>
+                <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 0% 0%, ${t.accent}14, transparent 60%)`, pointerEvents: "none" }} />
+                <div style={{ position: "relative" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: t.accent, textTransform: "uppercase" }}>{t.name}</div>
+                    {t.flagship && <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", color: "#0a0e1a", background: t.accent, padding: "3px 9px", borderRadius: 999, textTransform: "uppercase" }}>Flagship</div>}
+                  </div>
+                  <div style={{ fontSize: 30, fontWeight: 900, color: "#f8fafc", letterSpacing: "-0.02em", lineHeight: 1, marginBottom: 4 }}>{t.check}</div>
+                  <div style={{ fontSize: 14, color: "#cbd5e1", marginBottom: 18 }}>
+                    → инвестору <strong style={{ color: t.accent }}>{t.investorPct}</strong> · основателю {t.founderPct}
+                  </div>
+                  {[
+                    { k: "Доля основателя", v: t.founderPct },
+                    { k: "Стоимость доли осн.", v: t.founderStake, hi: true },
+                    { k: "Характер сделки", v: t.kind },
+                    { k: "Роль основателя", v: t.role },
+                  ].map(row => (
+                    <div key={row.k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <span style={{ fontSize: 12, color: "#64748b" }}>{row.k}</span>
+                      <span style={{ fontSize: 12, color: row.hi ? t.accent : "#e2e8f0", fontWeight: row.hi ? 800 : 600, textAlign: "right" }}>{row.v}</span>
+                    </div>
+                  ))}
+                  <a
+                    href={"mailto:yahiin1978@gmail.com?subject=" + encodeURIComponent(withRefTag(`AEVION ${t.name} (${t.check} → ${t.investorPct}) — LOI inquiry`, acquireRef.name))}
+                    style={{ display: "block", marginTop: 16, textAlign: "center", padding: "11px 16px", fontSize: 13, fontWeight: 800, color: t.flagship ? "#0a0e1a" : "#cbd5e1", background: t.flagship ? t.accent : "rgba(255,255,255,0.05)", border: t.flagship ? "none" : "1px solid rgba(255,255,255,0.12)", borderRadius: 10, textDecoration: "none" }}
+                  >
+                    Выбрать этот вход →
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p style={{ fontSize: 13, color: "#64748b", marginTop: 24, lineHeight: 1.6, maxWidth: 860 }}>
+            Цена за процент постоянна на всех уровнях ({PRICE_PER_PCT} при оценке {VALUATION_LABEL}) — это и есть единая ценовая политика.
+            «Стоимость доли осн.» = доля основателя × оценка. Флагман $1B — net основателю (DIFC 0% CGT либо gross-up на стороне покупателя).
+            Соотношение primary (в компанию) / secondary (кэш основателю) на каждом уровне фиксируется в LOI.
           </p>
         </div>
       </section>
@@ -390,7 +488,7 @@ export default function AcquirePage() {
       {/* DEAL */}
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "100px 24px 60px" }}>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 16 }}>
-          Условия
+          Условия · верхний уровень (полный выкуп)
         </div>
         <h2 style={{ fontSize: "clamp(40px, 6vw, 64px)", fontWeight: 900, lineHeight: 1.05, marginBottom: 16, letterSpacing: "-0.03em" }}>
           <span style={{ background: "linear-gradient(135deg, #10b981 0%, #3b82f6 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
@@ -399,7 +497,7 @@ export default function AcquirePage() {
           {" "}net.
         </h2>
         <p style={{ fontSize: 20, color: "#cbd5e1", maxWidth: 780, lineHeight: 1.55, marginBottom: 40 }}>
-          Финальный слайд. Семь строк. Не «открыты к обсуждению».
+          Верхний уровень лестницы — полный выкуп (95%). Семь строк. Меньшие доли ($10.5M–$789M по той же цене $10.5M/1%) — в таблице «Выбор входа» выше.
         </p>
 
         <div style={{ padding: 36, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 24 }}>
@@ -417,7 +515,7 @@ export default function AcquirePage() {
 
         <div style={{ marginTop: 40, padding: 28, background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.1))", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 20, textAlign: "center" }}>
           <div style={{ fontSize: 14, color: "#cbd5e1", marginBottom: 14, lineHeight: 1.55 }}>
-            LOI с восемью пунктами (см. <Link href="/acquire" style={{ color: "#10b981", textDecoration: "underline" }}>02_DEAL_TERMS</Link>) —
+            LOI с восемью пунктами (полные условия — в таблице выше, расширенная версия в <code style={{ color: "#10b981", fontFamily: "ui-monospace, monospace" }}>promo/02_DEAL_TERMS.md</code>) —
             подписываем в течение 5 рабочих дней.
           </div>
           <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20acquisition%20-%20LOI%20inquiry&body=Hello,%0A%0AWe%20are%20interested%20in%20discussing%20the%20AEVION%20acquisition%20brief.%0A%0ACompany:%0AContact:%0ATimeline:%0A%0A--" style={{ ...btnPrimary, fontSize: 18, padding: "16px 36px" }}>
@@ -520,7 +618,7 @@ export default function AcquirePage() {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "16px 24px", display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#10b981", textTransform: "uppercase" }}>
-              Acquisition floor · $1B net · Senior Advisor 24m
+              Выбор доли · $10.5M за 1% · до $1B net · Senior Advisor 24m
             </div>
             <div style={{ fontSize: 13, color: "#cbd5e1" }}>
               Готовы подписать LOI с восемью пунктами в 5 рабочих дней. Также — <Link href="/pilot" style={{ color: "#10b981", textDecoration: "underline" }}>90-day pilot</Link> с 100% credit против acquisition.

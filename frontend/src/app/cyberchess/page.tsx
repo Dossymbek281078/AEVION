@@ -4616,8 +4616,9 @@ export default function CyberChessPage(){
         </div>;
       })()}
 
-      {/* Workspace quick-bar — PiP + Multi-panel + stream toggle; compact 1 row */}
-      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&(
+      {/* Workspace quick-bar — PiP + Multi-panel + stream toggle; compact 1 row.
+          Hidden during active play to maximize board space (media features → Ctrl+K / workspace dropdown). */}
+      {!streamerMode&&!pzCurrent&&!scratchOn&&!(setup&&tab==="play")&&!(on&&tab==="play")&&(
         <div style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,flexWrap:"nowrap"}}>
           <button onClick={()=>sWsPreset(wsPreset==="stream"?"standard":"stream")}
             title={wsPreset==="stream"?"Скрыть медиа-панель (YT/Twitch)":"Открыть медиа-панель (YT/Twitch)"}

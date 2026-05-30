@@ -382,6 +382,20 @@ export default function QNewsPage() {
     fetchStats();
   }, [category]);
 
+  // Load bookmarks once on mount (auth-gated, silently no-op if anon)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(apiUrl("/api/qnews/me/bookmarks"), { headers: authHeaders() });
+        if (!resp.ok || cancelled) return;
+        const data = await resp.json() as { articles: NewsItem[] };
+        setBookmarked(new Set((data.articles ?? []).map((a) => a.id)));
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   async function handleSummarize(articleId: string) {
     setAiLoading(articleId);
     try {
@@ -424,12 +438,23 @@ export default function QNewsPage() {
               {stats && <span style={{ marginLeft: 8, fontWeight: 600, color: "#0d9488" }}>{stats.total} статей</span>}
             </p>
           </div>
-          <button
-            onClick={() => setShowSubmit(true)}
-            style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-          >
-            + Опубликовать
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <a
+              href={apiUrl("/api/qnews/rss")}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="RSS 2.0 feed"
+              style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff", color: "#f97316", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
+            >
+              📡 RSS
+            </a>
+            <button
+              onClick={() => setShowSubmit(true)}
+              style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+            >
+              + Опубликовать
+            </button>
+          </div>
         </div>
 
         {/* Submit modal */}

@@ -10,6 +10,7 @@ import RoutingSimulator from "./components/RoutingSimulator";
 import PrivacyScore from "./components/PrivacyScore";
 import EncryptedPostForm from "./components/EncryptedPostForm";
 import PostReader from "./components/PostReader";
+import StatsStrip from "./components/StatsStrip";
 
 export default function ShadowNetPage() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -126,6 +127,10 @@ export default function ShadowNetPage() {
           score и end-to-end зашифрованные посты — всё с криптографией в браузере,
           сервер видит только ciphertext.
         </p>
+      </section>
+
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 20px 30px" }}>
+        <StatsStrip />
       </section>
 
       <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>

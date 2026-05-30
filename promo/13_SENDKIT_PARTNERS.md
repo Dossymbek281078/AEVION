@@ -1,6 +1,7 @@
 # Partner send-kit — PIF · Mubadala · ADQ
 
-> Три финальных письма под Innovation Partnership ($170M / 70% / CIO-модель).
+> Три финальных письма под Innovation Partnership — единая цена $10.5M за 1% (оценка $1.05B),
+> инвестор выбирает глубину входа. Универсал одним письмом — `21_UNIVERSAL_LETTER.md`.
 > Структура каждого: subject + body + 3 reply-шаблона + send-чеклист.
 > Язык — английский для всех трёх (международные партнёры).
 > **Читай своими глазами перед каждой отправкой. Это черновики, не финал.**
@@ -14,7 +15,7 @@
 
 ## ПИСЬМО 1 — PIF / Sanabil Investments (Саудовская Аравия)
 
-**Subject:** `AEVION Partnership — $170M / 70% stake / post-quantum IP (MENA-ready)`
+**Subject:** `AEVION Partnership — one price, you choose the stake (post-quantum IP, MENA-ready)`
 
 **To:** `info@sanabil.com` (официальный contact Sanabil) / через форму на sanabil.com/contact
 **CC (если есть warm intro):** через LinkedIn поиск «Sanabil Investments investment team»
@@ -40,17 +41,18 @@ offer where you bring the execution team and I bring the thinking that
 built 30 products nobody asked me to build — because I couldn't stop seeing
 the problems.
 
-What Sanabil gets:
-  70% of AEVION for $170M total
-    — $110M secondary → founder receives $100M net (DIFC 0% CGT)
-    — $60M primary into the company for operations and hiring
-  Founder stays as Chief Innovation Officer (30% stake, no exit)
-  Your team of 50-100 engineers executes on a proven idea pipeline
+What Sanabil gets — one price, your choice of depth:
+  AEVION is valued at ~$1.05B; the price is constant at $10.5M per 1%.
+    — Partnership: a 25-49% stake ($263M-$516M), mostly primary into the
+      company; founder keeps the majority (51-75%) and stays as CIO.
+    — Or the full engine: 95% for $1B net; founder stays as CIO.
+  Your team of 50-100 engineers executes on a proven idea pipeline.
 
 Financial case:
   Year 3: $130M ARR → $1.0-1.6B company valuation
   Year 5: $490M ARR → $3.9-5.9B company valuation
-  Your 70% at year 5: $2.7-4.1B on a $170M entry
+  A 49% stake at year 5: ~$2.4B (≈4.7× on entry). ROI is identical at any
+  stake — the price per percent never changes.
 
 Why this fits Vision 2030:
   1. QSign (FIPS 204 ML-DSA-65, GA) — post-quantum e-signature ready for
@@ -139,7 +141,7 @@ yahiin1978@gmail.com
 
 ## ПИСЬМО 2 — Mubadala Investment Company (Абу-Даби, ОАЭ)
 
-**Subject:** `AEVION Partnership — DIFC digital bank + post-quantum IP ($170M / 70%)`
+**Subject:** `AEVION Partnership — DIFC digital bank + post-quantum IP (one price, your stake)`
 
 **To:** через форму mubadala.ae → «Investment Enquiry» / или `communications@mubadala.ae`
 **Alt contact:** DIFC FinTech Hive (они напрямую коннектят с Mubadala) → fintechhive.ae/contact
@@ -162,10 +164,11 @@ developer platform. One person. No engineering team. Zero VC funding.
 AEVION is now seeking an execution partner. You bring the team.
 I bring the thinking that never stops generating.
 
-Partnership terms:
-  $170M total — $110M secondary (founder nets $100M, DIFC 0% CGT) +
-  $60M primary into company. Investor: 70%. Founder stays as CIO: 30%.
-  Implied pre-money valuation: ~$275M.
+Partnership terms — one price, you choose the depth:
+  AEVION is valued at ~$1.05B; price is constant at $10.5M per 1%.
+  Partnership: 25-49% ($263M-$516M), mostly primary into the company;
+  founder keeps the majority (51-75%) and stays as CIO. Or full
+  acquisition: 95% for $1B net.
 
 Why Mubadala specifically — three direct synergies:
 
@@ -184,7 +187,8 @@ Why Mubadala specifically — three direct synergies:
      Stripe, ElevenLabs, Brevo, DALL-E, Drive, Railway) — the first
      full-stack developer workspace that works in MENA compliance environments.
 
-Year 5 scenario: $490M ARR, $3.9-5.9B valuation. Your 70%: $2.7-4.1B.
+Year 5 scenario: $490M ARR, $3.9-5.9B valuation. A 49% stake: ~$2.4B
+(≈4.7× on entry; ROI identical at any stake — price per percent is fixed).
 
 Brief + live modules: https://aevion.app/partner
 30-min call this week or next?
@@ -256,7 +260,7 @@ Brief: https://aevion.app/partner?ref=mubadala-fu1
 > и diversification. Работает параллельно с Mubadala, отдельный LP.
 > Прямая синергия: ADQ активно строит digital economy в MENA.
 
-**Subject:** `AEVION Partnership — digital infrastructure play for MENA ($170M / 70%)`
+**Subject:** `AEVION Partnership — digital infrastructure play for MENA (one price, your stake)`
 
 **To:** через форму adq.ae → «Investment Enquiry» / `invest@adq.ae`
 **Alt:** через ADGM (Abu Dhabi Global Market) ecosystem — они коннектят с ADQ tech team
@@ -280,12 +284,12 @@ trust infrastructure should look like — but didn't exist.
 With AI tools, I built 30+ working prototypes in 6 months. Not development
 speed — idea speed. The bottleneck is execution. That's where ADQ comes in.
 
-Partnership structure:
-  $170M total — $110M secondary (founder nets $100M, DIFC 0% CGT) +
-  $60M primary into company.
-  ADQ receives: 70% equity.
-  Founder stays as Chief Innovation Officer: 30% + $2M advisor fee/year.
-  Implied pre-money: ~$275M.
+Partnership structure — one price, you choose the depth:
+  AEVION is valued at ~$1.05B; price is constant at $10.5M per 1%.
+  Partnership: ADQ takes 25-49% ($263M-$516M), mostly primary into the
+  company; founder keeps the majority (51-75%). Or full acquisition:
+  95% for $1B net.
+  Founder stays as Chief Innovation Officer + $2M advisor fee/year.
 
 Why ADQ / MENA fit:
 
@@ -308,8 +312,8 @@ Why ADQ / MENA fit:
      QCoreAI (5+ AI providers, 490 tests passing) — last-mile AI
      for governments where Anthropic/OpenAI have compliance gaps.
 
-Year 5 scenario: $490M ARR, $3.9-5.9B valuation. ADQ 70%: $2.7-4.1B.
-ROI: 16-24× on a $170M entry.
+Year 5 scenario: $490M ARR, $3.9-5.9B valuation. A 49% stake: ~$2.4B
+(≈4.7× on entry; ROI identical at any stake — price per percent is fixed).
 
 Full brief + live health-board: https://aevion.app/partner?ref=adq
 30-min call this week?

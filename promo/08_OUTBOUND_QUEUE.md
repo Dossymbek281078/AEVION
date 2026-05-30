@@ -36,7 +36,8 @@ These extend Stripe's payments rail into IP+dev without competing with your
 core network. Closest comp transactions: Plaid/Visa $5.3B, GitHub/Microsoft
 $7.5B. AEVION sits at the intersection.
 
-Acquisition floor: $1B USD net, 70/20/10 structure, founder remains as Senior
+One price: $10.5M per 1% (~$1.05B valuation); you choose the depth. Full
+buyout: 95% for $1B USD net, founder remains as Senior
 Advisor 24m, brand kept, AEV cap immutable. Full brief: https://aevion.app/acquire
 (short link with 5-page printable PDF). 90-second pitch video on the same page.
 
@@ -76,7 +77,7 @@ For Visa, the relevant pillars:
   - DevHub — single AEV-billed workspace across nine SaaS integrations.
     Distribution channel for Visa-attached merchants.
 
-Floor: $1B USD net + Senior Advisor 24m + brand kept + AEV cap immutable.
+One price $10.5M/1% (~$1.05B); choose your stake. Full buyout 95% = $1B USD net + Senior Advisor 24m + brand kept + AEV cap immutable.
 Full brief, 5-page printable, 90-sec video: https://aevion.app/acquire
 
 We're targeting a closing window inside 60-day exclusivity. Open to a 30-min
@@ -120,7 +121,7 @@ Plus 7+ consumer-product proofs (CyberChess, HealthAI, Multichat...) to
 demonstrate the layer holds real users at scale.
 
 Comp: Microsoft × GitHub 2018 was $7.5B. AEVION as the next layer above
-that thesis: $1B USD net floor + Senior Advisor 24m + brand kept. Five-page
+that thesis: one price $10.5M/1% (~$1.05B), choose your stake; full buyout 95% = $1B USD net + Senior Advisor 24m + brand kept. Five-page
 printable + 90-sec video: https://aevion.app/acquire
 
 30-min call worth a calendar slot?
@@ -151,7 +152,7 @@ Constitution v1 attested. Daily smoke 24/24, transparent health board.
 I'm reaching out specifically because Plaid is the most natural strategic
 partner / counterparty for AEVION, in two possible structures:
 
-  1. Acquisition — floor $1B USD net + founder stays as Senior Advisor 24m,
+  1. Acquisition — one price $10.5M/1% (~$1.05B), full buyout 95% = $1B USD net + founder stays as Senior Advisor 24m,
      brand kept, AEV cap immutable. Comparable to the unwound Visa deal but
      into a much wider product surface.
 

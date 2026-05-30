@@ -58,7 +58,7 @@
 
 ### Сделка
 
-**$1 000 000 000 USD net (после налогов)** + Senior Advisor on AEVION matters + retained brand + 24-мес continuity. Полные условия — в `02_DEAL_TERMS.md`.
+Одна цена **$10.5M за 1%** (оценка $1.05B); выбор глубины 1%→95%. Полный выкуп: **95% = $1 000 000 000 USD net** + Senior Advisor on AEVION matters + retained brand + 24-мес continuity. Полные условия — в `02_DEAL_TERMS.md`.
 
 ---
 
@@ -171,7 +171,7 @@ Compositional moat, не отдельные продукты.
 
 ### Слайд 12 — Сделка
 
-> **$1 000 000 000 USD net (после налогов)**
+> **Одна цена $10.5M за 1% · оценка $1.05B · выбор глубины 1%→95% · полный выкуп 95% = $1 000 000 000 USD net**
 >
 > 70% cash at close + 30% retention bonus (24 мес)
 > Должность основателя: **Senior Advisor on AEVION matters**

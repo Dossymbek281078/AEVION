@@ -18,29 +18,32 @@ AEVION — компания второго типа. За последние 18 
 
 **Слабость очевидна:** нет команды для масштабирования.
 
-**Предложение:** стратегический инвестор приходит с $170M и командой 50-100 инженеров. Получает 70% компании. Основатель получает $100M net (через secondary) и остаётся Chief Innovation Officer с 30% доли — генерируя следующую волну идей.
+**Предложение:** одна цена — **$10.5M за 1%** при оценке ≈ **$1.05B**. Инвестор выбирает глубину входа. В партнёрском варианте берёт значимую долю (25–49% = $263M–$516M), приходит с командой 50-100 инженеров, деньги идут в рост (primary). Основатель сохраняет большинство (51–75%) и остаётся Chief Innovation Officer — генерируя следующую волну идей. Полный выкуп (95% за $1B net) — верхний уровень той же лестницы.
 
 ---
 
-## Структура сделки
+## Структура сделки (единая цена, выбор глубины)
+
+> Та же ценовая политика, что в `02_DEAL_TERMS.md`: оценка ≈ **$1.05B**, постоянная цена
+> **$10.5M за 1%**. Партнёрский вход — нижние/средние уровни лестницы, где основатель сохраняет большинство.
 
 | Параметр | Условие |
 |----------|---------|
-| Общий чек инвестора | ~$170M |
-| Secondary (покупка акций основателя) | ~$110M gross → **$100M net** (после налога) |
-| Primary (в компанию) | ~$60M — найм, операции, масштаб |
-| Доля инвестора | **70%** |
-| Доля основателя | **30%** + Chief Innovation Officer |
-| Implied company valuation | ~$275M pre-money |
-| Роль основателя | CIO — стратегия, новые идеи, продуктовый vision |
+| Цена | **$10.5M за 1%** (постоянна на всех уровнях) |
+| Оценка post-money | ≈ **$1.05B** |
+| Партнёрский вход | **25–49% = $263M–$516M** (по той же цене за процент) |
+| Доля основателя | **51–75%** + Chief Innovation Officer / CEO |
+| Куда идут деньги | Primary (найм, операции, масштаб) + опц. secondary основателю |
+| Роль основателя | CIO/CEO — стратегия, новые идеи, продуктовый vision |
 | Advisor fee | $2M/год (дополнительно к доле) |
-| Вето основателя | На изменение core IP и фундаментальных продуктовых направлений |
+| Вето основателя | На изменение core IP, AEV cap supply и Constitution v1 |
 | Юрисдикция | **DIFC Dubai** (0% capital gains, нейтральный, сильный enforcement) |
 | Срок DD | 60 дней с LOI |
 | Эксклюзивность | 60 дней по подписанию LOI |
+| Полный выкуп | **95% за $1B net** — верхний уровень той же лестницы (`/acquire`) |
 
 **Почему DIFC Dubai:**
-- 0% налог на прирост капитала → $100M gross = $100M net
+- 0% налог на прирост капитала → secondary-выплаты основателю net = gross
 - Нейтральная юрисдикция (не KZ, не US) — удобна для арабских фондов
 - Сильная судебная система по английскому праву
 - DIFC Courts — признаются в 170+ странах
@@ -125,8 +128,10 @@ AEVION — компания второго типа. За последние 18 
 - Год 3: оценка компании **$1.0-1.6B**
 - Год 5: оценка компании **$3.9-5.9B**
 
-**Инвестор (70%):** $700M-$4.1B
-**Основатель (30%):** $300M-$1.8B (сверх $100M, уже полученных)
+> Вход по оценке $1.05B ($10.5M за 1%). ROI одинаков на любой выбранной доле — цена за процент постоянна.
+
+**Пример (партнёрский вход 49%):** при $4.9B в год 5 доля = **$2.4B** (ROI ≈ 4.7× на вход $516M).
+**Основатель (51%):** **$2.5B** — остаётся выровненным с инвестором на росте.
 
 ---
 
@@ -141,6 +146,7 @@ AEVION — компания второго типа. За последние 18 
 | Innovation capacity | Нанять product visionary ($2-5M/год) | **Включён в сделку** |
 | IP | Создавать с нуля | **Готово** — QSign, QRight, Constitution, AEV |
 | Регуляторный риск | Высокий | **Частично пройден** — FIPS 204 compliance |
+| Цена входа | — | **$10.5M за 1%, любая доля по той же цене** |
 
 ---
 
@@ -149,7 +155,7 @@ AEVION — компания второго типа. За последние 18 
 | Риск | Митигация |
 |------|-----------|
 | Pre-revenue | QSign — технически готов к коммерциализации немедленно |
-| Solo founder | CIO-роль с 30% = долгосрочная retention. Advisor fee = финансовая мотивация |
+| Solo founder | CIO-роль + большинство (51–75%) = долгосрочная retention. Advisor fee = финансовая мотивация |
 | KZ юрисдикция | DIFC структура снимает regulatory risk |
 | AEV token classification | Legal opinion как первый шаг в DD |
 | Конкуренция в DevHub | MENA/CIS market — незащищённый, Zapier там не работает нормально |
@@ -158,9 +164,9 @@ AEVION — компания второго типа. За последние 18 
 
 ## Условия LOI (8 пунктов)
 
-1. $110M gross secondary (→ $100M net основателю) + $60M primary в компанию
-2. Инвестор 70%, основатель 30%
-3. Основатель: Chief Innovation Officer, без срока, advisor fee $2M/год
+1. Цена $10.5M за 1% (оценка $1.05B); инвестор фиксирует долю — партнёрский вход 25–49% или полный выкуп 95%
+2. Деньги: primary в компанию (+ опц. secondary основателю); соотношение фиксируется в LOI
+3. Основатель: Chief Innovation Officer, без срока, advisor fee $2M/год; сохраняет большинство при доле инвестора < 50%
 4. Бренд AEVION сохраняется
 5. AEV cap 21M — неизменен (governance commitment)
 6. Инвестор обязуется привлечь команду 50+ человек в течение 18 месяцев
@@ -195,12 +201,12 @@ IP registry, developer platform. One founder, 30+ live modules, zero revenue tod
 
 The proposition for PIF/Sanabil:
 
-Invest $170M total:
-  - $110M secondary → founder receives $100M net → 40% acquired
-  - $60M primary into company → 30% acquired
-  - Total: 70% at ~$275M implied valuation
+One price: $10.5M per 1% at a ~$1.05B valuation. You choose the stake:
+  - Partnership entry: 25-49% ($263M-$516M), mostly primary into the company
+  - Or full engine: 95% for $1B net
+  - Founder keeps the majority (51-75%) in the partnership case
 
-Founder stays as Chief Innovation Officer (30% stake, no exit).
+Founder stays as Chief Innovation Officer, no exit.
 
 Why this fits Vision 2030:
   1. QSign (ML-DSA-65 FIPS 204) — national-grade e-signature infrastructure
@@ -215,8 +221,8 @@ Founder generates next innovation wave — already has 5+ unrevealed concepts
 under NDA for qualified partners.
 
 Financial scenario: $490M ARR by year 5 → company valuation $3.9-5.9B.
-Your 70% → $2.7-4.1B. This is not speculative — it's a team execution problem,
-not an idea problem.
+A 49% stake → ~$2.4B (≈4.7× on entry). This is not speculative — it's a team
+execution problem, not an idea problem.
 
 Full brief: https://aevion.app/partner
 30-min call this week?
@@ -242,11 +248,11 @@ has zero revenue and needs an execution partner.
 
 Partnership structure:
 
-Total investment: ~$170M
-  Secondary: $110M (40% stake) → Founder nets $100M after DIFC 0% CGT
-  Primary: $60M into company (30% stake)
-  Implied pre-money: ~$275M
-  Founder retains: 30% + Chief Innovation Officer role
+One price: $10.5M per 1% at a ~$1.05B valuation. Choose the stake:
+  Partnership: 25-49% ($263M-$516M), mostly primary into the company
+  Or full acquisition: 95% for $1B net
+  Founder retains the majority (51-75%) in the partnership case
+    + Chief Innovation Officer role
 
 Why Mubadala specifically:
 
@@ -263,7 +269,7 @@ Why Mubadala specifically:
      Make don't serve in MENA. First-mover advantage available now.
 
 Year 5 scenario: $490M ARR, $3.9-5.9B company valuation.
-Mubadala 70% → $2.7-4.1B.
+A 49% stake → ~$2.4B (≈4.7× on entry).
 
 Brief + live health-board: https://aevion.app/partner
 Available for a call this week.

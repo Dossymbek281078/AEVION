@@ -287,6 +287,7 @@ export default function KidsAiContentPage() {
           Детские уроки на русском, английском и казахском. С AI-помощником,
           который объяснит непонятное простыми словами.
         </p>
+        <KidsStatsRow />
       </section>
 
       <LanguageSelector value={lang} onChange={setLang} />
@@ -363,6 +364,35 @@ export default function KidsAiContentPage() {
       >
         AEVION · Kids AI · MVP · safe-by-default · ages 5–12
       </footer>
+    </div>
+  );
+}
+
+function KidsStatsRow() {
+  const [stats, setStats] = useState<{ totalLessons: number; languages: number; categories: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/kids-ai/stats"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setStats(d); })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, []);
+  if (!stats) return null;
+  const cellStyle: React.CSSProperties = {
+    background: "rgba(255,255,255,0.7)",
+    border: "1px solid #fde68a",
+    borderRadius: 14,
+    padding: "10px 18px",
+    textAlign: "center",
+  };
+  const valStyle: React.CSSProperties = { fontSize: 22, fontWeight: 900, color: "#b45309" };
+  const labStyle: React.CSSProperties = { fontSize: 11, color: "#92400e", marginTop: 2, fontWeight: 600 };
+  return (
+    <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 16 }}>
+      <div style={cellStyle}><div style={valStyle}>{stats.totalLessons}</div><div style={labStyle}>уроков</div></div>
+      <div style={cellStyle}><div style={valStyle}>{stats.languages}</div><div style={labStyle}>языков</div></div>
+      <div style={cellStyle}><div style={valStyle}>{stats.categories}</div><div style={labStyle}>категорий</div></div>
     </div>
   );
 }

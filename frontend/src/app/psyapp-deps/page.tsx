@@ -122,6 +122,7 @@ export default function PsyAppDepsPage() {
           Алкоголь, курение или другие зависимости — путь один: маленькие шаги, поддержка и
           честность с собой. Без диагнозов, без осуждения, без следов.
         </p>
+        <CommunityStatsRow />
       </section>
 
       {/* Main flow */}
@@ -316,3 +317,35 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
   },
 };
+
+function CommunityStatsRow() {
+  const [stats, setStats] = useState<{ total_users: number; avg_streak_days: number; top_trigger_type: string | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/psyapp-deps/stats"), { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled && d?.ok) setStats(d); })
+      .catch(() => null);
+    return () => { cancelled = true; };
+  }, []);
+  if (!stats || stats.total_users === 0) return null;
+  const cellStyle: React.CSSProperties = {
+    background: "rgba(60,45,30,0.55)",
+    border: "1px solid #3a2e1f",
+    borderRadius: 12,
+    padding: "12px 18px",
+    textAlign: "center",
+    minWidth: 130,
+  };
+  const valStyle: React.CSSProperties = { fontSize: 22, fontWeight: 800, color: "#e8c684", fontFamily: "monospace" };
+  const labStyle: React.CSSProperties = { fontSize: 10, color: "#a18962", marginTop: 4, textTransform: "uppercase", letterSpacing: "0.06em" };
+  return (
+    <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
+      <div style={cellStyle}><div style={valStyle}>{stats.total_users.toLocaleString()}</div><div style={labStyle}>в комьюнити</div></div>
+      <div style={cellStyle}><div style={valStyle}>{Math.round(stats.avg_streak_days)}d</div><div style={labStyle}>средний streak</div></div>
+      {stats.top_trigger_type && (
+        <div style={cellStyle}><div style={valStyle}>{stats.top_trigger_type}</div><div style={labStyle}>топ-триггер</div></div>
+      )}
+    </div>
+  );
+}

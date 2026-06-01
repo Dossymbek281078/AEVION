@@ -24,7 +24,20 @@ import {
   saveStudentName,
   type CertificateEligibility,
 } from "../lib/examCertificate";
+import {
+  loadTransfers,
+  transferStats,
+  clearTransfers,
+  type TransferEntry,
+  type TransferStats,
+} from "../lib/transferLog";
 import { useRouter } from "next/navigation";
+
+const TRANSFER_KIND_LABEL: Record<TransferEntry["kind"], { icon: string; text: string }> = {
+  rate: { icon: "📋", text: "Расценка / аналог" },
+  value: { icon: "✨", text: "Объём" },
+  formula: { icon: "🧮", text: "Формула" },
+};
 
 function formatTs(iso: string): string {
   try {
@@ -55,11 +68,21 @@ export default function ExamJournalPage() {
   const [filterTask, setFilterTask] = useState<string>("all");
   const [eligibility, setEligibility] = useState<CertificateEligibility | null>(null);
   const [studentName, setStudentName] = useState("");
+  const [transfers, setTransfers] = useState<TransferEntry[]>([]);
+  const [transferAgg, setTransferAgg] = useState<TransferStats | null>(null);
 
   function refresh() {
     setAttempts(loadAttempts());
     setStats(computeStats());
     setEligibility(checkEligibility());
+    setTransfers(loadTransfers().slice().reverse());
+    setTransferAgg(transferStats());
+  }
+
+  function handleClearTransfers() {
+    if (!confirm("Очистить лог переданных позиций?")) return;
+    clearTransfers();
+    refresh();
   }
 
   useEffect(() => {
@@ -144,6 +167,60 @@ export default function ExamJournalPage() {
             </button>
           </div>
         </div>
+
+        {transferAgg && transferAgg.total > 0 && (
+          <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
+            <div className="flex items-baseline justify-between mb-2">
+              <h2 className="text-sm font-bold text-slate-800">
+                📤 Переданные в смету позиции
+                <span className="ml-2 text-xs font-normal text-slate-500">
+                  {transferAgg.total} всего · {transferAgg.byKind.rate} расценок ·{" "}
+                  {transferAgg.byKind.value} объёмов · {transferAgg.byKind.formula} формул
+                </span>
+              </h2>
+              <button
+                onClick={handleClearTransfers}
+                className="px-2 py-1 text-[11px] border border-slate-300 rounded hover:bg-slate-100 text-slate-500"
+              >
+                ✕ очистить лог
+              </button>
+            </div>
+            <div className="max-h-48 overflow-auto">
+              <table className="w-full text-[11px]">
+                <thead className="text-slate-500 text-left sticky top-0 bg-white">
+                  <tr>
+                    <th className="py-1 pr-2">Когда</th>
+                    <th className="py-1 pr-2">Тип</th>
+                    <th className="py-1 pr-2">Что передано</th>
+                    <th className="py-1 pr-2">В задание</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transfers.slice(0, 50).map((t) => {
+                    const k = TRANSFER_KIND_LABEL[t.kind];
+                    return (
+                      <tr key={t.id} className="border-t border-slate-100">
+                        <td className="py-1 pr-2 text-slate-500 whitespace-nowrap">{formatTs(t.timestamp)}</td>
+                        <td className="py-1 pr-2 whitespace-nowrap">
+                          {k.icon} {k.text}
+                        </td>
+                        <td className="py-1 pr-2">
+                          <code className="text-slate-800">{t.detail}</code>
+                          {t.label && <span className="text-slate-400"> — {t.label}</span>}
+                        </td>
+                        <td className="py-1 pr-2 text-slate-500 truncate max-w-[14rem]">{t.taskTitle ?? t.examId}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2 italic">
+              Передачи из калькулятора / каталога / шпаргалки / реальных расценок. Не влияют на баллы —
+              это след активности при сборке сметы.
+            </p>
+          </div>
+        )}
 
         {stats && stats.totalAttempts === 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded p-4 text-sm text-amber-900">

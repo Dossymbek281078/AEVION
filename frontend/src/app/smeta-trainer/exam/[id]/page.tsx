@@ -14,6 +14,7 @@ import { calcLsr, formatKzt } from "../../lib/calc";
 import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
 import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
+import { logTransfer } from "../../lib/transferLog";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
@@ -191,6 +192,7 @@ export default function ExamTaskPage({
   }
 
   function applyPendingValue(value: number) {
+    logTransfer({ kind: "value", detail: value.toFixed(2), examId: task!.id, taskTitle: task!.title });
     setLsr((prev) => {
       if (selectedPosId) {
         return {
@@ -216,10 +218,12 @@ export default function ExamTaskPage({
   }
 
   function applyPendingRate(rateCode: string) {
-    if (!findRate(rateCode)) {
+    const rate = findRate(rateCode);
+    if (!rate) {
       alert(`Расценка ${rateCode} не найдена в корпусе`);
       return;
     }
+    logTransfer({ kind: "rate", detail: rateCode, label: rate.title, examId: task!.id, taskTitle: task!.title });
     setLsr((prev) => {
       const sections = prev.sections.map((s) => ({ ...s, positions: [...s.positions] }));
       const targetSectionIdx = selectedPosId
@@ -249,6 +253,7 @@ export default function ExamTaskPage({
   }
 
   function applyPendingFormula(formula: string) {
+    logTransfer({ kind: "formula", detail: formula, examId: task!.id, taskTitle: task!.title });
     setLsr((prev) => {
       if (selectedPosId) {
         return {

@@ -54,12 +54,20 @@ function RealRatesPageInner() {
               {META.smetyCount} локальных смет настоящего объекта. {META.norm}.
             </p>
           </div>
-          <Link
-            href="/smeta-trainer/rates"
-            className="text-xs px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-100"
-          >
-            📋 Учебный каталог ЭСН →
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/smeta-trainer/resource-quiz"
+              className="text-xs px-3 py-2 bg-white border border-slate-300 rounded hover:bg-slate-100"
+            >
+              🧱 Тест по методу
+            </Link>
+            <Link
+              href="/smeta-trainer/real-rates/build"
+              className="text-xs px-3 py-2 bg-emerald-600 text-white border border-emerald-600 rounded hover:bg-emerald-700"
+            >
+              🧰 Собрать смету →
+            </Link>
+          </div>
         </div>
 
         <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-3 mb-4 text-xs text-amber-900">

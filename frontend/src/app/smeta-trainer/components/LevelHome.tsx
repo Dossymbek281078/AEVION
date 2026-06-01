@@ -352,6 +352,15 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
+              href="/smeta-trainer/real-rates"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
+            >
+              🏗 Реальные расценки РК (Форма 4)
+              <span className="text-[10px] text-amber-600 font-normal">
+                3237 из настоящей сметы · ресурсный метод
+              </span>
+            </Link>
+            <Link
               href="/smeta-trainer/calc"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs font-semibold rounded-lg"
             >

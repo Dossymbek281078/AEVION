@@ -22,7 +22,7 @@ export default function PrivacyPage() {
 
         <div>
           <h2 className="text-lg font-semibold text-white mb-2">3. Payment Processing</h2>
-          <p>All payments are processed by Paddle.com, who acts as the Merchant of Record. AEVION does not store your payment card details. Paddle's privacy policy applies to payment data: <a href="https://www.paddle.com/legal/privacy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">paddle.com/legal/privacy</a></p>
+          <p>All payments are processed by Gumroad, Inc., who acts as the Merchant of Record. AEVION does not store your payment card details. Gumroad's privacy policy applies to payment data: <a href="https://gumroad.com/privacy" className="text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">gumroad.com/privacy</a></p>
         </div>
 
         <div>

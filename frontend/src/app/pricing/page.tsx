@@ -14,11 +14,12 @@ type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
 type TierId = "free" | "pro" | "business" | "enterprise";
 
-// Paddle Price IDs — production live
-const PADDLE_PRICE_IDS: Partial<Record<`${TierId}_${BillingPeriod}`, string>> = {
-  pro_monthly:      "pri_01krzxq0t2rmy9erdv54c9ny3w",
-  pro_annual:       "pri_01krzyf5trnvptmpwdxz570mpf",
-  business_monthly: "pri_01krzy7zgqn32xc52qjbkfhvz0",
+// Живой процессинг — Gumroad. Paddle/Stripe/LemonSqueezy не прошли KYC и мертвы.
+// Платные тиры ведут на Gumroad-чекаут; Free/Enterprise — прежний session-flow.
+// Пока один продукт (xpxzam) обслуживает оба платных тира.
+const GUMROAD_PERMALINKS: Partial<Record<TierId, string>> = {
+  pro: "xpxzam",
+  business: "xpxzam",
 };
 
 interface TierLimits {
@@ -248,31 +249,14 @@ export default function PricingPage() {
     });
     try {
       const period = opts.period ?? "monthly";
-      const priceKey = `${opts.tierId}_${period}` as keyof typeof PADDLE_PRICE_IDS;
-      const priceId = PADDLE_PRICE_IDS[priceKey];
+      const permalink = GUMROAD_PERMALINKS[opts.tierId];
 
-      if (priceId) {
-        // Paddle checkout (primary)
-        const r = await fetch(apiUrl("/api/paddle/checkout"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            priceId,
-            appId: "platform",
-            tierId: opts.tierId,
-          }),
-        });
-        const j = await r.json();
-        if (j.url) {
-          window.location.href = j.url;
-        } else if (j.error?.includes("checkout_not_enabled")) {
-          setCheckoutNotice("Платёжный шлюз проходит верификацию — будет доступен в течение 1-3 дней. Напишите нам на support@aevion.app и мы оформим вручную.");
-          setCheckingOut(null);
-        } else {
-          console.error("[paddle checkout] no url", j);
-          setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или напишите на support@aevion.app");
-          setCheckingOut(null);
-        }
+      if (permalink) {
+        // Gumroad hosted checkout — единственный живой процессинг (Paddle/Stripe/LS мертвы).
+        // ?wanted=true сразу открывает overlay; tier/period/app — для аналитики.
+        window.location.href =
+          `https://aevion.gumroad.com/l/${permalink}?wanted=true&app=platform&tier=${opts.tierId}&period=${period}`;
+        return;
       } else {
         // Free или Enterprise — старый flow
         const r = await fetch(apiUrl("/api/pricing/checkout/session"), {

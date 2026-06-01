@@ -388,6 +388,12 @@ C) [третий вариант]
 
 ### Pending cross-zone change requests
 
+- **2026-06-01** — `aevion-core/main` (Revenue Hub) → owner of `veilnetx` zone (`aevion-build`)
+  - **Что:** `frontend/src/app/veilnetx/page.tsx:308` — TS2339 `Property 'note' does not exist on type 'Inspect'` (`{server.note}`). Это **единственная** type-ошибка во всём фронте — она роняет `next build` / `npm run verify` для ВСЕХ сессий.
+  - **Как всплыло:** прогонял `npm run build:frontend` как gate для пивота Revenue Hub на Gumroad. Мои revenue-файлы tsc-чистые; красный билд — только из-за этой строки.
+  - **Что нужно в вашей зоне:** в типе `Inspect` добавить `note?: string`, либо убрать `{server.note}` из JSX (строка 308). Файл грязный/недопушенный (`f8e6a7a8`).
+  - **Срочность:** med — общий frontend build не проходит, пока не починят. Свою правку не делал (чужая зона).
+
 - **2026-05-12** — `aevion-core/main` → owner of `aevion-build` (`routes/veilnetxLedger.ts`)
   - **Цель:** применить canonical JSON (sorted keys) в `entryHash` payload — и для POST `/entries`, и для GET `/chain/verify`.
   - **Почему:** Postgres JSONB переупорядочивает ключи `meta` при storage. Сейчас insert-time хэш считается над `JSON.stringify({txId, walletId, feeKzt})`, а verify-time над JSONB-возвращённым `{txId, feeKzt, walletId}` → SHA расходится → `/chain/verify` ложно репортит `brokenAt`. Подтверждено перебором перестановок ключей (doctor script).

@@ -4,6 +4,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { createPaddleTransaction, PADDLE_KEY, IS_PADDLE_SANDBOX } from "../lib/paddleClient";
 
 export const devhubRouter = Router();
 
@@ -2828,6 +2829,45 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
     res.json({ ok: true, messageId: (data as any)?.messageId ?? null });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "WhatsApp send failed" });
+  }
+});
+
+// POST /api/devhub/media/paddle-checkout — create a Paddle checkout link for an
+// ad-hoc amount (e.g. sell access to a DevHub-built app/template). Thin wrapper
+// over the platform paddleClient — no checkout logic is duplicated here.
+// Body: { amount: number (major units, e.g. 9.99), currency?: string, description: string, email?, successUrl? }
+devhubRouter.post("/media/paddle-checkout", async (req, res) => {
+  const { amount, currency = "USD", description, email, successUrl } = req.body || {};
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "amount required (positive number in major units, e.g. 9.99)" });
+  if (amt > 1_000_000) return res.status(400).json({ error: "amount too large (max 1,000,000)" });
+  if (!description || typeof description !== "string" || !description.trim()) return res.status(400).json({ error: "description required" });
+  if (typeof currency !== "string" || !/^[A-Za-z]{3}$/.test(currency)) return res.status(400).json({ error: "currency must be a 3-letter ISO code (e.g. USD, EUR)" });
+  if (email != null && (typeof email !== "string" || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return res.status(400).json({ error: "email must be a valid address" });
+
+  if (!PADDLE_KEY()) {
+    return res.status(503).json({
+      error: "Paddle not configured — set PADDLE_API_KEY",
+      setupUrl: "https://vendors.paddle.com/authentication-v2",
+    });
+  }
+
+  const amountCents = Math.round(amt * 100);
+  const base = (process.env.FRONTEND_URL?.trim() || "https://aevion.app").replace(/\/+$/, "");
+
+  try {
+    const tx = await createPaddleTransaction({
+      amountCents,
+      currency: currency.toUpperCase(),
+      description: description.trim(),
+      email: email ? String(email).trim() : null,
+      successUrl: successUrl && typeof successUrl === "string" ? successUrl : `${base}/pricing/checkout/success?provider=paddle&source=devhub`,
+      customData: { source: "devhub" },
+    });
+    if (!tx) return res.status(502).json({ error: "paddle_transaction_failed" });
+    res.json({ ok: true, url: tx.url, transactionId: tx.transactionId, sandbox: IS_PADDLE_SANDBOX() });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || "Paddle checkout failed" });
   }
 });
 

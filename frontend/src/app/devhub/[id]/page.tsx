@@ -437,7 +437,8 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // Stripe payment link state
+  // Payment link state (Stripe one-off link OR Paddle checkout)
+  const [payProvider, setPayProvider] = useState<"stripe" | "paddle">("stripe");
   const [payName, setPayName] = useState("");
   const [payAmount, setPayAmount] = useState("");
   const [payCurrency, setPayCurrency] = useState("usd");
@@ -986,6 +987,41 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
       }
     } catch (e: any) {
       setPayError(e?.message || "Failed to create payment link");
+    } finally {
+      setPayLoading(false);
+    }
+  };
+
+  // ── Paddle checkout helper (reuses platform paddleClient via devhub proxy) ───
+
+  const createPaddleCheckout = async () => {
+    if (!payName.trim() || !payAmount.trim()) return;
+    const amtUnits = parseFloat(payAmount);
+    if (!Number.isFinite(amtUnits) || amtUnits <= 0) {
+      setPayError("Invalid amount");
+      return;
+    }
+    setPayLoading(true);
+    setPayError(null);
+    setPayResult(null);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/media/paddle-checkout"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: payDesc.trim() || payName.trim(),
+          amount: amtUnits,
+          currency: payCurrency.toUpperCase(),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.ok) {
+        setPayError(d.error || "Failed to create Paddle checkout");
+      } else {
+        setPayResult({ url: d.url });
+      }
+    } catch (e: any) {
+      setPayError(e?.message || "Failed to create Paddle checkout");
     } finally {
       setPayLoading(false);
     }
@@ -2754,6 +2790,22 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                   {/* Stripe Payment Link */}
                   {mediaTab === "payment" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {(["stripe", "paddle"] as const).map((prov) => (
+                          <button
+                            key={prov}
+                            onClick={() => { setPayProvider(prov); setPayResult(null); setPayError(null); }}
+                            style={{
+                              flex: 1, padding: "6px 10px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                              border: payProvider === prov ? "1px solid #635bff" : "1px solid #e2e8f0",
+                              background: payProvider === prov ? "#eef2ff" : "#fff",
+                              color: payProvider === prov ? "#4338ca" : "#64748b",
+                            }}
+                          >
+                            {prov === "stripe" ? "Stripe link" : "Paddle checkout"}
+                          </button>
+                        ))}
+                      </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Product Name</label>
                         <input
@@ -2821,7 +2873,7 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                         </div>
                       )}
                       <button
-                        onClick={createPaymentLink}
+                        onClick={payProvider === "paddle" ? createPaddleCheckout : createPaymentLink}
                         disabled={payLoading || !payName.trim() || !payAmount.trim()}
                         style={{
                           padding: "9px 18px", background: payLoading ? "#a5b4fc" : "#635bff",
@@ -2829,10 +2881,12 @@ export default function DevHubProjectPage({ params }: { params: { id: string } }
                           cursor: (payLoading || !payName.trim() || !payAmount.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {payLoading ? "Creating..." : "Create Payment Link"}
+                        {payLoading ? "Creating..." : payProvider === "paddle" ? "Create Paddle Checkout" : "Create Payment Link"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>. Min amount 50 cents (or equivalent).
+                        {payProvider === "paddle"
+                          ? <>Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>PADDLE_API_KEY</code> (sandbox unless <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>PADDLE_SANDBOX=false</code>). Creates an inline-priced transaction.</>
+                          : <>Server env: <code style={{ background: "#f1f5f9", padding: "1px 4px", borderRadius: 3 }}>STRIPE_SECRET_KEY</code>. Min amount 50 cents (or equivalent).</>}
                       </div>
                     </div>
                   )}

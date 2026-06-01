@@ -254,6 +254,13 @@ async function run() {
     { text: "Hello world", targetLang: "RU" }
   );
 
+  // ── 21b. Media: Paddle checkout ───────────────────────────────────────
+  console.log("\n21b. Media — Paddle checkout");
+  await mediaTest("Paddle", "/api/devhub/media/paddle-checkout",
+    {},
+    { amount: 9.99, currency: "USD", description: "DevHub smoke test product" }
+  );
+
   // ── 22. Media: Drive ──────────────────────────────────────────────────
   console.log("\n22. Media — Drive");
   const driveBad = await req("POST", "/api/devhub/media/drive-search", {});

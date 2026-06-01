@@ -4,7 +4,9 @@
  * Централизованная точка сбора метрик монетизации по всем приложениям.
  *
  * Архитектура:
- *   - Paddle Billing (основной): Merchant of Record, KZ-friendly → /api/paddle/*
+ *   - Gumroad (ОСНОВНОЙ и единственный живой процессинг): продажи через
+ *     GET /v2/sales (access_token = GUMROAD_ACCESS_TOKEN) → /api/revenue/gumroad/*
+ *   - Paddle Billing: KYC не пройдена → заглушка, не использовать как живой канал
  *   - PayBox: KZT локальные платежи
  *   - YouTube Analytics API (read-only)
  *   - Twitch Helix API (client-credentials)
@@ -24,6 +26,15 @@ const PADDLE_SANDBOX = IS_PADDLE_SANDBOX;
 const YT_API_KEY = () => process.env.YOUTUBE_API_KEY?.trim() || "";
 const TWITCH_CLIENT_ID = () => process.env.TWITCH_CLIENT_ID?.trim() || "";
 const TWITCH_CLIENT_SECRET = () => process.env.TWITCH_CLIENT_SECRET?.trim() || "";
+const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
+
+/** Permalink → appId. Set GUMROAD_APP_<PERMALINK>=<appId> to attribute a
+ *  product's sales to a specific AEVION app; otherwise "platform". */
+function appIdForPermalink(permalink?: string | null): string {
+  if (!permalink) return "platform";
+  const key = `GUMROAD_APP_${permalink.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+  return process.env[key]?.trim() || "platform";
+}
 
 // ─── Twitch OAuth token (cached in-process) ───────────────────────────────
 
@@ -104,6 +115,70 @@ async function twitchChannelStats(login: string): Promise<{
   } catch { return null; }
 }
 
+// ─── Gumroad helpers ──────────────────────────────────────────────────────
+
+interface GumroadSale {
+  id?: string;
+  email?: string;
+  product_name?: string;
+  product_permalink?: string;
+  product_id?: string;
+  price?: number;        // amount buyer paid, in cents
+  gumroad_fee?: number;  // Gumroad's cut, in cents
+  currency?: string;
+  created_at?: string;
+  refunded?: boolean;
+  disputed?: boolean;
+  chargedback?: boolean;
+}
+
+/**
+ * Fetch sales from Gumroad's GET /v2/sales, following next_page_url.
+ * Returns null only when the token is missing or the very first call fails;
+ * partial pages already collected are returned if a later page errors.
+ * maxPages caps the walk so a huge history can't hang the request — if the cap
+ * is hit we log it (no silent truncation).
+ */
+async function gumroadSales(maxPages = 10): Promise<GumroadSale[] | null> {
+  const token = GUMROAD_TOKEN();
+  if (!token) return null;
+  const all: GumroadSale[] = [];
+  let url: string | null =
+    `https://api.gumroad.com/v2/sales?access_token=${encodeURIComponent(token)}`;
+  let pages = 0;
+  try {
+    while (url && pages < maxPages) {
+      const r: Response = await fetch(url);
+      if (!r.ok) return all.length ? all : null;
+      const d = (await r.json()) as {
+        success?: boolean;
+        sales?: GumroadSale[];
+        next_page_url?: string;
+      };
+      if (!d.success || !Array.isArray(d.sales)) break;
+      all.push(...d.sales);
+      pages++;
+      if (d.next_page_url) {
+        let next = d.next_page_url.startsWith("http")
+          ? d.next_page_url
+          : `https://api.gumroad.com${d.next_page_url}`;
+        if (!/[?&]access_token=/.test(next)) {
+          next += (next.includes("?") ? "&" : "?") + `access_token=${encodeURIComponent(token)}`;
+        }
+        url = next;
+      } else {
+        url = null;
+      }
+    }
+    if (url && pages >= maxPages) {
+      console.warn(`[revenue/gumroad] maxPages=${maxPages} reached — totals may undercount older sales`);
+    }
+    return all;
+  } catch {
+    return all.length ? all : null;
+  }
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────────
 
 /**
@@ -113,9 +188,11 @@ revenueRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     providers: {
+      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
       paddle: {
         configured: Boolean(PADDLE_KEY()),
         sandbox: PADDLE_SANDBOX(),
+        note: "KYC не пройдена — не используется как живой канал",
         setupGuide: "/api/paddle/setup-guide",
       },
       paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID) },
@@ -217,6 +294,7 @@ revenueRouter.get("/overview", (_req, res) => {
     liveApps: live.length,
     channelCoverage: channelMap,
     providers: {
+      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
       paddle: { configured: Boolean(PADDLE_KEY()), sandbox: PADDLE_SANDBOX() },
       youtube: { configured: Boolean(YT_API_KEY()) },
       twitch: { configured: Boolean(TWITCH_CLIENT_ID() && TWITCH_CLIENT_SECRET()) },
@@ -298,12 +376,72 @@ revenueRouter.get("/paddle/recent", async (_req, res) => {
 });
 
 /**
+ * GET /api/revenue/gumroad/balance
+ * Net-баланс по живому каналу: gross - Gumroad fee, USD. Возвраты исключены.
+ */
+revenueRouter.get("/gumroad/balance", async (_req, res) => {
+  if (!GUMROAD_TOKEN()) {
+    return res.json({ stub: true, message: "GUMROAD_ACCESS_TOKEN not set", setupGuide: "/api/revenue/env-guide" });
+  }
+  const sales = await gumroadSales();
+  if (!sales) return res.status(502).json({ error: "gumroad_api_error" });
+
+  const valid = sales.filter((s) => !s.refunded && !s.disputed && !s.chargedback);
+  const grossUsd = valid.reduce((sum, s) => sum + (s.price ? s.price / 100 : 0), 0);
+  const feesUsd = valid.reduce((sum, s) => sum + (s.gumroad_fee ? s.gumroad_fee / 100 : 0), 0);
+
+  res.json({
+    grossUsd,
+    feesUsd,
+    netUsd: grossUsd - feesUsd,
+    currency: "USD",
+    saleCount: valid.length,
+    refundedCount: sales.length - valid.length,
+  });
+});
+
+/**
+ * GET /api/revenue/gumroad/recent
+ * Последние продажи с разбивкой по app_id (через GUMROAD_APP_<PERMALINK>).
+ */
+revenueRouter.get("/gumroad/recent", async (_req, res) => {
+  if (!GUMROAD_TOKEN()) {
+    return res.json({ stub: true, sales: [], byApp: {}, message: "GUMROAD_ACCESS_TOKEN not set" });
+  }
+  const sales = await gumroadSales();
+  if (!sales) return res.status(502).json({ error: "gumroad_api_error" });
+
+  const recent = sales.slice(0, 20).map((s) => ({
+    id: s.id ?? "",
+    appId: appIdForPermalink(s.product_permalink),
+    product: s.product_name ?? s.product_permalink ?? "unknown",
+    email: s.email ?? null,
+    amountUsd: s.price ? s.price / 100 : 0,
+    currency: s.currency?.toUpperCase() ?? "USD",
+    refunded: Boolean(s.refunded || s.disputed || s.chargedback),
+    date: s.created_at ?? null,
+  }));
+
+  const byApp: Record<string, { count: number; totalUsd: number }> = {};
+  for (const s of recent) {
+    if (s.refunded) continue;
+    if (!byApp[s.appId]) byApp[s.appId] = { count: 0, totalUsd: 0 };
+    byApp[s.appId].count++;
+    byApp[s.appId].totalUsd += s.amountUsd;
+  }
+
+  res.json({ sales: recent, byApp });
+});
+
+/**
  * GET /api/revenue/env-guide
  */
 revenueRouter.get("/env-guide", (_req, res) => {
   res.json({
     global: [
-      { key: "PADDLE_API_KEY", required: true, example: "pdl_sdbx_...", note: "Paddle dashboard → Developer → Authentication → API Key. Для KZ можно регистрироваться как Individual." },
+      { key: "GUMROAD_ACCESS_TOKEN", required: true, example: "gum_...", note: "ЖИВОЙ канал. Gumroad → Settings → Advanced → Applications → Generate access token. Нужен для /api/revenue/gumroad/*." },
+      { key: "GUMROAD_APP_<PERMALINK>", required: false, example: "GUMROAD_APP_XPXZAM=cyberchess", note: "Атрибуция продаж пермалинка к appId в дашборде. Без него продажи идут в 'platform'." },
+      { key: "PADDLE_API_KEY", required: false, example: "pdl_sdbx_...", note: "Paddle — KYC не пройдена, не используется. Оставлено для совместимости." },
       { key: "PADDLE_WEBHOOK_SECRET", required: false, example: "pdl_ntfset_...", note: "Paddle dashboard → Notifications → endpoint → signing secret" },
       { key: "PADDLE_SANDBOX", required: false, example: "true", note: "true = sandbox тестирование (по умолчанию). false = production." },
       { key: "YOUTUBE_API_KEY", required: false, example: "AIzaSy...", note: "Google Cloud Console → APIs → YouTube Data API v3 → API Key" },

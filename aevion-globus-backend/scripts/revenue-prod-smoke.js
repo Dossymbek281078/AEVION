@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Revenue Hub PROD smoke — Stripe + YouTube + Twitch monetization hub.
+ * Revenue Hub PROD smoke — Gumroad (live) + Paddle + YouTube + Twitch monetization hub.
  * Usage: BASE=https://... node scripts/revenue-prod-smoke.js
  */
 const BASE = (process.env.BASE || "https://aevion-production-a70c.up.railway.app").replace(/\/+$/, "");
@@ -43,15 +43,23 @@ async function run() {
     single.body?.appId === appId ? ok("appId matches") : fail("appId matches");
   } else { passed += 2; }
 
-  // 14. Paddle balance (replaced Stripe)
+  // 14. Gumroad balance (LIVE processor; 200 with stub:true when no token)
+  const gum = await req("/api/revenue/gumroad/balance");
+  gum.status === 200 ? ok("GET /gumroad/balance → 200", gum.body?.stub ? "stub (no token)" : `netUsd=${gum.body?.netUsd}`) : fail("GET /gumroad/balance → 200", String(gum.status));
+
+  // 15. Gumroad recent
+  const grec = await req("/api/revenue/gumroad/recent");
+  grec.status === 200 && Array.isArray(grec.body?.sales) ? ok("GET /gumroad/recent → 200 (sales array)") : fail("GET /gumroad/recent → 200 (sales array)", String(grec.status));
+
+  // 16. Paddle balance (legacy — KYC not passed, kept for compat)
   const bal = await req("/api/revenue/paddle/balance");
   bal.status === 200 ? ok("GET /paddle/balance → 200", `totalUsd=${bal.body?.totalUsd}`) : fail("GET /paddle/balance → 200", String(bal.status));
 
-  // 15. Env guide
+  // 17. Env guide
   const guide = await req("/api/revenue/env-guide");
   guide.status === 200 ? ok("GET /env-guide → 200") : fail("GET /env-guide → 200", String(guide.status));
 
-  console.log(`\n15 assertions — ${passed} PASS  ${failed} FAIL\n`);
+  console.log(`\n17 assertions — ${passed} PASS  ${failed} FAIL\n`);
   process.exit(failed > 0 ? 1 : 0);
 }
 run().catch(e => { console.error(e); process.exit(1); });

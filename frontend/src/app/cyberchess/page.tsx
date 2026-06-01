@@ -499,13 +499,13 @@ type CellProps={
   cursor:"grab"|"default";
   iS:boolean;iV:boolean;iCk:boolean;iPM:boolean;iPS:boolean;
   iL:boolean;isShadow:boolean;isAnimDest:boolean;isDragOrigin:boolean;
-  iHover?:boolean;iHoverCap?:boolean;
+  iHover?:boolean;iHoverCap?:boolean;iSH?:boolean;
   pmIdx?:number;
   coordFile?:string;
   coordRank?:number;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,pmIdx,coordFile,coordRank}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,pmIdx,coordFile,coordRank}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
   const isLifted=(iS||iPS)&&!isDragOrigin;
@@ -539,6 +539,8 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
         (bg-тинта T.last мало: фигура занимает 88% клетки). Не рисуем на клетке
         шаха (там свой red pulse-glow) чтобы маркеры не наслаивались. */}
     {iL&&!iCk&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(217,119,6,0.92)",pointerEvents:"none",zIndex:1}}/>}
+    {/* Strip-hover sync — sky-blue ring на from/to наведённого хода (analysis bar) */}
+    {iSH&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(56,189,248,0.95)",pointerEvents:"none",zIndex:1}}/>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none",zIndex:2}}>{coordRank}</div>}
     {coordFile&&<div style={{position:"absolute",bottom:"5%",right:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordFile}</div>}
   </div>;
@@ -623,6 +625,9 @@ export default function CyberChessPage(){
   // Hover preview — показываем возможные ходы при наведении мыши (без клика, как у lichess).
   const[hoverSq,sHoverSq]=useState<Square|null>(null);
   const[hoverVm,sHoverVm]=useState<Set<string>>(new Set());
+  // Hover-sync: наведение на сегмент хода в analysis replay-bar подсвечивает
+  // from/to этого хода на доске (sky-blue ring, отличается от amber last-move).
+  const[hoverStripMove,sHoverStripMove]=useState<{from:string;to:string}|null>(null);
   const[lm,sLm]=useState<{from:string;to:string}|null>(null);
   const[over,sOver]=useState<string|null>(null);
   const[showGameOver,sShowGameOver]=useState(false);
@@ -5983,6 +5988,7 @@ export default function CyberChessPage(){
                 // Hover preview — показываем когда нет active sel
                 const iHover=!sel&&hoverVm.has(sq);
                 const iHoverCap=iHover&&!!p;
+                const iSH=tab==="analysis"&&!!(hoverStripMove&&(hoverStripMove.from===sq||hoverStripMove.to===sq));
                 let bg=lt?bT.light:bT.dark;
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 const isDragOrigin=ghostFrom===sq;
@@ -5995,7 +6001,7 @@ export default function CyberChessPage(){
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
                   iS={iS} iV={iV} iCk={iCk} iPM={iPM} iPS={iPS} iL={iL}
-                  iHover={iHover} iHoverCap={iHoverCap}
+                  iHover={iHover} iHoverCap={iHoverCap} iSH={iSH}
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
                   pmIdx={pmToIdx.get(sq)}
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}
@@ -6276,7 +6282,9 @@ export default function CyberChessPage(){
                   return<div key={ply}
                     title={`Ход ${Math.floor(ply/2)+1}${isW?" (бел)":" (чёрн)"}: ${hist[ply]}${ev?" "+qLabel(ev.quality):""}`}
                     onClick={()=>sBrowseIdx(ply)}
-                    style={{flex:1,background:col,position:"relative",transition:"opacity 100ms",
+                    onMouseEnter={()=>{try{const c=new Chess(fenHist[ply]);const mv=c.move(hist[ply]);if(mv)sHoverStripMove({from:mv.from,to:mv.to});}catch{}}}
+                    onMouseLeave={()=>sHoverStripMove(null)}
+                    style={{flex:1,background:col,position:"relative",transition:"opacity 100ms",cursor:"pointer",
                       opacity:ply<=cur?1:0.35,
                       outline:isCur?"2px solid rgba(255,255,255,0.7)":"none",outlineOffset:-1,
                     }}

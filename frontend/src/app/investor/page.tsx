@@ -70,7 +70,7 @@ export default function InvestorPage() {
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "80px 24px 60px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: "#10b981", textTransform: "uppercase" }}>
-            Seed Round · $5M · Pre-revenue · Live product
+            One valuation · $1.05B · $10.5M per 1% · you choose the stake
           </span>
         </div>
         <h1 style={{ fontSize: "clamp(36px,6vw,64px)", fontWeight: 900, lineHeight: 1.1, marginBottom: 20 }}>
@@ -411,6 +411,43 @@ export default function InvestorPage() {
         </div>
       </section>
 
+      {/* Investment terms — constant price ladder */}
+      <section style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.08)", padding: "60px 24px" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: "#64748b", textTransform: "uppercase", marginBottom: 16 }}>
+            Investment terms — one price, you choose the stake
+          </h2>
+          <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 720, lineHeight: 1.6, marginBottom: 28 }}>
+            One valuation (<strong style={{ color: "#f1f5f9" }}>$1.05B</strong>), one constant price
+            (<strong style={{ color: "#f1f5f9" }}>$10.5M per 1%</strong>). You pick only the depth — from a
+            1% primary stake (capital into growth, founder at the helm) to a 95% secondary buyout
+            ($1B net, founder → Senior Advisor, 24 months). No per-slice premium, no moving goalposts.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 14 }}>
+            {[
+              { stake: "1%", price: "$10.5M", note: "Primary · capital into growth" },
+              { stake: "10%", price: "$105M", note: "Primary · board seat" },
+              { stake: "25%", price: "$263M", note: "Strategic minority" },
+              { stake: "49%", price: "$516M", note: "Co-control" },
+              { stake: "75%", price: "$789M", note: "Majority secondary" },
+              { stake: "95%", price: "$1B net", note: "Full buyout · founder advises" },
+            ].map(t => (
+              <div key={t.stake} style={{ padding: 18, background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "#10b981", lineHeight: 1 }}>{t.stake}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", margin: "6px 0 6px" }}>{t.price}</div>
+                <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.4 }}>{t.note}</div>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
+            Full ladder, deal mechanics and founder-transition terms →{" "}
+            <Link href="/acquire" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
+              Acquisition brief
+            </Link>
+          </p>
+        </div>
+      </section>
+
       {/* CTA */}
       <section style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(59,130,246,0.1))", borderTop: "1px solid rgba(16,185,129,0.2)", padding: "60px 24px", textAlign: "center" }}>
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -424,8 +461,8 @@ export default function InvestorPage() {
             <a href="https://github.com/Dossymbek281078/AEVION" target="_blank" rel="noopener" style={btnGhost}>Inspect the code</a>
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
-            Seed round open · $5M · contact:{" "}
-            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20seed%20round%20inquiry" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
+            One price · $10.5M per 1% · you choose the stake (1% → 95%) · contact:{" "}
+            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20investment%20inquiry" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
               yahiin1978@gmail.com
             </a>
           </p>

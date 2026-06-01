@@ -738,7 +738,9 @@ export const risks = {
 export const ask = {
   title: "The ask",
   body:
-    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 15 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership.",
+    "We're raising for a focused 18-month sprint: harden the launched 12 modules, ship 4 of the 15 emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. Terms are simple and constant: one valuation ($1.05B), one price ($10.5M per 1%), and you choose only the depth — from a 1% primary stake to a 95% secondary buyout.",
+  termsHref: "/acquire",
+  termsLabel: "See the full deal ladder (1% → 95%)",
   ctaPrimary: { label: "Book an investor demo", href: "mailto:yahiin1978@gmail.com?subject=AEVION investor demo" },
   ctaSecondary: { label: "Read the deep-dive", href: "/demo/deep" },
 } as const;

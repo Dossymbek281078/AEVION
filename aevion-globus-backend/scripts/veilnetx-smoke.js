@@ -44,7 +44,9 @@ async function run() {
   assert("GET /inspect → 200", ins.status === 200);
   assert("inspect.tool === inspect", ins.body?.tool === "inspect");
   assert("ip echoed from X-Forwarded-For leftmost", ins.body?.ip === "203.0.113.7");
-  assert("ipChain has 2 hops", Array.isArray(ins.body?.ipChain) && ins.body.ipChain.length === 2);
+  // >= 2: an edge proxy (Cloudflare/Railway) appends its own hop in prod, so the
+  // chain is 2 locally but 3 behind the edge. Leftmost original client is asserted above.
+  assert("ipChain keeps client hops (>=2)", Array.isArray(ins.body?.ipChain) && ins.body.ipChain.length >= 2);
   assert("proxyDetected true (multi-hop XFF)", ins.body?.proxyDetected === true);
   assert("UA parsed → Chrome / Windows", ins.body?.userAgent?.browser === "Chrome" && ins.body?.userAgent?.os === "Windows");
   assert("primaryLanguage parsed", ins.body?.primaryLanguage === "ru-RU");

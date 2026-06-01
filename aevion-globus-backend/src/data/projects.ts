@@ -158,7 +158,7 @@ export const projects: GlobusProject[] = [
     code: "VEILNETX",
     name: "VeilNetX — Privacy Crypto & Network",
     description:
-      "Privacy proxy network MVP 2026-05-15 — pre-launch status surface, waitlist with email-hash dedupe, principles + threat model, in-memory concept board. /api/veilnetx.",
+      "Privacy network. LIVE: privacy-check tool (GET /api/veilnetx/inspect) — что запрос раскрывает серверу (IP/гео/UA + exposure score green/yellow/red) + браузерные утечки (WebRTC/canvas/fingerprint) на /veilnetx. Plus waitlist (email-hash dedupe), threat model, concept board. Tor-proxy roadmap Q4 2026. /api/veilnetx.",
     kind: "experiment",
     status: "live",
     priority: 2,

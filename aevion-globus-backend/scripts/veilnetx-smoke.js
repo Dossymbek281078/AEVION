@@ -68,17 +68,22 @@ async function run() {
   assert("GET /openapi.json → 200", oas.status === 200);
   assert("/inspect documented", Boolean(oas.body?.paths?.["/inspect"]));
 
-  // 4. Waitlist validation + rate limit
-  console.log("\n4. Waitlist");
-  const bad = await req("POST", "/api/veilnetx/waitlist", { email: "not-an-email" });
-  assert("invalid email → 400", bad.status === 400);
+  // 4. Waitlist validation + rate limit — WRITE leg, skipped on prod (READ_ONLY=1)
+  //    so the daily prod run doesn't insert smoke emails into the live waitlist.
+  if (process.env.READ_ONLY === "1") {
+    console.log("\n4. [Skipping waitlist writes — READ_ONLY=1 (prod-safe mode)]");
+  } else {
+    console.log("\n4. Waitlist");
+    const bad = await req("POST", "/api/veilnetx/waitlist", { email: "not-an-email" });
+    assert("invalid email → 400", bad.status === 400);
 
-  let limited = false;
-  for (let i = 0; i < 8; i++) {
-    const r = await req("POST", "/api/veilnetx/waitlist", { email: `smoke+${i}@example.com` });
-    if (r.status === 429) { limited = true; break; }
+    let limited = false;
+    for (let i = 0; i < 8; i++) {
+      const r = await req("POST", "/api/veilnetx/waitlist", { email: `smoke+${i}@example.com` });
+      if (r.status === 429) { limited = true; break; }
+    }
+    assert("rate limit kicks in (429 within 8 tries)", limited);
   }
-  assert("rate limit kicks in (429 within 8 tries)", limited);
 
   // Summary
   console.log(`\nVeilNetX: ${passed} passed, ${failed} failed`);

@@ -67,6 +67,10 @@ const SMOKES = [
   { name: "qgood", script: "qgood-smoke.js", readOnly: false },
   // QMaskCard — virtual payment masking. Issues mask, charges, revokes.
   { name: "qmaskcard", script: "qmaskcard-smoke.js", readOnly: false },
+  // VeilNetX privacy-check — live /inspect tool (IP/geo/UA/exposure score) +
+  // status + openapi. Read-only & prod-safe: the waitlist WRITE leg self-skips
+  // when READ_ONLY=1, so daily prod runs never insert smoke emails.
+  { name: "veilnetx", script: "veilnetx-smoke.js", readOnly: true },
   // VeilNetX Ledger — chain integrity + entry write.
   { name: "veilnetx-ledger", script: "veilnetx-ledger-smoke.js", readOnly: false },
   // VeilNetX chaos — bursty parallel writes + chain integrity check. Catches race-condition regressions.

@@ -659,16 +659,37 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
     // LEFT JOIN IPCertificate so the embed surface can deep-link to /verify/[certId].
     // The pipeline route writes both rows in one transaction, but the JOIN tolerates
     // legacy QRightObject rows created via POST /objects with no certificate.
-    const result = await pool.query(
-      `SELECT q.id, q.title, q.kind, q."contentHash", q."ownerName", q.country, q.city,
-              q."createdAt", q."revokedAt", q."revokeReason", q."revokeReasonCode",
-              c.id AS "certificateId"
-       FROM "QRightObject" q
-       LEFT JOIN "IPCertificate" c ON c."objectId" = q.id
-       WHERE q."id" = $1
-       LIMIT 1`,
-      [id]
-    );
+    //
+    // IPCertificate is created lazily by the bureau/pipeline routes (CREATE TABLE
+    // IF NOT EXISTS on first hit), NOT by ensureQRightTable() and NOT at startup.
+    // On a fresh DB where neither route has run yet the table is absent, so the
+    // JOIN would throw 42P01 and 500 the public embed core. Fall back to a
+    // certificate-less query in that case: certificateId degrades to null and the
+    // verifyUrl points at /qright/object/:id instead of /verify/:certId.
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT q.id, q.title, q.kind, q."contentHash", q."ownerName", q.country, q.city,
+                q."createdAt", q."revokedAt", q."revokeReason", q."revokeReasonCode",
+                c.id AS "certificateId"
+         FROM "QRightObject" q
+         LEFT JOIN "IPCertificate" c ON c."objectId" = q.id
+         WHERE q."id" = $1
+         LIMIT 1`,
+        [id]
+      );
+    } catch (joinErr: any) {
+      if (joinErr?.code !== "42P01") throw joinErr;
+      result = await pool.query(
+        `SELECT q.id, q.title, q.kind, q."contentHash", q."ownerName", q.country, q.city,
+                q."createdAt", q."revokedAt", q."revokeReason", q."revokeReasonCode",
+                NULL::text AS "certificateId"
+         FROM "QRightObject" q
+         WHERE q."id" = $1
+         LIMIT 1`,
+        [id]
+      );
+    }
 
     if (result.rowCount === 0) {
       // Use 200 with explicit status so embeds can render a "not found" badge

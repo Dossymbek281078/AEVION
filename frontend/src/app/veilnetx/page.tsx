@@ -121,6 +121,7 @@ type Inspect = {
   geoLeaked: boolean;
   userAgent: { browser: string; os: string; mobile: boolean };
   exposure: { score: number; level: "green" | "yellow" | "red"; findings: InspectFinding[] };
+  note: string;
 };
 
 type ClientCheck = { id: string; label: string; value: string; exposed: boolean; weight: number };

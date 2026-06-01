@@ -5,8 +5,10 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import { useI18n } from "@/lib/i18n";
 
 function DepositForm() {
+  const { t } = useI18n();
   const params = useSearchParams();
   const router = useRouter();
   const walletId = params.get("wallet") ?? "";
@@ -18,7 +20,7 @@ function DepositForm() {
 
   async function handleDeposit() {
     const token = localStorage.getItem("aevion_token") ?? "";
-    if (!token || !amount || parseFloat(amount) <= 0) { setError("Введите сумму и авторизуйтесь"); return; }
+    if (!token || !amount || parseFloat(amount) <= 0) { setError(t("qpaynet.deposit.err.amountAuth")); return; }
     setLoading(true); setError("");
     try {
       const r = await fetch(apiUrl("/api/qpaynet/deposit"), {
@@ -27,15 +29,15 @@ function DepositForm() {
         body: JSON.stringify({ walletId, amount: parseFloat(amount), description }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "Ошибка");
+      if (!r.ok) throw new Error(d.error ?? t("qpaynet.deposit.err.generic"));
       setDone(d);
-    } catch (e) { setError(e instanceof Error ? e.message : "Ошибка"); }
+    } catch (e) { setError(e instanceof Error ? e.message : t("qpaynet.deposit.err.generic")); }
     finally { setLoading(false); }
   }
 
   async function handleCard() {
     const token = localStorage.getItem("aevion_token") ?? "";
-    if (!token || !amount || parseFloat(amount) <= 0) { setError("Введите сумму и авторизуйтесь"); return; }
+    if (!token || !amount || parseFloat(amount) <= 0) { setError(t("qpaynet.deposit.err.amountAuth")); return; }
     setLoading(true); setError("");
     try {
       const r = await fetch(apiUrl("/api/qpaynet/deposit/checkout"), {
@@ -44,26 +46,26 @@ function DepositForm() {
         body: JSON.stringify({ walletId, amount: parseFloat(amount) }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? "Ошибка");
+      if (!r.ok) throw new Error(d.error ?? t("qpaynet.deposit.err.generic"));
       window.location.href = d.url;
-    } catch (e) { setError(e instanceof Error ? e.message : "Ошибка"); setLoading(false); }
+    } catch (e) { setError(e instanceof Error ? e.message : t("qpaynet.deposit.err.generic")); setLoading(false); }
   }
 
   if (done) return (
     <div className="text-center py-12 px-4">
       <div className="text-5xl mb-4" aria-hidden>✅</div>
-      <h2 className="text-xl font-bold mb-2">Пополнено!</h2>
-      <p className="text-slate-400 text-sm mb-6">Новый баланс: <strong className="text-emerald-400">{done.newBalance.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₸</strong></p>
-      <button onClick={() => router.push("/qpaynet")} className="px-6 py-3 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-semibold min-h-[44px]">← К кошельку</button>
+      <h2 className="text-xl font-bold mb-2">{t("qpaynet.deposit.done.title")}</h2>
+      <p className="text-slate-400 text-sm mb-6">{t("qpaynet.deposit.done.balance")} <strong className="text-emerald-400">{done.newBalance.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} ₸</strong></p>
+      <button onClick={() => router.push("/qpaynet")} className="px-6 py-3 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-semibold min-h-[44px]">{t("qpaynet.deposit.done.toWallet")}</button>
     </div>
   );
 
   return (
     <div className="max-w-sm mx-auto py-8 sm:py-12 px-4 sm:px-6">
-      <h1 className="text-xl font-bold mb-6">Пополнить кошелёк</h1>
+      <h1 className="text-xl font-bold mb-6">{t("qpaynet.deposit.title")}</h1>
       <div className="space-y-4">
         <div>
-          <label htmlFor="qpaynet-deposit-amount" className="text-xs text-slate-400 mb-1 block">Сумма (тенге)</label>
+          <label htmlFor="qpaynet-deposit-amount" className="text-xs text-slate-400 mb-1 block">{t("qpaynet.deposit.amountLabel")}</label>
           <div className="grid grid-cols-4 gap-2 mb-2">
             {[1000,5000,10000,50000].map(n => (
               <button key={n} type="button" onClick={() => setAmount(String(n))}
@@ -74,26 +76,26 @@ function DepositForm() {
             ))}
           </div>
           <input id="qpaynet-deposit-amount" type="number" min="1" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)}
-            placeholder="Сумма в тенге"
+            placeholder={t("qpaynet.deposit.amountPlaceholder")}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40" />
         </div>
         <div>
-          <label htmlFor="qpaynet-deposit-desc" className="text-xs text-slate-400 mb-1 block">Описание (опционально)</label>
+          <label htmlFor="qpaynet-deposit-desc" className="text-xs text-slate-400 mb-1 block">{t("qpaynet.deposit.descLabel")}</label>
           <input id="qpaynet-deposit-desc" type="text" value={description} onChange={e => setDescription(e.target.value)}
-            placeholder="Пополнение через карту"
+            placeholder={t("qpaynet.deposit.descPlaceholder")}
             maxLength={500}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/40" />
         </div>
         {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
         <button onClick={handleCard} disabled={loading || !amount}
           className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-xl font-semibold flex items-center justify-center gap-2 min-h-[48px]">
-          {loading ? "..." : <><span aria-hidden>💳</span> Оплатить картой{amount ? ` ${parseFloat(amount).toLocaleString("ru-RU")} ₸` : ""}</>}
+          {loading ? "..." : <><span aria-hidden>💳</span> {t("qpaynet.deposit.payCard")}{amount ? ` ${parseFloat(amount).toLocaleString("ru-RU")} ₸` : ""}</>}
         </button>
         <button onClick={handleDeposit} disabled={loading || !amount}
           className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 rounded-xl text-sm border border-slate-700 min-h-[44px]">
-          <span aria-hidden>🧪</span> Тестовое пополнение (без карты)
+          <span aria-hidden>🧪</span> {t("qpaynet.deposit.testDeposit")}
         </button>
-        <Link href="/qpaynet" className="block text-center text-xs text-slate-500 hover:text-slate-300 py-2">← Назад</Link>
+        <Link href="/qpaynet" className="block text-center text-xs text-slate-500 hover:text-slate-300 py-2">{t("qpaynet.deposit.back")}</Link>
       </div>
     </div>
   );

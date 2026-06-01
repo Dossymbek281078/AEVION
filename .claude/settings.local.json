@@ -133,7 +133,24 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" api -X DELETE repos/Dossymbek281078/AEVION/git/refs/heads/feat/paywall-402-ux)",
       "Bash('/c/Program Files/GitHub CLI/gh.exe' pr create --title 'feat\\(paywall+seo\\): qfusionai wire + CI audit gate + flip ops + GSC verify' --body ' *)",
       "PowerShell(node -e \"try { JSON.parse\\(require\\('fs'\\).readFileSync\\('C:/Users/user/aevion-core/.claude/settings.local.json','utf8'\\)\\); console.log\\('VALID'\\) } catch\\(e\\){ console.log\\('ERROR:', e.message\\) }\")",
-      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Size: $\\($bytes.Length\\) bytes\"; \"First 4 bytes \\(hex\\): $\\($bytes[0..3] | ForEach-Object { '{0:X2}' -f $_ }\\)\"; $text = [System.IO.File]::ReadAllText\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Trailing chars after last }: '$\\($text.Substring\\($text.LastIndexOf\\('}'\\) + 1\\)\\)'\")"
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Size: $\\($bytes.Length\\) bytes\"; \"First 4 bytes \\(hex\\): $\\($bytes[0..3] | ForEach-Object { '{0:X2}' -f $_ }\\)\"; $text = [System.IO.File]::ReadAllText\\(\"C:\\\\Users\\\\user\\\\aevion-core\\\\.claude\\\\settings.local.json\"\\); \"Trailing chars after last }: '$\\($text.Substring\\($text.LastIndexOf\\('}'\\) + 1\\)\\)'\")",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(printenv DATABASE_URL)",
+      "Bash(echo \"launched pid $!\")",
+      "Bash(tee /tmp/qright-backend.log)",
+      "Bash(curl -s --max-time 5 http://localhost:4001/api/qright/transparency)",
+      "Bash(curl -s --max-time 5 \"http://localhost:4001/api/qright/objects?limit=2\")",
+      "Bash(curl -s --max-time 5 \"http://localhost:4001/api/qright/objects?limit=1\")",
+      "Bash(netstat -ano)",
+      "Bash(curl -sv --max-time 4 http://127.0.0.1:4001/api/qright/transparency)",
+      "Bash(findstr 4001)",
+      "Bash(tasklist)",
+      "Bash(curl -s --max-time 5 http://127.0.0.1:4001/api/qright/transparency)",
+      "Bash(echo \"=== exit $? ===\")",
+      "Bash(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 6 http://127.0.0.1:4001__TRACKED_VAR__)",
+      "Read(//tmp/**)",
+      "Bash(curl -s --max-time 6 http://127.0.0.1:4001/api/qright/embed/e02ac547-6a80-4a2f-b315-4f6b7536a488)",
+      "Bash(tee /tmp/qr-be2.log)"
     ]
   }
 }

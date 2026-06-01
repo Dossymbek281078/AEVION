@@ -1,8 +1,5 @@
 import { Router } from "express";
-import {
-  PADDLE_KEY, PADDLE_WEBHOOK_SECRET, IS_PADDLE_SANDBOX,
-  paddlePost, paddleGet, verifyPaddleWebhook,
-} from "../lib/paddleClient";
+import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode,
   type TierId, type BillingPeriod,
@@ -12,18 +9,26 @@ import { provisionSubscription, countSubscriptions } from "./provisioning";
 export const checkoutRouter = Router();
 
 /**
- * Paddle Billing checkout с graceful stub-fallback.
+ * Gumroad checkout с graceful stub-fallback.
  *
- * Если PADDLE_API_KEY задан — создаём реальную Paddle Transaction.
- * Если нет — возвращаем stub-ссылку для UX-flow без реальных ключей.
+ * Gumroad — единственный KYC-пройденный процессинг (Stripe/Paddle/LemonSqueezy
+ * заблокированы). Цена фиксируется в продукте Gumroad; здесь мы строим публичный
+ * URL продукта по permalink'у из env. Провижининг подписки выполняется централизованно
+ * в POST /api/gumroad/webhook (см. routes/gumroadWebhook.ts) — отдельного вебхука здесь нет.
  *
- * ENV:
- *   PADDLE_API_KEY         — secret key из Paddle dashboard
- *   PADDLE_WEBHOOK_SECRET  — webhook endpoint secret
- *   PADDLE_SANDBOX         — "true"(default)/"false" для prod
+ * ENV (permalink на tier:period; без него — graceful stub):
+ *   GUMROAD_PERMALINK_TIER_PRO_MONTHLY, ..._PRO_ANNUAL,
+ *   GUMROAD_PERMALINK_TIER_BUSINESS_MONTHLY, ..._BUSINESS_ANNUAL
+ *   GUMROAD_DEFAULT_PERMALINK — catch-all, если конкретный не задан
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL?.trim() || "http://localhost:3000";
+
+/** A Gumroad checkout is "real" only when a product permalink is configured. */
+function gumroadPermalinkConfigured(reference: string): boolean {
+  const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+  return Boolean(process.env[envKey] || process.env.GUMROAD_DEFAULT_PERMALINK);
+}
 
 interface CheckoutBody {
   tierId: TierId;
@@ -96,8 +101,26 @@ checkoutRouter.post("/session", async (req, res) => {
     const trialDays = body.trial && (tier.id === "pro" || tier.id === "business") ? 14 : 0;
     const totalCents = Math.round(totalUsd * 100);
 
-    // Stub-режим — нет Paddle ключа
-    if (!PADDLE_KEY()) {
+    const reference = `tier_${tier.id}_${period}`;
+
+    // Free / fully discounted — no checkout needed, provision directly
+    if (totalCents <= 0) {
+      if (body.email) {
+        provisionSubscription({
+          email: body.email, tierId: tier.id, period, seats,
+          modules: body.modules ?? [], trialDays, amountUsd: 0,
+          promoCode: body.promoCode, source: "gumroad_zero",
+        }).catch((e) => console.error("[provisioning] zero-price failed", e));
+      }
+      return res.json({
+        url: `${FRONTEND_URL}/pricing/checkout/success?gumroad=true&tier=${tier.id}&period=${period}&total=0`,
+        mode: "zero",
+        provider: "gumroad",
+      });
+    }
+
+    // Stub-режим — для этого tier:period ещё не задан Gumroad-permalink
+    if (!gumroadPermalinkConfigured(reference)) {
       if (body.email) {
         provisionSubscription({
           email: body.email,
@@ -114,93 +137,26 @@ checkoutRouter.post("/session", async (req, res) => {
       return res.json({
         url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${totalCents}`,
         mode: "stub",
-        provider: "paddle",
+        provider: "gumroad",
       });
     }
 
-    if (totalCents <= 0) {
-      // Free / fully discounted
-      if (body.email) {
-        provisionSubscription({
-          email: body.email, tierId: tier.id, period, seats,
-          modules: body.modules ?? [], trialDays, amountUsd: 0,
-          promoCode: body.promoCode, source: "paddle_zero",
-        }).catch((e) => console.error("[provisioning] zero-price failed", e));
-      }
-      return res.json({
-        url: `${FRONTEND_URL}/pricing/checkout/success?paddle=true&tier=${tier.id}&period=${period}&total=0`,
-        mode: "zero",
-        provider: "paddle",
-      });
-    }
-
-    // Реальный Paddle Checkout — используем каталожные priceId если заданы, иначе inline price
-    const PADDLE_PRICES: Record<string, string | undefined> = {
-      "pro:monthly":   process.env.PADDLE_PRICE_PRO_MONTHLY,
-      "pro:annual":    process.env.PADDLE_PRICE_PRO_ANNUAL,
-      "business:monthly": process.env.PADDLE_PRICE_BIZ_MONTHLY,
-      "business:annual":  process.env.PADDLE_PRICE_BIZ_ANNUAL,
-    };
-    const catalogPriceId = PADDLE_PRICES[`${tier.id}:${period}`];
-
-    const customData: Record<string, string> = {
-      tierId: tier.id,
-      period,
-      seats: String(seats),
-      modules: (body.modules ?? []).join(","),
-      promoCode: body.promoCode ?? "",
-      trialDays: String(trialDays),
-      source: "aevion_checkout",
-    };
-
-    // Build items: prefer catalog priceId, fall back to inline price
-    const item: Record<string, unknown> = catalogPriceId
-      ? { price_id: catalogPriceId, quantity: 1 }
-      : {
-          price: {
-            description: `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`,
-            unit_price: { amount: String(totalCents), currency_code: "USD" },
-            product: { name: `AEVION ${tier.name}`, tax_category: "standard" },
-          },
-          quantity: 1,
-        };
-
-    // Find or create Paddle customer
-    const txBody: Record<string, unknown> = {
-      items: [item],
-      checkout: {
-        url: `${FRONTEND_URL}/pricing/checkout/success?tier=${tier.id}&period=${period}`,
-      },
-      custom_data: customData,
-    };
-
-    if (body.email) {
-      const existing = await paddleGet(
-        `/customers?email=${encodeURIComponent(body.email)}&per_page=1`
-      ) as { data?: { id: string }[] } | null;
-      const customerId = existing?.data?.[0]?.id;
-      if (customerId) {
-        txBody.customer_id = customerId;
-      } else {
-        const newCust = await paddlePost("/customers", { email: body.email }) as { data?: { id: string } } | null;
-        if (newCust?.data?.id) txBody.customer_id = newCust.data.id;
-      }
-    }
-
-    const tx = await paddlePost("/transactions", txBody) as {
-      data?: { id: string; checkout?: { url: string } };
-    } | null;
-
-    if (!tx?.data) {
-      return res.status(502).json({ error: "paddle_transaction_failed" });
-    }
+    // Реальный Gumroad checkout — публичный URL продукта по permalink'у.
+    // Цена фиксирована в продукте Gumroad; провижининг — на ping продукта
+    // (POST /api/gumroad/webhook).
+    const intent = await gumroadPaymentProvider.createIntent({
+      reference,
+      amountCents: totalCents,
+      currency: "USD",
+      description: `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`,
+      email: body.email ?? null,
+    });
 
     res.json({
-      url: tx.data.checkout?.url ?? `${FRONTEND_URL}/pricing/checkout/success?tx=${tx.data.id}`,
+      url: intent.checkoutUrl,
       mode: "real",
-      provider: "paddle",
-      transactionId: tx.data.id,
-      sandbox: IS_PADDLE_SANDBOX(),
+      provider: "gumroad",
+      intentId: intent.intentId,
     });
   } catch (e: unknown) {
     console.error("[checkout/session] failed", e);
@@ -209,65 +165,14 @@ checkoutRouter.post("/session", async (req, res) => {
 });
 
 // ── POST /webhook ─────────────────────────────────────────────────────────────
-checkoutRouter.post("/webhook", (req, res) => {
-  const secret = PADDLE_WEBHOOK_SECRET();
-
-  if (!secret) {
-    console.log("[checkout/webhook] STUB — no PADDLE_WEBHOOK_SECRET");
-    return res.json({ received: true, mode: "stub" });
-  }
-
-  const sig = req.headers["paddle-signature"] as string | undefined;
-  if (!sig) return res.status(400).json({ error: "missing paddle-signature header" });
-
-  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
-  if (!rawBody) return res.status(400).json({ error: "raw body not available" });
-
-  if (!verifyPaddleWebhook(rawBody, sig, secret)) {
-    console.error("[checkout/webhook] signature mismatch");
-    return res.status(400).json({ error: "invalid_signature" });
-  }
-
-  let event: { event_type: string; data: Record<string, unknown> };
-  try {
-    event = JSON.parse(rawBody.toString("utf8"));
-  } catch {
-    return res.status(400).json({ error: "invalid_json" });
-  }
-
-  // Paddle events: transaction.completed → provision subscription
-  if (event.event_type === "transaction.completed") {
-    const tx = event.data as {
-      id?: string;
-      custom_data?: Record<string, string>;
-      customer?: { email?: string };
-      details?: { totals?: { grand_total?: string } };
-    };
-    const m = tx.custom_data ?? {};
-    const email = tx.customer?.email;
-    const amountCents = parseInt(tx.details?.totals?.grand_total ?? "0", 10);
-
-    if (email && m.tierId) {
-      provisionSubscription({
-        email,
-        tierId: m.tierId as TierId,
-        period: (m.period as BillingPeriod) || "monthly",
-        seats: m.seats ? parseInt(m.seats, 10) : 1,
-        modules: m.modules ? m.modules.split(",").filter(Boolean) : [],
-        trialDays: m.trialDays ? parseInt(m.trialDays, 10) : 0,
-        amountUsd: amountCents / 100,
-        promoCode: m.promoCode || undefined,
-        paddleTransactionId: tx.id,
-        source: "paddle_webhook",
-      }).then((r) => {
-        console.log(`[provisioning] paddle tx=${tx.id} tier=${r.subscription.tierId} email=${email}`);
-      }).catch((e) => console.error("[provisioning] failed", e));
-    }
-  } else if (event.event_type === "subscription.activated" || event.event_type === "subscription.updated") {
-    console.log(`[checkout/webhook] ${event.event_type}`, (event.data as { id?: string }).id);
-  }
-
-  res.json({ received: true, provider: "paddle" });
+// Paddle webhook removed. Gumroad sale provisioning is handled centrally by
+// POST /api/gumroad/webhook (routes/gumroadWebhook.ts). Keep this path as a
+// 410 so any stale Paddle webhook config fails loudly instead of silently 200.
+checkoutRouter.post("/webhook", (_req, res) => {
+  res.status(410).json({
+    error: "gone",
+    message: "Paddle webhook removed — Gumroad sales are provisioned at POST /api/gumroad/webhook",
+  });
 });
 
 // ── GET /subscriptions/count ──────────────────────────────────────────────────
@@ -279,10 +184,8 @@ checkoutRouter.get("/subscriptions/count", (_req, res) => {
 checkoutRouter.get("/healthz", (_req, res) => {
   res.json({
     ok: true,
-    mode: PADDLE_KEY() ? "real" : "stub",
-    provider: "paddle",
-    sandbox: IS_PADDLE_SANDBOX(),
-    webhookConfigured: !!PADDLE_WEBHOOK_SECRET(),
+    provider: "gumroad",
+    webhook: "/api/gumroad/webhook",
     frontendUrl: FRONTEND_URL,
   });
 });

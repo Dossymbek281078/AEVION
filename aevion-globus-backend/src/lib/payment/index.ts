@@ -1,14 +1,12 @@
 import { PaymentProvider } from "./provider";
 import { stubPaymentProvider } from "./stubProvider";
 import { stripePaymentProvider } from "./stripeProvider";
-import { paddlePaymentProvider } from "./paddlePaymentProvider";
 import { lemonSqueezyPaymentProvider } from "./lemonSqueezyProvider";
 import { gumroadPaymentProvider } from "./gumroadProvider";
 
 export * from "./provider";
 export { stubPaymentProvider, __resetStubPaymentIntents } from "./stubProvider";
 export { stripePaymentProvider } from "./stripeProvider";
-export { paddlePaymentProvider } from "./paddlePaymentProvider";
 export { lemonSqueezyPaymentProvider } from "./lemonSqueezyProvider";
 export { gumroadPaymentProvider } from "./gumroadProvider";
 
@@ -21,15 +19,13 @@ export function getPaymentProvider(): PaymentProvider {
       return lemonSqueezyPaymentProvider;
     case "gumroad":
       return gumroadPaymentProvider;
-    case "paddle":
-      return paddlePaymentProvider;
     case "stripe":
       return stripePaymentProvider;
     case "stub":
       return stubPaymentProvider;
     default:
       throw new Error(
-        `Unknown BUREAU_PAYMENT_PROVIDER=${id}. Supported: stub, stripe, paddle, lemonsqueezy, gumroad.`,
+        `Unknown BUREAU_PAYMENT_PROVIDER=${id}. Supported: stub, stripe, lemonsqueezy, gumroad.`,
       );
   }
 }

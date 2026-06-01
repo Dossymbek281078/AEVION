@@ -1,141 +1,128 @@
 import { Router } from "express";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 
 export const paymentsRouter = Router();
 
-const PADDLE_KEY = () => process.env.PADDLE_API_KEY?.trim() || "";
-const PADDLE_SANDBOX = () => process.env.PADDLE_SANDBOX !== "false";
-const PADDLE_BASE = () => PADDLE_SANDBOX() ? "https://sandbox-api.paddle.com" : "https://api.paddle.com";
+const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
 const PAYBOX_MERCHANT = () => process.env.PAYBOX_MERCHANT_ID?.trim() || "";
 const PAYBOX_SECRET = () => process.env.PAYBOX_SECRET_KEY?.trim() || "";
+
+/** A Gumroad checkout is "real" only when a product permalink is configured. */
+function gumroadConfigured(reference: string): boolean {
+  const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+  return Boolean(process.env[envKey] || process.env.GUMROAD_DEFAULT_PERMALINK);
+}
 
 /* ═══ Plans definition ═══ */
 
 const PLANS = [
   { id: "free", name: "Free", price: 0, currency: "usd", interval: "month", features: ["5 QCoreAI runs/day", "3 DevHub projects", "1 GB QMedia storage", "Basic analytics"] },
-  { id: "pro", name: "Pro", price: 1900, currency: "usd", interval: "month", priceId: process.env.PADDLE_PRICE_PRO_MONTHLY, features: ["Unlimited QCoreAI runs", "Unlimited DevHub projects", "50 GB QMedia storage", "AI Memory", "Priority support", "Advanced analytics", "API keys", "Organizations"] },
-  { id: "enterprise", name: "Enterprise", price: 9900, currency: "usd", interval: "month", priceId: process.env.PADDLE_PRICE_BIZ_MONTHLY, features: ["Everything in Pro", "Custom AI models", "SLA 99.9%", "Dedicated support", "Custom integrations", "On-premise option"] },
+  { id: "pro", name: "Pro", price: 1900, currency: "usd", interval: "month", reference: "tier_pro_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_PRO_MONTHLY, features: ["Unlimited QCoreAI runs", "Unlimited DevHub projects", "50 GB QMedia storage", "AI Memory", "Priority support", "Advanced analytics", "API keys", "Organizations"] },
+  { id: "enterprise", name: "Enterprise", price: 9900, currency: "usd", interval: "month", reference: "tier_business_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_BUSINESS_MONTHLY, features: ["Everything in Pro", "Custom AI models", "SLA 99.9%", "Dedicated support", "Custom integrations", "On-premise option"] },
 ];
 
-/* ═══ Paddle ═══ */
+/* ═══ Gumroad (only KYC-cleared processor; Stripe/Paddle blocked) ═══ */
 
-paymentsRouter.get("/paddle/config", (_req, res) => {
+paymentsRouter.get("/gumroad/config", (_req, res) => {
   res.json({
-    configured: Boolean(PADDLE_KEY()),
-    sandbox: PADDLE_SANDBOX(),
-    provider: "paddle",
+    configured: Boolean(GUMROAD_TOKEN()),
+    provider: "gumroad",
   });
 });
 
-paymentsRouter.get("/paddle/plans", (_req, res) => {
+paymentsRouter.get("/gumroad/plans", (_req, res) => {
   res.json({ plans: PLANS });
 });
 
-paymentsRouter.post("/paddle/create-transaction", async (req, res) => {
+// Build a Gumroad checkout URL for an ad-hoc amount. Gumroad price is fixed in
+// the product, so `amount` is informational; we route by `reference` (→ permalink
+// via GUMROAD_PERMALINK_<REFERENCE>). Stub when no permalink is configured.
+paymentsRouter.post("/gumroad/create-transaction", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const { amount, currency = "USD", description, priceId, successUrl } = req.body || {};
+    const { amount, currency = "USD", description, reference = "default", email } = req.body || {};
     if (!amount || typeof amount !== "number" || amount < 50) {
       return res.status(400).json({ error: "amount required (min 50 cents)" });
     }
 
-    if (!PADDLE_KEY()) {
+    if (!gumroadConfigured(String(reference))) {
       return res.json({
-        checkoutUrl: `https://buy.paddle.com/stub?amount=${amount}`,
-        transactionId: `txn_stub_${Date.now()}`,
+        checkoutUrl: `https://app.gumroad.com/l/stub?amount=${amount}`,
+        intentId: `gumroad_stub_${auth.sub.slice(0, 8)}`,
         mode: "stub",
+        provider: "gumroad",
       });
     }
 
-    const body: Record<string, unknown> = priceId
-      ? { items: [{ price_id: priceId, quantity: 1 }] }
-      : {
-          items: [{
-            quantity: 1,
-            price: {
-              name: (description || "AEVION Payment").slice(0, 200),
-              unit_price: { amount: String(Math.round(amount)), currency_code: String(currency).toUpperCase().slice(0, 3) },
-              tax_mode: "exclusive",
-            },
-          }],
-        };
-
-    if (successUrl) (body as any).checkout = { url: successUrl };
-
-    const r = await fetch(`${PADDLE_BASE()}/transactions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${PADDLE_KEY()}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+    const intent = await gumroadPaymentProvider.createIntent({
+      reference: String(reference),
+      amountCents: Math.round(amount),
+      currency: String(currency).toUpperCase().slice(0, 3),
+      description: (description || "AEVION Payment").slice(0, 200),
+      email: email ? String(email) : null,
     });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      return res.status(400).json({ error: (err as any)?.error?.detail || "Paddle error" });
-    }
-    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
-    const tx = data.data;
-    if (!tx?.id) return res.status(500).json({ error: "no transaction id from Paddle" });
 
     res.json({
-      checkoutUrl: tx.checkout?.url ?? `${PADDLE_BASE().replace("api.", "")}/checkout/${tx.id}`,
-      transactionId: tx.id,
-      provider: "paddle",
-      sandbox: PADDLE_SANDBOX(),
+      checkoutUrl: intent.checkoutUrl,
+      intentId: intent.intentId,
+      provider: "gumroad",
     });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "create transaction failed" });
   }
 });
 
-paymentsRouter.post("/paddle/create-subscription", async (req, res) => {
+paymentsRouter.post("/gumroad/create-subscription", async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
-    const { priceId, email, successUrl } = req.body || {};
-    if (!priceId) return res.status(400).json({ error: "priceId required (get from /api/payments/paddle/plans)" });
+    const { reference, email } = req.body || {};
+    if (!reference) return res.status(400).json({ error: "reference required (e.g. tier_pro_monthly; see /api/payments/gumroad/plans)" });
 
-    if (!PADDLE_KEY()) {
-      return res.json({ checkoutUrl: `https://buy.paddle.com/stub?price=${priceId}`, mode: "stub" });
+    if (!gumroadConfigured(String(reference))) {
+      return res.json({ checkoutUrl: `https://app.gumroad.com/l/stub?ref=${reference}`, mode: "stub", provider: "gumroad" });
     }
 
-    const body: Record<string, unknown> = {
-      items: [{ price_id: priceId, quantity: 1 }],
-      ...(email ? { customer: { email } } : {}),
-      ...(successUrl ? { checkout: { url: successUrl } } : {}),
-    };
-
-    const r = await fetch(`${PADDLE_BASE()}/transactions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${PADDLE_KEY()}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+    const intent = await gumroadPaymentProvider.createIntent({
+      reference: String(reference),
+      amountCents: 0,
+      currency: "USD",
+      description: `AEVION membership (${reference})`,
+      email: email ? String(email) : null,
     });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      return res.status(400).json({ error: (err as any)?.error?.detail || "Paddle error" });
-    }
-    const data = await r.json() as { data?: { id: string; checkout?: { url: string } } };
-    const tx = data.data;
     res.json({
-      checkoutUrl: tx?.checkout?.url ?? null,
-      transactionId: tx?.id,
-      provider: "paddle",
+      checkoutUrl: intent.checkoutUrl,
+      intentId: intent.intentId,
+      provider: "gumroad",
     });
   } catch (e: any) {
     res.status(500).json({ error: e?.message || "create subscription failed" });
   }
 });
 
-/* ═══ Legacy Stripe aliases (redirect to Paddle) ═══ */
+/* ═══ Legacy aliases (Stripe & Paddle removed — both KYC-blocked) ═══ */
 
 paymentsRouter.get("/stripe/config", (_req, res) => {
-  res.json({ configured: false, migrated: true, provider: "paddle", message: "Stripe removed — use /api/payments/paddle/*" });
+  res.json({ configured: false, migrated: true, provider: "gumroad", message: "Stripe removed — use /api/payments/gumroad/*" });
 });
-paymentsRouter.get("/stripe/plans", (_req, res) => res.redirect("/api/payments/paddle/plans"));
+paymentsRouter.get("/stripe/plans", (_req, res) => res.redirect("/api/payments/gumroad/plans"));
+paymentsRouter.get("/paddle/config", (_req, res) => {
+  res.json({ configured: false, migrated: true, provider: "gumroad", message: "Paddle removed (KYC blocked) — use /api/payments/gumroad/*" });
+});
+paymentsRouter.get("/paddle/plans", (_req, res) => res.redirect("/api/payments/gumroad/plans"));
 paymentsRouter.post("/stripe/create-payment-intent", (_req, res) => {
-  res.status(410).json({ error: "Stripe removed — use POST /api/payments/paddle/create-transaction" });
+  res.status(410).json({ error: "Stripe removed — use POST /api/payments/gumroad/create-transaction" });
 });
 paymentsRouter.post("/stripe/create-subscription", (_req, res) => {
-  res.status(410).json({ error: "Stripe removed — use POST /api/payments/paddle/create-subscription" });
+  res.status(410).json({ error: "Stripe removed — use POST /api/payments/gumroad/create-subscription" });
+});
+paymentsRouter.post("/paddle/create-transaction", (_req, res) => {
+  res.status(410).json({ error: "Paddle removed (KYC blocked) — use POST /api/payments/gumroad/create-transaction" });
+});
+paymentsRouter.post("/paddle/create-subscription", (_req, res) => {
+  res.status(410).json({ error: "Paddle removed (KYC blocked) — use POST /api/payments/gumroad/create-subscription" });
 });
 
 /* ═══ PayBox (Kazakhstan) ═══ */
@@ -194,9 +181,10 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 
 paymentsRouter.get("/health", (_req, res) => {
   res.json({
-    paddle: { configured: Boolean(PADDLE_KEY()), sandbox: PADDLE_SANDBOX() },
+    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
     paybox: { configured: Boolean(PAYBOX_MERCHANT()) },
     kaspi: { configured: false },
+    paddle: { configured: false, migrated: true },
     stripe: { configured: false, migrated: true },
   });
 });

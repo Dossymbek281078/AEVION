@@ -515,6 +515,8 @@ C) [третий вариант]
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
+| `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | UX-бэклог: layout 100vh, lichess move-dots+hover, in-game dashboard, плавность ходов, видимость 1-го хода, 60 звуков + free music | 2026-06-01 |
+| `frontend/src/app/{demo,investor,pitch}/**` | ☑ ЗАНЯТО | aevion-core/main (Investor Demo) | Подготовка инвестор-демо: маршруты demo / investor / pitch | 2026-06-01 |
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |
 | `qcoreai.ts` + `qcoreai/**` | ✅ V31-V70 + collab viewer DONE | frontend-qcore | collab share link + 24h TTL + viewer count. Далее: streaming SSE | 12:19 UTC |
 | `devhub.ts` + `devhub/**` | ✅ V1-V3 DONE | frontend-qcore | GitHub API branches/sync. Далее: Monaco editor или Cloudflare domain | 12:19 UTC |

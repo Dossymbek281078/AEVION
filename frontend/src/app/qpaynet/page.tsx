@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { useI18n } from "@/lib/i18n";
 
 interface Wallet {
   id: string;
@@ -32,22 +33,27 @@ interface Stats {
   totalDepositedKzt: number;
 }
 
-const TYPE_LABELS: Record<string, { label: string; color: string; sign: string }> = {
-  deposit:        { label: "Пополнение",    color: "text-emerald-400", sign: "+" },
-  withdraw:       { label: "Вывод",         color: "text-red-400",     sign: "−" },
-  transfer_out:   { label: "Перевод (исх)", color: "text-amber-400",   sign: "−" },
-  transfer_in:    { label: "Перевод (вх)",  color: "text-emerald-400", sign: "+" },
-  merchant_charge:{ label: "Списание",      color: "text-red-400",     sign: "−" },
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+const TYPE_META: Record<string, { key: string; color: string; sign: string }> = {
+  deposit:        { key: "qpaynet.home.txtype.deposit",       color: "text-emerald-400", sign: "+" },
+  withdraw:       { key: "qpaynet.home.txtype.withdraw",      color: "text-red-400",     sign: "−" },
+  transfer_out:   { key: "qpaynet.home.txtype.transferOut",   color: "text-amber-400",   sign: "−" },
+  transfer_in:    { key: "qpaynet.home.txtype.transferIn",    color: "text-emerald-400", sign: "+" },
+  merchant_charge:{ key: "qpaynet.home.txtype.merchantCharge",color: "text-red-400",     sign: "−" },
 };
 
 function fmt(n: number) {
   return n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+function fmtDate(iso: string, lang: string) {
+  // en uses month-day ordering; ru / kk and other locales share ru-RU ordering
+  const localeTag = lang === "en" ? "en-US" : "ru-RU";
+  return new Date(iso).toLocaleString(localeTag, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 export default function QPayNetDashboard() {
+  const { t, lang } = useI18n();
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -69,20 +75,20 @@ export default function QPayNetDashboard() {
   async function copyWalletId(id: string) {
     try {
       await navigator.clipboard.writeText(id);
-      showToast("ID кошелька скопирован");
+      showToast(t("qpaynet.home.toast.copied"));
     } catch {
-      showToast("Не удалось скопировать");
+      showToast(t("qpaynet.home.toast.copyFail"));
     }
   }
 
   useEffect(() => {
-    const t = localStorage.getItem("aevion_token") ?? "";
-    setToken(t);
+    const saved = localStorage.getItem("aevion_token") ?? "";
+    setToken(saved);
     fetch(apiUrl("/api/qpaynet/stats")).then(r => r.json()).then(setStats).catch(() => {});
-    if (!t) { setLoading(false); return; }
+    if (!saved) { setLoading(false); return; }
     Promise.all([
-      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
-      fetch(apiUrl("/api/qpaynet/transactions?limit=20"), { headers: { Authorization: `Bearer ${t}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/wallets"), { headers: { Authorization: `Bearer ${saved}` } }).then(r => r.json()),
+      fetch(apiUrl("/api/qpaynet/transactions?limit=20"), { headers: { Authorization: `Bearer ${saved}` } }).then(r => r.json()),
     ]).then(([wd, td]) => {
       setWallets(wd.wallets ?? []);
       setTxs(td.transactions ?? []);
@@ -109,7 +115,7 @@ export default function QPayNetDashboard() {
     const r = await fetch(apiUrl("/api/qpaynet/wallets"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: newWalletName || "Мой кошелёк" }),
+      body: JSON.stringify({ name: newWalletName || t("qpaynet.home.wallets.defaultName") }),
     });
     const d = await r.json();
     setWallets(prev => [d, ...prev]);
@@ -118,7 +124,7 @@ export default function QPayNetDashboard() {
   }
 
   const activeW = wallets.find(w => w.id === activeWallet);
-  const activeTxs = txs.filter(t => !activeWallet || t.wallet_id === activeWallet);
+  const activeTxs = txs.filter(tx => !activeWallet || tx.wallet_id === activeWallet);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -132,14 +138,14 @@ export default function QPayNetDashboard() {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Link href="/" className="text-xs text-slate-400 hover:text-white">← AEVION</Link>
           {token && <NotificationBell token={token} />}
-          {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white hidden sm:inline">📥 Запросы</Link>}
-          {token && <Link href="/qpaynet/payouts" className="text-xs text-slate-400 hover:text-white hidden sm:inline">🏦 Выплаты</Link>}
+          {token && <Link href="/qpaynet/requests" className="text-xs text-slate-400 hover:text-white hidden sm:inline">📥 {t("qpaynet.home.nav.requests")}</Link>}
+          {token && <Link href="/qpaynet/payouts" className="text-xs text-slate-400 hover:text-white hidden sm:inline">🏦 {t("qpaynet.home.nav.payouts")}</Link>}
           {token && <Link href="/qpaynet/kyc" className="text-xs text-slate-400 hover:text-white hidden sm:inline">🛡 KYC</Link>}
           <Link href="/qpaynet/merchant" className="text-xs text-slate-400 hover:text-white hidden sm:inline">Merchant API</Link>
           {token && (
             <button onClick={() => setShowCreate(true)}
               className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-lg">
-              + Кошелёк
+              + {t("qpaynet.home.nav.newWallet")}
             </button>
           )}
         </div>
@@ -149,9 +155,9 @@ export default function QPayNetDashboard() {
       {stats && (
         <div className="border-b border-slate-800 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center sm:gap-6 gap-2 text-[11px] sm:text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span aria-hidden>💳</span>{stats.activeWallets} <span className="hidden xs:inline sm:inline">кошельков</span></span>
-            <span className="flex items-center gap-1.5"><span aria-hidden>⚡</span>{stats.totalTransactions} <span className="hidden xs:inline sm:inline">транзакций</span></span>
-            <span className="flex items-center gap-1.5"><span aria-hidden>₸</span><span className="truncate">{fmt(stats.totalDepositedKzt)}</span> <span className="hidden sm:inline">тнг. депозитов</span></span>
+            <span className="flex items-center gap-1.5"><span aria-hidden>💳</span>{stats.activeWallets} <span className="hidden xs:inline sm:inline">{t("qpaynet.home.stats.wallets")}</span></span>
+            <span className="flex items-center gap-1.5"><span aria-hidden>⚡</span>{stats.totalTransactions} <span className="hidden xs:inline sm:inline">{t("qpaynet.home.stats.transactions")}</span></span>
+            <span className="flex items-center gap-1.5"><span aria-hidden>₸</span><span className="truncate">{fmt(stats.totalDepositedKzt)}</span> <span className="hidden sm:inline">{t("qpaynet.home.stats.deposited")}</span></span>
           </div>
           <ModulePricingChip moduleId="qpaynet-embedded" theme="dark" currency="KZT" />
         </div>
@@ -160,19 +166,19 @@ export default function QPayNetDashboard() {
       {!token && (
         <div className="max-w-3xl mx-auto px-6 py-20 text-center">
           <div className="text-6xl mb-6">💳</div>
-          <h1 className="text-4xl font-black mb-4">Платёжная инфраструктура<br />встроенная в AEVION</h1>
+          <h1 className="text-4xl font-black mb-4">{t("qpaynet.home.hero.titleL1")}<br />{t("qpaynet.home.hero.titleL2")}</h1>
           <p className="text-slate-400 text-lg mb-8">
-            Кошельки в тенге · P2P переводы · Merchant API для QBuild и других модулей
+            {t("qpaynet.home.hero.subtitle")}
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap mb-10">
-            {[["₸","Тенге (KZT)"],["⚡","Мгновенные переводы"],["🔑","Merchant API Key"],["📊","История транзакций"]].map(([icon,label])=>(
+            {[["₸",t("qpaynet.home.hero.f1")],["⚡",t("qpaynet.home.hero.f2")],["🔑",t("qpaynet.home.hero.f3")],["📊",t("qpaynet.home.hero.f4")]].map(([icon,label])=>(
               <div key={label} className="flex items-center gap-2 text-sm text-slate-300 bg-slate-800 px-4 py-2 rounded-xl">
                 <span>{icon}</span><span>{label}</span>
               </div>
             ))}
           </div>
           <Link href="/auth" className="inline-block px-8 py-4 bg-violet-600 hover:bg-violet-700 text-white text-base font-bold rounded-xl">
-            Войти и открыть кошелёк →
+            {t("qpaynet.home.hero.cta")}
           </Link>
         </div>
       )}
@@ -193,7 +199,7 @@ export default function QPayNetDashboard() {
       {token && (
         <div className="max-w-5xl mx-auto px-6 py-8">
           {loading ? (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse" aria-label="Загрузка дашборда" role="status">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-pulse" aria-label={t("qpaynet.home.loading")} role="status">
               <div className="lg:col-span-1 space-y-3">
                 <div className="h-3 w-20 bg-slate-800 rounded" />
                 {[0,1].map(i => (
@@ -217,7 +223,7 @@ export default function QPayNetDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left: wallets */}
               <div className="lg:col-span-1 space-y-3">
-                <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Кошельки</h2>
+                <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t("qpaynet.home.wallets.title")}</h2>
                 {wallets.map(w => (
                   <button key={w.id} onClick={() => setActiveWallet(w.id)}
                     className={`w-full text-left p-4 rounded-xl border transition-colors ${
@@ -231,17 +237,17 @@ export default function QPayNetDashboard() {
                   </button>
                 ))}
                 {wallets.length === 0 && (
-                  <div className="text-slate-600 text-sm text-center py-6">Нет кошельков</div>
+                  <div className="text-slate-600 text-sm text-center py-6">{t("qpaynet.home.wallets.empty")}</div>
                 )}
                 {showCreate && (
                   <div className="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2">
                     <input type="text" value={newWalletName} onChange={e => setNewWalletName(e.target.value)}
-                      placeholder="Название кошелька"
+                      placeholder={t("qpaynet.home.wallets.namePlaceholder")}
                       className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500" />
                     <div className="flex gap-2">
                       <button onClick={createWallet} disabled={creating}
                         className="flex-1 py-1.5 bg-violet-600 hover:bg-violet-700 rounded-lg text-xs font-semibold disabled:opacity-40">
-                        {creating ? "..." : "Создать"}
+                        {creating ? "..." : t("qpaynet.home.wallets.create")}
                       </button>
                       <button onClick={() => setShowCreate(false)}
                         className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs">✕</button>
@@ -279,19 +285,19 @@ export default function QPayNetDashboard() {
                       </div>
                       <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-2 sm:flex-wrap w-full sm:w-auto mt-3 sm:mt-0">
                         <Link href={`/qpaynet/deposit?wallet=${activeW.id}`}
-                          className="px-3 py-2.5 sm:py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">+ Пополнить</Link>
+                          className="px-3 py-2.5 sm:py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">+ {t("qpaynet.home.action.deposit")}</Link>
                         <Link href={`/qpaynet/send?wallet=${activeW.id}`}
-                          className="px-3 py-2.5 sm:py-1.5 bg-violet-700 hover:bg-violet-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">→ Отправить</Link>
+                          className="px-3 py-2.5 sm:py-1.5 bg-violet-700 hover:bg-violet-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">→ {t("qpaynet.home.action.send")}</Link>
                         <Link href={`/qpaynet/request?wallet=${activeW.id}`}
-                          className="px-3 py-2.5 sm:py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">📥 Запросить</Link>
+                          className="px-3 py-2.5 sm:py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-semibold text-center min-h-[44px] sm:min-h-0 flex items-center justify-center">📥 {t("qpaynet.home.action.request")}</Link>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <div className="text-[10px] text-slate-600 font-mono truncate">{activeW.id}</div>
                       <button
                         onClick={() => copyWalletId(activeW.id)}
-                        title="Скопировать ID кошелька"
-                        aria-label="Скопировать ID кошелька"
+                        title={t("qpaynet.home.copyWalletId")}
+                        aria-label={t("qpaynet.home.copyWalletId")}
                         className="shrink-0 text-xs text-slate-500 hover:text-slate-300 px-2 py-1.5 bg-slate-800 rounded min-h-[32px]"
                       >
                         📋
@@ -303,28 +309,31 @@ export default function QPayNetDashboard() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      Последние транзакции
+                      {t("qpaynet.home.tx.recent")}
                     </h3>
                     <Link href="/qpaynet/transactions" className="text-[11px] text-violet-400 hover:text-violet-300">
-                      Все →
+                      {t("qpaynet.home.tx.all")}
                     </Link>
                   </div>
                   {activeTxs.length === 0 ? (
                     <div className="text-slate-600 text-sm text-center py-8 bg-slate-900 rounded-xl border border-slate-800">
-                      Транзакций пока нет
+                      {t("qpaynet.home.tx.empty")}
                     </div>
                   ) : (
                     <div className="space-y-1">
                       {activeTxs.slice(0, 15).map(tx => {
-                        const t = TYPE_LABELS[tx.type] ?? { label: tx.type, color: "text-slate-400", sign: "" };
+                        const meta = TYPE_META[tx.type];
+                        const label = meta ? t(meta.key) : tx.type;
+                        const color = meta?.color ?? "text-slate-400";
+                        const sign = meta?.sign ?? "";
                         return (
                           <div key={tx.id} className="flex items-center justify-between py-2.5 px-3 bg-slate-900 rounded-lg border border-slate-800 text-xs">
                             <div className="flex-1 min-w-0">
-                              <div className="text-slate-300 font-medium truncate">{tx.description || t.label}</div>
-                              <div className="text-slate-600 mt-0.5">{t.label} · {fmtDate(tx.created_at)}</div>
+                              <div className="text-slate-300 font-medium truncate">{tx.description || label}</div>
+                              <div className="text-slate-600 mt-0.5">{label} · {fmtDate(tx.created_at, lang)}</div>
                             </div>
-                            <div className={`font-bold ml-3 shrink-0 ${t.color}`}>
-                              {t.sign}{fmt(tx.amount)} ₸
+                            <div className={`font-bold ml-3 shrink-0 ${color}`}>
+                              {sign}{fmt(tx.amount)} ₸
                             </div>
                           </div>
                         );
@@ -349,6 +358,7 @@ interface Dashboard {
 }
 
 function DashboardSummary({ token }: { token: string }) {
+  const { t } = useI18n();
   const [data, setData] = useState<Dashboard | null>(null);
 
   useEffect(() => {
@@ -366,27 +376,27 @@ function DashboardSummary({ token }: { token: string }) {
     <div className="border-b border-slate-800 px-6 py-4">
       <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div className="text-[10px] text-slate-500 uppercase tracking-wide">Всего на кошельках</div>
+          <div className="text-[10px] text-slate-500 uppercase tracking-wide">{t("qpaynet.home.sum.total")}</div>
           <div className="text-xl font-bold text-white mt-0.5">{fmt(data.wallets.totalBalanceKzt)} <span className="text-xs text-slate-500">₸</span></div>
-          <div className="text-[10px] text-slate-600 mt-0.5">{data.wallets.activeCount} актив.</div>
+          <div className="text-[10px] text-slate-600 mt-0.5">{t("qpaynet.home.sum.active", { count: data.wallets.activeCount })}</div>
         </div>
         <div className="bg-emerald-950/40 border border-emerald-900/40 rounded-xl p-3">
-          <div className="text-[10px] text-emerald-400 uppercase tracking-wide">Получено (мес.)</div>
+          <div className="text-[10px] text-emerald-400 uppercase tracking-wide">{t("qpaynet.home.sum.received")}</div>
           <div className="text-xl font-bold text-emerald-300 mt-0.5">+{fmt(data.thisMonth.inKzt)} <span className="text-xs text-emerald-500">₸</span></div>
-          <div className="text-[10px] text-emerald-500/60 mt-0.5">{data.thisMonth.txCount} операций</div>
+          <div className="text-[10px] text-emerald-500/60 mt-0.5">{t("qpaynet.home.sum.ops", { count: data.thisMonth.txCount })}</div>
         </div>
         <div className="bg-red-950/30 border border-red-900/40 rounded-xl p-3">
-          <div className="text-[10px] text-red-400 uppercase tracking-wide">Отправлено (мес.)</div>
+          <div className="text-[10px] text-red-400 uppercase tracking-wide">{t("qpaynet.home.sum.sent")}</div>
           <div className="text-xl font-bold text-red-300 mt-0.5">−{fmt(data.thisMonth.outKzt)} <span className="text-xs text-red-500">₸</span></div>
           <div className={`text-[10px] mt-0.5 ${data.thisMonth.netKzt >= 0 ? "text-emerald-500" : "text-red-400"}`}>
-            нетто: {data.thisMonth.netKzt >= 0 ? "+" : "−"}{fmt(Math.abs(data.thisMonth.netKzt))} ₸
+            {t("qpaynet.home.sum.net")} {data.thisMonth.netKzt >= 0 ? "+" : "−"}{fmt(Math.abs(data.thisMonth.netKzt))} ₸
           </div>
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div className="text-[10px] text-slate-500 uppercase tracking-wide">7 дней</div>
+          <div className="text-[10px] text-slate-500 uppercase tracking-wide">{t("qpaynet.home.sum.days7")}</div>
           <div className="flex items-end gap-0.5 h-8 mt-1.5">
             {data.last7days.length === 0 ? (
-              <div className="text-[10px] text-slate-600 self-center">нет данных</div>
+              <div className="text-[10px] text-slate-600 self-center">{t("qpaynet.home.sum.noData")}</div>
             ) : data.last7days.map((d, i) => (
               <div key={i} className="flex-1 flex flex-col gap-0.5 justify-end">
                 <div className="bg-emerald-500/60 rounded-sm" style={{ height: `${(d.inKzt / max7) * 24}px` }} />
@@ -395,7 +405,7 @@ function DashboardSummary({ token }: { token: string }) {
             ))}
           </div>
           <div className="text-[10px] text-slate-600 mt-0.5">
-            запросы: {data.paymentRequests.paid}/{data.paymentRequests.pending + data.paymentRequests.paid + data.paymentRequests.cancelled}
+            {t("qpaynet.home.sum.requests")} {data.paymentRequests.paid}/{data.paymentRequests.pending + data.paymentRequests.paid + data.paymentRequests.cancelled}
           </div>
         </div>
       </div>
@@ -404,6 +414,7 @@ function DashboardSummary({ token }: { token: string }) {
 }
 
 function NotificationBell({ token }: { token: string }) {
+  const { t } = useI18n();
   const [count, setCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
@@ -421,8 +432,8 @@ function NotificationBell({ token }: { token: string }) {
     <Link
       href="/qpaynet/notifications"
       className="relative text-xs text-slate-400 hover:text-white min-w-[32px] min-h-[32px] flex items-center justify-center"
-      aria-label={count > 0 ? `Уведомления, ${count} непрочитанных` : "Уведомления"}
-      title={count > 0 ? `${count} непрочитанных` : "Уведомления"}
+      aria-label={count > 0 ? t("qpaynet.home.notif.ariaCount", { count }) : t("qpaynet.home.notif.label")}
+      title={count > 0 ? t("qpaynet.home.notif.unread", { count }) : t("qpaynet.home.notif.label")}
     >
       <span aria-hidden>🔔</span>
       {count > 0 && (

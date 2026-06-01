@@ -196,6 +196,55 @@ function PrivacyCheck() {
   const [client, setClient] = useState<ClientCheck[] | null>(null);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function flash(msg: string) {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2200);
+  }
+
+  function buildReport(score: number): string {
+    if (!server) return "";
+    return [
+      "VeilNetX — отчёт о раскрываемости",
+      `Итоговый score: ${score}/100`,
+      "",
+      "Сервер видит:",
+      `  IP: ${server.ip ?? "—"}`,
+      `  Прокси/Tor: ${server.proxyDetected ? "обнаружен" : "нет (прямое соединение)"}`,
+      `  Гео по IP: ${server.geoLeaked ? [server.geo.country, server.geo.city].filter(Boolean).join(", ") || "да" : "не раскрыто"}`,
+      `  Браузер/ОС: ${server.userAgent.browser} / ${server.userAgent.os}`,
+      "",
+      "Браузер раскрывает:",
+      ...(client ?? []).map((c) => `  ${c.label}: ${c.value}`),
+      "",
+      "Проверь себя: https://aevion.app/veilnetx",
+    ].join("\n");
+  }
+
+  async function copyReport(score: number) {
+    try {
+      await navigator.clipboard.writeText(buildReport(score));
+      flash("Отчёт скопирован");
+    } catch {
+      flash("Не удалось скопировать");
+    }
+  }
+
+  async function shareTool() {
+    const url = "https://aevion.app/veilnetx";
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+    try {
+      if (nav.share) {
+        await nav.share({ title: "VeilNetX privacy check", text: "Проверь, что ты раскрываешь любому сайту прямо сейчас:", url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      flash("Ссылка на инструмент скопирована");
+    } catch {
+      /* user cancelled share — noop */
+    }
+  }
 
   async function run() {
     setRunning(true);
@@ -334,6 +383,28 @@ function PrivacyCheck() {
               <b>{client?.find((c) => c.id === "timezone")?.value}</b> — несоответствие выдаёт VPN без подмены пояса.
             </div>
           )}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button onClick={() => copyReport(total)} className="px-3 py-1.5 border border-slate-700 hover:bg-slate-800 rounded-lg text-xs font-semibold">
+              📋 Копировать отчёт
+            </button>
+            <button onClick={shareTool} className="px-3 py-1.5 border border-slate-700 hover:bg-slate-800 rounded-lg text-xs font-semibold">
+              🔗 Поделиться инструментом
+            </button>
+            {toast && <span className="text-xs text-emerald-400">{toast}</span>}
+          </div>
+
+          {total >= 30 && (
+            <div className="bg-cyan-950/30 border border-cyan-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-slate-300">
+                <b className="text-cyan-300">Как это скрыть?</b> VeilNetX (Tor-routed, Q4 2026) спрячет IP+гео и
+                выровняет fingerprint — красные пункты выше станут зелёными.
+              </div>
+              <a href="#waitlist" className="px-4 py-2 bg-cyan-700 hover:bg-cyan-600 rounded-lg text-sm font-semibold whitespace-nowrap">
+                Хочу защиту →
+              </a>
+            </div>
+          )}
         </>
       )}
 
@@ -405,7 +476,7 @@ export default function VeilNetXLanding() {
           воспроизводимыми билдами.
         </p>
         <StatusPill />
-        <div className="space-y-2 pt-2">
+        <div id="waitlist" className="space-y-2 pt-2 scroll-mt-24">
           <div className="text-sm text-slate-400">
             Запуск Q4 2026. Подпишитесь — уведомим первыми.
           </div>
@@ -425,6 +496,10 @@ export default function VeilNetXLanding() {
             Watch on GitHub →
           </Link>
         </div>
+      </section>
+
+      <section className="max-w-5xl mx-auto px-6 pb-4">
+        <PrivacyCheck />
       </section>
 
       <section className="max-w-5xl mx-auto px-6 py-12 space-y-8">

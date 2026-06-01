@@ -89,7 +89,24 @@
       "PowerShell(git show *)",
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx\\)..\\($idx+25\\)] | ForEach-Object {Write-Host $_} })",
       "PowerShell($lines = git show \"HEAD:frontend/src/app/build/u/[id]/page.tsx\" 2>&1; $idx = \\($lines | Select-String \"achievementBadges &&\" | Select-Object -First 1\\).LineNumber; if\\($idx\\){ $lines[\\($idx-3\\)..\\($idx+30\\)] | ForEach-Object {Write-Host \"$\\($lines.IndexOf\\($_\\) + 1\\):  $_\"} })",
-      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)"
+      "PowerShell(cd C:\\\\Users\\\\user\\\\aevion-core ; git status --short 2>&1 | Where-Object {$_ -notmatch \"frontend-exchange|frontend-globus|frontend-gtm|frontend-payments|frontend-qcore|start-aevion|frontend-bank\"} | Select-Object -First 20)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(printenv DATABASE_URL)",
+      "Bash(echo \"launched pid $!\")",
+      "Bash(tee /tmp/qright-backend.log)",
+      "Bash(curl -s --max-time 5 http://localhost:4001/api/qright/transparency)",
+      "Bash(curl -s --max-time 5 \"http://localhost:4001/api/qright/objects?limit=2\")",
+      "Bash(curl -s --max-time 5 \"http://localhost:4001/api/qright/objects?limit=1\")",
+      "Bash(netstat -ano)",
+      "Bash(curl -sv --max-time 4 http://127.0.0.1:4001/api/qright/transparency)",
+      "Bash(findstr 4001)",
+      "Bash(tasklist)",
+      "Bash(curl -s --max-time 5 http://127.0.0.1:4001/api/qright/transparency)",
+      "Bash(echo \"=== exit $? ===\")",
+      "Bash(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 6 http://127.0.0.1:4001__TRACKED_VAR__)",
+      "Read(//tmp/**)",
+      "Bash(curl -s --max-time 6 http://127.0.0.1:4001/api/qright/embed/e02ac547-6a80-4a2f-b315-4f6b7536a488)",
+      "Bash(tee /tmp/qr-be2.log)"
     ]
   }
 }

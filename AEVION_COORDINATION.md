@@ -516,7 +516,7 @@ C) [третий вариант]
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
-| `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()` по маршрутам qpaynet (26 файлов, 11 языков). Старт: `/qpaynet` main page. qcontract уже 100%. commit `--only` по конкретным page.tsx | 2026-06-01 |
+| `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()`. ✅ Готово: `/qpaynet` (375a0900), `/send` `/request` `/requests` (56b4e2c5). Далее: `/deposit` `/payouts` `/transactions` `/kyc`. commit `--only` | 2026-06-01 |
 | `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | UX-бэклог: layout 100vh, lichess move-dots+hover, in-game dashboard, плавность ходов, видимость 1-го хода, 60 звуков + free music | 2026-06-01 |
 | `frontend/src/app/{demo,investor,pitch}/**` | ☑ ЗАНЯТО | aevion-core/main (Investor Demo) | Подготовка инвестор-демо: маршруты demo / investor / pitch | 2026-06-01 |
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |

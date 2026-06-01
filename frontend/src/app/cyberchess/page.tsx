@@ -535,7 +535,11 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
     {((iV&&!!hasPiece)||iHoverCap)&&<div style={{position:"absolute",inset:0,borderRadius:"50%",boxShadow:"inset 0 0 0 clamp(3px,9%,9px) rgba(15,23,42,0.28)",pointerEvents:"none"}}/>}
     {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"opacity 100ms ease-out",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
-    {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordRank}</div>}
+    {/* Last-move marker — чёткий amber inset-ring, читается даже под фигурой
+        (bg-тинта T.last мало: фигура занимает 88% клетки). Не рисуем на клетке
+        шаха (там свой red pulse-glow) чтобы маркеры не наслаивались. */}
+    {iL&&!iCk&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(217,119,6,0.92)",pointerEvents:"none",zIndex:1}}/>}
+    {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none",zIndex:2}}>{coordRank}</div>}
     {coordFile&&<div style={{position:"absolute",bottom:"5%",right:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none"}}>{coordFile}</div>}
   </div>;
 });
@@ -953,7 +957,7 @@ export default function CyberChessPage(){
     document.documentElement.setAttribute("data-cc-theme",themeMode);
     return()=>{document.body.style.background=prev;document.documentElement.removeAttribute("data-cc-theme")};
   },[themeMode]);
-  // Текущий звуковой пресет (40 пресетов + молчание). Сохраняется в localStorage.
+  // Текущий звуковой пресет (60 пресетов + молчание). Сохраняется в localStorage.
   const[soundPresetId,sSoundPresetId]=useState<string>(()=>loadSoundPreset());
   useEffect(()=>{saveSoundPreset(soundPresetId)},[soundPresetId]);
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
@@ -4330,7 +4334,7 @@ export default function CyberChessPage(){
   // (no localStorage-driven values in SSR), so React doesn't have to
   // regenerate the tree on hydration, and event handlers attach immediately.
   if(!mounted){
-    return(<main suppressHydrationWarning style={{background:T.bg,minHeight:"100vh"}}>
+    return(<main suppressHydrationWarning style={{background:T.bg,minHeight:"100dvh"}}>
       <ProductPageShell fullWidth>
         <div style={{minHeight:"60vh",display:"flex",alignItems:"center",justifyContent:"center",color:T.dim,fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -4349,7 +4353,7 @@ export default function CyberChessPage(){
     backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
   } : {};
   const hasBg=bgPreset!=="none"&&!!bgPreset;
-  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,height:"100vh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
+  return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":CC.bg,height:"100dvh",overflow:"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
     <ProductPageShell fullWidth>
       {streamerMode&&<style>{`body{background:#0a0a0a !important}`}</style>}
@@ -11929,7 +11933,7 @@ ${question.trim()}`;
               sMasterVoice(v=>!v);
             }}/>
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Звуки фигур — 40 пресетов + молчание</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text,marginBottom:2}}>Звуки фигур — {CHESS_SOUND_PRESETS.filter(p=>p.category!=="silent").length} пресетов + молчание</div>
               <div style={{fontSize:12,color:CC.textDim,lineHeight:1.4,marginBottom:SPACE[2]}}>
                 Сейчас: <b style={{color:CC.text}}>{CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.emoji} {CHESS_SOUND_PRESETS.find(p=>p.id===soundPresetId)?.name}</b>
               </div>

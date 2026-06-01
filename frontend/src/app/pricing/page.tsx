@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
+import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useABVariant } from "@/lib/abVariant";
@@ -14,13 +15,10 @@ type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
 type TierId = "free" | "pro" | "business" | "enterprise";
 
-// Живой процессинг — Gumroad. Paddle/Stripe/LemonSqueezy не прошли KYC и мертвы.
-// Платные тиры ведут на Gumroad-чекаут; Free/Enterprise — прежний session-flow.
-// Пока один продукт (xpxzam) обслуживает оба платных тира.
-const GUMROAD_PERMALINKS: Partial<Record<TierId, string>> = {
-  pro: "xpxzam",
-  business: "xpxzam",
-};
+// Живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не прошли KYC). Маппинг
+// тиров/приложений на permalink'и — в @/lib/gumroad. Платные тиры → Gumroad-чекаут,
+// Free/Enterprise — прежний session-flow.
+const PAID_TIERS: TierId[] = ["pro", "business"];
 
 interface TierLimits {
   modules: number | null;
@@ -249,13 +247,10 @@ export default function PricingPage() {
     });
     try {
       const period = opts.period ?? "monthly";
-      const permalink = GUMROAD_PERMALINKS[opts.tierId];
 
-      if (permalink) {
+      if (PAID_TIERS.includes(opts.tierId)) {
         // Gumroad hosted checkout — единственный живой процессинг (Paddle/Stripe/LS мертвы).
-        // ?wanted=true сразу открывает overlay; tier/period/app — для аналитики.
-        window.location.href =
-          `https://aevion.gumroad.com/l/${permalink}?wanted=true&app=platform&tier=${opts.tierId}&period=${period}`;
+        window.location.href = gumroadCheckoutUrl({ key: "platform", tier: opts.tierId, period });
         return;
       } else {
         // Free или Enterprise — старый flow
@@ -805,7 +800,7 @@ export default function PricingPage() {
               {tier.id !== "enterprise" && tier.id !== "free" && (
                 <>
                   <a
-                    href="https://aevion.gumroad.com/l/xpxzam"
+                    href={gumroadCheckoutUrl({ key: tier.id, tier: tier.id })}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -1008,7 +1003,7 @@ export default function PricingPage() {
                 <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> /мес</span>
               </div>
               <a
-                href="https://aevion.gumroad.com/l/xpxzam"
+                href={gumroadCheckoutUrl({ key: b.id })}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

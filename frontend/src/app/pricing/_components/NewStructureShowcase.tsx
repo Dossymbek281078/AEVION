@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { gumroadCheckoutUrl } from "@/lib/gumroad";
 
 // Showcases the new 3-tier monetization design (Solo + Bundles + All-Access)
-// from the live /api/aevion/pricing endpoint. Sits above the legacy Paddle
-// tiers (Free/Pro/Business/Enterprise) until Phase 3, when Paddle products
-// for the new structure are provisioned and the legacy tiers retire.
+// from the live /api/aevion/pricing endpoint. Checkout CTAs route to Gumroad
+// (the only live processor — Paddle/Stripe/LemonSqueezy failed KYC).
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type ComputeTier = "light" | "standard" | "heavy";
@@ -173,7 +173,7 @@ export default function NewStructureShowcase({ currency, billingPeriod }: Props)
                 Saves {fmt(save, currency)}/мес vs solo
               </div>
               <a
-                href="https://aevion.gumroad.com/l/xpxzam"
+                href={gumroadCheckoutUrl({ key: b.id })}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -227,7 +227,7 @@ export default function NewStructureShowcase({ currency, billingPeriod }: Props)
             Saves {fmt(allAccessSave, currency)}/мес vs all-solo
           </div>
           <a
-            href="https://aevion.gumroad.com/l/xpxzam"
+            href={gumroadCheckoutUrl({ key: "all-access" })}
             target="_blank"
             rel="noopener noreferrer"
             style={{

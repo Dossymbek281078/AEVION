@@ -1,19 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { gumroadCheckoutUrl } from "@/lib/gumroad";
 
 // NOTE: имя PaddleUpgradeButton оставлено как legacy — на него завязаны ~11
 // модульных страниц (импорты). Paddle/Stripe/LemonSqueezy не прошли KYC и мертвы;
 // единственный живой процессинг — Gumroad. Кнопка ведёт на Gumroad-чекаут.
-
-const GUMROAD_BASE = "https://aevion.gumroad.com/l";
-
-// tier → Gumroad permalink. Пока один продукт (xpxzam) обслуживает оба тира;
-// когда заведём отдельные продукты — добавить сюда их permalink'и.
-const PERMALINKS: Record<string, string> = {
-  pro: "xpxzam",
-  business: "xpxzam",
-};
 
 interface Props {
   tierId?: "pro" | "business";
@@ -36,11 +28,8 @@ export function PaddleUpgradeButton({
 
   function handleClick() {
     setLoading(true);
-    const permalink = PERMALINKS[tierId] ?? "xpxzam";
-    // Gumroad hosted checkout — единственный живой рельс. ?wanted=true сразу
-    // открывает overlay-чекаут. app= только для аналитики (referrer).
-    const url = `${GUMROAD_BASE}/${permalink}?wanted=true&app=${encodeURIComponent(appId)}`;
-    window.location.href = url;
+    // Gumroad hosted checkout — единственный живой рельс.
+    window.location.href = gumroadCheckoutUrl({ key: appId, tier: tierId });
   }
 
   const defaultLabel = tierId === "pro" ? "Начать бесплатно — 14 дней" : "Попробовать Business";

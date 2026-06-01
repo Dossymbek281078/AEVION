@@ -113,6 +113,248 @@ function WaitlistForm() {
   );
 }
 
+type InspectFinding = { id: string; label: string; severity: "low" | "med" | "high"; exposed: boolean };
+type Inspect = {
+  ip: string | null;
+  proxyDetected: boolean;
+  geo: { country: string | null; city: string | null; region: string | null };
+  geoLeaked: boolean;
+  userAgent: { browser: string; os: string; mobile: boolean };
+  exposure: { score: number; level: "green" | "yellow" | "red"; findings: InspectFinding[] };
+};
+
+type ClientCheck = { id: string; label: string; value: string; exposed: boolean; weight: number };
+
+// Best-effort WebRTC local/public IP leak probe. Modern browsers mask local IPs
+// behind mDNS (*.local) — if we still see a raw IP, that's a real leak.
+function probeWebRTC(timeoutMs = 1500): Promise<string[]> {
+  return new Promise((resolve) => {
+    const ips = new Set<string>();
+    let pc: RTCPeerConnection | null = null;
+    try {
+      pc = new RTCPeerConnection({ iceServers: [] });
+    } catch {
+      resolve([]);
+      return;
+    }
+    const done = () => {
+      try { pc?.close(); } catch { /* noop */ }
+      resolve([...ips]);
+    };
+    const timer = setTimeout(done, timeoutMs);
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) {
+        clearTimeout(timer);
+        done();
+        return;
+      }
+      const m = /([0-9]{1,3}(?:\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){7})/i.exec(e.candidate.candidate);
+      if (m && !/\.local/i.test(e.candidate.candidate)) ips.add(m[1]);
+    };
+    try {
+      pc.createDataChannel("veilnetx-probe");
+      pc.createOffer().then((o) => pc?.setLocalDescription(o)).catch(() => done());
+    } catch {
+      clearTimeout(timer);
+      done();
+    }
+  });
+}
+
+// Cheap canvas fingerprint hash — if it produces a stable non-trivial value the
+// browser is canvas-fingerprintable.
+function canvasHash(): string | null {
+  try {
+    const c = document.createElement("canvas");
+    c.width = 240;
+    c.height = 60;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.textBaseline = "top";
+    ctx.font = "14px 'Arial'";
+    ctx.fillStyle = "#f60";
+    ctx.fillRect(10, 10, 120, 30);
+    ctx.fillStyle = "#069";
+    ctx.fillText("VeilNetX ⚡ privacy", 12, 14);
+    const data = c.toDataURL();
+    let h = 0;
+    for (let i = 0; i < data.length; i++) h = (h * 31 + data.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(16);
+  } catch {
+    return null;
+  }
+}
+
+function levelColor(level: string) {
+  if (level === "green") return { ring: "border-emerald-700", text: "text-emerald-400", bg: "bg-emerald-950/30", bar: "bg-emerald-500" };
+  if (level === "yellow") return { ring: "border-amber-700", text: "text-amber-400", bg: "bg-amber-950/30", bar: "bg-amber-500" };
+  return { ring: "border-red-700", text: "text-red-400", bg: "bg-red-950/30", bar: "bg-red-500" };
+}
+
+function PrivacyCheck() {
+  const [server, setServer] = useState<Inspect | null>(null);
+  const [client, setClient] = useState<ClientCheck[] | null>(null);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run() {
+    setRunning(true);
+    setErr(null);
+    setServer(null);
+    setClient(null);
+    try {
+      const [inspectRes, webrtcIps] = await Promise.all([
+        fetch("/api-backend/api/veilnetx/inspect").then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))),
+        probeWebRTC(),
+      ]);
+      setServer(inspectRes as Inspect);
+
+      const nav = navigator as Navigator & { deviceMemory?: number };
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
+      const cHash = canvasHash();
+      const checks: ClientCheck[] = [
+        {
+          id: "webrtc",
+          label: "WebRTC IP-leak",
+          value: webrtcIps.length ? webrtcIps.join(", ") : "не утекает (mDNS-маскировка)",
+          exposed: webrtcIps.length > 0,
+          weight: 18,
+        },
+        {
+          id: "timezone",
+          label: "Часовой пояс",
+          value: tz,
+          exposed: true,
+          weight: 8,
+        },
+        {
+          id: "canvas",
+          label: "Canvas fingerprint",
+          value: cHash ? `стабильный хэш ${cHash}` : "недоступен",
+          exposed: Boolean(cHash),
+          weight: 12,
+        },
+        {
+          id: "screen",
+          label: "Экран / DPR",
+          value: `${screen.width}×${screen.height} @${window.devicePixelRatio}x`,
+          exposed: true,
+          weight: 6,
+        },
+        {
+          id: "hardware",
+          label: "Ядра CPU / память",
+          value: `${nav.hardwareConcurrency ?? "?"} ядер${nav.deviceMemory ? `, ${nav.deviceMemory} ГБ` : ""}`,
+          exposed: Boolean(nav.hardwareConcurrency),
+          weight: 6,
+        },
+        {
+          id: "languages",
+          label: "Языки браузера",
+          value: (navigator.languages || [navigator.language]).join(", "),
+          exposed: true,
+          weight: 6,
+        },
+      ];
+      setClient(checks);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const clientScore = client ? client.reduce((s, c) => (c.exposed ? s + c.weight : s), 0) : 0;
+  const total = server ? Math.min(100, server.exposure.score + clientScore) : null;
+  const tzVsGeo =
+    server?.geo.country && client?.find((c) => c.id === "timezone");
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xl font-black">🔍 Проверь свою приватность</div>
+          <div className="text-sm text-slate-400 mt-1">
+            Работает сегодня. Покажем, что ты раскрываешь любому серверу прямо сейчас — без Tor.
+          </div>
+        </div>
+        <button
+          onClick={run}
+          disabled={running}
+          className="px-5 py-2.5 bg-cyan-700 hover:bg-cyan-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg text-sm font-semibold whitespace-nowrap"
+        >
+          {running ? "Сканирую…" : server ? "Проверить снова" : "Запустить проверку"}
+        </button>
+      </div>
+
+      {err && <div className="text-sm text-red-400">Ошибка: {err}</div>}
+
+      {total !== null && server && (
+        <>
+          {(() => {
+            const lvl = total >= 60 ? "red" : total >= 30 ? "yellow" : "green";
+            const c = levelColor(lvl);
+            return (
+              <div className={`${c.bg} border ${c.ring} rounded-xl p-5`}>
+                <div className="flex items-baseline justify-between">
+                  <span className={`text-sm font-bold ${c.text}`}>
+                    {lvl === "red" ? "Высокая раскрываемость" : lvl === "yellow" ? "Средняя раскрываемость" : "Низкая раскрываемость"}
+                  </span>
+                  <span className={`text-2xl font-black ${c.text}`}>{total}/100</span>
+                </div>
+                <div className="mt-2 h-2 w-full bg-slate-950 rounded-full overflow-hidden">
+                  <div className={`h-full ${c.bar}`} style={{ width: `${total}%` }} />
+                </div>
+                <div className="text-xs text-slate-400 mt-2">{server.note}</div>
+              </div>
+            );
+          })()}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Сервер видит</div>
+              <Row label="IP" value={server.ip ?? "—"} exposed={!server.proxyDetected} />
+              <Row label="Прокси/Tor" value={server.proxyDetected ? "обнаружен" : "нет (прямое соединение)"} exposed={!server.proxyDetected} />
+              <Row
+                label="Гео по IP"
+                value={server.geoLeaked ? [server.geo.country, server.geo.city].filter(Boolean).join(", ") || "да" : "не раскрыто"}
+                exposed={server.geoLeaked}
+              />
+              <Row label="Браузер / ОС" value={`${server.userAgent.browser} / ${server.userAgent.os}`} exposed />
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Браузер раскрывает</div>
+              {client?.map((c) => <Row key={c.id} label={c.label} value={c.value} exposed={c.exposed} />)}
+            </div>
+          </div>
+
+          {tzVsGeo && (
+            <div className="text-xs text-amber-400/90 bg-amber-950/20 border border-amber-900 rounded-lg px-3 py-2">
+              ⚠ Сверка: сервер определил страну <b>{server.geo.country}</b>, браузер сообщает пояс{" "}
+              <b>{client?.find((c) => c.id === "timezone")?.value}</b> — несоответствие выдаёт VPN без подмены пояса.
+            </div>
+          )}
+        </>
+      )}
+
+      {total === null && !running && !err && (
+        <div className="text-sm text-slate-500">
+          Нажми «Запустить проверку» — комбинируем серверный отчёт (IP, гео, заголовки) с браузерными утечками (WebRTC, canvas, fingerprint-поверхность).
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, value, exposed }: { label: string; value: string; exposed: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-sm bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+      <span className="text-slate-400 shrink-0">{label}</span>
+      <span className={`text-right break-all ${exposed ? "text-red-300" : "text-emerald-300"}`}>{value}</span>
+    </div>
+  );
+}
+
 export default function VeilNetXLanding() {
   return (
     <div className="min-h-screen bg-slate-950 text-white">

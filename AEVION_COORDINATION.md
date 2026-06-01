@@ -168,6 +168,7 @@ C) [третий вариант]
 
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
+| DevHub | `aevion-globus-backend/src/routes/devhub.ts` + `frontend/src/app/devhub/[id]/page.tsx` + `scripts/devhub-prod-smoke.js` | **Paddle как 5-я медиа-интеграция DevHub.** Тонкий `/api/devhub/media/paddle-checkout` поверх готового `lib/paddleClient.ts` (reuse, без дублирования), Stripe/Paddle переключатель в payment-табе, smoke 47→48. verify зелёный. | 2026-06-01 UTC+5 |
 | _free_ | — | **COVERAGE-CLOSEOUT SESSION COMPLETE 2026-05-19.** 26 read-only prod-smokes (qshield drift fix + 3 new wirings + openapi-completeness), OpenAPI 0.7.0 documents 39 module prefixes (was 23 in 0.6.0), все 20 soft prefixes теперь present. | 2026-05-19 13:00 UTC+5 |
 
 ### Завершено 2026-05-19 (OpenAPI 0.7.0 + smoke gap closure)
@@ -515,6 +516,7 @@ C) [третий вариант]
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
+| `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()` по маршрутам qpaynet (26 файлов, 11 языков). Старт: `/qpaynet` main page. qcontract уже 100%. commit `--only` по конкретным page.tsx | 2026-06-01 |
 | `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | UX-бэклог: layout 100vh, lichess move-dots+hover, in-game dashboard, плавность ходов, видимость 1-го хода, 60 звуков + free music | 2026-06-01 |
 | `frontend/src/app/{demo,investor,pitch}/**` | ☑ ЗАНЯТО | aevion-core/main (Investor Demo) | Подготовка инвестор-демо: маршруты demo / investor / pitch | 2026-06-01 |
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |

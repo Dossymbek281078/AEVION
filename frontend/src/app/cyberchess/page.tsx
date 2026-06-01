@@ -6614,6 +6614,23 @@ export default function CyberChessPage(){
               <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
                 Ход {Math.ceil(hist.length/2)} · {tc.ini>0?tc.name:"без таймера"}
               </div>
+              {/* Always-on: материальный баланс + фаза партии + дебют.
+                  Работает без движка анализа (в отличие от блока точности ниже). */}
+              {(()=>{
+                const VAL:Record<string,number>={p:1,n:3,b:3,r:5,q:9,k:0};
+                let wm=0,bm=0,minor=0;
+                for(const row of game.board())for(const sq of row){if(!sq)continue;wm+=sq.color==="w"?(VAL[sq.type]||0):0;bm+=sq.color==="b"?(VAL[sq.type]||0):0;if(sq.type==="n"||sq.type==="b"||sq.type==="r"||sq.type==="q")minor++;}
+                const myDiff=pCol==="w"?wm-bm:bm-wm;
+                const ply=hist.length;
+                const phase=minor<=6?"Эндшпиль":(ply<16&&minor>=11)?"Дебют":"Миттельшпиль";
+                const phaseIcon=phase==="Эндшпиль"?"♔":phase==="Дебют"?"♙":"♘";
+                return <div style={{fontSize:10,color:CC.textMute,marginTop:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <span title="Материальный баланс (твоя сторона)" style={{fontWeight:900,fontFamily:"ui-monospace,monospace",color:myDiff>0?"#10b981":myDiff<0?"#ef4444":CC.textMute}}>{myDiff>0?`+${myDiff}`:myDiff<0?`${myDiff}`:"="}</span>
+                  <span style={{opacity:0.4}}>·</span>
+                  <span title="Фаза партии">{phaseIcon} {phase}</span>
+                  {currentOpening?.name&&<><span style={{opacity:0.4}}>·</span><span title={currentOpening.eco?`ECO ${currentOpening.eco}`:undefined} style={{maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</span></>}
+                </div>;
+              })()}
               {analysis.length>=2&&(()=>{
                 const myMoves=analysis.filter((_,i)=>pCol==="w"?i%2===0:i%2===1);
                 const oppMoves=analysis.filter((_,i)=>pCol==="w"?i%2===1:i%2===0);

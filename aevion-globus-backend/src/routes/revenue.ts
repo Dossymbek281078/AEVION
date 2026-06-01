@@ -29,11 +29,17 @@ const TWITCH_CLIENT_SECRET = () => process.env.TWITCH_CLIENT_SECRET?.trim() || "
 const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
 
 /** Permalink → appId. Set GUMROAD_APP_<PERMALINK>=<appId> to attribute a
- *  product's sales to a specific AEVION app; otherwise "platform". */
+ *  product's sales to a specific AEVION app. Falls back to the checkout layer's
+ *  GUMROAD_PRODUCT_<PERMALINK> mapping (already set on Railway) so configured
+ *  products don't all collapse into "platform"; otherwise "platform". */
 function appIdForPermalink(permalink?: string | null): string {
   if (!permalink) return "platform";
-  const key = `GUMROAD_APP_${permalink.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
-  return process.env[key]?.trim() || "platform";
+  const slug = permalink.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+  return (
+    process.env[`GUMROAD_APP_${slug}`]?.trim() ||
+    process.env[`GUMROAD_PRODUCT_${slug}`]?.trim() ||
+    "platform"
+  );
 }
 
 // ─── Twitch OAuth token (cached in-process) ───────────────────────────────

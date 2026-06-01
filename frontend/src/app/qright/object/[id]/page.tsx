@@ -102,24 +102,28 @@ type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { id } = await params;
+  const sp = (await searchParams) || {};
+  const h = await headers();
+  const lang = pickLang(sp, h);
+  const t = (key: string, vars?: Record<string, string | number>) =>
+    tString("object", lang, key, vars);
   const origin = await getOrigin();
   const rssUrl = origin
     ? `${origin}/api-backend/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`
     : `${getApiBase()}/api/qright/objects/${encodeURIComponent(id)}/changelog.rss`;
   const fallback: Metadata = {
-    title: "QRight registration — AEVION",
-    description: "Public registration record on the AEVION QRight registry.",
-    openGraph: { type: "article", title: "QRight registration — AEVION" },
-    twitter: { card: "summary_large_image", title: "QRight registration — AEVION" },
+    title: t("metaFallbackTitle"),
+    description: t("metaFallbackDesc"),
+    openGraph: { type: "article", title: t("metaFallbackTitle") },
+    twitter: { card: "summary_large_image", title: t("metaFallbackTitle") },
   };
   if (!id) return fallback;
   const data = await loadEmbed(id);
   if (!data || data.status === "not_found") return fallback;
 
-  const statusLabel =
-    data.status === "revoked" ? "REVOKED" : "REGISTERED";
+  const statusLabel = data.status === "revoked" ? t("revoked") : t("registered");
   const titleLine = data.title
     ? `${data.title} · ${statusLabel}`
     : `QRight ${id.slice(0, 8)} · ${statusLabel}`;

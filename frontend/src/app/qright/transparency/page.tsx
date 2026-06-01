@@ -39,16 +39,21 @@ async function loadTransparency(): Promise<TransparencyView | null> {
   }
 }
 
-export const metadata: Metadata = {
-  title: "QRight transparency — AEVION",
-  description:
-    "Public aggregate stats for the AEVION QRight registry: total registrations, active vs revoked, breakdown by revocation reason and content type.",
-  openGraph: {
-    type: "article",
-    title: "QRight transparency — AEVION",
-    description: "Public aggregate stats for the AEVION QRight registry.",
-  },
-};
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const sp = (await searchParams) || {};
+  const h = await headers();
+  const lang = pickLang(sp, h);
+  const t = (key: string) => tString("transparency", lang as "en" | "ru", key);
+  return {
+    title: t("metaTitle"),
+    description: t("metaDesc"),
+    openGraph: {
+      type: "article",
+      title: t("metaTitle"),
+      description: t("metaDescShort"),
+    },
+  };
+}
 
 const card: CSSProperties = {
   border: "1px solid rgba(15,23,42,0.1)",

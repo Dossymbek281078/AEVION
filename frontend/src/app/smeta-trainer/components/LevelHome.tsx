@@ -361,7 +361,7 @@ export function LevelHome() {
               </span>
             </Link>
             <Link
-              href="/smeta-trainer/real-rates/build"
+              href="/smeta-trainer/real-rates/assemble"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold rounded-lg"
             >
               🧰 Собрать смету из реальных позиций

@@ -62,7 +62,7 @@ function RealRatesPageInner() {
               🧱 Тест по методу
             </Link>
             <Link
-              href="/smeta-trainer/real-rates/build"
+              href="/smeta-trainer/real-rates/assemble"
               className="text-xs px-3 py-2 bg-emerald-600 text-white border border-emerald-600 rounded hover:bg-emerald-700"
             >
               🧰 Собрать смету →

@@ -109,7 +109,7 @@ export default function ResourceQuizPage() {
                 </button>
               )}
               <Link
-                href="/smeta-trainer/real-rates/build"
+                href="/smeta-trainer/real-rates/assemble"
                 className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded hover:bg-emerald-700"
               >
                 → Собрать смету из реальных позиций

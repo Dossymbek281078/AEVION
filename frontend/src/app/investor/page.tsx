@@ -21,17 +21,16 @@ type Stats = {
  * Only the fields the investor page actually renders are typed; the
  * endpoint is the source of truth for the full schema.
  */
+type CoverageStat = { count: number; total: number; percent: number };
 type RegistryStats = {
-  totalModules?: number;
+  total?: number;
   byStatus?: Record<string, number>;
   byKind?: Record<string, number>;
   coverage?: {
-    withFrontend?: number;
-    withOpenapi?: number;
-    withHealth?: number;
-    withOgImage?: number;
+    health?: CoverageStat;
+    openapi?: CoverageStat;
   };
-  lastUpdated?: string;
+  generatedAt?: string;
 };
 
 export default function InvestorPage() {
@@ -151,19 +150,17 @@ export default function InvestorPage() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
               <div style={{ fontSize: 38, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.03em", lineHeight: 1 }}>
-                {registry?.totalModules ?? 27}
+                {registry?.total ?? 27}
               </div>
               <div style={{ fontSize: 12, color: "#94a3b8" }}>modules tracked</div>
             </div>
             {[
-              { label: "Frontend live", value: registry?.coverage?.withFrontend, color: "#10b981" },
-              { label: "OpenAPI documented", value: registry?.coverage?.withOpenapi, color: "#3b82f6" },
-              { label: "Health endpoint", value: registry?.coverage?.withHealth, color: "#8b5cf6" },
-              { label: "OG image", value: registry?.coverage?.withOgImage, color: "#fbbf24" },
+              { label: "Health endpoint", stat: registry?.coverage?.health, color: "#8b5cf6" },
+              { label: "OpenAPI documented", stat: registry?.coverage?.openapi, color: "#3b82f6" },
             ].map((row) => {
-              const total = registry?.totalModules ?? 27;
-              const v = row.value ?? 0;
-              const pct = total > 0 ? Math.round((v / total) * 100) : 0;
+              const total = row.stat?.total ?? registry?.total ?? 27;
+              const v = row.stat?.count ?? 0;
+              const pct = row.stat?.percent != null ? Math.round(row.stat.percent) : (total > 0 ? Math.round((v / total) * 100) : 0);
               return (
                 <div key={row.label} style={{ marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>

@@ -522,7 +522,7 @@ C) [третий вариант]
 
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
-| `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()`. ✅ 14/26: + `/merchant` `/widget/[walletId]` (3fcb7c5e). Осталось: `/admin/**` (9 стр.). SSR `r/[token]/layout`+`opengraph-image` оставлены в RU (tServer/OG отдельно). commit `--only` | 2026-06-01 |
+| `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()`. ✅ 14/26 закоммичено (вкл. `/merchant` `/widget`, 3fcb7c5e). ⚠️ `/admin/**` (9 стр.) — правки откатились параллельной сессией дважды на диске; зона КОНТЕСТЕД, не беру повторно без согласования. SSR `r/[token]/layout`+`opengraph-image` — в RU (tServer/OG отдельно). commit `--only` | 2026-06-01 |
 | `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | UX-бэклог: layout 100vh, lichess move-dots+hover, in-game dashboard, плавность ходов, видимость 1-го хода, 60 звуков + free music | 2026-06-01 |
 | `frontend/src/app/{demo,investor,pitch}/**` | ☑ ЗАНЯТО | aevion-core/main (Investor Demo) | Подготовка инвестор-демо: маршруты demo / investor / pitch | 2026-06-01 |
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |

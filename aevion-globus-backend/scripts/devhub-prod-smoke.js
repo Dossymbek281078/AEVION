@@ -254,11 +254,11 @@ async function run() {
     { text: "Hello world", targetLang: "RU" }
   );
 
-  // ── 21b. Media: Paddle checkout ───────────────────────────────────────
-  console.log("\n21b. Media — Paddle checkout");
-  await mediaTest("Paddle", "/api/devhub/media/paddle-checkout",
+  // ── 21b. Media: Gumroad checkout (only live processor) ────────────────
+  console.log("\n21b. Media — Gumroad checkout");
+  await mediaTest("Gumroad", "/api/devhub/media/gumroad-checkout",
     {},
-    { amount: 9.99, currency: "USD", description: "DevHub smoke test product" }
+    { permalink: "aevion-devhub-smoke" }
   );
 
   // ── 22. Media: Drive ──────────────────────────────────────────────────

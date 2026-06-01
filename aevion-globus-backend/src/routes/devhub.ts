@@ -4,7 +4,6 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady } from "../lib/ensureDevHubTables";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
-import { createPaddleTransaction, PADDLE_KEY, IS_PADDLE_SANDBOX } from "../lib/paddleClient";
 
 export const devhubRouter = Router();
 
@@ -2832,43 +2831,24 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
   }
 });
 
-// POST /api/devhub/media/paddle-checkout — create a Paddle checkout link for an
-// ad-hoc amount (e.g. sell access to a DevHub-built app/template). Thin wrapper
-// over the platform paddleClient — no checkout logic is duplicated here.
-// Body: { amount: number (major units, e.g. 9.99), currency?: string, description: string, email?, successUrl? }
-devhubRouter.post("/media/paddle-checkout", async (req, res) => {
-  const { amount, currency = "USD", description, email, successUrl } = req.body || {};
-  const amt = Number(amount);
-  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "amount required (positive number in major units, e.g. 9.99)" });
-  if (amt > 1_000_000) return res.status(400).json({ error: "amount too large (max 1,000,000)" });
-  if (!description || typeof description !== "string" || !description.trim()) return res.status(400).json({ error: "description required" });
-  if (typeof currency !== "string" || !/^[A-Za-z]{3}$/.test(currency)) return res.status(400).json({ error: "currency must be a 3-letter ISO code (e.g. USD, EUR)" });
+// POST /api/devhub/media/gumroad-checkout — build a Gumroad product checkout URL
+// for a DevHub-built product. Gumroad is the only live processor (Stripe/Paddle
+// are blocked by KYC). Price is fixed in the Gumroad product itself, not passed
+// here — same public-URL scheme as lib/payment/gumroadProvider. No API key needed
+// to generate the link (the URL is a public product page).
+// Body: { permalink: string (slug or full Gumroad URL), email?: string }
+devhubRouter.post("/media/gumroad-checkout", async (req, res) => {
+  const { permalink, email } = req.body || {};
+  if (!permalink || typeof permalink !== "string" || !permalink.trim()) return res.status(400).json({ error: "permalink required (Gumroad product slug, e.g. 'my-product')" });
+  // Accept a raw slug or a full https://app.gumroad.com/l/<slug> URL.
+  const slug = permalink.trim().replace(/^https?:\/\/[^/]+\/l\//i, "").replace(/^\/+|[/?#].*$/g, "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(slug)) return res.status(400).json({ error: "permalink must be a Gumroad product slug (letters, digits, -, _)" });
   if (email != null && (typeof email !== "string" || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return res.status(400).json({ error: "email must be a valid address" });
 
-  if (!PADDLE_KEY()) {
-    return res.status(503).json({
-      error: "Paddle not configured — set PADDLE_API_KEY",
-      setupUrl: "https://vendors.paddle.com/authentication-v2",
-    });
-  }
-
-  const amountCents = Math.round(amt * 100);
-  const base = (process.env.FRONTEND_URL?.trim() || "https://aevion.app").replace(/\/+$/, "");
-
-  try {
-    const tx = await createPaddleTransaction({
-      amountCents,
-      currency: currency.toUpperCase(),
-      description: description.trim(),
-      email: email ? String(email).trim() : null,
-      successUrl: successUrl && typeof successUrl === "string" ? successUrl : `${base}/pricing/checkout/success?provider=paddle&source=devhub`,
-      customData: { source: "devhub" },
-    });
-    if (!tx) return res.status(502).json({ error: "paddle_transaction_failed" });
-    res.json({ ok: true, url: tx.url, transactionId: tx.transactionId, sandbox: IS_PADDLE_SANDBOX() });
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message || "Paddle checkout failed" });
-  }
+  const url = email
+    ? `https://app.gumroad.com/l/${slug}?wanted_email=${encodeURIComponent(String(email).trim())}`
+    : `https://app.gumroad.com/l/${slug}`;
+  res.json({ ok: true, url, provider: "gumroad" });
 });
 
 // POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)

@@ -829,6 +829,9 @@ export default function CyberChessPage(){
   type OpeningIndexed = Opening & {fenKey:string;plyLen:number};
   const[openingsDb,sOpeningsDb]=useState<OpeningIndexed[]>([]);
   const openingMapRef=useRef<Map<string,OpeningIndexed>>(new Map());
+  // Book-continuation map: fenKey позиции -> UCI следующего хода по книжной линии.
+  // Заполняется при загрузке openings.json. Используется для стрелки-подсказки дебюта.
+  const bookNextRef=useRef<Map<string,string>>(new Map());
   const[currentOpening,sCurrentOpening]=useState<Opening|null>(null);
   const[showOpeningCard,sShowOpeningCard]=useState(false);
   const[openingCardShownPly,sOpeningCardShownPly]=useState(-1);
@@ -968,6 +971,8 @@ export default function CyberChessPage(){
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
+  const[showBookArrow,sShowBookArrow]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_chess_bookarrow_v1")!=="0"}catch{return true}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_bookarrow_v1",showBookArrow?"1":"0")}catch{}},[showBookArrow]);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_autoqueen_v1",autoQueen?"1":"0")}catch{}},[autoQueen]);
   // F2 phase-3 — Stockfish analysis depth для CPI/metrics recall. 18 = быстро (по умолчанию),
   // 25 = точнее, 30 = максимум. Влияет только на recordMoveWithMultiPV и top-3 metrics —
@@ -1911,7 +1916,11 @@ export default function CyberChessPage(){
         const map=new Map<string,OpeningIndexed>();const indexed:OpeningIndexed[]=[];
         for(const op of d){try{
           const g=new Chess();const uciList=op.moves.trim().split(/\s+/);
-          for(const uci of uciList){if(uci.length<4)continue;g.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});}
+          for(const uci of uciList){if(uci.length<4)continue;
+            // Запоминаем книжное продолжение из позиции ПЕРЕД этим ходом (first-seen).
+            const pp=g.fen().split(" ");const pk=`${pp[0]} ${pp[1]} ${pp[2]}`;
+            if(!bookNextRef.current.has(pk))bookNextRef.current.set(pk,uci);
+            g.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:uci.length>4?uci[4] as any:undefined});}
           const parts=g.fen().split(" ");const fenKey=`${parts[0]} ${parts[1]} ${parts[2]}`;
           const entry:OpeningIndexed={...op,fenKey,plyLen:uciList.length};indexed.push(entry);
           const existing=map.get(fenKey);if(!existing||existing.plyLen<entry.plyLen)map.set(fenKey,entry);
@@ -2192,8 +2201,11 @@ export default function CyberChessPage(){
   // Юзер только что сам перетащил/щёлкнул — анимация лишь добавляет восприятия лага.
   // fromUser=false (AI/P2P/Ghost) — НЕ ставим skip → slide-animation играет 180ms.
   const skipNextAnimRef=useRef(false);
-  const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n",fromUser:boolean=true)=>{
-    if(fromUser)skipNextAnimRef.current=true;
+  const exec=useCallback((from:Square,to:Square,pr?:"q"|"r"|"b"|"n",fromUser:boolean=true,animateOwn:boolean=false)=>{
+    // Свои ходы по клику (animateOwn=true) теперь тоже плавно скользят — как на
+    // lichess/chess.com. Drag-ходы остаются instant (skip), т.к. фигура уже у
+    // курсора и обратный slide выглядел бы дёргано.
+    if(fromUser&&!animateOwn)skipNextAnimRef.current=true;
     const p=game.get(from);if(!p)return false;
     // ── OPENING TRAINER — верификация хода против скрипта дебюта ──
     if(openingDrill){
@@ -3843,8 +3855,8 @@ export default function CyberChessPage(){
     if(sel){
       if(vm.has(sq)){const mp=game.get(sel);if(mp?.type==="p"&&(sq[1]==="1"||sq[1]==="8")){
         // Knight Riders: pawns always promote to knight (thematic rule)
-        if(variant==="knightriders"){exec(sel,sq,"n");return}
-        if(autoQueen){exec(sel,sq,"q");return}sPromo({from:sel,to:sq});return}exec(sel,sq);return}
+        if(variant==="knightriders"){exec(sel,sq,"n",true,true);return}
+        if(autoQueen){exec(sel,sq,"q",true,true);return}sPromo({from:sel,to:sq});return}exec(sel,sq,undefined,true,true);return}
       if(sel===sq){sSel(null);sVm(new Set());return}
       if(p?.color===sideToMove){sSel(sq);sVm(new Set((variant==="diceblade"&&dicePieceType?filterMovesByDice(game.moves({square:sq,verbose:true}),dicePieceType):game.moves({square:sq,verbose:true})).map(m=>m.to)));return}
       sSel(null);sVm(new Set());return;
@@ -5899,6 +5911,27 @@ export default function CyberChessPage(){
                       <circle cx={x1} cy={y1} r="2.4" fill="#2563eb" opacity={0.5}/>
                     </g>;
                   })}
+                </svg>;
+              })()}
+              {/* Book-line hint arrow — фиолетовая пунктирная стрелка следующего
+                  книжного хода в дебюте. Только свой ход, ранний дебют, без
+                  активного выбора/премува. Отдельный svg-слой (основной слой
+                  ниже рендерится лишь при наличии arrows/sqHL). */}
+              {showBookArrow&&on&&!over&&!setup&&tab==="play"&&!sel&&pms.length===0&&hist.length<16&&game.turn()===pCol&&browseIdx<0&&(()=>{
+                const parts=game.fen().split(" ");const fk=`${parts[0]} ${parts[1]} ${parts[2]}`;
+                const uci=bookNextRef.current.get(fk);
+                if(!uci||uci.length<4)return null;
+                const from=uci.slice(0,2) as Square,to=uci.slice(2,4) as Square;
+                let legal=false;try{const c=new Chess(game.fen());legal=!!c.move({from,to,promotion:(uci.length>4?uci[4]:undefined) as any});}catch{}
+                if(!legal)return null;
+                const sqXY=(sq:Square):[number,number]=>{const f=FILES.indexOf(sq[0]);const r=8-parseInt(sq[1]);const c=flip?7-f:f;const rr=flip?7-r:r;return[c*12.5+6.25,rr*12.5+6.25];};
+                const[x1,y1]=sqXY(from);const[x2,y2]=sqXY(to);
+                const dx=x2-x1,dy=y2-y1,len=Math.max(0.01,Math.hypot(dx,dy));
+                const tx=x2-(dx/len)*3.5,ty=y2-(dy/len)*3.5;
+                return <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:5}}>
+                  <defs><marker id="ah-book" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="3" markerHeight="3" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a78bfa"/></marker></defs>
+                  <circle cx={x1} cy={y1} r="5.2" fill="rgba(167,139,250,0.12)" stroke="#a78bfa" strokeWidth="0.6" opacity="0.6"/>
+                  <line x1={x1} y1={y1} x2={tx} y2={ty} stroke="#a78bfa" strokeWidth="1.6" strokeLinecap="round" markerEnd="url(#ah-book)" opacity="0.5" strokeDasharray="3 2"/>
                 </svg>;
               })()}
               {/* Arrow / highlight overlay */}
@@ -11995,6 +12028,7 @@ ${question.trim()}`;
           <div>
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginBottom:SPACE[1]}}>🎮 Игра</div>
             <Row label="Auto-queen (превращение в ферзя)" desc="Пешка на 8-й сразу становится ферзём — без модалки. Для bullet/blitz и премувов. Выключи если нужны underpromotions (конь, ладья, слон)." checked={autoQueen} onChange={()=>sAutoQueen(v=>!v)}/>
+            <Row label="Подсказка дебюта (стрелка)" desc="Фиолетовая пунктирная стрелка показывает книжный ход в дебюте (первые 8 ходов, на твоём ходу). Помогает изучать теорию." checked={showBookArrow} onChange={()=>sShowBookArrow(v=>!v)}/>
             <Row label="Threat Heatmap" desc="Подсветка контроля доски: зелёный — белые, красный — чёрные, янтарный — спорно." checked={showThreatMap} onChange={()=>sShowThreatMap(v=>!v)}/>
             <Row label="Streamer Mode" desc="Скрывает рейтинг и историю — для стримов и публичных демо." checked={streamerMode} onChange={()=>sStreamerMode(v=>!v)}/>
             <div style={{padding:`${SPACE[3]}px 0`,borderBottom:`1px solid ${CC.border}`}}>

@@ -11,6 +11,8 @@
  */
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import realRates from "../data/real-rates.json";
 import { RealRatesView } from "../components/RealRatesView";
 
@@ -23,6 +25,18 @@ const META = realRates as unknown as {
 };
 
 export default function RealRatesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 p-6 text-slate-500 text-sm">Загрузка…</div>}>
+      <RealRatesPageInner />
+    </Suspense>
+  );
+}
+
+function RealRatesPageInner() {
+  const searchParams = useSearchParams();
+  const fromExam = searchParams?.get("from") === "exam";
+  const examId = searchParams?.get("examId") ?? null;
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-6xl mx-auto">
@@ -55,7 +69,7 @@ export default function RealRatesPage() {
           Источник: <span className="font-mono">{META.source}</span>.
         </div>
 
-        <RealRatesView />
+        <RealRatesView fromExam={fromExam} examId={examId} />
       </div>
     </div>
   );

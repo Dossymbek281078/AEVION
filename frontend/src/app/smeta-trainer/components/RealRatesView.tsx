@@ -13,10 +13,32 @@
  * Стиль — Tailwind, как остальной тренажёр. Подключено роутом real-rates/page.tsx.
  */
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import realRates from "../data/real-rates.json";
 import { rates as SEED_RATES } from "../lib/corpus";
 import { formatKzt } from "../lib/calc";
+
+// Контракт передачи в открытую вкладку с экзаменом — тот же ключ, что у /rates.
+// Реальные коды ЭСН РК (1101-0705-0107) в seed-корпусе отсутствуют, поэтому
+// в смету уходит код УЧЕБНОГО АНАЛОГА, который редактор экзамена умеет разрешить.
+const PENDING_RATE_KEY = "smeta-trainer:pending-rate-code";
+
+function sendAnalogToExam(analog: typeof SEED_RATES[number]) {
+  if (typeof window === "undefined") return;
+  const payload = {
+    kind: "rate",
+    rateCode: analog.code,
+    title: analog.title,
+    unit: analog.unit,
+    at: Date.now(),
+  };
+  try {
+    window.localStorage.setItem(PENDING_RATE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore quota */
+  }
+}
 
 interface Resource {
   code: string;
@@ -101,7 +123,13 @@ const BASIS_BADGE: Record<string, string> = {
   "прочее": "bg-slate-100 text-slate-700",
 };
 
-export function RealRatesView() {
+export function RealRatesView({
+  fromExam = false,
+  examId = null,
+}: {
+  fromExam?: boolean;
+  examId?: string | null;
+} = {}) {
   const [active, setActive] = useState(0);
   const [open, setOpen] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -117,6 +145,25 @@ export function RealRatesView() {
 
   return (
     <div>
+      {fromExam && (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-lg p-3 mb-4 flex items-center gap-3 text-xs text-emerald-900">
+          <span className="text-lg">🎯</span>
+          <div className="flex-1">
+            <strong>Режим из экзамена.</strong> Разверните позицию (▶) и нажмите
+            «📤 Учебный аналог → в смету» — расценка появится во вкладке с экзаменом
+            как новая позиция (реальный код ЭСН в корпусе синтетический, поэтому
+            передаётся сопоставимый учебный аналог).
+          </div>
+          {examId && (
+            <Link
+              href={`/smeta-trainer/exam/${examId}`}
+              className="shrink-0 text-emerald-700 underline hover:text-emerald-900"
+            >
+              ← вернуться
+            </Link>
+          )}
+        </div>
+      )}
       <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           <div className="md:col-span-7">
@@ -268,6 +315,7 @@ function RealRow({ pos, isOpen, onToggle }: { pos: Position; isOpen: boolean; on
 }
 
 function AnalogCompare({ pos, analog }: { pos: Position; analog: typeof SEED_RATES[number] }) {
+  const [sent, setSent] = useState(false);
   const Row = ({ label, real, edu }: { label: string; real: React.ReactNode; edu: React.ReactNode }) => (
     <tr className="border-t border-slate-100 align-top">
       <td className="px-2 py-1.5 text-slate-500 w-28">{label}</td>
@@ -313,6 +361,26 @@ function AnalogCompare({ pos, analog }: { pos: Position; analog: typeof SEED_RAT
           💡 {analog.technicalNotes}
         </p>
       )}
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          onClick={() => {
+            sendAnalogToExam(analog);
+            setSent(true);
+            setTimeout(() => setSent(false), 2000);
+          }}
+          className={`px-3 py-1.5 text-[11px] font-bold rounded ${
+            sent
+              ? "bg-emerald-700 text-white"
+              : "bg-emerald-600 text-white hover:bg-emerald-700"
+          }`}
+          title="Передать учебный аналог этой позиции в открытую вкладку с экзаменом"
+        >
+          {sent ? "✓ Передано" : "📤 Учебный аналог → в смету"}
+        </button>
+        <span className="text-[10px] text-slate-400">
+          Появится во вкладке с экзаменом как новая позиция (объём по умолчанию 1).
+        </span>
+      </div>
     </div>
   );
 }

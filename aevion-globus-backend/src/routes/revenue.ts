@@ -139,13 +139,26 @@ interface GumroadSale {
 }
 
 /**
+ * In-process cache for the sales walk. Gumroad rate-limits the API and the
+ * dashboard hits balance+recent on every load, so we serve a <=60s snapshot.
+ * The Ping webhook (POST /gumroad/webhook) busts it the moment a sale lands.
+ */
+const SALES_TTL_MS = 60_000;
+let salesCache: { at: number; data: GumroadSale[] } | null = null;
+
+/** Drop the cached snapshot so the next read re-fetches from Gumroad. */
+function invalidateGumroadSales(): void {
+  salesCache = null;
+}
+
+/**
  * Fetch sales from Gumroad's GET /v2/sales, following next_page_url.
  * Returns null only when the token is missing or the very first call fails;
  * partial pages already collected are returned if a later page errors.
  * maxPages caps the walk so a huge history can't hang the request — if the cap
  * is hit we log it (no silent truncation).
  */
-async function gumroadSales(maxPages = 10): Promise<GumroadSale[] | null> {
+async function gumroadSalesUncached(maxPages = 10): Promise<GumroadSale[] | null> {
   const token = GUMROAD_TOKEN();
   if (!token) return null;
   const all: GumroadSale[] = [];
@@ -183,6 +196,20 @@ async function gumroadSales(maxPages = 10): Promise<GumroadSale[] | null> {
   } catch {
     return all.length ? all : null;
   }
+}
+
+/**
+ * Cached wrapper around gumroadSalesUncached (TTL 60s). Pass force=true to
+ * bypass the cache. A null result (no token / first page failed) is never
+ * cached, so a transient failure won't stick.
+ */
+async function gumroadSales(force = false): Promise<GumroadSale[] | null> {
+  if (!force && salesCache && Date.now() - salesCache.at < SALES_TTL_MS) {
+    return salesCache.data;
+  }
+  const fresh = await gumroadSalesUncached();
+  if (fresh) salesCache = { at: Date.now(), data: fresh };
+  return fresh;
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────
@@ -440,6 +467,19 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
 });
 
 /**
+ * POST /api/revenue/gumroad/webhook
+ * Gumroad Ping target — fires on each sale/refund. We don't persist the
+ * payload (form-encoded sale params); we just bust the sales cache so the
+ * dashboard reflects the change on its next load — near-real-time without
+ * polling Gumroad on every hit. Configure URL in Gumroad → Settings →
+ * Advanced → Ping.
+ */
+revenueRouter.post("/gumroad/webhook", (_req, res) => {
+  invalidateGumroadSales();
+  res.json({ ok: true });
+});
+
+/**
  * GET /api/revenue/env-guide
  */
 revenueRouter.get("/env-guide", (_req, res) => {
@@ -447,6 +487,7 @@ revenueRouter.get("/env-guide", (_req, res) => {
     global: [
       { key: "GUMROAD_ACCESS_TOKEN", required: true, example: "gum_...", note: "ЖИВОЙ канал. Gumroad → Settings → Advanced → Applications → Generate access token. Нужен для /api/revenue/gumroad/*." },
       { key: "GUMROAD_APP_<PERMALINK>", required: false, example: "GUMROAD_APP_XPXZAM=cyberchess", note: "Атрибуция продаж пермалинка к appId в дашборде. Без него продажи идут в 'platform'." },
+      { key: "Gumroad Ping URL", required: false, example: "https://<api-host>/api/revenue/gumroad/webhook", note: "Gumroad → Settings → Advanced → Ping. Сбрасывает 60-сек кэш дашборда при каждой продаже — данные обновляются мгновенно (не настраивается через ENV, ставится в дашборде Gumroad)." },
       { key: "PADDLE_API_KEY", required: false, example: "pdl_sdbx_...", note: "Paddle — KYC не пройдена, не используется. Оставлено для совместимости." },
       { key: "PADDLE_WEBHOOK_SECRET", required: false, example: "pdl_ntfset_...", note: "Paddle dashboard → Notifications → endpoint → signing secret" },
       { key: "PADDLE_SANDBOX", required: false, example: "true", note: "true = sandbox тестирование (по умолчанию). false = production." },

@@ -59,7 +59,11 @@ async function run() {
   const guide = await req("/api/revenue/env-guide");
   guide.status === 200 ? ok("GET /env-guide → 200") : fail("GET /env-guide → 200", String(guide.status));
 
-  console.log(`\n17 assertions — ${passed} PASS  ${failed} FAIL\n`);
+  // 18. Gumroad Ping webhook (cache-bust) — POST → 200 {ok:true}
+  const wh = await fetch(`${BASE}/api/revenue/gumroad/webhook`, { method: "POST", signal: AbortSignal.timeout(10000) }).then((r) => r.json()).catch(() => null);
+  wh?.ok === true ? ok("POST /gumroad/webhook → ok (cache bust)") : fail("POST /gumroad/webhook → ok");
+
+  console.log(`\n18 assertions — ${passed} PASS  ${failed} FAIL\n`);
   process.exit(failed > 0 ? 1 : 0);
 }
 run().catch(e => { console.error(e); process.exit(1); });

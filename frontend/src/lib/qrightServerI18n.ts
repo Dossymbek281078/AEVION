@@ -58,6 +58,10 @@ const TRANSPARENCY_EN: StringTable = {
   byKind: "Registrations by content type",
   noRegistrations: "No registrations yet.",
   generated: "Generated {ts}",
+  metaTitle: "QRight transparency — AEVION",
+  metaDesc:
+    "Public aggregate stats for the AEVION QRight registry: total registrations, active vs revoked, breakdown by revocation reason and content type.",
+  metaDescShort: "Public aggregate stats for the AEVION QRight registry.",
   failedTitle: "Failed to load",
   failedDetail: "The aggregate is temporarily unreachable. Try again later.",
 };
@@ -79,6 +83,10 @@ const TRANSPARENCY_RU: StringTable = {
   byKind: "Регистрации по типам контента",
   noRegistrations: "Пока нет регистраций.",
   generated: "Сгенерировано {ts}",
+  metaTitle: "Прозрачность QRight — AEVION",
+  metaDesc:
+    "Публичная агрегированная статистика реестра AEVION QRight: всего регистраций, активные и отозванные, разбивка по причинам отзыва и типам контента.",
+  metaDescShort: "Публичная агрегированная статистика реестра AEVION QRight.",
   failedTitle: "Не удалось загрузить",
   failedDetail:
     "Агрегатор временно недоступен. Попробуйте позже.",
@@ -113,6 +121,8 @@ const OBJECT_EN: StringTable = {
   notFoundTitle: "Not registered",
   notFoundDetail: "No QRight object with id {id}.",
   registerCta: "← Register your work on AEVION QRight",
+  metaFallbackTitle: "QRight registration — AEVION",
+  metaFallbackDesc: "Public registration record on the AEVION QRight registry.",
   failedTitle: "Failed to load",
   failedDetail: "The AEVION registry is unreachable. Try again later.",
 };
@@ -146,6 +156,8 @@ const OBJECT_RU: StringTable = {
   notFoundTitle: "Не зарегистрировано",
   notFoundDetail: "Нет объекта QRight с id {id}.",
   registerCta: "← Зарегистрируйте произведение в AEVION QRight",
+  metaFallbackTitle: "Регистрация QRight — AEVION",
+  metaFallbackDesc: "Публичная запись о регистрации в реестре AEVION QRight.",
   failedTitle: "Не удалось загрузить",
   failedDetail: "Реестр AEVION временно недоступен. Попробуйте позже.",
 };

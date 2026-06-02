@@ -4783,6 +4783,17 @@ export default function CyberChessPage(){
             }} title="AEVION Chess Performance Index — детальная аналитика всех партий">
               <span>📊</span><span>CPI</span>
             </Link>
+            {/* Полная статистика игрока — открывает PlayerStatsDashboard (overview / дебюты / тайминг / тренд / калибровка). */}
+            <button onClick={()=>sShowStatsDashboard(true)} style={{
+              display:"inline-flex",alignItems:"center",gap:4,
+              padding:"3px 9px",borderRadius:RADIUS.full,
+              background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",
+              border:"1px solid #6ee7b7",
+              fontSize:10,fontWeight:900,color:"#047857",letterSpacing:0.4,
+              cursor:"pointer"
+            }} title="Полная статистика: W/L/D, дебюты, тайминг, тренд рейтинга, FIDE-калибровка">
+              <span>📈</span><span>Стата</span>
+            </button>
           </div>}
 
           {/* ─── Daily Goals mini-card ─── */}

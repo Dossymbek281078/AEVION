@@ -16,6 +16,7 @@ import { findExamTask } from "../../lib/examTasks";
 import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
 import { logTransfer } from "../../lib/transferLog";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
+import { buildRemediation, type RemSeverity } from "../../lib/examRemediation";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
 
@@ -179,7 +180,7 @@ export default function ExamTaskPage({
   function submit() {
     const r = gradeExam(lsr, task!.reference, task!.object);
     setReport(r);
-    saveAttempt(task!.id, task!.title, r);
+    saveAttempt(task!.id, task!.title, r, { trap: findLesson(task!.id)?.trap });
     const b = bestAttempt(task!.id);
     setBestSoFar(b ? b.score : null);
     setFailedCount(failedAttemptsCount(task!.id));
@@ -275,6 +276,8 @@ export default function ExamTaskPage({
       return { ...prev, sections, updatedAt: new Date().toISOString() };
     });
   }
+
+  const remPlan = report ? buildRemediation(report, { trap: findLesson(task!.id)?.trap }) : null;
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -504,6 +507,38 @@ export default function ExamTaskPage({
                 </div>
               </div>
             )}
+
+            {/* Работа над ошибками */}
+            {remPlan && remPlan.items.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-xs font-bold text-slate-700 uppercase mb-1">
+                  🛠 Работа над ошибками
+                </h3>
+                <p className="text-[11px] text-slate-500 mb-2">{remPlan.summary}</p>
+                <ol className="space-y-1.5">
+                  {remPlan.items.map((it, i) => (
+                    <li
+                      key={`${it.kind}-${it.rateCode ?? it.title}-${i}`}
+                      className={`border rounded p-2.5 text-xs ${SEV_STYLE[it.severity].box}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className={`shrink-0 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${SEV_STYLE[it.severity].chip}`}>
+                          {SEV_STYLE[it.severity].label}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800">{it.title}</div>
+                          <div className="text-slate-700 mt-0.5">→ {it.action}</div>
+                          {it.detail && <div className="text-slate-500 mt-0.5">{it.detail}</div>}
+                          {it.reference && (
+                            <div className="text-[10px] text-slate-500 mt-0.5">📎 {it.reference}</div>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
           </div>
         )}
 
@@ -643,6 +678,12 @@ export default function ExamTaskPage({
     </div>
   );
 }
+
+const SEV_STYLE: Record<RemSeverity, { label: string; box: string; chip: string }> = {
+  high:   { label: "критично", box: "bg-red-50 border-red-300",     chip: "bg-red-100 text-red-700" },
+  medium: { label: "внимание", box: "bg-amber-50 border-amber-300", chip: "bg-amber-100 text-amber-800" },
+  low:    { label: "мелочь",   box: "bg-slate-50 border-slate-300", chip: "bg-slate-200 text-slate-700" },
+};
 
 function Score({
   label,

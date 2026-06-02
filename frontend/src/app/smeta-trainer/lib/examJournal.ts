@@ -8,8 +8,20 @@
  */
 
 import type { ExamReport } from "./examGrader";
+import { buildRemediation, type RemediationOptions } from "./examRemediation";
 
 const STORAGE_KEY = "smeta-trainer:exam-journal:v1";
+
+/** Компактная сводка «работы над ошибками», сохраняемая в попытку. */
+export interface AttemptRemediation {
+  high: number;
+  medium: number;
+  low: number;
+  estimatedGain: number;
+  summary: string;
+  /** до 3 главных действий — чтобы студент видел, что чинить, не пересдавая */
+  topActions: string[];
+}
 
 export interface ExamAttempt {
   id: string;
@@ -27,6 +39,8 @@ export interface ExamAttempt {
   noticesCount: number;
   studentTotal: number;
   refTotal: number;
+  /** автоген «работа над ошибками» (отсутствует у старых записей) */
+  remediation?: AttemptRemediation;
 }
 
 export interface JournalStats {
@@ -67,7 +81,9 @@ export function saveAttempt(
   taskId: string,
   taskTitle: string,
   report: ExamReport,
+  remOpts: RemediationOptions = {},
 ): ExamAttempt {
+  const plan = buildRemediation(report, remOpts);
   const attempt: ExamAttempt = {
     id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     taskId,
@@ -84,6 +100,14 @@ export function saveAttempt(
     noticesCount: report.breakdown.ai.notices.length,
     studentTotal: report.studentTotal,
     refTotal: report.refTotal,
+    remediation: {
+      high: plan.bySeverity.high,
+      medium: plan.bySeverity.medium,
+      low: plan.bySeverity.low,
+      estimatedGain: plan.estimatedGain,
+      summary: plan.summary,
+      topActions: plan.items.slice(0, 3).map((i) => i.action),
+    },
   };
   const all = safeRead();
   all.push(attempt);
@@ -164,6 +188,9 @@ export function exportCsv(): string {
     "notices",
     "studentTotal",
     "refTotal",
+    "remHigh",
+    "remMedium",
+    "remGain",
   ];
   const rows = all.map((a) =>
     [
@@ -179,6 +206,9 @@ export function exportCsv(): string {
       a.noticesCount,
       a.studentTotal.toFixed(2),
       a.refTotal.toFixed(2),
+      a.remediation?.high ?? 0,
+      a.remediation?.medium ?? 0,
+      a.remediation?.estimatedGain ?? 0,
     ].join(","),
   );
   return [headers.join(","), ...rows].join("\n");

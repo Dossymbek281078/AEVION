@@ -13,8 +13,10 @@ import {
   computeStats,
   clearJournal,
   exportCsv,
+  remediationProgress,
   type ExamAttempt,
   type JournalStats,
+  type AttemptProgress,
 } from "../lib/examJournal";
 import {
   checkEligibility,
@@ -128,6 +130,9 @@ export default function ExamJournalPage() {
       ? attempts
       : attempts.filter((a) => a.taskId === filterTask);
   const sorted = [...filtered].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  // динамика «работы над ошибками» считается по всем попыткам (а не по фильтру),
+  // иначе «предыдущая попытка» терялась бы при фильтрации
+  const progress = remediationProgress(attempts);
 
   const totalTasks = EXAM_TASKS.length;
 
@@ -381,6 +386,17 @@ export default function ExamJournalPage() {
                         <div className="text-[10px] text-slate-500">
                           {task.category} · {task.difficulty}
                         </div>
+                        {best?.remediation && best.remediation.high + best.remediation.medium > 0 && (
+                          <div className="text-[10px] text-amber-700 mt-0.5">
+                            🛠 осталось исправить: {best.remediation.high > 0 && `${best.remediation.high} критич.`}
+                            {best.remediation.high > 0 && best.remediation.medium > 0 && ", "}
+                            {best.remediation.medium > 0 && `${best.remediation.medium} на внимание`}
+                            {best.remediation.estimatedGain > 0 && ` · потенциал +${best.remediation.estimatedGain}`}
+                          </div>
+                        )}
+                        {best?.remediation && best.remediation.high + best.remediation.medium === 0 && (
+                          <div className="text-[10px] text-emerald-700 mt-0.5">✓ замечаний нет</div>
+                        )}
                       </div>
                       <div>
                         {best ? (
@@ -434,6 +450,7 @@ export default function ExamJournalPage() {
                     <th className="py-2 px-2 text-right w-20">Покр.</th>
                     <th className="py-2 px-2 text-right w-20">Объёмы</th>
                     <th className="py-2 px-2 text-right w-20">Сумма</th>
+                    <th className="py-2 px-2 w-56">Работа над ошибками</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -462,6 +479,9 @@ export default function ExamJournalPage() {
                         <td className="py-1.5 px-2 text-right font-mono text-slate-600">{a.breakdown.coverage}</td>
                         <td className="py-1.5 px-2 text-right font-mono text-slate-600">{a.breakdown.volumes}</td>
                         <td className="py-1.5 px-2 text-right font-mono text-slate-600">{a.breakdown.total}</td>
+                        <td className="py-1.5 px-2">
+                          <RemediationCell attempt={a} progress={progress.get(a.id) ?? null} />
+                        </td>
                       </tr>
                     );
                   })}
@@ -481,6 +501,69 @@ export default function ExamJournalPage() {
           Очистка истории браузера или другой профиль = пустой журнал.
         </div>
       </div>
+    </div>
+  );
+}
+
+function RemediationCell({
+  attempt,
+  progress,
+}: {
+  attempt: ExamAttempt;
+  progress: AttemptProgress | null;
+}) {
+  const rem = attempt.remediation;
+  if (!rem) {
+    return <span className="text-[10px] text-slate-300 italic">—</span>;
+  }
+  const significant = rem.high + rem.medium;
+  return (
+    <div className="space-y-0.5">
+      <div className="flex flex-wrap gap-1 items-center">
+        {rem.high > 0 && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-red-100 text-red-700">
+            {rem.high} критич.
+          </span>
+        )}
+        {rem.medium > 0 && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+            {rem.medium} вним.
+          </span>
+        )}
+        {significant === 0 && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800">
+            ✓ чисто
+          </span>
+        )}
+      </div>
+      {/* динамика к прошлой попытке */}
+      {progress && progress.scoreDelta != null && (
+        <div className="text-[10px] flex flex-wrap gap-x-2 gap-y-0">
+          <span
+            className={
+              progress.scoreDelta > 0
+                ? "text-emerald-700 font-semibold"
+                : progress.scoreDelta < 0
+                ? "text-red-700 font-semibold"
+                : "text-slate-400"
+            }
+          >
+            {progress.scoreDelta > 0 ? "▲" : progress.scoreDelta < 0 ? "▼" : "="}{" "}
+            {progress.scoreDelta > 0 ? "+" : ""}
+            {progress.scoreDelta} балл к прошлой
+          </span>
+          {progress.resolvedActions.length > 0 && (
+            <span className="text-emerald-700" title={progress.resolvedActions.join("\n")}>
+              закрыто {progress.resolvedActions.length}
+            </span>
+          )}
+          {progress.newActions.length > 0 && (
+            <span className="text-amber-700" title={progress.newActions.join("\n")}>
+              новых {progress.newActions.length}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

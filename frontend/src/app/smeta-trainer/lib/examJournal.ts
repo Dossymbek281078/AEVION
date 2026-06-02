@@ -173,6 +173,58 @@ export function clearJournal(): void {
   safeWrite([]);
 }
 
+/** Динамика одной попытки относительно предыдущей сдачи того же задания. */
+export interface AttemptProgress {
+  attemptId: string;
+  prevAttemptId: string | null;
+  /** балл − балл прошлой попытки (null — первая сдача) */
+  scoreDelta: number | null;
+  /** (high+medium сейчас) − (было); отрицательное = стало лучше */
+  issuesDelta: number | null;
+  /** действия из прошлой работы над ошибками, которых больше нет = закрытые */
+  resolvedActions: string[];
+  /** действия, появившиеся впервые в этой попытке */
+  newActions: string[];
+}
+
+function significantIssues(a: ExamAttempt): number {
+  const r = a.remediation;
+  return r ? r.high + r.medium : 0;
+}
+
+/**
+ * Для каждой попытки считает динамику относительно предыдущей сдачи того же
+ * задания (по времени): прирост балла, изменение числа значимых замечаний,
+ * какие пункты «работы над ошибками» закрыты, а какие появились.
+ */
+export function remediationProgress(attempts: ExamAttempt[]): Map<string, AttemptProgress> {
+  const byTask = new Map<string, ExamAttempt[]>();
+  for (const a of attempts) {
+    const arr = byTask.get(a.taskId) ?? [];
+    arr.push(a);
+    byTask.set(a.taskId, arr);
+  }
+  const out = new Map<string, AttemptProgress>();
+  for (const arr of byTask.values()) {
+    const chrono = arr.slice().sort((x, y) => x.timestamp.localeCompare(y.timestamp));
+    for (let i = 0; i < chrono.length; i++) {
+      const cur = chrono[i];
+      const prev = i > 0 ? chrono[i - 1] : null;
+      const curActions = new Set(cur.remediation?.topActions ?? []);
+      const prevActions = new Set(prev?.remediation?.topActions ?? []);
+      out.set(cur.id, {
+        attemptId: cur.id,
+        prevAttemptId: prev?.id ?? null,
+        scoreDelta: prev ? cur.score - prev.score : null,
+        issuesDelta: prev ? significantIssues(cur) - significantIssues(prev) : null,
+        resolvedActions: prev ? [...prevActions].filter((x) => !curActions.has(x)) : [],
+        newActions: prev ? [...curActions].filter((x) => !prevActions.has(x)) : [],
+      });
+    }
+  }
+  return out;
+}
+
 export function exportCsv(): string {
   const all = safeRead().slice().sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const headers = [

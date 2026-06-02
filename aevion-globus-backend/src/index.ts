@@ -902,8 +902,6 @@ app.use("/api/qmaskcard", qmaskcardRouter);
 app.use("/api/veilnetx-ledger", veilnetxLedgerRouter);
 app.use("/api/ztide", ztideRouter);
 app.use("/api/qchaingov", qchaingovRouter);
-app.use("/api/pricing", pricingRouter);
-app.use("/api/pricing/checkout", checkoutRouter);
 app.use("/api/pricing/events", eventsRouter);
 app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
 app.use("/api/gumroad", gumroadWebhookRouter);

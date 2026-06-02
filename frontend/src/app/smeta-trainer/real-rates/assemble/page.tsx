@@ -21,10 +21,12 @@ import {
   type PositionLite,
   type SmetaLite,
   type BasketItem,
+  type DiffStatus,
   kindPerUnitOf,
   basketTotals,
   realFactTotals,
   matchPercent,
+  reconcilePositions,
 } from "../../lib/realBuild";
 
 const STORAGE_KEY = "smeta-trainer:real-build:v1";
@@ -38,6 +40,16 @@ const KIND_BADGE: Record<Kind, string> = {
   "материал": "bg-emerald-100 text-emerald-800",
   "перевозка": "bg-sky-100 text-sky-800",
 };
+
+// Цвет/иконка/подпись по статусу позиционной сверки (зелёный/жёлтый/красный — UX-принцип).
+const DIFF_META: Record<DiffStatus, { icon: string; label: string; row: string; chip: string }> = {
+  ok:      { icon: "✓", label: "Сошлось",          row: "bg-emerald-50", chip: "bg-emerald-100 text-emerald-800" },
+  qty:     { icon: "≠", label: "Неверный объём",   row: "bg-amber-50",   chip: "bg-amber-100 text-amber-800" },
+  price:   { icon: "₸", label: "Неверная расценка", row: "bg-red-50",     chip: "bg-red-100 text-red-700" },
+  missing: { icon: "–", label: "Пропущена",         row: "bg-red-50",     chip: "bg-red-100 text-red-700" },
+  extra:   { icon: "+", label: "Лишняя",            row: "bg-amber-50",   chip: "bg-amber-100 text-amber-800" },
+};
+const DIFF_ORDER: DiffStatus[] = ["ok", "qty", "price", "missing", "extra"];
 
 export default function RealBuildPage() {
   const [basket, setBasket] = useState<BasketItem[]>([]);
@@ -101,6 +113,13 @@ export default function RealBuildPage() {
 
   // Сравнение с эталонной ЛС (по умолчанию — активная в каталоге справа)
   const fact = useMemo(() => realFactTotals(smeta), [smeta]);
+  // Позиционный разбор расхождений: что именно не сошлось (объём/расценка/пропуск/лишнее)
+  const recon = useMemo(() => reconcilePositions(basket, smeta), [basket, smeta]);
+  const [onlyProblems, setOnlyProblems] = useState(true);
+  const reconRows = useMemo(
+    () => (onlyProblems ? recon.rows.filter((r) => r.status !== "ok") : recon.rows),
+    [recon, onlyProblems],
+  );
 
   if (!hydrated) return null;
 
@@ -207,6 +226,93 @@ export default function RealBuildPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ПОЗИЦИОННЫЙ РАЗБОР РАСХОЖДЕНИЙ */}
+        {fact["всего"] != null && (
+          <div className="bg-white border border-slate-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-sm font-bold text-slate-800">
+                🔍 Разбор по позициям
+                {recon.matchedPct != null && (
+                  <span className={`ml-2 text-[11px] font-bold ${
+                    recon.matchedPct >= 99 ? "text-emerald-700" : recon.matchedPct >= 50 ? "text-amber-700" : "text-red-700"
+                  }`}>
+                    {recon.matchedPct.toFixed(0)}% позиций сошлось
+                  </span>
+                )}
+              </h2>
+              <label className="text-[10px] text-slate-500 flex items-center gap-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={onlyProblems}
+                  onChange={(e) => setOnlyProblems(e.target.checked)}
+                  className="accent-slate-700"
+                />
+                только расхождения
+              </label>
+            </div>
+
+            {/* сводка по статусам */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {DIFF_ORDER.filter((s) => recon.counts[s] > 0).map((s) => (
+                <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${DIFF_META[s].chip}`}>
+                  {DIFF_META[s].icon} {DIFF_META[s].label}: {recon.counts[s]}
+                </span>
+              ))}
+            </div>
+
+            {reconRows.length === 0 ? (
+              <p className="text-[11px] text-emerald-700 italic py-3 text-center">
+                {recon.counts.ok > 0
+                  ? "🎉 Все позиции сошлись с эталоном — смета собрана верно."
+                  : "Добавьте позиции этой ЛС в смету, чтобы увидеть разбор."}
+              </p>
+            ) : (
+              <div className="max-h-[22rem] overflow-auto">
+                <table className="w-full text-[11px]">
+                  <thead className="text-slate-500 text-left sticky top-0 bg-white">
+                    <tr>
+                      <th className="py-1">Статус</th>
+                      <th className="py-1">Код / наименование</th>
+                      <th className="py-1 text-right">Объём: эталон / мой</th>
+                      <th className="py-1 text-right">Расценка: эталон / моя</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reconRows.map((r) => {
+                      const m = DIFF_META[r.status];
+                      const fq = r.factQty != null ? formatKzt(r.factQty) : "—";
+                      const mq = r.mineQty != null ? formatKzt(r.mineQty) : "—";
+                      const fp = r.factUnitPrice != null ? `${formatKzt(r.factUnitPrice)} ₸` : "—";
+                      const mp = r.mineUnitPrice != null ? `${formatKzt(r.mineUnitPrice)} ₸` : "—";
+                      return (
+                        <tr key={r.code} className={`border-t border-slate-100 align-top ${m.row}`}>
+                          <td className="py-1.5 pr-2 whitespace-nowrap">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${m.chip}`}>
+                              {m.icon} {m.label}
+                            </span>
+                          </td>
+                          <td className="py-1.5 pr-2">
+                            <code className="text-[10px] text-slate-900">{r.code}</code>
+                            <div className="text-slate-600 leading-snug">{r.name}</div>
+                            <div className="text-[10px] text-slate-500 italic mt-0.5">{r.note}</div>
+                          </td>
+                          <td className="py-1.5 text-right font-mono whitespace-nowrap text-slate-700">
+                            {fq} / <span className={r.status === "qty" ? "font-bold text-amber-800" : ""}>{mq}</span>
+                            <div className="text-[9px] text-slate-400">{r.unit}</div>
+                          </td>
+                          <td className="py-1.5 text-right font-mono whitespace-nowrap text-slate-700">
+                            {fp} / <span className={r.status === "price" ? "font-bold text-red-700" : ""}>{mp}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

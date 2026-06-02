@@ -4,6 +4,8 @@ import {
   basketTotals,
   realFactTotals,
   matchPercent,
+  approxEqual,
+  reconcilePositions,
   type PositionLite,
   type SmetaLite,
   type BasketItem,
@@ -121,5 +123,85 @@ describe("matchPercent", () => {
   });
   it("корректное отношение", () => {
     expect(matchPercent(250, 500)).toBeCloseTo(50, 5);
+  });
+});
+
+describe("approxEqual", () => {
+  it("равные в пределах относительного допуска", () => {
+    expect(approxEqual(100000, 100400)).toBe(true);  // 0.4% < 0.5%
+    expect(approxEqual(100000, 101000)).toBe(false); // 1% > 0.5%
+  });
+  it("мелкие абсолютные расхождения считаются равными", () => {
+    expect(approxEqual(0.2, 0.6)).toBe(true); // diff 0.4 ≤ abs 0.5
+  });
+});
+
+describe("reconcilePositions", () => {
+  const POS_A: PositionLite = { n: 1, code: "AAA", name: "Работа A", unit: "м3", qty: 10, unitPrice: 100, total: 1000 };
+  const POS_B: PositionLite = { n: 2, code: "BBB", name: "Работа B", unit: "м2", qty: 5, unitPrice: 200, total: 1000 };
+  const SMETA: SmetaLite = {
+    sheet: "L1", smetaNo: "01-01", object: "школа",
+    totals: { "всего": 2000 },
+    positions: [POS_A, POS_B],
+  };
+  const item = (p: PositionLite, qty: number, sheet = "L1"): BasketItem => ({
+    uid: `u-${p.code}-${qty}`, sheet, n: p.n, code: p.code, name: p.name,
+    unit: p.unit, unitPrice: p.unitPrice, qty, kindPerUnit: kindPerUnitOf(p),
+  });
+
+  it("полное совпадение → все ok, matchedPct=100", () => {
+    const r = reconcilePositions([item(POS_A, 10), item(POS_B, 5)], SMETA);
+    expect(r.counts.ok).toBe(2);
+    expect(r.matchedPct).toBeCloseTo(100, 5);
+    expect(r.rows.every((x) => x.status === "ok")).toBe(true);
+  });
+
+  it("неверный объём → status qty с указанием направления", () => {
+    const r = reconcilePositions([item(POS_A, 12), item(POS_B, 5)], SMETA);
+    expect(r.counts.qty).toBe(1);
+    const a = r.rows.find((x) => x.code === "AAA")!;
+    expect(a.status).toBe("qty");
+    expect(a.factQty).toBe(10);
+    expect(a.mineQty).toBe(12);
+    expect(a.note).toContain("завышен");
+  });
+
+  it("пропущенная позиция → missing, лишняя из другой ЛС → extra", () => {
+    const foreign = { ...item(POS_A, 10), code: "ZZZ", name: "чужая" };
+    const r = reconcilePositions([foreign], SMETA);
+    // AAA и BBB пропущены (нет в корзине по листу L1), ZZZ — лишняя
+    expect(r.counts.missing).toBe(2);
+    expect(r.counts.extra).toBe(1);
+    expect(r.matchedPct).toBeCloseTo(0, 5);
+  });
+
+  it("позиция из другого листа не зачитывается за сверяемую ЛС", () => {
+    const r = reconcilePositions([item(POS_A, 10, "L2"), item(POS_B, 5)], SMETA);
+    const a = r.rows.find((x) => x.code === "AAA")!;
+    expect(a.status).toBe("missing"); // L2-позиция не участвует → AAA в L1 пропущена
+    expect(r.counts.missing).toBe(1);
+    expect(r.counts.extra).toBe(0); // чужой лист не зачитывается как «лишняя»
+  });
+
+  it("неверная расценка → status price", () => {
+    const r = reconcilePositions(
+      [{ ...item(POS_A, 10), unitPrice: 150 }, item(POS_B, 5)],
+      SMETA,
+    );
+    const a = r.rows.find((x) => x.code === "AAA")!;
+    expect(a.status).toBe("price");
+    expect(r.counts.price).toBe(1);
+  });
+
+  it("агрегирует одинаковые шифры в корзине", () => {
+    const r = reconcilePositions([item(POS_A, 6), item(POS_A, 4), item(POS_B, 5)], SMETA);
+    const a = r.rows.find((x) => x.code === "AAA")!;
+    expect(a.mineQty).toBe(10); // 6+4
+    expect(a.status).toBe("ok");
+  });
+
+  it("сортирует ошибки выше ok", () => {
+    const r = reconcilePositions([item(POS_A, 99), item(POS_B, 5)], SMETA);
+    expect(r.rows[0].status).not.toBe("ok"); // qty-расхождение первым
   });
 });

@@ -491,6 +491,15 @@ function StatusBar({over,chk,think,myT,useSF,pmsLen,histLen,rat,rkI}:StatusBarPr
    меняет состояние только 2-4 cells.
    ═══════════════════════════════════════════════════════════════════════ */
 
+// Яркость hex-цвета (0..255 по Rec.601) — для выбора контрастного цвета move-dots.
+function sqLuma(hex:string):number{
+  const h=hex.replace("#","");
+  if(h.length<6)return 128;
+  const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+  if(isNaN(r)||isNaN(g)||isNaN(b))return 128;
+  return 0.299*r+0.587*g+0.114*b;
+}
+
 type CellProps={
   sq:Square;
   pieceType:"p"|"n"|"b"|"r"|"q"|"k"|null;
@@ -500,12 +509,13 @@ type CellProps={
   iS:boolean;iV:boolean;iCk:boolean;iPM:boolean;iPS:boolean;
   iL:boolean;isShadow:boolean;isAnimDest:boolean;isDragOrigin:boolean;
   iHover?:boolean;iHoverCap?:boolean;iSH?:boolean;
+  dotOnDark?:boolean;
   pmIdx?:number;
   coordFile?:string;
   coordRank?:number;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,pmIdx,coordFile,coordRank}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,dotOnDark,pmIdx,coordFile,coordRank}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
   const isLifted=(iS||iPS)&&!isDragOrigin;
@@ -527,12 +537,13 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   return <div data-sq={sq}
     className={`cc-board-cell${iS||iPS?" cc-board-cell-selected":""}${iL?" cc-board-cell-lastmove":""}`}
     style={{aspectRatio:"1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"clamp(40px,7.5vw,80px)",background:bg,cursor,position:"relative",lineHeight:1}}>
-    {/* Lichess-style move dots и кольца захвата */}
+    {/* Lichess-style move dots и кольца захвата. Цвет зависит от яркости backdrop
+        (dotOnDark) — иначе тёмная точка тонула на тёмных темах. */}
     {(iV&&!hasPiece)||(iHover&&!iHoverCap&&!hasPiece)
-      ?<div style={{width:"30%",height:"30%",borderRadius:"50%",background:"rgba(15,23,42,0.20)",position:"absolute",pointerEvents:"none",transition:"opacity 80ms"}}/>
+      ?<div style={{width:"30%",height:"30%",borderRadius:"50%",background:dotOnDark?"rgba(255,255,255,0.55)":"rgba(15,23,42,0.22)",position:"absolute",pointerEvents:"none",transition:"opacity 80ms"}}/>
       :null}
     {/* Кольцо захвата: iV&&hasPiece (clicked) или iHoverCap (hover) */}
-    {((iV&&!!hasPiece)||iHoverCap)&&<div style={{position:"absolute",inset:0,borderRadius:"50%",boxShadow:"inset 0 0 0 clamp(3px,9%,9px) rgba(15,23,42,0.28)",pointerEvents:"none"}}/>}
+    {((iV&&!!hasPiece)||iHoverCap)&&<div style={{position:"absolute",inset:0,borderRadius:"50%",boxShadow:`inset 0 0 0 clamp(3px,9%,9px) ${dotOnDark?"rgba(255,255,255,0.45)":"rgba(15,23,42,0.28)"}`,pointerEvents:"none"}}/>}
     {hasPiece&&<div key={snapNonce} className={snapClass} style={{width:"88%",height:"88%",transform:"none",filter:isShadow?"drop-shadow(0 2px 3px rgba(0,0,0,0.25))":"drop-shadow(0 2px 3px rgba(0,0,0,0.35))",opacity:isDragOrigin||isAnimDest?0:(isShadow?0.55:1),transition:"opacity 100ms ease-out",animation:iCk?"cc-pulse-glow 1.2s ease-in-out infinite":undefined,borderRadius:iCk?"50%":undefined,pointerEvents:"none"}}><Piece type={pieceType} color={pieceColor}/></div>}
     {pmIdx!==undefined&&<div style={{position:"absolute",top:3,right:3,minWidth:18,height:18,padding:"0 5px",borderRadius:9,background:"#2563eb",color:"#fff",fontSize:11,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,0.4)",pointerEvents:"none",lineHeight:1,fontFamily:"monospace"}}>{pmIdx}</div>}
     {/* Last-move marker — чёткий amber inset-ring, читается даже под фигурой
@@ -6040,6 +6051,9 @@ export default function CyberChessPage(){
                 if(iCk)bg=T.chk;else if(iPS)bg=T.pmS;else if(iPM)bg=T.pm;else if(iS)bg=T.sel;else if(iCp)bg=T.cap;else if(iV)bg=T.valid;else if(iL)bg=T.last;
                 const isDragOrigin=ghostFrom===sq;
                 const isAnimDest=moveAnim?.to===sq;
+                // Контраст move-dot: на valid (clicked) клетке фон = тинт над страницей →
+                // ориентируемся на themeMode; на hover-клетке фон = реальный цвет клетки board-темы.
+                const dotOnDark=iV?(themeMode==="dark"):sqLuma(lt?bT.light:bT.dark)<140;
                 // Lichess-style board coordinates: rank on left col, file on bottom row
                 const isLeftCol=c===(flip?7:0);
                 const isBottomRow=r===(flip?0:7);
@@ -6048,7 +6062,7 @@ export default function CyberChessPage(){
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
                   iS={iS} iV={iV} iCk={iCk} iPM={iPM} iPS={iPS} iL={iL}
-                  iHover={iHover} iHoverCap={iHoverCap} iSH={iSH}
+                  iHover={iHover} iHoverCap={iHoverCap} iSH={iSH} dotOnDark={dotOnDark}
                   isShadow={isShadow} isAnimDest={isAnimDest} isDragOrigin={isDragOrigin}
                   pmIdx={pmToIdx.get(sq)}
                   coordRank={isLeftCol?parseInt(sq[1]):undefined}

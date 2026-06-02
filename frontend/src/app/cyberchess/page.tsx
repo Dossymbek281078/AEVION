@@ -5736,6 +5736,9 @@ export default function CyberChessPage(){
                     <div style={{display:"flex",alignItems:"center",gap:5}}>
                       <span style={{fontSize:13,fontWeight:800,color:CC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
                       <span style={{fontSize:10,fontWeight:700,color:isAI?al.color:CC.accent,background:isAI?al.color+"18":CC.accentSoft,padding:"1px 5px",borderRadius:4}}>{elo}</span>
+                      {/* In-game stats trigger — только на строке игрока, открывает PlayerStatsDashboard прямо во время партии. */}
+                      {!isAI&&<button onClick={()=>sShowStatsDashboard(true)} title="Моя статистика: W/L/D, дебюты, тайминг, тренд рейтинга"
+                        style={{fontSize:11,lineHeight:1,padding:"1px 4px",borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.textDim,cursor:"pointer",flexShrink:0}}>📊</button>}
                       {isAI&&think&&<span style={{fontSize:9,color:al.color,fontWeight:700,letterSpacing:2,animation:"cc-dots 1.2s ease-in-out infinite"}}>●●●</span>}
                     </div>
                     {/* Захваченные фигуры + advantage */}

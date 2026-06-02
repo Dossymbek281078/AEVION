@@ -523,7 +523,7 @@ C) [третий вариант]
 | Зона | Статус | Кто | Задача | Обновлено |
 |------|--------|-----|--------|-----------|
 | `frontend/src/app/qpaynet/**` (только UI-строки → t(), i18n-зона) | ☑ ЗАНЯТО | i18n-сессия | Свип hardcoded RU → `t()`. ✅ 14/26 закоммичено (вкл. `/merchant` `/widget`, 3fcb7c5e). ⚠️ `/admin/**` (9 стр.) — правки откатились параллельной сессией дважды на диске; зона КОНТЕСТЕД, не беру повторно без согласования. SSR `r/[token]/layout`+`opengraph-image` — в RU (tServer/OG отдельно). commit `--only` | 2026-06-01 |
-| `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | UX-бэклог: layout 100vh, lichess move-dots+hover, in-game dashboard, плавность ходов, видимость 1-го хода, 60 звуков + free music | 2026-06-01 |
+| `frontend/src/app/cyberchess/**` | ☑ ЗАНЯТО | aevion-core/main (CyberChess) | Бэклог 2026-06-01 (100vh / move-dots+hover / плавность / 1-й ход / 60 звуков / музыка) по коду УЖЕ закрыт — фаза верификации билда + точечный полиш реальных пробелов | 2026-06-02 |
 | `frontend/src/app/{demo,investor,pitch}/**` | ☑ ЗАНЯТО | aevion-core/main (Investor Demo) | Подготовка инвестор-демо: маршруты demo / investor / pitch | 2026-06-01 |
 | `smeta-trainer/drawings-practice/**` | ☑ ЗАНЯТО | aevion-smeta-trainer | Drawings-practice батчи (48 модулей, 9 категорий) | 05:42 UTC |
 | `qcoreai.ts` + `qcoreai/**` | ✅ V31-V70 + collab viewer DONE | frontend-qcore | collab share link + 24h TTL + viewer count. Далее: streaming SSE | 12:19 UTC |

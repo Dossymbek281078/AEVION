@@ -14,8 +14,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { EXAM_TASKS } from "../lib/examTasks";
-import { computeStats, type JournalStats } from "../lib/examJournal";
+import { computeStats, commonMistakes, loadAttempts, type JournalStats, type MistakeAggregate } from "../lib/examJournal";
 import { gradeExam } from "../lib/examGrader";
+import { scenarioLabel } from "../lib/ai/scenarioLabels";
 
 type ScenarioStat = {
   scenario: string;
@@ -25,9 +26,11 @@ type ScenarioStat = {
 
 export default function ExamAnalyticsPage() {
   const [stats, setStats] = useState<JournalStats | null>(null);
+  const [mistakes, setMistakes] = useState<MistakeAggregate | null>(null);
 
   useEffect(() => {
     setStats(computeStats());
+    setMistakes(commonMistakes(loadAttempts()));
   }, []);
 
   // Профиль типовых ошибок — прогоняем стартовые шаблоны через грейдер,
@@ -138,6 +141,48 @@ export default function ExamAnalyticsPage() {
           )}
         </section>
 
+        {/* Повторяющиеся замечания студента (из реальных сдач) */}
+        {mistakes && mistakes.attemptsAnalyzed > 0 && (
+          <section className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
+            <h2 className="text-base font-semibold text-slate-800 mb-1">
+              🧯 Ваши повторяющиеся замечания
+            </h2>
+            <p className="text-[11px] text-slate-500 mb-3">
+              По {mistakes.attemptsAnalyzed} сдачам с разбором: {mistakes.cleanAttempts} без замечаний,
+              суммарно {mistakes.totalSignificant} значимых. Что всплывает чаще всего:
+            </p>
+            {mistakes.items.length === 0 ? (
+              <div className="text-sm text-emerald-700 italic">
+                🎉 Повторяющихся замечаний нет — все сдачи чистые.
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {mistakes.items.slice(0, 8).map((m, i) => {
+                  const max = mistakes.items[0].count;
+                  return (
+                    <li
+                      key={m.action}
+                      className="grid grid-cols-[28px_1fr_160px_70px] gap-2 items-center text-xs"
+                    >
+                      <div className="text-slate-400 font-mono">{i + 1}.</div>
+                      <div className="text-slate-800 truncate" title={m.action}>{m.action}</div>
+                      <div className="bg-slate-100 rounded h-2 overflow-hidden relative">
+                        <div
+                          className="absolute inset-y-0 left-0 bg-amber-500"
+                          style={{ width: `${(m.count / max) * 100}%` }}
+                        />
+                      </div>
+                      <div className="text-right font-mono text-slate-600">
+                        ×{m.count} · {m.tasks} зад.
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+
         {/* Hardest tasks для студента */}
         <section className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
           <h2 className="text-base font-semibold text-slate-800 mb-3">
@@ -202,7 +247,10 @@ export default function ExamAnalyticsPage() {
                     className="grid grid-cols-[32px_1fr_200px_60px] gap-2 items-center text-xs"
                   >
                     <div className="text-slate-400 font-mono">{i + 1}.</div>
-                    <code className="font-mono text-slate-800">{s.scenario}</code>
+                    <div>
+                      <div className="font-medium text-slate-800">{scenarioLabel(s.scenario).label}</div>
+                      <div className="text-[10px] text-slate-500">{scenarioLabel(s.scenario).short}</div>
+                    </div>
                     <div className="bg-slate-100 rounded h-2 overflow-hidden relative">
                       <div
                         className="absolute inset-y-0 left-0 bg-red-500"

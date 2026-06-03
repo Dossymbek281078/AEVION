@@ -173,6 +173,52 @@ export function clearJournal(): void {
   safeWrite([]);
 }
 
+/** Агрегат повторяющихся замечаний студента по всем сдачам. */
+export interface CommonMistake {
+  action: string;
+  count: number;
+  /** в скольких разных заданиях встретилось */
+  tasks: number;
+}
+
+export interface MistakeAggregate {
+  /** топ повторяющихся пунктов «работы над ошибками» */
+  items: CommonMistake[];
+  /** суммарно значимых замечаний (high+medium) по всем сдачам */
+  totalSignificant: number;
+  /** сдач, где замечаний не было */
+  cleanAttempts: number;
+  attemptsAnalyzed: number;
+}
+
+/**
+ * Что чаще всего «всплывает» у студента: агрегирует topActions работы над
+ * ошибками по всем попыткам (с remediation). Чистая по входу — для аналитики.
+ */
+export function commonMistakes(attempts: ExamAttempt[]): MistakeAggregate {
+  const byAction = new Map<string, { count: number; tasks: Set<string> }>();
+  let totalSignificant = 0;
+  let cleanAttempts = 0;
+  let analyzed = 0;
+  for (const a of attempts) {
+    if (!a.remediation) continue;
+    analyzed += 1;
+    const sig = a.remediation.high + a.remediation.medium;
+    totalSignificant += sig;
+    if (sig === 0) cleanAttempts += 1;
+    for (const action of a.remediation.topActions) {
+      const slot = byAction.get(action) ?? { count: 0, tasks: new Set<string>() };
+      slot.count += 1;
+      slot.tasks.add(a.taskId);
+      byAction.set(action, slot);
+    }
+  }
+  const items: CommonMistake[] = Array.from(byAction.entries())
+    .map(([action, v]) => ({ action, count: v.count, tasks: v.tasks.size }))
+    .sort((x, y) => y.count - x.count || y.tasks - x.tasks);
+  return { items, totalSignificant, cleanAttempts, attemptsAnalyzed: analyzed };
+}
+
 /** Динамика одной попытки относительно предыдущей сдачи того же задания. */
 export interface AttemptProgress {
   attemptId: string;

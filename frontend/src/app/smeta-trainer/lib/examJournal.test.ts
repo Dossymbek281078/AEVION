@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { remediationProgress, type ExamAttempt } from "./examJournal";
+import { remediationProgress, commonMistakes, type ExamAttempt } from "./examJournal";
 
 function att(over: Partial<ExamAttempt> & { id: string; taskId: string; timestamp: string }): ExamAttempt {
   return {
@@ -66,5 +66,35 @@ describe("remediationProgress", () => {
     ]);
     expect(p.get("a1")!.prevAttemptId).toBeNull();
     expect(p.get("a2")!.prevAttemptId).toBe("a1");
+  });
+});
+
+describe("commonMistakes", () => {
+  it("агрегирует topActions по частоте и числу заданий", () => {
+    const agg = commonMistakes([
+      att({ id: "a1", taskId: "T1", timestamp: "1", remediation: rem(1, 0, ["вычти проёмы", "добавь штукатурку"]) }),
+      att({ id: "a2", taskId: "T2", timestamp: "2", remediation: rem(1, 0, ["вычти проёмы"]) }),
+      att({ id: "a3", taskId: "T1", timestamp: "3", remediation: rem(0, 1, ["вычти проёмы"]) }),
+    ]);
+    const top = agg.items[0];
+    expect(top.action).toBe("вычти проёмы");
+    expect(top.count).toBe(3);
+    expect(top.tasks).toBe(2); // T1 и T2
+    expect(agg.attemptsAnalyzed).toBe(3);
+  });
+
+  it("считает чистые сдачи и суммарные значимые замечания", () => {
+    const agg = commonMistakes([
+      att({ id: "a1", taskId: "T1", timestamp: "1", remediation: rem(2, 1, ["x"]) }),
+      att({ id: "a2", taskId: "T1", timestamp: "2", remediation: rem(0, 0, []) }),
+    ]);
+    expect(agg.totalSignificant).toBe(3); // 2+1 + 0
+    expect(agg.cleanAttempts).toBe(1);
+  });
+
+  it("игнорирует попытки без remediation (старые записи)", () => {
+    const agg = commonMistakes([att({ id: "a1", taskId: "T1", timestamp: "1" })]);
+    expect(agg.attemptsAnalyzed).toBe(0);
+    expect(agg.items).toHaveLength(0);
   });
 });

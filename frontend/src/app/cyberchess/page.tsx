@@ -702,7 +702,7 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
-  const baseBoardPx=Math.max(300,Math.min(720,vhPx-400,vwPx-280));
+  const baseBoardPx=Math.max(300,Math.min(720,vhPx-360,vwPx-280));
   const boardPx=Math.round(baseBoardPx*boardScale);
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);

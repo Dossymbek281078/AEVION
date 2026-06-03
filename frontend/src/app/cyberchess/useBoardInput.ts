@@ -557,8 +557,12 @@ export function useBoardInput(opts: BoardInputOptions) {
         const target = hover && hover !== d.from ? hover : null;
         if (target !== dragHoverIntRef.current) {
           dragHoverIntRef.current = target;
-          // Imperative halo — no setDragHover, no React render thrashing.
+          // Imperative halo — мгновенная подсветка цели без ожидания React.
           positionHalo(target);
+          // Также обновляем dragHover STATE — но только на смене клетки (не per-pixel),
+          // поэтому без render-thrashing. Нужно чтобы премув-стрелка + синяя подсветка
+          // цели (page.tsx) следовали за курсором вживую, а не «запаздывали».
+          setDragHover(target);
         }
       }
     };
@@ -567,6 +571,8 @@ export function useBoardInput(opts: BoardInputOptions) {
       const d = dragRef.current;
       if (!d || d.pid !== e.pointerId) return;
       dragRef.current = null;
+      // Сбрасываем dragHover STATE на завершении драга — иначе премув-стрелка/подсветка зависнут.
+      if (dragHoverIntRef.current !== null) { dragHoverIntRef.current = null; setDragHover(null); }
       const wasActive = d.active;
       if (!wasActive) {
         // Tap with no drag — hide ghost + delegate to click().
@@ -621,6 +627,7 @@ export function useBoardInput(opts: BoardInputOptions) {
         if (to && to !== d.from) { recentDragRef.current = Date.now(); executeDrop(d.from, to); }
       }
       dragRef.current = null;
+      if (dragHoverIntRef.current !== null) { dragHoverIntRef.current = null; setDragHover(null); }
       hideGhost();
     };
 

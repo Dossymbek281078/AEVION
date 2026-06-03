@@ -27,6 +27,7 @@ import {
   realFactTotals,
   matchPercent,
   reconcilePositions,
+  buildReconChecklist,
 } from "../../lib/realBuild";
 
 const STORAGE_KEY = "smeta-trainer:real-build:v1";
@@ -115,6 +116,7 @@ export default function RealBuildPage() {
   const fact = useMemo(() => realFactTotals(smeta), [smeta]);
   // Позиционный разбор расхождений: что именно не сошлось (объём/расценка/пропуск/лишнее)
   const recon = useMemo(() => reconcilePositions(basket, smeta), [basket, smeta]);
+  const checklist = useMemo(() => buildReconChecklist(recon), [recon]);
   const [onlyProblems, setOnlyProblems] = useState(true);
   const reconRows = useMemo(
     () => (onlyProblems ? recon.rows.filter((r) => r.status !== "ok") : recon.rows),
@@ -252,6 +254,36 @@ export default function RealBuildPage() {
                 />
                 только расхождения
               </label>
+            </div>
+
+            {/* чек-лист «что сделать, чтобы свести» */}
+            <div className={`rounded-md p-2.5 mb-2 border ${checklist.ready ? "bg-emerald-50 border-emerald-200" : "bg-slate-50 border-slate-200"}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[11px] font-bold text-slate-700">
+                  {checklist.ready ? "✅ Готовность" : "📝 Чек-лист сведения"}
+                </span>
+                <div className="flex-1 h-1.5 bg-slate-200 rounded overflow-hidden">
+                  <div
+                    className={`h-full ${checklist.readiness >= 99 ? "bg-emerald-500" : checklist.readiness >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                    style={{ width: `${checklist.readiness}%` }}
+                  />
+                </div>
+                <span className="text-[11px] font-mono font-bold text-slate-600">{checklist.readiness}%</span>
+              </div>
+              <p className="text-[11px] text-slate-600">{checklist.summary}</p>
+              {checklist.items.length > 0 && (
+                <ol className="mt-1.5 space-y-0.5">
+                  {checklist.items.slice(0, 8).map((it) => (
+                    <li key={`${it.status}-${it.code}`} className="flex items-start gap-1.5 text-[11px]">
+                      <span className={`mt-0.5 shrink-0 w-1.5 h-1.5 rounded-full ${it.severity === "high" ? "bg-red-500" : "bg-amber-500"}`} />
+                      <span className="text-slate-700">{it.text}</span>
+                    </li>
+                  ))}
+                  {checklist.items.length > 8 && (
+                    <li className="text-[10px] text-slate-400 italic pl-3">…и ещё {checklist.items.length - 8} — см. таблицу ниже</li>
+                  )}
+                </ol>
+              )}
             </div>
 
             {/* сводка по статусам */}

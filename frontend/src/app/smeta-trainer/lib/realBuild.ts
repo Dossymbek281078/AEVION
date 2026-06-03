@@ -242,3 +242,77 @@ export function reconcilePositions(basket: BasketItem[], smeta: SmetaLite): Reco
   const matchedPct = fact.size > 0 ? (counts.ok / fact.size) * 100 : null;
   return { rows, counts, matchedPct };
 }
+
+/* ─────────────────── Чек-лист исправлений из позиционного разбора ───────────────────
+ * Таблица разбора показывает ВСЁ; чек-лист — короткий приоритизированный «делай дальше»:
+ * что добавить / исправить / убрать, чтобы своя смета сошлась с эталоном.
+ */
+
+export interface ReconChecklistItem {
+  severity: "high" | "medium";
+  status: Exclude<DiffStatus, "ok">;
+  code: string;
+  /** императив для студента */
+  text: string;
+}
+
+export interface ReconChecklist {
+  items: ReconChecklistItem[];
+  /** всё сошлось (и есть с чем сверять) */
+  ready: boolean;
+  /** готовность, % (matchedPct округлённый; 100 если эталон пуст) */
+  readiness: number;
+  summary: string;
+}
+
+const CHECK_SEVERITY: Record<Exclude<DiffStatus, "ok">, "high" | "medium"> = {
+  price: "high",
+  missing: "high",
+  qty: "medium",
+  extra: "medium",
+};
+
+function checklistText(status: Exclude<DiffStatus, "ok">, code: string, name: string): string {
+  switch (status) {
+    case "missing":
+      return `Добавьте позицию ${code} — ${name}`;
+    case "extra":
+      return `Уберите лишнюю ${code} — её нет в эталоне`;
+    case "qty":
+      return `Исправьте объём ${code} — ${name}`;
+    case "price":
+      return `Проверьте расценку ${code} — не совпала с эталоном`;
+  }
+}
+
+/** Короткий приоритизированный чек-лист «что сделать, чтобы смета сошлась». */
+export function buildReconChecklist(recon: Reconciliation): ReconChecklist {
+  const items: ReconChecklistItem[] = [];
+  for (const r of recon.rows) {
+    if (r.status === "ok") continue;
+    const status = r.status as Exclude<DiffStatus, "ok">;
+    items.push({
+      severity: CHECK_SEVERITY[status],
+      status,
+      code: r.code,
+      text: checklistText(status, r.code, r.name),
+    });
+  }
+  const sevRank = { high: 0, medium: 1 } as const;
+  items.sort((a, b) => sevRank[a.severity] - sevRank[b.severity] || a.code.localeCompare(b.code));
+
+  const ready = items.length === 0 && recon.matchedPct != null;
+  const readiness = recon.matchedPct != null ? Math.round(recon.matchedPct) : 100;
+  const parts: string[] = [];
+  if (recon.counts.missing > 0) parts.push(`добавить ${recon.counts.missing}`);
+  if (recon.counts.qty > 0) parts.push(`исправить объёмов ${recon.counts.qty}`);
+  if (recon.counts.price > 0) parts.push(`проверить расценок ${recon.counts.price}`);
+  if (recon.counts.extra > 0) parts.push(`убрать лишних ${recon.counts.extra}`);
+  const summary = ready
+    ? "Смета сошлась с эталоном — отлично."
+    : parts.length > 0
+      ? `Чтобы свести: ${parts.join(", ")}.`
+      : "Добавьте позиции этой ЛС, чтобы началась сверка.";
+
+  return { items, ready, readiness, summary };
+}

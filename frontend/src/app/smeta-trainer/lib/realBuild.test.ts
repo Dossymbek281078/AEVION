@@ -6,6 +6,7 @@ import {
   matchPercent,
   approxEqual,
   reconcilePositions,
+  buildReconChecklist,
   type PositionLite,
   type SmetaLite,
   type BasketItem,
@@ -203,5 +204,44 @@ describe("reconcilePositions", () => {
   it("сортирует ошибки выше ok", () => {
     const r = reconcilePositions([item(POS_A, 99), item(POS_B, 5)], SMETA);
     expect(r.rows[0].status).not.toBe("ok"); // qty-расхождение первым
+  });
+});
+
+describe("buildReconChecklist", () => {
+  const POS_A: PositionLite = { n: 1, code: "AAA", name: "Работа A", unit: "м3", qty: 10, unitPrice: 100, total: 1000 };
+  const POS_B: PositionLite = { n: 2, code: "BBB", name: "Работа B", unit: "м2", qty: 5, unitPrice: 200, total: 1000 };
+  const SMETA: SmetaLite = { sheet: "L1", smetaNo: "01", object: "o", totals: { "всего": 2000 }, positions: [POS_A, POS_B] };
+  const item = (p: PositionLite, qty: number): BasketItem => ({
+    uid: `u-${p.code}-${qty}`, sheet: "L1", n: p.n, code: p.code, name: p.name,
+    unit: p.unit, unitPrice: p.unitPrice, qty, kindPerUnit: kindPerUnitOf(p),
+  });
+
+  it("полное совпадение → ready, пустой список, 100%", () => {
+    const c = buildReconChecklist(reconcilePositions([item(POS_A, 10), item(POS_B, 5)], SMETA));
+    expect(c.ready).toBe(true);
+    expect(c.items).toHaveLength(0);
+    expect(c.readiness).toBe(100);
+    expect(c.summary).toContain("сошлась");
+  });
+
+  it("missing/price идут выше qty/extra", () => {
+    // AAA объём неверный (qty), BBB отсутствует (missing)
+    const c = buildReconChecklist(reconcilePositions([item(POS_A, 12)], SMETA));
+    expect(c.items[0].severity).toBe("high"); // missing BBB
+    expect(c.items.some((x) => x.status === "missing" && x.code === "BBB")).toBe(true);
+    expect(c.items.some((x) => x.status === "qty" && x.code === "AAA")).toBe(true);
+    expect(c.ready).toBe(false);
+  });
+
+  it("summary перечисляет что сделать", () => {
+    const c = buildReconChecklist(reconcilePositions([item(POS_A, 12)], SMETA));
+    expect(c.summary).toContain("добавить 1");
+    expect(c.summary).toContain("исправить объёмов 1");
+  });
+
+  it("текст императивный по статусу", () => {
+    const c = buildReconChecklist(reconcilePositions([item(POS_A, 12)], SMETA));
+    expect(c.items.find((x) => x.code === "BBB")!.text).toContain("Добавьте");
+    expect(c.items.find((x) => x.code === "AAA")!.text).toContain("Исправьте объём");
   });
 });

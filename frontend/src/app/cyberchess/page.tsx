@@ -557,6 +557,35 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
   </div>;
 });
 
+/* ─── MoveSlide ─── floating-фигура, скользящая from→to за один ход.
+   Мемоизирован и анимируется ТОЛЬКО на mount (useEffect []), поэтому
+   ре-рендеры родителя (тик часов, AI-«думаю», eval) НЕ сбрасывают
+   transform в стартовое положение — раньше это давало рывки/лаг. */
+const MoveSlide=React.memo(function MoveSlide({left,top,dx,dy,pieceType,pieceColor}:{
+  left:number;top:number;dx:number;dy:number;pieceType:"p"|"n"|"b"|"r"|"q"|"k";pieceColor:"w"|"b";
+}){
+  const ref=useRef<HTMLDivElement|null>(null);
+  useEffect(()=>{
+    const el=ref.current;if(!el)return;
+    el.style.transform=`translate(${dx}%,${dy}%)`;
+    el.style.transition="transform 0ms";
+    void el.offsetWidth; // force reflow
+    el.style.transition="transform 180ms cubic-bezier(0.25,0.46,0.45,0.94)";
+    el.style.transform="translate(0,0)";
+  },[]); // mount-only — стабильные пропы + memo гарантируют отсутствие ре-рендеров до remount по новому key
+  return <div ref={ref} style={{
+    position:"absolute",left:`${left}%`,top:`${top}%`,
+    width:"12.5%",height:"12.5%",
+    transform:`translate(${dx}%,${dy}%)`,
+    pointerEvents:"none",zIndex:6,
+    display:"flex",alignItems:"center",justifyContent:"center",
+  }}>
+    <div style={{width:"88%",height:"88%",filter:"drop-shadow(0 6px 12px rgba(0,0,0,0.32))"}}>
+      <Piece type={pieceType} color={pieceColor}/>
+    </div>
+  </div>;
+});
+
 /* ─── BottomNav ─── */
 function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute,surface1,border}:{
   setup:boolean; tab:string;
@@ -3414,7 +3443,6 @@ export default function CyberChessPage(){
      запускаем floating piece от from к to. Хард-таймаут 180ms — потом
      убираем floating, фигура остаётся на dest cell. ── */
   const[moveAnim,sMoveAnim]=useState<{from:Square;to:Square;piece:{type:any;color:any};key:number}|null>(null);
-  const moveAnimElRef=useRef<HTMLDivElement|null>(null);
   const lmKeyRef=useRef("");
   // Capture animation: захваченная фигура коротко fade+shrink на cell взятия (lichess-style).
   const[capAnim,sCapAnim]=useState<{sq:Square;piece:{type:any;color:any};key:number}|null>(null);
@@ -3440,17 +3468,8 @@ export default function CyberChessPage(){
     return()=>clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[lm?.from,lm?.to,bk]);
-  // После mount floating piece — trigger transition через рефлоу, чтобы
-  // initial transform (from→to negative offset) уехал в 0,0.
-  useEffect(()=>{
-    if(!moveAnim)return;
-    const el=moveAnimElRef.current;if(!el)return;
-    // force reflow
-    void el.offsetWidth;
-    // Pure ease-out без overshoot — фигура «приземляется» плавно, без bounce-эффекта.
-    el.style.transition="transform 180ms cubic-bezier(0.25,0.46,0.45,0.94)";
-    el.style.transform="translate(0,0)";
-  },[moveAnim?.key]);
+  // Анимация слайда теперь инкапсулирована в <MoveSlide> (mount-only effect) —
+  // больше не сбрасывается ре-рендерами родителя. См. рендер ниже.
 
   /* ── Premove trigger — синхронно после render'а, без rAF. rAF добавлял
      лишний кадр (~16ms) задержки; премув должен срабатывать сразу как
@@ -5686,10 +5705,13 @@ export default function CyberChessPage(){
       )}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",justifyContent:"center",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
-        <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
+        {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
+            в широкой колонке и правый рейл уезжает далеко. Группа [доска+рейл] центрируется
+            через justifyContent на cc-main-row, рейл встаёт вплотную (gap 12). */}
+        <div style={{flex:"0 1 auto",minWidth:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
           {/* ─── Active Lesson banner — shown when user loaded a position from a Coach Lesson ─── */}
           {activeLesson&&<div style={{
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
@@ -6204,7 +6226,8 @@ export default function CyberChessPage(){
                   пересечении клетки во время drag. */}
               {/* Ghost moved to sibling of main so overflow:hidden of board cannot clip it */}
 
-              {/* Move slide animation — летящая фигура поверх board */}
+              {/* Move slide animation — летящая фигура поверх board (мемоизирована в MoveSlide,
+                  ре-рендеры родителя не сбрасывают transform). key=moveAnim.key → remount на новый ход. */}
               {moveAnim&&(()=>{
                 const fromF=FILES.indexOf(moveAnim.from[0]);
                 const fromR=8-parseInt(moveAnim.from[1]);
@@ -6215,19 +6238,8 @@ export default function CyberChessPage(){
                 const tc=flip?7-toF:toF;
                 const tr=flip?7-toR:toR;
                 const dx=(fc-tc)*100,dy=(fr-tr)*100;
-                return <div ref={moveAnimElRef} key={moveAnim.key} style={{
-                  position:"absolute",
-                  left:`${tc*12.5}%`,top:`${tr*12.5}%`,
-                  width:"12.5%",height:"12.5%",
-                  transform:`translate(${dx}%,${dy}%)`,
-                  transition:"transform 0ms",
-                  pointerEvents:"none",zIndex:6,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                }}>
-                  <div style={{width:"88%",height:"88%",filter:"drop-shadow(0 6px 12px rgba(0,0,0,0.32))"}}>
-                    <Piece type={moveAnim.piece.type} color={moveAnim.piece.color}/>
-                  </div>
-                </div>;
+                return <MoveSlide key={moveAnim.key} left={tc*12.5} top={tr*12.5} dx={dx} dy={dy}
+                  pieceType={moveAnim.piece.type} pieceColor={moveAnim.piece.color}/>;
               })()}
 
               {/* Keyboard SAN input — плавающая плашка с буфером */}

@@ -18,6 +18,14 @@ import { logTransfer } from "../../lib/transferLog";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
 import { buildRemediation, type RemSeverity } from "../../lib/examRemediation";
 import { applyReferenceFixes, hasMechanicalFixes } from "../../lib/examFix";
+import {
+  analyzeOpenings,
+  explainOpeningsDeterministic,
+  buildOpeningsAIPrompt,
+} from "../../lib/ai/scenarios/openingsAdvisor";
+import { streamLLM } from "../../lib/aiBackend";
+import type { LsrCalc, AiNotice } from "../../lib/types";
+import type { RoomGeometry } from "../../lib/types";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
 
@@ -302,6 +310,25 @@ export default function ExamTaskPage({
 
   const remPlan = report ? buildRemediation(report, { trap: findLesson(task!.id)?.trap }) : null;
 
+  // Контекст для живого AI-разбора проёмов: замечание + геометрия + введённый объём
+  const openingsNotice = report?.breakdown.ai.notices.find(
+    (n) => n.scenario === "missing-opening-subtraction",
+  );
+  const roomGeometry =
+    task!.object.geometry && task!.object.geometry.kind === "room" ? task!.object.geometry : null;
+  let openingsPosTitle: string | undefined;
+  let openingsEnteredVolume: number | undefined;
+  if (openingsNotice?.context.positionId) {
+    for (const s of lsr.sections) {
+      const p = s.positions.find((x) => x.id === openingsNotice.context.positionId);
+      if (p) {
+        openingsPosTitle = findRate(p.rateCode)?.title;
+        openingsEnteredVolume = p.volume;
+        break;
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <ExamToolsPanel examId={task!.id} hasLesson={lessonExists} />
@@ -531,6 +558,18 @@ export default function ExamTaskPage({
               </div>
             )}
 
+            {/* Живой AI-разбор проёмов (P3) */}
+            {openingsNotice && roomGeometry && (
+              <OpeningsAdvisorPanel
+                geometry={roomGeometry}
+                positionTitle={openingsPosTitle}
+                enteredVolume={openingsEnteredVolume}
+                lsr={lsr}
+                calc={calc}
+                notices={report.breakdown.ai.notices}
+              />
+            )}
+
             {/* Работа над ошибками */}
             {remPlan && remPlan.items.length > 0 && (
               <div className="mt-4">
@@ -715,6 +754,92 @@ export default function ExamTaskPage({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Рендер «**жирного**» markdown в простой JSX (для разбора проёмов). */
+function renderBold(text: string) {
+  return text.split("\n").map((line, li) => (
+    <span key={li}>
+      {line.split(/(\*\*[^*]+\*\*)/g).map((part, pi) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={pi}>{part.slice(2, -2)}</strong>
+        ) : (
+          <span key={pi}>{part}</span>
+        ),
+      )}
+      {"\n"}
+    </span>
+  ));
+}
+
+function OpeningsAdvisorPanel({
+  geometry,
+  positionTitle,
+  enteredVolume,
+  lsr,
+  calc,
+  notices,
+}: {
+  geometry: RoomGeometry;
+  positionTitle?: string;
+  enteredVolume?: number;
+  lsr: Lsr;
+  calc: LsrCalc;
+  notices: AiNotice[];
+}) {
+  const analysis = useMemo(() => analyzeOpenings(geometry), [geometry]);
+  const deterministic = useMemo(
+    () => explainOpeningsDeterministic(analysis, enteredVolume),
+    [analysis, enteredVolume],
+  );
+  const [aiText, setAiText] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [asked, setAsked] = useState(false);
+
+  async function askAI() {
+    setAsked(true);
+    setStreaming(true);
+    setAiText("");
+    const { question, extraSystem } = buildOpeningsAIPrompt(analysis, { positionTitle, enteredVolume });
+    try {
+      await streamLLM(question, [], lsr, calc, notices, {
+        extraSystem,
+        onChunk: (t) => setAiText((p) => p + t),
+      });
+    } catch {
+      setAiText((p) => p || "Не удалось получить ответ ИИ — выше детерминированный разбор.");
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border border-sky-200 bg-sky-50 rounded-lg p-3">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <h3 className="text-xs font-bold text-sky-900 uppercase">📐 Разбор проёмов</h3>
+        <button
+          onClick={askAI}
+          disabled={streaming}
+          className="text-[11px] px-3 py-1.5 rounded bg-sky-700 text-white hover:bg-sky-800 font-semibold disabled:opacity-50 whitespace-nowrap"
+        >
+          🤖 {streaming ? "ИИ разбирает…" : "Спросить ИИ подробнее"}
+        </button>
+      </div>
+      <div className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+        {renderBold(deterministic)}
+      </div>
+      {asked && (
+        <div className="mt-3 pt-3 border-t border-sky-200">
+          <div className="text-[10px] uppercase tracking-wider text-sky-700 font-bold mb-1">
+            🤖 Объяснение ИИ
+          </div>
+          <div className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
+            {aiText || (streaming ? "…" : "")}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

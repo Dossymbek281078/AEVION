@@ -17,6 +17,7 @@ import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJou
 import { logTransfer } from "../../lib/transferLog";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
 import { buildRemediation, type RemSeverity } from "../../lib/examRemediation";
+import { applyReferenceFixes, hasMechanicalFixes } from "../../lib/examFix";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
 
@@ -190,6 +191,28 @@ export default function ExamTaskPage({
   function reset() {
     setLsr(task!.starter);
     setReport(null);
+  }
+
+  /**
+   * Применяет механические исправления из отчёта (объёмы / лишние / пропущенные)
+   * к ЛСР, не трогая AI-замечания. Отчёт сбрасывается — студент пересдаёт сам.
+   */
+  function applyFixes() {
+    if (!report) return;
+    const { lsr: fixedLsr, counts } = applyReferenceFixes(lsr, report, task!.reference);
+    setLsr(fixedLsr);
+    setReport(null);
+    if (typeof window !== "undefined") {
+      const parts = [
+        counts.volume > 0 ? `объёмов: ${counts.volume}` : null,
+        counts.removed > 0 ? `удалено: ${counts.removed}` : null,
+        counts.added > 0 ? `добавлено: ${counts.added}` : null,
+      ].filter(Boolean);
+      alert(
+        `Исправлено механических расхождений — ${parts.join(", ") || "нет"}.\n` +
+          "AI-замечания (коэффициенты, двойной счёт, индексы) оставлены вам — исправьте и пересдайте.",
+      );
+    }
   }
 
   function applyPendingValue(value: number) {
@@ -511,10 +534,27 @@ export default function ExamTaskPage({
             {/* Работа над ошибками */}
             {remPlan && remPlan.items.length > 0 && (
               <div className="mt-4">
-                <h3 className="text-xs font-bold text-slate-700 uppercase mb-1">
-                  🛠 Работа над ошибками
-                </h3>
+                <div className="flex items-center justify-between mb-1 gap-3">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase">
+                    🛠 Работа над ошибками
+                  </h3>
+                  {hasMechanicalFixes(report) && (
+                    <button
+                      onClick={applyFixes}
+                      className="text-[11px] px-3 py-1.5 rounded bg-slate-800 text-white hover:bg-slate-900 font-semibold whitespace-nowrap"
+                      title="Привести объёмы к эталону, удалить лишние, добавить пропущенные. AI-замечания останутся вам."
+                    >
+                      ⚙ Применить исправления
+                    </button>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500 mb-2">{remPlan.summary}</p>
+                {hasMechanicalFixes(report) && (
+                  <p className="text-[10px] text-slate-400 italic mb-2">
+                    Кнопка чинит только механику (объёмы / лишние / пропущенные). Коэффициенты, двойной
+                    счёт и индексы из AI-замечаний исправьте сами — потом пересдайте.
+                  </p>
+                )}
                 <ol className="space-y-1.5">
                   {remPlan.items.map((it, i) => (
                     <li

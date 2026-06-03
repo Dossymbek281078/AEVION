@@ -203,17 +203,30 @@ function parseUserAgent(ua: string | undefined): {
 veilnetxRouter.get("/inspect", (req: Request, res: Response) => {
   // IP chain: X-Forwarded-For is leftmost-original-client first.
   const xff = headerStr(req.headers["x-forwarded-for"]);
-  const ipChain = xff
+  const rawChain = xff
     ? xff.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
+  // Railway/CF terminate TLS and append their own hop(s) to X-Forwarded-For.
+  // Those trailing entries are our own edge infrastructure, not a privacy proxy
+  // the visitor chose — strip them before judging exposure, otherwise every
+  // direct visitor is wrongly told "you're behind a proxy". Defaults to 1 hop on
+  // Railway (RAILWAY_ENVIRONMENT set), 0 elsewhere; override via env for other edges.
+  const trustedEdgeHops = Number(
+    process.env.VEILNETX_TRUSTED_EDGE_HOPS ??
+      (process.env.RAILWAY_ENVIRONMENT ? "1" : "0"),
+  );
+  const ipChain =
+    trustedEdgeHops > 0 && rawChain.length > trustedEdgeHops
+      ? rawChain.slice(0, rawChain.length - trustedEdgeHops)
+      : rawChain;
   const directIp =
     (req.socket && req.socket.remoteAddress) || req.ip || null;
   const clientIp = ipChain[0] || directIp || null;
 
   const via = headerStr(req.headers["via"]);
   const forwarded = headerStr(req.headers["forwarded"]);
-  // A proxy is "in front" if a forwarding header carries more than just the
-  // edge hop (Railway/CF terminate TLS and add exactly one entry).
+  // A proxy is "in front" only if the client-visible chain (after stripping our
+  // own edge hops) still has more than one hop, or a Via/Forwarded header is set.
   const proxyDetected = Boolean(via || forwarded || ipChain.length > 1);
 
   const ua = parseUserAgent(headerStr(req.headers["user-agent"]));

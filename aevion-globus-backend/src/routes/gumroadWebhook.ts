@@ -31,9 +31,55 @@ export const gumroadWebhookRouter = Router();
 
 const SEEN = new Set<string>();
 
-function resolveReferenceFromProductId(productId: string): string {
-  const envKey = `GUMROAD_PRODUCT_${productId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
-  return process.env[envKey] ?? "constitution-pro";
+// Tier products are sold via the same GUMROAD_PERMALINK_TIER_* permalinks the
+// checkout layer builds the buy-URL from. Gumroad pings that permalink back, so
+// we can reverse-map it to a tier reference here — no separate opaque
+// GUMROAD_PRODUCT_<id> mapping needed for the four subscription tiers.
+const TIER_PERMALINK_ENV: Record<string, string> = {
+  GUMROAD_PERMALINK_TIER_PRO_MONTHLY: "tier_pro_monthly",
+  GUMROAD_PERMALINK_TIER_PRO_ANNUAL: "tier_pro_annual",
+  GUMROAD_PERMALINK_TIER_BUSINESS_MONTHLY: "tier_business_monthly",
+  GUMROAD_PERMALINK_TIER_BUSINESS_ANNUAL: "tier_business_annual",
+};
+
+/** Last path segment of a Gumroad permalink or full product URL, lowercased.
+ *  "https://aevion.gumroad.com/l/xpxzam?x=1" → "xpxzam"; "xpxzam" → "xpxzam". */
+function permalinkSlug(v?: string | null): string {
+  if (!v) return "";
+  const noQuery = v.trim().replace(/\/+$/, "").split("?")[0];
+  return (noQuery.split("/").pop() ?? noQuery).toLowerCase();
+}
+
+function resolveReference(raw: Record<string, string>): string {
+  const pingSlug = permalinkSlug(raw.product_permalink ?? raw.permalink ?? raw.short_product_id);
+
+  // 0. Explicit external / non-AEVION products (e.g. books on the shared Gumroad
+  //    account) — comma-separated permalinks in GUMROAD_EXTERNAL_PERMALINKS.
+  //    Without this they hit the constitution-pro default and wrongly grant a
+  //    subscription to a book buyer.
+  if (pingSlug) {
+    const externals = (process.env.GUMROAD_EXTERNAL_PERMALINKS ?? "")
+      .split(",").map((s) => permalinkSlug(s)).filter(Boolean);
+    if (externals.includes(pingSlug)) return "external";
+  }
+
+  // 1. Subscription tiers — reverse-map the ping's permalink to a tier reference.
+  if (pingSlug) {
+    for (const [envKey, reference] of Object.entries(TIER_PERMALINK_ENV)) {
+      if (permalinkSlug(process.env[envKey]) === pingSlug && pingSlug) return reference;
+    }
+  }
+
+  // 2. Explicit per-product override by product_id.
+  const productId = raw.product_id ?? raw.short_product_id ?? "";
+  if (productId) {
+    const envKey = `GUMROAD_PRODUCT_${productId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+    const mapped = process.env[envKey];
+    if (mapped) return mapped;
+  }
+
+  // 3. Legacy catch-all — keep Constitution Pro working without explicit mapping.
+  return "constitution-pro";
 }
 
 function tierForReference(ref: string): "pro" | "business" {
@@ -110,7 +156,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   if (SEEN.has(dedupKey)) return res.json({ ok: true, deduped: true });
   SEEN.add(dedupKey);
 
-  const reference = resolveReferenceFromProductId(productId);
+  const reference = resolveReference(raw);
 
   // Products from other services (book platform etc.) share this Gumroad account
   // but don't need AEVION subscription provisioning — skip them silently.

@@ -169,7 +169,7 @@ C) [третий вариант]
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
 | DevHub | `aevion-globus-backend/src/routes/devhub.ts` + `frontend/src/app/devhub/[id]/page.tsx` + `scripts/devhub-prod-smoke.js` | **Paddle как 5-я медиа-интеграция DevHub.** Тонкий `/api/devhub/media/paddle-checkout` поверх готового `lib/paddleClient.ts` (reuse, без дублирования), Stripe/Paddle переключатель в payment-табе, smoke 47→48. verify зелёный. | 2026-06-01 UTC+5 |
-| Payments | `aevion-globus-backend/src/index.ts` (только строки 905-906) | **Fix дубль-регистрации роутеров.** `pricingRouter`+`checkoutRouter` зарегистрированы дважды на одних путях (896-897 == 905-906, наследие мержа) — убираю второй блок. Только этот файл, commit --only. Прод-диагноз: подписочный чекаут pro/business в `mode:stub` (нет Gumroad-permalink ENV) — это передано юзеру для создания продуктов. | 2026-06-02 UTC+5 |
+| Payments | `aevion-globus-backend/src/routes/gumroadWebhook.ts` | **Reverse-map permalink пинга → тир.** Вебхук теперь резолвит reference по `product_permalink` через те же `GUMROAD_PERMALINK_TIER_*` (Business выдаёт Business, не Pro) + `GUMROAD_EXTERNAL_PERMALINKS` (книги не провижинят constitution-pro). Дефолт constitution-pro не тронут. Только этот файл, commit --only. | 2026-06-03 UTC+5 |
 | _free_ | — | **COVERAGE-CLOSEOUT SESSION COMPLETE 2026-05-19.** 26 read-only prod-smokes (qshield drift fix + 3 new wirings + openapi-completeness), OpenAPI 0.7.0 documents 39 module prefixes (was 23 in 0.6.0), все 20 soft prefixes теперь present. | 2026-05-19 13:00 UTC+5 |
 
 ### Завершено 2026-05-19 (OpenAPI 0.7.0 + smoke gap closure)

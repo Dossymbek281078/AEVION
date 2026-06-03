@@ -567,16 +567,18 @@ const MoveSlide=React.memo(function MoveSlide({left,top,dx,dy,pieceType,pieceCol
   const ref=useRef<HTMLDivElement|null>(null);
   useEffect(()=>{
     const el=ref.current;if(!el)return;
-    el.style.transform=`translate(${dx}%,${dy}%)`;
+    // Мягкий lift: фигура стартует чуть крупнее (scale 1.06) и «оседает» в 1.0 —
+    // ощущение «поднял-поставил», убирает резкость. Translate + scale в одном transform.
+    el.style.transform=`translate(${dx}%,${dy}%) scale(1.06)`;
     el.style.transition="transform 0ms";
     void el.offsetWidth; // force reflow
-    el.style.transition="transform 180ms cubic-bezier(0.25,0.46,0.45,0.94)";
-    el.style.transform="translate(0,0)";
+    el.style.transition="transform 190ms cubic-bezier(0.22,0.61,0.36,1)";
+    el.style.transform="translate(0,0) scale(1)";
   },[]); // mount-only — стабильные пропы + memo гарантируют отсутствие ре-рендеров до remount по новому key
   return <div ref={ref} style={{
     position:"absolute",left:`${left}%`,top:`${top}%`,
     width:"12.5%",height:"12.5%",
-    transform:`translate(${dx}%,${dy}%)`,
+    transform:`translate(${dx}%,${dy}%) scale(1.06)`,
     pointerEvents:"none",zIndex:6,
     display:"flex",alignItems:"center",justifyContent:"center",
   }}>

@@ -13,12 +13,12 @@ import NewStructureShowcase from "./_components/NewStructureShowcase";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "pro" | "business" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 
-// Живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не прошли KYC). Маппинг
-// тиров/приложений на permalink'и — в @/lib/gumroad. Платные тиры → Gumroad-чекаут,
-// Free/Enterprise — прежний session-flow.
-const PAID_TIERS: TierId[] = ["pro", "business"];
+// Живой процессинг подписок — LemonSqueezy (primary) с fallback на Gumroad;
+// бэкенд /api/pricing/checkout/session выбирает процессинг сам. Платные тиры
+// (lite/medium/full) идут через checkout-session, Free/Enterprise — прежний flow.
+const PAID_TIERS: TierId[] = ["lite", "medium", "full"];
 
 interface TierLimits {
   modules: number | null;
@@ -191,7 +191,7 @@ export default function PricingPage() {
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
 
   // Калькулятор сметы
-  const [calcTier, setCalcTier] = useState<TierId>("pro");
+  const [calcTier, setCalcTier] = useState<TierId>("medium");
   const [calcModules, setCalcModules] = useState<string[]>([]);
   const [calcSeats, setCalcSeats] = useState(1);
   const [calcPromo, setCalcPromo] = useState("");
@@ -654,14 +654,14 @@ export default function PricingPage() {
         {data.tiers.map((tier) => {
           // A/B/C variant for tier-cards:
           //   A — no highlight (control)
-          //   B — highlight Pro
-          //   C — highlight Business
+          //   B — highlight Medium (popular)
+          //   C — highlight Full
           const isHighlight =
             tierCardsVariant === "A"
               ? false
               : tierCardsVariant === "B"
-                ? tier.id === "pro"
-                : tier.id === "business";
+                ? tier.id === "medium"
+                : tier.id === "full";
           const showPrice =
             period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
           return (

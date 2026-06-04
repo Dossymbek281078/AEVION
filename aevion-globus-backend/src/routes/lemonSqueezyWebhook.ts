@@ -43,7 +43,7 @@ export const lemonSqueezyWebhookRouter = Router();
 interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
-    custom_data?: { reference?: string; email?: string };
+    custom_data?: { reference?: string; email?: string; module?: string };
   };
   data?: {
     id?: string;
@@ -144,7 +144,9 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     if (ACTIVATE_EVENTS.has(event)) {
       const ref = referenceForVariantId(attrs.variant_id);
       const tierId = tierForLemonSqueezyReference(ref);
-      const modules = modulesForReference(ref);
+      // Lite = 1 продукт на выбор: берём его из custom_data (передан на чекауте).
+      const customModule = payload.meta?.custom_data?.module;
+      const modules = tierId === "lite" && customModule ? [customModule] : modulesForReference(ref);
       const result = await provisionSubscription({
         email,
         tierId,

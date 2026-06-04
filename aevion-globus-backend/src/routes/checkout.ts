@@ -135,8 +135,12 @@ checkoutRouter.post("/session", async (req, res) => {
       Boolean(resolveLemonSqueezyVariant(reference));
     if (lsReady) {
       try {
+        // Lite = 1 продукт на выбор: пробрасываем выбранный модуль в custom_data,
+        // чтобы вебхук провижинил подписку именно на него.
+        const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          customData: liteModule ? { module: liteModule } : undefined,
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
       } catch (e) {

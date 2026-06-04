@@ -121,7 +121,7 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
         attributes: {
           checkout_data: {
             email: input.email ?? undefined,
-            custom: { bureauIntentId: intentId, reference: input.reference },
+            custom: { bureauIntentId: intentId, reference: input.reference, ...(input.customData ?? {}) },
           },
           checkout_options: {
             embed: false,

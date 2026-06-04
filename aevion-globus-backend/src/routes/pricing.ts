@@ -23,7 +23,7 @@ import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
-import { sendEmail, purgeSubscriptions } from "./provisioning";
+import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
 
 export const pricingRouter = Router();
 
@@ -1414,6 +1414,7 @@ pricingRouter.get("/subscription/me", (req, res) => {
         tierId: latest.tierId,
         period: latest.period,
         seats: latest.seats ?? 1,
+        modules: Array.isArray(latest.modules) ? latest.modules : [],
         validUntil: latest.validUntil ?? null,
         trialDays: latest.trialDays ?? 0,
         amountUsd: latest.amountUsd ?? null,
@@ -1425,6 +1426,46 @@ pricingRouter.get("/subscription/me", (req, res) => {
     console.error("[subscription/me] read failed", e);
     res.status(500).json({ error: "read_failed" });
   }
+});
+
+/**
+ * POST /api/pricing/subscription/lite-module
+ * JWT-auth. Body: { moduleId }
+ *
+ * Lite = 1 продукт на выбор. Меняет выбранный продукт подписчика Lite/Free,
+ * дописывая новую (latest-wins) запись подписки с modules=[moduleId].
+ */
+pricingRouter.post("/subscription/lite-module", (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "unauthorized" });
+  let email: string;
+  try {
+    const payload = jwt.verify(auth.slice(7), getJwtSecret(), { algorithms: ["HS256"] }) as { email?: string };
+    if (!payload.email) return res.status(401).json({ error: "invalid_token" });
+    email = payload.email.toLowerCase();
+  } catch {
+    return res.status(401).json({ error: "invalid_token" });
+  }
+
+  const moduleId = typeof req.body?.moduleId === "string" ? req.body.moduleId.trim() : "";
+  if (!moduleId || !getModulePrice(moduleId)) {
+    return res.status(400).json({ error: "invalid_module" });
+  }
+
+  const current = readLatestSubscription(email);
+  if (!current || (current.tierId !== "lite" && current.tierId !== "free")) {
+    return res.status(409).json({ error: "not_lite", message: "Смена одного продукта доступна на тарифах Free/Lite" });
+  }
+
+  const updated: Subscription = {
+    ...current,
+    id: `sub_litemod_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    ts: new Date().toISOString(),
+    modules: [moduleId],
+    source: "lite_module_change",
+  };
+  writeSubscription(updated);
+  res.json({ ok: true, tierId: current.tierId, module: moduleId });
 });
 
 /**

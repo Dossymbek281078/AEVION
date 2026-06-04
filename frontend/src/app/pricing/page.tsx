@@ -15,10 +15,8 @@ type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
 type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 
-// Живой процессинг подписок — LemonSqueezy (primary) с fallback на Gumroad;
-// бэкенд /api/pricing/checkout/session выбирает процессинг сам. Платные тиры
-// (lite/medium/full) идут через checkout-session, Free/Enterprise — прежний flow.
-const PAID_TIERS: TierId[] = ["lite", "medium", "full"];
+// Все тиры идут через бэкенд /api/pricing/checkout/session — он сам выбирает
+// процессинг (LemonSqueezy primary → Gumroad fallback → stub).
 
 interface TierLimits {
   modules: number | null;
@@ -191,6 +189,9 @@ export default function PricingPage() {
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
 
   // Калькулятор сметы
+  // Lite = 1 продукт на выбор: выбранный модуль для чекаута Lite
+  const [liteModule, setLiteModule] = useState<string>("");
+
   const [calcTier, setCalcTier] = useState<TierId>("medium");
   const [calcModules, setCalcModules] = useState<string[]>([]);
   const [calcSeats, setCalcSeats] = useState(1);
@@ -246,27 +247,20 @@ export default function PricingPage() {
       },
     });
     try {
-      const period = opts.period ?? "monthly";
-
-      if (PAID_TIERS.includes(opts.tierId)) {
-        // Gumroad hosted checkout — единственный живой процессинг (Paddle/Stripe/LS мертвы).
-        window.location.href = gumroadCheckoutUrl({ key: "platform", tier: opts.tierId, period });
-        return;
+      // Единая точка: backend /checkout/session сам выбирает процессинг
+      // (LemonSqueezy → Gumroad → stub) и возвращает готовый URL.
+      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(opts),
+      });
+      const j = await r.json();
+      if (j.url) {
+        window.location.href = j.url;
       } else {
-        // Free или Enterprise — старый flow
-        const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(opts),
-        });
-        const j = await r.json();
-        if (j.url) {
-          window.location.href = j.url;
-        } else {
-          console.error("[checkout] no url returned", j);
-          setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.");
-          setCheckingOut(null);
-        }
+        console.error("[checkout] no url returned", j);
+        setCheckoutNotice("Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.");
+        setCheckingOut(null);
       }
     } catch (e) {
       console.error("[checkout] failed", e);
@@ -771,6 +765,31 @@ export default function PricingPage() {
                   {tier.ctaLabel}
                 </Link>
               ) : (
+                <>
+                {tier.id === "lite" && (
+                  <select
+                    value={liteModule}
+                    onChange={(e) => setLiteModule(e.target.value)}
+                    aria-label="Выберите продукт для Lite"
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      border: isHighlight ? "1px solid rgba(255,255,255,0.25)" : "1px solid rgba(13,148,136,0.4)",
+                      marginBottom: 8,
+                      background: isHighlight ? "rgba(255,255,255,0.06)" : "#fff",
+                      color: isHighlight ? "#e2e8f0" : "#0f172a",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="">— выберите продукт —</option>
+                    {(data?.modules ?? []).map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                )}
                 <button
                   disabled={checkingOut === tier.id}
                   style={{
@@ -790,40 +809,24 @@ export default function PricingPage() {
                     marginBottom: 8,
                     opacity: checkingOut === tier.id ? 0.7 : 1,
                   }}
-                  onClick={() =>
-                    startCheckout({ tierId: tier.id, period, seats: 1 })
-                  }
+                  onClick={() => {
+                    if (tier.id === "lite") {
+                      if (!liteModule) {
+                        setCheckoutNotice("Сначала выберите продукт для тарифа Lite");
+                        return;
+                      }
+                      startCheckout({ tierId: tier.id, period, seats: 1, modules: [liteModule] });
+                    } else {
+                      startCheckout({ tierId: tier.id, period, seats: 1 });
+                    }
+                  }}
                 >
                   {checkingOut === tier.id ? "Открываем оплату..." : tier.ctaLabel}
                 </button>
+                </>
               )}
               {tier.id !== "enterprise" && tier.id !== "free" && (
                 <>
-                  <a
-                    href={gumroadCheckoutUrl({ key: tier.id, tier: tier.id })}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      padding: "8px 16px",
-                      fontSize: 12,
-                      fontWeight: 800,
-                      borderRadius: 8,
-                      border: isHighlight
-                        ? "1px solid rgba(255,255,255,0.2)"
-                        : "1px solid rgba(13,148,136,0.4)",
-                      cursor: "pointer",
-                      background: "transparent",
-                      color: isHighlight ? "#5eead4" : "#0d9488",
-                      marginBottom: 6,
-                      textAlign: "center",
-                      textDecoration: "none",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    Buy All-Access on Gumroad →
-                  </a>
                   <button
                     style={{
                       width: "100%",
@@ -840,7 +843,11 @@ export default function PricingPage() {
                       marginBottom: 6,
                     }}
                     onClick={() =>
-                      startCheckout({ tierId: tier.id, period, seats: 1, trial: true })
+                      startCheckout(
+                        tier.id === "lite" && liteModule
+                          ? { tierId: tier.id, period, seats: 1, trial: true, modules: [liteModule] }
+                          : { tierId: tier.id, period, seats: 1, trial: true },
+                      )
                     }
                   >
                     {tp("tier.tryTrial")}

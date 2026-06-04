@@ -422,7 +422,8 @@ deepSanRouter.get("/status", limiter, (_req: Request, res: Response) => {
     description: "Anti-chaos: Kanban + Pomodoro + focus sessions + concept board.",
     endpoints: {
       tasks: "/api/deepsan/tasks",
-      sessions: "/api/deepsan/sessions",
+      focus: "/api/deepsan/focus",
+      focusActive: "/api/deepsan/focus/active",
       stats: "/api/deepsan/stats",
       conceptMessages: "/api/deepsan/concept/messages",
       conceptStats: "/api/deepsan/concept-stats",

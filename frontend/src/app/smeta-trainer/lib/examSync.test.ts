@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildExamAttemptPayload, EXAM_LEVEL } from "./examSync";
+import { buildExamAttemptPayload, EXAM_LEVEL, describeAttemptKind, examTaskTitleFromPayload } from "./examSync";
 import type { ExamReport } from "./examGrader";
 
 function report(over: Partial<ExamReport> = {}): ExamReport {
@@ -45,5 +45,27 @@ describe("buildExamAttemptPayload", () => {
     expect(a.feedback).toContain("78/100");
     expect(a.feedback).toContain("9/10");
     expect(a.feedback).toContain("замечаний 2");
+  });
+});
+
+describe("describeAttemptKind", () => {
+  it("человекочитаемые ярлыки", () => {
+    expect(describeAttemptKind("lsr-submit")).toBe("Экзамен (ЛСР)");
+    expect(describeAttemptKind("quiz")).toBe("Тест");
+    expect(describeAttemptKind("exercise")).toBe("Практика");
+  });
+  it("неизвестный kind возвращается как есть", () => {
+    expect(describeAttemptKind("custom")).toBe("custom");
+  });
+});
+
+describe("examTaskTitleFromPayload", () => {
+  it("достаёт taskTitle из payload", () => {
+    expect(examTaskTitleFromPayload({ taskTitle: "Отделка класса" })).toBe("Отделка класса");
+  });
+  it("null для отсутствующего/неверного payload", () => {
+    expect(examTaskTitleFromPayload(null)).toBeNull();
+    expect(examTaskTitleFromPayload({ x: 1 })).toBeNull();
+    expect(examTaskTitleFromPayload("str")).toBeNull();
   });
 });

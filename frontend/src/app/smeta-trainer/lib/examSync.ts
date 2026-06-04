@@ -53,6 +53,29 @@ export function buildExamAttemptPayload(
   };
 }
 
+/** Человекочитаемое название типа попытки для дашборда куратора. */
+export function describeAttemptKind(kind: string): string {
+  switch (kind) {
+    case "lsr-submit":
+      return "Экзамен (ЛСР)";
+    case "quiz":
+      return "Тест";
+    case "exercise":
+      return "Практика";
+    default:
+      return kind;
+  }
+}
+
+/** Достаёт название задания из payload экзамен-попытки (или null). */
+export function examTaskTitleFromPayload(payload: unknown): string | null {
+  if (payload && typeof payload === "object" && "taskTitle" in payload) {
+    const t = (payload as { taskTitle: unknown }).taskTitle;
+    return typeof t === "string" ? t : null;
+  }
+  return null;
+}
+
 /** Отправляет сдачу на сервер; никогда не бросает (бэкенд опционален). */
 export async function syncExamAttempt(
   taskId: string,

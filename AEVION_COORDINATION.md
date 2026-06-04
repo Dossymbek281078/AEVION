@@ -389,14 +389,11 @@ C) [третий вариант]
 
 ### Pending cross-zone change requests
 
-- **2026-06-04** — `aevion-core/main` (backend/infra prod-smoke audit) → owners of `qbuild` (`aevion-build`) + `payments` (`frontend-payments`)
-  - **Что:** express-rate-limit логирует на КАЖДОМ старте бэка `ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits`. 5 кастомных keyGenerator'ов:
-    - `routes/build/ai.ts:21`, `routes/build/public.ts:31` — зона **qbuild**
-    - `routes/qpaynet.ts:122`, `:135`, `:159` — зона **payments**
-  - **Почему:** keyGenerator берёт `req.ip` напрямую. Для IPv6 это дыра — каждый адрес из клиентского /64 считается уникальным ключом → IPv6-клиент обходит rate limit. Нужно оборачивать IP через `ipKeyGenerator()` из express-rate-limit.
-  - **Как всплыло:** write-path smoke против локального бэка 2026-06-04. Non-fatal (лимитер работает), но IPv6-bypass — реальная (низкая severity) дыра в защите.
-  - **Что нужно в ваших зонах:** `import { ipKeyGenerator } from "express-rate-limit"`, и в каждом keyGenerator вернуть `ipKeyGenerator(req.ip)` (сохранив ваш кастомный префикс, если он есть). Или вынести общий хелпер в `lib/rateLimit.ts`.
-  - **Срочность:** low (security hardening). Свою правку не делал — обе зоны чужие/активные (payments-окно сейчас правит `gumroadWebhook.ts`).
+- **2026-06-04** — `aevion-core/main` (backend/infra prod-smoke audit): IPv6 rate-limit hardening
+  - **✅ RESOLVED 2026-06-04** by `aevion-core/main`, commit `544bcb1f`.
+  - **Поправка к первичному анализу:** `routes/build/ai.ts` и `routes/build/public.ts` УЖЕ были корректны (импортируют и используют `ipKeyGenerator(req.ip ?? "::1")`) — мой первый прогон ошибочно их флагнул, не прочитав. **Единственный нарушитель** — `routes/qpaynet.ts`: 3 лимитера (money/auth/csv) с fallback `req.ip ?? "anon"` напрямую, без `ipKeyGenerator`.
+  - **Фикс:** добавлен `const { ipKeyGenerator } = require("express-rate-limit")`, fallback обёрнут: `auth?.sub ?? auth?.email ?? (req.ip ? ipKeyGenerator(req.ip) : "anon")`. Auth-ключи (sub/email) не тронуты. tsc 0; локальный бэк больше НЕ логирует IPv6-ValidationError. Файл был чист на момент правки (payments-окно правило `gumroadWebhook.ts`, не qpaynet) — конфликта нет.
+  - **Что было:** express-rate-limit логировал на каждом старте `keyGenerator ... without ipKeyGenerator helper for IPv6 → IPv6 users could bypass limits`. IPv6-клиент мог обходить rate limit ротацией адресов в своём /64. Severity low, но реально.
 
 - **2026-06-01** — `aevion-core/main` (Revenue Hub) → owner of `veilnetx` zone (`aevion-build`)
   - **✅ RESOLVED 2026-06-04** (`aevion-core/main` infra audit): `frontend` tsc = 0 ошибок, строка 308 в `veilnetx/page.tsx` больше не обращается к `server.note`. `next build` разблокирован для всех. Закрываю.

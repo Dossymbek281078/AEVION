@@ -13,7 +13,7 @@
  */
 
 export type CaseIndustry = "banks" | "startups" | "government" | "creators" | "law-firms" | "media";
-export type CaseTier = "free" | "pro" | "business" | "enterprise";
+export type CaseTier = "free" | "lite" | "medium" | "full" | "enterprise";
 
 export interface CaseMetric {
   label: string;
@@ -84,7 +84,7 @@ export const CASE_STUDIES: CaseStudy[] = [
     customerColor: "#92400e",
     industry: "law-firms",
     region: "ЕС / Германия",
-    tier: "business",
+    tier: "full",
     modules: ["qright", "aevion-ip-bureau", "qsign"],
     hook: "$2.3M годовой экономии на регистрации цифровой собственности 400+ клиентов.",
     challenge:
@@ -113,7 +113,7 @@ export const CASE_STUDIES: CaseStudy[] = [
     customerColor: "#be185d",
     industry: "creators",
     region: "США / Лос-Анджелес",
-    tier: "pro",
+    tier: "medium",
     modules: ["qright", "qsign", "kids-ai-content"],
     hook: "0 IP-споров за 18 месяцев работы с 40+ внешними сценаристами.",
     challenge:
@@ -171,7 +171,7 @@ export const CASE_STUDIES: CaseStudy[] = [
     customerColor: "#7c3aed",
     industry: "startups",
     region: "Турция / Стамбул",
-    tier: "pro",
+    tier: "medium",
     modules: ["qright", "qsign", "multichat-engine"],
     hook: "$240/год экономии vs DocuSign + Notarize + Patently комбо для seed-стадии.",
     challenge:

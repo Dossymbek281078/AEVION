@@ -9,7 +9,7 @@ import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 
 type CaseIndustry = "banks" | "startups" | "government" | "creators" | "law-firms" | "media";
-type CaseTier = "free" | "pro" | "business" | "enterprise";
+type CaseTier = "free" | "lite" | "medium" | "full" | "enterprise";
 
 interface CaseMetric {
   label: string;
@@ -42,8 +42,9 @@ const BORDER = "1px solid rgba(15,23,42,0.08)";
 
 const TIER_BADGE: Record<CaseTier, { bg: string; fg: string }> = {
   free: { bg: "#f1f5f9", fg: "#475569" },
-  pro: { bg: "#ccfbf1", fg: "#0f766e" },
-  business: { bg: "#dbeafe", fg: "#1e40af" },
+  lite: { bg: "#ccfbf1", fg: "#0f766e" },
+  medium: { bg: "#dbeafe", fg: "#1e40af" },
+  full: { bg: "#ede9fe", fg: "#6d28d9" },
   enterprise: { bg: "#0f172a", fg: "#f8fafc" },
 };
 

@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 
-type TierId = "free" | "pro" | "business" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 type BillingPeriod = "monthly" | "annual";
 type HistoryStatus = "active" | "trial" | "expired";
 
@@ -54,15 +54,17 @@ interface StatsResp {
 
 const TIER_LABEL: Record<TierId, string> = {
   free: "Free",
-  pro: "Pro",
-  business: "Business",
+  lite: "Lite",
+  medium: "Medium",
+  full: "Full",
   enterprise: "Enterprise",
 };
 
 const TIER_COLOR: Record<TierId, string> = {
   free: "text-slate-300 bg-slate-700/40 ring-slate-500/40",
-  pro: "text-teal-200 bg-teal-500/15 ring-teal-400/40",
-  business: "text-sky-200 bg-sky-500/15 ring-sky-400/40",
+  lite: "text-teal-200 bg-teal-500/15 ring-teal-400/40",
+  medium: "text-sky-200 bg-sky-500/15 ring-sky-400/40",
+  full: "text-violet-200 bg-violet-500/15 ring-violet-400/40",
   enterprise: "text-amber-200 bg-amber-500/15 ring-amber-400/40",
 };
 
@@ -172,8 +174,8 @@ export default function ProvisioningPage() {
             <StatCard label="За 7 дней" value={`+${stats.last7d}`} accent="teal" />
             <StatCard label="Активных триалов" value={stats.trialsActive.toString()} accent="amber" />
             <StatCard
-              label="Pro · Business"
-              value={`${stats.byTier.pro ?? 0} · ${stats.byTier.business ?? 0}`}
+              label="Lite · Medium · Full"
+              value={`${stats.byTier.lite ?? 0} · ${stats.byTier.medium ?? 0} · ${stats.byTier.full ?? 0}`}
               accent="sky"
             />
           </div>

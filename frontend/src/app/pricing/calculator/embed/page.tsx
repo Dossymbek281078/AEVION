@@ -6,7 +6,7 @@ import { track } from "@/lib/track";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "pro" | "business" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
 
 interface PricingTier {
   id: TierId;
@@ -60,7 +60,7 @@ const SITE_ORIGIN =
 export default function PricingCalculatorEmbedPage() {
   const [data, setData] = useState<PricingPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tier, setTier] = useState<TierId>("pro");
+  const [tier, setTier] = useState<TierId>("medium");
   const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
   const [seats, setSeats] = useState(1);

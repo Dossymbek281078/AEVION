@@ -17,9 +17,11 @@ function gumroadConfigured(reference: string): boolean {
 /* ═══ Plans definition ═══ */
 
 const PLANS = [
-  { id: "free", name: "Free", price: 0, currency: "usd", interval: "month", features: ["5 QCoreAI runs/day", "3 DevHub projects", "1 GB QMedia storage", "Basic analytics"] },
-  { id: "pro", name: "Pro", price: 1900, currency: "usd", interval: "month", reference: "tier_pro_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_PRO_MONTHLY, features: ["Unlimited QCoreAI runs", "Unlimited DevHub projects", "50 GB QMedia storage", "AI Memory", "Priority support", "Advanced analytics", "API keys", "Organizations"] },
-  { id: "enterprise", name: "Enterprise", price: 9900, currency: "usd", interval: "month", reference: "tier_business_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_BUSINESS_MONTHLY, features: ["Everything in Pro", "Custom AI models", "SLA 99.9%", "Dedicated support", "Custom integrations", "On-premise option"] },
+  { id: "free", name: "Free", price: 0, currency: "usd", interval: "month", features: ["1 продукт на выбор (лимиты)", "QCoreAI 100K токенов/мес", "Публичный Globus", "Базовая аналитика"] },
+  { id: "lite", name: "Lite", price: 1900, currency: "usd", interval: "month", reference: "tier_lite_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY, features: ["1 любой продукт AEVION", "Полный доступ к выбранному", "QCoreAI 2M токенов/мес", "Email-поддержка"] },
+  { id: "medium", name: "Medium", price: 2900, currency: "usd", interval: "month", reference: "tier_medium_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_MEDIUM_MONTHLY, features: ["10 готовых продуктов", "CyberChess, HealthAI, Multichat, QCoreAI…", "QCoreAI 10M токенов/мес", "Email-поддержка"] },
+  { id: "full", name: "Full", price: 4900, currency: "usd", interval: "month", reference: "tier_full_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_FULL_MONTHLY, features: ["Все продукты AEVION (30+)", "IP-контур + финтех-стек", "QCoreAI 50M токенов/мес", "Приоритетная поддержка"] },
+  { id: "enterprise", name: "Enterprise", price: 0, currency: "usd", interval: "month", features: ["Всё из Full", "Выделенная инфра / on-prem", "SLA до 1 часа", "Customer Success менеджер"] },
 ];
 
 /* ═══ Gumroad (only KYC-cleared processor; Stripe/Paddle blocked) ═══ */
@@ -79,7 +81,7 @@ paymentsRouter.post("/gumroad/create-subscription", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { reference, email } = req.body || {};
-    if (!reference) return res.status(400).json({ error: "reference required (e.g. tier_pro_monthly; see /api/payments/gumroad/plans)" });
+    if (!reference) return res.status(400).json({ error: "reference required (e.g. tier_lite_monthly; see /api/payments/gumroad/plans)" });
 
     if (!gumroadConfigured(String(reference))) {
       return res.json({ checkoutUrl: `https://app.gumroad.com/l/stub?ref=${reference}`, mode: "stub", provider: "gumroad" });

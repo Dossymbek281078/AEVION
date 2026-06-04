@@ -26,7 +26,7 @@ import {
 } from "../../lib/ai/scenarios/openingsAdvisor";
 import { buildNoticeAIPrompt, hasDedicatedPanel } from "../../lib/ai/noticeAdvisor";
 import { deterministicBreakdown } from "../../lib/ai/scenarios/scenarioBreakdowns";
-import { buildLsrFormHtml, openPrintWindow } from "../../lib/printForms";
+import { buildLsrFormHtml, buildKs2FormHtml, buildSsrFormHtml, openPrintWindow } from "../../lib/printForms";
 import { streamLLM } from "../../lib/aiBackend";
 import type { LsrCalc, AiNotice } from "../../lib/types";
 import type { RoomGeometry } from "../../lib/types";
@@ -207,8 +207,8 @@ export default function ExamTaskPage({
     setReport(null);
   }
 
-  function printForm4() {
-    const ok = openPrintWindow(buildLsrFormHtml(lsr, calc));
+  function printForm(html: string) {
+    const ok = openPrintWindow(html);
     if (!ok && typeof window !== "undefined") {
       alert("Не удалось открыть окно печати — разрешите всплывающие окна для этого сайта.");
     }
@@ -489,13 +489,27 @@ export default function ExamTaskPage({
                   {report.grade}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap justify-end">
                 <button
-                  onClick={printForm4}
+                  onClick={() => printForm(buildLsrFormHtml(lsr, calc))}
                   className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
-                  title="Открыть Форму 4* для печати или сохранения в PDF"
+                  title="Открыть Форму 4* (ЛСР) для печати или сохранения в PDF"
                 >
-                  🖨 Форма 4* (PDF)
+                  🖨 Форма 4*
+                </button>
+                <button
+                  onClick={() => printForm(buildKs2FormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Акт о приёмке выполненных работ (КС-2)"
+                >
+                  🖨 КС-2
+                </button>
+                <button
+                  onClick={() => printForm(buildSsrFormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Сводный сметный расчёт (Форма 1)"
+                >
+                  🖨 ССР
                 </button>
                 <button
                   onClick={reset}

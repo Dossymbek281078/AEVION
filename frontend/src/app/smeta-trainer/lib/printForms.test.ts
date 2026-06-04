@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLsrFormHtml } from "./printForms";
+import { buildLsrFormHtml, buildKs2FormHtml, buildSsrFormHtml } from "./printForms";
 import type { Lsr, LsrCalc } from "./types";
 
 const lsr: Lsr = {
@@ -73,5 +73,32 @@ describe("buildLsrFormHtml", () => {
     const empty: LsrCalc = { lsr, sections: [], totalBeforeVat: 0, vat: 0, totalWithVat: 0 };
     const h = buildLsrFormHtml(lsr, empty);
     expect(h).toContain("Смета пуста");
+  });
+});
+
+describe("buildKs2FormHtml", () => {
+  const html = buildKs2FormHtml(lsr, calc, "Июнь 2026");
+
+  it("акт КС-2 с периодом и позицией", () => {
+    expect(html).toContain("Акт о приёмке выполненных работ");
+    expect(html).toContain("Июнь 2026");
+    expect(html).toContain("Окраска стен");
+    expect(html).toContain("ИТОГО выполнено за период");
+  });
+
+  it("содержит подписи сдал/принял", () => {
+    expect(html).toContain("Сдал");
+    expect(html).toContain("Принял");
+  });
+});
+
+describe("buildSsrFormHtml", () => {
+  const html = buildSsrFormHtml(lsr, calc);
+
+  it("сводный расчёт с главой 2, НДС и итогом", () => {
+    expect(html).toContain("Сводный сметный расчёт");
+    expect(html).toContain("Глава 2");
+    expect(html).toContain("НДС 12%");
+    expect(html).toContain("ВСЕГО по сводному");
   });
 });

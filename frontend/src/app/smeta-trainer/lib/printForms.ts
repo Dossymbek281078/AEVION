@@ -115,6 +115,114 @@ export function buildLsrFormHtml(lsr: Lsr, calc: LsrCalc): string {
 </body></html>`;
 }
 
+/** КС-2 «Акт о приёмке выполненных работ» из ЛСР (учебно: весь объём — за период). */
+export function buildKs2FormHtml(lsr: Lsr, calc: LsrCalc, periodName = "отчётный период"): string {
+  const m = lsr.meta ?? {};
+  let posNum = 0;
+  const rows: string[] = [];
+  for (const sc of calc.sections) {
+    if (sc.positions.length === 0) continue;
+    rows.push(`<tr class="section"><td colspan="7">${esc(sc.section.title)}</td></tr>`);
+    for (const p of sc.positions) {
+      posNum += 1;
+      rows.push(
+        `<tr>` +
+          `<td class="num">${posNum}</td>` +
+          `<td>${esc(p.rate.code)}</td>` +
+          `<td>${esc(p.rate.title)}</td>` +
+          `<td>${esc(p.rate.unit)}</td>` +
+          `<td class="num">${esc(p.position.volume)}</td>` +
+          `<td class="num">${formatKzt(Math.round(p.unitPrice))}</td>` +
+          `<td class="num">${formatKzt(Math.round(p.current.direct))}</td>` +
+          `</tr>`,
+      );
+    }
+  }
+  const totalDirect = calc.sections.reduce((s, sc) => s + sc.direct, 0);
+  rows.push(
+    `<tr class="total"><td colspan="6">ИТОГО выполнено за период</td>` +
+      `<td class="num">${formatKzt(Math.round(totalDirect))}</td></tr>`,
+  );
+
+  return `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>КС-2 ${esc(m.lsrNumber ?? lsr.id)}</title>
+<style>${PRINT_CSS}</style></head>
+<body>
+<div class="toolbar"><button onclick="window.print()">🖨 Печать / Сохранить в PDF</button></div>
+<h1>Акт о приёмке выполненных работ (КС-2)</h1>
+<div class="sub">учебная форма AEVION · аналог Ф-2 РК</div>
+<table class="meta">
+  <tr><td class="k">Объект:</td><td>${esc(m.objectTitle ?? lsr.title)}</td><td class="k">Период:</td><td>${esc(periodName)}</td></tr>
+  <tr><td class="k">Основание:</td><td>${esc(m.osnovanje ?? "ЛСР " + (m.lsrNumber ?? ""))}</td><td class="k">Цены:</td><td>${esc(m.priceDate ?? `${lsr.indexRegion} ${lsr.indexQuarter}`)}</td></tr>
+</table>
+<table class="lsr">
+  <thead><tr>
+    <th style="width:30px">№</th><th style="width:90px">Обоснование</th>
+    <th>Наименование работ</th><th style="width:46px">Ед.</th>
+    <th style="width:70px">Выполнено</th><th style="width:90px">Цена ед., ₸</th>
+    <th style="width:110px">Стоимость, ₸</th>
+  </tr></thead>
+  <tbody>
+    ${rows.join("\n    ") || `<tr><td colspan="7" style="text-align:center;color:#888">Нет выполненных работ</td></tr>`}
+  </tbody>
+</table>
+<div class="sign">
+  <div class="line">Сдал (подрядчик)${m.author ? `: ${esc(m.author)}` : ""}</div>
+  <div class="line">Принял (заказчик)</div>
+</div>
+</body></html>`;
+}
+
+/** ССР «Сводный сметный расчёт» (Форма 1) — учебно по одной ЛСР как объекту главы 2. */
+export function buildSsrFormHtml(lsr: Lsr, calc: LsrCalc): string {
+  const m = lsr.meta ?? {};
+  const objectCost = calc.totalBeforeVat; // ПЗ + НР + СП по ЛСР
+  const chapters = [
+    { n: 2, title: "Глава 2. Основные объекты строительства", cost: objectCost },
+  ];
+  const chapterRows = chapters
+    .map(
+      (c) =>
+        `<tr><td class="num">${c.n}</td><td>${esc(c.title)}</td>` +
+        `<td class="num">${formatKzt(Math.round(c.cost))}</td></tr>`,
+    )
+    .join("\n    ");
+
+  return `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>ССР ${esc(m.strojkaTitle ?? lsr.title)}</title>
+<style>${PRINT_CSS}</style></head>
+<body>
+<div class="toolbar"><button onclick="window.print()">🖨 Печать / Сохранить в PDF</button></div>
+<h1>Сводный сметный расчёт стоимости строительства (Форма 1)</h1>
+<div class="sub">НДЦС РК 8.01-08-2022 · учебная форма AEVION</div>
+<table class="meta">
+  <tr><td class="k">Стройка:</td><td>${esc(m.strojkaTitle ?? lsr.title)}</td><td class="k">Цены:</td><td>${esc(m.priceDate ?? `${lsr.indexRegion} ${lsr.indexQuarter}`)}</td></tr>
+</table>
+<table class="lsr">
+  <thead><tr>
+    <th style="width:50px">№ гл.</th><th>Наименование глав и затрат</th>
+    <th style="width:140px">Сметная стоимость, ₸</th>
+  </tr></thead>
+  <tbody>
+    ${chapterRows}
+    <tr class="subtotal"><td></td><td>Итого по главам 1–12</td><td class="num">${formatKzt(Math.round(objectCost))}</td></tr>
+    <tr><td></td><td>НДС 12%</td><td class="num">${formatKzt(Math.round(calc.vat))}</td></tr>
+    <tr class="total"><td></td><td>ВСЕГО по сводному сметному расчёту</td><td class="num">${formatKzt(Math.round(calc.totalWithVat))}</td></tr>
+  </tbody>
+</table>
+<p style="color:#777;font-size:10px;margin-top:8px">
+  Учебная форма: построена по одной ЛСР как объекту главы 2. В реальном ССР сводятся все
+  объектные сметы и лимитированные затраты (временные здания, зимнее удорожание, резерв).
+</p>
+<div class="sign">
+  <div class="line">Составил${m.author ? `: ${esc(m.author)}` : ""}</div>
+  <div class="line">Проверил</div>
+</div>
+</body></html>`;
+}
+
 /** Открыть HTML в новом окне и инициировать печать (PDF — через диалог браузера). */
 export function openPrintWindow(html: string): boolean {
   if (typeof window === "undefined") return false;

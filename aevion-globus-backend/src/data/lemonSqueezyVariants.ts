@@ -1,79 +1,90 @@
 /**
- * Lemon Squeezy Variant IDs — stub.
+ * Lemon Squeezy variant mapping — Lite / Medium / Full subscription tiers.
  *
- * Filled when LS account is set up:
- *   1. Lemon Squeezy dashboard → Store → Products
- *   2. Create one Product per bundle (Fintech, Build, AI, Gaming) + one
- *      All-Access subscription product.
- *   3. Each product gets a Variant — the numeric variant ID is in the URL
- *      when you open the variant detail page: lemonsqueezy.com/dashboard/
- *      stores/<storeId>/products/<productId>/variants/<VARIANT_ID>
- *   4. Paste the number (as a string — LS IDs are >2^31 sometimes) into
- *      the matching field below and remove the `null` placeholder.
+ * LS is now the LIVE subscription processor (account activated 2026-06-04).
+ * Each tier:period maps to one LS variant id, supplied via env so new variant
+ * IDs are pasted without code changes:
  *
- * Consumers (lemonSqueezyProvider.createIntent) should fall back to
- * LEMON_SQUEEZY_DEFAULT_VARIANT_ID (env) when a bundle/all-access map
- * entry is still `null`. That keeps the provider usable in early launch
- * before all four bundles are listed.
+ *   LEMON_SQUEEZY_VARIANT_LITE_MONTHLY     LEMON_SQUEEZY_VARIANT_LITE_ANNUAL
+ *   LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY   LEMON_SQUEEZY_VARIANT_MEDIUM_ANNUAL
+ *   LEMON_SQUEEZY_VARIANT_FULL_MONTHLY     LEMON_SQUEEZY_VARIANT_FULL_ANNUAL
  *
- * Numeric prices here are the published monthly USD prices we plan to
- * charge — they MUST match what's set on the LS variant. If they drift,
- * checkout still works (LS variant is the source of truth) but
- * /api/aevion/pricing will show inconsistent numbers vs the receipt.
+ * Setup:
+ *   1. LS dashboard → Store → Products → New product (subscription)
+ *      - Lite   $19/mo  + $190/yr variant
+ *      - Medium $29/mo  + $290/yr variant
+ *      - Full   $49/mo  + $490/yr variant
+ *   2. Open each variant; the numeric variant id is in the URL:
+ *      lemonsqueezy.com/dashboard/.../products/<pid>/variants/<VARIANT_ID>
+ *   3. Paste each id into the matching env var on Railway.
+ *
+ * Prices on the LS variant are the source of truth — they MUST match the tier
+ * prices in data/pricing.ts (lite 19/190, medium 29/290, full 49/490).
+ *
+ * A checkout reference is "tier_<tier>_<period>" (built by routes/checkout.ts),
+ * e.g. "tier_lite_monthly". The webhook reverse-maps an incoming variant_id
+ * back to that reference to provision the right tier.
  */
 
-import type { BundleId } from "./modulePricing";
+import type { TierId } from "./pricing";
 
-export interface LemonSqueezyVariant {
-  /** LS variant id (numeric string from dashboard URL). null until set. */
-  variantId: string | null;
-  /** Display price in USD/month — must match LS variant price. */
-  monthlyUsd: number;
-  /** Short human label, mirrors what /pricing shows in the bundle card. */
-  label: string;
-}
+export type LemonSqueezyReference =
+  | "tier_lite_monthly"
+  | "tier_lite_annual"
+  | "tier_medium_monthly"
+  | "tier_medium_annual"
+  | "tier_full_monthly"
+  | "tier_full_annual";
 
-// monthlyUsd MUST mirror BUNDLE_USD / ALL_ACCESS_USD in modulePricing.ts.
-export const LEMON_SQUEEZY_BUNDLE_VARIANTS: Record<BundleId, LemonSqueezyVariant> = {
-  fintech: { variantId: null, monthlyUsd: 29, label: "Fintech bundle" },
-  build:   { variantId: null, monthlyUsd: 19, label: "Build & IP bundle" },
-  ai:      { variantId: null, monthlyUsd: 29, label: "AI bundle" },
-  gaming:  { variantId: null, monthlyUsd: 19, label: "Gaming & UX bundle" },
+/** reference → env var holding the LS variant id. */
+const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
+  tier_lite_monthly: "LEMON_SQUEEZY_VARIANT_LITE_MONTHLY",
+  tier_lite_annual: "LEMON_SQUEEZY_VARIANT_LITE_ANNUAL",
+  tier_medium_monthly: "LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY",
+  tier_medium_annual: "LEMON_SQUEEZY_VARIANT_MEDIUM_ANNUAL",
+  tier_full_monthly: "LEMON_SQUEEZY_VARIANT_FULL_MONTHLY",
+  tier_full_annual: "LEMON_SQUEEZY_VARIANT_FULL_ANNUAL",
 };
 
-export const LEMON_SQUEEZY_ALL_ACCESS_VARIANT: LemonSqueezyVariant = {
-  variantId: null,
-  monthlyUsd: 59,
-  label: "All-Access (every paid module)",
-};
-
-/** A checkout/subscription target: one of the 4 bundles or all-access. */
-export type LemonSqueezyReference = BundleId | "all-access";
-
-/**
- * Resolves the right LS variant for a checkout reference like "bundle:ai"
- * or "all-access". Returns null if the variant isn't published yet —
- * caller should fall back to LEMON_SQUEEZY_DEFAULT_VARIANT_ID env.
- */
-export function resolveLemonSqueezyVariant(reference: string): LemonSqueezyVariant | null {
-  if (reference === "all-access") return LEMON_SQUEEZY_ALL_ACCESS_VARIANT;
-  const m = reference.match(/^bundle:(fintech|build|ai|gaming)$/);
-  if (m) return LEMON_SQUEEZY_BUNDLE_VARIANTS[m[1] as BundleId];
-  return null;
+function isReference(s: string): s is LemonSqueezyReference {
+  return s in TIER_VARIANT_ENV;
 }
 
 /**
- * Reverse lookup: given a numeric LS variant_id from a webhook payload,
- * return which bundle / all-access it maps to. Returns null while the
- * variant IDs are still unset (stub) OR for an unrecognised id — the
- * webhook handler then falls back to a generic "pro" activation.
+ * Resolve the LS variant id for a checkout reference ("tier_lite_monthly").
+ * Returns null if the reference is unknown or its variant env isn't set yet —
+ * the provider then falls back to LEMON_SQUEEZY_DEFAULT_VARIANT_ID.
  */
-export function referenceForVariantId(variantId: string | number | null | undefined): LemonSqueezyReference | null {
+export function resolveLemonSqueezyVariant(reference: string): string | null {
+  if (!isReference(reference)) return null;
+  const id = process.env[TIER_VARIANT_ENV[reference]]?.trim();
+  return id || null;
+}
+
+/** True when at least one tier variant id is configured (LS checkout is live). */
+export function lemonSqueezyTiersConfigured(): boolean {
+  return Object.values(TIER_VARIANT_ENV).some((k) => Boolean(process.env[k]?.trim()));
+}
+
+/**
+ * Reverse lookup: a numeric LS variant_id from a webhook payload → the
+ * checkout reference it belongs to. Returns null for an unrecognised id.
+ */
+export function referenceForVariantId(
+  variantId: string | number | null | undefined,
+): LemonSqueezyReference | null {
   if (variantId == null) return null;
   const id = String(variantId);
-  if (LEMON_SQUEEZY_ALL_ACCESS_VARIANT.variantId === id) return "all-access";
-  for (const key of Object.keys(LEMON_SQUEEZY_BUNDLE_VARIANTS) as BundleId[]) {
-    if (LEMON_SQUEEZY_BUNDLE_VARIANTS[key].variantId === id) return key;
+  for (const ref of Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[]) {
+    if (process.env[TIER_VARIANT_ENV[ref]]?.trim() === id) return ref;
   }
   return null;
+}
+
+/** A checkout reference → tier id. Defaults to "lite" (safest paid entry). */
+export function tierForLemonSqueezyReference(ref: LemonSqueezyReference | null): TierId {
+  if (!ref) return "lite";
+  if (ref.includes("medium")) return "medium";
+  if (ref.includes("full")) return "full";
+  return "lite";
 }

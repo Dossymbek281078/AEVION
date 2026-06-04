@@ -13,10 +13,11 @@
  *   subscription_cancelled | subscription_expired | subscription_paused
  *     → writes a tierId:"free" downgrade record so /subscription/me reflects it.
  *
- * Activation tier:
- *   - All-Access variant → "business"
- *   - any bundle variant → "pro"
- *   - unrecognised / still-stubbed variant id → "pro" (generic upgrade)
+ * Activation tier (variant_id → reference → tier):
+ *   - LEMON_SQUEEZY_VARIANT_MEDIUM_* → "medium" (modules = MEDIUM_BUNDLE)
+ *   - LEMON_SQUEEZY_VARIANT_FULL_*   → "full"   (modules = [] == all)
+ *   - LEMON_SQUEEZY_VARIANT_LITE_*   → "lite"   (modules = [], 1 product chosen in cabinet)
+ *   - unrecognised variant id        → "lite"   (safest paid entry)
  *
  * Signature: HMAC-SHA256(rawBody, LEMON_SQUEEZY_WEBHOOK_SECRET) compared to
  * the x-signature header (hex). See
@@ -30,9 +31,12 @@
 import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
-import { MODULE_PRICING, type BundleId } from "../data/modulePricing";
-import { referenceForVariantId, type LemonSqueezyReference } from "../data/lemonSqueezyVariants";
-import type { TierId } from "../data/pricing";
+import {
+  referenceForVariantId,
+  tierForLemonSqueezyReference,
+  type LemonSqueezyReference,
+} from "../data/lemonSqueezyVariants";
+import { MEDIUM_BUNDLE } from "../data/pricing";
 
 export const lemonSqueezyWebhookRouter = Router();
 
@@ -73,14 +77,12 @@ const DEACTIVATE_EVENTS = new Set([
 // /subscription/me (latest-wins) tolerates.
 const SEEN = new Set<string>();
 
-function modulesForReference(ref: LemonSqueezyReference): string[] {
-  if (ref === "all-access") return []; // [] == every module (welcome email reads it as "all")
-  return MODULE_PRICING.filter((m) => m.bundle === (ref as BundleId)).map((m) => m.id);
-}
-
-function tierForReference(ref: LemonSqueezyReference | null): TierId {
-  if (ref === "all-access") return "business";
-  return "pro"; // bundle or unknown → generic pro upgrade
+function modulesForReference(ref: LemonSqueezyReference | null): string[] {
+  if (!ref) return [];
+  if (ref.includes("medium")) return [...MEDIUM_BUNDLE];
+  // full → [] is read as "all" by the welcome email + access is granted by tier;
+  // lite → [] (1 product of choice, selected in the cabinet after checkout).
+  return [];
 }
 
 function verifySignature(rawBody: string, presented: string | undefined, secret: string): boolean {
@@ -141,8 +143,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
   try {
     if (ACTIVATE_EVENTS.has(event)) {
       const ref = referenceForVariantId(attrs.variant_id);
-      const tierId = tierForReference(ref);
-      const modules = ref ? modulesForReference(ref) : [];
+      const tierId = tierForLemonSqueezyReference(ref);
+      const modules = modulesForReference(ref);
       const result = await provisionSubscription({
         email,
         tierId,

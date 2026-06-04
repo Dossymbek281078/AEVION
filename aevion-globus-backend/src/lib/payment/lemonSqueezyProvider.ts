@@ -111,8 +111,7 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
     // Reference-based mapping first ("bundle:fintech", "all-access" → published
     // variant), env DEFAULT acts as the catch-all when the slot isn't filled
     // yet OR when reference doesn't match any known bundle.
-    const mapped = resolveLemonSqueezyVariant(input.reference);
-    const variantId = mapped?.variantId ?? requiredEnv("LEMON_SQUEEZY_DEFAULT_VARIANT_ID");
+    const variantId = resolveLemonSqueezyVariant(input.reference) ?? requiredEnv("LEMON_SQUEEZY_DEFAULT_VARIANT_ID");
     const intentId = randomUUID();
     const base = publicBaseUrl();
 

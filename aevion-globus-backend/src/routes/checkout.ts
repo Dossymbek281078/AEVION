@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
+import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
+import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode,
   type TierId, type BillingPeriod,
@@ -9,17 +11,21 @@ import { provisionSubscription, countSubscriptions } from "./provisioning";
 export const checkoutRouter = Router();
 
 /**
- * Gumroad checkout с graceful stub-fallback.
+ * Подписочный чекаут (Lite / Medium / Full) с каскадом процессингов:
+ *   1. LemonSqueezy — основной живой процессинг (аккаунт активирован 2026-06-04).
+ *      Провижининг — на POST /api/lemonsqueezy/webhook.
+ *   2. Gumroad — fallback (one-time продукты). Провижининг — на POST /api/gumroad/webhook.
+ *   3. Stub — если ни один не настроен для данного tier:period.
  *
- * Gumroad — единственный KYC-пройденный процессинг (Stripe/Paddle/LemonSqueezy
- * заблокированы). Цена фиксируется в продукте Gumroad; здесь мы строим публичный
- * URL продукта по permalink'у из env. Провижининг подписки выполняется централизованно
- * в POST /api/gumroad/webhook (см. routes/gumroadWebhook.ts) — отдельного вебхука здесь нет.
+ * Цена фиксируется в продукте процессинга (LS variant / Gumroad product) — она
+ * ДОЛЖНА совпадать с tier-ценой из data/pricing.ts (lite 19/190, medium 29/290,
+ * full 49/490).
  *
- * ENV (permalink на tier:period; без него — graceful stub):
- *   GUMROAD_PERMALINK_TIER_PRO_MONTHLY, ..._PRO_ANNUAL,
- *   GUMROAD_PERMALINK_TIER_BUSINESS_MONTHLY, ..._BUSINESS_ANNUAL
- *   GUMROAD_DEFAULT_PERMALINK — catch-all, если конкретный не задан
+ * ENV:
+ *   LemonSqueezy: LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID,
+ *     LEMON_SQUEEZY_VARIANT_{LITE,MEDIUM,FULL}_{MONTHLY,ANNUAL}
+ *   Gumroad (fallback): GUMROAD_PERMALINK_TIER_{LITE,MEDIUM,FULL}_{MONTHLY,ANNUAL},
+ *     GUMROAD_DEFAULT_PERMALINK
  */
 
 const FRONTEND_URL = process.env.FRONTEND_URL?.trim() || "http://localhost:3000";
@@ -119,44 +125,51 @@ checkoutRouter.post("/session", async (req, res) => {
       });
     }
 
-    // Stub-режим — для этого tier:period ещё не задан Gumroad-permalink
-    if (!gumroadPermalinkConfigured(reference)) {
-      if (body.email) {
-        provisionSubscription({
-          email: body.email,
-          tierId: tier.id,
-          period,
-          seats,
-          modules: body.modules ?? [],
-          trialDays,
-          amountUsd: totalUsd,
-          promoCode: body.promoCode,
-          source: "stub_checkout",
-        }).catch((e) => console.error("[stub_provisioning] failed", e));
+    const description = `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`;
+
+    // 1) LemonSqueezy — основной живой процессинг подписок (аккаунт активирован).
+    //    Используется, когда задан LS API + variant для этого tier:period.
+    const lsReady =
+      Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
+      Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim()) &&
+      Boolean(resolveLemonSqueezyVariant(reference));
+    if (lsReady) {
+      try {
+        const intent = await lemonSqueezyPaymentProvider.createIntent({
+          reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+        });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", intentId: intent.intentId });
+      } catch (e) {
+        console.error("[checkout/session] LS createIntent failed, falling back to Gumroad/stub", e);
       }
-      return res.json({
-        url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${totalCents}`,
-        mode: "stub",
-        provider: "gumroad",
-      });
     }
 
-    // Реальный Gumroad checkout — публичный URL продукта по permalink'у.
-    // Цена фиксирована в продукте Gumroad; провижининг — на ping продукта
-    // (POST /api/gumroad/webhook).
-    const intent = await gumroadPaymentProvider.createIntent({
-      reference,
-      amountCents: totalCents,
-      currency: "USD",
-      description: `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`,
-      email: body.email ?? null,
-    });
+    // 2) Gumroad — fallback (one-time продукты / пока LS не настроен).
+    if (gumroadPermalinkConfigured(reference)) {
+      const intent = await gumroadPaymentProvider.createIntent({
+        reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+      });
+      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", intentId: intent.intentId });
+    }
 
-    res.json({
-      url: intent.checkoutUrl,
-      mode: "real",
-      provider: "gumroad",
-      intentId: intent.intentId,
+    // 3) Stub — ни один процессинг не настроен для этого tier:period.
+    if (body.email) {
+      provisionSubscription({
+        email: body.email,
+        tierId: tier.id,
+        period,
+        seats,
+        modules: body.modules ?? [],
+        trialDays,
+        amountUsd: totalUsd,
+        promoCode: body.promoCode,
+        source: "stub_checkout",
+      }).catch((e) => console.error("[stub_provisioning] failed", e));
+    }
+    return res.json({
+      url: `${FRONTEND_URL}/pricing/checkout/success?stub=true&tier=${tier.id}&period=${period}&total=${totalCents}`,
+      mode: "stub",
+      provider: "none",
     });
   } catch (e: unknown) {
     console.error("[checkout/session] failed", e);
@@ -182,10 +195,16 @@ checkoutRouter.get("/subscriptions/count", (_req, res) => {
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────
 checkoutRouter.get("/healthz", (_req, res) => {
+  const lsReady =
+    Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
+    Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
   res.json({
     ok: true,
-    provider: "gumroad",
-    webhook: "/api/gumroad/webhook",
+    primaryProvider: lsReady ? "lemonsqueezy" : "gumroad",
+    providers: {
+      lemonsqueezy: { configured: lsReady, webhook: "/api/lemonsqueezy/webhook" },
+      gumroad: { configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()), webhook: "/api/gumroad/webhook" },
+    },
     frontendUrl: FRONTEND_URL,
   });
 });

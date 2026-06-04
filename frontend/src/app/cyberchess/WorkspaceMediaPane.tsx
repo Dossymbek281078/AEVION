@@ -104,6 +104,12 @@ function paneIframe(p: PaneState, parent: string): { src: string; key: string; e
       : { src: "", key: "tw-empty", ext: "" };
   }
   if (p.tab === "url") {
+    // Авто-конверт youtube/twitch ссылок в embed-форму — сырой /watch?v= или
+    // twitch.tv/канал нельзя iframe'ить (X-Frame-Options). Это и ломало «ссылки».
+    const yid = ytId(p.url);
+    if (yid) return { src: `https://www.youtube-nocookie.com/embed/${yid}?autoplay=1&mute=1&playsinline=1&rel=0`, key: `url-yt-${yid}`, ext: `https://youtube.com/watch?v=${yid}` };
+    const tch = /twitch\.tv/i.test(p.url) ? twChannel(p.url) : null;
+    if (tch) return { src: `https://player.twitch.tv/?channel=${tch}&${buildTwitchParents(parent)}&muted=true&autoplay=true`, key: `url-tw-${tch}`, ext: `https://twitch.tv/${tch}` };
     const u = safeUrl(p.url);
     return u ? { src: u, key: `url-${u}`, ext: u } : { src: "", key: "url-empty", ext: "" };
   }
@@ -359,7 +365,7 @@ export default function WorkspaceMediaPane() {
 
   return (
     <div style={{
-      width: "min(300px, 22vw)", minWidth: 240, maxWidth: 360, alignSelf: "stretch",
+      width: "clamp(320px, 32vw, 600px)", minWidth: 300, maxWidth: 600, alignSelf: "stretch",
       display: "flex", flexDirection: "column",
       borderRadius: 10, overflow: "hidden",
       background: "#0f172a", color: "#e2e8f0",

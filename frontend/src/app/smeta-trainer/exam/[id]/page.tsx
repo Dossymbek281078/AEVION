@@ -25,6 +25,7 @@ import {
 } from "../../lib/ai/scenarios/openingsAdvisor";
 import { buildNoticeAIPrompt, hasDedicatedPanel } from "../../lib/ai/noticeAdvisor";
 import { deterministicBreakdown } from "../../lib/ai/scenarios/scenarioBreakdowns";
+import { buildLsrFormHtml, openPrintWindow } from "../../lib/printForms";
 import { streamLLM } from "../../lib/aiBackend";
 import type { LsrCalc, AiNotice } from "../../lib/types";
 import type { RoomGeometry } from "../../lib/types";
@@ -201,6 +202,13 @@ export default function ExamTaskPage({
   function reset() {
     setLsr(task!.starter);
     setReport(null);
+  }
+
+  function printForm4() {
+    const ok = openPrintWindow(buildLsrFormHtml(lsr, calc));
+    if (!ok && typeof window !== "undefined") {
+      alert("Не удалось открыть окно печати — разрешите всплывающие окна для этого сайта.");
+    }
   }
 
   /**
@@ -478,12 +486,21 @@ export default function ExamTaskPage({
                   {report.grade}
                 </div>
               </div>
-              <button
-                onClick={reset}
-                className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
-              >
-                Начать заново
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={printForm4}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Открыть Форму 4* для печати или сохранения в PDF"
+                >
+                  🖨 Форма 4* (PDF)
+                </button>
+                <button
+                  onClick={reset}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                >
+                  Начать заново
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">

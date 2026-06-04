@@ -20,6 +20,20 @@ interface Exercise {
   steps: string[];
 }
 
+interface CharityStats {
+  total_campaigns: number;
+  active_campaigns: number;
+  total_raised_cents: string | number;
+  total_donors: number;
+  currency: string;
+}
+
+function fmtMoney(cents: string | number): string {
+  const n = typeof cents === 'string' ? parseInt(cents, 10) : cents;
+  if (!Number.isFinite(n)) return '0';
+  return new Intl.NumberFormat('en-US').format(Math.round(n / 100));
+}
+
 const NAV_TABS = [
   { id: 'mood', label: '🌡️ Настроение' },
   { id: 'chat', label: '💬 Собеседник' },
@@ -32,6 +46,7 @@ export default function QGoodPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [moodRefreshKey, setMoodRefreshKey] = useState(0);
   const [backendOk, setBackendOk] = useState<boolean | null>(null);
+  const [charity, setCharity] = useState<CharityStats | null>(null);
 
   useEffect(() => {
     // Check backend health
@@ -44,6 +59,12 @@ export default function QGoodPage() {
       .then(r => r.json())
       .then((d: { exercises?: Exercise[] }) => setExercises(d.exercises || []))
       .catch(() => setExercises([]));
+
+    // Load charity stats (the donation platform half of this module)
+    fetch(apiUrl('/api/qgood/stats'))
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: CharityStats | null) => { if (d) setCharity(d); })
+      .catch(() => {});
   }, []);
 
   return (
@@ -178,6 +199,33 @@ export default function QGoodPage() {
 
       </div>
 
+      {/* Charity side — the donation platform that lives under this module but
+          was previously unreachable from the landing (orphaned subpages). */}
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 16px 8px' }}>
+        <div style={{ background: '#fff', border: '1px solid #e8d5f5', borderRadius: 16, padding: 20, boxShadow: '0 1px 3px rgba(124,58,237,0.06)' }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: '#7c3aed' }}>💜 Благотворительность</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+              Прозрачные кампании · matching-пулы удваивают пожертвования · цепочка донатов проверяема
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10, marginBottom: 16 }}>
+            <GoodStat label="Кампаний" value={charity ? String(charity.total_campaigns) : undefined} />
+            <GoodStat label="Активных" value={charity ? String(charity.active_campaigns) : undefined} />
+            <GoodStat label="Собрано" value={charity ? `$${fmtMoney(charity.total_raised_cents)}` : undefined} />
+            <GoodStat label="Доноров" value={charity ? String(charity.total_donors) : undefined} />
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a href="/qgood/campaigns" style={{ padding: '10px 16px', borderRadius: 10, background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+              Все кампании →
+            </a>
+            <a href="/qgood/matching-pools" style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #d8b4fe', color: '#7c3aed', fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+              Matching pools →
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 16px 32px' }}>
         <MvpConceptBoard
           moduleId="qgood"
@@ -201,6 +249,15 @@ export default function QGoodPage() {
         <br />
         Не является медицинским устройством или заменой психотерапии.
       </div>
+    </div>
+  );
+}
+
+function GoodStat({ label, value }: { label: string; value: string | undefined }) {
+  return (
+    <div style={{ background: '#faf5ff', border: '1px solid #f0e0ff', borderRadius: 12, padding: '12px 10px', textAlign: 'center' }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: '#7c3aed' }}>{value ?? '…'}</div>
+      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
     </div>
   );
 }

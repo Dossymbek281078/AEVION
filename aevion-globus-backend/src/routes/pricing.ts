@@ -192,7 +192,7 @@ pricingRouter.get("/bundles", (_req, res) => {
 pricingRouter.post("/quote", (req, res) => {
   const body = req.body ?? {};
   const tierId = body.tierId as TierId | undefined;
-  if (!tierId || !["free", "pro", "business", "enterprise"].includes(tierId)) {
+  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
     return res.status(400).json({ error: "invalid_tier", tierId });
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
@@ -222,7 +222,7 @@ pricingRouter.post("/promo/validate", (req, res) => {
   if (!code) {
     return res.status(400).json({ valid: false, reason: "empty_code" });
   }
-  if (!tierId || !["free", "pro", "business", "enterprise"].includes(tierId)) {
+  if (!tierId || !["free", "lite", "medium", "full", "enterprise"].includes(tierId)) {
     return res.status(400).json({ valid: false, reason: "invalid_tier" });
   }
   const { promo, reason } = resolvePromoCode(code, tierId);
@@ -278,7 +278,7 @@ pricingRouter.post("/lead", (req, res) => {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase().slice(0, 200) : "";
   const company = typeof body.company === "string" ? body.company.trim().slice(0, 200) : undefined;
   const industry = typeof body.industry === "string" ? body.industry.trim().slice(0, 60) : undefined;
-  const tier = typeof body.tier === "string" && ["free", "pro", "business", "enterprise"].includes(body.tier)
+  const tier = typeof body.tier === "string" && ["free", "lite", "medium", "full", "enterprise"].includes(body.tier)
     ? (body.tier as TierId)
     : undefined;
   const seats = Number.isFinite(body.seats) ? Math.min(10000, Math.max(1, Math.floor(body.seats))) : undefined;

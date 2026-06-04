@@ -25,6 +25,7 @@
 import { Router, type Request, type Response } from "express";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 
 export const gumroadWebhookRouter = Router();
@@ -36,10 +37,12 @@ const SEEN = new Set<string>();
 // we can reverse-map it to a tier reference here — no separate opaque
 // GUMROAD_PRODUCT_<id> mapping needed for the four subscription tiers.
 const TIER_PERMALINK_ENV: Record<string, string> = {
-  GUMROAD_PERMALINK_TIER_PRO_MONTHLY: "tier_pro_monthly",
-  GUMROAD_PERMALINK_TIER_PRO_ANNUAL: "tier_pro_annual",
-  GUMROAD_PERMALINK_TIER_BUSINESS_MONTHLY: "tier_business_monthly",
-  GUMROAD_PERMALINK_TIER_BUSINESS_ANNUAL: "tier_business_annual",
+  GUMROAD_PERMALINK_TIER_LITE_MONTHLY: "tier_lite_monthly",
+  GUMROAD_PERMALINK_TIER_LITE_ANNUAL: "tier_lite_annual",
+  GUMROAD_PERMALINK_TIER_MEDIUM_MONTHLY: "tier_medium_monthly",
+  GUMROAD_PERMALINK_TIER_MEDIUM_ANNUAL: "tier_medium_annual",
+  GUMROAD_PERMALINK_TIER_FULL_MONTHLY: "tier_full_monthly",
+  GUMROAD_PERMALINK_TIER_FULL_ANNUAL: "tier_full_annual",
 };
 
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
@@ -82,11 +85,13 @@ function resolveReference(raw: Record<string, string>): string {
   return "constitution-pro";
 }
 
-function tierForReference(ref: string): "pro" | "business" {
-  // "team" tier (e.g. constitution-team) is the multi-seat plan above Pro
-  // and unlocks the same Pro features as All-Access — map to "business".
-  if (ref === "all-access" || ref.includes("all-access") || ref.includes("business") || ref.includes("team")) return "business";
-  return "pro";
+function tierForReference(ref: string): TierId {
+  const r = ref.toLowerCase();
+  if (r.includes("medium")) return "medium";
+  // all-access / business / team / full → вся экосистема
+  if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
+  // lite / pro / constitution-pro → входной тир
+  return "lite";
 }
 
 function isConstitutionProduct(ref: string): boolean {

@@ -45,7 +45,7 @@ checkoutRouter.post("/session", async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
 
-    if (!body.tierId || !["free", "pro", "business", "enterprise"].includes(body.tierId)) {
+    if (!body.tierId || !["free", "lite", "medium", "full", "enterprise"].includes(body.tierId)) {
       return res.status(400).json({ error: "invalid_tier" });
     }
     const tier = getTier(body.tierId)!;
@@ -98,7 +98,7 @@ checkoutRouter.post("/session", async (req, res) => {
       }
     }
 
-    const trialDays = body.trial && (tier.id === "pro" || tier.id === "business") ? 14 : 0;
+    const trialDays = body.trial && (tier.id === "lite" || tier.id === "medium" || tier.id === "full") ? 14 : 0;
     const totalCents = Math.round(totalUsd * 100);
 
     const reference = `tier_${tier.id}_${period}`;

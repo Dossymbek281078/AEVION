@@ -187,9 +187,13 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
 
 const TIER_DISPLAY: Record<TierId, string> = {
   free: "Free",
-  pro: "Pro",
-  business: "Business",
+  lite: "Lite",
+  medium: "Medium",
+  full: "Full",
   enterprise: "Enterprise",
+  // legacy aliases (deprecated)
+  pro: "Lite",
+  business: "Full",
 };
 
 function welcomeHtml(sub: Subscription): string {

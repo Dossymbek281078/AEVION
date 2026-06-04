@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLsrFormHtml, buildKs2FormHtml, buildSsrFormHtml } from "./printForms";
+import { buildLsrFormHtml, buildKs2FormHtml, buildSsrFormHtml, buildObjectEstimateHtml, buildKs3FormHtml } from "./printForms";
 import type { Lsr, LsrCalc } from "./types";
 
 const lsr: Lsr = {
@@ -100,5 +100,27 @@ describe("buildSsrFormHtml", () => {
     expect(html).toContain("Глава 2");
     expect(html).toContain("НДС 12%");
     expect(html).toContain("ВСЕГО по сводному");
+  });
+});
+
+describe("buildObjectEstimateHtml", () => {
+  const html = buildObjectEstimateHtml(lsr, calc);
+
+  it("объектный расчёт (Форма 3) со строительными работами и итогом", () => {
+    expect(html).toContain("Объектный сметный расчёт");
+    expect(html).toContain("Строит. работы");
+    expect(html).toContain("Итого по объекту");
+    expect(html).toContain("ВСЕГО по объектной смете");
+  });
+});
+
+describe("buildKs3FormHtml", () => {
+  const html = buildKs3FormHtml(lsr, calc, "Июль 2026");
+
+  it("справка КС-3 нарастающим итогом с периодом", () => {
+    expect(html).toContain("Справка о стоимости");
+    expect(html).toContain("Июль 2026");
+    expect(html).toContain("ИТОГО к оплате");
+    expect(html).toContain("Подрядчик");
   });
 });

@@ -223,6 +223,87 @@ export function buildSsrFormHtml(lsr: Lsr, calc: LsrCalc): string {
 </body></html>`;
 }
 
+/** Объектный сметный расчёт (Форма 3) — учебно по одной ЛСР как строительным работам. */
+export function buildObjectEstimateHtml(lsr: Lsr, calc: LsrCalc): string {
+  const m = lsr.meta ?? {};
+  const stroit = calc.totalBeforeVat; // строительные работы (ПЗ+НР+СП)
+  return `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>Объектная смета ${esc(m.objectTitle ?? lsr.title)}</title>
+<style>${PRINT_CSS}</style></head>
+<body>
+<div class="toolbar"><button onclick="window.print()">🖨 Печать / Сохранить в PDF</button></div>
+<h1>Объектный сметный расчёт (Форма 3)</h1>
+<div class="sub">НДЦС РК 8.01-08-2022 · учебная форма AEVION</div>
+<table class="meta">
+  <tr><td class="k">Объект:</td><td>${esc(m.objectTitle ?? lsr.title)}</td><td class="k">Цены:</td><td>${esc(m.priceDate ?? `${lsr.indexRegion} ${lsr.indexQuarter}`)}</td></tr>
+</table>
+<table class="lsr">
+  <thead><tr>
+    <th style="width:40px">№</th><th>Наименование работ и затрат (локальные сметы)</th>
+    <th style="width:110px">Строит. работы, ₸</th><th style="width:90px">Монтаж, ₸</th>
+    <th style="width:90px">Оборуд., ₸</th><th style="width:110px">Всего, ₸</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td class="num">1</td>
+      <td>${esc(m.lsrNumber ? "ЛСР " + m.lsrNumber + " — " : "")}${esc(lsr.title)}</td>
+      <td class="num">${formatKzt(Math.round(stroit))}</td>
+      <td class="num">0</td><td class="num">0</td>
+      <td class="num">${formatKzt(Math.round(stroit))}</td>
+    </tr>
+    <tr class="subtotal"><td></td><td>Итого по объекту</td>
+      <td class="num">${formatKzt(Math.round(stroit))}</td><td class="num">0</td><td class="num">0</td>
+      <td class="num">${formatKzt(Math.round(stroit))}</td></tr>
+    <tr><td></td><td>НДС 12%</td><td colspan="3"></td><td class="num">${formatKzt(Math.round(calc.vat))}</td></tr>
+    <tr class="total"><td></td><td>ВСЕГО по объектной смете</td><td colspan="3"></td>
+      <td class="num">${formatKzt(Math.round(calc.totalWithVat))}</td></tr>
+  </tbody>
+</table>
+<div class="sign">
+  <div class="line">Составил${m.author ? `: ${esc(m.author)}` : ""}</div>
+  <div class="line">Проверил</div>
+</div>
+</body></html>`;
+}
+
+/** КС-3 «Справка о стоимости выполненных работ» (учебно: один отчётный период). */
+export function buildKs3FormHtml(lsr: Lsr, calc: LsrCalc, periodName = "отчётный период"): string {
+  const m = lsr.meta ?? {};
+  const total = calc.totalWithVat;
+  return `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>КС-3 ${esc(m.lsrNumber ?? lsr.id)}</title>
+<style>${PRINT_CSS}</style></head>
+<body>
+<div class="toolbar"><button onclick="window.print()">🖨 Печать / Сохранить в PDF</button></div>
+<h1>Справка о стоимости выполненных работ и затрат (КС-3)</h1>
+<div class="sub">учебная форма AEVION · нарастающим итогом</div>
+<table class="meta">
+  <tr><td class="k">Объект:</td><td>${esc(m.objectTitle ?? lsr.title)}</td><td class="k">Период:</td><td>${esc(periodName)}</td></tr>
+</table>
+<table class="lsr">
+  <thead><tr>
+    <th style="width:40px">№</th><th>Наименование работ и затрат</th>
+    <th style="width:120px">Стоимость с начала, ₸</th>
+    <th style="width:120px">в т.ч. за период, ₸</th>
+  </tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>${esc(m.objectTitle ?? lsr.title)} (с НДС)</td>
+      <td class="num">${formatKzt(Math.round(total))}</td>
+      <td class="num">${formatKzt(Math.round(total))}</td></tr>
+    <tr class="total"><td></td><td>ИТОГО к оплате</td>
+      <td class="num">${formatKzt(Math.round(total))}</td>
+      <td class="num">${formatKzt(Math.round(total))}</td></tr>
+  </tbody>
+</table>
+<div class="sign">
+  <div class="line">Подрядчик${m.author ? `: ${esc(m.author)}` : ""}</div>
+  <div class="line">Заказчик</div>
+</div>
+</body></html>`;
+}
+
 /** Открыть HTML в новом окне и инициировать печать (PDF — через диалог браузера). */
 export function openPrintWindow(html: string): boolean {
   if (typeof window === "undefined") return false;

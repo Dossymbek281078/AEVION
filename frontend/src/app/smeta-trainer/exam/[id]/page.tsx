@@ -26,7 +26,14 @@ import {
 } from "../../lib/ai/scenarios/openingsAdvisor";
 import { buildNoticeAIPrompt, hasDedicatedPanel } from "../../lib/ai/noticeAdvisor";
 import { deterministicBreakdown } from "../../lib/ai/scenarios/scenarioBreakdowns";
-import { buildLsrFormHtml, buildKs2FormHtml, buildSsrFormHtml, openPrintWindow } from "../../lib/printForms";
+import {
+  buildLsrFormHtml,
+  buildKs2FormHtml,
+  buildSsrFormHtml,
+  buildObjectEstimateHtml,
+  buildKs3FormHtml,
+  openPrintWindow,
+} from "../../lib/printForms";
 import { streamLLM } from "../../lib/aiBackend";
 import type { LsrCalc, AiNotice } from "../../lib/types";
 import type { RoomGeometry } from "../../lib/types";
@@ -505,11 +512,25 @@ export default function ExamTaskPage({
                   🖨 КС-2
                 </button>
                 <button
+                  onClick={() => printForm(buildObjectEstimateHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Объектный сметный расчёт (Форма 3)"
+                >
+                  🖨 Форма 3
+                </button>
+                <button
                   onClick={() => printForm(buildSsrFormHtml(lsr, calc))}
                   className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
                   title="Сводный сметный расчёт (Форма 1)"
                 >
                   🖨 ССР
+                </button>
+                <button
+                  onClick={() => printForm(buildKs3FormHtml(lsr, calc))}
+                  className="text-xs px-3 py-2 border border-slate-300 rounded hover:bg-slate-100"
+                  title="Справка о стоимости (КС-3)"
+                >
+                  🖨 КС-3
                 </button>
                 <button
                   onClick={reset}

@@ -23,6 +23,7 @@ import {
   explainOpeningsDeterministic,
   buildOpeningsAIPrompt,
 } from "../../lib/ai/scenarios/openingsAdvisor";
+import { buildNoticeAIPrompt, hasDedicatedPanel } from "../../lib/ai/noticeAdvisor";
 import { streamLLM } from "../../lib/aiBackend";
 import type { LsrCalc, AiNotice } from "../../lib/types";
 import type { RoomGeometry } from "../../lib/types";
@@ -552,6 +553,14 @@ export default function ExamTaskPage({
                       {n.reference && (
                         <div className="text-[10px] text-slate-500 mt-1">📎 {n.reference}</div>
                       )}
+                      {!hasDedicatedPanel(n.scenario) && (
+                        <NoticeAdvisor
+                          notice={n}
+                          lsr={lsr}
+                          calc={calc}
+                          notices={report.breakdown.ai.notices}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -838,6 +847,56 @@ function OpeningsAdvisorPanel({
           <div className="text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap">
             {aiText || (streaming ? "…" : "")}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoticeAdvisor({
+  notice,
+  lsr,
+  calc,
+  notices,
+}: {
+  notice: AiNotice;
+  lsr: Lsr;
+  calc: LsrCalc;
+  notices: AiNotice[];
+}) {
+  const [text, setText] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [asked, setAsked] = useState(false);
+
+  async function ask() {
+    setAsked(true);
+    setStreaming(true);
+    setText("");
+    const { question, extraSystem } = buildNoticeAIPrompt(notice);
+    try {
+      await streamLLM(question, [], lsr, calc, notices, {
+        extraSystem,
+        onChunk: (t) => setText((p) => p + t),
+      });
+    } catch {
+      setText((p) => p || "Не удалось получить ответ ИИ.");
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={ask}
+        disabled={streaming}
+        className="text-[10px] px-2 py-1 rounded border border-current opacity-80 hover:opacity-100 font-semibold disabled:opacity-50"
+      >
+        🤖 {streaming ? "ИИ разбирает…" : "Разобрать с ИИ"}
+      </button>
+      {asked && (
+        <div className="mt-1.5 text-[11px] text-slate-800 leading-relaxed whitespace-pre-wrap bg-white/60 rounded p-2">
+          {text || (streaming ? "…" : "")}
         </div>
       )}
     </div>

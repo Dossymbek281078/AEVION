@@ -485,6 +485,12 @@ export default function VeilNetXLanding() {
         </div>
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
+            href="/veilnetx/ledger"
+            className="px-5 py-2.5 bg-cyan-700 hover:bg-cyan-600 rounded-lg text-sm font-semibold"
+          >
+            🔗 Ledger Explorer — live verified chain →
+          </Link>
+          <Link
             href="https://api.aevion.app/api/veilnetx/status"
             className="px-5 py-2.5 border border-slate-700 hover:bg-slate-900 rounded-lg text-sm font-semibold"
           >

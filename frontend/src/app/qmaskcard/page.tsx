@@ -199,6 +199,7 @@ export default function QMaskCardPage() {
         <div className="mx-auto max-w-6xl flex items-center justify-between">
           <Link href="/" className="text-sm text-slate-400 hover:text-white">← AEVION</Link>
           <div className="flex items-center gap-3">
+            <Link href="/qmaskcard/dashboard" className="text-xs text-slate-400 hover:text-white">Публичная статистика →</Link>
             <ModulePricingChip moduleId="qmaskcard" theme="dark" />
             <div className="text-xs font-mono tracking-[0.2em] text-amber-300">Q·MASKCARD</div>
           </div>

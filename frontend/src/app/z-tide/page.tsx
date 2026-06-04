@@ -267,7 +267,10 @@ export default function ZTidePage() {
       {/* Leaderboard */}
       <section className="mx-auto max-w-6xl px-5 pb-8">
         <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 backdrop-blur">
-          <div className="text-sm font-semibold text-violet-200 mb-4">🏆 Лидерборд</div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm font-semibold text-violet-200">🏆 Лидерборд</div>
+            <Link href="/z-tide/leaderboard" className="text-xs text-slate-400 hover:text-white">весь топ-50 →</Link>
+          </div>
           {leaderboard.length === 0 ? (
             <div className="text-slate-500 text-center py-6">Пока пусто — стань первым приливом.</div>
           ) : (

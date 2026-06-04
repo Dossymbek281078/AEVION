@@ -4215,6 +4215,21 @@ export default function CyberChessPage(){
       prevCp=cp;
     }
     sAnalysis(results);sAnalyzing(false);sShowAnal(true);
+    // Completion summary — мгновенный ответ «как я сыграл» (точность + ACPL + зевки)
+    // по ходам игрока. Формула точности совпадает с лаунчпадом (consistency).
+    (()=>{
+      const isWhite=pCol==="w";
+      const pm=results.filter((_,i)=>isWhite?(i%2===0):(i%2===1));
+      const n=pm.length||1;
+      const grt=pm.filter(m=>m.quality==="great"||m.quality==="brilliant").length;
+      const goo=pm.filter(m=>m.quality==="good").length;
+      const ina=pm.filter(m=>m.quality==="inacc").length;
+      const mis=pm.filter(m=>m.quality==="mistake").length;
+      const blu=pm.filter(m=>m.quality==="blunder").length;
+      const acc=Math.round(100*(grt*1+goo*0.85+ina*0.6+mis*0.3)/n);
+      const acpl=Math.round(pm.reduce((s,m)=>s+m.cpLoss,0)/n);
+      showToast(`✅ Точность ${acc}% · ср. потеря ${acpl}cp${blu?` · ${blu} зев.`:""}${mis?` · ${mis} ош.`:""}`,blu||acc<60?"info":"success");
+    })();
     // Auto-populate blunder book: find positions where player blundered
     const blunders:BlunderEntry[]=[];
     const playerIsWhite=pCol==="w";

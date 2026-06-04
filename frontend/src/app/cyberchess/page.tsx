@@ -6905,17 +6905,40 @@ export default function CyberChessPage(){
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               <Btn size="sm" variant="primary" onClick={()=>{
-                // Полный анализ через chessCoachEngine — позиция + тактика + дебют + принципы
                 const fen=game.fen();
-                const engineBody=generatePositionExplanation(fen,hist.length,evalCp);
+                // 1) Мат в 1 — мгновенно, без движка. Коуч обязан это видеть.
+                try{
+                  const c=new Chess(fen);
+                  for(const m of c.moves()){const t=new Chess(fen);t.move(m);if(t.isCheckmate()){
+                    sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:`🏆 МАТ В 1 ХОД: ${m}!\nНе ищи ничего другого — ставь мат, партия выиграна.`});
+                    return;
+                  }}
+                }catch{}
                 const tactics=spotTactics(fen);
                 const tacticsHint=tactics.length>0?"\n\n"+tactics.join("\n"):"";
                 const opening=identifyOpening(hist.join(" "));
-                const openingHint=opening?`\n\n📚 Дебют: ${opening.name} (${opening.eco})\n${opening.character}\n💡 ${opening.whiteIdea}`:"";
-                const phaseKey=hist.length<20?"opening":hist.length<40?"middlegame":"endgame";
-                const principles=getPhaseAdvice(phaseKey,2).map((p:string)=>`• ${p}`).join("\n");
-                const principlesHint=`\n\n📖 Принципы ${phaseKey==="opening"?"дебюта":phaseKey==="middlegame"?"миттельшпиля":"эндшпиля"}:\n${principles}`;
-                sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:engineBody+openingHint+tacticsHint+principlesHint});
+                // Дебют-блок и общие принципы — только в дебюте, иначе это «безразрядник».
+                const openingHint=(opening&&hist.length<20)?`\n\n📚 Дебют: ${opening.name} (${opening.eco})\n${opening.character}\n💡 ${opening.whiteIdea}`:"";
+                const buildBody=(cp:number,mate:number)=>{
+                  const engineBody=generatePositionExplanation(fen,hist.length,cp,mate);
+                  let principlesHint="";
+                  if(mate===0&&Math.abs(cp)<300){
+                    const phaseKey=hist.length<20?"opening":hist.length<40?"middlegame":"endgame";
+                    const principles=getPhaseAdvice(phaseKey,2).map((p:string)=>`• ${p}`).join("\n");
+                    principlesHint=`\n\n📖 Принципы ${phaseKey==="opening"?"дебюта":phaseKey==="middlegame"?"миттельшпиля":"эндшпиля"}:\n${principles}`;
+                  }
+                  return engineBody+openingHint+tacticsHint+principlesHint;
+                };
+                // 2) Реальный eval движка (бело-относительный), иначе fallback на текущий стейт.
+                if(!sfR.current?.ready()){
+                  sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:buildBody(evalCp,evalMate)});
+                  return;
+                }
+                sCoachRemark({kind:"position",title:"⏳ Coach анализирует позицию…",body:"Считаю движком…"});
+                const sign=fen.split(" ")[1]==="w"?1:-1;let lc=0,lmt=0;
+                sfR.current.eval(fen,14,(cc:number,mm:number)=>{lc=cc*sign;lmt=mm*sign;},()=>{
+                  sCoachRemark({kind:"position",title:"🔍 Полный анализ позиции",body:buildBody(lc,lmt)});
+                });
               }}>🔍 Объясни</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Найди план — top-3 моих лучших ходов + комментарий

@@ -126,7 +126,6 @@ const TW_CHANNELS: [string, string][] = [
   ["chess", "🎥 Chess.com"],
   ["botezlive", "🎥 BotezLive"],
   ["gothamchess", "🎥 GothamChess"],
-  ["danya", "🎥 Naroditsky"],
 ];
 
 function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {

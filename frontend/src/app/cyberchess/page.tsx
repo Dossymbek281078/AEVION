@@ -4695,7 +4695,9 @@ export default function CyberChessPage(){
           </button>
           <button onClick={()=>{
             if(pip.open){pip.hide();return}
-            const url=window.prompt("YouTube или Twitch URL для PiP-окна:","https://www.twitch.tv/gmhikaru");
+            // Дефолт — сохранённый любимый стример пользователя (без хардкода имён).
+            let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}
+            const url=window.prompt("YouTube или Twitch URL для PiP-окна:",def);
             if(!url)return;const src=detectMediaSource(url.trim());
             if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);
           }} title="Floating PiP — видео поверх доски"
@@ -10158,7 +10160,7 @@ ${question.trim()}`;
     {/* PiP UX polish: variant-of-day pulsing stream suggestion.
         Appears once per day in the bottom-right corner when PiP is closed AND
         today's daily variant is unplayed. Two CTAs:
-          1) "Включить" → opens a Twitch stream of a relevant GM (Naroditsky default)
+          1) "Включить" → opens the user's favorite Twitch stream (configurable, no hardcoded names)
           2) "×" → dismiss for the rest of the day (localStorage-keyed by date) */}
     {showPipSuggest&&<div
       role="alert"
@@ -10173,11 +10175,20 @@ ${question.trim()}`;
         fontSize:13,fontWeight:700,maxWidth:340,
       }}>
       <span style={{fontSize:18,lineHeight:1}}>📺</span>
-      <span style={{flex:1}}>Включи стрим от GM Naroditsky к {dailyVariantInfo?.variant?`варианту дня (${dailyVariantInfo.variant})`:"варианту дня"}?</span>
+      <span style={{flex:1}}>Включить стрим любимого стримера к {dailyVariantInfo?.variant?`варианту дня (${dailyVariantInfo.variant})`:"варианту дня"}?</span>
       <button
         type="button"
         onClick={()=>{
-          pip.show({kind:"twitch",url:"gmnaroditsky",title:"GM Naroditsky · вариант дня"});
+          // Любимый стример — настраиваемый канал, без хардкода имён. Сохраняется один раз.
+          let fav="";try{fav=localStorage.getItem("cc_fav_streamer_v1")||""}catch{}
+          if(!fav){
+            const v=window.prompt("Twitch-канал любимого стримера (ник или ссылка):","");
+            if(!v)return;
+            fav=v.trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i,"").replace(/\/.*$/,"");
+            if(!fav)return;
+            try{localStorage.setItem("cc_fav_streamer_v1",fav)}catch{}
+          }
+          pip.show({kind:"twitch",url:fav,title:"Стрим любимого стримера"});
           dismissPipSuggest();
         }}
         style={{

@@ -2783,7 +2783,7 @@ export default function CyberChessPage(){
         }catch{showToast("Не удалось скопировать","error")}
       }
       if(e.key==="n"||e.key==="N"){const c=kbCtxRef.current;if(c.tab==="play"&&(c.setup||!c.on||!!c.over)){e.preventDefault();newGRef.current()}}
-      if(e.key==="r"||e.key==="R"){e.preventDefault();sRepertoireOpen(v=>!v)}
+      if(e.key==="r"||e.key==="R"){if(kbCtxRef.current.tab==="puzzles")return;e.preventDefault();sRepertoireOpen(v=>!v)} // в пазлах R = рестарт (см. отдельный puzzle-хэндлер)
       if(hist.length===0)return;
       if(e.key==="ArrowLeft"){
         e.preventDefault();
@@ -2792,6 +2792,7 @@ export default function CyberChessPage(){
         try{const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}catch{}
       }
       if(e.key==="ArrowRight"){
+        if(kbCtxRef.current.tab==="puzzles")return; // в пазлах → = следующий пазл (см. отдельный puzzle-хэндлер)
         e.preventDefault();
         const cur=browseIdx<0?hist.length:browseIdx;
         const ni=Math.min(hist.length,cur+1);
@@ -4025,6 +4026,32 @@ export default function CyberChessPage(){
   const nextPz=useCallback(()=>{const nextIdx=(pzI+1)%Math.max(1,fPz.length);ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
 
+  /* ── Puzzle hotkeys — H: подсказка · N/→: следующий · R: рестарт текущего.
+     Отдельный хэндлер (определён ПОСЛЕ nextPz во избежание TDZ). Глобальный хэндлер
+     в пазлах h/n не трогает (no-op), а r/→ там отдан этому (см. guard в нём). ── */
+  useEffect(()=>{
+    if(tab!=="puzzles")return;
+    const h=(e:KeyboardEvent)=>{
+      const t=e.target as HTMLElement;
+      if(t?.tagName==="INPUT"||t?.tagName==="TEXTAREA"||t?.tagName==="SELECT")return;
+      if(e.ctrlKey||e.metaKey||e.altKey)return;
+      if(!pzCurrent)return;
+      if(e.key==="h"||e.key==="H"){
+        if(pzAttempt==="shown"||pzAttempt==="correct")return;
+        e.preventDefault();
+        if(!spendChessy(5,"подсказка"))return;
+        sPzAttempt("shown");
+      }else if(e.key==="n"||e.key==="N"||e.key==="ArrowRight"){
+        e.preventDefault();nextPz();
+      }else if(e.key==="r"||e.key==="R"){
+        e.preventDefault();
+        try{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sSel(null);sVm(new Set());}catch{}
+      }
+    };
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[tab,pzCurrent,pzAttempt,nextPz,spendChessy]);
+
   /* ── Blunder Rewind — превращает блундер игрока в персональный пазл.
      Берёт позицию ДО ошибки, запрашивает у Stockfish лучший ход,
      загружает как обычный puzzle (reusing pzCurrent infra). ── */
@@ -4190,10 +4217,11 @@ export default function CyberChessPage(){
   /* ── Post-game analysis ── */
   const runAnalysis=useCallback(async(depth=16)=>{
     if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}
-    sAnalyzing(true);sAnalysis([]);
+    sAnalyzing(true);sAnalysis([]);sAnalysisProgress(0);
     const results:{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]=[];
     let prevCp=0;
     for(let i=0;i<fenHist.length;i++){
+      sAnalysisProgress(Math.round((i/fenHist.length)*100)); // прогресс «N/всего» во время ручного разбора
       const fen=fenHist[i];const turn=fen.split(" ")[1];
       const{cp,mate}=await new Promise<{cp:number;mate:number}>(res=>{
         let lastCp=0,lastMate=0;
@@ -4214,7 +4242,7 @@ export default function CyberChessPage(){
       }
       prevCp=cp;
     }
-    sAnalysis(results);sAnalyzing(false);sShowAnal(true);
+    sAnalysis(results);sAnalyzing(false);sShowAnal(true);sAnalysisProgress(100);
     // Completion summary — мгновенный ответ «как я сыграл» (точность + ACPL + зевки)
     // по ходам игрока. Формула точности совпадает с лаунчпадом (consistency).
     (()=>{
@@ -7794,7 +7822,7 @@ export default function CyberChessPage(){
           {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={()=>runAnalysis()} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>
             🔍 Проанализировать всю партию ({hist.length} ходов)
           </button>}
-          {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Analyzing…</div>}
+          {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Анализирую… {analysisProgress}%</div>}
 
           {/* Move list + premoves — hidden in info/coach sub-tabs during active play */}
           {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
@@ -7851,6 +7879,23 @@ export default function CyberChessPage(){
                 </select>}
                 <button onClick={()=>{sReplaying(false);const ni=browseIdx<0?hist.length:Math.min(hist.length,browseIdx+1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni>=hist.length?-1:ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Вперёд">▶</button>
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[fenHist.length-1]);setGame(g);sBk(k=>k+1);sBrowseIdx(-1);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:browseIdx<0?`1px solid ${T.accent}`:`1px solid ${T.border}`,background:browseIdx<0?"rgba(5,150,105,0.1)":"#fff",fontSize:11,cursor:"pointer"}} title="К последнему">⏭</button>
+                {/* Навигация по ключевым моментам: зевки/ошибки/блестящие. Прыжок на позицию
+                    ПЕРЕД ходом (browseIdx=ply), как 📌 — чтобы искать лучший ход. */}
+                {tab==="analysis"&&analysis.length>0&&(()=>{
+                  const moments=analysis.filter(a=>a.quality==="blunder"||a.quality==="mistake"||a.quality==="brilliant").map(a=>a.move-1).filter(p=>p>=0).sort((x,y)=>x-y);
+                  if(!moments.length)return null;
+                  const cur=browseIdx<0?hist.length:browseIdx;
+                  const prev=[...moments].reverse().find(p=>p<cur);
+                  const next=moments.find(p=>p>cur);
+                  const glyph=(q?:string)=>q==="brilliant"?"!!":q==="blunder"?"??":q==="mistake"?"?":"●";
+                  const jump=(p:number)=>{try{const g=new Chess(fenHist[p]);setGame(g);sBk(k=>k+1);sBrowseIdx(p);sLm(null);sSel(null);sVm(new Set());sReplaying(false);const a=analysis.find(x=>x.move-1===p);showToast(`${glyph(a?.quality)} Ключевой момент · ход ${Math.floor(p/2)+1}`,"info");}catch{}};
+                  const nb=(enabled:boolean):React.CSSProperties=>({padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,fontWeight:800,cursor:enabled?"pointer":"default",opacity:enabled?1:0.4,color:T.danger});
+                  return <>
+                    <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
+                    <button disabled={prev===undefined} onClick={()=>prev!==undefined&&jump(prev)} style={nb(prev!==undefined)} title="Пред. ключевой момент (зевок/ошибка/блеск)">⟨◆</button>
+                    <button disabled={next===undefined} onClick={()=>next!==undefined&&jump(next)} style={nb(next!==undefined)} title="След. ключевой момент (зевок/ошибка/блеск)">◆⟩</button>
+                  </>;
+                })()}
               </div>}
             </div>
             {/* Analysis progress bar */}

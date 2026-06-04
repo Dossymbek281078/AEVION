@@ -14,6 +14,7 @@ import { calcLsr, formatKzt } from "../../lib/calc";
 import { gradeExam, type ExamReport } from "../../lib/examGrader";
 import { findExamTask } from "../../lib/examTasks";
 import { saveAttempt, bestAttempt, failedAttemptsCount } from "../../lib/examJournal";
+import { syncExamAttempt } from "../../lib/examSync";
 import { logTransfer } from "../../lib/transferLog";
 import { isLessonVisited, findLesson } from "../../lib/examLessons";
 import { buildRemediation, type RemSeverity } from "../../lib/examRemediation";
@@ -193,6 +194,8 @@ export default function ExamTaskPage({
     const r = gradeExam(lsr, task!.reference, task!.object);
     setReport(r);
     saveAttempt(task!.id, task!.title, r, { trap: findLesson(task!.id)?.trap });
+    // дублируем сдачу на backend для куратора (fire-and-forget, бэкенд опционален)
+    void syncExamAttempt(task!.id, task!.title, r);
     const b = bestAttempt(task!.id);
     setBestSoFar(b ? b.score : null);
     setFailedCount(failedAttemptsCount(task!.id));

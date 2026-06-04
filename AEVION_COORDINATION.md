@@ -169,7 +169,7 @@ C) [третий вариант]
 | Сессия | Модуль / файл | Что делается | Обновлено |
 |--------|--------------|--------------|-----------|
 | DevHub | `aevion-globus-backend/src/routes/devhub.ts` + `frontend/src/app/devhub/[id]/page.tsx` + `scripts/devhub-prod-smoke.js` | **Paddle как 5-я медиа-интеграция DevHub.** Тонкий `/api/devhub/media/paddle-checkout` поверх готового `lib/paddleClient.ts` (reuse, без дублирования), Stripe/Paddle переключатель в payment-табе, smoke 47→48. verify зелёный. | 2026-06-01 UTC+5 |
-| Payments | `data/pricing.ts` + `routes/{checkout,pricing,provisioning,gumroadWebhook}.ts` + LS (`lemonSqueezy*`) | **Новая модель тарифов Lite/Medium/Full** (было pro/business). Lite $19 (1 на выбор), Medium $29 (бандл 10 апп), Full $49 (всё). Годовая ×10. pro/business — legacy-алиасы в union. **LemonSqueezy активирован → перевожу LS-чекаут на новые тиры** (был на bundles+all-access). commit --only. | 2026-06-04 UTC+5 |
+| Payments | ✅ DONE 2026-06-04 | **Lite/Medium/Full + LemonSqueezy primary.** Backend (pricing/checkout/webhook/provisioning) + LS-чекаут (LS→Gumroad→stub) + фронт `/pricing` + дочерние pricing-страницы — все на новые тиры. Backend tsc + frontend build зелёные. 7 коммитов (bf67782a..8afbee11), не запушены. Ждёт: variant-ID из LS-дашборда + ENV на Railway. | 2026-06-04 UTC+5 |
 | _free_ | — | **COVERAGE-CLOSEOUT SESSION COMPLETE 2026-05-19.** 26 read-only prod-smokes (qshield drift fix + 3 new wirings + openapi-completeness), OpenAPI 0.7.0 documents 39 module prefixes (was 23 in 0.6.0), все 20 soft prefixes теперь present. | 2026-05-19 13:00 UTC+5 |
 
 ### Завершено 2026-05-19 (OpenAPI 0.7.0 + smoke gap closure)

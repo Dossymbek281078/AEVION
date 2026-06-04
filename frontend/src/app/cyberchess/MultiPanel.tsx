@@ -231,6 +231,7 @@ export default function MultiPanel({ open, onClose }: Props) {
               <iframe
                 src={makeIframeSrc(p)}
                 title={p.label || p.id}
+                {...({ credentialless: "" } as Record<string, unknown>)}
                 allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                 allowFullScreen
                 style={{ flex: 1, border: "none", background: "#000", minHeight: 0 }}

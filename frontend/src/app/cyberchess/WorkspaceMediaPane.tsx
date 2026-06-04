@@ -240,6 +240,10 @@ function PaneBody({ p, idx, isActive, onSelect, onUpdate }: {
             <iframe
               key={key}
               src={src}
+              // credentialless: ОБЯЗАТЕЛЕН — страница /cyberchess под COEP:credentialless
+              // (нужен для Stockfish SharedArrayBuffer). Без этого атрибута кросс-доменный
+              // iframe YouTube/Twitch блокируется и плеер не запускается. Доказано тестом.
+              {...({ credentialless: "" } as Record<string, unknown>)}
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write; accelerometer; gyroscope"
               allowFullScreen
               referrerPolicy="origin-when-cross-origin"

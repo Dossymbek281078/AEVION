@@ -329,6 +329,8 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           {embedSrc ? (
             <iframe
               src={embedSrc}
+              // credentialless обязателен под COEP:credentialless /cyberchess — иначе YouTube/Twitch блокируется.
+              {...({ credentialless: "" } as Record<string, unknown>)}
               allow="autoplay; fullscreen; picture-in-picture; encrypted-media; clipboard-write; accelerometer; gyroscope"
               allowFullScreen
               referrerPolicy="origin-when-cross-origin"
@@ -466,6 +468,7 @@ export default function WorkspacePiP({ initialSource, defaultPosition, onClose, 
           </div>
           <iframe
             src={buildTwitchChatSrc(source.url, parent)}
+            {...({ credentialless: "" } as Record<string, unknown>)}
             style={{ flex: 1, width: "100%", border: "none", background: "#0e0e10" }}
           />
         </div>

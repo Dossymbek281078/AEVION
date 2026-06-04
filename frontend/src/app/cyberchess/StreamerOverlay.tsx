@@ -222,6 +222,7 @@ function PanelHost({ kind, state, onChange, onClose }: PanelHostProps) {
             <iframe
               key={embed}
               src={embed}
+              {...({ credentialless: "" } as Record<string, unknown>)}
               allow="autoplay; encrypted-media; picture-in-picture"
               allowFullScreen
               style={{ width: "100%", height: "100%", border: 0, display: "block" }}

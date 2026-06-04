@@ -389,14 +389,22 @@ C) [третий вариант]
 
 ### Pending cross-zone change requests
 
+- **2026-06-04** — `aevion-core/main` (backend/infra prod-smoke audit) → owners of `qbuild` (`aevion-build`) + `payments` (`frontend-payments`)
+  - **Что:** express-rate-limit логирует на КАЖДОМ старте бэка `ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper function for IPv6 addresses. This could allow IPv6 users to bypass limits`. 5 кастомных keyGenerator'ов:
+    - `routes/build/ai.ts:21`, `routes/build/public.ts:31` — зона **qbuild**
+    - `routes/qpaynet.ts:122`, `:135`, `:159` — зона **payments**
+  - **Почему:** keyGenerator берёт `req.ip` напрямую. Для IPv6 это дыра — каждый адрес из клиентского /64 считается уникальным ключом → IPv6-клиент обходит rate limit. Нужно оборачивать IP через `ipKeyGenerator()` из express-rate-limit.
+  - **Как всплыло:** write-path smoke против локального бэка 2026-06-04. Non-fatal (лимитер работает), но IPv6-bypass — реальная (низкая severity) дыра в защите.
+  - **Что нужно в ваших зонах:** `import { ipKeyGenerator } from "express-rate-limit"`, и в каждом keyGenerator вернуть `ipKeyGenerator(req.ip)` (сохранив ваш кастомный префикс, если он есть). Или вынести общий хелпер в `lib/rateLimit.ts`.
+  - **Срочность:** low (security hardening). Свою правку не делал — обе зоны чужие/активные (payments-окно сейчас правит `gumroadWebhook.ts`).
+
 - **2026-06-01** — `aevion-core/main` (Revenue Hub) → owner of `veilnetx` zone (`aevion-build`)
-  - **Что:** `frontend/src/app/veilnetx/page.tsx:308` — TS2339 `Property 'note' does not exist on type 'Inspect'` (`{server.note}`). Это **единственная** type-ошибка во всём фронте — она роняет `next build` / `npm run verify` для ВСЕХ сессий.
-  - **Как всплыло:** прогонял `npm run build:frontend` как gate для пивота Revenue Hub на Gumroad. Мои revenue-файлы tsc-чистые; красный билд — только из-за этой строки.
-  - **Что нужно в вашей зоне:** в типе `Inspect` добавить `note?: string`, либо убрать `{server.note}` из JSX (строка 308). Файл грязный/недопушенный (`f8e6a7a8`).
-  - **Срочность:** med — общий frontend build не проходит, пока не починят. Свою правку не делал (чужая зона).
+  - **✅ RESOLVED 2026-06-04** (`aevion-core/main` infra audit): `frontend` tsc = 0 ошибок, строка 308 в `veilnetx/page.tsx` больше не обращается к `server.note`. `next build` разблокирован для всех. Закрываю.
+  - **Что было:** `frontend/src/app/veilnetx/page.tsx:308` — TS2339 `Property 'note' does not exist on type 'Inspect'` (`{server.note}`). Единственная type-ошибка во всём фронте — роняла `next build` для ВСЕХ сессий.
 
 - **2026-05-12** — `aevion-core/main` → owner of `aevion-build` (`routes/veilnetxLedger.ts`)
-  - **Цель:** применить canonical JSON (sorted keys) в `entryHash` payload — и для POST `/entries`, и для GET `/chain/verify`.
+  - **✅ DONE 2026-06-03** (`aevion-core/main`, commit `7911e69c`): `routes/veilnetxLedger.ts` теперь импортирует `canonicalJson` из `../lib/ecosystemEvents` и применяет в 3 местах (POST `/entries` insert, `/entries/:id` integrity, `/chain/verify` recompute). Запушено, Railway задеплоил, выполнен `ALLOW_CHAIN_REBUILD=1 ALLOW_CHAIN_REBUILD_PROD=1 node scripts/rebuild-veilnetx-chain.js` (508 строк, head `a01d2066…`). Прод `/chain/verify`=**true**, `fintech-prod-smoke` 53/53. Хэндофф закрыт.
+  - **Цель (была):** применить canonical JSON (sorted keys) в `entryHash` payload — и для POST `/entries`, и для GET `/chain/verify`.
   - **Почему:** Postgres JSONB переупорядочивает ключи `meta` при storage. Сейчас insert-time хэш считается над `JSON.stringify({txId, walletId, feeKzt})`, а verify-time над JSONB-возвращённым `{txId, feeKzt, walletId}` → SHA расходится → `/chain/verify` ложно репортит `brokenAt`. Подтверждено перебором перестановок ключей (doctor script).
   - **Что уже сделано в моей зоне (главный коммит `8c93bdc1`):** `lib/ecosystemEvents.ts` экспортирует `canonicalJson()` и использует его для `metaJson` хэша. `scripts/rebuild-veilnetx-chain.js` зеркалит ту же функцию (коммит `6d6e01bc`).
   - **Что нужно в твоей зоне:** в `routes/veilnetxLedger.ts` импортировать `canonicalJson` из `../lib/ecosystemEvents` и заменить два места `JSON.stringify(meta)` (в POST `/entries` insert + в `/chain/verify` recompute loop) на `canonicalJson(meta)`. После деплоя выполнить `ALLOW_CHAIN_REBUILD=1 ALLOW_CHAIN_REBUILD_PROD=1 node scripts/rebuild-veilnetx-chain.js` чтобы перебить исторические хэши на новый формат.

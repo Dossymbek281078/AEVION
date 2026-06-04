@@ -6691,7 +6691,7 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 252px",width:252,minWidth:0,maxWidth:252,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 auto",width:"clamp(280px,20vw,340px)",minWidth:0,maxWidth:340,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,

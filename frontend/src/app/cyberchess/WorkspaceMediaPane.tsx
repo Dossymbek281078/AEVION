@@ -369,7 +369,9 @@ export default function WorkspaceMediaPane() {
 
   return (
     <div style={{
-      width: "clamp(320px, 32vw, 600px)", minWidth: 300, maxWidth: 600, alignSelf: "stretch",
+      // Растягиваемся на всё свободное место строки (доска + рейл держат свои размеры,
+      // остаток забирает медиа-окно). minWidth держит юзабельность на узких экранах.
+      flex: "1 1 auto", minWidth: 340, maxWidth: "min(60vw, 1000px)", alignSelf: "stretch",
       display: "flex", flexDirection: "column",
       borderRadius: 10, overflow: "hidden",
       background: "#0f172a", color: "#e2e8f0",

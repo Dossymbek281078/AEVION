@@ -24,6 +24,7 @@ import {
   buildOpeningsAIPrompt,
 } from "../../lib/ai/scenarios/openingsAdvisor";
 import { buildNoticeAIPrompt, hasDedicatedPanel } from "../../lib/ai/noticeAdvisor";
+import { deterministicBreakdown } from "../../lib/ai/scenarios/scenarioBreakdowns";
 import { streamLLM } from "../../lib/aiBackend";
 import type { LsrCalc, AiNotice } from "../../lib/types";
 import type { RoomGeometry } from "../../lib/types";
@@ -553,6 +554,14 @@ export default function ExamTaskPage({
                       {n.reference && (
                         <div className="text-[10px] text-slate-500 mt-1">📎 {n.reference}</div>
                       )}
+                      {(() => {
+                        const bd = deterministicBreakdown(lsr, n);
+                        return bd ? (
+                          <div className="mt-2 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap bg-white/60 rounded p-2 border border-slate-200">
+                            {renderBold(bd)}
+                          </div>
+                        ) : null;
+                      })()}
                       {!hasDedicatedPanel(n.scenario) && (
                         <NoticeAdvisor
                           notice={n}

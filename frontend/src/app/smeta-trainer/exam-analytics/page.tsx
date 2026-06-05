@@ -108,7 +108,7 @@ export default function ExamAnalyticsPage() {
   const totalGrades = Object.values(gradeDistribution).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-baseline justify-between mb-4">
           <div>
@@ -183,11 +183,11 @@ export default function ExamAnalyticsPage() {
                   return (
                     <li
                       key={m.action}
-                      className="grid grid-cols-[28px_1fr_160px_70px] gap-2 items-center text-xs"
+                      className="grid grid-cols-[28px_1fr_70px] md:grid-cols-[28px_1fr_160px_70px] gap-2 items-center text-xs"
                     >
                       <div className="text-slate-400 font-mono">{i + 1}.</div>
                       <div className="text-slate-800 truncate" title={m.action}>{m.action}</div>
-                      <div className="bg-slate-100 rounded h-2 overflow-hidden relative">
+                      <div className="hidden md:block bg-slate-100 rounded h-2 overflow-hidden relative">
                         <div
                           className="absolute inset-y-0 left-0 bg-amber-500"
                           style={{ width: `${(m.count / max) * 100}%` }}
@@ -265,14 +265,14 @@ export default function ExamAnalyticsPage() {
                 return (
                   <li
                     key={s.scenario}
-                    className="grid grid-cols-[32px_1fr_200px_60px] gap-2 items-center text-xs"
+                    className="grid grid-cols-[32px_1fr_60px] md:grid-cols-[32px_1fr_200px_60px] gap-2 items-center text-xs"
                   >
                     <div className="text-slate-400 font-mono">{i + 1}.</div>
                     <div>
                       <div className="font-medium text-slate-800">{scenarioLabel(s.scenario).label}</div>
                       <div className="text-[10px] text-slate-500">{scenarioLabel(s.scenario).short}</div>
                     </div>
-                    <div className="bg-slate-100 rounded h-2 overflow-hidden relative">
+                    <div className="hidden md:block bg-slate-100 rounded h-2 overflow-hidden relative">
                       <div
                         className="absolute inset-y-0 left-0 bg-red-500"
                         style={{ width: `${pct}%` }}
@@ -306,13 +306,13 @@ export default function ExamAnalyticsPage() {
               return (
                 <li
                   key={s.scenario}
-                  className="grid grid-cols-[1fr_180px_110px] gap-2 items-center text-xs"
+                  className="grid grid-cols-[1fr_110px] md:grid-cols-[1fr_180px_110px] gap-2 items-center text-xs"
                 >
                   <div>
                     <div className="font-medium text-slate-800">{lbl.label}</div>
                     <div className="text-[10px] text-slate-500">{lbl.short}</div>
                   </div>
-                  <div className="bg-slate-100 rounded h-2 overflow-hidden relative">
+                  <div className="hidden md:block bg-slate-100 rounded h-2 overflow-hidden relative">
                     <div
                       className={`absolute inset-y-0 left-0 ${armed ? "bg-indigo-500" : "bg-slate-300"}`}
                       style={{ width: `${(s.count / max) * 100}%` }}

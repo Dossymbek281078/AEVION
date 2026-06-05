@@ -1138,6 +1138,81 @@ const T18_STARTER = mkLsr({
   ],
 });
 
+/* =========================================================================
+ *  ЗАДАНИЕ 19 — Неверная категория раздела → НР/СП (overhead-mismatch)
+ * ========================================================================= */
+const T19_OBJECT: LearningObject = {
+  id: "exam-overhead-mismatch",
+  title: "СОШ №47, демонтаж отделки кабинета",
+  type: "капремонт",
+  region: REGION,
+  description: "Кабинет 6.0 × 5.0 × 3.0 м. Демонтаж старой штукатурки и стяжки перед ремонтом.",
+  geometry: { kind: "room", length: 6.0, width: 5.0, height: 3.0, openings: [] },
+  attachments: [],
+};
+const T19_REFERENCE = mkLsr({
+  id: "exam-t19-ref", title: "Эталон — демонтаж", objectId: T19_OBJECT.id, lsrNumber: "exam-t19",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Демонтажные работы", category: "демонтажные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-01.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+        { id: "rp2", rateCode: "ЭСНСб11-02.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+      ],
+    },
+  ],
+});
+const T19_STARTER = mkLsr({
+  id: "exam-t19-student", title: "Моё решение", objectId: T19_OBJECT.id, lsrNumber: "exam-t19",
+  sections: [
+    {
+      // BUG: раздел демонтажа ошибочно отнесён к «общестроительным» (НР=90% вместо 70%).
+      id: "stu-s1", title: "Раздел 1. Демонтажные работы", category: "общестроительные",
+      positions: [
+        { id: "sp1", rateCode: "ЭСНСб15-01.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+        { id: "sp2", rateCode: "ЭСНСб11-02.Д-001", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 20 — Высотные работы без лесов (scaffolding-missing)
+ * ========================================================================= */
+const T20_OBJECT: LearningObject = {
+  id: "exam-scaffolding-missing",
+  title: "СОШ №47, штукатурка спортзала (высота 4.5 м)",
+  type: "капремонт",
+  region: REGION,
+  description: "Спортзал 12.0 × 9.0 × 4.5 м. Штукатурка стен на высоте — нужны строительные леса.",
+  geometry: { kind: "room", length: 12.0, width: 9.0, height: 4.5, openings: [] },
+  attachments: [],
+};
+const T20_REFERENCE = mkLsr({
+  id: "exam-t20-ref", title: "Эталон — штукатурка + леса", objectId: T20_OBJECT.id, lsrNumber: "exam-t20",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Отделка стен", category: "отделочные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.89, coefficients: [], formula: "2×(12+9)×4.5 = 189 / 100 = 1.89" },
+        { id: "rp2", rateCode: "ЭСНСб08-01-01-001", volume: 189, coefficients: [], formula: "Леса по площади стен = 189 м²" },
+      ],
+    },
+  ],
+});
+const T20_STARTER = mkLsr({
+  id: "exam-t20-student", title: "Моё решение", objectId: T20_OBJECT.id, lsrNumber: "exam-t20",
+  sections: [
+    {
+      // BUG: штукатурка на высоте 4.5 м, но позиция на строительные леса пропущена.
+      id: "stu-s1", title: "Раздел 1. Отделка стен", category: "отделочные",
+      positions: [
+        { id: "sp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.89, coefficients: [], formula: "2×(12+9)×4.5 = 189 / 100 = 1.89" },
+      ],
+    },
+  ],
+});
+
 /* ========================================================================= */
 
 export const EXAM_TASKS: ExamTask[] = [
@@ -1427,6 +1502,38 @@ export const EXAM_TASKS: ExamTask[] = [
     hints: [
       "«Стеснённые» и «действующий-объект» описывают по сути одно — стеснённость на работающем объекте",
       "Оставьте один коэффициент; перемножение 1.15 × 1.15 завышает стоимость на 32% вместо 15%",
+    ],
+  },
+  {
+    id: "demolition-section-overhead",
+    title: "Демонтаж кабинета — категория раздела",
+    category: "Отделка",
+    difficulty: "сложная",
+    durationMin: 18,
+    icon: "🏷️",
+    hiddenError: "Раздел демонтажа отнесён к «общестроительным» — НР/СП начислены по 90% вместо 70%",
+    object: T19_OBJECT,
+    reference: T19_REFERENCE,
+    starter: T19_STARTER,
+    hints: [
+      "НР/СП начисляются по категории раздела: для демонтажа — НР=70%/СП=45%, для общестроя — НР=90%/СП=60%",
+      "Категория раздела должна соответствовать работам внутри (СН РК 8.02-07)",
+    ],
+  },
+  {
+    id: "gym-scaffolding-missing",
+    title: "Штукатурка спортзала — леса",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 15,
+    icon: "🪜",
+    hiddenError: "Штукатурка на высоте 4.5 м без позиции на строительные леса",
+    object: T20_OBJECT,
+    reference: T20_REFERENCE,
+    starter: T20_STARTER,
+    hints: [
+      "При высоте > 4 м внутри помещения нужны строительные леса/подмости (СН РК 1.03-05)",
+      "Добавьте позицию «Монтаж и демонтаж наружных трубчатых строительных лесов» (ЭСНСб08-01-01-001)",
     ],
   },
 ];

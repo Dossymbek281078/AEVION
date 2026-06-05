@@ -95,7 +95,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <header className="bg-white dark:bg-slate-900 border-b dark:border-slate-700 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-4 flex-wrap">
           <Link href="/smeta-trainer" className="text-xs text-slate-500 hover:text-slate-900">
             ← К курсу
           </Link>
@@ -138,9 +138,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-4 grid grid-cols-12 gap-4">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ── Левая колонка: личный прогресс ─────────── */}
-        <section className="col-span-7 space-y-4">
+        <section className="col-span-1 lg:col-span-7 space-y-4">
           {/* Карточка с общим счётом */}
           <div className="bg-white border rounded-lg p-5">
             <div className="flex items-center justify-between mb-4">
@@ -321,7 +321,7 @@ export default function DashboardPage() {
         </section>
 
         {/* ── Правая колонка: лидерборд + статистика ─────────── */}
-        <aside className="col-span-5 space-y-4">
+        <aside className="col-span-1 lg:col-span-5 space-y-4">
           {backendOk && stats && (
             <div className="bg-white border rounded-lg p-5">
               <div className="text-sm font-semibold text-slate-900 mb-3">

@@ -49,7 +49,12 @@ export const MODULE_DESTINATIONS: Record<string, ModuleDestination> = {
     description: "Экзамен на вычет проёмов + AI-советник",
     examTaskId: "finishing-classroom",
   },
-  "2.4": { label: "Накладные расходы и сметная прибыль", path: "/methodology", description: "Калькулятор НР/СП и нормативы" },
+  "2.4": {
+    label: "Накладные расходы и сметная прибыль",
+    path: "/exam/demolition-section-overhead",
+    description: "Экзамен на категорию раздела и НР/СП",
+    examTaskId: "demolition-section-overhead",
+  },
   "2.5": { label: "Индексы пересчёта", path: "/indexes", description: "Применение индексов, двойной учёт" },
   "2.6": { label: "Печатные формы", path: "/documents", description: "ЛСР, КС-2, КС-3, ССР → PDF" },
   "3.3": {
@@ -58,6 +63,15 @@ export const MODULE_DESTINATIONS: Record<string, ModuleDestination> = {
     description: "Экзамен на двойной коэффициент условий",
     examTaskId: "painting-coef-double",
   },
+  "3.4": { label: "Лимитированные затраты", path: "/documents", description: "Лимитированные затраты в формах ССР/ЛСР" },
+  "3.5": {
+    label: "Дополнительные работы и корректировки",
+    path: "/exam/gym-scaffolding-missing",
+    description: "Экзамен на пропущенные леса/подмости",
+    examTaskId: "gym-scaffolding-missing",
+  },
+  "4.2": { label: "Сводный сметный расчёт по 12 главам", path: "/documents", description: "ССР, объектные сметы → PDF" },
+  "5.2": { label: "Методология сметной экспертизы", path: "/methodology", description: "Методика проверки и нормативы РК" },
   "5.3": { label: "Типовые завышения", path: "/exam-analytics", description: "Аналитика типовых ошибок банка" },
   capstone: { label: "Сквозной кейс — школа №47", path: "/capstone", description: "Полный кейс капремонта школы" },
 };

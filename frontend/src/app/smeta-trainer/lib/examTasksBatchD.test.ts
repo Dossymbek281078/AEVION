@@ -27,6 +27,14 @@ describe("batch D — покрытие банка экзаменов", () => {
     expect(scenariosOf("painting-coef-double")).toContain("coef-double");
   });
 
+  it("демонтаж-раздел запускает overhead-mismatch", () => {
+    expect(scenariosOf("demolition-section-overhead")).toContain("overhead-mismatch");
+  });
+
+  it("спортзал запускает scaffolding-missing", () => {
+    expect(scenariosOf("gym-scaffolding-missing")).toContain("scaffolding-missing");
+  });
+
   it("каждый детектор batch D срабатывает хотя бы в одном задании", () => {
     const armed = new Set<string>();
     for (const id of ["laminate-duplicate-material", "plaster-index-double", "painting-coef-double"]) {

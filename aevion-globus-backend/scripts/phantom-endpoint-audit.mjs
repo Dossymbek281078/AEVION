@@ -71,3 +71,12 @@ console.log("\n--- 404 but a handler exists (POST-only / param route — NOT pha
 notFound.filter((o) => hasHandler(o.u)).forEach((o) => console.log("  ", o.u));
 console.log("\n--- 404 on a router mount prefix (no index route — NOT phantom) ---");
 mountOnly.forEach((o) => console.log("  ", o.u));
+
+// Runner-friendly summary + exit code so this doubles as a smoke gate:
+// any confirmed phantom is a failed assertion. Network errors don't fail the
+// gate (they mean the target was unreachable, not that a phantom exists).
+const failCount = phantoms.length;
+console.log(
+  `\nphantom-endpoint-audit — 1 check — ${failCount === 0 ? "1 PASS  0 FAIL" : `0 PASS  ${failCount} FAIL`}`,
+);
+process.exit(failCount > 0 ? 1 : 0);

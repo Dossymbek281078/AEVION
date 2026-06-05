@@ -97,6 +97,11 @@ const SMOKES = [
   // 19 critical module prefixes must be documented; 20 soft prefixes tracked
   // for awareness (after 2026-05-19 expansion: all 20 present).
   { name: "openapi-completeness", script: "openapi-completeness-smoke.js", readOnly: true },
+  // Phantom-endpoint gate — probes every advertised "/api/..." literal and
+  // fails if any is a confirmed phantom (advertised + 404 + no handler of any
+  // method). Read-only (GET probes only). Guards against the OpenAPI catalog
+  // advertising routes that don't exist. Honors BASE.
+  { name: "phantom-audit", script: "phantom-endpoint-audit.mjs", readOnly: true },
   // QCoreAI PROD — 12 checks for the multi-agent AI core (foundational —
   // every AI-using module eventually calls into it). Validates health,
   // providers/configuration consistency, sessions/agents/prompts shape.

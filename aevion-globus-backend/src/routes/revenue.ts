@@ -40,7 +40,7 @@ async function lsOrders(): Promise<LsOrder[] | null> {
   if (!key) return null;
   try {
     const store = LS_STORE();
-    const url = `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}sort=-created_at&page[size]=50`;
+    const url = `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}page[size]=50`;
     const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" } });
     if (!r.ok) return null;
     const j = await r.json() as { data?: { id: string; attributes: Record<string, unknown> }[] };

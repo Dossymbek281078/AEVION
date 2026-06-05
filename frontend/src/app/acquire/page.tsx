@@ -280,6 +280,45 @@ export default function AcquirePage() {
         </div>
       </section>
 
+      {/* WHAT IS A PLANET — core thesis, shown before the deal */}
+      <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "radial-gradient(circle at 80% 0%, rgba(168,85,247,0.10), transparent 55%), rgba(255,255,255,0.015)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 24px" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#a855f7", textTransform: "uppercase", marginBottom: 16 }}>
+            Главная идея · что мы на самом деле строим
+          </div>
+          <h2 style={{ fontSize: "clamp(28px, 4.4vw, 50px)", fontWeight: 900, lineHeight: 1.08, marginBottom: 24, letterSpacing: "-0.02em", maxWidth: 920 }}>
+            Когда ИИ-инструменты становятся товаром, дефицитом становится{" "}
+            <span style={{ background: "linear-gradient(135deg, #a855f7, #3b82f6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              место, где живёт пользователь.
+            </span>
+          </h2>
+          <p style={{ fontSize: 19, color: "#cbd5e1", maxWidth: 880, lineHeight: 1.6, marginBottom: 40 }}>
+            Несколько компаний уже дают ИИ «для всего». Следующий слой — не сотня вкладок, а
+            самодостаточные среды-<strong style={{ color: "#f8fafc" }}>планеты</strong>, внутри которых
+            происходит вся работа человека. Кто построит первую связную — владеет всей сессией пользователя.{" "}
+            <strong style={{ color: "#f8fafc" }}>AEVION — первая такая планета.</strong>
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+            {[
+              { t: "Инструмент → среда", d: "За «ИИ-как-инструмент» приходит «ИИ-как-обиталище». Каждый AI-провайдер либо обрастёт планетами, либо породит их сам.", a: "#a855f7" },
+              { t: "Внутри ареала — всё", d: "ИИ-инструменты, игры, банк, платежи, право, идентичность, коммерция — под одним логином и одной расчётной единицей AEV. Уходить никуда не нужно.", a: "#3b82f6" },
+              { t: "Открытая по дизайну", d: "Можно подключить Amazon и другие площадки. Пользователи — или сам провайдер — строят свои под-миры поверх, оставаясь в одной экономике и контуре доверия.", a: "#10b981" },
+            ].map(c => (
+              <div key={c.t} style={{ padding: 24, background: "rgba(255,255,255,0.03)", border: `1px solid ${c.a}33`, borderRadius: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.14em", color: c.a, textTransform: "uppercase", marginBottom: 10 }}>{c.t}</div>
+                <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: 0 }}>{c.d}</p>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 880, lineHeight: 1.6, marginTop: 28 }}>
+            Поэтому AEVION — это не «30 приложений». Это <strong style={{ color: "#e2e8f0" }}>первый
+            потребительский и экономический слой-планета</strong> поверх модели: то, что превращает голую
+            способность ИИ в место, где люди живут и совершают транзакции. Будка сбора пошлины, ОС эпохи ИИ.
+            Миллиард сегодня — триллион как траектория.
+          </p>
+        </div>
+      </section>
+
       {/* PITCH VIDEO/AUDIO */}
       <PitchMedia />
 

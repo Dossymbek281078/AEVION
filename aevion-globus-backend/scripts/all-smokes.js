@@ -215,10 +215,21 @@ const SMOKES = [
   },
 ];
 
+// The *-prod smokes encode production-specific expectations (live billing
+// keys, seeded search indexes, gated mutations). Run against a local backend
+// they fail for environment reasons, not real bugs — so skip them unless the
+// target actually looks like prod.
+const isProdTarget = !/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/i.test(BASE);
+const prodSkipped = [];
+
 const eligible = SMOKES.filter((sm) => {
   if (ONLY.length > 0 && !ONLY.includes(sm.name)) return false;
   if (SKIP.includes(sm.name)) return false;
   if (READ_ONLY && !sm.readOnly) return false;
+  if (!isProdTarget && /-prod$/.test(sm.name) && !ONLY.includes(sm.name)) {
+    prodSkipped.push(sm.name);
+    return false;
+  }
   return true;
 });
 
@@ -231,6 +242,9 @@ console.log(`AEVION smoke orchestrator`);
 console.log(`  BASE       = ${BASE}`);
 console.log(`  READ_ONLY  = ${READ_ONLY ? "yes" : "no"}`);
 console.log(`  scripts    = ${eligible.map((s) => s.name).join(", ")}`);
+if (prodSkipped.length > 0) {
+  console.log(`  skipped    = ${prodSkipped.length} *-prod smoke(s) (BASE is not prod): ${prodSkipped.join(", ")}`);
+}
 console.log("");
 
 // Node v24.11.1 on Windows can crash during process teardown (exit code

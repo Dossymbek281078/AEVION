@@ -12,6 +12,10 @@
 > Реалистичная оптика для Anthropic: они **не** типичный покупатель «95% за $1B». Их
 > естественная дверь — «участвовать безопасно» (1–10%) и/или partnership + showcase.
 > Поэтому письмо ведёт case-study/mission-углом, а оффер-лестницу даёт как опцию, не как ультиматум.
+>
+> **Денежные структуры под Anthropic (чтобы не отпугнуть и чтобы не сделали без меня) — `25_ANTHROPIC_DEAL_VARIANTS.md`:**
+> платят ресурсами, не кэшем; триллион — траектория, не цена; V2 Planet Co-Build (Anthropic ~90% контроль
+> ресурсами, основатель 9–10% + Chief Idea Officer) — якорный вариант; anti-clone через незаменимость, не угрозу.
 
 ---
 
@@ -47,7 +51,8 @@ I am writing to you first, and not by accident.
 I am not a programmer. In Kazakhstan I am director and founder of several
 companies whose entire job is verifying trust in the physical world — technical
 supervision of construction, design, expert review of projects, structural
-inspection of buildings — and the hired Technical Director of a design firm. For
+inspection of buildings — and the hired Technical Director of a design firm, a job
+I still do every weekday from 09:30 to 18:30. For
 twenty years my profession was confirming that something is authentic and
 recording who is accountable for it, while watching that trust fail around me:
 forged permits, stolen designs, untraceable payments. AEVION is that exact job,
@@ -79,6 +84,21 @@ one fabric of trust. This is not "30 apps built on Claude." It is the first cons
 and economic layer — a planet — on top of your model: the thing that turns raw
 capability into a place where people live and transact.
 
+Let me be plain about what your tools did, because it is why I am writing to you
+first and not only to investors. I cannot write code. Yet in six months Claude Code
+let me build real, working systems — and feel, for the first time in my life, like
+a builder. You did not just hand me a tool; you gave me back the ability to realize
+ideas I had carried for years — and I built all of this in the hours around a
+full-time job and the several companies I run. I am not saying this to flatter you;
+flattery would insult us both. I am saying it because it is the most honest line in
+this letter.
+
+And it is exactly why I will not keep these ideas to myself. Alone, even with
+Claude, this stays one level below what it could be: a strong team is the one thing
+I cannot conjure, and time is the one thing none of us gets back. So I would rather
+bring the ideas to you now, while they are early — so that together we turn them
+into advantage and shape what comes next, inside your ecosystem, on your base.
+
 You will ask: where are the sales? There are none — and that is the entire point.
 Sales are what a team builds from an idea. I brought the idea, and proved I
 generate ideas faster than teams execute them. The one thing I cannot conjure
@@ -98,24 +118,30 @@ attestation layer (QSign / QRight / Planet) is exactly that: post-quantum-signed
 on-chain authorship, built as the default. As AI-generated content floods the world,
 someone becomes the notary of record. I built the first consumer-grade one — on Claude.
 
-So I am not handing you a take-it-or-leave-it deal. One valuation (~$1.05B today),
-one constant price ($10.5M per 1%), and you choose only your depth:
+So I am not handing you a take-it-or-leave-it deal — and it does not begin with a
+wire transfer. There are several ways in, and the ones I would put first cost you
+almost no cash, because you would pay in what you already have in abundance —
+compute, engineers, distribution, your brand — not in scarce capital:
 
-  - Participate safely — 1-10% ($10.5M-$105M). A small, de-risked stake. The most
-    natural door for a platform partner who wants exposure and a flagship showcase,
-    not control. Funds the build; I keep skin in the game; tranches tie to milestones.
-  - Build it with me — 25-49% ($263M-$516M). A partner stake; shared board; I stay
-    CEO/CIO.
-  - Own the engine outright — 95% for $1B net to me; I keep 5% and stay as Chief
-    Innovation Officer for years.
+  - Start as a showcase and a partnership. Feature the first planet built on
+    Claude; give it compute and access. Near-zero risk, and the relationship begins.
+  - Or take a small, de-risked stake — 1-10% at one constant valuation (~$1.05B,
+    $10.5M per 1%), milestone-tranched, no operational load.
+  - Or build it with me as a planet on your base: you contribute a team and
+    resources for control, I keep a minority and stay as your Chief Idea Officer —
+    the engine that keeps producing what comes next. The outright buyout ($1B for
+    95%) stays on the table, but for you it is the last door, not the first.
 
-And the honest upside, stated plainly: with a real team behind it, the layer beneath
-money, IP, and AI-provenance is not a billion-dollar business — it is a trillion-dollar
-one. I am pricing the seed of that today at a billion. The asymmetry is the offer:
-participate small and safe now, or take the whole engine — either way you are early.
+The honest upside, kept as trajectory and not as today's price: with your team and
+distribution, the layer beneath money, IP, and AI-provenance is not a billion-dollar
+business — its path runs toward a trillion, and in a control structure most of that
+path is yours. I price the seed today at a billion; the asymmetry is the whole offer.
 
-The price per percent never changes — there is nothing to haggle but the size of
-your conviction. And I earn only when you earn; I am not selling and walking away.
+And if your instinct is that you could simply build this yourselves — the thirty
+modules can be copied; the person who produced them in six months, and will produce
+the next thirty, cannot. That is what I am offering to keep on your side, not only
+the code. The full set of structures is at the link, and none of them ask you to be
+afraid of the number. I earn only when you earn; I am not selling and walking away.
 Whatever brought you here — a proof of your own platform, a piece of the future, or
 the trust infrastructure the AI age needs anyway — our goal is the same one.
 
@@ -149,7 +175,7 @@ yahiin1978@gmail.com · https://aevion.app/acquire
 Я не программист. В Казахстане я директор и учредитель нескольких компаний, чьё дело —
 проверять доверие в физическом мире: технический надзор за строительством, проектирование,
 экспертиза проектов, техническое обследование зданий и сооружений; и наёмный технический
-директор в проектной компании. Двадцать лет моя профессия — подтверждать, что объект
+директор в проектной компании — а это каждый будний день с 9:30 до 18:30. Двадцать лет моя профессия — подтверждать, что объект
 подлинный, и фиксировать, кто за него отвечает, — и всё это время я видел, как доверие
 рушится: поддельные экспертизы, украденные проекты, непрозрачные платежи. AEVION — это та же
 работа, перенесённая в цифру. Потом я открыл Claude Code. За 6 месяцев
@@ -161,6 +187,35 @@ yahiin1978@gmail.com · https://aevion.app/acquire
 полное доказательство того, что один мотивированный не-инженер теперь может построить с
 Claude. Если вам когда-нибудь нужен был один флагманский кейс — «без диплома CS, в
 одиночку, за 6 месяцев, реальная production-инфраструктура» — он лежит в моём репозитории.
+
+Но доказательство — не главное. Вот главное. Когда ИИ-инструменты становятся товаром — а они
+становятся — дефицитом перестаёт быть инструмент. Дефицит — место, где живёт пользователь. Пока
+несколько компаний дают ИИ «для всего», следующий неизбежный слой — не сотня разрозненных вкладок,
+а самодостаточные среды — сообщества, планеты — внутри которых происходит вся работа человека.
+Каждый крупный AI-провайдер либо обрастёт такими планетами, либо породит их сам. Кто построит
+первую связную — владеет всей сессией пользователя.
+
+AEVION — это первая такая планета, на вашей базе. Внутри её ареала у пользователя есть всё —
+ИИ-инструменты, игры, банк, платежи, IP, идентичность, коммерция — под одним логином и одной
+расчётной единицей, и уходить никуда не нужно. И она открыта по дизайну: можно подключить внешние
+площадки (Amazon и другие), а пользователи — или сам Anthropic — могут строить свои под-миры
+поверх, оставаясь в одной экономике и одном контуре доверия. Это не «30 приложений на Claude».
+Это первый потребительский и экономический слой — планета — поверх вашей модели: то, что
+превращает голую способность в место, где люди живут и совершают транзакции.
+
+Скажу прямо, что сделали ваши инструменты — потому что именно поэтому я пишу сначала вам, а не
+только инвесторам. Я не умею писать код. И всё же за 6 месяцев Claude Code позволил мне строить
+реальные, работающие системы — и впервые в жизни почувствовать себя разработчиком. Вы дали мне не
+просто инструмент; вы вернули мне возможность реализовывать идеи, которые я носил годами, — и всё
+это я построил в часы вокруг работы по найму и нескольких компаний, которыми руковожу. Я говорю
+это не чтобы льстить; лесть оскорбила бы нас обоих. Я говорю это потому, что это самая честная
+строка в письме.
+
+И именно поэтому я не оставлю эти идеи при себе. В одиночку, даже с Claude, это останется на
+уровень ниже того, чем могло бы быть: сильная команда — единственное, что я не могу создать сам,
+а время — единственное, что не вернуть. Поэтому я лучше принесу идеи вам сейчас, пока они ранние, —
+чтобы вместе мы превратили их в преимущество и определили, что будет дальше, внутри вашей
+экосистемы, на вашей базе.
 
 Вы спросите: где продажи? Их нет — и в этом вся суть. Продажи — это то, что команда строит
 из идеи. Я принёс идею и доказал, что генерирую идеи быстрее, чем команды их воплощают.
@@ -179,23 +234,28 @@ Planet) — ровно это: постквантово подписанное, 
 заливает AI-контент, кто-то становится нотариусом записи. Я построил первый
 потребительский — на Claude.
 
-Поэтому я не даю вам сделку «бери или уходи». Одна оценка (~$1.05B сегодня), одна постоянная
-цена ($10.5M за 1%), и вы выбираете только глубину:
+Поэтому я не даю вам сделку «бери или уходи» — и она не начинается с банковского перевода.
+Дверей несколько, и те, что я поставлю первыми, почти не стоят вам кэша: вы платите тем, чего у
+вас в избытке — компьют, инженеры, дистрибуция, бренд, — а не дефицитным капиталом:
 
-  - Участвовать безопасно — 1-10% ($10.5M-$105M). Малая, де-рискованная доля. Самая
-    естественная дверь для платформенного партнёра, которому нужна экспозиция и флагманский
-    showcase, а не контроль. Деньги в рост; у меня шкура в игре; транши под майлстоуны.
-  - Строить вместе — 25-49% ($263M-$516M). Партнёрская доля; совместный борд; я остаюсь CEO/CIO.
-  - Владеть двигателем целиком — 95% за $1B net мне; я оставляю 5% и остаюсь Chief Innovation
-    Officer на годы.
+  - Начать как showcase и партнёрство. Показать первую планету, построенную на Claude; дать ей
+    компьют и доступ. Риск близок к нулю, и отношения начаты.
+  - Или взять малую, де-рискованную долю — 1-10% по одной постоянной оценке (~$1.05B, $10.5M за
+    1%), транши под майлстоуны, без операционной нагрузки.
+  - Или строить вместе как планету на вашей базе: вы вносите команду и ресурсы и получаете
+    контроль, я сохраняю меньшинство и остаюсь вашим Chief Idea Officer — двигателем, который
+    продолжает выдавать следующее. Полный выкуп ($1B за 95%) остаётся в меню, но для вас это
+    последняя дверь, не первая.
 
-И честный апсайд, прямо: при настоящей команде слой под деньгами, IP и AI-provenance — это
-не бизнес на миллиард, это бизнес на триллион. Я оцениваю семя этого сегодня в миллиард.
-Асимметрия и есть оффер: участвуй мало и безопасно сейчас — или забери весь двигатель; в
-любом случае вы рано.
+Честный апсайд — как траектория, а не как сегодняшняя цена: при вашей команде и дистрибуции слой
+под деньгами, IP и AI-provenance — это не бизнес на миллиард, его путь ведёт к триллиону, и при
+контрольной структуре бóльшая часть этого пути — ваша. Семя я оцениваю сегодня в миллиард; асимметрия
+и есть весь оффер.
 
-Цена за процент не меняется — торговать не о чем, кроме размера вашей убеждённости. И я
-зарабатываю только когда зарабатываете вы; я не продаю и не ухожу. Что бы вас сюда ни
+И если внутри мелькнёт «да мы и сами это построим» — тридцать модулей копируются; человек, который
+сделал их за 6 месяцев и сделает следующие тридцать, — нет. Именно его, а не только код, я предлагаю
+оставить на вашей стороне. Полный набор структур — по ссылке, и ни одна из них не просит вас бояться
+цифры. Я зарабатываю только когда зарабатываете вы; я не продаю и не ухожу. Что бы вас сюда ни
 привело — доказательство вашей же платформы, кусок будущего или инфраструктура доверия,
 которая нужна AI-эпохе в любом случае — наша цель одна.
 

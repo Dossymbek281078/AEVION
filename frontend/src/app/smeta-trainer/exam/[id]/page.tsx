@@ -39,6 +39,7 @@ import type { LsrCalc, AiNotice } from "../../lib/types";
 import type { RoomGeometry } from "../../lib/types";
 import { ExamToolsPanel } from "../../components/ExamToolsPanel";
 import { PendingCalcValue } from "../../components/PendingCalcValue";
+import { LmsReturnBanner } from "../../components/LmsReturnBanner";
 
 export default function ExamTaskPage({
   params,
@@ -471,6 +472,9 @@ export default function ExamTaskPage({
             </div>
           )}
         </div>
+
+        {/* Возврат зачёта в курс (если открыто из LMS) */}
+        <LmsReturnBanner taskId={task!.id} score={report?.score ?? null} grade={report?.grade ?? null} />
 
         {/* Отчёт */}
         {report && (

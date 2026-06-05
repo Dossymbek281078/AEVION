@@ -987,6 +987,157 @@ const T15_STARTER = mkLsr({
   ],
 });
 
+/* =========================================================================
+ *  ЗАДАНИЕ 16 — Дубль материала (batch D: duplicate-material)
+ * ========================================================================= */
+const T16_OBJECT: LearningObject = {
+  id: "exam-laminate-dup",
+  title: "СОШ №47, замена покрытия пола в кабинете",
+  type: "капремонт",
+  region: REGION,
+  description: "Кабинет 6.0 × 5.0 × 3.0 м. Укладка ламината 33 класса по готовой стяжке, 30 м².",
+  geometry: { kind: "room", length: 6.0, width: 5.0, height: 3.0, openings: [] },
+  attachments: [],
+};
+const LAMINATE_RES = [
+  { kind: "труд" as const, name: "Плотник-отделочник 5 разряда", qtyPerUnit: 14, unit: "чел.-ч", basePrice: 1500 },
+  { kind: "материал" as const, name: "Ламинат 33 класс", qtyPerUnit: 105, unit: "м²", basePrice: 2800 },
+  { kind: "материал" as const, name: "Подложка 3 мм", qtyPerUnit: 102, unit: "м²", basePrice: 320 },
+  { kind: "материал" as const, name: "Плинтус ПВХ", qtyPerUnit: 35, unit: "м", basePrice: 380 },
+];
+const T16_REFERENCE = mkLsr({
+  id: "exam-t16-ref", title: "Эталон — ламинат", objectId: T16_OBJECT.id, lsrNumber: "exam-t16",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Полы", category: "отделочные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-11-04-002", volume: 0.30, coefficients: [], formula: "30 / 100 = 0.30" },
+      ],
+    },
+  ],
+});
+const T16_STARTER = mkLsr({
+  id: "exam-t16-student", title: "Моё решение", objectId: T16_OBJECT.id, lsrNumber: "exam-t16",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Полы", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-11-04-002", volume: 0.30, coefficients: [],
+          formula: "30 / 100 = 0.30",
+          note: "Поправил состав ресурсов под факт",
+          // BUG: «Ламинат 33 класс» добавлен дважды — стоимость материала задвоена.
+          resourceOverrides: [
+            LAMINATE_RES[0],
+            LAMINATE_RES[1],
+            { ...LAMINATE_RES[1] },
+            LAMINATE_RES[2],
+            LAMINATE_RES[3],
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 17 — Двойной индекс по материалу (batch D: index-double)
+ * ========================================================================= */
+const T17_OBJECT: LearningObject = {
+  id: "exam-index-double",
+  title: "СОШ №47, штукатурка стен лаборатории",
+  type: "капремонт",
+  region: REGION,
+  description: "Лаборатория 8.0 × 6.0 × 3.3 м. Штукатурка стен по маякам, 120 м² (нетто).",
+  geometry: { kind: "room", length: 8.0, width: 6.0, height: 3.3, openings: [] },
+  attachments: [],
+};
+const PLASTER_RES_BASE = [
+  { kind: "труд" as const, name: "Штукатур 4 разряда", qtyPerUnit: 42, unit: "чел.-ч", basePrice: 1300 },
+  { kind: "машины" as const, name: "Растворонасос", qtyPerUnit: 2, unit: "маш.-ч", basePrice: 950 },
+  { kind: "материал" as const, name: "Раствор цементно-известковый М100", qtyPerUnit: 2.5, unit: "м³", basePrice: 16500 },
+];
+const T17_REFERENCE = mkLsr({
+  id: "exam-t17-ref", title: "Эталон — штукатурка", objectId: T17_OBJECT.id, lsrNumber: "exam-t17",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Штукатурка", category: "отделочные",
+      positions: [
+        { id: "rp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.20, coefficients: [], formula: "120 / 100 = 1.20" },
+      ],
+    },
+  ],
+});
+const T17_STARTER = mkLsr({
+  id: "exam-t17-student", title: "Моё решение", objectId: T17_OBJECT.id, lsrNumber: "exam-t17",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Штукатурка", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-13-01-001", volume: 1.20, coefficients: [],
+          formula: "120 / 100 = 1.20",
+          // BUG: цена раствора введена в ТЕКУЩЕМ уровне (≈ базис ×8.7), без обоснования —
+          // при базисно-индексном методе индекс применится повторно.
+          resourceOverrides: [
+            PLASTER_RES_BASE[0],
+            PLASTER_RES_BASE[1],
+            { ...PLASTER_RES_BASE[2], basePrice: 143000 },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+/* =========================================================================
+ *  ЗАДАНИЕ 18 — Двойной коэффициент условий (batch D: coef-double)
+ * ========================================================================= */
+const T18_OBJECT: LearningObject = {
+  id: "exam-coef-double",
+  title: "СОШ №47, окраска коридора в действующем здании",
+  type: "капремонт",
+  region: REGION,
+  description: "Коридор 18.0 × 2.4 × 3.0 м. Окраска стен в 2 слоя, 120 м². Школа функционирует.",
+  geometry: { kind: "room", length: 18.0, width: 2.4, height: 3.0, openings: [] },
+  attachments: [],
+};
+const T18_REFERENCE = mkLsr({
+  id: "exam-t18-ref", title: "Эталон — окраска", objectId: T18_OBJECT.id, lsrNumber: "exam-t18",
+  sections: [
+    {
+      id: "ref-s1", title: "Раздел 1. Окраска", category: "отделочные",
+      positions: [
+        {
+          id: "rp1", rateCode: "ЭСНСб15-15-04-001", volume: 1.20,
+          coefficients: [{ kind: "действующий-объект", value: 1.15, justification: "Школа функционирует (СН РК 8.02-10)" }],
+          formula: "120 / 100 = 1.20",
+        },
+      ],
+    },
+  ],
+});
+const T18_STARTER = mkLsr({
+  id: "exam-t18-student", title: "Моё решение", objectId: T18_OBJECT.id, lsrNumber: "exam-t18",
+  sections: [
+    {
+      id: "stu-s1", title: "Раздел 1. Окраска", category: "отделочные",
+      positions: [
+        {
+          id: "sp1", rateCode: "ЭСНСб15-15-04-001", volume: 1.20,
+          // BUG: применены и «стеснённые», и «действующий-объект» — перекрывающиеся
+          // по смыслу условия, удорожание задваивается (1.15 × 1.15 = 1.32).
+          coefficients: [
+            { kind: "стеснённые", value: 1.15, justification: "Работа в узком коридоре" },
+            { kind: "действующий-объект", value: 1.15, justification: "Школа функционирует" },
+          ],
+          formula: "120 / 100 = 1.20",
+        },
+      ],
+    },
+  ],
+});
+
 /* ========================================================================= */
 
 export const EXAM_TASKS: ExamTask[] = [
@@ -1228,6 +1379,54 @@ export const EXAM_TASKS: ExamTask[] = [
     hints: [
       "Тёплый водяной пол требует циркуляционного насоса (ЭСНСб07-12-10-001)",
       "Это не дополнительная позиция, а обязательная — без неё система не работает",
+    ],
+  },
+  {
+    id: "laminate-duplicate-material",
+    title: "Ламинат в кабинете — состав ресурсов",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 15,
+    icon: "🪵",
+    hiddenError: "Материал «Ламинат 33 класс» добавлен в состав ресурсов дважды — стоимость задвоена",
+    object: T16_OBJECT,
+    reference: T16_REFERENCE,
+    starter: T16_STARTER,
+    hints: [
+      "Откройте редактор состава ресурсов позиции — нет ли одинаковых строк материала?",
+      "Расход материала задаётся одной строкой; повтор удваивает стоимость материала в ПЗ",
+    ],
+  },
+  {
+    id: "plaster-index-double",
+    title: "Штукатурка лаборатории — цена раствора",
+    category: "Отделка",
+    difficulty: "сложная",
+    durationMin: 20,
+    icon: "🧱",
+    hiddenError: "Цена раствора введена в текущем уровне — при базисно-индексном методе индекс задваивается",
+    object: T17_OBJECT,
+    reference: T17_REFERENCE,
+    starter: T17_STARTER,
+    hints: [
+      "Метод базисно-индексный: в состав ресурсов вносят БАЗИСНУЮ цену, индекс ×8.7 применит калькулятор",
+      "Если ввести текущую цену, она умножится на индекс ещё раз — переоценка в ~8.7 раза",
+    ],
+  },
+  {
+    id: "painting-coef-double",
+    title: "Окраска коридора — коэффициенты условий",
+    category: "Отделка",
+    difficulty: "средняя",
+    durationMin: 15,
+    icon: "🖌️",
+    hiddenError: "Применены и «стеснённые», и «действующий-объект» — перекрывающиеся условия задваивают удорожание",
+    object: T18_OBJECT,
+    reference: T18_REFERENCE,
+    starter: T18_STARTER,
+    hints: [
+      "«Стеснённые» и «действующий-объект» описывают по сути одно — стеснённость на работающем объекте",
+      "Оставьте один коэффициент; перемножение 1.15 × 1.15 завышает стоимость на 32% вместо 15%",
     ],
   },
 ];

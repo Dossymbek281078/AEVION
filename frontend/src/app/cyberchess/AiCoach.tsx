@@ -483,6 +483,9 @@ export default function AiCoach({
 
   // Live Coach — only on key moments
   useEffect(() => {
+    // Новая партия / откат: история ходов сжалась → сбрасываем курсор комментариев,
+    // иначе после длинной партии следующая НЕ комментируется, пока не превысит её длину.
+    if (moves.length < lastCommentedMoveIdx.current) lastCommentedMoveIdx.current = moves.length;
     if (!liveMode || !visible || moves.length === 0) return;
     if (moves.length <= lastCommentedMoveIdx.current) return;
 

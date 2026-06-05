@@ -241,16 +241,26 @@ console.log("");
 // fall back to judging by the child's printed summary instead of the code.
 const WIN_EXIT_TEARDOWN_CRASH = 3221226505; // 0xC0000409
 
-// True when the captured output reports zero failed assertions. Covers both
-// summary formats in use: "… N PASS  0 FAIL" and "… N passed, 0 failed".
+// True when the captured output reports zero failed assertions. Covers the
+// summary formats in use across the smoke fleet:
+//   "… N PASS  0 FAIL"   "… N passed, 0 failed"   "failed: 0"
+//   "[x-smoke] PASS=9 FAIL=0"   "✅ all steps passed"
 function reportsZeroFailures(out) {
-  const hasSummary = /\bassertions\b|\bPASS\b|\bpassed\b/i.test(out);
+  const hasSummary =
+    /\bassertions\b|\bPASS\b|\bpassed\b|\bFAIL=\d+\b/i.test(out);
   const zeroFail =
     /\b0\s+FAIL\b/i.test(out) ||
     /\b0\s+failed\b/i.test(out) ||
-    /failed:\s*0\b/i.test(out);
+    /failed:\s*0\b/i.test(out) ||
+    /\bFAIL=0\b/i.test(out) ||
+    /\ball (?:steps|checks|assertions|tests) passed\b/i.test(out);
+  // Note the (?!=) guards: in "PASS=9 FAIL=0" the "9 FAIL" substring must NOT
+  // be read as a fail count — FAIL there is followed by "=0" (a zero count).
   const hasFailMarker =
-    /\b[1-9]\d*\s+FAIL\b/i.test(out) || /\b[1-9]\d*\s+failed\b/i.test(out);
+    /\b[1-9]\d*\s+FAIL\b(?!=)/i.test(out) ||
+    /\b[1-9]\d*\s+failed\b/i.test(out) ||
+    /\bFAIL=[1-9]\d*\b/i.test(out) ||
+    /failed:\s*[1-9]\d*\b/i.test(out);
   return hasSummary && zeroFail && !hasFailMarker;
 }
 

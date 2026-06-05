@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EXAM_TASKS } from "../lib/examTasks";
 import { computeStats, commonMistakes, loadAttempts, type JournalStats, type MistakeAggregate } from "../lib/examJournal";
 import { gradeExam } from "../lib/examGrader";
-import { scenarioLabel } from "../lib/ai/scenarioLabels";
+import { scenarioLabel, NEW_DETECTOR_SCENARIOS } from "../lib/ai/scenarioLabels";
 
 type ScenarioStat = {
   scenario: string;
@@ -35,7 +35,7 @@ export default function ExamAnalyticsPage() {
 
   // Профиль типовых ошибок — прогоняем стартовые шаблоны через грейдер,
   // собираем какие AI-сценарии срабатывают и в каких заданиях.
-  const scenarioProfile = useMemo(() => {
+  const scenarioCountMap = useMemo(() => {
     const map = new Map<string, ScenarioStat>();
     for (const t of EXAM_TASKS) {
       const r = gradeExam(t.starter, t.reference, t.object);
@@ -50,8 +50,29 @@ export default function ExamAnalyticsPage() {
         map.set(n.scenario, slot);
       }
     }
-    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+    return map;
   }, []);
+
+  const scenarioProfile = useMemo(
+    () => Array.from(scenarioCountMap.values()).sort((a, b) => b.count - a.count),
+    [scenarioCountMap]
+  );
+
+  // Сводка по новым детекторам (batch D): покрытие банка экзаменов.
+  // Нулевое срабатывание = тип ошибки не воспроизводится ни одним стартовым
+  // шаблоном → методисту стоит добавить задачу, где эта ловушка проявится.
+  const batchDProfile = useMemo(
+    () =>
+      NEW_DETECTOR_SCENARIOS.map((code) => {
+        const stat = scenarioCountMap.get(code);
+        return {
+          scenario: code,
+          count: stat?.count ?? 0,
+          tasks: stat?.affectedTasks.size ?? 0,
+        };
+      }).sort((a, b) => b.count - a.count),
+    [scenarioCountMap]
+  );
 
   // Профиль ожидаемых баллов на стартовых шаблонах (где «легче залезть в неуд.»)
   const starterScores = useMemo(() => {
@@ -265,6 +286,51 @@ export default function ExamAnalyticsPage() {
               })}
             </ul>
           )}
+        </section>
+
+        {/* Сводка по новым детекторам batch D — для куратора/методиста */}
+        <section className="bg-white border border-indigo-200 rounded-lg p-4 mb-4">
+          <h2 className="text-base font-semibold text-indigo-900 mb-1">
+            🆕 Новые детекторы (batch D) — покрытие банка
+          </h2>
+          <p className="text-[11px] text-slate-500 mb-3 italic">
+            Детекторы ресурсной части и коэффициентов (урок 2.6). Сколько стартовых шаблонов их
+            запускает. <b>0 срабатываний</b> = ловушка пока не воспроизводится в банке — добавьте
+            задачу, где эта ошибка проявится.
+          </p>
+          <ul className="space-y-1">
+            {batchDProfile.map((s) => {
+              const max = batchDProfile[0]?.count || 1;
+              const lbl = scenarioLabel(s.scenario);
+              const armed = s.count > 0;
+              return (
+                <li
+                  key={s.scenario}
+                  className="grid grid-cols-[1fr_180px_110px] gap-2 items-center text-xs"
+                >
+                  <div>
+                    <div className="font-medium text-slate-800">{lbl.label}</div>
+                    <div className="text-[10px] text-slate-500">{lbl.short}</div>
+                  </div>
+                  <div className="bg-slate-100 rounded h-2 overflow-hidden relative">
+                    <div
+                      className={`absolute inset-y-0 left-0 ${armed ? "bg-indigo-500" : "bg-slate-300"}`}
+                      style={{ width: `${(s.count / max) * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-right font-mono">
+                    {armed ? (
+                      <span className="text-slate-600">
+                        {s.count} зам. · {s.tasks} зад.
+                      </span>
+                    ) : (
+                      <span className="text-amber-600">нет в банке</span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
         {/* Стартовые баллы — где упасть проще всего */}

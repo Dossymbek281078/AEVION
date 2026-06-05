@@ -63,6 +63,6 @@ describe("deterministicBreakdown", () => {
       { id: "s2", title: "Отделка", category: "отделочные", positions: [pos("p2", "ОТД-15")] },
     ]);
     expect(deterministicBreakdown(l, notice({ context: { positionId: "p1" } }))).toContain("ОТД-15");
-    expect(deterministicBreakdown(l, notice({ scenario: "winter-surcharge", context: { positionId: "p1" } }))).toBeNull();
+    expect(deterministicBreakdown(l, notice({ scenario: "scaffolding-missing", context: { positionId: "p1" } }))).toBeNull();
   });
 });

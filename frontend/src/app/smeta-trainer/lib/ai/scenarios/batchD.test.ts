@@ -4,6 +4,7 @@ import { registerRuntimeRate, clearRuntimeRates } from "../../corpus";
 import { checkDuplicateMaterial } from "./duplicateMaterial";
 import { checkMaterialPriceUnjustified } from "./materialPriceUnjustified";
 import { checkCoefDouble } from "./coefDouble";
+import { checkIndexDouble } from "./indexDouble";
 import { deterministicBreakdown } from "./scenarioBreakdowns";
 
 function mat(name: string, basePrice: number, qty = 1, unit = "м²"): Resource {
@@ -99,6 +100,29 @@ describe("checkCoefDouble", () => {
   });
 });
 
+describe("checkIndexDouble", () => {
+  const biLsr = (positions: SmetaPosition[]): Lsr => ({ ...lsr(positions), method: "базисно-индексный" });
+
+  it("флагует текущую цену материала при базисно-индексном методе", () => {
+    // baseline 2000, индекс Алматы 2026-Q2 = ×8.7 → 16000 уже текущая (ratio 8 ≥ 8.7×0.85)
+    const l = biLsr([pos({ resourceOverrides: [mat("Плитка керамическая", 16000)] })]);
+    const n = checkIndexDouble(l);
+    expect(n).toHaveLength(1);
+    expect(n[0].scenario).toBe("index-double");
+    expect(n[0].severity).toBe("error");
+  });
+
+  it("не флагует при ресурсном методе", () => {
+    const l = lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 16000)] })]); // ресурсный
+    expect(checkIndexDouble(l)).toHaveLength(0);
+  });
+
+  it("не флагует базисную цену", () => {
+    const l = biLsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2100)] })]);
+    expect(checkIndexDouble(l)).toHaveLength(0);
+  });
+});
+
 describe("deterministicBreakdown — batch D", () => {
   it("дубль материала → текст с именем и числом", () => {
     const l = lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2000), mat("Плитка керамическая", 2000)] })]);
@@ -129,5 +153,44 @@ describe("deterministicBreakdown — batch D", () => {
     });
     expect(txt).toBeTruthy();
     expect(txt!).toContain("индекс");
+  });
+
+  const mk = (scenario: string, ctx: { positionId?: string; sectionId?: string }): AiNotice => ({
+    id: "n", severity: "warning", scenario, context: ctx, title: "T", message: "m",
+  });
+
+  it("зимнее удорожание → текст про СН РК 8.02-09", () => {
+    const l = lsr([pos({})]);
+    const txt = deterministicBreakdown(l, mk("winter-surcharge", { positionId: "p1" }));
+    expect(txt).toBeTruthy();
+    expect(txt!).toContain("8.02-09");
+  });
+
+  it("коэф. высоты → диапазон K", () => {
+    const l = lsr([pos({})]);
+    const txt = deterministicBreakdown(l, mk("height-coefficient", { positionId: "p1" }));
+    expect(txt).toBeTruthy();
+    expect(txt!).toContain("1.20");
+  });
+
+  it("потери материала → типовой % и расход", () => {
+    const l = lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 2000, 1.0)] })]);
+    const txt = deterministicBreakdown(l, mk("waste-factor-missing", { positionId: "p1" }));
+    expect(txt).toBeTruthy();
+    expect(txt!).toContain("Плитка керамическая");
+  });
+
+  it("НР/СП раздела → разбор с названием раздела", () => {
+    const l = lsr([pos({})]);
+    const txt = deterministicBreakdown(l, mk("overhead-mismatch", { sectionId: "s1" }));
+    expect(txt).toBeTruthy();
+    expect(txt!).toContain("Раздел");
+  });
+
+  it("двойной индекс → упоминание индекса материалов", () => {
+    const l: Lsr = { ...lsr([pos({ resourceOverrides: [mat("Плитка керамическая", 16000)] })]), method: "базисно-индексный" };
+    const txt = deterministicBreakdown(l, mk("index-double", { positionId: "p1" }));
+    expect(txt).toBeTruthy();
+    expect(txt!).toContain("8.7");
   });
 });

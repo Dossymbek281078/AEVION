@@ -30,8 +30,21 @@ export const SCENARIO_LABELS: Record<string, ScenarioLabel> = {
   "duplicate-material": { label: "Дубль материала", short: "Один материал добавлен в позицию дважды." },
   "material-price-unjustified": { label: "Цена без обоснования", short: "Индивидуальная цена материала без ссылки на прайс/КП." },
   "coef-double": { label: "Двойной коэффициент", short: "Перекрывающиеся/повторённые коэффициенты условий." },
+  "index-double": { label: "Двойной индекс", short: "Текущая цена материала умножается на индекс повторно." },
 };
 
 export function scenarioLabel(code: string): ScenarioLabel {
   return SCENARIO_LABELS[code] ?? { label: code, short: "" };
 }
+
+/**
+ * Сценарии «batch D» — детекторы ресурсной части и коэффициентов (урок 2.6),
+ * добавленные после первичной серии. Используются в аналитике куратора, чтобы
+ * отдельно отслеживать частоту новых типов ошибок и покрытие банка экзаменов.
+ */
+export const NEW_DETECTOR_SCENARIOS: string[] = [
+  "duplicate-material",
+  "material-price-unjustified",
+  "coef-double",
+  "index-double",
+];

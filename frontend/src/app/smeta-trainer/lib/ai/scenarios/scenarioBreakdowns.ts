@@ -8,13 +8,22 @@
  */
 
 import type { Lsr, AiNotice } from "../../types";
-import { findRate } from "../../corpus";
+import { findRate, findIndex } from "../../corpus";
 
 /** Сценарии с собственным детерминированным разбором (помимо проёмов). */
 export const SCENARIOS_WITH_BREAKDOWN = new Set<string>([
   "double-count",
   "missing-coefficient",
+  "index-mismatch",
+  "index-stale",
+  "duplicate-material",
+  "material-price-unjustified",
+  "coef-double",
 ]);
+
+function normName(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
 
 function rateTitle(code: string): string {
   return findRate(code)?.title ?? code;
@@ -68,6 +77,97 @@ export function explainMissingCoef(lsr: Lsr, notice: AiNotice): string | null {
   return lines.join("\n");
 }
 
+/** Разбор индекса: какой набор применён/не найден и чем грозит. */
+export function explainIndex(lsr: Lsr, notice: AiNotice): string | null {
+  if (lsr.method !== "базисно-индексный") return null;
+  const idx = findIndex(lsr.indexRegion, lsr.indexQuarter);
+  const lines: string[] = [];
+  if (!idx) {
+    lines.push(`**Индекс для «${lsr.indexRegion}», квартал «${lsr.indexQuarter}» — не найден в корпусе.**`);
+    lines.push("");
+    lines.push(`При базисно-индексном методе базисные цены умножаются на индекс пересчёта к текущему`);
+    lines.push(`уровню. Если набора нет — текущая стоимость считается **×1**, то есть остаётся в ценах`);
+    lines.push(`базисного года и оказывается заниженной в разы.`);
+    lines.push("");
+    lines.push(`Проверьте регион и квартал в шапке ЛСР. В учебном квартале действует **Алматы 2026-Q2**.`);
+    return lines.join("\n");
+  }
+  lines.push(`**Применён индекс: ${lsr.indexRegion}, ${lsr.indexQuarter}.**`);
+  lines.push("");
+  lines.push(`Индекс умножает базисные ПЗ на коэффициент пересчёта к текущим ценам. Если квартал старше`);
+  lines.push(`фактического периода работ — цены занижены, экспертиза потребует пересчёт на актуальный набор.`);
+  lines.push("");
+  lines.push(`Сверьте квартал индекса с датой уровня цен в шапке: они должны совпадать.`);
+  return lines.join("\n");
+}
+
+/** Разбор дубля материала: какой материал, сколько раз, как чинить. */
+export function explainDuplicateMaterial(lsr: Lsr, notice: AiNotice): string | null {
+  const found = findPosition(lsr, notice.context.positionId);
+  if (!found) return null;
+  const { position } = found;
+  const overrides = position.resourceOverrides ?? [];
+  const counts = new Map<string, { name: string; n: number; price: number; qty: number }>();
+  for (const r of overrides) {
+    if (r.kind !== "материал") continue;
+    const k = normName(r.name);
+    const prev = counts.get(k);
+    counts.set(k, { name: r.name, n: (prev?.n ?? 0) + 1, price: r.basePrice, qty: r.qtyPerUnit });
+  }
+  const dup = [...counts.values()].find((c) => c.n >= 2);
+  if (!dup) return null;
+
+  const lines: string[] = [];
+  lines.push(`**Материал «${dup.name}» в позиции ${position.rateCode} учтён ${dup.n} раза.**`);
+  lines.push("");
+  lines.push(`Каждая строка материала умножается на объём позиции и попадает в ПЗ. Две одинаковые строки`);
+  lines.push(`= двойная стоимость материала (≈ +${dup.price.toLocaleString("ru-RU")} ₸ на единицу нормы лишних).`);
+  lines.push("");
+  lines.push(`Оставьте **одну** строку «${dup.name}», задайте в ней суммарный расход на единицу нормы,`);
+  lines.push(`остальные удалите в редакторе состава ресурсов.`);
+  return lines.join("\n");
+}
+
+/** Разбор индивидуальной цены без обоснования (урок 2.6). */
+export function explainMaterialPrice(lsr: Lsr, notice: AiNotice): string | null {
+  const found = findPosition(lsr, notice.context.positionId);
+  if (!found) return null;
+  const { position } = found;
+  const lines: string[] = [];
+  lines.push(`**Индивидуальная цена материала в позиции ${position.rateCode} — без обоснования.**`);
+  lines.push("");
+  lines.push(`Методика РК допускает замену нормативной цены на текущую (индивидуальную), но **только`);
+  lines.push(`при документальном обосновании**: прайс поставщика, коммерческое предложение, счёт или`);
+  lines.push(`конъюнктурный анализ (минимум 3 КП с расчётом средней).`);
+  lines.push("");
+  lines.push(`Без ссылки на источник экспертиза вернёт смету. Добавьте обоснование в **заметку позиции**`);
+  lines.push(`(например: «цена по КП ТОО “…” №… от …»).`);
+  return lines.join("\n");
+}
+
+/** Разбор двойного коэффициента условий. */
+export function explainCoefDouble(lsr: Lsr, notice: AiNotice): string | null {
+  const found = findPosition(lsr, notice.context.positionId);
+  if (!found) return null;
+  const { position } = found;
+  const coefs = position.coefficients ?? [];
+  if (coefs.length < 2) return null;
+  const product = coefs.reduce((m, c) => m * (c.value || 1), 1);
+
+  const lines: string[] = [];
+  lines.push(`**Позиция ${position.rateCode} — коэффициенты перемножаются в ${product.toFixed(3)}.**`);
+  lines.push("");
+  for (const c of coefs) lines.push(`   • ${c.kind} = ${c.value}${c.justification ? ` (${c.justification})` : ""}`);
+  lines.push("");
+  lines.push(`Признаки условий производства не суммируются, если описывают одно и то же (например,`);
+  lines.push(`«стеснённые» и «действующий-объект» — это стеснённость на эксплуатируемом объекте).`);
+  lines.push(`Повтор одного признака или перекрытие задваивает удорожание.`);
+  lines.push("");
+  lines.push(`Оставьте один коэффициент, точнее отражающий условия, либо подтвердите документом, что`);
+  lines.push(`условия действительно независимы.`);
+  return lines.join("\n");
+}
+
 /** Готовый текст разбора по замечанию или null (тогда — общий AI-разбор). */
 export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | null {
   switch (notice.scenario) {
@@ -75,6 +175,15 @@ export function deterministicBreakdown(lsr: Lsr, notice: AiNotice): string | nul
       return explainDoubleCount(lsr, notice);
     case "missing-coefficient":
       return explainMissingCoef(lsr, notice);
+    case "index-mismatch":
+    case "index-stale":
+      return explainIndex(lsr, notice);
+    case "duplicate-material":
+      return explainDuplicateMaterial(lsr, notice);
+    case "material-price-unjustified":
+      return explainMaterialPrice(lsr, notice);
+    case "coef-double":
+      return explainCoefDouble(lsr, notice);
     default:
       return null;
   }

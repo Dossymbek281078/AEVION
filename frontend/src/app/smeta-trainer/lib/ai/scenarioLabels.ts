@@ -27,6 +27,9 @@ export const SCENARIO_LABELS: Record<string, ScenarioLabel> = {
   "scaffolding-missing": { label: "Забыты леса", short: "Высотные работы без лесов/подмостей." },
   "dismantling-coef-missing": { label: "Забыт коэф. разборки", short: "Демонтаж без понижающего коэффициента." },
   "waste-factor-missing": { label: "Забыт коэф. отходов", short: "Материал без учёта отходов/потерь." },
+  "duplicate-material": { label: "Дубль материала", short: "Один материал добавлен в позицию дважды." },
+  "material-price-unjustified": { label: "Цена без обоснования", short: "Индивидуальная цена материала без ссылки на прайс/КП." },
+  "coef-double": { label: "Двойной коэффициент", short: "Перекрывающиеся/повторённые коэффициенты условий." },
 };
 
 export function scenarioLabel(code: string): ScenarioLabel {

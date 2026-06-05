@@ -6984,28 +6984,38 @@ export default function CyberChessPage(){
                 });
               }}>🎯 Тактика</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
-                // Где слабости — анализ позиции на слабости (короля, пешек, фигур)
+                // Где слабости — атака на короля + «висящие» (незащищённые атакованные) фигуры.
                 const fen=game.fen();
-                const myK=pCol==="w"?"K":"k";
-                const oppK=pCol==="w"?"k":"K";
-                const findKing=(c:string)=>{
-                  const ranks=fen.split(" ")[0].split("/");
-                  for(let r=0;r<8;r++){let f=0;for(const ch of ranks[r]){if(/\d/.test(ch))f+=parseInt(ch);else{if(ch===c)return `${"abcdefgh"[f]}${8-r}`;f++}}}
-                  return null;
-                };
-                const myKsq=findKing(myK);
-                const oppKsq=findKing(oppK);
-                let myAtk=0,oppAtk=0;
+                const myColor=pCol;const oppColor:"w"|"b"=pCol==="w"?"b":"w";
+                const GLYPH:Record<string,string>={p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚"};
+                let myKsq:string|null=null,oppKsq:string|null=null,myAtk=0,oppAtk=0;
+                const myHang:string[]=[],oppHang:string[]=[];
                 try{
-                  const tmp=new Chess(fen);
-                  if(myKsq)myAtk=tmp.attackers(myKsq as Square,pCol==="w"?"b":"w").length;
-                  if(oppKsq)oppAtk=tmp.attackers(oppKsq as Square,pCol).length;
+                  const c=new Chess(fen);const b=c.board();
+                  for(let r=0;r<8;r++)for(let f=0;f<8;f++){
+                    const cell=b[r][f];if(!cell)continue;
+                    const sq=`${"abcdefgh"[f]}${8-r}` as Square;
+                    if(cell.type==="k"){if(cell.color===myColor)myKsq=sq;else oppKsq=sq;continue;}
+                    const attackedBy=c.attackers(sq,cell.color===myColor?oppColor:myColor);
+                    const defendedBy=c.attackers(sq,cell.color);
+                    if(attackedBy.length>0&&defendedBy.length===0){ // атакована и не защищена = висит
+                      const tag=`${GLYPH[cell.type]}${sq}`;
+                      if(cell.color===myColor)myHang.push(tag);else oppHang.push(tag);
+                    }
+                  }
+                  if(myKsq)myAtk=c.attackers(myKsq as Square,oppColor).length;
+                  if(oppKsq)oppAtk=c.attackers(oppKsq as Square,myColor).length;
                 }catch{}
-                const safety=myAtk===0?"Король в безопасности":myAtk===1?"Король под атакой 1 фигуры":`Король под атакой ${myAtk} фигур!`;
-                const attack=oppAtk===0?"Король соперника безопасен":oppAtk>=2?`Король соперника под атакой ${oppAtk} фигур!`:"Король соперника под лёгким давлением";
-                const evalAbs=Math.abs(evalCp);
-                const positional=evalAbs>200&&hist.length>20?"Позиция требует нового плана — текущая стратегия не работает":evalAbs<50?"Равная позиция — ищи мелкие улучшения фигур":"Позиция в порядке — продолжай план";
-                sCoachRemark({kind:"weakness",title:"🛡 Слабости в позиции",body:`Твой король: ${safety} (${myKsq})\nКороль соперника: ${attack} (${oppKsq})\n\n${positional}`,hint:myAtk>=2?"Защити короля немедленно!":oppAtk>=2?"Усиль атаку!":undefined});
+                const safety=myAtk===0?"в безопасности":myAtk===1?"под атакой 1 фигуры":`под атакой ${myAtk} фигур!`;
+                const attack=oppAtk===0?"безопасен":oppAtk>=2?`под атакой ${oppAtk} фигур!`:"под лёгким давлением";
+                const parts:string[]=[
+                  `Твой король (${myKsq}): ${safety}`,
+                  `Король соперника (${oppKsq}): ${attack}`,
+                ];
+                if(myHang.length)parts.push(``,`⚠️ ТВОИ висят (бесплатно бьются): ${myHang.join(", ")} — защити или уведи!`);
+                if(oppHang.length)parts.push(``,`💎 У соперника висят: ${oppHang.join(", ")} — забирай!`);
+                if(!myHang.length&&!oppHang.length)parts.push(``,`Висящих фигур нет — ищи мелкие улучшения и слабые пешки.`);
+                sCoachRemark({kind:"weakness",title:"🛡 Слабости в позиции",body:parts.join("\n"),hint:myHang.length?"Сначала спаси висящие фигуры!":myAtk>=2?"Защити короля немедленно!":oppHang.length?"Забери бесплатную фигуру!":oppAtk>=2?"Усиль атаку!":undefined});
               }}>🛡 Слабости</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
                 // Разбор последнего хода — качество + альтернативы + объяснение

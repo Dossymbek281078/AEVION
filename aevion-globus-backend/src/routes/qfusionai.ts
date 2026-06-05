@@ -292,6 +292,55 @@ qfusionaiRouter.get("/stats", async (_req, res) => {
   });
 });
 
+/** GET /fusions — list recent fusion runs (Postgres + in-memory fallback) */
+qfusionaiRouter.get("/fusions", async (req: Request, res: Response) => {
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(String(req.query.offset ?? "0"), 10) || 0, 0);
+
+  // Try Postgres first
+  try {
+    const ready = await ensureFusionTable();
+    if (ready) {
+      const pool = getPool();
+      const [itemsRes, totalRes] = await Promise.all([
+        pool.query(
+          `SELECT id, strategy, provider, latency_ms, tokens_estimate, created_at
+           FROM qfusionai_requests
+           ORDER BY created_at DESC
+           LIMIT $1 OFFSET $2`,
+          [limit, offset]
+        ),
+        pool.query("SELECT COUNT(*)::int AS total FROM qfusionai_requests"),
+      ]);
+      return res.json({
+        source: "postgres",
+        total: totalRes.rows[0]?.total ?? 0,
+        limit,
+        offset,
+        items: itemsRes.rows,
+      });
+    }
+  } catch {
+    // fall through to in-memory
+  }
+
+  // In-memory fallback — MEM_STATS is append-order, newest last
+  const total = MEM_STATS.length;
+  const items = MEM_STATS.slice()
+    .reverse()
+    .slice(offset, offset + limit)
+    .map((s, idx) => ({
+      id: total - offset - idx,
+      strategy: s.strategy,
+      provider: s.provider,
+      latency_ms: s.latencyMs,
+      tokens_estimate: s.tokensEstimate,
+      created_at: new Date(s.createdAt).toISOString(),
+    }));
+
+  res.json({ source: "memory", total, limit, offset, items });
+});
+
 /** POST /route — main routing endpoint */
 qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response) => {
   const body = req.body || {};

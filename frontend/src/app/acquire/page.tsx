@@ -479,6 +479,44 @@ export default function AcquirePage() {
         </div>
       </section>
 
+      {/* SOFT DOORS — shown to AI-lab platform partners, above the cash ladder */}
+      {(acquireRef.key === "anthropic" || acquireRef.key === "openai" || acquireRef.key === "nvidia") && (
+        <section style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "radial-gradient(circle at 15% 0%, rgba(16,185,129,0.10), transparent 55%), rgba(255,255,255,0.015)" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 24px" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 16 }}>
+              Для платформенного партнёра · ни одна дверь не начинается с чека на $1B
+            </div>
+            <h2 style={{ fontSize: "clamp(26px, 3.8vw, 44px)", fontWeight: 900, lineHeight: 1.1, marginBottom: 22, letterSpacing: "-0.02em", maxWidth: 900 }}>
+              Несколько способов участвовать — без перевода на миллиард.
+            </h2>
+            <p style={{ fontSize: 18, color: "#cbd5e1", maxWidth: 880, lineHeight: 1.6, marginBottom: 36 }}>
+              Вы платите тем, чего у вас в избытке — <strong style={{ color: "#f8fafc" }}>компьют, инженеры,
+              дистрибуция, бренд</strong>, — а не дефицитным кэшем. Я прошу мало сейчас и привязываю свой
+              апсайд к тому, <strong style={{ color: "#f8fafc" }}>взлетит ли планета</strong>: вестинг и
+              earnout по реальным метрикам. Вы рискуете ресурсами, не капиталом.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+              {[
+                { tag: "V0 · ≈ $0", t: "Showcase & Credits", d: "Показать первую планету на Claude + компьют-кредиты и доступ. Риск близок к нулю, отношения начаты.", a: "#10b981" },
+                { tag: "V1 · 1–10%", t: "Малая стратегическая доля", d: "$10.5M–$105M по одной оценке ~$1.05B, транши под майлстоуны, без операционной нагрузки.", a: "#3b82f6" },
+                { tag: "V2 · контроль", t: "Planet Co-Build ⭐", d: "Вы вносите команду и ресурсы → контроль 80–90%; я сохраняю меньшинство с вестингом и остаюсь Chief Idea Officer — двигателем следующих идей.", a: "#a855f7" },
+              ].map(c => (
+                <div key={c.t} style={{ padding: 24, background: "rgba(255,255,255,0.03)", border: `1px solid ${c.a}40`, borderRadius: 18 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", color: c.a, textTransform: "uppercase", marginBottom: 10 }}>{c.tag}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#f8fafc", marginBottom: 10 }}>{c.t}</div>
+                  <p style={{ fontSize: 14, color: "#cbd5e1", lineHeight: 1.6, margin: 0 }}>{c.d}</p>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 880, lineHeight: 1.6, marginTop: 24 }}>
+              Полный выкуп ($1B за 95%) остаётся в меню ниже — но для платформенного партнёра это последняя
+              дверь, не первая. Большие деньги приходят по факту успеха, а не на старте. Токен AEV выносится
+              из периметра сделки. Структура фаз — по запросу.
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* CHOOSE YOUR ENTRY — tiered ladder */}
       <section style={{ background: "rgba(255,255,255,0.015)", borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 24px" }}>

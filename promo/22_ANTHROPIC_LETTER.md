@@ -132,6 +132,13 @@ compute, engineers, distribution, your brand — not in scarce capital:
     the engine that keeps producing what comes next. The outright buyout ($1B for
     95%) stays on the table, but for you it is the last door, not the first.
 
+And let me remove the thing that usually kills a deal like this: I am not asking you
+for a large check, or for a fortune up front. Pay me little now — a salary and a role
+— and tie my real upside to whether the planet actually works: vesting and earnouts
+on real milestones, liquidity later. You risk resources, not capital, and you pay in
+full only if it succeeds. That is deliberately the opposite of what would frighten a
+company heading into an IPO.
+
 The honest upside, kept as trajectory and not as today's price: with your team and
 distribution, the layer beneath money, IP, and AI-provenance is not a billion-dollar
 business — its path runs toward a trillion, and in a control structure most of that
@@ -246,6 +253,12 @@ Planet) — ровно это: постквантово подписанное, 
     контроль, я сохраняю меньшинство и остаюсь вашим Chief Idea Officer — двигателем, который
     продолжает выдавать следующее. Полный выкуп ($1B за 95%) остаётся в меню, но для вас это
     последняя дверь, не первая.
+
+И сразу уберу то, что обычно убивает такую сделку: я не прошу у вас большой чек и не прошу
+состояние на старте. Платите мне мало сейчас — зарплату и роль — и привяжите мой реальный апсайд к
+тому, взлетит ли планета: вестинг и earnout по реальным метрикам, ликвидность позже. Вы рискуете
+ресурсами, а не капиталом, и платите полностью только если получилось. Это намеренно
+противоположно тому, что испугало бы компанию, идущую на IPO.
 
 Честный апсайд — как траектория, а не как сегодняшняя цена: при вашей команде и дистрибуции слой
 под деньгами, IP и AI-provenance — это не бизнес на миллиард, его путь ведёт к триллиону, и при

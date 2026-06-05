@@ -158,6 +158,9 @@ type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:
 /* ═══ Stockfish with MultiPV ═══ */
 type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
 class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];
+  // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
+  // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
+  private ecbTimer:ReturnType<typeof setTimeout>|null=null;private pendingEval:{cp:number;mate:number;depth:number}|null=null;
   init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
@@ -169,7 +172,7 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       const cp=cpM?parseInt(cpM[1]):0;const mate=mM?parseInt(mM[1]):0;
       const pvNum=pvM?parseInt(pvM[1]):1;const depth=depM?parseInt(depM[1]):0;
       const moves=movesM?movesM[1].trim().split(" "):[];
-      if(this.ecb)this.ecb(cp,mate,depth);
+      if(this.ecb){this.pendingEval={cp,mate,depth};if(!this.ecbTimer){this.ecbTimer=setTimeout(()=>{this.ecbTimer=null;const p=this.pendingEval;this.pendingEval=null;if(this.ecb&&p)this.ecb(p.cp,p.mate,p.depth);},120);}}
       if(this.mpvCb){
         const idx=this.mpvLines.findIndex(x=>x.pv===pvNum);
         const line={pv:pvNum,cp,mate,depth,moves:moves.slice(0,10)};
@@ -178,6 +181,9 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
       }
     }
     if(l.startsWith("bestmove")){
+      // Флашим отложенную оценку — финальный eval должен осесть сразу по окончании счёта.
+      if(this.ecbTimer){clearTimeout(this.ecbTimer);this.ecbTimer=null;}
+      if(this.ecb&&this.pendingEval){const p=this.pendingEval;this.pendingEval=null;this.ecb(p.cp,p.mate,p.depth);}
       if(this.mpvCb){this.mpvCb([...this.mpvLines]);this.mpvCb=null;this.mpvLines=[]}
       const m=l.split(" ")[1];if(m&&m.length>=4&&this.cb){this.cb(m.slice(0,2),m.slice(2,4),m.length>4?m[4]:undefined);this.cb=null}}
     if(l==="uciok"){

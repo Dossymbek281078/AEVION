@@ -27,6 +27,39 @@ const YT_API_KEY = () => process.env.YOUTUBE_API_KEY?.trim() || "";
 const TWITCH_CLIENT_ID = () => process.env.TWITCH_CLIENT_ID?.trim() || "";
 const TWITCH_CLIENT_SECRET = () => process.env.TWITCH_CLIENT_SECRET?.trim() || "";
 const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
+const LS_KEY = () => process.env.LEMON_SQUEEZY_API_KEY?.trim() || "";
+const LS_STORE = () => process.env.LEMON_SQUEEZY_STORE_ID?.trim() || "";
+
+// ─── LemonSqueezy orders (живой канал подписок) ───────────────────────────
+interface LsOrder {
+  id: string; total: number; status: string; refunded: boolean;
+  currency: string; created_at: string; email: string; product: string;
+}
+async function lsOrders(): Promise<LsOrder[] | null> {
+  const key = LS_KEY();
+  if (!key) return null;
+  try {
+    const store = LS_STORE();
+    const url = `https://api.lemonsqueezy.com/v1/orders?${store ? `filter[store_id]=${store}&` : ""}sort=-created_at&page[size]=50`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/vnd.api+json" } });
+    if (!r.ok) return null;
+    const j = await r.json() as { data?: { id: string; attributes: Record<string, unknown> }[] };
+    return (j.data ?? []).map((o) => {
+      const a = o.attributes as Record<string, unknown>;
+      const foi = (a.first_order_item ?? {}) as Record<string, unknown>;
+      return {
+        id: o.id,
+        total: typeof a.total === "number" ? a.total : 0,
+        status: String(a.status ?? ""),
+        refunded: Boolean(a.refunded),
+        currency: String(a.currency ?? "USD").toUpperCase(),
+        created_at: String(a.created_at ?? ""),
+        email: String(a.user_email ?? ""),
+        product: String(foi.product_name ?? foi.variant_name ?? "AEVION"),
+      };
+    });
+  } catch { return null; }
+}
 
 /** Permalink → appId. Set GUMROAD_APP_<PERMALINK>=<appId> to attribute a
  *  product's sales to a specific AEVION app. Falls back to the checkout layer's
@@ -221,7 +254,8 @@ revenueRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     providers: {
-      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
+      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: true, note: "живой канал подписок (Lite/Medium/Full)" },
+      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: false, note: "one-time продукты / fallback" },
       paddle: {
         configured: Boolean(PADDLE_KEY()),
         sandbox: PADDLE_SANDBOX(),
@@ -327,7 +361,8 @@ revenueRouter.get("/overview", (_req, res) => {
     liveApps: live.length,
     channelCoverage: channelMap,
     providers: {
-      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true },
+      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: true },
+      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: false },
       paddle: { configured: Boolean(PADDLE_KEY()), sandbox: PADDLE_SANDBOX() },
       youtube: { configured: Boolean(YT_API_KEY()) },
       twitch: { configured: Boolean(TWITCH_CLIENT_ID() && TWITCH_CLIENT_SECRET()) },
@@ -464,6 +499,50 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
   }
 
   res.json({ sales: recent, byApp });
+});
+
+/**
+ * GET /api/revenue/lemonsqueezy/balance
+ * Сводка по живому каналу подписок. grossUsd = сумма оплаченных заказов.
+ * Комиссию LS (~5%+pp) заказы не отдают — net считается в выплатах LS.
+ */
+revenueRouter.get("/lemonsqueezy/balance", async (_req, res) => {
+  if (!LS_KEY()) {
+    return res.json({ stub: true, message: "LEMON_SQUEEZY_API_KEY not set" });
+  }
+  const orders = await lsOrders();
+  if (!orders) return res.status(502).json({ error: "lemonsqueezy_api_error" });
+  const valid = orders.filter((o) => o.status === "paid" && !o.refunded);
+  const grossUsd = valid.reduce((s, o) => s + o.total / 100, 0);
+  res.json({
+    grossUsd,
+    currency: "USD",
+    saleCount: valid.length,
+    refundedCount: orders.length - valid.length,
+    note: "LS забирает комиссию ~5%+pp; точный net — в Payouts LS",
+  });
+});
+
+/**
+ * GET /api/revenue/lemonsqueezy/recent
+ * Последние заказы LemonSqueezy.
+ */
+revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
+  if (!LS_KEY()) {
+    return res.json({ stub: true, sales: [], message: "LEMON_SQUEEZY_API_KEY not set" });
+  }
+  const orders = await lsOrders();
+  if (!orders) return res.status(502).json({ error: "lemonsqueezy_api_error" });
+  const recent = orders.slice(0, 20).map((o) => ({
+    id: o.id,
+    product: o.product,
+    email: o.email || null,
+    amountUsd: o.total / 100,
+    currency: o.currency,
+    refunded: o.refunded,
+    date: o.created_at || null,
+  }));
+  res.json({ sales: recent });
 });
 
 /**

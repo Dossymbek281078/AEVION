@@ -24,6 +24,9 @@ const KNOWN_REFS: Record<string, string> = {
   temasek: "Temasek",
   sequoia: "Sequoia",
   a16z: "Andreessen Horowitz",
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  nvidia: "NVIDIA",
   softbank: "SoftBank",
   kaspi: "Kaspi.kz",
   halyk: "Halyk Bank",
@@ -220,6 +223,25 @@ export default function AcquirePage() {
           }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: "#10b981", boxShadow: "0 0 0 4px rgba(16,185,129,0.18)" }} aria-hidden />
             Hello, <span style={{ color: "#10b981", fontWeight: 800 }}>{acquireRef.name}</span> team — this brief was prepared for you.
+          </div>
+        )}
+        {(acquireRef.key === "anthropic" || acquireRef.key === "openai" || acquireRef.key === "nvidia") && (
+          <div style={{
+            marginBottom: 22,
+            padding: "16px 20px",
+            background: "linear-gradient(135deg, rgba(16,185,129,0.10), rgba(168,85,247,0.08))",
+            border: "1px solid rgba(168,85,247,0.30)",
+            borderRadius: 16,
+            fontSize: 15,
+            color: "#e2e8f0",
+            lineHeight: 1.55,
+            maxWidth: 820,
+          }}>
+            <strong style={{ color: "#f8fafc" }}>Every line of AEVION was built on your platform.</strong>{" "}
+            A non-engineer — director of several construction-trust companies — shipped 30+ production
+            modules solo in six months, with AI as the only engineer. Before it is an investment, AEVION
+            may be the most complete living proof of what your platform makes possible. Honest disclosure:
+            a short list of strategic addressees received this brief, and each was told so.
           </div>
         )}
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: "#10b981", textTransform: "uppercase", marginBottom: 24 }}>
@@ -431,6 +453,11 @@ export default function AcquirePage() {
             Цена одна и постоянная: <strong style={{ color: "#f8fafc" }}>{PRICE_PER_PCT} за 1% при единой оценке {VALUATION_LABEL}.</strong>{" "}
             Вы выбираете только <em>сколько</em> покупаете — цена за процент не меняется ни на одном уровне.
             Малая доля — капитал в рост (primary), я остаюсь за рулём. 95% — полный выкуп (secondary), я ухожу в Senior Advisor.
+          </p>
+          <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 860, lineHeight: 1.6, marginBottom: 20 }}>
+            <strong style={{ color: "#10b981" }}>Цена сегодня — миллиард, траектория — триллион.</strong>{" "}
+            Мы оцениваем <em>семя</em> в {VALUATION_LABEL}. Слой под деньгами, IP и AI-provenance при настоящей команде —
+            адресуемое пространство ≈ $1.5–2T к 2030. Асимметрия и есть сделка: участвовать мало и безопасно сейчас — или забрать весь двигатель; в любом случае вы рано.
           </p>
           <div style={{ display: "inline-flex", flexWrap: "wrap", marginBottom: 32, borderRadius: 14, overflow: "hidden", border: "1px solid rgba(16,185,129,0.3)" }}>
             <div style={{ padding: "14px 22px", background: "rgba(16,185,129,0.10)" }}>

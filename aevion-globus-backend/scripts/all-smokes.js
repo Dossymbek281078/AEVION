@@ -233,18 +233,49 @@ console.log(`  READ_ONLY  = ${READ_ONLY ? "yes" : "no"}`);
 console.log(`  scripts    = ${eligible.map((s) => s.name).join(", ")}`);
 console.log("");
 
+// Node v24.11.1 on Windows can crash during process teardown (exit code
+// 0xC0000409 = 3221226505, STATUS_STACK_BUFFER_OVERRUN) when fetch/undici
+// keep-alive sockets are still open at exit — even after a clean
+// process.exit(0). That overrides the child's real exit code, so a fully
+// passing smoke shows up as a failure. When we see that exact sentinel,
+// fall back to judging by the child's printed summary instead of the code.
+const WIN_EXIT_TEARDOWN_CRASH = 3221226505; // 0xC0000409
+
+// True when the captured output reports zero failed assertions. Covers both
+// summary formats in use: "… N PASS  0 FAIL" and "… N passed, 0 failed".
+function reportsZeroFailures(out) {
+  const hasSummary = /\bassertions\b|\bPASS\b|\bpassed\b/i.test(out);
+  const zeroFail =
+    /\b0\s+FAIL\b/i.test(out) ||
+    /\b0\s+failed\b/i.test(out) ||
+    /failed:\s*0\b/i.test(out);
+  const hasFailMarker =
+    /\b[1-9]\d*\s+FAIL\b/i.test(out) || /\b[1-9]\d*\s+failed\b/i.test(out);
+  return hasSummary && zeroFail && !hasFailMarker;
+}
+
 const results = [];
 for (const sm of eligible) {
   const banner = `========== ${sm.name} ==========`;
   console.log(`\n${banner}`);
   const start = Date.now();
   const child = spawnSync("node", [path.join(__dirname, sm.script)], {
-    stdio: "inherit",
     env: { ...process.env, BASE, ...(sm.env || {}) },
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
   });
+  // Stream the captured output through, preserving the previous live-ish UX.
+  if (child.stdout) process.stdout.write(child.stdout);
+  if (child.stderr) process.stderr.write(child.stderr);
   const elapsed = Date.now() - start;
-  const ok = child.status === 0;
-  results.push({ name: sm.name, ok, status: child.status, elapsed });
+  const combined = (child.stdout || "") + "\n" + (child.stderr || "");
+  let ok = child.status === 0;
+  let note = "";
+  if (!ok && child.status === WIN_EXIT_TEARDOWN_CRASH && reportsZeroFailures(combined)) {
+    ok = true;
+    note = " (Node/Windows exit-teardown crash ignored — 0 failures reported)";
+  }
+  results.push({ name: sm.name, ok, status: child.status, elapsed, note });
 }
 
 console.log("\n========== Summary ==========");
@@ -252,7 +283,7 @@ let passed = 0,
   failed = 0;
 for (const r of results) {
   const tag = r.ok ? "PASS" : "FAIL";
-  const detail = r.ok ? "" : ` (exit=${r.status})`;
+  const detail = r.ok ? r.note || "" : ` (exit=${r.status})`;
   console.log(`  ${tag}  ${r.name.padEnd(12)}  ${(r.elapsed / 1000).toFixed(1)}s${detail}`);
   if (r.ok) passed += 1;
   else failed += 1;

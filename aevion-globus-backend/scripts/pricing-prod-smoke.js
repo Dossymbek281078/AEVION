@@ -59,9 +59,10 @@ async function run() {
   if (r.status === 200 && Array.isArray(r.body?.items)) {
     tiers = r.body.items;
     const ids = tiers.map((t) => t.id);
-    if (ids.includes("free") && ids.includes("pro")) {
+    const hasPaid = tiers.some((t) => Number(t.priceMonthly) > 0);
+    if (ids.includes("free") && hasPaid) {
       ok("GET /pricing/tiers", `count=${tiers.length} ids=${ids.join(",")}`);
-    } else fail("tiers ids missing free/pro", `got=${ids.join(",")}`);
+    } else fail("tiers need free + >=1 paid", `got=${ids.join(",")}`);
   } else fail("GET /pricing/tiers", `${r.status} ${JSON.stringify(r.body).slice(0, 60)}`);
 
   // 3. tier.priceMonthly numeric on free

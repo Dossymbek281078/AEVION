@@ -7018,27 +7018,34 @@ export default function CyberChessPage(){
                 sCoachRemark({kind:"weakness",title:"🛡 Слабости в позиции",body:parts.join("\n"),hint:myHang.length?"Сначала спаси висящие фигуры!":myAtk>=2?"Защити короля немедленно!":oppHang.length?"Забери бесплатную фигуру!":oppAtk>=2?"Усиль атаку!":undefined});
               }}>🛡 Слабости</Btn>
               <Btn size="sm" variant="secondary" onClick={()=>{
-                // Разбор последнего хода — качество + альтернативы + объяснение
+                // Разбор последнего хода — природа хода (из SAN) + качество (если есть полный
+                // анализ) + РЕАЛЬНАЯ оценка движка. Раньше во время живой партии (analysis пуст)
+                // показывал «Eval +0.00 · Нейтральный ход» — мусор.
                 if(hist.length===0){sCoachRemark({kind:"explain",title:"Нет ходов",body:"Партия ещё не началась"});return}
                 const lastSan=hist[hist.length-1];
                 const lastIdx=hist.length-1;
                 const myAnnot=moveAnnotations[lastIdx];
-                const evalBefore=analysis[lastIdx-1]?.cp??0;
-                const evalAfter=analysis[lastIdx]?.cp??0;
-                const quality=analysis[lastIdx]?.quality;
-                const movedBy=lastIdx%2===0?"Белые":"Чёрные";
-                const evalDiff=Math.abs(evalAfter-evalBefore);
-                const sign=lastIdx%2===0?1:-1;
-                const fromPerspective=(evalAfter-evalBefore)*sign;
-                const qualityLabel=quality==="great"?"🌟 Отличный":quality==="good"?"✅ Хороший":quality==="inacc"?"⚠ Неточность":quality==="mistake"?"❌ Ошибка":quality==="blunder"?"💀 Блундер":"";
-                const evalStr=`${evalAfter>0?"+":""}${(evalAfter/100).toFixed(2)}`;
-                const hint=fromPerspective<-100?"Потеря материала или позиции — рассмотри альтернативы":fromPerspective>100?"Этот ход улучшил позицию — хорошее решение!":quality==="blunder"?"Критическая ошибка — противник может использовать":"Нейтральный ход";
                 const annot=myAnnot?` (ты отметил: ${myAnnot})`:"";
-                sCoachRemark({
-                  kind:"explain",
-                  title:`📝 Разбор: ${lastSan}${annot}`,
-                  body:`${movedBy} сыграли ${lastSan}.\n${qualityLabel?qualityLabel+" ход\n":""}Eval: ${evalStr} (Δ ${evalDiff>0?"+":""}${(evalDiff/100).toFixed(2)} cp)\n${hint}`,
-                  hint:quality==="blunder"?"Используй 🔍 Объясни или 📋 Найди план чтобы понять позицию":undefined
+                const movedBy=lastIdx%2===0?"Белые":"Чёрные";
+                const isMate=lastSan.includes("#"),isCheck=lastSan.includes("+"),isCap=lastSan.includes("x"),isCastle=lastSan.startsWith("O-"),isProm=lastSan.includes("=");
+                const nature=isMate?"⚔ мат":isCastle?"рокировка":isProm?"превращение":isCap&&isCheck?"взятие с шахом":isCheck?"шах":isCap?"взятие":"тихий ход";
+                const q=analysis[lastIdx]?.quality;
+                const qLabel=q==="brilliant"?"💎 Блестящий":q==="great"?"🌟 Отличный":q==="good"?"✅ Хороший":q==="inacc"?"⚠ Неточность":q==="mistake"?"❌ Ошибка":q==="blunder"?"💀 Блундер":"";
+                const buildBody=(cp:number|null,mate:number)=>{
+                  const evalStr=mate!==0?`мат в ${Math.abs(mate)} (${mate>0?"за белых":"за чёрных"})`:cp!==null?`${cp>0?"+":""}${(cp/100).toFixed(2)}`:"запусти полный анализ для оценки";
+                  const lines=[`${movedBy} сыграли ${lastSan} — ${nature}.`];
+                  if(qLabel)lines.push(`${qLabel} ход`);
+                  lines.push(`Оценка позиции: ${evalStr}`);
+                  return lines.join("\n");
+                };
+                if(!sfR.current?.ready()){
+                  sCoachRemark({kind:"explain",title:`📝 Разбор: ${lastSan}${annot}`,body:buildBody(analysis[lastIdx]?.cp??null,0),hint:q==="blunder"?"Используй 🔍 Объясни чтобы понять позицию":undefined});
+                  return;
+                }
+                sCoachRemark({kind:"explain",title:"⏳ Разбираю ход…",body:"Считаю движком…"});
+                const sgn=game.fen().split(" ")[1]==="w"?1:-1;let lc=0,lm=0;
+                sfR.current.eval(game.fen(),14,(cc:number,mm:number)=>{lc=cc*sgn;lm=mm*sgn;},()=>{
+                  sCoachRemark({kind:"explain",title:`📝 Разбор: ${lastSan}${annot}`,body:buildBody(lc,lm),hint:q==="blunder"?"Используй 🔍 Объясни или 📋 Найди план":undefined});
                 });
               }}>📝 Разбор</Btn>
               {coachRemark&&<Btn size="sm" variant="ghost" onClick={()=>sCoachRemark(null)}>✕ Скрыть</Btn>}

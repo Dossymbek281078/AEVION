@@ -102,6 +102,10 @@ const SMOKES = [
   // method). Read-only (GET probes only). Guards against the OpenAPI catalog
   // advertising routes that don't exist. Honors BASE.
   { name: "phantom-audit", script: "phantom-endpoint-audit.mjs", readOnly: true },
+  // Frontend phantom-page gate — every module in the registry advertises a
+  // page at /<id>; this fails if any returns 404 on the live frontend.
+  // Read-only; always probes FRONTEND (default https://aevion.app).
+  { name: "frontend-phantom", script: "frontend-phantom-audit.mjs", readOnly: true, env: { FRONTEND: process.env.FRONTEND || "https://aevion.app" } },
   // QCoreAI PROD — 12 checks for the multi-agent AI core (foundational —
   // every AI-using module eventually calls into it). Validates health,
   // providers/configuration consistency, sessions/agents/prompts shape.

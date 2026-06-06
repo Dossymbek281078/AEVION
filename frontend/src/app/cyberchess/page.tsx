@@ -7876,23 +7876,25 @@ export default function CyberChessPage(){
                 Each chip has a per-premove ✕ for surgical removal; the toolbar at the right
                 has ↶ (undo last) and ✕ (clear all). User feedback: clicking the chip's ✕
                 must remove that specific premove. */}
-            {pms.length>0&&(tab==="play"||tab==="coach")&&<div style={{padding:"7px 10px",borderBottom:`1px solid #bfdbfe`,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            {pms.length>0&&(tab==="play"||tab==="coach")&&(()=>{
+              const cmp=pms.length>6; // компактный режим: мелкие чипы, чтобы много премувов влезло
+              return <div style={{padding:cmp?"5px 8px":"7px 10px",borderBottom:`1px solid #bfdbfe`,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",display:"flex",alignItems:"center",gap:cmp?3:6,flexWrap:"wrap"}}>
               <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>Премувы · {pms.length}</span>
-              {pms.map((pm,i)=>(<span key={`pm-rp-${i}`} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 3px 2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
-                <span style={{minWidth:14,height:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:900}}>{i+1}</span>
+              {pms.map((pm,i)=>(<span key={`pm-rp-${i}`} style={{display:"inline-flex",alignItems:"center",gap:cmp?2:3,padding:cmp?"1px 2px 1px 5px":"2px 3px 2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:cmp?10:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
+                <span style={{minWidth:cmp?11:14,height:cmp?11:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:cmp?8:9,fontWeight:900}}>{i+1}</span>
                 <span>{pm.from}→{pm.to}</span>
                 <button onClick={()=>{sPms(v=>v.filter((_,j)=>j!==i));snd("premove")}}
                   title={`Удалить премув ${pm.from}→${pm.to}`}
-                  style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:18,height:18,borderRadius:9,border:"none",background:"transparent",color:"#94a3b8",fontSize:11,fontWeight:900,cursor:"pointer",lineHeight:1,padding:0,marginLeft:1}}
+                  style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:cmp?14:18,height:cmp?14:18,borderRadius:9,border:"none",background:"transparent",color:"#94a3b8",fontSize:cmp?10:11,fontWeight:900,cursor:"pointer",lineHeight:1,padding:0,marginLeft:1}}
                   onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#fee2e2";(e.currentTarget as HTMLElement).style.color="#dc2626"}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";(e.currentTarget as HTMLElement).style.color="#94a3b8"}}>✕</button>
               </span>))}
               <span style={{flex:1}}/>
               <button onClick={()=>{sPms(p=>p.slice(0,-1));snd("premove")}} title="Отменить последний премув"
-                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶</button>
+                style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1d4ed8",fontSize:11,fontWeight:800,cursor:"pointer"}}>↶</button>
               <button onClick={()=>{sPms([]);sPmSel(null);snd("cancel")}} title="Отменить все премувы"
-                style={{padding:"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ всё</button>
-            </div>}
+                style={{padding:cmp?"2px 6px":"3px 8px",borderRadius:6,border:"1px solid #fca5a5",background:"#fef2f2",color:"#b91c1c",fontSize:11,fontWeight:800,cursor:"pointer"}}>✕ всё</button>
+            </div>;})()}
             <div style={{padding:"7px 10px",borderBottom:`1px solid ${T.border}`,background:"linear-gradient(180deg, #fafbfd, #f9fafb)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:10,fontWeight:900,letterSpacing:"0.08em",textTransform:"uppercase" as const,color:T.dim,display:"inline-flex",alignItems:"center",gap:5,flex:1,minWidth:0}}>
                 <span style={{display:"inline-block",width:3,height:14,background:`linear-gradient(180deg, ${T.accent}, ${T.purple})`,borderRadius:2,flexShrink:0}}/>

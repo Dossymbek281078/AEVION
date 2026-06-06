@@ -511,7 +511,10 @@ export default function AcquirePage() {
             <p style={{ fontSize: 14, color: "#94a3b8", maxWidth: 880, lineHeight: 1.6, marginTop: 24 }}>
               Полный выкуп ($1B за 95%) остаётся в меню ниже — но для платформенного партнёра это последняя
               дверь, не первая. Большие деньги приходят по факту успеха, а не на старте. Токен AEV выносится
-              из периметра сделки. Структура фаз — по запросу.
+              из периметра сделки.{" "}
+              <Link href="/acquire/ways" style={{ color: "#10b981", textDecoration: "underline" }}>
+                Печатная версия «Ways to participate» (PDF) →
+              </Link>
             </p>
           </div>
         </section>

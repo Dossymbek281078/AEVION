@@ -4058,6 +4058,30 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[tab,pzCurrent,pzAttempt,nextPz,spendChessy]);
 
+  /* ── Analysis hotkeys — J: пред. ключевой момент · K: след. (дублируют кнопки ⟨◆/◆⟩).
+     Отдельный хэндлер с deps на analysis/browseIdx — иначе stale-closure. ── */
+  useEffect(()=>{
+    if(tab!=="analysis"||analysis.length===0)return;
+    const h=(e:KeyboardEvent)=>{
+      const t=e.target as HTMLElement;
+      if(t?.tagName==="INPUT"||t?.tagName==="TEXTAREA"||t?.tagName==="SELECT")return;
+      if(e.ctrlKey||e.metaKey||e.altKey)return;
+      if(e.key!=="j"&&e.key!=="J"&&e.key!=="k"&&e.key!=="K")return;
+      const moments=analysis.filter(a=>a.quality==="blunder"||a.quality==="mistake"||a.quality==="brilliant").map(a=>a.move-1).filter(p=>p>=0).sort((x,y)=>x-y);
+      if(!moments.length)return;
+      const cur=browseIdx<0?hist.length:browseIdx;
+      const target=(e.key==="j"||e.key==="J")?[...moments].reverse().find(p=>p<cur):moments.find(p=>p>cur);
+      if(target===undefined)return;
+      e.preventDefault();
+      try{const g=new Chess(fenHist[target]);setGame(g);sBk(k=>k+1);sBrowseIdx(target);sLm(null);sSel(null);sVm(new Set());sReplaying(false);
+        const a=analysis.find(x=>x.move-1===target);const gl=a?.quality==="brilliant"?"!!":a?.quality==="blunder"?"??":a?.quality==="mistake"?"?":"●";
+        showToast(`${gl} Ключевой момент · ход ${Math.floor(target/2)+1}`,"info");
+      }catch{}
+    };
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[tab,analysis,browseIdx,hist.length,fenHist]);
+
   /* ── Blunder Rewind — превращает блундер игрока в персональный пазл.
      Берёт позицию ДО ошибки, запрашивает у Stockfish лучший ход,
      загружает как обычный puzzle (reusing pzCurrent infra). ── */
@@ -7940,8 +7964,8 @@ export default function CyberChessPage(){
                   const nb=(enabled:boolean):React.CSSProperties=>({padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,fontWeight:800,cursor:enabled?"pointer":"default",opacity:enabled?1:0.4,color:T.danger});
                   return <>
                     <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
-                    <button disabled={prev===undefined} onClick={()=>prev!==undefined&&jump(prev)} style={nb(prev!==undefined)} title="Пред. ключевой момент (зевок/ошибка/блеск)">⟨◆</button>
-                    <button disabled={next===undefined} onClick={()=>next!==undefined&&jump(next)} style={nb(next!==undefined)} title="След. ключевой момент (зевок/ошибка/блеск)">◆⟩</button>
+                    <button disabled={prev===undefined} onClick={()=>prev!==undefined&&jump(prev)} style={nb(prev!==undefined)} title="Пред. ключевой момент — зевок/ошибка/блеск (клавиша J)">⟨◆</button>
+                    <button disabled={next===undefined} onClick={()=>next!==undefined&&jump(next)} style={nb(next!==undefined)} title="След. ключевой момент — зевок/ошибка/блеск (клавиша K)">◆⟩</button>
                   </>;
                 })()}
               </div>}

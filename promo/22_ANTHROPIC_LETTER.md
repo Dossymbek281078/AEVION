@@ -84,6 +84,20 @@ one fabric of trust. This is not "30 apps built on Claude." It is the first cons
 and economic layer — a planet — on top of your model: the thing that turns raw
 capability into a place where people live and transact.
 
+And the habitat is not only for individuals. A government can hold its own sovereign
+territory on this globe — a sealed enclave only its authorized officials may enter,
+post-quantum-protected, where the nation's data never leaves its own contour. This is
+how you establish at the level of states, not vendors. Kazakhstan, whose government is
+pushing AI hard right now, is a natural first beachhead: put a country's schools inside
+it — every child an account, every subject including AI literacy taught with Claude
+underneath — and one nation's education alone is hundreds of millions a year, recurring.
+Banks need the post-quantum signing layer today; hospitals need the trust; agencies
+need verifiable, corruption-resistant records. That is why this needed to exist
+yesterday: AI content is already flooding, the quantum clock is already running, and
+every state is reaching for AI sovereignty at once. Whoever sets the standard for a
+sovereign AI ecosystem first anchors nations for a generation — on your base, if you
+move now.
+
 Let me be plain about what your tools did, because it is why I am writing to you
 first and not only to investors. I cannot write code. Yet in six months Claude Code
 let me build real, working systems — and feel, for the first time in my life, like
@@ -132,12 +146,14 @@ compute, engineers, distribution, your brand — not in scarce capital:
     the engine that keeps producing what comes next. The outright buyout ($1B for
     95%) stays on the table, but for you it is the last door, not the first.
 
-And let me remove the thing that usually kills a deal like this: I am not asking you
-for a large check, or for a fortune up front. Pay me little now — a salary and a role
-— and tie my real upside to whether the planet actually works: vesting and earnouts
-on real milestones, liquidity later. You risk resources, not capital, and you pay in
-full only if it succeeds. That is deliberately the opposite of what would frighten a
-company heading into an IPO.
+And let me make the actual ask concrete, and small. I want $10M now — but I mean it
+as a repayable advance, not a payday: you get it back, out of revenue, once we reach
+$100M. I keep 35% of AEVION; you and your partners take control of the rest, paid
+mostly in what you have in abundance — a team, compute, distribution, brand. So if
+you believe in this, the $10M is an investment that returns to you, while I am tied to
+the upside of my 35% as the planet grows. That is deliberately the opposite of what
+would frighten a company heading into an IPO: a small check, recoverable, and I only
+grow rich if you do.
 
 The honest upside, kept as trajectory and not as today's price: with your team and
 distribution, the layer beneath money, IP, and AI-provenance is not a billion-dollar
@@ -210,6 +226,17 @@ AEVION — это первая такая планета, на вашей баз
 Это первый потребительский и экономический слой — планета — поверх вашей модели: то, что
 превращает голую способность в место, где люди живут и совершают транзакции.
 
+И этот ареал — не только для людей. Государство может получить собственную суверенную территорию на
+этом глобусе — запечатанный анклав, куда вход только у уполномоченных лиц, с постквантовой защитой, где
+данные страны не покидают её контур. Так вы закрепляетесь на уровне государств, а не вендоров. Казахстан,
+чьё правительство прямо сейчас агрессивно двигает ИИ, — естественный первый плацдарм: помещаете школы
+страны внутрь — аккаунт на каждого ребёнка, все предметы, включая ИИ-грамотность, с Claude внутри — и
+образование одной страны — это уже сотни миллионов в год, рекуррентно. Банкам постквантовая подпись
+нужна сегодня; больницам — доверие; ведомствам — проверяемые, устойчивые к коррупции записи. Вот почему
+это надо было построить ещё вчера: AI-контент уже заливает мир, квантовые часы уже идут, и государства
+тянутся к AI-суверенитету все разом. Кто первым задаст стандарт суверенной AI-экосистемы — заякорит
+страны на поколение. На вашей базе — если двинетесь сейчас.
+
 Скажу прямо, что сделали ваши инструменты — потому что именно поэтому я пишу сначала вам, а не
 только инвесторам. Я не умею писать код. И всё же за 6 месяцев Claude Code позволил мне строить
 реальные, работающие системы — и впервые в жизни почувствовать себя разработчиком. Вы дали мне не
@@ -254,11 +281,13 @@ Planet) — ровно это: постквантово подписанное, 
     продолжает выдавать следующее. Полный выкуп ($1B за 95%) остаётся в меню, но для вас это
     последняя дверь, не первая.
 
-И сразу уберу то, что обычно убивает такую сделку: я не прошу у вас большой чек и не прошу
-состояние на старте. Платите мне мало сейчас — зарплату и роль — и привяжите мой реальный апсайд к
-тому, взлетит ли планета: вестинг и earnout по реальным метрикам, ликвидность позже. Вы рискуете
-ресурсами, а не капиталом, и платите полностью только если получилось. Это намеренно
-противоположно тому, что испугало бы компанию, идущую на IPO.
+И сделаю просьбу конкретной и небольшой. Я хочу $10M сейчас — но как **возвратный аванс**, не
+выплату-состояние: вы получаете их обратно, из дохода, когда мы достигаем $100M. Я сохраняю **35%**
+AEVION; вы и партнёры берёте контроль над остальным, оплачивая в основном тем, чего у вас в избытке —
+команда, компьют, дистрибуция, бренд. То есть, если вы верите в проект, $10M — это ваша инвестиция,
+которая к вам и вернётся, а я привязан к апсайду своих 35% по мере роста планеты. Это намеренно
+противоположно тому, что испугало бы компанию перед IPO: маленький чек, возвратный, и я богатею только
+если богатеете вы.
 
 Честный апсайд — как траектория, а не как сегодняшняя цена: при вашей команде и дистрибуции слой
 под деньгами, IP и AI-provenance — это не бизнес на миллиард, его путь ведёт к триллиону, и при

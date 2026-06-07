@@ -47,12 +47,13 @@ export default function AcquireWaysPage() {
         </p>
 
         <div className="ask-box">
-          <div className="eyebrow">The deal-saver</div>
-          <div className="price">I ask for little now. My upside is tied to whether the planet works.</div>
+          <div className="eyebrow">The headline ask · small and recoverable</div>
+          <div className="price">$10M now — as a repayable advance. I keep 35%.</div>
           <p style={{ margin: 0 }}>
-            A salary and a role today — not a fortune. My wealth comes through <strong>vesting and earnouts on
-            real milestones</strong>, with liquidity later. You risk resources, not capital, and pay in full
-            only if it succeeds. The opposite of what frightens a company heading into an IPO.
+            You get the $10M back, out of revenue, once we reach $100M. You and your partners take control of
+            the rest (~65%), paid mostly in <strong>compute, a team, distribution, brand</strong> — not capital.
+            If you believe in this, the $10M is an investment that returns to you; I am tied to the upside of my
+            <strong> 35%</strong> as the planet grows. A small check, recoverable, and I only grow rich if you do.
           </p>
         </div>
 
@@ -111,6 +112,39 @@ export default function AcquireWaysPage() {
         <p>
           So whatever brought you here — a proof of your own platform, a piece of the future, or the trust
           infrastructure the AI age needs anyway — none of these doors asks you to be afraid of the number.
+        </p>
+
+        {/* PAGE 3 — who it serves + sovereign + urgency */}
+        <div className="page-break" />
+        <div className="eyebrow">Why the planet is bigger than apps</div>
+        <h2>Sovereign territory, and who it serves</h2>
+        <p>
+          The habitat is not only for individuals. A <strong>government can hold its own sovereign territory
+          on the globe</strong> — a sealed enclave only its authorized officials may enter, post-quantum-
+          protected, where the nation’s data never leaves its own contour. This is how you establish at the
+          level of states, not vendors. Kazakhstan — whose government is pushing AI hard right now — is a
+          natural first beachhead.
+        </p>
+        <table>
+          <thead><tr><th style={{ width: "24%" }}>Who</th><th>What the planet gives</th><th style={{ width: "26%" }}>Why it is money / value</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Governments</strong></td><td>Sovereign enclave, e-gov, identity, document attestation, transparent (corruption-resistant) procurement</td><td>State budgets, national security, anti-corruption</td></tr>
+            <tr><td><strong>Education</strong></td><td>An account per child: every subject + AI literacy, a Claude tutor, credential attestation</td><td>~$100/child/year recurring — one country’s schools ≈ $350M/yr</td></tr>
+            <tr><td><strong>Banks</strong></td><td>Payment rail, KYC, <strong>post-quantum transaction signing</strong>, settlement, contract attestation</td><td>Banks must move to post-quantum now (harvest-now-decrypt-later)</td></tr>
+            <tr><td><strong>Healthcare / creators / devs</strong></td><td>Secure records; authorship attestation; one developer cabinet vs 15 subscriptions</td><td>Trust, provenance, efficiency</td></tr>
+          </tbody>
+        </table>
+        <h3>Why it needed to exist yesterday</h3>
+        <ul>
+          <li>AI content is already flooding — the provenance crisis is now, not later.</li>
+          <li>The quantum clock is already running — signatures must be reissued today (ML-DSA-65, FIPS 204, in prod).</li>
+          <li>Every state is reaching for AI sovereignty at once — first to set the standard anchors nations for a generation.</li>
+          <li>Tools are commoditizing — the window to own the place, not just a tool, is closing.</li>
+        </ul>
+        <p style={{ fontSize: "9.5pt", color: "#555" }}>
+          Figures illustrative; the order of magnitude is the point — one vertical of one country is hundreds
+          of millions a year, recurring. That is why “a billion today, a trillion as trajectory” is arithmetic,
+          not a slogan. Full detail: promo/26_PLANET_UTILITY_SOVEREIGN.md.
         </p>
 
         <div className="footer">

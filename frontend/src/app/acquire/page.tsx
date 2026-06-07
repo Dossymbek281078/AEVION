@@ -499,7 +499,7 @@ export default function AcquirePage() {
               {[
                 { tag: "V0 · ≈ $0", t: "Showcase & Credits", d: "Показать первую планету на Claude + компьют-кредиты и доступ. Риск близок к нулю, отношения начаты.", a: "#10b981" },
                 { tag: "V1 · 1–10%", t: "Малая стратегическая доля", d: "$10.5M–$105M по одной оценке ~$1.05B, транши под майлстоуны, без операционной нагрузки.", a: "#3b82f6" },
-                { tag: "V2 · контроль", t: "Planet Co-Build ⭐", d: "Вы вносите команду и ресурсы → контроль 80–90%; я сохраняю меньшинство с вестингом и остаюсь Chief Idea Officer — двигателем следующих идей.", a: "#a855f7" },
+                { tag: "V2 · headline", t: "Planet Co-Build ⭐", d: "$10M сейчас как возвратный аванс; я сохраняю 35%, вы + партнёры — контроль 65% (в основном ресурсами). $10M возвращаются вам при $100M. Я остаюсь Chief Idea Officer — двигателем следующих идей.", a: "#a855f7" },
               ].map(c => (
                 <div key={c.t} style={{ padding: 24, background: "rgba(255,255,255,0.03)", border: `1px solid ${c.a}40`, borderRadius: 18 }}>
                   <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", color: c.a, textTransform: "uppercase", marginBottom: 10 }}>{c.tag}</div>

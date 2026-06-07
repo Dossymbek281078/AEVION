@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
 import DonateForm from "./DonateForm";
 
 export const dynamic = "force-dynamic";
@@ -121,23 +122,24 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function QGoodCampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const data = await loadCampaign(id);
+  const { t } = await getServerT();
 
   if (!data) {
     return (
       <main style={{ minHeight: "100vh", background: "#0f172a", color: "#f1f5f9", padding: "64px 24px" }}>
         <div style={{ maxWidth: 560, margin: "0 auto", textAlign: "center" }}>
           <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 16 }}>
-            <Link href="/qgood/campaigns" style={{ color: "#94a3b8", textDecoration: "none" }}>← All campaigns</Link>
+            <Link href="/qgood/campaigns" style={{ color: "#94a3b8", textDecoration: "none" }}>{t("qgood.camp.back")}</Link>
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, marginBottom: 12 }}>Campaign not found</h1>
+          <h1 style={{ fontSize: 28, fontWeight: 900, margin: 0, marginBottom: 12 }}>{t("qgood.detail.notFound.title")}</h1>
           <p style={{ fontSize: 14, color: "#94a3b8", margin: 0, marginBottom: 24, lineHeight: 1.6 }}>
-            The campaign you&apos;re looking for doesn&apos;t exist, was removed, or hasn&apos;t been approved yet.
+            {t("qgood.detail.notFound.body")}
           </p>
           <Link
             href="/qgood/campaigns"
             style={{ display: "inline-block", padding: "10px 20px", background: "#10b981", color: "#062e22", fontWeight: 800, fontSize: 13, borderRadius: 10, textDecoration: "none" }}
           >
-            Browse active campaigns
+            {t("qgood.detail.notFound.cta")}
           </Link>
         </div>
       </main>
@@ -153,7 +155,7 @@ export default async function QGoodCampaignDetailPage({ params }: { params: Prom
       <section style={{ padding: "32px 24px 16px" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto" }}>
           <div style={{ fontSize: 12, marginBottom: 16 }}>
-            <Link href="/qgood/campaigns" style={{ color: "#94a3b8", textDecoration: "none" }}>← All campaigns</Link>
+            <Link href="/qgood/campaigns" style={{ color: "#94a3b8", textDecoration: "none" }}>{t("qgood.camp.back")}</Link>
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
@@ -192,20 +194,20 @@ export default async function QGoodCampaignDetailPage({ params }: { params: Prom
                       {fmtMoney(c.raisedCents, c.currency)}
                     </span>
                     <span style={{ fontSize: 13, color: "#94a3b8", marginLeft: 8 }}>
-                      raised of {fmtMoney(c.targetCents, c.currency)}
+                      {t("qgood.detail.raisedOf", { target: fmtMoney(c.targetCents, c.currency) })}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: "#94a3b8" }}>
-                    {c.donorCount} donor{c.donorCount === 1 ? "" : "s"} · <span style={{ color: "#34d399", fontWeight: 700 }}>{pct}%</span>
+                    {t("qgood.camp.donors", { n: c.donorCount })} · <span style={{ color: "#34d399", fontWeight: 700 }}>{pct}%</span>
                   </div>
                 </div>
                 <div style={{ height: 8, background: "#0f172a", borderRadius: 999, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${pct}%`, background: "#10b981", transition: "width 0.4s ease" }} />
                 </div>
                 <div style={{ fontSize: 10, color: "#64748b", marginTop: 10, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                  Created {timeAgo(c.createdAt)}
-                  {c.approvedAt ? ` · approved ${timeAgo(c.approvedAt)}` : ""}
-                  {c.closedAt ? ` · closed ${timeAgo(c.closedAt)}` : ""}
+                  {t("qgood.detail.created", { ago: timeAgo(c.createdAt) })}
+                  {c.approvedAt ? t("qgood.detail.approved", { ago: timeAgo(c.approvedAt) }) : ""}
+                  {c.closedAt ? t("qgood.detail.closed", { ago: timeAgo(c.closedAt) }) : ""}
                 </div>
               </div>
             </div>
@@ -215,16 +217,16 @@ export default async function QGoodCampaignDetailPage({ params }: { params: Prom
 
               <div style={{ padding: 16, background: "#1e293b", border: "1px solid #334155", borderRadius: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 12 }}>
-                  Recent donations
+                  {t("qgood.detail.recent")}
                 </div>
                 {recentDonations.length === 0 ? (
                   <div style={{ fontSize: 12, color: "#64748b", textAlign: "center", padding: "12px 0" }}>
-                    Be the first to support this campaign.
+                    {t("qgood.detail.beFirst")}
                   </div>
                 ) : (
                   <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 12 }}>
                     {recentDonations.map((d) => {
-                      const name = d.anonymous || !d.donorName ? "Anonymous" : d.donorName;
+                      const name = d.anonymous || !d.donorName ? t("qgood.detail.anonymous") : d.donorName;
                       return (
                         <li key={d.id} style={{ paddingBottom: 12, borderBottom: "1px solid #334155" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
@@ -255,8 +257,8 @@ export default async function QGoodCampaignDetailPage({ params }: { params: Prom
       <section style={{ padding: "0 24px 64px" }}>
         <div style={{ maxWidth: 1080, margin: "0 auto" }}>
           <div style={{ padding: 16, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 12, fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>
-            <span style={{ color: "#34d399", fontWeight: 800 }}>Audit-trail by QRight + VeilNetX.</span>{" "}
-            Every donation on QGood is anchored on AEVION&apos;s public ledger. View the chain on the{" "}
+            <span style={{ color: "#34d399", fontWeight: 800 }}>{t("qgood.detail.audit.lead")}</span>{" "}
+            {t("qgood.detail.audit.body")} View the chain on the{" "}
             <Link href="/qgood" style={{ color: "#34d399", textDecoration: "underline" }}>QGood homepage</Link>{" "}
             or learn more about{" "}
             <Link href="/qright" style={{ color: "#34d399", textDecoration: "underline" }}>QRight</Link>.

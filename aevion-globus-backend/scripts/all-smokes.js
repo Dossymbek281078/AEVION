@@ -292,8 +292,13 @@ for (const sm of eligible) {
   const banner = `========== ${sm.name} ==========`;
   console.log(`\n${banner}`);
   const start = Date.now();
+  // Preload a fetch wrapper that retries idempotent GETs once on a transient
+  // network blip, so prod latency doesn't produce false FAILs. Forward slashes
+  // work on Windows and avoid backslash escaping inside NODE_OPTIONS.
+  const preload = path.join(__dirname, "lib", "fetch-retry.cjs").replace(/\\/g, "/");
+  const childNodeOptions = `${process.env.NODE_OPTIONS ? process.env.NODE_OPTIONS + " " : ""}--require ${preload}`;
   const child = spawnSync("node", [path.join(__dirname, sm.script)], {
-    env: { ...process.env, BASE, ...(sm.env || {}) },
+    env: { ...process.env, BASE, NODE_OPTIONS: childNodeOptions, ...(sm.env || {}) },
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
   });

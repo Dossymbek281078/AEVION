@@ -8364,6 +8364,15 @@ export default function CyberChessPage(){
                   {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null)}}>Заново</Btn>}
                   {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
                 </div>
+                {/* Подсказка по хоткеям — discoverability клавиш пазла */}
+                <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap",fontSize:10,color:T.dim,fontWeight:700}}>
+                  {[["H","подсказка"],["N / →","следующий"],["R","заново"]].map(([k,d])=>(
+                    <span key={k} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                      <kbd style={{padding:"1px 5px",borderRadius:4,border:`1px solid ${T.border}`,background:T.surface,fontFamily:"ui-monospace,monospace",fontSize:10,fontWeight:800,color:T.text}}>{k}</kbd>
+                      {d}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>:<div style={{padding:"24px",textAlign:"center",color:T.dim,fontSize:14,background:T.surface,borderRadius:10,border:`1px solid ${T.border}`}}>Выбери задачу из списка ниже ↓</div>}
 

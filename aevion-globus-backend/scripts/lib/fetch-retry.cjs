@@ -19,21 +19,31 @@ if (typeof origFetch === "function" && !globalThis.__fetchRetryInstalled) {
     return ni;
   }
 
+  // Escalating backoff across attempts. Two retries (3 attempts total) absorbs
+  // Railway cold-starts, where the first request wakes a sleeping instance and
+  // can exceed the per-call timeout before it's warm.
+  const BACKOFFS = [600, 1500];
+
   globalThis.fetch = async function fetchWithRetry(input, init) {
     const method = ((init && init.method) || "GET").toUpperCase();
     const retryable = method === "GET" || method === "HEAD";
-    try {
-      const res = await origFetch(input, init);
-      if (retryable && res && res.status === 0) {
-        await sleep(600);
-        return await origFetch(input, freshInit(init));
+    let lastErr;
+    for (let attempt = 0; attempt <= BACKOFFS.length; attempt++) {
+      const thisInit = attempt === 0 ? init : freshInit(init);
+      try {
+        const res = await origFetch(input, thisInit);
+        // status 0 (opaque/aborted) is treated like a transient failure.
+        if (retryable && res && res.status === 0 && attempt < BACKOFFS.length) {
+          await sleep(BACKOFFS[attempt]);
+          continue;
+        }
+        return res;
+      } catch (e) {
+        lastErr = e;
+        if (!retryable || attempt === BACKOFFS.length) throw e;
+        await sleep(BACKOFFS[attempt]);
       }
-      return res;
-    } catch (e) {
-      if (!retryable) throw e;
-      await sleep(600);
-      // One retry only — let a second failure propagate as the real result.
-      return await origFetch(input, freshInit(init));
     }
+    throw lastErr;
   };
 }

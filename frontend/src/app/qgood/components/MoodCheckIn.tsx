@@ -2,15 +2,16 @@
 
 import { useState } from 'react';
 import { apiUrl } from '@/lib/apiBase';
+import { useI18n } from '@/lib/i18n';
 
 const EMOTIONS = [
-  { id: 'happy', label: 'Радость', emoji: '😊' },
-  { id: 'calm', label: 'Спокойствие', emoji: '😌' },
-  { id: 'anxious', label: 'Тревога', emoji: '😰' },
-  { id: 'sad', label: 'Грусть', emoji: '😔' },
-  { id: 'angry', label: 'Злость', emoji: '😠' },
-  { id: 'tired', label: 'Усталость', emoji: '😴' },
-  { id: 'neutral', label: 'Нейтрально', emoji: '😐' },
+  { id: 'happy', emoji: '😊' },
+  { id: 'calm', emoji: '😌' },
+  { id: 'anxious', emoji: '😰' },
+  { id: 'sad', emoji: '😔' },
+  { id: 'angry', emoji: '😠' },
+  { id: 'tired', emoji: '😴' },
+  { id: 'neutral', emoji: '😐' },
 ];
 
 function scoreEmoji(score: number): string {
@@ -33,6 +34,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const { t } = useI18n();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,7 +51,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
       setContext('');
       setTimeout(() => { setSuccess(false); onLogged?.(); }, 1500);
     } catch {
-      setError('Не удалось сохранить. Попробуйте ещё раз.');
+      setError(t('qgood.mood.err'));
     } finally {
       setLoading(false);
     }
@@ -58,14 +60,14 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
   return (
     <div style={{ background: '#fdf6ff', borderRadius: 16, padding: '24px', border: '1px solid #e8d5f5' }}>
       <h2 style={{ color: '#6b21a8', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>
-        Как вы себя чувствуете?
+        {t('qgood.mood.title')}
       </h2>
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 14, color: '#7c3aed' }}>
-            <span>Плохо</span>
+            <span>{t('qgood.mood.bad')}</span>
             <span style={{ fontSize: 28 }}>{scoreEmoji(score)} {score}</span>
-            <span>Отлично</span>
+            <span>{t('qgood.mood.great')}</span>
           </div>
           <input
             type="range"
@@ -78,7 +80,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>Эмоция (необязательно)</div>
+          <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 8 }}>{t('qgood.mood.emotionLabel')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {EMOTIONS.map(em => (
               <button
@@ -97,7 +99,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
                   transition: 'all 0.15s',
                 }}
               >
-                {em.emoji} {em.label}
+                {em.emoji} {t('qgood.mood.emo.' + em.id)}
               </button>
             ))}
           </div>
@@ -107,7 +109,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
           <textarea
             value={context}
             onChange={e => setContext(e.target.value)}
-            placeholder="Что происходит? (необязательно)"
+            placeholder={t('qgood.mood.contextPh')}
             rows={2}
             maxLength={500}
             style={{
@@ -132,7 +134,7 @@ export default function MoodCheckIn({ userId = 'anonymous', onLogged }: Props) {
             transition: 'background 0.2s',
           }}
         >
-          {success ? '✓ Сохранено!' : loading ? 'Сохраняю…' : 'Зафиксировать'}
+          {success ? t('qgood.mood.saved') : loading ? t('qgood.mood.saving') : t('qgood.mood.submit')}
         </button>
       </form>
     </div>

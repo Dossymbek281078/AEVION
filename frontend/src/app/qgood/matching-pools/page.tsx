@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerT } from "@/lib/i18n-server";
 import AdminPanel from "./AdminPanel";
+
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +121,7 @@ function progressPctFilled(remaining: string | number, total: string | number): 
 }
 
 export default async function QGoodMatchingPoolsPage() {
-  const pools = await loadPools();
+  const [pools, { t }] = await Promise.all([loadPools(), getServerT()]);
 
   const totalFunded = pools.reduce((acc, p) => acc + toNum(p.totalCents), 0);
   const totalRemaining = pools.reduce((acc, p) => acc + toNum(p.remainingCents), 0);
@@ -133,7 +136,7 @@ export default async function QGoodMatchingPoolsPage() {
               ← QGood
             </Link>
             <Link href="/qgood/campaigns" style={{ fontSize: 12, color: "#94a3b8", textDecoration: "none" }}>
-              ← Campaigns
+              {t("qgood.pool.backCampaigns")}
             </Link>
           </div>
         </div>
@@ -158,7 +161,7 @@ export default async function QGoodMatchingPoolsPage() {
             QGOOD · MATCHING POOLS
           </div>
           <h1 style={{ fontSize: 38, fontWeight: 900, margin: 0, lineHeight: 1.1, marginBottom: 12 }}>
-            Matching <span style={{ color: "#34d399" }}>pools</span>
+            {t("qgood.pool.hero.pre")} <span style={{ color: "#34d399" }}>{t("qgood.pool.hero.hl")}</span>
           </h1>
           <p
             style={{
@@ -169,8 +172,7 @@ export default async function QGoodMatchingPoolsPage() {
               margin: "0 auto",
             }}
           >
-            Active pools auto-match donations across campaigns. When you donate, the system instantly matches up to the
-            pool's remaining balance and cap.
+            {t("qgood.pool.hero.sub")}
           </p>
         </div>
       </section>
@@ -186,9 +188,9 @@ export default async function QGoodMatchingPoolsPage() {
             justifyContent: "center",
           }}
         >
-          <Pill label={`${pools.length} pool${pools.length === 1 ? "" : "s"}`} />
-          <Pill label={`${fmtMoney(totalFunded, displayCurrency)} funded`} />
-          <Pill label={`${fmtMoney(totalRemaining, displayCurrency)} remaining`} accent />
+          <Pill label={t("qgood.pool.count", { n: pools.length })} />
+          <Pill label={t("qgood.pool.funded", { amount: fmtMoney(totalFunded, displayCurrency) })} />
+          <Pill label={t("qgood.pool.remaining", { amount: fmtMoney(totalRemaining, displayCurrency) })} accent />
         </div>
       </section>
 
@@ -206,7 +208,7 @@ export default async function QGoodMatchingPoolsPage() {
                 fontSize: 14,
               }}
             >
-              No matching pools yet. Admins can fund the first pool below.
+              {t("qgood.pool.empty")}
             </div>
           ) : (
             <div
@@ -217,7 +219,7 @@ export default async function QGoodMatchingPoolsPage() {
               }}
             >
               {pools.map((p) => (
-                <PoolCard key={p.id} p={p} />
+                <PoolCard key={p.id} p={p} t={t} />
               ))}
             </div>
           )}
@@ -251,7 +253,7 @@ function Pill({ label, accent }: { label: string; accent?: boolean }) {
   );
 }
 
-function PoolCard({ p }: { p: MatchingPool }) {
+function PoolCard({ p, t }: { p: MatchingPool; t: TFn }) {
   const c = statusColors(p.status, p.remainingCents, p.totalCents);
   const pct = progressPctFilled(p.remainingCents, p.totalCents);
   return (
@@ -318,9 +320,9 @@ function PoolCard({ p }: { p: MatchingPool }) {
           <span style={{ color: "#34d399", fontWeight: 700 }}>
             {fmtMoney(p.remainingCents, p.currency)}
           </span>{" "}
-          remaining
+          {t("qgood.pool.cardRemaining")}
         </span>
-        <span>of {fmtMoney(p.totalCents, p.currency)}</span>
+        <span>{t("qgood.camp.of", { target: fmtMoney(p.totalCents, p.currency) })}</span>
       </div>
 
       <div
@@ -340,7 +342,7 @@ function PoolCard({ p }: { p: MatchingPool }) {
             borderRadius: 999,
           }}
         >
-          {fmtRatio(p.matchRatio)} match
+          {t("qgood.pool.match", { ratio: fmtRatio(p.matchRatio) })}
         </span>
         <span
           style={{
@@ -350,7 +352,7 @@ function PoolCard({ p }: { p: MatchingPool }) {
             borderRadius: 999,
           }}
         >
-          max {fmtMoney(p.maxMatchPerDonationCents, p.currency)} per donation
+          {t("qgood.pool.maxPer", { amount: fmtMoney(p.maxMatchPerDonationCents, p.currency) })}
         </span>
         <span style={{ marginLeft: "auto", color: "#64748b", padding: "3px 0" }}>{relTime(p.createdAt)}</span>
       </div>

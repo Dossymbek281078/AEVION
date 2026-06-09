@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor, type Move } from "chess.js";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -2515,11 +2515,20 @@ export default function CyberChessPage(){
     const now=Date.now();
     const cpiTimeMs=now-lastMoveStartRef.current;
     moveTimesRef.current=[...moveTimesRef.current,cpiTimeMs];
-    sMoveTimes([...moveTimesRef.current]);
+    // sMoveTimes убран из горячего пути — создавал новый массив на каждый ход
+    // (отдельный ре-рендер вне батча). Данные живут в moveTimesRef для CPI.
+    // Обновим state через startTransition чтобы не мешать анимации.
+    lastMoveStartRef.current=now;
     // Notify behavior tracker of player move
     if(mv.color===pCol){behaviorRef.current.onMoveMade(hist.length,cpiTimeMs);}
-    lastMoveStartRef.current=now;
-    sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
+    // ── Визуальные обновления — немедленно (board refresh, position indicator)
+    sLm({from:mv.from,to:mv.to});sSel(null);sVm(new Set());sBk(k=>k+1);
+    // ── Не-визуальные — startTransition: не блокируют анимацию (~190ms)
+    // React помечает их как low-priority: анимация + board render идут первыми.
+    startTransition(()=>{
+      sHist(h=>[...h,mv.san]);sFenHist(h=>[...h,game.fen()]);
+      sMoveTimes([...moveTimesRef.current]);
+    });
     // F2-phase-2: record per-move metrics into the CPI collector.
     // We build a base MoveMetric from the heuristic (live evalCp scalar) and then,
     // if Stockfish has pre-computed multiPV=3 for fenBefore (via the background
@@ -3510,7 +3519,7 @@ export default function CyberChessPage(){
     const pc=game.get(lm.to as Square);
     if(!pc)return;
     sMoveAnim({from:lm.from as Square,to:lm.to as Square,piece:{type:pc.type,color:pc.color},key:Date.now()});
-    const id=window.setTimeout(()=>sMoveAnim(null),220);
+    const id=window.setTimeout(()=>sMoveAnim(null),160); // 130ms анимация + 30ms buffer
     return()=>clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[lm?.from,lm?.to,bk]);

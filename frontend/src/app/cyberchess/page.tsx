@@ -120,7 +120,7 @@ import WorkspacePiP, { useWorkspacePiP, detectMediaSource } from "./WorkspacePiP
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 import Link from "next/link";
 import { MetricsCollector, computeCPL, type MoveMetric, type PVLine as MetricsPVLine } from "./stockfishMetrics";
-import { applyGameToCPI } from "./cpi";
+import { applyGameToCPI, ldCPIState, type GameMetrics } from "./cpi";
 import OpeningFlashCard from "./OpeningFlashCard";
 import MirrorModePanel from "./MirrorModePanel";
 import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
@@ -4288,6 +4288,36 @@ export default function CyberChessPage(){
       const acpl=Math.round(pm.reduce((s,m)=>s+m.cpLoss,0)/n);
       showToast(`✅ Точность ${acc}% · ср. потеря ${acpl}cp${blu?` · ${blu} зев.`:""}${mis?` · ${mis} ош.`:""}`,blu||acc<60?"info":"success");
     })();
+    // ── AEVION CPI: начисляем по реальной партии (один раз на партию, дедуп по gameId).
+    // Метрики берём из результатов разбора + moveTimes + дебют + результат. Это «оживляет»
+    // рейтинг CPI — раньше движок cpi.ts был построен, но applyGameToCPI нигде не вызывался. ──
+    try{
+      const isW=pCol==="w";
+      const pmCpi=results.filter((_,i)=>isW?(i%2===0):(i%2===1));
+      if(pmCpi.length>=4){
+        const rankOf=(q:string):1|2|3|4=>q==="brilliant"||q==="great"||q==="good"?1:q==="inacc"?2:q==="mistake"?3:4;
+        const ranks=pmCpi.map(m=>rankOf(m.quality));
+        const myTimes=moveTimesRef.current.filter((_,i)=>isW?(i%2===0):(i%2===1)).filter(t=>typeof t==="number"&&t>=0);
+        const res:"w"|"l"|"d"=!over?"d":/you win|вы (выиграл|победил)|ai timed out|timed out — you|сдался — вы/i.test(over)?"w":/draw|ничья|stalemate|repetition|insufficient|50-move|договорились/i.test(over)?"d":"l";
+        const metrics:GameMetrics={
+          cplPerMove:pmCpi.map(m=>m.cpLoss),
+          timeMsPerMove:myTimes.length?myTimes:pmCpi.map(()=>1000),
+          totalTimeMs:(tc.ini||600)*1000,
+          openingBookHits:ranks.slice(0,10).filter(r=>r===1).length,
+          movesByEngineRank:ranks,
+          mateOpportunities:{m1:0,m2:0,m3:0},mateFound:{m1:0,m2:0,m3:0},
+          hangs:0,
+          brilliancies:pmCpi.filter(m=>m.quality==="brilliant").length,
+          result:res,
+        };
+        const gameId=`g-${hist.length}-${hist.slice(0,6).join("")}`;
+        if(!ldCPIState().history.some(h=>h.gameId===gameId)){
+          const st=applyGameToCPI(metrics,gameId);
+          const d=st.history[st.history.length-1]?.delta??0;
+          showToast(`🏆 AEVION CPI ${st.cpi} (${d>=0?"+":""}${Math.round(d)})`,"success");
+        }
+      }
+    }catch{}
     // Auto-populate blunder book: find positions where player blundered
     const blunders:BlunderEntry[]=[];
     const playerIsWhite=pCol==="w";

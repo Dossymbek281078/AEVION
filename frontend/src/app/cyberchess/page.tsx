@@ -1852,8 +1852,9 @@ export default function CyberChessPage(){
   // Click clears it so the new state isn't reverted by the trailing mouseleave.
   const hoverSnapRef=useRef<{fen:string;idx:number}|null>(null);
   const previewLeaveTimer=useRef<number|null>(null);
-  const fPz=PUZZLES.filter(p=>{
-    // Category filter
+  // useMemo: fPz пересчитывается только при смене фильтров, а не каждый рендер.
+  // Без мемоизации auto-advance таймеры захватывали stale fPz → неверный индекс.
+  const fPz=useMemo(()=>PUZZLES.filter(p=>{
     if(pzCategory==="tactics"&&p.goal!=="Best move")return false;
     if(pzCategory==="mate1"&&(p.goal!=="Mate"||p.mateIn!==1))return false;
     if(pzCategory==="mate2"&&(p.goal!=="Mate"||p.mateIn!==2))return false;
@@ -1869,7 +1870,8 @@ export default function CyberChessPage(){
     if(pzFilterSide!=="all"&&p.side!==pzFilterSide)return false;
     if(p.r<pzFilterRating[0]||p.r>pzFilterRating[1])return false;
     return true;
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }),[pzCategory,pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,pzFilterRating[0],pzFilterRating[1],PUZZLES.length]);
 
   // Auto-load first puzzle when category changes and we're on Puzzles tab
   useEffect(()=>{
@@ -2366,6 +2368,8 @@ export default function CyberChessPage(){
       }
     }
     // Puzzle mode: verify solution before executing
+    // pzAttempt==="shown" блокируем — подсказка уже показана, ход не принимаем
+    if(tab==="puzzles"&&pzCurrent&&pzAttempt==="shown")return false;
     if(tab==="puzzles"&&pzCurrent&&pzAttempt==="idle"){
       const attemptUci=`${from}${to}${pr||""}`;
       const expectedUci=pzCurrent.sol[0];
@@ -2389,8 +2393,8 @@ export default function CyberChessPage(){
               if(rmv){sLm({from:rmv.from,to:rmv.to});sHist(h=>[...h,rmv.san]);sFenHist(h=>[...h,game.fen()]);sBk(k=>k+1);snd("move")}
               // If more moves in solution, user must continue
               if(pzCurrent.sol.length>2){
-                // Shift solution forward so next user move is sol[2]
-                sPzCurrent({...pzCurrent,sol:pzCurrent.sol.slice(2)});
+                // callback-форма чтобы не использовать stale pzCurrent из closure
+                sPzCurrent(pc=>pc?{...pc,sol:pc.sol.slice(2)}:pc);
                 showToast("Продолжай решение...","info");
               }else{
                 sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
@@ -8484,18 +8488,39 @@ export default function CyberChessPage(){
                   {pzCurrent.goal==="Mate"&&pzCurrent.mateIn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#fef2f2",color:"#991b1b",fontWeight:800}}>Мат в {pzCurrent.mateIn}</span>}
                 </div>
                 {/* Result banner */}
-                {pzAttempt==="correct"&&<div style={{
-                  fontSize:15,fontWeight:900,color:"#065f46",
-                  padding:"10px 14px",marginBottom:10,borderRadius:8,
-                  background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",
-                  border:"1px solid #6ee7b7",
-                  display:"flex",alignItems:"center",gap:8,
-                  animation:"cc-turn-flash 0.6s ease-out"
-                }}>
-                  <span style={{fontSize:20}}>✅</span>
-                  <span>{pzMode==="rush"&&rushStreak>=3?`Серия ${rushStreak}! 🔥`:pzMode==="rush"?"Верно! 🎯":"Отлично! Верный ход"}</span>
-                  {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>+3с ⏱</span>}
-                </div>}
+                {pzAttempt==="correct"&&(()=>{
+                  // Определяем тактический мотив из theme + sol для объяснения (lichess-style)
+                  const theme=pzCurrent.theme||"";
+                  const motifMap:Record<string,{icon:string;name:string;desc:string}>={
+                    fork:{icon:"🐴",name:"Вилка",desc:"Одна фигура атакует две цели одновременно — соперник не успевает защитить обе."},
+                    pin:{icon:"📌",name:"Связка",desc:"Фигура не может двигаться — за ней стоит более ценная. Используй это давление."},
+                    skewer:{icon:"⚔",name:"Рентген",desc:"Атака на ценную фигуру, за которой прячется ещё одна. Вынуждает отступить и потерять материал."},
+                    discoveredAttack:{icon:"💥",name:"Открытый удар",desc:"Ход одной фигуры открывает атаку другой — соперник не готов к двойному удару."},
+                    deflection:{icon:"↗",name:"Отвлечение",desc:"Вынуждаем фигуру уйти с важного поля, теряя защиту ключевой цели."},
+                    decoy:{icon:"🎭",name:"Завлечение",desc:"Жертвой заманиваем фигуру на невыгодное поле для последующего удара."},
+                    backRankMate:{icon:"🏰",name:"Мат на последней горизонтали",desc:"Король заперт своими пешками. Ладья или ферзь ставят мат по первой/восьмой линии."},
+                    hangingPiece:{icon:"🎁",name:"Висячая фигура",desc:"Фигура соперника без защиты — просто забирай!"},
+                    trappedPiece:{icon:"🕸",name:"Западня",desc:"Фигура не может уйти без потерь — окружай и бери."},
+                  };
+                  const motif=Object.entries(motifMap).find(([k])=>theme.toLowerCase().includes(k.toLowerCase()))||null;
+                  const isMate=pzCurrent.goal==="Mate";
+                  return <div style={{marginBottom:10}}>
+                    <div style={{fontSize:15,fontWeight:900,color:"#065f46",padding:"10px 14px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",display:"flex",alignItems:"center",gap:8,animation:"cc-turn-flash 0.6s ease-out"}}>
+                      <span style={{fontSize:20}}>✅</span>
+                      <span>{pzMode==="rush"&&rushStreak>=3?`Серия ${rushStreak}! 🔥`:pzMode==="rush"?"Верно! 🎯":isMate?`Мат в ${pzCurrent.mateIn}! Отлично!`:"Верно! Отличный ход"}</span>
+                      {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>+3с ⏱</span>}
+                    </div>
+                    {/* Объяснение тактического мотива — ключевое отличие от простого «верно/неверно» */}
+                    {motif&&pzMode==="learn"&&<div style={{marginTop:6,padding:"9px 12px",borderRadius:8,background:"linear-gradient(135deg,#fffbeb,#fef9c3)",border:"1px solid #fde68a",fontSize:12,color:"#78350f"}}>
+                      <div style={{fontWeight:900,marginBottom:3}}>{motif[1].icon} {motif[1].name}</div>
+                      <div style={{lineHeight:1.55,fontWeight:600}}>{motif[1].desc}</div>
+                    </div>}
+                    {isMate&&pzMode==="learn"&&!motif&&<div style={{marginTop:6,padding:"9px 12px",borderRadius:8,background:"linear-gradient(135deg,#fff1f2,#fce7f3)",border:"1px solid #fda4af",fontSize:12,color:"#881337"}}>
+                      <div style={{fontWeight:900,marginBottom:3}}>♟ Матовая комбинация</div>
+                      <div style={{lineHeight:1.55,fontWeight:600}}>Король соперника загнан в угол — при точной игре матовый финал неизбежен. Запомни характер позиции!</div>
+                    </div>}
+                  </div>;
+                })()}
                 {pzAttempt==="wrong"&&<div style={{
                   fontSize:14,fontWeight:900,color:"#991b1b",
                   padding:"10px 14px",marginBottom:10,borderRadius:8,

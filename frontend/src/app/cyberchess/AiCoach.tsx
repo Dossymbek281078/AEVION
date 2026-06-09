@@ -228,7 +228,7 @@ export default function AiCoach({
   const [error, sError] = useState("");
   const [engineThinking, sEngineThinking] = useState(false);
 
-  const [liveMode, sLiveMode] = useState(true);
+  const [liveMode, sLiveMode] = useState(false); // OFF по умолчанию — каждый ход = API call, шум во время игры
   const [liveComments, sLiveComments] = useState<
     { move: number; san: string; comment: string; quality?: string }[]
   >([]);

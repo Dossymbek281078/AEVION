@@ -4249,6 +4249,8 @@ export default function CyberChessPage(){
     if(!sfR.current?.ready()||fenHist.length<3){showToast("Need Stockfish and a finished game","error");return}
     sAnalyzing(true);sAnalysis([]);sAnalysisProgress(0);
     const results:{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]=[];
+    // CPI extra-метрики: мат-возможности и висящие фигуры (per position, игрок)
+    const cpiM={m1:{opp:0,found:0},m2:{opp:0,found:0},m3:{opp:0,found:0}};let cpiHangs=0;
     let prevCp=0;
     for(let i=0;i<fenHist.length;i++){
       sAnalysisProgress(Math.round((i/fenHist.length)*100)); // прогресс «N/всего» во время ручного разбора
@@ -4269,6 +4271,28 @@ export default function CyberChessPage(){
         else if(drop<=-100&&Math.abs(prevCp<300?prevCp:-prevCp)<300)quality="brilliant";
         else if(drop<=-50)quality="great";
         results.push({move:i,cp,mate,quality,cpLoss:Math.max(0,drop)});
+        // CPI: мат-возможности на позиции ДО хода (fen[i-1]) — для стороны, сделавшей этот ход
+        const isPlayerMove=moverWasWhite===(pCol==="w");
+        if(isPlayerMove){
+          try{
+            const prev=new Chess(fenHist[i-1]);
+            const mvs=prev.moves({verbose:true});
+            const m1mvs=mvs.filter(m=>{const t=new Chess(fenHist[i-1]);t.move(m);return t.isCheckmate();});
+            if(m1mvs.length){cpiM.m1.opp++;if(quality!=="blunder"&&quality!=="mistake")cpiM.m1.found++;}
+          }catch{}
+          // Висящие фигуры у игрока на позиции ПОСЛЕ хода
+          try{
+            const c=new Chess(fenHist[i]);const b=c.board();
+            for(let r=0;r<8;r++)for(let f=0;f<8;f++){
+              const cell=b[r][f];if(!cell||cell.type==="k")continue;
+              const sq=`${"abcdefgh"[f]}${8-r}` as Square;
+              if(cell.color!==pCol)continue;
+              const atk=c.attackers(sq,cell.color==="w"?"b":"w");
+              const def=c.attackers(sq,cell.color);
+              if(atk.length>0&&def.length===0)cpiHangs++;
+            }
+          }catch{}
+        }
       }
       prevCp=cp;
     }
@@ -4305,8 +4329,9 @@ export default function CyberChessPage(){
           totalTimeMs:(tc.ini||600)*1000,
           openingBookHits:ranks.slice(0,10).filter(r=>r===1).length,
           movesByEngineRank:ranks,
-          mateOpportunities:{m1:0,m2:0,m3:0},mateFound:{m1:0,m2:0,m3:0},
-          hangs:0,
+          mateOpportunities:{m1:cpiM.m1.opp,m2:cpiM.m2.opp,m3:cpiM.m3.opp},
+          mateFound:{m1:cpiM.m1.found,m2:cpiM.m2.found,m3:cpiM.m3.found},
+          hangs:cpiHangs,
           brilliancies:pmCpi.filter(m=>m.quality==="brilliant").length,
           result:res,
         };

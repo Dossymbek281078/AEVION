@@ -6877,8 +6877,8 @@ export default function CyberChessPage(){
               }}>{t.label}</button>
             ))}
           </div>}
-          {/* ── Live Stats Card — shown in Info sub-tab or Coach tab ── */}
-          {on&&!setup&&(tab==="coach"||(tab==="play"&&rpTab==="info"))&&<div style={{
+          {/* ── Live Stats Card — показываем только в Info (не в Coach — там eval дублируется) ── */}
+          {on&&!setup&&(tab==="play"&&rpTab==="info")&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
             display:"flex",alignItems:"center",gap:10,
@@ -7064,14 +7064,12 @@ export default function CyberChessPage(){
           {/* Coach Quick Actions доступны без SF — "Объясни" и "Слабости" работают на эвристике.
               "Найди план" и "Тактика" сами проверяют sfR.current?.ready() */}
           {(tab==="coach"||(tab==="play"&&rpTab==="coach"))&&on&&!over&&!setup&&<div style={{
-            padding:"10px 12px",borderRadius:RADIUS.lg,
+            padding:"8px 10px",borderRadius:RADIUS.lg,
             background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",
-            display:"flex",flexDirection:"column",gap:8
+            display:"flex",flexDirection:"column",gap:6
           }}>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const}}>
-              <span style={{fontSize:14}}>🎓</span>AI Coach · быстрые подсказки
-            </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {/* Компактный грид 2-строки × 3 кнопки — меньше вертикального пространства */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5}}>
               <Btn size="sm" variant="primary" onClick={()=>{
                 const fen=game.fen();
                 // 1) Мат в 1 — мгновенно, без движка. Коуч обязан это видеть.

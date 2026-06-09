@@ -594,6 +594,48 @@ const MoveSlide=React.memo(function MoveSlide({left,top,dx,dy,pieceType,pieceCol
   </div>;
 });
 
+/* ─── CPIBadge — live CPI-бейдж с breakdown-поповером при наведении ─── */
+const CPIBadge=React.memo(function CPIBadge({cpi,col,delta,pts,W3,H3,xi,yi,last,factors,href}:{
+  cpi:number;col:string;delta:number;pts:number[];W3:number;H3:number;
+  xi:(i:number)=>number;yi:(v:number)=>number;
+  last:any;factors:readonly (readonly [string,string,string])[];href:string;
+}){
+  const[show,setShow]=React.useState(false);
+  return(
+    <div style={{position:"relative",display:"inline-flex"}} onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}>
+      <Link href={href} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:999,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",border:"1px solid #c4b5fd",fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,textDecoration:"none"}}>
+        {pts.length>=3&&<svg width={W3} height={H3} style={{flexShrink:0,opacity:0.9}} aria-hidden>
+          <polyline points={pts.map((v,i)=>`${xi(i).toFixed(1)},${yi(v).toFixed(1)}`).join(" ")} fill="none" stroke={col} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx={xi(pts.length-1).toFixed(1)} cy={yi(pts[pts.length-1]).toFixed(1)} r={2} fill={col}/>
+        </svg>}
+        <span>CPI <b style={{color:col}}>{cpi}</b></span>
+        {delta!==0&&<span style={{fontSize:9,fontWeight:800,color:delta>0?"#059669":"#dc2626"}}>{delta>0?"+":""}{Math.round(delta)}</span>}
+      </Link>
+      {show&&last&&<div style={{
+        position:"absolute",bottom:"calc(100% + 6px)",right:0,zIndex:9999,
+        background:"#1e1b4b",border:"1px solid #4f46e5",borderRadius:10,
+        padding:"10px 12px",minWidth:200,boxShadow:"0 8px 24px rgba(0,0,0,0.5)",
+        pointerEvents:"none",
+      }}>
+        <div style={{fontSize:11,fontWeight:900,color:"#a78bfa",marginBottom:7,letterSpacing:0.3}}>CPI {cpi} — последняя партия</div>
+        {factors.map(([emoji,key,label])=>{
+          const v=last[key]??0;const pct=Math.min(100,Math.max(0,Math.round(v)));
+          const barCol=pct>=15?"#7c3aed":pct>=8?"#f59e0b":"#ef4444";
+          return <div key={key} style={{display:"grid",gridTemplateColumns:"16px 72px 1fr 28px",gap:4,alignItems:"center",marginBottom:4}}>
+            <span style={{fontSize:10}}>{emoji}</span>
+            <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{label}</span>
+            <div style={{height:5,borderRadius:3,background:"rgba(255,255,255,0.1)",overflow:"hidden"}}>
+              <div style={{width:`${pct}%`,height:"100%",background:barCol,borderRadius:3,transition:"width 200ms"}}/>
+            </div>
+            <span style={{fontSize:9,fontFamily:"ui-monospace,monospace",color:barCol,fontWeight:800,textAlign:"right"}}>{v>=0?"+":""}{Math.round(v)}</span>
+          </div>;
+        })}
+        <div style={{fontSize:9,color:"#4f46e5",marginTop:6,fontWeight:700}}>Нажми → полный дашборд</div>
+      </div>}
+    </div>
+  );
+});
+
 /* ─── BottomNav ─── */
 function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute,surface1,border}:{
   setup:boolean; tab:string;
@@ -4934,8 +4976,7 @@ export default function CyberChessPage(){
                 <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ACC <b style={{color:col2}}>{last2}%</b></span>
               </React.Fragment>;
             })()}
-            {/* CPI live-бейдж: реальный рейтинг + мини-спарклайн тренда (последние 10 партий).
-                Читает тот же localStorage, что applyGameToCPI — обновляется сразу после разбора. */}
+            {/* CPI live-бейдж + breakdown tooltip при наведении */}
             {(()=>{
               const cs=ldCPIState();const nh=cs.history.length;
               if(nh===0)return(
@@ -4943,7 +4984,6 @@ export default function CyberChessPage(){
                   <span>📊</span><span>CPI —</span>
                 </Link>
               );
-              // тренд последних 10 партий
               const h10=cs.history.slice(-10);
               const pts=h10.map((_,i,a)=>{let s=cs.cpi;for(let j=i+1;j<a.length;j++)s-=a[j].delta;return Math.max(0,Math.min(4000,s));});
               const up=pts.length>=2&&pts[pts.length-1]>=pts[0];
@@ -4953,15 +4993,11 @@ export default function CyberChessPage(){
               const xi=(i:number)=>pd+(i/(Math.max(pts.length-1,1)))*(W3-pd*2);
               const yi=(v:number)=>H3-pd-(v-mn)/rng*(H3-pd*2);
               const delta=cs.history[nh-1]?.delta??0;
+              // breakdown из последней партии
+              const last=cs.history[nh-1]?.breakdown;
+              const FACTORS=[["🎯","E","Точность"],["⏱","T","Тайминг"],["📖","O","Дебют"],["①","B1","Best line"],["💀","M1","Мат-зрение"],["🛡","H","Чистота"],["💎","Br","Бриллианты"]] as const;
               return(
-                <Link href="/cyberchess/cpi/dashboard" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:RADIUS.full,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",border:"1px solid #c4b5fd",fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,textDecoration:"none"}} title={`AEVION CPI ${cs.cpi} · последнее изменение ${delta>=0?"+":""}${Math.round(delta)} · нажми для детального разбора`}>
-                  {pts.length>=3&&<svg width={W3} height={H3} style={{flexShrink:0,opacity:0.9}} aria-hidden>
-                    <polyline points={pts.map((v,i)=>`${xi(i).toFixed(1)},${yi(v).toFixed(1)}`).join(" ")} fill="none" stroke={col} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx={xi(pts.length-1).toFixed(1)} cy={yi(pts[pts.length-1]).toFixed(1)} r={2} fill={col}/>
-                  </svg>}
-                  <span>CPI <b style={{color:col}}>{cs.cpi}</b></span>
-                  {delta!==0&&<span style={{fontSize:9,fontWeight:800,color:delta>0?"#059669":"#dc2626"}}>{delta>0?"+":""}{Math.round(delta)}</span>}
-                </Link>
+                <CPIBadge cpi={cs.cpi} col={col} delta={delta} pts={pts} W3={W3} H3={H3} xi={xi} yi={yi} last={last} factors={FACTORS} href="/cyberchess/cpi/dashboard"/>
               );
             })()}
             {/* Полная статистика игрока — открывает PlayerStatsDashboard (overview / дебюты / тайминг / тренд / калибровка). */}

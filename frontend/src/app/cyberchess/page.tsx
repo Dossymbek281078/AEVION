@@ -4934,17 +4934,36 @@ export default function CyberChessPage(){
                 <span style={{fontSize:10,color:CC.textMute,fontWeight:700}}>ACC <b style={{color:col2}}>{last2}%</b></span>
               </React.Fragment>;
             })()}
-            {/* F2-phase: CPI dashboard quick-link */}
-            <Link href="/cyberchess/cpi/dashboard" style={{
-              display:"inline-flex",alignItems:"center",gap:4,
-              padding:"3px 9px",borderRadius:RADIUS.full,
-              background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",
-              border:"1px solid #c4b5fd",
-              fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,
-              textDecoration:"none",cursor:"pointer"
-            }} title="AEVION Chess Performance Index — детальная аналитика всех партий">
-              <span>📊</span><span>CPI</span>
-            </Link>
+            {/* CPI live-бейдж: реальный рейтинг + мини-спарклайн тренда (последние 10 партий).
+                Читает тот же localStorage, что applyGameToCPI — обновляется сразу после разбора. */}
+            {(()=>{
+              const cs=ldCPIState();const nh=cs.history.length;
+              if(nh===0)return(
+                <Link href="/cyberchess/cpi/dashboard" style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:RADIUS.full,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",border:"1px solid #c4b5fd",fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,textDecoration:"none"}} title="AEVION CPI — сыграй и разбери партию чтобы начать">
+                  <span>📊</span><span>CPI —</span>
+                </Link>
+              );
+              // тренд последних 10 партий
+              const h10=cs.history.slice(-10);
+              const pts=h10.map((_,i,a)=>{let s=cs.cpi;for(let j=i+1;j<a.length;j++)s-=a[j].delta;return Math.max(0,Math.min(4000,s));});
+              const up=pts.length>=2&&pts[pts.length-1]>=pts[0];
+              const col=up?"#7c3aed":"#ef4444";
+              const mn=Math.min(...pts),mx=Math.max(...pts),rng=Math.max(mx-mn,20);
+              const W3=36,H3=14,pd=2;
+              const xi=(i:number)=>pd+(i/(Math.max(pts.length-1,1)))*(W3-pd*2);
+              const yi=(v:number)=>H3-pd-(v-mn)/rng*(H3-pd*2);
+              const delta=cs.history[nh-1]?.delta??0;
+              return(
+                <Link href="/cyberchess/cpi/dashboard" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:RADIUS.full,background:"linear-gradient(135deg,#ede9fe,#ddd6fe)",border:"1px solid #c4b5fd",fontSize:10,fontWeight:900,color:"#5b21b6",letterSpacing:0.4,textDecoration:"none"}} title={`AEVION CPI ${cs.cpi} · последнее изменение ${delta>=0?"+":""}${Math.round(delta)} · нажми для детального разбора`}>
+                  {pts.length>=3&&<svg width={W3} height={H3} style={{flexShrink:0,opacity:0.9}} aria-hidden>
+                    <polyline points={pts.map((v,i)=>`${xi(i).toFixed(1)},${yi(v).toFixed(1)}`).join(" ")} fill="none" stroke={col} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx={xi(pts.length-1).toFixed(1)} cy={yi(pts[pts.length-1]).toFixed(1)} r={2} fill={col}/>
+                  </svg>}
+                  <span>CPI <b style={{color:col}}>{cs.cpi}</b></span>
+                  {delta!==0&&<span style={{fontSize:9,fontWeight:800,color:delta>0?"#059669":"#dc2626"}}>{delta>0?"+":""}{Math.round(delta)}</span>}
+                </Link>
+              );
+            })()}
             {/* Полная статистика игрока — открывает PlayerStatsDashboard (overview / дебюты / тайминг / тренд / калибровка). */}
             <button onClick={()=>sShowStatsDashboard(true)} style={{
               display:"inline-flex",alignItems:"center",gap:4,

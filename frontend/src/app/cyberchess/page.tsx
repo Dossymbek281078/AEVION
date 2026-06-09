@@ -564,30 +564,21 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
 });
 
 /* ─── MoveSlide ─── floating-фигура, скользящая from→to за один ход.
-   Мемоизирован и анимируется ТОЛЬКО на mount (useEffect []), поэтому
-   ре-рендеры родителя (тик часов, AI-«думаю», eval) НЕ сбрасывают
-   transform в стартовое положение — раньше это давало рывки/лаг. */
+   CSS @keyframes cc-piece-slide (globals.css) крутится на compositor-треде —
+   физически не прерывается React-ре-рендерами. В отличие от предыдущего
+   imperative useEffect (устанавливал transform через стиль), CSS-анимация
+   не зависит от JS-потока вообще: даже если React делает 50 ре-рендеров за
+   190ms, анимация остаётся плавной. --dx/--dy задаются через CSS-переменные. */
 const MoveSlide=React.memo(function MoveSlide({left,top,dx,dy,pieceType,pieceColor}:{
   left:number;top:number;dx:number;dy:number;pieceType:"p"|"n"|"b"|"r"|"q"|"k";pieceColor:"w"|"b";
 }){
-  const ref=useRef<HTMLDivElement|null>(null);
-  useEffect(()=>{
-    const el=ref.current;if(!el)return;
-    // Мягкий lift: фигура стартует чуть крупнее (scale 1.06) и «оседает» в 1.0 —
-    // ощущение «поднял-поставил», убирает резкость. Translate + scale в одном transform.
-    el.style.transform=`translate(${dx}%,${dy}%) scale(1.06)`;
-    el.style.transition="transform 0ms";
-    void el.offsetWidth; // force reflow
-    el.style.transition="transform 190ms cubic-bezier(0.22,0.61,0.36,1)";
-    el.style.transform="translate(0,0) scale(1)";
-  },[]); // mount-only — стабильные пропы + memo гарантируют отсутствие ре-рендеров до remount по новому key
-  return <div ref={ref} style={{
+  return <div className="cc-piece-slide" style={{
     position:"absolute",left:`${left}%`,top:`${top}%`,
     width:"12.5%",height:"12.5%",
-    transform:`translate(${dx}%,${dy}%) scale(1.06)`,
+    "--dx":`${dx}%`,"--dy":`${dy}%`,
     pointerEvents:"none",zIndex:6,
     display:"flex",alignItems:"center",justifyContent:"center",
-  }}>
+  } as React.CSSProperties}>
     <div style={{width:"88%",height:"88%",filter:"drop-shadow(0 6px 12px rgba(0,0,0,0.32))"}}>
       <Piece type={pieceType} color={pieceColor}/>
     </div>

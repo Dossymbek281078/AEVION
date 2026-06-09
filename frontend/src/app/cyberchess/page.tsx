@@ -4321,6 +4321,15 @@ export default function CyberChessPage(){
             const mvs=prev.moves({verbose:true});
             const m1mvs=mvs.filter(m=>{const t=new Chess(fenHist[i-1]);t.move(m);return t.isCheckmate();});
             if(m1mvs.length){cpiM.m1.opp++;if(quality!=="blunder"&&quality!=="mistake")cpiM.m1.found++;}
+            // M2: мат в 2 — любой ход ведёт к позиции где у соперника нет ответа на мат
+            if(!m1mvs.length){
+              const m2=mvs.some(m=>{
+                const t=new Chess(fenHist[i-1]);t.move(m);
+                if(t.isCheckmate()||t.isGameOver())return false;
+                return t.moves({verbose:true}).some(r=>{const t2=new Chess(t.fen());t2.move(r);return t2.isCheckmate();});
+              });
+              if(m2){cpiM.m2.opp++;if(quality!=="blunder"&&quality!=="mistake")cpiM.m2.found++;}
+            }
           }catch{}
           // Висящие фигуры у игрока на позиции ПОСЛЕ хода
           try{

@@ -161,6 +161,12 @@ const SMOKES = [
   // guards the express.urlencoded body-parser fix (form pings must reach the
   // handler with a populated body). Signs with GUMROAD_WEBHOOK_SECRET if set.
   { name: "gumroad-webhook", script: "gumroad-webhook-smoke.js", readOnly: false, env: { GUMROAD_WEBHOOK_SECRET: process.env.GUMROAD_WEBHOOK_SECRET || "" } },
+  // Smeta Trainer PROD — read-only: health, leaderboard, per-level stats,
+  // groups, graceful student-miss, /sync validation gate. Last live-module gap.
+  { name: "smeta-trainer-prod", script: "smeta-trainer-prod-smoke.js", readOnly: true },
+  // CyberChess PROD — read-only: CPI leaderboard, tournaments list/detail/meta,
+  // spectator, auth+validation gates. No game state, no cyberchess source.
+  { name: "cyberchess-prod", script: "cyberchess-prod-smoke.js", readOnly: true },
   // DevHub PROD — 47 assertions: all 8 tabs (projects/files/env/deployments/github/templates/agent/snippets)
   // + 13 media subtabs (TTS/Image/SFX/Music/VoiceClone/STT/Email/Payment/SMS/WhatsApp/Translate/Drive)
   // Accepts 503 gracefully for unconfigured API keys. Writes one project + snippet then cleans up.

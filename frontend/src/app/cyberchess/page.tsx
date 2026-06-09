@@ -6434,6 +6434,21 @@ export default function CyberChessPage(){
                       <span style={{fontSize:17,fontWeight:900,color:accentCol,letterSpacing:-0.3}}>{resultLabel}</span>
                     </div>
                     <div style={{fontSize:10,color:"#5d5b59",fontWeight:700,textAlign:"center",maxWidth:190,lineHeight:1.4}}>{over}</div>
+                    {/* CPI статус — «считается…» пока анализ идёт, потом реальный рейтинг */}
+                    {(()=>{
+                      const cs=ldCPIState();const last=cs.history[cs.history.length-1];
+                      const d=last?.delta??0;
+                      if(analyzing)return <div style={{fontSize:11,color:"#a78bfa",fontWeight:800,display:"flex",alignItems:"center",gap:5}}>
+                        <span style={{animation:"cc-dots 1.2s ease-in-out infinite",letterSpacing:2}}>●●●</span>
+                        <span>CPI считается…</span>
+                      </div>;
+                      if(cs.history.length>0)return <div style={{fontSize:11,fontWeight:900,display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{color:"#a78bfa"}}>🏆 CPI</span>
+                        <span style={{color:"#e2e8f0",fontSize:14}}>{cs.cpi}</span>
+                        {d!==0&&<span style={{color:d>0?"#22c55e":"#ef4444",fontSize:10}}>{d>0?"+":""}{Math.round(d)}</span>}
+                      </div>;
+                      return null;
+                    })()}
                     <div style={{display:"flex",gap:7,marginTop:2,flexWrap:"wrap" as const,justifyContent:"center"}}>
                       <button onClick={()=>{const swapped=pCol==="w"?"b" as ChessColor:"w" as ChessColor;newG(swapped);}}
                         style={{padding:"8px 15px",borderRadius:8,border:"1px solid rgba(117,153,0,0.5)",

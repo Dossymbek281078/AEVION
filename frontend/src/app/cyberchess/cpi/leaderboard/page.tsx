@@ -88,28 +88,60 @@ function rankBadge(rank: number): { bg: string; fg: string } {
 export default function CPILeaderboardPage() {
   const [filter, setFilter] = useState<FactorKey>("overall");
   const [myCpi, setMyCpi] = useState<number | null>(null);
+  const [myGames, setMyGames] = useState(0);
+  const [myFactors, setMyFactors] = useState<Entry["factors"] | null>(null);
+  const [myAvatar, setMyAvatar] = useState("👤");
 
-  // Try to read user's own CPI from localStorage (cpi.ts state)
+  // Читаем реальный CPI игрока + вычисляем средние per-factor из истории партий
   useEffect(() => {
     try {
       const raw = localStorage.getItem("aevion_cyberchess_cpi_v1");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.v === 1 && typeof parsed.cpi === "number") setMyCpi(parsed.cpi);
+        if (parsed?.v === 1 && typeof parsed.cpi === "number") {
+          setMyCpi(parsed.cpi);
+          const hist = Array.isArray(parsed.history) ? parsed.history : [];
+          setMyGames(hist.length);
+          if (hist.length > 0) {
+            const avg = (key: keyof Entry["factors"]) => {
+              const vals = hist.map((h: any) => h.breakdown?.[key] ?? 0);
+              const s = vals.reduce((a: number, b: number) => a + b, 0);
+              return s / vals.length;
+            };
+            setMyFactors({ E: avg("E"), T: avg("T"), O: avg("O"), B1: avg("B1"), M1: avg("M1"), M2: avg("M2"), M3: avg("M3"), H: avg("H"), Br: avg("Br") });
+          }
+        }
       }
+      const av = localStorage.getItem("cc_avatar_emoji_v1");
+      if (av) setMyAvatar(av);
     } catch {}
   }, []);
 
+  // Вставляем локального игрока в таблицу чтобы он видел себя в контексте
+  const allEntries = useMemo<Entry[]>(() => {
+    if (myCpi === null) return MOCK_ENTRIES;
+    const me: Entry = {
+      rank: 0,
+      username: "Ты",
+      emoji: myAvatar,
+      cpi: myCpi,
+      factors: myFactors ?? { E: 0, T: 0, O: 0, B1: 0, M1: 0, M2: 0, M3: 0, H: 0, Br: 0 },
+      games: myGames,
+      trend: "flat",
+    };
+    return [...MOCK_ENTRIES, me];
+  }, [myCpi, myGames, myFactors, myAvatar]);
+
   const sortedEntries = useMemo(() => {
-    if (filter === "overall") return MOCK_ENTRIES.slice().sort((a, b) => b.cpi - a.cpi).map((e, i) => ({ ...e, rank: i + 1 }));
+    if (filter === "overall") return allEntries.slice().sort((a, b) => b.cpi - a.cpi).map((e, i) => ({ ...e, rank: i + 1 }));
     const f = filter as keyof Entry["factors"];
-    return MOCK_ENTRIES.slice().sort((a, b) => b.factors[f] - a.factors[f]).map((e, i) => ({ ...e, rank: i + 1 }));
-  }, [filter]);
+    return allEntries.slice().sort((a, b) => b.factors[f] - a.factors[f]).map((e, i) => ({ ...e, rank: i + 1 }));
+  }, [filter, allEntries]);
 
   const myProjectedRank = useMemo(() => {
-    if (myCpi === null || filter !== "overall") return null;
-    return MOCK_ENTRIES.filter(e => e.cpi > myCpi).length + 1;
-  }, [myCpi, filter]);
+    if (myCpi === null) return null;
+    return sortedEntries.find(e => e.username === "Ты")?.rank ?? null;
+  }, [myCpi, sortedEntries]);
 
   return (
     <main style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "system-ui, sans-serif", padding: "32px 16px" }}>
@@ -172,7 +204,7 @@ export default function CPILeaderboardPage() {
                 <span style={{ fontSize: 26, fontWeight: 900, color: C.text, fontFamily: "ui-monospace, monospace" }}>{myCpi}</span>
                 <span style={{ fontSize: 13, color: tierFor(myCpi).color, fontWeight: 700 }}>{tierFor(myCpi).tier}</span>
                 {myProjectedRank && (
-                  <span style={{ fontSize: 13, color: C.dim }}>· топ-{myProjectedRank} среди {MOCK_ENTRIES.length} показанных</span>
+                  <span style={{ fontSize: 13, color: C.dim }}>· #{myProjectedRank} в таблице · {myGames} {myGames === 1 ? "партия" : myGames < 5 ? "партии" : "партий"}</span>
                 )}
               </div>
             </div>
@@ -262,6 +294,8 @@ export default function CPILeaderboardPage() {
                 padding: "12px 16px",
                 borderTop: e.rank === 1 ? "none" : `1px solid ${C.border}`,
                 alignItems: "center",
+                background: e.username === "Ты" ? "rgba(167,139,250,0.08)" : "transparent",
+                borderLeft: e.username === "Ты" ? `3px solid ${C.purple}` : "3px solid transparent",
               }}>
                 <div>
                   <span style={{
@@ -339,7 +373,7 @@ export default function CPILeaderboardPage() {
         </div>
 
         <div style={{ marginTop: 32, fontSize: 11, color: C.faint, textAlign: "center" }}>
-          Mock data · в проде — endpoint <code style={{ fontFamily: "ui-monospace, monospace" }}>/api/cyberchess/cpi/leaderboard</code>
+          Разбери партию в <Link href="/cyberchess" style={{ color: C.purple, textDecoration: "none" }}>CyberChess</Link> — твой CPI обновится автоматически и попадёт в таблицу
         </div>
       </article>
     </main>

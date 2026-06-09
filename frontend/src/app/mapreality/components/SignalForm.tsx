@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 type Category = "need" | "event" | "request";
 
@@ -10,10 +11,10 @@ export type SignalFormProps = {
   onSubmitted: () => void;
 };
 
-const CATEGORIES: Array<{ id: Category; label: string; color: string }> = [
-  { id: "need", label: "Need", color: "#bae6fd" },
-  { id: "event", label: "Event", color: "#fef08a" },
-  { id: "request", label: "Request", color: "#bbf7d0" },
+const CATEGORIES: Array<{ id: Category; color: string }> = [
+  { id: "need", color: "#bae6fd" },
+  { id: "event", color: "#fef08a" },
+  { id: "request", color: "#bbf7d0" },
 ];
 
 export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
@@ -26,20 +27,21 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
   const [lng, setLng] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const { t } = useI18n();
 
   function tryGeolocate() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setMsg("Geolocation not available in this browser");
+      setMsg(t("mapreality.form.geoUnavailable"));
       return;
     }
-    setMsg("Locating…");
+    setMsg(t("mapreality.form.locating"));
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(pos.coords.latitude.toFixed(5));
         setLng(pos.coords.longitude.toFixed(5));
-        setMsg("Location captured");
+        setMsg(t("mapreality.form.located"));
       },
-      (err) => setMsg(`Location denied: ${err.message}`),
+      (err) => setMsg(t("mapreality.form.locDenied", { msg: err.message })),
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
     );
   }
@@ -50,11 +52,11 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
 
     const alias = authorAlias.trim();
     if (!alias) {
-      setMsg("Set your author alias first (top of page)");
+      setMsg(t("mapreality.form.noAlias"));
       return;
     }
     if (!title.trim() || !description.trim() || !country.trim()) {
-      setMsg("Title, description, country are required");
+      setMsg(t("mapreality.form.required"));
       return;
     }
 
@@ -79,10 +81,10 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       });
       const data = (await r.json()) as { id?: number; error?: string };
       if (!r.ok) {
-        setMsg(data.error ?? `error ${r.status}`);
+        setMsg(data.error ?? t("mapreality.card.errStatus", { status: r.status }));
         return;
       }
-      setMsg(`Signal #${data.id} published`);
+      setMsg(t("mapreality.form.published", { id: data.id ?? "" }));
       setTitle("");
       setDescription("");
       setCity("");
@@ -90,7 +92,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       setLng("");
       onSubmitted();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "network error");
+      setMsg(e instanceof Error ? e.message : t("mapreality.card.network"));
     } finally {
       setBusy(false);
       setTimeout(() => setMsg(null), 3000);
@@ -111,8 +113,8 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       }}
     >
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, color: "#f1f5f9", margin: 0 }}>Publish a signal</h2>
-        <span style={{ fontSize: 11, color: "#94a3b8" }}>MVP · public, in-memory if DB unavailable</span>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: "#f1f5f9", margin: 0 }}>{t("mapreality.form.title")}</h2>
+        <span style={{ fontSize: 11, color: "#94a3b8" }}>{t("mapreality.form.note")}</span>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -135,7 +137,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
                 cursor: "pointer",
               }}
             >
-              {c.label}
+              {t("mapreality.cat." + c.id)}
             </button>
           );
         })}
@@ -143,7 +145,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
 
       <input
         type="text"
-        placeholder="Title (e.g. Need 3 GPs for week of May 20)"
+        placeholder={t("mapreality.form.titlePh")}
         maxLength={200}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
@@ -152,7 +154,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       />
 
       <textarea
-        placeholder="Describe the need / event / request in detail (max 2000 chars)"
+        placeholder={t("mapreality.form.descPh")}
         maxLength={2000}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
@@ -164,7 +166,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <input
           type="text"
-          placeholder="Country (KZ, RU, US...)"
+          placeholder={t("mapreality.form.countryPh")}
           maxLength={64}
           value={country}
           onChange={(e) => setCountry(e.target.value)}
@@ -173,7 +175,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
         />
         <input
           type="text"
-          placeholder="City (optional)"
+          placeholder={t("mapreality.form.cityPh")}
           maxLength={80}
           value={city}
           onChange={(e) => setCity(e.target.value)}
@@ -184,14 +186,14 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, alignItems: "stretch" }}>
         <input
           type="text"
-          placeholder="lat (optional)"
+          placeholder={t("mapreality.form.latPh")}
           value={lat}
           onChange={(e) => setLat(e.target.value)}
           style={inputStyle}
         />
         <input
           type="text"
-          placeholder="lng (optional)"
+          placeholder={t("mapreality.form.lngPh")}
           value={lng}
           onChange={(e) => setLng(e.target.value)}
           style={inputStyle}
@@ -210,7 +212,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
             whiteSpace: "nowrap",
           }}
         >
-          Use my location
+          {t("mapreality.form.useLocation")}
         </button>
       </div>
 
@@ -230,7 +232,7 @@ export function SignalForm({ authorAlias, onSubmitted }: SignalFormProps) {
             opacity: busy ? 0.6 : 1,
           }}
         >
-          {busy ? "Publishing…" : "Publish signal"}
+          {busy ? t("mapreality.form.publishing") : t("mapreality.form.publish")}
         </button>
         {msg && <span style={{ fontSize: 12, color: "#cbd5e1" }}>{msg}</span>}
       </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import type { Signal } from "./SignalCard";
 
 export type FilterCategory = "all" | "need" | "event" | "request";
@@ -11,11 +12,11 @@ export type FilterState = {
   country: string;
 };
 
-const CATEGORIES: Array<{ id: FilterCategory; label: string; color: string }> = [
-  { id: "all", label: "All", color: "rgba(148, 163, 184, 0.25)" },
-  { id: "need", label: "Need", color: "#bae6fd" },
-  { id: "event", label: "Event", color: "#fef08a" },
-  { id: "request", label: "Request", color: "#bbf7d0" },
+const CATEGORIES: Array<{ id: FilterCategory; color: string }> = [
+  { id: "all", color: "rgba(148, 163, 184, 0.25)" },
+  { id: "need", color: "#bae6fd" },
+  { id: "event", color: "#fef08a" },
+  { id: "request", color: "#bbf7d0" },
 ];
 
 export function Filters({
@@ -31,10 +32,11 @@ export function Filters({
 }) {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   function handleNearby() {
     if (!navigator.geolocation) {
-      setGeoError("Геолокация не поддерживается браузером");
+      setGeoError(t("mapreality.geo.unsupported"));
       return;
     }
     setGeoLoading(true);
@@ -51,14 +53,14 @@ export function Filters({
           const json = (await r.json()) as { success: boolean; data: { signals: Signal[] } };
           onNearby(json.data?.signals ?? []);
         } catch (e) {
-          setGeoError(e instanceof Error ? e.message : "Ошибка загрузки");
+          setGeoError(e instanceof Error ? e.message : t("mapreality.geo.loadErr"));
         } finally {
           setGeoLoading(false);
         }
       },
       (_err) => {
         setGeoLoading(false);
-        setGeoError("Доступ к геолокации отклонён");
+        setGeoError(t("mapreality.geo.denied"));
       },
       { timeout: 10_000 },
     );
@@ -98,7 +100,7 @@ export function Filters({
                 transition: "background 120ms, color 120ms",
               }}
             >
-              {c.label}
+              {t("mapreality.cat." + c.id)}
             </button>
           );
         })}
@@ -122,13 +124,13 @@ export function Filters({
             transition: "background 120ms, opacity 120ms",
           }}
         >
-          {geoLoading ? "Определяем..." : "Рядом со мной"}
+          {geoLoading ? t("mapreality.geo.locating") : t("mapreality.geo.nearby")}
         </button>
         {geoError && (
           <span style={{ fontSize: 11, color: "#fca5a5" }}>{geoError}</span>
         )}
 
-        <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Country</label>
+        <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{t("mapreality.country")}</label>
         <select
           value={value.country}
           onChange={(e) => onChange({ ...value, country: e.target.value })}
@@ -143,7 +145,7 @@ export function Filters({
             minWidth: 110,
           }}
         >
-          <option value="">All</option>
+          <option value="">{t("mapreality.country.all")}</option>
           {countries.map((c) => (
             <option key={c} value={c}>
               {c}

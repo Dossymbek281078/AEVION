@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 export type Signal = {
   id: number;
@@ -18,10 +19,10 @@ export type Signal = {
   created_at: string;
 };
 
-const CATEGORY_STYLE: Record<Signal["category"], { bg: string; text: string; label: string }> = {
-  need: { bg: "#bae6fd", text: "#075985", label: "Need" },
-  event: { bg: "#fef08a", text: "#854d0e", label: "Event" },
-  request: { bg: "#bbf7d0", text: "#166534", label: "Request" },
+const CATEGORY_STYLE: Record<Signal["category"], { bg: string; text: string }> = {
+  need: { bg: "#bae6fd", text: "#075985" },
+  event: { bg: "#fef08a", text: "#854d0e" },
+  request: { bg: "#bbf7d0", text: "#166534" },
 };
 
 function flagFor(country: string): string {
@@ -65,12 +66,13 @@ export function SignalCard({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const style = CATEGORY_STYLE[signal.category];
+  const { t } = useI18n();
 
   async function support() {
     if (busy) return;
     const alias = supporterAlias.trim();
     if (!alias) {
-      setMsg("Set your alias above first.");
+      setMsg(t("mapreality.card.noAlias"));
       return;
     }
     setBusy(true);
@@ -84,15 +86,15 @@ export function SignalCard({
       const data = (await r.json()) as { supportCount?: number; error?: string };
       if (r.ok && typeof data.supportCount === "number") {
         onSupported({ ...signal, support_count: data.supportCount });
-        setMsg("Supported");
+        setMsg(t("mapreality.card.supported"));
       } else if (r.status === 409 && typeof data.supportCount === "number") {
         onSupported({ ...signal, support_count: data.supportCount });
-        setMsg("Already supported");
+        setMsg(t("mapreality.card.already"));
       } else {
-        setMsg(data.error ?? `error ${r.status}`);
+        setMsg(data.error ?? t("mapreality.card.errStatus", { status: r.status }));
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "network error");
+      setMsg(e instanceof Error ? e.message : t("mapreality.card.network"));
     } finally {
       setBusy(false);
       setTimeout(() => setMsg(null), 2400);
@@ -127,7 +129,7 @@ export function SignalCard({
             flexShrink: 0,
           }}
         >
-          {style.label}
+          {t("mapreality.cat." + signal.category)}
         </span>
       </div>
 
@@ -137,7 +139,7 @@ export function SignalCard({
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 11, color: "#94a3b8", flexWrap: "wrap" }}>
         <span>{flagFor(signal.country)} {signal.city ? `${signal.city}, ` : ""}{signal.country}</span>
-        <span>by {signal.author_alias}</span>
+        <span>{t("mapreality.card.by", { alias: signal.author_alias })}</span>
         <span>{timeAgo(signal.created_at)}</span>
         {signal.status !== "active" && (
           <span style={{ color: signal.status === "resolved" ? "#86efac" : "#fca5a5" }}>{signal.status}</span>
@@ -161,7 +163,7 @@ export function SignalCard({
             opacity: busy ? 0.6 : 1,
           }}
         >
-          +1 Support · {signal.support_count}
+          {t("mapreality.card.support", { n: signal.support_count })}
         </button>
         {msg && <span style={{ fontSize: 11, color: "#94a3b8" }}>{msg}</span>}
       </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { SignalForm } from "./components/SignalForm";
@@ -36,6 +37,7 @@ export default function MapRealityPage() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [nearbySignals, setNearbySignals] = useState<Signal[] | null>(null);
+  const { t } = useI18n();
 
   // Restore alias from localStorage on mount
   useEffect(() => {
@@ -133,12 +135,12 @@ export default function MapRealityPage() {
           </Link>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <ModulePricingChip moduleId="mapreality" theme="dark" />
-            <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>Your alias</label>
+            <label style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{t("mapreality.alias.label")}</label>
             <input
               type="text"
               value={alias}
               onChange={(e) => setAlias(e.target.value.slice(0, 64))}
-              placeholder="pick a pseudonym"
+              placeholder={t("mapreality.alias.ph")}
               style={{
                 padding: "5px 9px",
                 fontSize: 13,
@@ -162,7 +164,7 @@ export default function MapRealityPage() {
               letterSpacing: -0.5,
             }}
           >
-            Map of real{" "}
+            {t("mapreality.hero.pre")}{" "}
             <span
               style={{
                 background: "linear-gradient(90deg, #7dd3fc, #86efac, #fde047)",
@@ -170,13 +172,12 @@ export default function MapRealityPage() {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              needs & signals
+              {t("mapreality.hero.hl")}
             </span>
             .
           </h1>
           <p style={{ maxWidth: 640, margin: "10px auto 0", color: "#cbd5e1", fontSize: 15, lineHeight: 1.55 }}>
-            Citizens publish signals (need / event / request) tied to a country and city. Others support what matters
-            with +1. Pick an alias, publish, support.
+            {t("mapreality.hero.sub")}
           </p>
         </section>
 
@@ -207,7 +208,7 @@ export default function MapRealityPage() {
                 }}
               >
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#7dd3fc" }}>
-                  Сигналы рядом (50 км) — {nearbySignals.length}
+                  {t("mapreality.nearby.title", { n: nearbySignals.length })}
                 </span>
                 <button
                   type="button"
@@ -221,12 +222,12 @@ export default function MapRealityPage() {
                     padding: "2px 6px",
                   }}
                 >
-                  скрыть
+                  {t("mapreality.nearby.hide")}
                 </button>
               </div>
               {nearbySignals.length === 0 ? (
                 <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>
-                  Нет активных сигналов в радиусе 50 км от вас.
+                  {t("mapreality.nearby.empty")}
                 </p>
               ) : (
                 <div
@@ -265,16 +266,16 @@ export default function MapRealityPage() {
           >
             <div style={{ fontSize: 13, color: "#94a3b8" }}>
               {loading
-                ? "Loading…"
+                ? t("mapreality.loading")
                 : error
-                ? <span style={{ color: "#fca5a5" }}>Error: {error}</span>
-                : `${sortedSignals.length} signal${sortedSignals.length === 1 ? "" : "s"}`}
+                ? <span style={{ color: "#fca5a5" }}>{t("mapreality.error", { error })}</span>
+                : t("mapreality.count", { n: sortedSignals.length })}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               {([
-                { id: "support", label: "Top supported" },
-                { id: "recent", label: "Most recent" },
-              ] as Array<{ id: SortBy; label: string }>).map((opt) => (
+                { id: "support" },
+                { id: "recent" },
+              ] as Array<{ id: SortBy }>).map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
@@ -291,7 +292,7 @@ export default function MapRealityPage() {
                     fontWeight: 600,
                   }}
                 >
-                  {opt.label}
+                  {t("mapreality.sort." + opt.id)}
                 </button>
               ))}
             </div>
@@ -316,7 +317,7 @@ export default function MapRealityPage() {
                   fontSize: 14,
                 }}
               >
-                No signals yet — be the first to publish one above.
+                {t("mapreality.empty")}
               </div>
             )}
             {sortedSignals.map((s) => (
@@ -335,14 +336,14 @@ export default function MapRealityPage() {
             moduleId="mapreality"
             noun="concept/messages"
             accent="emerald"
-            sectionTitle="Map concept board"
-            sectionHint="Какие слои реальности должны быть на карте? Какие сигналы важны для AR-навигации?"
+            sectionTitle={t("mapreality.concept.title")}
+            sectionHint={t("mapreality.concept.hint")}
             titleField="idea"
             summaryField="rationale"
             fields={[
-              { key: "idea", label: "Идея / слой", placeholder: "напр.: тепловые карты безопасности районов", required: true },
-              { key: "rationale", label: "Зачем нужен этот слой", type: "textarea", placeholder: "Какую проблему решает, как верифицировать" },
-              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+              { key: "idea", label: t("mapreality.concept.idea.label"), placeholder: t("mapreality.concept.idea.ph"), required: true },
+              { key: "rationale", label: t("mapreality.concept.rationale.label"), type: "textarea", placeholder: t("mapreality.concept.rationale.ph") },
+              { key: "author", label: t("mapreality.concept.author.label"), placeholder: "anon" },
             ]}
           />
         </div>
@@ -362,7 +363,7 @@ export default function MapRealityPage() {
           }}
         >
           <span>API: <code style={{ background: "rgba(148,163,184,0.1)", padding: "1px 6px", borderRadius: 4 }}>/api/mapreality/*</code></span>
-          <Link href="/" style={{ color: "#7dd3fc", textDecoration: "none" }}>← All AEVION modules</Link>
+          <Link href="/" style={{ color: "#7dd3fc", textDecoration: "none" }}>{t("mapreality.footer.allModules")}</Link>
         </footer>
       </div>
     </main>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
 
 export type StatsData = {
   total: number;
@@ -9,15 +10,16 @@ export type StatsData = {
   byCountry: Array<{ country: string; count: number }>;
 };
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  need: { bg: "#bae6fd", text: "#075985", label: "Needs" },
-  event: { bg: "#fef08a", text: "#854d0e", label: "Events" },
-  request: { bg: "#bbf7d0", text: "#166534", label: "Requests" },
+const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
+  need: { bg: "#bae6fd", text: "#075985" },
+  event: { bg: "#fef08a", text: "#854d0e" },
+  request: { bg: "#bbf7d0", text: "#166534" },
 };
 
 export function StatsBar({ refreshKey }: { refreshKey: number }) {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +42,7 @@ export function StatsBar({ refreshKey }: { refreshKey: number }) {
   if (error) {
     return (
       <div style={{ padding: "12px 16px", background: "#fee2e2", color: "#991b1b", borderRadius: 12, fontSize: 13 }}>
-        Stats unavailable: {error}
+        {t("mapreality.stats.unavailable", { error })}
       </div>
     );
   }
@@ -48,7 +50,7 @@ export function StatsBar({ refreshKey }: { refreshKey: number }) {
   if (!stats) {
     return (
       <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.05)", color: "#94a3b8", borderRadius: 12, fontSize: 13 }}>
-        Loading stats…
+        {t("mapreality.stats.loading")}
       </div>
     );
   }
@@ -70,7 +72,7 @@ export function StatsBar({ refreshKey }: { refreshKey: number }) {
     >
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
-          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: "#94a3b8" }}>Active signals</div>
+          <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, color: "#94a3b8" }}>{t("mapreality.stats.active")}</div>
           <div style={{ fontSize: 36, fontWeight: 700, color: "#e2e8f0", lineHeight: 1 }}>{stats.total}</div>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -98,7 +100,7 @@ export function StatsBar({ refreshKey }: { refreshKey: number }) {
           const pct = (n / max) * 100;
           return (
             <div key={c} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 80, fontSize: 12, color: "#cbd5e1" }}>{color.label}</div>
+              <div style={{ width: 80, fontSize: 12, color: "#cbd5e1" }}>{t("mapreality.statCat." + c)}</div>
               <div style={{ flex: 1, height: 10, background: "rgba(148,163,184,0.12)", borderRadius: 999, overflow: "hidden" }}>
                 <div
                   style={{

@@ -170,9 +170,18 @@ export const payboxPaymentProvider: PaymentProvider = {
     for (const [k, v] of params.entries()) flat[k] = v;
 
     const presented = flat["pg_sig"] ?? "";
-    const expected = sign(scriptName, flat);
     const paymentId = flat["pg_payment_id"] ?? flat["pg_order_id"] ?? "";
 
+    // Без секрета подпись вычислить нечем → не доверяем (а не падаем). Возвращаем
+    // invalid_signature, чтобы роут ответил 401, а не 400 на необработанном throw.
+    if (!process.env.PAYBOX_SECRET?.trim()) {
+      return {
+        intentId: `paybox:${paymentId}`,
+        result: { status: "failed" as const, paidAt: null, reason: "invalid_signature", raw: flat },
+      };
+    }
+
+    const expected = sign(scriptName, flat);
     if (!presented || presented !== expected) {
       return {
         intentId: `paybox:${paymentId}`,

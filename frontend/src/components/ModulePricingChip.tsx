@@ -4,14 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 
-// Compact pricing chip for module pages. Shows the cheapest path to this
-// module (solo) plus the bundle that includes it (if any) plus the
-// All-Access dominant offer. Wherever a visitor lands on /cyberchess,
-// /qpaynet, /healthai, etc. they see "$5/mo Solo · $19/mo Gaming Bundle
-// (5 mods) · $59/mo All-Access" without leaving the page.
+// Compact pricing chip + direct-buy button for module pages. Shows the
+// cheapest path to this module (solo) and a one-click "Купить" button that
+// opens the live LemonSqueezy checkout for Lite+thisModule — без захода на
+// общий /pricing (последняя миля). The "сравнить тарифы →" link still leads
+// to /pricing?module=<id> with the product pre-selected.
 //
-// Data: pulls /api/aevion/pricing once per page-load and caches the
-// in-flight promise at module scope so N chips on one page = 1 request.
+// Wherever a visitor lands on /cyberchess, /qpaynet, /healthai, etc. they see
+// "Купить $5/мес · Gaming bundle $19 · All-Access $59" and can pay in one click.
+//
+// Data: pulls /api/aevion/pricing once per page-load and caches the in-flight
+// promise at module scope so N chips on one page = 1 request.
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 type BundleId = "fintech" | "build" | "ai" | "gaming";
@@ -67,10 +70,14 @@ interface Props {
   currency?: CurrencyCode;
   /** Optional dark/light theme (defaults to light). */
   theme?: "light" | "dark";
+  /** Hide the one-click buy button (chip stays informational). Default false. */
+  hideBuy?: boolean;
 }
 
-export default function ModulePricingChip({ moduleId, currency = "USD", theme = "light" }: Props) {
+export default function ModulePricingChip({ moduleId, currency = "USD", theme = "light", hideBuy = false }: Props) {
   const [data, setData] = useState<PricingResponse | null>(null);
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,35 +99,88 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
     ? { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.12)", text: "#e2e8f0", muted: "#94a3b8", accent: "#34d399" }
     : { bg: "#f8fafc", border: "rgba(15,23,42,0.08)", text: "#0f172a", muted: "#64748b", accent: "#0d9488" };
 
+  // One-click checkout: Lite tier + this module → live LemonSqueezy hosted page.
+  // The backend /checkout/session picks the processor (LS primary → Gumroad →
+  // stub) and returns a ready checkout URL. Email is collected on the hosted
+  // page, so we don't ask for it here.
+  async function buyNow() {
+    setBuying(true);
+    setBuyError(false);
+    try {
+      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tierId: "lite", period: "monthly", seats: 1, modules: [moduleId] }),
+      });
+      const j = await r.json();
+      if (j?.url) {
+        window.location.href = j.url;
+        return; // keep the spinner while the browser navigates away
+      }
+      setBuyError(true);
+      setBuying(false);
+    } catch {
+      setBuyError(true);
+      setBuying(false);
+    }
+  }
+
   return (
-    <Link
-      href={`/pricing?module=${encodeURIComponent(moduleId)}`}
+    <span
       style={{
         display: "inline-flex",
         alignItems: "center",
         gap: 10,
-        padding: "6px 12px",
+        padding: "6px 8px 6px 12px",
         background: palette.bg,
         border: `1px solid ${palette.border}`,
         borderRadius: 999,
         fontSize: 12,
         color: palette.text,
-        textDecoration: "none",
         lineHeight: 1.4,
       }}
-      title={`Solo, bundle, or all-access — see /pricing`}
     >
-      <span><strong style={{ fontWeight: 800 }}>{fmt(solo.monthly[currency], currency)}</strong>/мес solo</span>
-      {bundle && (
-        <>
-          <span style={{ color: palette.muted }}>·</span>
-          <span>{BUNDLE_NAME[bundle.id]} bundle <strong style={{ fontWeight: 800 }}>{fmt(bundle.monthly[currency], currency)}</strong> ({bundle.modules.length} mods)</span>
-        </>
+      <Link
+        href={`/pricing?module=${encodeURIComponent(moduleId)}`}
+        style={{ display: "inline-flex", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
+        title="Сравнить тарифы — Solo, bundle, All-Access"
+      >
+        <span><strong style={{ fontWeight: 800 }}>{fmt(solo.monthly[currency], currency)}</strong>/мес solo</span>
+        {bundle && (
+          <>
+            <span style={{ color: palette.muted }}>·</span>
+            <span>{BUNDLE_NAME[bundle.id]} bundle <strong style={{ fontWeight: 800 }}>{fmt(bundle.monthly[currency], currency)}</strong> ({bundle.modules.length} mods)</span>
+          </>
+        )}
+        <span style={{ color: palette.muted }}>·</span>
+        <span style={{ color: palette.accent, fontWeight: 700 }}>
+          All-Access {fmt(data.allAccess.monthly[currency], currency)}
+        </span>
+      </Link>
+      {!hideBuy && (
+        <button
+          type="button"
+          onClick={buyNow}
+          disabled={buying}
+          title={buyError ? "Ошибка — попробуйте ещё раз" : `Купить ${fmt(solo.monthly[currency], currency)}/мес — оплата картой`}
+          style={{
+            border: "none",
+            cursor: buying ? "wait" : "pointer",
+            padding: "6px 14px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 800,
+            whiteSpace: "nowrap",
+            color: "#fff",
+            background: buyError
+              ? "#dc2626"
+              : "linear-gradient(135deg, #0d9488, #0ea5e9)",
+            opacity: buying ? 0.7 : 1,
+          }}
+        >
+          {buying ? "Открываем…" : buyError ? "Повторить" : "Купить"}
+        </button>
       )}
-      <span style={{ color: palette.muted }}>·</span>
-      <span style={{ color: palette.accent, fontWeight: 700 }}>
-        All-Access {fmt(data.allAccess.monthly[currency], currency)}
-      </span>
-    </Link>
+    </span>
   );
 }

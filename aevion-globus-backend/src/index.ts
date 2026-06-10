@@ -27,6 +27,7 @@ import { pricingRouter } from "./routes/pricing";
 import { checkoutRouter } from "./routes/checkout";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
 import { gumroadWebhookRouter } from "./routes/gumroadWebhook";
+import { payboxWebhookRouter } from "./routes/payboxWebhook";
 import { healthaiRouter } from "./routes/healthai";
 import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
@@ -905,6 +906,7 @@ app.use("/api/qchaingov", qchaingovRouter);
 app.use("/api/pricing/events", eventsRouter);
 app.use("/api/lemonsqueezy", lemonSqueezyWebhookRouter);
 app.use("/api/gumroad", gumroadWebhookRouter);
+app.use("/api/paybox", payboxWebhookRouter);
 // ==========================
 // Auth
 // ==========================

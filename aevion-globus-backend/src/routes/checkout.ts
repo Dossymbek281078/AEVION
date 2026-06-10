@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
+import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
-  TIERS, getTier, getModulePrice, resolvePromoCode,
-  type TierId, type BillingPeriod,
+  TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES,
+  type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
 
@@ -44,6 +45,8 @@ interface CheckoutBody {
   promoCode?: string;
   email?: string;
   trial?: boolean;
+  /** Валюта оплаты. "KZT" → локальный канал PayBox (если настроен), иначе USD/LS. */
+  currency?: CurrencyCode;
 }
 
 // ── POST /session ─────────────────────────────────────────────────────────────
@@ -126,6 +129,25 @@ checkoutRouter.post("/session", async (req, res) => {
     }
 
     const description = `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`;
+
+    // 0) PayBox — локальный KZT-канал (карты КЗ + Kaspi). Срабатывает только
+    //    когда плательщик явно выбрал KZT и провайдер настроен. Сумму USD
+    //    конвертируем в тенге по курсу из CURRENCY_RATES; PayBox принимает
+    //    pg_amount в основной единице (тенге), поэтому передаём amountCents в
+    //    тыйынах (тенге*100), а провайдер делит на 100.
+    if (body.currency === "KZT" && isPayboxConfigured()) {
+      try {
+        const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
+        const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
+        const intent = await payboxPaymentProvider.createIntent({
+          reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
+          customData: liteModule ? { module: liteModule } : undefined,
+        });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", intentId: intent.intentId });
+      } catch (e) {
+        console.error("[checkout/session] PayBox createIntent failed, falling back to LS/Gumroad/stub", e);
+      }
+    }
 
     // 1) LemonSqueezy — основной живой процессинг подписок (аккаунт активирован).
     //    Используется, когда задан LS API + variant для этого tier:period.

@@ -262,7 +262,7 @@ revenueRouter.get("/health", (_req, res) => {
         note: "KYC не пройдена — не используется как живой канал",
         setupGuide: "/api/paddle/setup-guide",
       },
-      paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID) },
+      paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim()), note: "KZT — карты КЗ + Kaspi (12 приложений). Каскад checkout: currency=KZT → PayBox." },
       youtube: { configured: Boolean(YT_API_KEY()) },
       twitch: { configured: Boolean(TWITCH_CLIENT_ID() && TWITCH_CLIENT_SECRET()) },
     },

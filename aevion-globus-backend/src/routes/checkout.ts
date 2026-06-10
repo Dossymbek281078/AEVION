@@ -2,6 +2,7 @@ import { Router } from "express";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
+import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES,
@@ -47,6 +48,8 @@ interface CheckoutBody {
   trial?: boolean;
   /** Валюта оплаты. "KZT" → локальный канал PayBox (если настроен), иначе USD/LS. */
   currency?: CurrencyCode;
+  /** Способ оплаты. "paypal" → канал PayPal (если настроен), иначе дефолтный каскад. */
+  method?: "card" | "paypal";
 }
 
 // ── POST /session ─────────────────────────────────────────────────────────────
@@ -149,6 +152,21 @@ checkoutRouter.post("/session", async (req, res) => {
       }
     }
 
+    // 0b) PayPal — глобальный карт/PayPal-канал. Срабатывает только когда
+    //     плательщик явно выбрал method="paypal" и провайдер настроен.
+    if (body.method === "paypal" && isPaypalConfigured()) {
+      try {
+        const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
+        const intent = await paypalPaymentProvider.createIntent({
+          reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          customData: liteModule ? { module: liteModule } : undefined,
+        });
+        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", intentId: intent.intentId });
+      } catch (e) {
+        console.error("[checkout/session] PayPal createIntent failed, falling back to LS/Gumroad/stub", e);
+      }
+    }
+
     // 1) LemonSqueezy — основной живой процессинг подписок (аккаунт активирован).
     //    Используется, когда задан LS API + variant для этого tier:period.
     const lsReady =
@@ -230,6 +248,8 @@ checkoutRouter.get("/healthz", (_req, res) => {
     providers: {
       lemonsqueezy: { configured: lsReady, webhook: "/api/lemonsqueezy/webhook" },
       gumroad: { configured: Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()), webhook: "/api/gumroad/webhook" },
+      paybox: { configured: isPayboxConfigured(), trigger: "currency=KZT", webhook: "/api/paybox/webhook" },
+      paypal: { configured: isPaypalConfigured(), trigger: "method=paypal", webhook: "/api/paypal/webhook" },
     },
     frontendUrl: FRONTEND_URL,
   });

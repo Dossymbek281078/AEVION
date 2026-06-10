@@ -263,6 +263,7 @@ revenueRouter.get("/health", (_req, res) => {
         setupGuide: "/api/paddle/setup-guide",
       },
       paybox: { configured: Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim()), note: "KZT — карты КЗ + Kaspi (12 приложений). Каскад checkout: currency=KZT → PayBox." },
+      paypal: { configured: Boolean(process.env.PAYPAL_CLIENT_ID?.trim() && process.env.PAYPAL_SECRET?.trim()), sandbox: process.env.PAYPAL_SANDBOX !== "0", note: "Глобальный карт/PayPal-канал. Каскад checkout: method=paypal → PayPal Orders v2." },
       youtube: { configured: Boolean(YT_API_KEY()) },
       twitch: { configured: Boolean(TWITCH_CLIENT_ID() && TWITCH_CLIENT_SECRET()) },
     },
@@ -585,6 +586,19 @@ revenueRouter.get("/env-guide", (_req, res) => {
           ...(a.twitchChannelEnvKey ? [{ key: a.twitchChannelEnvKey, example: "yourchannel", note: `Twitch логин для ${a.appName}` }] : []),
         ],
       })),
+    // Атрибуция продаж Gumroad по модулям. Подставь <PERMALINK> = пермалинк
+    // твоего Gumroad-продукта (последний сегмент его URL, заглавными,
+    // не-буквенно-цифровые → "_"). value = appId, в который засчитать продажи.
+    // Без этих переменных все продажи валятся в "platform".
+    gumroadAttribution: {
+      note: "На Railway задай по одной переменной на продукт: GUMROAD_APP_<PERMALINK>=<appId>. <PERMALINK> бери из URL продукта Gumroad.",
+      example: "GUMROAD_APP_XPXZAM=cyberchess",
+      apps: REVENUE_APPS.map((a) => ({
+        appId: a.appId,
+        appName: a.appName,
+        envKeyPattern: `GUMROAD_APP_<PERMALINK>=${a.appId}`,
+      })),
+    },
     setupGuide: "/api/paddle/setup-guide",
   });
 });

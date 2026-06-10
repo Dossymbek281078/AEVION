@@ -191,6 +191,8 @@ export default function PricingPage() {
   // Калькулятор сметы
   // Lite = 1 продукт на выбор: выбранный модуль для чекаута Lite
   const [liteModule, setLiteModule] = useState<string>("");
+  // Модуль из deep-link (?module=) — для prominent hero-баннера «Купить <модуль>».
+  const [heroModule, setHeroModule] = useState<string>("");
 
   const [calcTier, setCalcTier] = useState<TierId>("medium");
   const [calcModules, setCalcModules] = useState<string[]>([]);
@@ -247,12 +249,13 @@ export default function PricingPage() {
       },
     });
     try {
-      // Единая точка: backend /checkout/session сам выбирает процессинг
-      // (LemonSqueezy → Gumroad → stub) и возвращает готовый URL.
+      // Единая точка: backend /checkout/session сам выбирает процессинг.
+      // Прокидываем выбранную валюту: currency=KZT → backend ведёт на PayBox
+      // (локальные карты КЗ + Kaspi), иначе USD → LemonSqueezy → Gumroad → stub.
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(opts),
+        body: JSON.stringify({ ...opts, currency }),
       });
       const j = await r.json();
       if (j.url) {
@@ -330,6 +333,7 @@ export default function PricingPage() {
     const mod = params.get("module");
     if (mod && data?.modules?.some((m) => m.id === mod)) {
       setLiteModule(mod);
+      setHeroModule(mod);
     }
     if (params.get("period") === "annual") {
       setPeriod("annual");
@@ -420,6 +424,70 @@ export default function PricingPage() {
 
   return (
     <ProductPageShell maxWidth={1280}>
+      {/* Module deep-link hero — prominent «Купить <модуль>» когда пришли с
+          страницы продукта (/pricing?module=<id>). Закрывает последнюю милю:
+          заметная кнопка покупки именно этого продукта, валюта (вкл. KZT/PayBox)
+          берётся из общего тумблера ниже. */}
+      {heroModule && (() => {
+        const m = data.modules.find((x) => x.id === heroModule);
+        const lite = data.tiers.find((t) => t.id === "lite");
+        if (!m) return null;
+        const litePrice = period === "annual" ? (lite?.priceAnnualTotal ?? null) : (lite?.priceMonthly ?? null);
+        return (
+          <section
+            style={{
+              margin: "24px auto 0",
+              maxWidth: 760,
+              padding: "20px 24px",
+              borderRadius: 18,
+              background: "linear-gradient(135deg, rgba(13,148,136,0.10), rgba(14,165,233,0.10))",
+              border: "1px solid rgba(13,148,136,0.30)",
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              textAlign: "left",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                Тариф Lite — 1 продукт
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
+                {m.name}
+                {litePrice !== null && (
+                  <span style={{ fontWeight: 700, color: "#334155", fontSize: 16 }}>
+                    {" "}— {displayPrice(litePrice)}/{period === "annual" ? "год" : "мес"}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>
+                Оплата картой. {currency === "KZT" ? "KZT → локальные карты КЗ + Kaspi (PayBox)." : "USD через LemonSqueezy."}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={checkingOut === "lite"}
+              onClick={() => startCheckout({ tierId: "lite", period, seats: 1, modules: [heroModule] })}
+              style={{
+                padding: "12px 28px",
+                fontSize: 15,
+                fontWeight: 900,
+                borderRadius: 12,
+                border: "none",
+                cursor: checkingOut === "lite" ? "wait" : "pointer",
+                color: "#fff",
+                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+                whiteSpace: "nowrap",
+                opacity: checkingOut === "lite" ? 0.7 : 1,
+              }}
+            >
+              {checkingOut === "lite" ? "Открываем оплату…" : `Купить ${m.name}`}
+            </button>
+          </section>
+        );
+      })()}
       {/* Hero */}
       <section style={{ textAlign: "center", padding: "40px 0 32px" }}>
         <div

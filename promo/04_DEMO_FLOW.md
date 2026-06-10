@@ -30,7 +30,9 @@
    - Параллельно «Send campaign» → Brevo шлёт.
    - Параллельно «Generate voiceover» → ElevenLabs.
    - На экране — три зелёные галочки за 20 секунд.
-4. Открыть `/api/devhub/usage` — счётчик AEV-биллинга в реальном времени.
+4. Показать счётчик AEV-биллинга прямо в дашборде DevHub (вкладка Usage) — в реальном времени.
+
+> ⚠️ Backend `/api/*` задеплоен под отдельным хостом и **не отвечает на `aevion.app`** (проверено 2026-06-10 — все `/api/...` дают 404). На живой встрече **не открываем сырые API-URL в браузере** — показываем всё в UI-страницах (они 200). Сырой JSON — только в DevTools или против локального backend, как запасной вариант.
 
 Сказать:
 
@@ -40,15 +42,15 @@
 
 ## 2:00–4:00 — AEV (расчётная единица)
 
-Открыть `https://aevion.app/aev` (или /pay).
+Открыть `https://aevion.app/aev` (живой 200; верхнеуровневый `/pay` на проде даёт 404 — используем `/aev`).
 
 Показать:
 
 1. Cap supply 21 000 000, выпущено: текущее число.
 2. Ledger — последние 10 транзакций.
-3. Открыть `/api/aev/balance/{accountId}` — JSON ответ.
-4. Перевести 100 AEV с одного счёта на другой → подтверждение.
-5. Открыть `aevion-globus-backend/src/routes/aev.ts` — 6 endpoints.
+3. Показать баланс счёта прямо на странице `/aev` (ledger + cap supply уже в UI) — без сырого API.
+4. Перевести 100 AEV с одного счёта на другой через UI → подтверждение.
+5. Открыть в редакторе `aevion-globus-backend/src/routes/aev.ts` — 6 endpoints (показ кода локально, не URL).
 
 Сказать:
 
@@ -58,12 +60,12 @@
 
 ## 4:00–5:30 — QSign (post-quantum signatures)
 
-Открыть `https://aevion.app/qsign-v2` (или developer page).
+Открыть `https://aevion.app/qsign` (живой 200; `/qsign-v2` на проде даёт 404).
 
 Показать:
 
 1. Подписать тестовый документ ML-DSA-65 Dilithium через UI.
-2. Открыть `/api/qsign/v2/sign` → ответ с подписью.
+2. Показать ответ с подписью прямо в результате на странице `/qsign` (не сырой `/api/...`).
 3. Сказать, что это FIPS 204 GA — конкуренты ещё в proposal.
 4. Открыть npm — `@dosymbek/qsign-v2` published.
 
@@ -78,7 +80,7 @@
 1. Документ на RU/EN/KK с переключателем языка.
 2. QSign envelope visible — нажать «verify» → зелёная галочка.
 3. Перейти на `/planet` — реестр аттестаций.
-4. Перейти на `/api/aevion/registry` — JSON всех 30+ модулей.
+4. Перейти на `/api-explorer/catalog` — каталог всех 30+ модулей в UI (живой 200; `/api/aevion/registry` на проде 404).
 
 > «Constitution version 1 опубликован через QSign envelope и аттестован в Planet. Это правовой режим продукта — не правила в Notion.»
 
@@ -102,20 +104,30 @@
 Быстро:
 
 1. `https://aevion.app/healthai` — анкета → план.
-2. `https://aevion.app/multichat` — multi-provider AI с handoff.
+2. `https://aevion.app/qcoreai` — multi-provider AI с handoff (живой 200; `/multichat` на проде 404).
 3. Сказать что таких consumer-витрин ещё 5+ (KidsAI, Smeta Trainer, MapReality, LifeBox, StartupX).
 
 ---
 
 ## 10:30–12:00 — Прозрачность
 
-Открыть `https://aevion.app/transparency` и `https://aevion.app/launch-status`.
+Открыть `https://aevion.app/planet/transparency` и `https://aevion.app/launch-status` (оба 200; верхнеуровневый `/transparency` даёт 404).
 
 1. Daily smoke 24/24.
 2. Health-board всех модулей.
-3. `/api/aevion/stats` — coverage по health/openapi/frontend/og.
+3. Coverage по health/openapi/frontend/og — показать прямо на странице `/planet/transparency` (UI), без сырого `/api/aevion/stats`.
 
 > «Мы публикуем health-board наружу. Покупатель проверит сам — не нужно нам верить.»
+
+---
+
+## 11:30–12:00 — Экосистема: один контур, любой участник
+
+Не открывая новых вкладок, сказать (формулировка из `28_ECOSYSTEM_TENANTS.md`):
+
+> «И теперь главное про масштаб. Подключиться может кто угодно и любого размера — один человек, ИП, ТОО, целая школа, клиника, банк или государство. У каждого — свой запечатанный суверенный контур с пост-квантовой подписью, а между контурами только проверяемые аттестации, не доступ к чужим данным. Одна модель безопасности масштабируется от ребёнка до министерства. Поэтому это безопасно и для одного пользователя, и для государства в целом.»
+
+Если показан `/planet` — указать на территории-«света» как иллюстрацию: каждый участник = свой свет на глобусе. Подробнее — `28_ECOSYSTEM_TENANTS.md`, `26_PLANET_UTILITY_SOVEREIGN.md`.
 
 ---
 
@@ -169,7 +181,7 @@
 ## Чек-лист «до встречи»
 
 - [ ] `aevion.app/launch-status` зелёный.
-- [ ] `aevion.app/transparency` обновлён.
+- [ ] `aevion.app/planet/transparency` обновлён (верхнеуровневый `/transparency` — 404).
 - [ ] `aevion.app/constitution` грузится без ошибок.
 - [ ] `aevion.app/devhub` — 9 интеграций видны.
 - [ ] `aevion.app/cyberchess` — Stockfish загружается.

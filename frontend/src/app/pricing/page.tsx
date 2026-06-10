@@ -319,6 +319,24 @@ export default function PricingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroVariant, tierCardsVariant]);
 
+  // Deep-link c модульной страницы: /pricing?module=<id> предвыбирает продукт
+  // для тарифа Lite (последняя миля — посетитель приходит с /cyberchess,
+  // /healthai и т.п. и сразу видит свой продукт в Lite, не ищет в дропдауне).
+  // ?period=annual переключает на годовой период. Без useSearchParams, чтобы
+  // не плодить Suspense-boundary в этом большом client-компоненте.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const mod = params.get("module");
+    if (mod && data?.modules?.some((m) => m.id === mod)) {
+      setLiteModule(mod);
+    }
+    if (params.get("period") === "annual") {
+      setPeriod("annual");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   const symbol = data?.currencies[currency].symbol ?? "$";
   const rate = data?.currencies[currency].rate ?? 1;
 

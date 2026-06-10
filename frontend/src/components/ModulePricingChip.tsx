@@ -94,7 +94,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
 
   return (
     <Link
-      href="/pricing"
+      href={`/pricing?module=${encodeURIComponent(moduleId)}`}
       style={{
         display: "inline-flex",
         alignItems: "center",

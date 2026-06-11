@@ -1,177 +1,136 @@
-# Anthropic Letter — письмо #1, честно-многоадресное
+# Anthropic Letter — письмо #1 (фрейм: идея → команда → реализация)
 
-> Адресат №1 — Anthropic. Причина: весь AEVION построен на Claude / Claude Code в одиночку.
-> Это не «ещё один фонд» — это платформа, на которой всё и сделано, значит письмо к ней
-> обязано быть честным про многоадресность (иначе продукт про доверие начинается со лжи)
-> и должно вести с уникального козыря: **живое доказательство того, что даёт их платформа.**
+> Адресат №1 — Anthropic. Весь AEVION построен на Claude / Claude Code в одиночку — поэтому письмо
+> к ним обязано быть честным про многоадресность и вести с уникального козыря: живого доказательства
+> того, что даёт их платформа.
 >
-> Стратегия — та же, что в `21_UNIVERSAL_LETTER.md` и `02_DEAL_TERMS.md`:
-> одна цена $10.5M / 1%, оценка ≈ $1.05B сегодня, **траектория — триллион** при команде и масштабе.
-> Выбор глубины: безопасное участие 1–10% · партнёрство 25–49% · полный выкуп 95% = $1B net.
->
-> Реалистичная оптика для Anthropic: они **не** типичный покупатель «95% за $1B». Их
-> естественная дверь — «участвовать безопасно» (1–10%) и/или partnership + showcase.
-> Поэтому письмо ведёт case-study/mission-углом, а оффер-лестницу даёт как опцию, не как ультиматум.
->
-> **Денежные структуры под Anthropic (чтобы не отпугнуть и чтобы не сделали без меня) — `25_ANTHROPIC_DEAL_VARIANTS.md`:**
-> платят ресурсами, не кэшем; триллион — траектория, не цена; V2 Planet Co-Build (Anthropic ~90% контроль
-> ресурсами, основатель 9–10% + Chief Idea Officer) — якорный вариант; anti-clone через незаменимость, не угрозу.
+> **ФРЕЙМ (финал 2026-06-11): сотрудничество, не выкуп. НЕ просим долю Anthropic и НЕ называем оценку.**
+> Стержень: всё в мире начинается с идеи → цель и задачи → команда → реализованный проект. Основатель
+> прошёл стадию идеи и сделал рабочий эскиз направления (30+ модулей соло за 6 мес на Claude); следующая
+> стадия — исполнение, а это по определению команда. «Слабость — один человек без рук» истинна только в
+> одиночку: руки у Anthropic, значит это не слабость, а шов стыковки.
+> **Ask:** довести идею с их командой до реальных пользователей. **Сделка (мягко, в конце, маленькая):**
+> 1% от AEVION (он встраивается в Anthropic как единое целое) + $10M возвратным авансом против этого 1%,
+> чтобы освободить основателя от других дел и уйти в идеи фул-тайм. **Опция выкупа идеи:** $10M сейчас
+> net (КЗ-налог ~40% → брутто ≈ $16.7M или налог на покупателе) + 1% роялти от прибыли.
+> **Концовка (вар. A):** ведёт в ПЕРЕПИСКУ (англ. — второй язык основателя, точнее в письме), созвон —
+> опция; «если дойдёт до разговора — это уже знак интереса». НЕ форсить живой англоязычный звонок.
+> Старые денежные доки ($10.5M/1%, $1B-лестница в `02_DEAL_TERMS`/`25`) — архив, НЕ для этого захода.
 
 ---
 
 ## Subject line (A/B)
 
-| Вариант | Сила | Риск |
-|---|---|---|
-| `Built entirely on Claude, solo, in six months — and an honest proposal` | Прямой козырь + честность в теме | Длинновато |
-| `One person, your platform, 30+ live modules — 30 minutes?` | Конкретика + CTA | Менее эмоционально |
-| `The idea is mine. The team is yours. The life — ours.` | Эмоциональное ядро (как у всех) | Не подсвечивает Claude-угол |
+| Вариант | Сила |
+|---|---|
+| `Everything begins with an idea — I built mine on Claude, alone, in six months` | Стержень + козырь |
+| `I have the idea and the proof; the team is yours — happy to talk in writing` | Прямой стык + письменный CTA |
+| `Built entirely on Claude, solo, in six months — an honest proposal` | Козырь + честность |
 
-**Рекомендация:** первый. Он сразу говорит, почему письмо адресовано именно им, и заявляет честность как тон.
+**Рекомендация:** первый.
 
-**Send:** вторник–четверг, 08:00–10:00 PT. Plain-text, без attachments. Две ссылки: репозиторий + /acquire.
+**Send:** вторник–четверг, 08:00–10:00 PT. Plain-text, без вложений, две ссылки (demo + репо). Канал — LinkedIn Vu Bui / CFO + `press@anthropic.com` (см. `30_ANTHROPIC_OUTREACH.md`).
 
 ---
 
 ## ПИСЬМО (EN — send-ready)
 
 ```
-To the Anthropic team — strategic / corporate development, and to the founders' office,
+Everything that has ever been built began the same way: first an idea, then a goal and
+the tasks beneath it, then a team, then a realized project. Anthropic began as an idea too.
 
-First, full honesty, because honesty is the entire product I am offering.
-
-This letter goes to a short list of addressees — a few strategic investors and
-funds. I am telling each of them exactly what I am telling you: they are not the
-only one reading it. I am not running an auction and not playing anyone against
-anyone. I am simply being transparent — because what I built exists to make trust
-verifiable, and I will not start it on a hidden premise.
+I am writing to you at a precise point on that path — and, before anything else, in full
+honesty, because honesty is the entire product I am offering. This letter goes to a short
+list of strategic parties. I am telling each of them exactly what I am telling you: they
+are not the only one reading it. No auction, no one played against anyone. I am simply
+transparent, because what I built exists to make trust verifiable, and I will not begin it
+on a hidden premise.
 
 I am writing to you first, and not by accident.
 
-I am not a programmer. In Kazakhstan I am director and founder of several
-companies whose entire job is verifying trust in the physical world — technical
-supervision of construction, design, expert review of projects, structural
-inspection of buildings — and the hired Technical Director of a design firm, a job
-I still do every weekday from 09:30 to 18:30. For
-twenty years my profession was confirming that something is authentic and
-recording who is accountable for it, while watching that trust fail around me:
-forged permits, stolen designs, untraceable payments. AEVION is that exact job,
-moved into the digital world. Then I opened Claude Code.
-In six months, alone, with Claude as my only engineer, I built 30+ working modules
-across five domains: post-quantum signatures, digital banking, IP attestation, an
-AI gateway, and a developer layer. Every line shipped on your platform. The repo
-is public — you can read every commit.
+I am not a programmer. In Kazakhstan I am the director and founder of several companies
+whose entire job is verifying trust in the physical world — technical supervision of
+construction, design, expert review of projects, structural inspection of buildings — and
+the hired Technical Director of a design firm, a job I still do every weekday from 09:30 to
+18:30. For twenty years my profession has been to confirm that something is authentic and
+to record who is accountable for it, while watching trust fail around me: forged permits,
+stolen designs, untraceable payments. AEVION is that exact work, moved into the digital
+world. Then I opened Claude Code.
 
-So before AEVION is an investment, it is something simpler: it may be the most
-complete proof in existence of what one motivated non-engineer can now build with
-Claude. If you ever wanted a single flagship case — "no CS degree, solo, six
-months, real production infrastructure" — it is sitting in my repository.
+I am the originator of the idea — and I did not stop at imagining it. In six months, alone,
+with Claude as my only engineer, I worked it far enough that you can see, concretely, what
+it is and where it goes: 30+ working modules across five domains — post-quantum signatures,
+digital banking, IP attestation, an AI gateway, a developer layer — and a coherent "planet"
+you can click through today. Every line shipped on your platform; the repo is public. This
+is not a finished product, and I will not pretend it is. It is a proof of direction — the
+sketch that makes the vision tangible.
 
-But the proof is not the point. Here is the point. When AI tools become a
-commodity — and they are becoming one — the scarce thing is no longer the tool.
-It is the place where the user lives. As several companies now provide AI "for
-everything," the next inevitable layer is not a hundred scattered tabs: it is
-self-contained environments — communities, planets — where all of a person's work
-happens. Every major AI provider will either grow such planets or spawn them.
-Whoever builds the first coherent one owns the user's entire session.
+Here is the vision. When AI tools become a commodity — and they are becoming one — the
+scarce thing is no longer the tool. It is the place where the user lives. The next layer is
+not a hundred scattered tabs; it is self-contained environments — planets — where all of a
+person's work happens. Whoever builds the first coherent one owns the user's whole session.
+AEVION is that first planet, built on your base: under one login and one settlement unit a
+user has everything — AI, a bank, payments, IP, identity, commerce — and never has to leave.
+It is open by design, and its safety model scales the same way for anyone: a single person,
+a company, a school, a clinic, a ministry — each in its own sealed, post-quantum-signed
+contour, connected only by verifiable attestation. A planet, not a hundred logins.
 
-AEVION is that first planet, built on your base. Inside its habitat a user has
-everything — AI tools, games, a bank, payments, IP, identity, commerce — under one
-login and one settlement unit, and never needs to leave. And it is open by design:
-you can plug in outside platforms (Amazon and others), and users — or Anthropic
-itself — can build their own sub-worlds on top, while staying in one economy and
-one fabric of trust. This is not "30 apps built on Claude." It is the first consumer
-and economic layer — a planet — on top of your model: the thing that turns raw
-capability into a place where people live and transact.
+And one part of this is your mission directly. The hardest unsolved problem of the AI era is
+provenance — who made this, when, and can it be proven afterward. AEVION's attestation layer
+(QSign / QRight / Planet) is exactly that, built as the default. As AI-generated content
+floods the world, someone becomes the notary of record. I built the first consumer-grade one
+— on Claude.
 
-And the habitat is not only for individuals. A government can hold its own sovereign
-territory on this globe — a sealed enclave only its authorized officials may enter,
-post-quantum-protected, where the nation's data never leaves its own contour. This is
-how you establish at the level of states, not vendors. Kazakhstan, whose government is
-pushing AI hard right now, is a natural first beachhead: put a country's schools inside
-it — every child an account, every subject including AI literacy taught with Claude
-underneath — and one nation's education alone is hundreds of millions a year, recurring.
-Banks need the post-quantum signing layer today; hospitals need the trust; agencies
-need verifiable, corruption-resistant records. That is why this needed to exist
-yesterday: AI content is already flooding, the quantum clock is already running, and
-every state is reaching for AI sovereignty at once. Whoever sets the standard for a
-sovereign AI ecosystem first anchors nations for a generation — on your base, if you
-move now.
+And the clock just became literal. OpenAI's "Education for Countries" is already live in
+Kazakhstan: 165,000 free ChatGPT Edu licences nationwide, privately funded, no state budget —
+the Microsoft-OEM playbook applied to AI: give it away to own a nation's next generation.
+I'll be honest — no one wins a country's classrooms head-to-head against free, and that lane
+is taken. But a chatbot licence is not a sovereign enclave. The lane still open is the one
+OpenAI is not building: the trust, sovereignty and attestation layer. Whoever sets that
+standard first anchors nations for a generation, and the window is months, not years.
 
-Let me be plain about what your tools did, because it is why I am writing to you
-first and not only to investors. I cannot write code. Yet in six months Claude Code
-let me build real, working systems — and feel, for the first time in my life, like
-a builder. You did not just hand me a tool; you gave me back the ability to realize
-ideas I had carried for years — and I built all of this in the hours around a
-full-time job and the several companies I run. I am not saying this to flatter you;
-flattery would insult us both. I am saying it because it is the most honest line in
-this letter.
+Now the honest part about me. What comes next on the path — idea, goal, team, realization —
+is the one stage no individual can be: execution. Ideas are made by people; products are made
+by teams. So when I say my weakness is that I am one person without hands, that is true only
+alone. The hands are yours. With you it is not a weakness at all — it is exactly the seam
+where we fit: I bring the upstream half, the engine that generates the idea and holds the
+direction; you bring the downstream half, the team and the reach that turn it into a realized
+product.
 
-And it is exactly why I will not keep these ideas to myself. Alone, even with
-Claude, this stays one level below what it could be: a strong team is the one thing
-I cannot conjure, and time is the one thing none of us gets back. So I would rather
-bring the ideas to you now, while they are early — so that together we turn them
-into advantage and shape what comes next, inside your ecosystem, on your base.
+So I am not asking to be rescued, and I am not asking for money as the point of this letter.
+I am at the natural handoff point of any real project — the idea proven, the direction set —
+and what it needs now is a team to realize it. That is what I am proposing we build, together:
+take this, with your platform, your people and your reach, and bring it live to real users on
+the open internet. Let us find out together whether the idea carries to the goal.
 
-You will ask: where are the sales? There are none — and that is the entire point.
-Sales are what a team builds from an idea. I brought the idea, and proved I
-generate ideas faster than teams execute them. The one thing I cannot conjure
-alone is execution at scale.
+Let me be concrete about the one practical thing — kept small, and at the end, where it
+belongs. I am not pricing the result, and I am not asking for a share of Anthropic; you are
+already a trillion-dollar company, and if AEVION proves worth it you would integrate or absorb
+it, and it becomes one whole with you. In that world the realized value is built by your team
+and the specialists you bring — so my claim is deliberately modest: 1% of AEVION, as it lives
+inside Anthropic.
 
-The idea is mine. The team is yours. The life — ours.
+The one thing I ask for now is time. $10M, as a repayable advance against that future 1% — not
+a payday. It buys exactly one thing: it frees me from the companies and the day-job I still run
+every weekday, so I can give all of myself to the only thing I am uniquely good at — inventing
+ideas and seeing them realized. You recover it from my own 1% as the thing grows; if it never
+grows, I never earned it.
 
-That idea sits where three irreversible shifts meet: trust after quantum (every
-signature on earth must be reissued — NIST FIPS 204), banking without branches
-(1.4 billion people in markets the West forgot), and authorship in the age of AI
-(who made this, and when?). Whoever owns the layer beneath these owns a toll booth
-on the digital economy.
+Or, if you would rather buy the idea outright, the same shape works as a clean acquisition:
+$10M now, net of tax (Kazakhstan's rate is roughly 40%, so the gross is structured accordingly),
+plus a 1% profit royalty. Either way the number is small, the risk is yours to size, and I am
+tied to your success — not to a cheque.
 
-And the third shift is your mission, directly. The hardest unsolved problem of the
-AI era is provenance — who made this, when, and can it be proven afterward. AEVION's
-attestation layer (QSign / QRight / Planet) is exactly that: post-quantum-signed,
-on-chain authorship, built as the default. As AI-generated content floods the world,
-someone becomes the notary of record. I built the first consumer-grade one — on Claude.
+And if your instinct is that you could simply build this yourselves — the modules can be copied;
+the person who produced them in six months, alone, and will produce the next thirty, cannot.
+That is what I am offering to keep on your side: not the code, the engine that makes it.
 
-So I am not handing you a take-it-or-leave-it deal — and it does not begin with a
-wire transfer. There are several ways in, and the ones I would put first cost you
-almost no cash, because you would pay in what you already have in abundance —
-compute, engineers, distribution, your brand — not in scarce capital:
-
-  - Start as a showcase and a partnership. Feature the first planet built on
-    Claude; give it compute and access. Near-zero risk, and the relationship begins.
-  - Or take a small, de-risked stake — 1-10% at one constant valuation (~$1.05B,
-    $10.5M per 1%), milestone-tranched, no operational load.
-  - Or build it with me as a planet on your base: you contribute a team and
-    resources for control, I keep a minority and stay as your Chief Idea Officer —
-    the engine that keeps producing what comes next. The outright buyout ($1B for
-    95%) stays on the table, but for you it is the last door, not the first.
-
-And let me make the actual ask concrete, and small. I want $10M now — but I mean it
-as a repayable advance, not a payday: you get it back, out of revenue, once we reach
-$100M. I keep 35% of AEVION; you and your partners take control of the rest, paid
-mostly in what you have in abundance — a team, compute, distribution, brand. So if
-you believe in this, the $10M is an investment that returns to you, while I am tied to
-the upside of my 35% as the planet grows. That is deliberately the opposite of what
-would frighten a company heading into an IPO: a small check, recoverable, and I only
-grow rich if you do.
-
-The honest upside, kept as trajectory and not as today's price: with your team and
-distribution, the layer beneath money, IP, and AI-provenance is not a billion-dollar
-business — its path runs toward a trillion, and in a control structure most of that
-path is yours. I price the seed today at a billion; the asymmetry is the whole offer.
-
-And if your instinct is that you could simply build this yourselves — the thirty
-modules can be copied; the person who produced them in six months, and will produce
-the next thirty, cannot. That is what I am offering to keep on your side, not only
-the code. The full set of structures is at the link, and none of them ask you to be
-afraid of the number. I earn only when you earn; I am not selling and walking away.
-Whatever brought you here — a proof of your own platform, a piece of the future, or
-the trust infrastructure the AI age needs anyway — our goal is the same one.
-
-The full ladder, live and verifiable: https://aevion.app/acquire
+The live demo, and everything verifiable: https://aevion.app/acquire
 The public repository: https://github.com/Dossymbek281078/AEVION
 
-Thirty minutes this week?
+The best first step is simply writing back — ask me anything and I'll answer in full. English
+is my second language, so I'm most precise in writing; we can also talk by call whenever it
+suits you. If we reach a conversation at all, it already tells me the idea resonated.
 
 — Dosymbek Zhakiya
 Founder & Chief Innovation Officer, AEVION
@@ -180,131 +139,96 @@ yahiin1978@gmail.com · https://aevion.app/acquire
 
 ---
 
-## ПИСЬМО (RU — референс, не для отправки в Anthropic)
+## ПИСЬМО (RU — референс, отправляем EN)
 
 ```
-Команде Anthropic — strategic / corporate development и офису основателей,
+Всё, что когда-либо было построено, начиналось одинаково: сначала идея, потом цель и задачи
+под ней, потом команда, потом — реализованный проект. Anthropic тоже начался с идеи.
 
-Сначала — полная честность, потому что честность и есть весь продукт, который я предлагаю.
-
-Это письмо идёт короткому списку адресатов — нескольким стратегическим инвесторам и
-фондам. Каждому из них я говорю ровно то же, что и вам: он не единственный, кто это
-читает. Я не устраиваю аукцион и никого ни против кого не играю. Я просто прозрачен —
-потому что то, что я построил, существует ради проверяемого доверия, и я не начну это
-со скрытой посылки.
+Я пишу вам в конкретной точке этого пути — и прежде всего честно, потому что честность и есть
+весь продукт, который я предлагаю. Это письмо идёт короткому списку стратегических адресатов.
+Каждому я говорю ровно то же, что и вам: он не единственный, кто это читает. Без аукциона, никого
+ни против кого. Я просто прозрачен — потому что то, что я построил, существует ради проверяемого
+доверия, и я не начну это со скрытой посылки.
 
 Я пишу вам первым, и это не случайно.
 
-Я не программист. В Казахстане я директор и учредитель нескольких компаний, чьё дело —
-проверять доверие в физическом мире: технический надзор за строительством, проектирование,
-экспертиза проектов, техническое обследование зданий и сооружений; и наёмный технический
-директор в проектной компании — а это каждый будний день с 9:30 до 18:30. Двадцать лет моя профессия — подтверждать, что объект
-подлинный, и фиксировать, кто за него отвечает, — и всё это время я видел, как доверие
-рушится: поддельные экспертизы, украденные проекты, непрозрачные платежи. AEVION — это та же
-работа, перенесённая в цифру. Потом я открыл Claude Code. За 6 месяцев
-в одиночку, с Claude как единственным инженером, я построил 30+ работающих модулей в пяти
-доменах: постквантовые подписи, цифровой банк, IP-реестр, AI-шлюз, dev-платформа. Каждая
-строка выкачена на вашей платформе. Репозиторий публичный — можно прочитать каждый коммит.
+Я не программист. В Казахстане я директор и учредитель нескольких компаний, чьё дело — проверять
+доверие в физическом мире: технадзор за строительством, проектирование, экспертиза проектов,
+техническое обследование зданий; и наёмный технический директор проектной компании — каждый будний
+день с 9:30 до 18:30. Двадцать лет моя профессия — подтверждать, что объект подлинный, и фиксировать,
+кто за него отвечает, и всё это время я видел, как доверие рушится: поддельные экспертизы, украденные
+проекты, непрозрачные платежи. AEVION — это та же работа, перенесённая в цифру. Потом я открыл
+Claude Code.
 
-Поэтому прежде чем AEVION — это инвестиция, это нечто более простое: возможно, самое
-полное доказательство того, что один мотивированный не-инженер теперь может построить с
-Claude. Если вам когда-нибудь нужен был один флагманский кейс — «без диплома CS, в
-одиночку, за 6 месяцев, реальная production-инфраструктура» — он лежит в моём репозитории.
+Я — автор идеи, и я не остановился на том, чтобы её вообразить. За 6 месяцев, в одиночку, с Claude
+как единственным инженером, я довёл её настолько, что вы можете конкретно увидеть, что это и куда
+ведёт: 30+ работающих модулей в пяти доменах — постквантовые подписи, цифровой банк, IP-реестр,
+AI-шлюз, dev-платформа — и связную «планету», по которой можно кликать сегодня. Каждая строка
+выкачена на вашей платформе; репозиторий публичный. Это не готовый продукт, и я не буду делать вид,
+что готовый. Это доказательство направления — эскиз, который делает видение осязаемым.
 
-Но доказательство — не главное. Вот главное. Когда ИИ-инструменты становятся товаром — а они
-становятся — дефицитом перестаёт быть инструмент. Дефицит — место, где живёт пользователь. Пока
-несколько компаний дают ИИ «для всего», следующий неизбежный слой — не сотня разрозненных вкладок,
-а самодостаточные среды — сообщества, планеты — внутри которых происходит вся работа человека.
-Каждый крупный AI-провайдер либо обрастёт такими планетами, либо породит их сам. Кто построит
-первую связную — владеет всей сессией пользователя.
+Вот видение. Когда ИИ-инструменты становятся товаром — а они становятся — дефицитом перестаёт быть
+инструмент. Дефицит — место, где живёт пользователь. Следующий слой — не сотня разрозненных вкладок,
+а самодостаточные среды — планеты — внутри которых происходит вся работа человека. Кто построит первую
+связную — владеет всей его сессией. AEVION — первая такая планета, на вашей базе: под одним логином и
+одной расчётной единицей у пользователя есть всё — ИИ, банк, платежи, IP, идентичность, коммерция — и
+уходить никуда не нужно. Она открыта по дизайну, и её модель безопасности одинаково масштабируется на
+любого: один человек, компания, школа, клиника, министерство — каждый в своём запечатанном, постквантово
+подписанном контуре, связанные только проверяемой аттестацией. Планета, а не сто логинов.
 
-AEVION — это первая такая планета, на вашей базе. Внутри её ареала у пользователя есть всё —
-ИИ-инструменты, игры, банк, платежи, IP, идентичность, коммерция — под одним логином и одной
-расчётной единицей, и уходить никуда не нужно. И она открыта по дизайну: можно подключить внешние
-площадки (Amazon и другие), а пользователи — или сам Anthropic — могут строить свои под-миры
-поверх, оставаясь в одной экономике и одном контуре доверия. Это не «30 приложений на Claude».
-Это первый потребительский и экономический слой — планета — поверх вашей модели: то, что
-превращает голую способность в место, где люди живут и совершают транзакции.
-
-И этот ареал — не только для людей. Государство может получить собственную суверенную территорию на
-этом глобусе — запечатанный анклав, куда вход только у уполномоченных лиц, с постквантовой защитой, где
-данные страны не покидают её контур. Так вы закрепляетесь на уровне государств, а не вендоров. Казахстан,
-чьё правительство прямо сейчас агрессивно двигает ИИ, — естественный первый плацдарм: помещаете школы
-страны внутрь — аккаунт на каждого ребёнка, все предметы, включая ИИ-грамотность, с Claude внутри — и
-образование одной страны — это уже сотни миллионов в год, рекуррентно. Банкам постквантовая подпись
-нужна сегодня; больницам — доверие; ведомствам — проверяемые, устойчивые к коррупции записи. Вот почему
-это надо было построить ещё вчера: AI-контент уже заливает мир, квантовые часы уже идут, и государства
-тянутся к AI-суверенитету все разом. Кто первым задаст стандарт суверенной AI-экосистемы — заякорит
-страны на поколение. На вашей базе — если двинетесь сейчас.
-
-Скажу прямо, что сделали ваши инструменты — потому что именно поэтому я пишу сначала вам, а не
-только инвесторам. Я не умею писать код. И всё же за 6 месяцев Claude Code позволил мне строить
-реальные, работающие системы — и впервые в жизни почувствовать себя разработчиком. Вы дали мне не
-просто инструмент; вы вернули мне возможность реализовывать идеи, которые я носил годами, — и всё
-это я построил в часы вокруг работы по найму и нескольких компаний, которыми руковожу. Я говорю
-это не чтобы льстить; лесть оскорбила бы нас обоих. Я говорю это потому, что это самая честная
-строка в письме.
-
-И именно поэтому я не оставлю эти идеи при себе. В одиночку, даже с Claude, это останется на
-уровень ниже того, чем могло бы быть: сильная команда — единственное, что я не могу создать сам,
-а время — единственное, что не вернуть. Поэтому я лучше принесу идеи вам сейчас, пока они ранние, —
-чтобы вместе мы превратили их в преимущество и определили, что будет дальше, внутри вашей
-экосистемы, на вашей базе.
-
-Вы спросите: где продажи? Их нет — и в этом вся суть. Продажи — это то, что команда строит
-из идеи. Я принёс идею и доказал, что генерирую идеи быстрее, чем команды их воплощают.
-Единственное, что я не могу создать в одиночку, — исполнение в масштабе.
-
-Идея — моя. Команда — ваша. Жизнь — наша.
-
-Эта идея стоит на пересечении трёх необратимых сдвигов: доверие после кванта (каждая
-подпись на земле должна быть перевыпущена — NIST FIPS 204), банкинг без офисов (1.4 млрд
-человек на рынках, которые Запад забыл), авторство в эпоху AI (кто это создал и когда?).
-Кто владеет слоем под ними — владеет будкой сбора пошлины на всей цифровой экономике.
-
-И третий сдвиг — прямо ваша миссия. Самая нерешённая проблема AI-эпохи — provenance: кто
-создал, когда, и можно ли доказать это потом. Слой аттестации AEVION (QSign / QRight /
-Planet) — ровно это: постквантово подписанное, on-chain авторство по умолчанию. Когда мир
-заливает AI-контент, кто-то становится нотариусом записи. Я построил первый
+И одна часть этого — прямо ваша миссия. Самая нерешённая проблема AI-эпохи — provenance: кто создал,
+когда и можно ли доказать потом. Слой аттестации AEVION (QSign / QRight / Planet) — ровно это, по
+умолчанию. Когда мир заливает AI-контент, кто-то становится нотариусом записи. Я построил первый
 потребительский — на Claude.
 
-Поэтому я не даю вам сделку «бери или уходи» — и она не начинается с банковского перевода.
-Дверей несколько, и те, что я поставлю первыми, почти не стоят вам кэша: вы платите тем, чего у
-вас в избытке — компьют, инженеры, дистрибуция, бренд, — а не дефицитным капиталом:
+И часы стали буквальными. «Education for Countries» от OpenAI уже работает в Казахстане: 165 000
+бесплатных лицензий ChatGPT Edu по всей стране, частное финансирование, без госбюджета — майкрософтовский
+приём, применённый к ИИ: раздать бесплатно, чтобы владеть следующим поколением страны. Скажу честно —
+против бесплатного в классах страны лоб-в-лоб не выиграть, и эта полоса занята. Но лицензия на чат-бот —
+не суверенный анклав. Открыта полоса, которую OpenAI не строит: слой доверия, суверенитета и аттестации.
+Кто первым задаст этот стандарт — заякорит страны на поколение, и окно — месяцы, не годы.
 
-  - Начать как showcase и партнёрство. Показать первую планету, построенную на Claude; дать ей
-    компьют и доступ. Риск близок к нулю, и отношения начаты.
-  - Или взять малую, де-рискованную долю — 1-10% по одной постоянной оценке (~$1.05B, $10.5M за
-    1%), транши под майлстоуны, без операционной нагрузки.
-  - Или строить вместе как планету на вашей базе: вы вносите команду и ресурсы и получаете
-    контроль, я сохраняю меньшинство и остаюсь вашим Chief Idea Officer — двигателем, который
-    продолжает выдавать следующее. Полный выкуп ($1B за 95%) остаётся в меню, но для вас это
-    последняя дверь, не первая.
+Теперь честно обо мне. Что идёт дальше по пути — идея, цель, команда, реализация — это стадия, которой
+ни один человек быть не может: исполнение. Идеи создают люди, продукты — команды. Поэтому когда я говорю,
+что моя слабость в том, что я один человек без рук, — это верно только в одиночку. Руки — у вас. С вами
+это вовсе не слабость, а ровно тот шов, где мы стыкуемся: я приношу верхнюю половину — двигатель, который
+рождает идею и держит направление; вы приносите нижнюю — команду и охват, которые превращают это в
+реализованный продукт.
 
-И сделаю просьбу конкретной и небольшой. Я хочу $10M сейчас — но как **возвратный аванс**, не
-выплату-состояние: вы получаете их обратно, из дохода, когда мы достигаем $100M. Я сохраняю **35%**
-AEVION; вы и партнёры берёте контроль над остальным, оплачивая в основном тем, чего у вас в избытке —
-команда, компьют, дистрибуция, бренд. То есть, если вы верите в проект, $10M — это ваша инвестиция,
-которая к вам и вернётся, а я привязан к апсайду своих 35% по мере роста планеты. Это намеренно
-противоположно тому, что испугало бы компанию перед IPO: маленький чек, возвратный, и я богатею только
-если богатеете вы.
+Поэтому я не прошу меня спасать и не прошу денег как суть этого письма. Я в естественной точке передачи
+любого реального проекта — идея доказана, направление задано — и сейчас нужна команда, чтобы её
+реализовать. Это и есть то, что я предлагаю построить вместе: взять это, с вашей платформой, людьми и
+охватом, и вывести в живой интернет, к реальным пользователям. Давайте вместе выясним, доводит ли идея
+до цели.
 
-Честный апсайд — как траектория, а не как сегодняшняя цена: при вашей команде и дистрибуции слой
-под деньгами, IP и AI-provenance — это не бизнес на миллиард, его путь ведёт к триллиону, и при
-контрольной структуре бóльшая часть этого пути — ваша. Семя я оцениваю сегодня в миллиард; асимметрия
-и есть весь оффер.
+Теперь конкретно об одной практической вещи — намеренно маленькой и в самом конце, где ей и место. Я не
+назначаю цену за результат и не прошу долю Anthropic; вы уже компания на триллион, и если AEVION докажет
+ценность, вы интегрируете или поглотите его, и он станет единым целым с вами. В этом мире реализованную
+ценность создаёт ваша команда и приглашённые спецы — поэтому моя претензия намеренно скромна: 1% от
+AEVION в том виде, как он живёт внутри Anthropic.
 
-И если внутри мелькнёт «да мы и сами это построим» — тридцать модулей копируются; человек, который
-сделал их за 6 месяцев и сделает следующие тридцать, — нет. Именно его, а не только код, я предлагаю
-оставить на вашей стороне. Полный набор структур — по ссылке, и ни одна из них не просит вас бояться
-цифры. Я зарабатываю только когда зарабатываете вы; я не продаю и не ухожу. Что бы вас сюда ни
-привело — доказательство вашей же платформы, кусок будущего или инфраструктура доверия,
-которая нужна AI-эпохе в любом случае — наша цель одна.
+Единственное, о чём я прошу сейчас, — время. $10M возвратным авансом против этого будущего 1% — не
+выплата-состояние. Это покупает ровно одно: освобождает меня от компаний и работы по найму, которыми я
+по-прежнему занят каждый будний день, чтобы я мог отдать всего себя единственному, в чём я уникально
+хорош, — придумывать идеи и доводить их до реализации. Вы возвращаете эти деньги из моего же 1% по мере
+роста; если он не вырастет — я их и не заработал.
 
-Полная лестница, живая и проверяемая: https://aevion.app/acquire
+Либо, если вам ближе выкупить идею сразу, та же форма работает как чистая покупка: $10M сейчас, net
+после налога (ставка в Казахстане ~40%, поэтому брутто структурируется соответственно), плюс 1% роялти
+от прибыли. В любом случае сумма маленькая, размер риска выбираете вы, и я привязан к вашему успеху — не
+к чеку.
+
+И если внутри мелькнёт «да мы и сами это построим» — модули копируются; человек, который сделал их за 6
+месяцев в одиночку и сделает следующие тридцать, — нет. Именно его я предлагаю оставить на вашей стороне:
+не код, а двигатель, который его создаёт.
+
+Живое демо, и всё проверяемо: https://aevion.app/acquire
 Публичный репозиторий: https://github.com/Dossymbek281078/AEVION
 
-Тридцать минут на этой неделе?
+Лучший первый шаг — просто ответить письмом: спросите что угодно, отвечу подробно. Английский — мой
+второй язык, поэтому точнее всего я в переписке; созвон — тоже когда вам удобно. И если до разговора
+вообще дойдёт — это уже знак, что идея откликнулась.
 
 — Досымбек Жакия
 Основатель и Chief Innovation Officer, AEVION
@@ -313,41 +237,38 @@ yahiin1978@gmail.com · https://aevion.app/acquire
 
 ---
 
-## Почему именно так для Anthropic (разбор для тебя)
+## Почему так работает для Anthropic (разбор для тебя)
 
-| Приём в письме | Зачем под Anthropic |
+| Приём | Зачем под Anthropic |
 |---|---|
-| **Честное раскрытие многоадресности в первом абзаце** | Anthropic — компания, которая строит на доверии и безопасности. Скрыть рассылку = провалить тест на их же ценности. Раскрытие превращает «слабость» в доказательство характера. Это и есть твоё прямое пожелание — честно сказать про других адресатов. |
-| **«Built entirely on Claude, solo, six months»** | Единственный козырь, которого нет ни у одного другого адресата. Для Anthropic ты — живой маркетинговый кейс их платформы. Это интересно им вне зависимости от сделки. |
-| **Provenance = их миссия** | Anthropic про безопасный AI. Авторство/provenance AI-контента — открытая отраслевая проблема. QSign/QRight ложатся ровно в их повестку. |
-| **«Participate safely» как первая дверь** | Anthropic не покупает компании за $1B. Их реалистичная дверь — малое участие / партнёрство / showcase. Поэтому 1–10% подан первым и назван «самым естественным» именно для платформенного партнёра. |
-| **Триллионная рамка как траектория, не цена** | Твоя стратегия: «в будущем может стоить триллион». Подаётся честно — как апсайд при команде, тогда как цена входа сегодня — миллиард. Асимметрия = аргумент, а не хайп. |
+| **Стержень «всё начинается с идеи → команда реализует»** | Универсальная правда. «Нет исполнения» — не провал, а естественная следующая стадия = команда. |
+| **Инверсия слабости** | «Один без рук» → руки у них → слабость превращается в шов стыковки. |
+| **Доказательство = эскиз направления, не продукт** | Честно убирает удар «нет пользователей»; 30 модулей соло за 6 мес = право говорить «дайте команду». |
+| **НЕ просим долю Anthropic, 1% от AEVION** | При $1T просить 50/50 — абсурд. 1% + интеграция = скромно и реалистично. |
+| **Деньги в конце, маленькие, возвратные** | $10M аванс «освободить основателя», возврат из его 1% → риск ~ноль, рост только вместе. |
+| **Концовка в переписку (вар. A)** | Англ. — второй язык; письменный канал комфортен и точен; созвон = опция и сигнал интереса. |
 
 ---
 
-## Send-чеклист (Anthropic)
+## Send-чеклист
 
-- [ ] Канал: corporate development / partnerships. Тёплый путь — через знакомого в Anthropic или через Claude Developers / Anthology Fund (Menlo) контакт.
-- [ ] Репозиторий публичный и зелёный (daily smoke PASS) — они откроют его первым делом.
-- [ ] `aevion.app/acquire` живёт и показывает лестницу.
+- [ ] Канал: LinkedIn Vu Bui (Head of Strategic Finance & IR) / Krishna Rao (CFO) + резерв `press@anthropic.com`. Тёплое интро — сильнее всего.
+- [ ] Репозиторий публичный и зелёный — откроют первым делом.
+- [ ] `aevion.app/acquire` живёт, видео-герой (дуэт-промо) играет.
 - [ ] Plain-text, без вложений, две ссылки.
-- [ ] Прочитать вслух — честный абзац звучит уверенно, не оправдательно.
-- [ ] Вторник–четверг, 08:00–10:00 PT.
+- [ ] Вт–чт, 08:00–10:00 PT.
 
 ---
 
-## Важно (честная оптика, для тебя)
+## Честная оптика (для тебя)
 
-Anthropic — **не** классический инвестор/покупатель: у них нет традиционного корпоративного
-venture-рукава под выкуп компаний (есть Anthology Fund совместно с Menlo Ventures — ранние
-чеки стартапам на Claude). Поэтому для них реалистичны три исхода, в порядке вероятности:
-**(1)** интерес к тебе как к флагманскому кейсу платформы (PR / showcase / кредиты / доступ),
-**(2)** малое участие или знакомство с Anthology/Menlo, **(3)** маловероятный, но честно
-заявленный — крупная стратегическая доля. Письмо ведёт от (1), оставляя (2)–(3) открытыми.
-Это и есть твоя стратегия «безопасно с малым % ИЛИ рискнуть по-крупному», просто откалиброванная
-под реальный профиль адресата. Для фондов из `07_TARGET_BUYERS.md` акценты смещаются обратно
-к оффер-выбору как в `21_UNIVERSAL_LETTER.md`.
+Anthropic — не классический покупатель компаний; реалистичные исходы по убыванию вероятности:
+**(1)** интерес к тебе как к флагманскому кейсу платформы (showcase / кредиты / доступ / переписка),
+**(2)** небольшое участие / знакомство с их орбитой (Anthology Fund, Menlo),
+**(3)** маловероятный, но честно заявленный — взять идею и команду под реализацию на условиях выше.
+Письмо ведёт от (1). Холодный заход соло-основателя = низкая вероятность ответа; тёплое интро меняет
+шансы кардинально.
 
 ---
 
-— Anthropic Letter · 2026-06-05 · AEVION
+— Anthropic Letter · ред. 2026-06-11 · AEVION

@@ -19,6 +19,7 @@
 2. **Следующий слой после инструмента — среда.** Историческая закономерность: за вычислением приходит ОС, за протоколом — платформа, за API — экосистема. За «ИИ-как-инструмент» приходит **«ИИ-как-обиталище»**: среды/сообщества/планеты, внутри которых происходит *вся* работа пользователя, а не 100 разрозненных вкладок.
 3. **Каждый крупный AI-провайдер либо обрастёт такими планетами, либо породит их сам.** Вопрос не «появятся ли», а «кто построит первую связную».
 4. **Кто владеет планетой — владеет сессией пользователя целиком.** Не одним действием (платёж, подпись, чат), а всем временем, что человек проводит «внутри». Это и есть будка сбора пошлины эпохи ИИ.
+5. **И это единственный слой, за который можно брать деньги, когда инструмент бесплатен.** Способность — модели, агенты, инструменты — коммодитизируется, цена сырого интеллекта стремится к полу; у каждого своя бесплатная версия. Платят уже не за инструмент, а за **место, где живёшь**, и место держит **подписку** — модель оплаты, к которой потребитель давно привык. Планета берёт членскую плату там, где модель в одиночку не может. Поэтому вектор надо смещать сейчас: **завлекать пользователей в экосистему-планету, где подписка естественна**, — это устойчивая рекуррентная выручка поверх любой коммодити-модели.
 
 ---
 
@@ -59,6 +60,8 @@
 AEVION is that first planet, built on Anthropic's base. Inside its habitat a user has everything — AI tools, games, a bank, payments, IP, identity, commerce — under one login and one settlement unit (AEV), and never needs to leave. And it is open by design: you can plug in outside platforms (Amazon and others), and users — or Anthropic itself — can build their own sub-worlds on top, while staying in one economy and one trust fabric.
 
 So this isn't "30 apps built on Claude." It is the **first consumer and economic layer — a planet — on top of your model**: the thing that turns raw capability into a place where people live and transact. A toll booth, an operating system, for the AI age — on your base. A billion today; a trillion as the trajectory.
+
+And it is the layer that still earns when the tool does not. As raw capability commoditizes toward free, you no longer sell the tool — you sell the place, and a place sustains a **subscription**, the pricing every consumer already understands and accepts. A planet charges membership where a model alone cannot. This is the durable, recurring revenue layer on top of any commoditized model — and the reason to pull users into ecosystems like this **now**, before the tool layer's margin is gone.
 
 ---
 

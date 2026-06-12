@@ -75,6 +75,15 @@ It is open by design, and its safety model scales the same way for anyone: a sin
 a company, a school, a clinic, a ministry — each in its own sealed, post-quantum-signed
 contour, connected only by verifiable attestation. A planet, not a hundred logins.
 
+And there is a commercial reason this layer matters, especially to you. Capability itself —
+models, agents, tools — is commoditizing fast; everyone has a version, and the price of raw
+intelligence is racing toward the floor. When the tool becomes cheap, you no longer sell the
+tool — you sell the place where the user lives, and a place sustains a subscription, the one
+pricing every consumer already understands and accepts. A planet can charge membership where a
+model alone cannot. So AEVION is not only a showcase of what Claude builds; it is the durable,
+recurring layer on top of Claude — the answer to where consumer revenue comes from once raw
+capability is free.
+
 And one part of this is your mission directly. The hardest unsolved problem of the AI era is
 provenance — who made this, when, and can it be proven afterward. AEVION's attestation layer
 (QSign / QRight / Planet) is exactly that, built as the default. As AI-generated content
@@ -176,6 +185,14 @@ AI-шлюз, dev-платформа — и связную «планету», п
 уходить никуда не нужно. Она открыта по дизайну, и её модель безопасности одинаково масштабируется на
 любого: один человек, компания, школа, клиника, министерство — каждый в своём запечатанном, постквантово
 подписанном контуре, связанные только проверяемой аттестацией. Планета, а не сто логинов.
+
+И есть коммерческая причина, почему этот слой важен — особенно вам. Сама способность — модели,
+агенты, инструменты — быстро коммодитизируется; у каждого своя версия, и цена сырого интеллекта
+стремится к полу. Когда инструмент дешевеет, продаёшь уже не инструмент — продаёшь место, где живёт
+пользователь, а место держит подписку, единственную модель оплаты, которую потребитель уже понимает и
+принимает. Планета может брать членскую плату там, где модель в одиночку не может. Поэтому AEVION — не
+только витрина того, что строит Claude; это устойчивый рекуррентный слой поверх Claude, ответ на
+вопрос, откуда берётся потребительская выручка, когда сырая способность становится бесплатной.
 
 И одна часть этого — прямо ваша миссия. Самая нерешённая проблема AI-эпохи — provenance: кто создал,
 когда и можно ли доказать потом. Слой аттестации AEVION (QSign / QRight / Planet) — ровно это, по

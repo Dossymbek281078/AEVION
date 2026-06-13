@@ -13,17 +13,20 @@ import { buildPricingResponse } from "../data/modulePricing";
 
 export const aevionHubRouter = Router();
 
-const SUB_HEALTH = [
+// `id` (optional) = registry id from projects.ts, used ONLY for /stats coverage
+// matching. `name` is the display label probed by /health. They diverge where a
+// module's probe label differs from its registry id (e.g. qsign-legacy → "qsign").
+const SUB_HEALTH: { name: string; path: string; id?: string }[] = [
   { name: "pipeline", path: "/api/pipeline/health" },
   { name: "qsign-v2", path: "/api/qsign/v2/health" },
-  { name: "qsign-legacy", path: "/api/qsign/health" },
+  { name: "qsign-legacy", path: "/api/qsign/health", id: "qsign" },
   { name: "quantum-shield", path: "/api/quantum-shield/health" },
   { name: "qright", path: "/api/qright/health" },
   { name: "planet", path: "/api/planet/health" },
-  { name: "bureau", path: "/api/bureau/health" },
+  { name: "bureau", path: "/api/bureau/health", id: "aevion-ip-bureau" },
   { name: "auth", path: "/api/auth/health" },
   { name: "qcontract", path: "/api/qcontract/health" },
-  { name: "qpaynet", path: "/api/qpaynet/health" },
+  { name: "qpaynet", path: "/api/qpaynet/health", id: "qpaynet-embedded" },
   { name: "devhub", path: "/api/devhub/health" },
   { name: "smeta-trainer", path: "/api/smeta-trainer/health" },
   { name: "healthai", path: "/api/healthai/health" },
@@ -44,6 +47,21 @@ const SUB_HEALTH = [
   { name: "z-tide", path: "/api/z-tide/health" },
   { name: "lifebox", path: "/api/lifebox/health" },
   { name: "qchaingov", path: "/api/qchaingov/health" },
+  // Live modules previously missing from the probe list (all confirmed 200 on
+  // prod 2026-06-13). Adding them makes /health monitor the whole platform and
+  // /stats coverage reflect reality. multichat (401, auth-gated) and cyberchess
+  // (404, separate track) intentionally excluded so the hub stays green.
+  { name: "qcoreai", path: "/api/qcoreai/health" },
+  { name: "globus", path: "/api/globus/ping" },
+  { name: "qbuild", path: "/api/build/health" },
+  { name: "qnews", path: "/api/qnews/health" },
+  { name: "qmedia", path: "/api/qmedia/health" },
+  { name: "qai", path: "/api/qai/health" },
+  { name: "qlearn", path: "/api/qlearn/health" },
+  { name: "qstore", path: "/api/qstore/health" },
+  { name: "qevents", path: "/api/qevents/health" },
+  { name: "revenue-hub", path: "/api/revenue/overview" },
+  { name: "constitution", path: "/api/constitution/status" },
 ];
 
 const SUB_OPENAPI = [
@@ -621,7 +639,7 @@ aevionHubRouter.get("/stats", (req, res) => {
 
   // Coverage: how many modules have a /health probe wired in SUB_HEALTH,
   // and how many have a self-served /openapi.json wired in SUB_OPENAPI.
-  const healthIds = new Set(SUB_HEALTH.map((h) => h.name));
+  const healthIds = new Set(SUB_HEALTH.map((h) => h.id ?? h.name));
   const openapiIds = new Set(SUB_OPENAPI.map((o) => o.name));
   let healthCovered = 0;
   let openapiCovered = 0;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -595,7 +595,7 @@ export default function SdkPlaygroundPage() {
 
   const method = useMemo(() => methodById(selectedMethod), [selectedMethod]);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
 
   // The user-facing URL we render in the snippet card.
   const previewUrl = useMemo(() => {

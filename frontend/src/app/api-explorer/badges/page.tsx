@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 type CatalogItem = {
   id: string;
@@ -42,7 +42,7 @@ export default function BadgesExplorerPage() {
       .catch(() => {});
   }, []);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
 
   const filtered = useMemo(() => {
     if (!search.trim()) return items;

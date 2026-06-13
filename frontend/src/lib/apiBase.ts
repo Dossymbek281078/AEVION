@@ -28,6 +28,19 @@ export function getApiBase(): string {
 }
 
 /**
+ * Детерминированная база для ОТОБРАЖЕНИЯ в JSX (текст сниппетов, `href`, `src`).
+ * В отличие от `getApiBase()`, НЕ ветвится по `typeof window`, поэтому возвращает
+ * одинаковую строку при SSR и на клиенте → не вызывает hydration mismatch (#418).
+ * Использует только `NEXT_PUBLIC_*` (инлайнится одинаково в обе сборки) и относительный
+ * `/api-backend` по умолчанию. Для fetch по-прежнему используйте `apiUrl()`/`getApiBase()`.
+ */
+export function getClientApiBase(): string {
+  const pub = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (pub) return stripTrailingSlash(pub) || "/api-backend";
+  return "/api-backend";
+}
+
+/**
  * Абсолютный origin бекенда для ссылок `<a href>` (OpenAPI, health), не для прокси.
  */
 export function getBackendOrigin(): string {

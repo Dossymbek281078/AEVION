@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { apiUrl, getApiBase } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 type ServiceProbe = {
   name: string;
@@ -150,7 +150,7 @@ export default function HealthExplorerPage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const apiBase = getApiBase();
+  const apiBase = getClientApiBase();
   const fullUrl = `${apiBase}/api/aevion/health`;
   const curl = `curl -s '${fullUrl}' | jq .`;
   const sdk = `import { AevionCatalog } from "@aevion-io/catalog-client";

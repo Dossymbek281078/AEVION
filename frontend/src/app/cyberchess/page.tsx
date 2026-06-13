@@ -784,13 +784,17 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
-  // Layout-fill: доска ограничена доступной ВЫСОТОЙ окна (она квадратная, высота —
-  // обычно узкое место), а не жёстким 720px-капом, из-за которого на широких/высоких
-  // экранах вокруг доски оставались пустоты. Запас по высоте ~300px (header+часы+
-  // координаты+нижние контролы), по ширине ~360px (правая панель ≤340 + gap). Верхний
-  // кап 1080 страхует от гигантской доски на 4K. boardScale (0.5–1.5) применяется поверх.
-  const baseBoardPx=Math.max(300,Math.min(1080,vhPx-300,vwPx-360));
-  const boardPx=Math.round(baseBoardPx*boardScale);
+  // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
+  // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
+  // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
+  // -400 оставляет место правой панели (≤340) + поля. Кап 960 — чтобы на сверхшироких
+  // экранах доска не доминировала. boardScale (0.5–1.5) применяется поверх — но финал
+  // дополнительно зажат, чтобы даже при scale=1.5 не превышать высоту окна.
+  const baseBoardPx=Math.max(320,Math.min(960,vhPx-280,vwPx-400));
+  const boardPxRaw=Math.round(baseBoardPx*boardScale);
+  // Жёсткий потолок: даже при boardScale=1.5 доска не больше окна (vhPx-160 по высоте,
+  // vwPx-360 по ширине) — гарантия что низ доски не уезжает за экран/панель задач.
+  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-160,vwPx-360));
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");

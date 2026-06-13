@@ -64,10 +64,14 @@ const SUB_HEALTH: { name: string; path: string; id?: string }[] = [
   { name: "constitution", path: "/api/constitution/status" },
 ];
 
-const SUB_OPENAPI = [
-  { name: "qsign-v2", path: "/api/qsign/v2/openapi.json", title: "AEVION QSign v2" },
+// `id` (optional) = registry id, used ONLY for /stats coverage matching (same
+// pattern as SUB_HEALTH). Most other modules genuinely serve no /openapi.json
+// yet (probed 2026-06-13: 404), so they are deliberately NOT listed here — the
+// index must not point at dead specs. Coverage ~49% is truthful, not an artifact.
+const SUB_OPENAPI: { name: string; path: string; title: string; id?: string }[] = [
+  { name: "qsign-v2", path: "/api/qsign/v2/openapi.json", title: "AEVION QSign v2", id: "qsign" },
   { name: "quantum-shield", path: "/api/quantum-shield/openapi.json", title: "AEVION Quantum Shield" },
-  { name: "qpaynet", path: "/api/qpaynet/openapi.json", title: "AEVION QPayNet" },
+  { name: "qpaynet", path: "/api/qpaynet/openapi.json", title: "AEVION QPayNet", id: "qpaynet-embedded" },
   { name: "qcontract", path: "/api/qcontract/openapi.json", title: "AEVION QContract" },
   { name: "healthai", path: "/api/healthai/openapi.json", title: "AEVION HealthAI" },
   { name: "qtradeoffline", path: "/api/qtradeoffline/openapi.json", title: "AEVION QTradeOffline" },
@@ -640,7 +644,7 @@ aevionHubRouter.get("/stats", (req, res) => {
   // Coverage: how many modules have a /health probe wired in SUB_HEALTH,
   // and how many have a self-served /openapi.json wired in SUB_OPENAPI.
   const healthIds = new Set(SUB_HEALTH.map((h) => h.id ?? h.name));
-  const openapiIds = new Set(SUB_OPENAPI.map((o) => o.name));
+  const openapiIds = new Set(SUB_OPENAPI.map((o) => o.id ?? o.name));
   let healthCovered = 0;
   let openapiCovered = 0;
   for (const p of projects) {

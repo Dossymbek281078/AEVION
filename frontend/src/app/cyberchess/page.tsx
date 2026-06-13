@@ -9747,6 +9747,7 @@ ${question.trim()}`;
             opening={currentOpening}
             playerColor={pCol}
             phaseLabel={detectPhase(game.fen(),hist.length).label}
+            coachLevel={coachLevel}
             visible={true}
             onClose={()=>sTab("play")}
             runEngine={runEnginePromise}

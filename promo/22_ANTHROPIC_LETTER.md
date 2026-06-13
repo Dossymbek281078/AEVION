@@ -133,6 +133,15 @@ every weekday, so I can give all of myself to the only thing I am uniquely good 
 ideas and seeing them realized. You recover it from my own 1% as the thing grows; if it never
 grows, I never earned it.
 
+And let me make that advance concrete and low-risk, with the one example I can speak to as an
+expert rather than as a founder. I am a Candidate Master in chess — so I can judge a chess
+product the way its hardest users will. CyberChess is already live inside the planet, and with
+the finishing I could do myself it stands with chess.com and lichess on experience, built by
+someone who actually plays at that level. Online chess is a large, paying, recurring audience.
+Taken to market with your distribution, that single module could return the $10M within roughly
+a year of launch — not immediately, but on its own. So the advance is not a bet on the whole
+planet; even one vertical can repay it. The planet is the upside; chess is the floor.
+
 Or, if you would rather buy the idea outright, the same shape works as a clean acquisition:
 $10M now, net of tax (Kazakhstan's rate is roughly 40%, so the gross is structured accordingly),
 plus a 1% profit royalty. Either way the number is small, the risk is yours to size, and I am
@@ -246,6 +255,15 @@ AEVION в том виде, как он живёт внутри Anthropic.
 по-прежнему занят каждый будний день, чтобы я мог отдать всего себя единственному, в чём я уникально
 хорош, — придумывать идеи и доводить их до реализации. Вы возвращаете эти деньги из моего же 1% по мере
 роста; если он не вырастет — я их и не заработал.
+
+И сделаю этот аванс конкретным и низкорисковым на одном примере, о котором могу судить как эксперт,
+а не как основатель. Я кандидат в мастера спорта по шахматам — поэтому шахматный продукт я оцениваю
+так, как его оценят самые требовательные игроки. CyberChess уже живёт внутри планеты, и с доработкой,
+которую я в состоянии сделать сам, по опыту и уровню игры он встаёт вровень с chess.com и lichess — и
+сделан тем, кто реально играет на этом уровне. Онлайн-шахматы — большая, платящая, рекуррентная
+аудитория. С вашей дистрибуцией один этот модуль способен вернуть $10M примерно за год после выхода на
+рынок — не сразу, но сам по себе. Значит аванс — не ставка на всю планету: даже одна вертикаль его
+отбивает. Планета — это апсайд; шахматы — это пол.
 
 Либо, если вам ближе выкупить идею сразу, та же форма работает как чистая покупка: $10M сейчас, net
 после налога (ставка в Казахстане ~40%, поэтому брутто структурируется соответственно), плюс 1% роялти

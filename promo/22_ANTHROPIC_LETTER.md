@@ -61,8 +61,10 @@ I am the originator of the idea — and I did not stop at imagining it. In six m
 with Claude as my only engineer, I worked it far enough that you can see, concretely, what
 it is and where it goes: 30+ working modules across five domains — post-quantum signatures,
 digital banking, IP attestation, an AI gateway, a developer layer — and a coherent "planet"
-you can click through today. Every line shipped on your platform; the repo is public. This
-is not a finished product, and I will not pretend it is. It is a proof of direction — the
+you can click through today. Every line shipped on your platform; the repo is public. And
+Claude does not only build it — it runs inside it: the planet's AI gateway answers in
+production, on Claude, right now. The clearest proof of your platform is a product already
+running on it. This is not a finished product, and I will not pretend it is. It is a proof of direction — the
 sketch that makes the vision tangible.
 
 Here is the vision. When AI tools become a commodity — and they are becoming one — the
@@ -180,7 +182,9 @@ Claude Code.
 как единственным инженером, я довёл её настолько, что вы можете конкретно увидеть, что это и куда
 ведёт: 30+ работающих модулей в пяти доменах — постквантовые подписи, цифровой банк, IP-реестр,
 AI-шлюз, dev-платформа — и связную «планету», по которой можно кликать сегодня. Каждая строка
-выкачена на вашей платформе; репозиторий публичный. Это не готовый продукт, и я не буду делать вид,
+выкачена на вашей платформе; репозиторий публичный. И Claude не только строит это — он работает
+внутри: AI-шлюз планеты отвечает в проде, на Claude, прямо сейчас. Самое наглядное доказательство
+вашей платформы — продукт, уже работающий на ней. Это не готовый продукт, и я не буду делать вид,
 что готовый. Это доказательство направления — эскиз, который делает видение осязаемым.
 
 Вот видение. Когда ИИ-инструменты становятся товаром — а они становятся — дефицитом перестаёт быть

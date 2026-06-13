@@ -26,7 +26,7 @@ No users yet — deliberately. Operating apps is just hands; I was testing one t
 
 The urgency is real: OpenAI just placed 165,000 free ChatGPT Edu licences into Kazakhstan. They took the free-licence lane; the trust / sovereignty / attestation lane is still open. The window is months.
 
-I'm not pricing it and I'm not asking for a share of Anthropic — you'd integrate or absorb it anyway. I'm proposing collaboration: help me bring this live to real users with your platform and reach. My claim stays deliberately modest and tied to your success — details if we talk.
+I'm not pricing it and I'm not asking for a share of Anthropic — you'd integrate or absorb it anyway. I'm proposing collaboration: help me bring this live to real users with your platform and reach. My claim stays deliberately modest and tied to your success — details if we talk. One concrete example I can vouch for as a Candidate Master myself: CyberChess is already live and, with finishing I can do, rivals chess.com and lichess — that one module alone could repay the advance within a year of launch.
 
 The best first step is simply writing back — English is my second language, so I'm sharpest in writing; a call whenever suits you. If we reach a conversation at all, it already tells me the idea resonated.
 

@@ -75,6 +75,12 @@ It is open by design, and its safety model scales the same way for anyone: a sin
 a company, a school, a clinic, a ministry — each in its own sealed, post-quantum-signed
 contour, connected only by verifiable attestation. A planet, not a hundred logins.
 
+And about the giants you will think of — Google, Meta, Apple. They have the users, but none
+of them is the place. They are collections of separate products people bounce between, and you
+still leave them for your bank, your contracts, your code, your identity. No one has built the
+coherent environment — one login, one unit, everything under one fabric of trust, with no
+reason to leave. That is the gap, and it is still wide open.
+
 And there is a commercial reason this layer matters, especially to you. Capability itself —
 models, agents, tools — is commoditizing fast; everyone has a version, and the price of raw
 intelligence is racing toward the floor. When the tool becomes cheap, you no longer sell the
@@ -185,6 +191,12 @@ AI-шлюз, dev-платформа — и связную «планету», п
 уходить никуда не нужно. Она открыта по дизайну, и её модель безопасности одинаково масштабируется на
 любого: один человек, компания, школа, клиника, министерство — каждый в своём запечатанном, постквантово
 подписанном контуре, связанные только проверяемой аттестацией. Планета, а не сто логинов.
+
+И о гигантах, о которых вы подумаете — Google, Meta, Apple. У них есть пользователи, но ни один
+из них не есть то самое место. Это наборы отдельных продуктов, между которыми люди бегают, и всё
+равно уходят оттуда — за банком, договорами, кодом, идентичностью. Связную среду — один логин, одна
+единица, всё под одним контуром доверия, и уходить незачем — ещё не построил никто. Вот разрыв, и он
+по-прежнему широко открыт.
 
 И есть коммерческая причина, почему этот слой важен — особенно вам. Сама способность — модели,
 агенты, инструменты — быстро коммодитизируется; у каждого своя версия, и цена сырого интеллекта

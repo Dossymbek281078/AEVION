@@ -57,6 +57,8 @@
 
 **When AI tools become a commodity, the scarce thing is no longer the tool — it is the place where the user lives.** As several organizations now provide AI tools "for everything," the next inevitable layer isn't a hundred scattered tabs: it is self-contained environments — communities, *planets* — where all of a user's work happens. Every major AI provider will either grow such planets or spawn them. Whoever builds the first coherent one owns the user's entire session.
 
+And no incumbent has built it. Google, Meta and Apple have the users but not the *place* — they are collections of separate products people bounce between, and users still leave them for banking, contracts, code, identity. A unified environment — one login, one unit, everything under one fabric of trust, no reason to leave — does not exist yet. The gap is wide open.
+
 AEVION is that first planet, built on Anthropic's base. Inside its habitat a user has everything — AI tools, games, a bank, payments, IP, identity, commerce — under one login and one settlement unit (AEV), and never needs to leave. And it is open by design: you can plug in outside platforms (Amazon and others), and users — or Anthropic itself — can build their own sub-worlds on top, while staying in one economy and one trust fabric.
 
 So this isn't "30 apps built on Claude." It is the **first consumer and economic layer — a planet — on top of your model**: the thing that turns raw capability into a place where people live and transact. A toll booth, an operating system, for the AI age — on your base. A billion today; a trillion as the trajectory.

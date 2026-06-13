@@ -743,7 +743,12 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
-  const baseBoardPx=Math.max(300,Math.min(720,vhPx-360,vwPx-280));
+  // Layout-fill: доска ограничена доступной ВЫСОТОЙ окна (она квадратная, высота —
+  // обычно узкое место), а не жёстким 720px-капом, из-за которого на широких/высоких
+  // экранах вокруг доски оставались пустоты. Запас по высоте ~300px (header+часы+
+  // координаты+нижние контролы), по ширине ~360px (правая панель ≤340 + gap). Верхний
+  // кап 1080 страхует от гигантской доски на 4K. boardScale (0.5–1.5) применяется поверх.
+  const baseBoardPx=Math.max(300,Math.min(1080,vhPx-300,vwPx-360));
   const boardPx=Math.round(baseBoardPx*boardScale);
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);

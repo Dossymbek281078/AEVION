@@ -12,6 +12,18 @@
   --aevion-navy: #0f172a;
   --aevion-muted: #64748b;
 
+  /* CyberChess z-index hierarchy — single source of truth so floating
+     panels never sit UNDER content nor cover the board unexpectedly.
+     board(1) < panel(50) < banner(150) < overlay(250) < backdrop(299)
+     < drawer(300) < modal(400). Modals/toasts above use higher fixed values. */
+  --cc-z-board: 1;
+  --cc-z-panel: 50;
+  --cc-z-banner: 150;
+  --cc-z-overlay: 250;
+  --cc-z-backdrop: 299;
+  --cc-z-drawer: 300;
+  --cc-z-modal: 400;
+
   /* CyberChess theme vars — light (default) */
   --cc-bg: #f5f6fa;
   --cc-surface1: #ffffff;
@@ -686,14 +698,30 @@ button:focus:not(:focus-visible) {
   50%      { box-shadow: 0 6px 32px rgba(6,182,212,0.8), 0 0 0 6px rgba(6,182,212,0.1); }
 }
 
-/* Desktop: cc-main-row занимает всю высоту viewport чтобы не было пустоты снизу */
+/* Desktop: cc-main-row занимает всю высоту viewport чтобы не было пустоты снизу.
+   Резерв справа под плавающий баннер «Проекты АЕВИОН» (fixed-overlay, 240px)
+   задаётся через переменную --cc-banner-reserve (выставляется инлайном из page.tsx).
+   На узких экранах резерв обнуляется (см. медиа-запрос ниже), чтобы правая
+   панель НЕ уезжала за край вьюпорта. */
 .cc-main-row {
   min-height: calc(100vh - 110px);
   align-items: stretch !important;
+  padding-right: var(--cc-banner-reserve, 0px);
 }
-/* Sidebar на десктопе тянется на всю высоту строки */
+/* Sidebar на десктопе тянется на всю высоту строки.
+   Свой контекст наложения на уровне panel: над доской, под баннером/оверлеями. */
 .cc-right-panel {
   align-self: stretch !important;
+  position: relative;
+  z-index: var(--cc-z-panel, 50);
+}
+/* Узкий десктоп: баннер всё ещё overlay, но резерв убираем, иначе панель
+   выдавливается за правый край. Баннер в этом случае ложится поверх — но
+   только поверх ПУСТОГО поля справа от центрированной группы доска+рейл. */
+@media (max-width: 1180px) {
+  .cc-main-row {
+    padding-right: 0 !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -725,7 +753,7 @@ button:focus:not(:focus-visible) {
     bottom: 0 !important;
     width: 85vw !important;
     max-width: 360px !important;
-    z-index: 300 !important;
+    z-index: var(--cc-z-drawer, 300) !important;
     background: var(--cc-surface1, #262421) !important;
     border-left: 1px solid var(--cc-border, #3d3b39) !important;
     box-shadow: -8px 0 32px rgba(0,0,0,0.5) !important;
@@ -850,7 +878,7 @@ button:focus:not(:focus-visible) {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.5);
-  z-index: 299;
+  z-index: var(--cc-z-backdrop, 299);
 }
 
 @media (max-width: 480px) {

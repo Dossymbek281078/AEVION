@@ -50,42 +50,91 @@ function savePanels(p: Record<"yt" | "tw", Panel>) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch {}
 }
 
-// Extract YouTube video ID from URL formats: youtu.be/X, watch?v=X, /live/X, /embed/X.
+// A valid YouTube video id is exactly 11 chars of [A-Za-z0-9_-].
+const YT_ID = /^[A-Za-z0-9_-]{11}$/;
+
+// Parse a "t"/"start" timestamp into whole seconds. Accepts "90", "90s", "1m30s", "1h2m3s".
+function ytStartSeconds(raw: string | null): number | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (/^\d+$/.test(v)) { const n = parseInt(v, 10); return n > 0 ? n : null; }
+  const m = v.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+  if (m && (m[1] || m[2] || m[3])) {
+    const sec = (parseInt(m[1] || "0", 10) * 3600) + (parseInt(m[2] || "0", 10) * 60) + parseInt(m[3] || "0", 10);
+    return sec > 0 ? sec : null;
+  }
+  return null;
+}
+
+// Build a clean embed URL for a video id, stripping all params except autoplay + optional start.
+function ytEmbed(id: string, startParam?: string | null): string {
+  const start = ytStartSeconds(startParam ?? null);
+  return `https://www.youtube.com/embed/${id}?autoplay=1${start ? `&start=${start}` : ""}`;
+}
+
+// Extract YouTube video ID from URL formats: plain id, watch?v=X, youtu.be/X,
+// youtube.com/live/X, youtube.com/embed/X, youtube.com/shorts/X, youtube.com/@channel/live.
 function ytEmbedUrl(input: string): string | null {
   if (!input) return null;
   const s = input.trim();
   // Channel handle? @name → live embed
   const handle = s.match(/^@([\w.-]+)$/);
   if (handle) return `https://www.youtube.com/embed/live_stream?channel=${handle[1]}`;
-  // Plain video ID (11 chars)
-  if (/^[\w-]{11}$/.test(s)) return `https://www.youtube.com/embed/${s}?autoplay=1`;
+  // Plain video ID (exactly 11 valid chars)
+  if (YT_ID.test(s)) return ytEmbed(s);
   try {
     const u = new URL(s.startsWith("http") ? s : `https://${s}`);
+    if (!/(^|\.)(youtube\.com|youtu\.be)$/i.test(u.hostname)) return null;
+    const start = u.searchParams.get("t") || u.searchParams.get("start");
+    // watch?v=ID
     const v = u.searchParams.get("v");
-    if (v) return `https://www.youtube.com/embed/${v}?autoplay=1`;
+    if (v && YT_ID.test(v)) return ytEmbed(v, start);
     const parts = u.pathname.split("/").filter(Boolean);
-    const liveIdx = parts.indexOf("live");
-    if (liveIdx >= 0 && parts[liveIdx + 1]) return `https://www.youtube.com/embed/${parts[liveIdx + 1]}?autoplay=1`;
-    const embedIdx = parts.indexOf("embed");
-    if (embedIdx >= 0 && parts[embedIdx + 1]) return `https://www.youtube.com/embed/${parts[embedIdx + 1]}?autoplay=1`;
-    if (u.hostname.includes("youtu.be") && parts[0]) return `https://www.youtube.com/embed/${parts[0]}?autoplay=1`;
-    // Channel URL
+    // youtu.be/ID (id is the first path segment)
+    if (/(^|\.)youtu\.be$/i.test(u.hostname) && parts[0] && YT_ID.test(parts[0])) return ytEmbed(parts[0], start);
+    // /live/ID, /embed/ID, /shorts/ID, /v/ID
+    for (const seg of ["live", "embed", "shorts", "v"]) {
+      const idx = parts.indexOf(seg);
+      if (idx >= 0 && parts[idx + 1] && YT_ID.test(parts[idx + 1])) return ytEmbed(parts[idx + 1], start);
+    }
+    // youtube.com/@channel/live (best-effort live embed for the channel)
     const cIdx = parts.findIndex(p => p.startsWith("@"));
-    if (cIdx >= 0) return `https://www.youtube.com/embed/live_stream?channel=${parts[cIdx].slice(1)}`;
+    if (cIdx >= 0) {
+      // @channel/live → live_stream channel embed; @channel/VIDEOID → that video
+      const next = parts[cIdx + 1];
+      if (next && YT_ID.test(next)) return ytEmbed(next, start);
+      return `https://www.youtube.com/embed/live_stream?channel=${parts[cIdx].slice(1)}`;
+    }
   } catch {}
   return null;
 }
 
-// Extract Twitch channel from URL or accept bare channel name.
+// The Twitch embed requires the real embedding host as the `parent` param, or it refuses
+// to load. Resolve it safely: prefer the top window's hostname (guards against being inside
+// an iframe / SSR where window is undefined), fall back to localhost for dev.
+function twitchParent(): string {
+  if (typeof window === "undefined") return "localhost";
+  try {
+    // window.location.hostname is the real host the page is served from.
+    const h = window.location.hostname;
+    return h && h !== "null" ? h : "localhost";
+  } catch {
+    return "localhost";
+  }
+}
+
+// Extract Twitch channel from a full twitch.tv/<channel> URL or accept a bare channel name.
 function twEmbedUrl(input: string): string | null {
   if (!input) return null;
   const s = input.trim().replace(/^@/, "");
-  const parent = typeof window !== "undefined" ? window.location.hostname : "localhost";
-  if (/^[\w-]+$/.test(s)) return `https://player.twitch.tv/?channel=${s}&parent=${parent}&muted=true`;
+  const parent = twitchParent();
+  // Bare channel name (Twitch usernames are alphanumeric + underscore).
+  if (/^\w+$/.test(s)) return `https://player.twitch.tv/?channel=${encodeURIComponent(s)}&parent=${encodeURIComponent(parent)}&muted=true`;
   try {
     const u = new URL(s.startsWith("http") ? s : `https://${s}`);
+    if (!/(^|\.)twitch\.tv$/i.test(u.hostname)) return null;
     const ch = u.pathname.split("/").filter(Boolean)[0];
-    if (ch) return `https://player.twitch.tv/?channel=${ch}&parent=${parent}&muted=true`;
+    if (ch && /^\w+$/.test(ch)) return `https://player.twitch.tv/?channel=${encodeURIComponent(ch)}&parent=${encodeURIComponent(parent)}&muted=true`;
   } catch {}
   return null;
 }
@@ -111,10 +160,20 @@ function PanelHost({ kind, state, onChange, onClose }: PanelHostProps) {
   const onHeaderMove = useCallback((e: React.PointerEvent) => {
     const d = dragRef.current; if (!d) return;
     e.preventDefault();
-    const x = Math.max(0, Math.min(window.innerWidth - 80, e.clientX - d.dx));
-    const y = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - d.dy));
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let x = Math.max(0, Math.min(vw - 80, e.clientX - d.dx));
+    let y = Math.max(0, Math.min(vh - 40, e.clientY - d.dy));
+    // Snap-to-edge: when dropped within SNAP px of a viewport edge, dock the panel
+    // flush to that edge so it parks out of the way instead of floating over the board.
+    const SNAP = 48;
+    const w = state.minimized ? 200 : state.size.w;
+    const h = state.minimized ? 32 : state.size.h;
+    if (x <= SNAP) x = 0;
+    else if (x + w >= vw - SNAP) x = Math.max(0, vw - w);
+    if (y <= SNAP) y = 0;
+    else if (y + h >= vh - SNAP) y = Math.max(0, vh - h);
     onChange({ pos: { x, y } });
-  }, [onChange]);
+  }, [onChange, state.minimized, state.size.w, state.size.h]);
 
   const onHeaderUp = useCallback((e: React.PointerEvent) => {
     dragRef.current = null;

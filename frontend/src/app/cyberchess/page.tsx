@@ -1105,8 +1105,11 @@ export default function CyberChessPage(){
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
-  const[showBookArrow,sShowBookArrow]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_chess_bookarrow_v1")!=="0"}catch{return true}});
-  useEffect(()=>{try{localStorage.setItem("aevion_chess_bookarrow_v1",showBookArrow?"1":"0")}catch{}},[showBookArrow]);
+  // Book-подсказка-стрелка ВЫКЛ по умолчанию (v2): пользователь не хочет авто-стрелку на
+  // старте партии. Стрелки появляются только на реальных ходах (last-move) и при ручном
+  // рисовании правой кнопкой. Кто хочет дебютную подсказку — включает в настройках.
+  const[showBookArrow,sShowBookArrow]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_chess_bookarrow_v2")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_bookarrow_v2",showBookArrow?"1":"0")}catch{}},[showBookArrow]);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_autoqueen_v1",autoQueen?"1":"0")}catch{}},[autoQueen]);
   // F2 phase-3 — Stockfish analysis depth для CPI/metrics recall. 18 = быстро (по умолчанию),
   // 25 = точнее, 30 = максимум. Влияет только на recordMoveWithMultiPV и top-3 metrics —

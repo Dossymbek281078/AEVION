@@ -5981,6 +5981,45 @@ export default function CyberChessPage(){
         ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
+        {/* ─── Left info rail (chess.com-style) — заполняет левое поле на ШИРОКИХ экранах.
+            Только read-only сводка из уже посчитанных данных. Порог vwPx>=2200 гарантирует,
+            что aside(248)+доска(≤1400)+панель(340)+gaps влезают без overflow; на более узких
+            экранах рейл скрыт и раскладка остаётся прежней (доска+правая панель). */}
+        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=2200&&(()=>{
+          const PV:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
+          const sum=(a:string[])=>a.reduce((s,c)=>s+(PV[c]||0),0);
+          const adv=sum(capB)-sum(capW); // >0 = белые впереди
+          const evalStr=evalMate!==0?(evalMate>0?`+M${Math.abs(evalMate)}`:`-M${Math.abs(evalMate)}`):`${evalCp>=0?"+":""}${(evalCp/100).toFixed(1)}`;
+          const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
+          const card={background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,padding:"10px 12px"} as const;
+          const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
+          return <aside style={{flex:"0 0 248px",width:248,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
+            <div style={card}>
+              <div style={lbl}>Оценка</div>
+              <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
+              <div style={{marginTop:8,height:8,borderRadius:4,overflow:"hidden",display:"flex",background:"#0f172a"}}>
+                <div style={{width:`${wPct}%`,background:"#f8fafc"}}/>
+                <div style={{flex:1,background:"#0f172a"}}/>
+              </div>
+            </div>
+            <div style={card}>
+              <div style={lbl}>Материал</div>
+              <div style={{fontSize:13,color:CC.text,fontWeight:800}}>{adv===0?"Равенство":(adv>0?`Белые +${adv}`:`Чёрные +${-adv}`)}</div>
+              <div style={{marginTop:6,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capB.join("")||"—"}</div>
+              <div style={{marginTop:2,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capW.join("")||"—"}</div>
+            </div>
+            {currentOpening&&<div style={card}>
+              <div style={lbl}>Дебют</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</div>
+            </div>}
+            <div style={card}>
+              <div style={lbl}>Партия</div>
+              <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:CC.text}}>Stockfish 18 · d22</b></div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
+            </div>
+          </aside>;
+        })()}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
             в широкой колонке и правый рейл уезжает далеко. Группа [доска+рейл] центрируется
             через justifyContent на cc-main-row, рейл встаёт вплотную (gap 12). */}

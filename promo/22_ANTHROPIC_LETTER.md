@@ -154,6 +154,11 @@ That is what I am offering to keep on your side: not the code, the engine that m
 The live demo, and everything verifiable: https://aevion.app/acquire
 The public repository: https://github.com/Dossymbek281078/AEVION
 
+And if this simply isn't for you — if the idea doesn't resonate at all — I accept that fully
+and with genuine respect. People's visions and goals don't always align, and that is exactly
+as it should be. There is no pressure here and no hard feelings; I am grateful you read this
+far, and the door stays open either way.
+
 The best first step is simply writing back — ask me anything and I'll answer in full. English
 is my second language, so I'm most precise in writing; we can also talk by call whenever it
 suits you. If we reach a conversation at all, it already tells me the idea resonated.
@@ -276,6 +281,10 @@ AEVION в том виде, как он живёт внутри Anthropic.
 
 Живое демо, и всё проверяемо: https://aevion.app/acquire
 Публичный репозиторий: https://github.com/Dossymbek281078/AEVION
+
+И если это просто не ваше — если идея совсем не откликнулась — я приму это полностью и с искренним
+уважением. Взгляды и цели людей не всегда совпадают, и это абсолютно нормально. Здесь нет давления и
+нет обид; я уже благодарен за то, что вы дочитали, и дверь в любом случае остаётся открытой.
 
 Лучший первый шаг — просто ответить письмом: спросите что угодно, отвечу подробно. Английский — мой
 второй язык, поэтому точнее всего я в переписке; созвон — тоже когда вам удобно. И если до разговора

@@ -4993,7 +4993,7 @@ export default function CyberChessPage(){
           else if(r===streakType)streak++;
           else break;
         }
-        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3]}}>
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── Session stats pill strip ─── */}
           {totalGames>0&&<div style={{
@@ -5961,6 +5961,7 @@ export default function CyberChessPage(){
             {icon:"🧠",label:"Коуч",    hint:"AI-коуч",            act:()=>sTab("coach")},
             {icon:"🧩",label:"Пазлы",   hint:"Случайный пазл",     act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
+            {icon:pip.open?"⏏":"📺",label:pip.open?"Видео✓":"Видео",hint:"YouTube/Twitch поверх доски (PiP) — смотри стрим во время партии",act:()=>{if(pip.open){pip.hide();return}let def="";try{const f=localStorage.getItem("cc_fav_streamer_v1");if(f)def=`https://www.twitch.tv/${f}`}catch{}const url=window.prompt("YouTube или Twitch URL (смотреть поверх доски):",def);if(!url)return;const src=detectMediaSource(url.trim());if(!src){showToast("Нужен YouTube или Twitch URL","error");return}pip.show(src);}},
             {icon:"⚙",label:"Ещё",     hint:"Все инструменты (Ctrl+K)", act:()=>sPalOpen(true)},
           ] as {icon:string;label:string;hint:string;act:()=>void}[]).map((c,i)=>(
             <button key={i} onClick={c.act} title={c.hint} style={{

@@ -708,6 +708,12 @@ button:focus:not(:focus-visible) {
   align-items: stretch !important;
   padding-right: var(--cc-banner-reserve, 0px);
 }
+/* Нижняя навигация (BottomNav) — мобильный паттерн. На десктопе (≥769px) вкладки уже
+   в верхней шапке, поэтому скрываем нижнюю плашку: иначе она перекрывает низ доски
+   при увеличении (баг 2026-06-14). На мобайле (<769px) остаётся. */
+@media (min-width: 769px) {
+  .cc-bottom-nav { display: none !important; }
+}
 /* Sidebar на десктопе тянется на всю высоту строки.
    Свой контекст наложения на уровне panel: над доской, под баннером/оверлеями. */
 .cc-right-panel {

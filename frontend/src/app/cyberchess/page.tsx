@@ -687,7 +687,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute
     {id:"profile", icon:"👤",label:"Профиль", action:()=>{}},
   ];
   return(
-    <div style={{
+    <div className="cc-bottom-nav" style={{
       position:"sticky",bottom:0,zIndex:100,
       background:surface1,borderTop:`1px solid ${border}`,
       display:"flex",justifyContent:"space-around",alignItems:"stretch",
@@ -794,9 +794,10 @@ export default function CyberChessPage(){
   const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
   const baseBoardPx=Math.max(320,Math.min(1400,vhPx-280,vwPx-(railShown?660:400)));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
-  // Жёсткий потолок: даже при boardScale=1.5 доска не больше окна (vhPx-160 по высоте,
-  // vwPx-360 по ширине) — гарантия что низ доски не уезжает за экран/панель задач.
-  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-160,vwPx-360));
+  // Жёсткий потолок: даже при boardScale=1.5 доска не выше доступной высоты МИНУС вся
+  // вертикальная обвязка колонки (хедер+строки игроков+координаты+нижние контролы+низ.навбар
+  // на мобайле) ≈ 290px. Иначе при увеличении доска уезжала под нижнюю плашку (баг 2026-06-14).
+  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-290,vwPx-360));
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
@@ -10590,8 +10591,9 @@ ${question.trim()}`;
         Appears once per day in the bottom-right corner when PiP is closed AND
         today's daily variant is unplayed. Two CTAs:
           1) "Включить" → opens the user's favorite Twitch stream (configurable, no hardcoded names)
-          2) "×" → dismiss for the rest of the day (localStorage-keyed by date) */}
-    {showPipSuggest&&<div
+          2) "×" → dismiss for the rest of the day (localStorage-keyed by date)
+        Не показываем во время активной партии (!on) — чтобы не перекрывать доску. */}
+    {showPipSuggest&&!on&&<div
       role="alert"
       style={{
         position:"fixed",right:20,bottom:20,zIndex:7900,
@@ -12956,8 +12958,9 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
-    {/* Bottom navigation — фиксированный нижний бар на мобайле, tab-bar на десктопе */}
-    {!streamerMode&&<BottomNav
+    {/* Bottom navigation — только на мобайле (<769px). На десктопе вкладки уже в верхней
+        шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
+    {!streamerMode&&vwPx<769&&<BottomNav
       setup={setup} tab={tab}
       onPlay={()=>sShowQuickSetupModal(true)}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}

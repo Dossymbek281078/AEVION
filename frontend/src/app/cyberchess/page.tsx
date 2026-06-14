@@ -212,7 +212,7 @@ class SF{private w:Worker|null=null;private ok=false;private cb:((f:string,t:str
     }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
   go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void){if(!this.w)return cb("","");this.cb=cb;this.ecb=ecb||null;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
-  eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:()=>void){if(!this.w)return done();this.cb=()=>done();this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
+  eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:(best?:string)=>void){if(!this.w)return done();this.cb=(f,t,p)=>done(f&&t?`${f}${t}${p||""}`:undefined);this.ecb=ecb;this.mpvCb=null;try{this.w.postMessage("stop")}catch{};this.w.postMessage("setoption name MultiPV value 1");this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this.cb=null;this.ecb=null;this.mpvCb=cb;this.mpvLines=[];try{this.w.postMessage("stop")}catch{};this.w.postMessage(`setoption name MultiPV value ${pvCount}`);this.w.postMessage("ucinewgame");this.w.postMessage(`position fen ${fen}`);this.w.postMessage(`go depth ${d}`)}
   stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
   terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[]}}}
@@ -229,6 +229,47 @@ const PST:Record<PieceSymbol,number[]>={p:PP,n:PN,b:PB,r:PR,q:PQ,k:PK};
 function ev(c:Chess){let s=0;const b=c.board();for(let r=0;r<8;r++)for(let j=0;j<8;j++){const q=b[r][j];if(!q)continue;s+=(q.color==="w"?1:-1)*(PV[q.type]+(PST[q.type]?.[(q.color==="w"?r*8+j:(7-r)*8+j)]||0))}return s}
 function mm(c:Chess,d:number,a:number,b:number,mx:boolean):number{if(!d)return ev(c);const mv=c.moves({verbose:true});if(!mv.length)return c.isCheckmate()?(mx?-1e5:1e5):0;if(mx){let v=-Infinity;for(const m of mv){c.move(m);v=Math.max(v,mm(c,d-1,a,b,false));c.undo();a=Math.max(a,v);if(b<=a)break}return v}let v=Infinity;for(const m of mv){c.move(m);v=Math.min(v,mm(c,d-1,a,b,true));c.undo();b=Math.min(b,v);if(b<=a)break}return v}
 function best(c:Chess,d:number,rn:number):Move|null{const mv=c.moves({verbose:true});if(!mv.length)return null;const sc=mv.map(m=>{c.move(m);const s=mm(c,Math.min(d,4)-1,-Infinity,Infinity,c.turn()==="w");c.undo();return{m,s:s+(Math.random()-.5)*rn}});sc.sort((a,b)=>c.turn()==="w"?b.s-a.s:a.s-b.s);return sc[0].m}
+
+/* ═══ Move classification (lichess-grade, phase + eval-context aware) ═══
+   Вместо грубого абсолютного порога centipawn-падения учитываем:
+   - Фазу партии (по некоролевскому материалу из FEN): в эндшпиле малый cp-свинг
+     значит больше, поэтому пороги ниже; в дебюте/мителе — выше.
+   - Eval ДО хода: падение, переводящее выигранную позицию в проигранную
+     (смена знака на «лишённый шанса») наказывается строже, чем то же падение
+     в уже безнадёжной позиции (там оно почти ничего не меняет).
+   Ярлыки и форма результата не меняются. */
+function nonPawnMaterialFromFEN(fen?:string):number{
+  if(!fen)return 62; // дефолт = полный комплект → трактуем как мителшпиль
+  const board=fen.split(" ")[0];let m=0;
+  for(const ch of board){
+    const l=ch.toLowerCase();
+    if(l==="n"||l==="b")m+=3;else if(l==="r")m+=5;else if(l==="q")m+=9;
+  }
+  return m; // макс ≈ 2*(2*3+2*3+2*5+9)=62
+}
+function classifyDrop(drop:number,prevFromMover:number,currFromMover:number,fen?:string):"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder"{
+  const npm=nonPawnMaterialFromFEN(fen);
+  // phase: 1.0 = полный материал (дебют/митель), стремится к ~0 в голом эндшпиле.
+  // В эндшпиле множитель порогов <1 → те же потери классифицируются строже.
+  const phase=Math.min(1,npm/62);
+  const tMul=0.62+0.38*phase; // эндшпиль ≈0.62×, митель =1.0×
+  // Контекст по eval ДО хода: если ход переворачивает оценку (был не проигран →
+  // стал явно проигран), усиливаем (порог снижаем). Если позиция и так была
+  // проиграна (prevFromMover сильно отрицателен), ослабляем — потеря почти не важна.
+  let ctxMul=1;
+  const flips=prevFromMover>-150&&currFromMover<-200; // выигрыш/равенство → проигрыш
+  const alreadyLost=prevFromMover<=-400; // уже глубоко проиграно до хода
+  if(flips)ctxMul=0.75;        // строже: реальная цена ошибки выше
+  else if(alreadyLost)ctxMul=1.6; // мягче: «и так проиграно»
+  const f=tMul*ctxMul;
+  if(drop>=300*f)return "blunder";
+  if(drop>=150*f)return "mistake";
+  if(drop>=70*f)return "inacc";
+  // brilliant/great — «положительные» категории, не зависят от фазовых порогов потерь.
+  if(drop<=-100&&Math.abs(prevFromMover)<300)return "brilliant";
+  if(drop<=-50)return "great";
+  return "good";
+}
 
 /* ═══ Sound — neutral percussive (filtered noise bursts, no melody) ═══ */
 const MK="aevion_chess_mute_v1";
@@ -646,7 +687,7 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,brand,textMute
     {id:"profile", icon:"👤",label:"Профиль", action:()=>{}},
   ];
   return(
-    <div style={{
+    <div className="cc-bottom-nav" style={{
       position:"sticky",bottom:0,zIndex:100,
       background:surface1,borderTop:`1px solid ${border}`,
       display:"flex",justifyContent:"space-around",alignItems:"stretch",
@@ -743,8 +784,20 @@ export default function CyberChessPage(){
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
   useEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
-  const baseBoardPx=Math.max(300,Math.min(720,vhPx-360,vwPx-280));
-  const boardPx=Math.round(baseBoardPx*boardScale);
+  // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
+  // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
+  // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
+  // По ширине запас зависит от того, показан ли левый инфо-рейл: с рейлом резервируем
+  // ~660 (рейл 248 + панель 340 + поля), без рейла ~400 (только панель + поля) — так
+  // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
+  // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
+  const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  const baseBoardPx=Math.max(320,Math.min(1400,vhPx-280,vwPx-(railShown?660:400)));
+  const boardPxRaw=Math.round(baseBoardPx*boardScale);
+  // Жёсткий потолок: даже при boardScale=1.5 доска не выше доступной высоты МИНУС вся
+  // вертикальная обвязка колонки (хедер+строки игроков+координаты+нижние контролы+низ.навбар
+  // на мобайле) ≈ 290px. Иначе при увеличении доска уезжала под нижнюю плашку (баг 2026-06-14).
+  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-290,vwPx-360));
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
@@ -926,7 +979,7 @@ export default function CyberChessPage(){
   const[gamesSearch,sGamesSearch]=useState<string>("");
   const[gamesSort,sGamesSort]=useState<"date"|"rating"|"length"|"result">("date");
   const[gamesResult,sGamesResult]=useState<"all"|"win"|"loss"|"draw">("all");
-  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}[]>([]);
+  const[analysis,sAnalysis]=useState<{move:number;cp:number;mate:number;quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number;best?:string}[]>([]);
   const[showAnal,sShowAnal]=useState(false);
   const[qFlash,sQFlash]=useState<{quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";key:number}|null>(null);
   const[openingBoardFlash,sOpeningBoardFlash]=useState<{name:string;eco:string;key:number}|null>(null);
@@ -1003,6 +1056,9 @@ export default function CyberChessPage(){
   const[pzTimer,sPzTimer]=useState(0);
   const pzTimerRef=useRef<number>(0);
   const pzTimerIntervalRef=useRef<ReturnType<typeof setInterval>|null>(null);
+  // Per-puzzle wrong-attempt tracking (keyed by fen so it resets on puzzle change).
+  // Used to reveal the expected best move as a hint after 2 wrong tries (lichess-style).
+  const pzWrongTriesRef=useRef<{fen:string;n:number}>({fen:"",n:0});
   // ScoreCard: chessy earned in this puzzle session
   const[pzSessionChessy,sPzSessionChessy]=useState(0);
   // File input ref for custom FEN/PGN puzzle loading
@@ -1052,8 +1108,11 @@ export default function CyberChessPage(){
   // Auto-queen: при превращении пешки сразу ставится ферзь без модалки. По умолчанию ВКЛ —
   // в bullet/blitz/premove'ах модалка ломает темп. Кому надо underpromotion — выключит.
   const[autoQueen,sAutoQueen]=useState(()=>{try{return localStorage.getItem("aevion_chess_autoqueen_v1")!=="0"}catch{return true}});
-  const[showBookArrow,sShowBookArrow]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_chess_bookarrow_v1")!=="0"}catch{return true}});
-  useEffect(()=>{try{localStorage.setItem("aevion_chess_bookarrow_v1",showBookArrow?"1":"0")}catch{}},[showBookArrow]);
+  // Book-подсказка-стрелка ВЫКЛ по умолчанию (v2): пользователь не хочет авто-стрелку на
+  // старте партии. Стрелки появляются только на реальных ходах (last-move) и при ручном
+  // рисовании правой кнопкой. Кто хочет дебютную подсказку — включает в настройках.
+  const[showBookArrow,sShowBookArrow]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_chess_bookarrow_v2")==="1"}catch{return false}});
+  useEffect(()=>{try{localStorage.setItem("aevion_chess_bookarrow_v2",showBookArrow?"1":"0")}catch{}},[showBookArrow]);
   useEffect(()=>{try{localStorage.setItem("aevion_chess_autoqueen_v1",autoQueen?"1":"0")}catch{}},[autoQueen]);
   // F2 phase-3 — Stockfish analysis depth для CPI/metrics recall. 18 = быстро (по умолчанию),
   // 25 = точнее, 30 = максимум. Влияет только на recordMoveWithMultiPV и top-3 metrics —
@@ -2200,18 +2259,14 @@ export default function CyberChessPage(){
       });
     };
 
-    const classifyMove=(prevCp:number,currCp:number,turn:string):{quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}=>{
+    const classifyMove=(prevCp:number,currCp:number,turn:string,fen?:string):{quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder";cpLoss:number}=>{
       const moverWasWhite=turn==="b";
       const prevFromMover=moverWasWhite?prevCp:-prevCp;
       const currFromMover=moverWasWhite?currCp:-currCp;
       const drop=prevFromMover-currFromMover;
       const cpLoss=Math.max(0,drop); // negative drop = improvement, clamp to 0
-      let quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder"="good";
-      if(drop>=300)quality="blunder";
-      else if(drop>=150)quality="mistake";
-      else if(drop>=70)quality="inacc";
-      else if(drop<=-100&&Math.abs(prevFromMover)<300)quality="brilliant";
-      else if(drop<=-50)quality="great";
+      // Используем общую фазо-/контекст-зависимую классификацию (см. classifyDrop).
+      const quality=classifyDrop(drop,prevFromMover,currFromMover,fen);
       return {quality,cpLoss};
     };
 
@@ -2226,7 +2281,7 @@ export default function CyberChessPage(){
           const fen=fenHist[i+1];if(!fen)break;
           const ev=await evalAt(fen,8);
           const turn=fen.split(" ")[1];
-          const cm=classifyMove(prevCp,ev.cp,turn);
+          const cm=classifyMove(prevCp,ev.cp,turn,fen);
           results.push({move:i+1,cp:ev.cp,mate:ev.mate,...cm});
           prevCp=ev.cp;
           if(cancelled)return;
@@ -2248,7 +2303,7 @@ export default function CyberChessPage(){
         const fen=fenHist[i+1];if(!fen)break;
         const ev=await evalAt(fen,18);
         const turn=fen.split(" ")[1];
-        const cm2=classifyMove(prevCp2,ev.cp,turn);
+        const cm2=classifyMove(prevCp2,ev.cp,turn,fen);
         results2[i]={move:i+1,cp:ev.cp,mate:ev.mate,...cm2};
         prevCp2=ev.cp;
         if(cancelled){sRefiningAnalysis(false);return;}
@@ -2364,6 +2419,12 @@ export default function CyberChessPage(){
     if(tab==="puzzles"&&pzCurrent&&pzAttempt==="idle"){
       const attemptUci=`${from}${to}${pr||""}`;
       const expectedUci=pzCurrent.sol[0];
+      // Validate legality via chess.js BEFORE comparing to expected UCI:
+      // an illegal/ambiguous input must not falsely pass or crash the puzzle flow.
+      // Use a throwaway clone so the live `game` is not mutated during the probe.
+      let legal=false;
+      try{const probe=new Chess(game.fen());legal=!!probe.move({from,to,promotion:pr||"q"});}catch{legal=false;}
+      if(!legal){showToast("Недопустимый ход","error");return false;}
       if(attemptUci===expectedUci||attemptUci.slice(0,4)===expectedUci.slice(0,4)){
         // Execute user's correct move
         let mv;try{mv=game.move({from,to,promotion:pr||"q"});}catch{mv=null}
@@ -2457,6 +2518,10 @@ export default function CyberChessPage(){
         return true;
       }else{
         sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");resetPzStreak();
+        // Track wrong attempts for THIS puzzle (reset on puzzle change via fen key).
+        const wt=pzWrongTriesRef.current;
+        if(wt.fen!==pzCurrent.fen){wt.fen=pzCurrent.fen;wt.n=0;}
+        wt.n+=1;
         if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
         if(pzCurrent?.theme)addThemeResult(pzCurrent.theme,false);
         if(pzMode==="rush"){
@@ -2483,7 +2548,12 @@ export default function CyberChessPage(){
             sCapW([]);sCapB([]);sOn(true);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
           },1500);
         }else{
-          showToast(`✗ Неверно. Попробуй ещё или посмотри ответ`,"error");
+          // After 2 wrong tries on this puzzle, reveal the expected best move as a hint.
+          if(pzWrongTriesRef.current.n>=2){
+            showToast(`✗ Неверно. Лучший ход: ${pzCurrent.sol[0]}`,"error");
+          }else{
+            showToast(`✗ Неверно. Попробуй ещё или посмотри ответ`,"error");
+          }
         }
         return false;
       }
@@ -4298,25 +4368,29 @@ export default function CyberChessPage(){
     // CPI extra-метрики: мат-возможности и висящие фигуры (per position, игрок)
     const cpiM={m1:{opp:0,found:0},m2:{opp:0,found:0},m3:{opp:0,found:0}};let cpiHangs=0;
     let prevCp=0;
+    // Лучший ход движка в ПРЕДЫДУЩЕЙ позиции (= что стоило сыграть на ходу i).
+    // Заполняется из bestmove движка при оценке fenHist[i-1]; конвертируем uci→SAN.
+    let prevBestUci:string|undefined;
     for(let i=0;i<fenHist.length;i++){
       sAnalysisProgress(Math.round((i/fenHist.length)*100)); // прогресс «N/всего» во время ручного разбора
       const fen=fenHist[i];const turn=fen.split(" ")[1];
-      const{cp,mate}=await new Promise<{cp:number;mate:number}>(res=>{
+      const{cp,mate,best:bestUci}=await new Promise<{cp:number;mate:number;best?:string}>(res=>{
         let lastCp=0,lastMate=0;
-        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},()=>res({cp:lastCp,mate:lastMate}));
+        sfR.current!.eval(fen,depth,(c,m)=>{const sign=turn==="w"?1:-1;lastCp=c*sign;lastMate=m*sign},(b)=>res({cp:lastCp,mate:lastMate,best:b}));
       });
       if(i>0){
         // Evaluate quality of move played that led to this position
         // Move was by the side that just played (opposite of current turn)
         const moverWasWhite=turn==="b";const prev=moverWasWhite?prevCp:-prevCp;const curr=moverWasWhite?cp:-cp;
         const drop=prev-curr;
-        let quality:"brilliant"|"great"|"good"|"inacc"|"mistake"|"blunder"="good";
-        if(drop>=300)quality="blunder";
-        else if(drop>=150)quality="mistake";
-        else if(drop>=70)quality="inacc";
-        else if(drop<=-100&&Math.abs(prevCp<300?prevCp:-prevCp)<300)quality="brilliant";
-        else if(drop<=-50)quality="great";
-        results.push({move:i,cp,mate,quality,cpLoss:Math.max(0,drop)});
+        // Фазо-/контекст-зависимая классификация (общая с live-разбором).
+        const quality=classifyDrop(drop,prev,curr,fen);
+        // Лучший ход движка в позиции ДО хода (fenHist[i-1]) → SAN для «лучше было».
+        let bestSan:string|undefined;
+        if(prevBestUci&&prevBestUci.length>=4){
+          try{const tb=new Chess(fenHist[i-1]);const mv=tb.move({from:prevBestUci.slice(0,2),to:prevBestUci.slice(2,4),promotion:prevBestUci.length>4?prevBestUci[4]:undefined});if(mv)bestSan=mv.san;}catch{}
+        }
+        results.push({move:i,cp,mate,quality,cpLoss:Math.max(0,drop),...(bestSan?{best:bestSan}:{})});
         // CPI: мат-возможности на позиции ДО хода (fen[i-1]) — для стороны, сделавшей этот ход
         const isPlayerMove=moverWasWhite===(pCol==="w");
         if(isPlayerMove){
@@ -4349,7 +4423,7 @@ export default function CyberChessPage(){
           }catch{}
         }
       }
-      prevCp=cp;
+      prevCp=cp;prevBestUci=bestUci;
     }
     sAnalysis(results);sAnalyzing(false);sShowAnal(true);sAnalysisProgress(100);
     // Completion summary — мгновенный ответ «как я сыграл» (точность + ACPL + зевки)
@@ -5905,9 +5979,53 @@ export default function CyberChessPage(){
       )}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",justifyContent:"center",width:"100%",flex:1,minHeight:0,overflow:"hidden",paddingRight:showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn?244:0}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",justifyContent:"center",width:"100%",flex:1,minHeight:0,overflow:"hidden",
+        // Reserve space for the fixed 240px projects banner via a CSS var (NOT a hard
+        // inline paddingRight) so globals.css can zero it on narrow desktops and the
+        // right panel never gets pushed off-screen. Banner is a fixed overlay; this
+        // only stops it from covering the panel when there's room for both.
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
+        {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
+            Порог vwPx>=1100 (синхронен с railShown выше — бюджет ширины доски резервирует
+            под рейл, поэтому aside(248)+доска+панель(340)+gaps влезают без overflow на любой
+            ширине ≥1100). Ниже 1100 рейл скрыт → привычная раскладка доска+правая панель. */}
+        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=1100&&(()=>{
+          const PV:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
+          const sum=(a:string[])=>a.reduce((s,c)=>s+(PV[c]||0),0);
+          const adv=sum(capB)-sum(capW); // >0 = белые впереди
+          const evalStr=evalMate!==0?(evalMate>0?`+M${Math.abs(evalMate)}`:`-M${Math.abs(evalMate)}`):`${evalCp>=0?"+":""}${(evalCp/100).toFixed(1)}`;
+          const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
+          const card={background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,padding:"10px 12px"} as const;
+          const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
+          return <aside style={{flex:"0 0 248px",width:248,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
+            <div style={card}>
+              <div style={lbl}>Оценка</div>
+              <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
+              <div style={{marginTop:8,height:8,borderRadius:4,overflow:"hidden",display:"flex",background:"#0f172a"}}>
+                <div style={{width:`${wPct}%`,background:"#f8fafc"}}/>
+                <div style={{flex:1,background:"#0f172a"}}/>
+              </div>
+            </div>
+            <div style={card}>
+              <div style={lbl}>Материал</div>
+              <div style={{fontSize:13,color:CC.text,fontWeight:800}}>{adv===0?"Равенство":(adv>0?`Белые +${adv}`:`Чёрные +${-adv}`)}</div>
+              <div style={{marginTop:6,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capB.join("")||"—"}</div>
+              <div style={{marginTop:2,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capW.join("")||"—"}</div>
+            </div>
+            {currentOpening&&<div style={card}>
+              <div style={lbl}>Дебют</div>
+              <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</div>
+            </div>}
+            <div style={card}>
+              <div style={lbl}>Партия</div>
+              <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:CC.text}}>Stockfish 18 · d22</b></div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
+            </div>
+          </aside>;
+        })()}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
             в широкой колонке и правый рейл уезжает далеко. Группа [доска+рейл] центрируется
             через justifyContent на cc-main-row, рейл встаёт вплотную (gap 12). */}
@@ -7197,11 +7315,13 @@ export default function CyberChessPage(){
                 const nature=isMate?"⚔ мат":isCastle?"рокировка":isProm?"превращение":isCap&&isCheck?"взятие с шахом":isCheck?"шах":isCap?"взятие":"тихий ход";
                 const q=analysis[lastIdx]?.quality;
                 const qLabel=q==="brilliant"?"💎 Блестящий":q==="great"?"🌟 Отличный":q==="good"?"✅ Хороший":q==="inacc"?"⚠ Неточность":q==="mistake"?"❌ Ошибка":q==="blunder"?"💀 Блундер":"";
+                const bestSan=analysis[lastIdx]?.best;
                 const buildBody=(cp:number|null,mate:number)=>{
                   const evalStr=mate!==0?`мат в ${Math.abs(mate)} (${mate>0?"за белых":"за чёрных"})`:cp!==null?`${cp>0?"+":""}${(cp/100).toFixed(2)}`:"запусти полный анализ для оценки";
                   const lines=[`${movedBy} сыграли ${lastSan} — ${nature}.`];
                   if(qLabel)lines.push(`${qLabel} ход`);
                   lines.push(`Оценка позиции: ${evalStr}`);
+                  if(bestSan&&(q==="mistake"||q==="blunder"||q==="inacc"))lines.push(`Лучше было: ${bestSan}`);
                   return lines.join("\n");
                 };
                 if(!sfR.current?.ready()){
@@ -7684,7 +7804,7 @@ export default function CyberChessPage(){
                   const isBlunder=a.quality==="blunder";
                   return <button key={i} onClick={()=>rewindBlunder(i)}
                     className="cc-focus-ring"
-                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Блундер":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}`}
+                    title={`Ход ${Math.floor(i/2)+1}${userIsWhite?"":"..."}  · ${isBlunder?"Блундер":"Ошибка"} · eval ${a.cp>=0?"+":""}${(a.cp/100).toFixed(1)}${a.best?` · лучше было: ${a.best}`:""}`}
                     style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",
                       borderRadius:RADIUS.full,border:`1px solid ${isBlunder?"#fca5a5":"#fdba74"}`,
                       background:isBlunder?"#fef2f2":"#fff7ed",
@@ -7693,6 +7813,7 @@ export default function CyberChessPage(){
                       transition:`all ${MOTION.fast} ${MOTION.ease}`}}>
                     <span style={{fontSize:13,fontWeight:900}}>{isBlunder?"??":"?"}</span>
                     <span>Ход {Math.floor(i/2)+1}{userIsWhite?".":"..."}</span>
+                    {a.best&&<span style={{fontSize:11,fontWeight:700,opacity:0.85,fontFamily:"ui-monospace,monospace"}}>· лучше: {a.best}</span>}
                   </button>;
                 })}
               </div>
@@ -8445,7 +8566,10 @@ export default function CyberChessPage(){
                     </div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
-                    <span style={{fontSize:14,fontWeight:900,padding:"4px 12px",borderRadius:7,background:pzCurrent.r<600?"#d1fae5":pzCurrent.r<1200?"#dbeafe":pzCurrent.r<1800?"#ede9fe":"#fee2e2",color:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger}}>{pzCurrent.r}</span>
+                    <span style={{display:"inline-flex",flexDirection:"column",alignItems:"center",gap:1,padding:"4px 12px",borderRadius:7,background:pzCurrent.r<600?"#d1fae5":pzCurrent.r<1200?"#dbeafe":pzCurrent.r<1800?"#ede9fe":"#fee2e2",color:pzCurrent.r<600?T.accent:pzCurrent.r<1200?T.blue:pzCurrent.r<1800?T.purple:T.danger}}>
+                      <span style={{fontSize:9,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,opacity:0.85}}>{pzCurrent.r<800?"Лёгкая":pzCurrent.r<1400?"Средняя":pzCurrent.r<2000?"Сложная":"Эксперт"}</span>
+                      <span style={{fontSize:15,fontWeight:900,lineHeight:1}}>★ {pzCurrent.r}</span>
+                    </span>
                     {pzTimeLeft>0&&<span style={{fontSize:14,fontWeight:900,color:pzTimeLeft<15?CC.danger:pzTimeLeft<30?CC.gold:CC.text,fontFamily:"ui-monospace, monospace",padding:"2px 8px",borderRadius:5,background:pzTimeLeft<15?"#fef2f2":pzTimeLeft<30?"#fef3c7":"#f3f4f6"}}>⏱ {fmt(pzTimeLeft)}</span>}
                     {pzAttempt==="idle"&&<span style={{fontSize:12,fontWeight:800,color:pzTimer<10?"#065f46":pzTimer<30?"#92400e":"#6b7280",fontFamily:"ui-monospace,monospace",padding:"2px 6px",borderRadius:4,background:pzTimer<10?"#d1fae5":pzTimer<30?"#fef3c7":"#f3f4f6"}}>⏱ {Math.floor(pzTimer/60)>0?`${Math.floor(pzTimer/60)}:`:""}{ String(pzTimer%60).padStart(2,"0")}</span>}
                   </div>
@@ -8530,6 +8654,13 @@ export default function CyberChessPage(){
                   <span>{pzMode==="rush"?"Неверно! Стрик сброшен":"Неверно. Попробуй ещё"}</span>
                   {pzMode==="rush"&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:T.danger}}>−5с ⏱</span>}
                 </div>}
+                {/* After 2 wrong tries (non-timed/non-rush retry modes) reveal the expected best move as a hint */}
+                {pzAttempt==="wrong"&&pzMode!=="rush"&&pzWrongTriesRef.current.fen===pzCurrent.fen&&pzWrongTriesRef.current.n>=2&&pzCurrent.sol[0]&&<div style={{
+                  fontSize:13,fontWeight:800,color:"#78350f",
+                  padding:"9px 14px",marginBottom:10,borderRadius:8,
+                  background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
+                  border:"1px solid #fde68a"
+                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
                 {pzAttempt==="shown"&&<div style={{
                   fontSize:13,fontWeight:800,color:"#78350f",
                   padding:"10px 14px",marginBottom:10,borderRadius:8,
@@ -9742,6 +9873,7 @@ ${question.trim()}`;
             opening={currentOpening}
             playerColor={pCol}
             phaseLabel={detectPhase(game.fen(),hist.length).label}
+            coachLevel={coachLevel}
             visible={true}
             onClose={()=>sTab("play")}
             runEngine={runEnginePromise}
@@ -10459,8 +10591,9 @@ ${question.trim()}`;
         Appears once per day in the bottom-right corner when PiP is closed AND
         today's daily variant is unplayed. Two CTAs:
           1) "Включить" → opens the user's favorite Twitch stream (configurable, no hardcoded names)
-          2) "×" → dismiss for the rest of the day (localStorage-keyed by date) */}
-    {showPipSuggest&&<div
+          2) "×" → dismiss for the rest of the day (localStorage-keyed by date)
+        Не показываем во время активной партии (!on) — чтобы не перекрывать доску. */}
+    {showPipSuggest&&!on&&<div
       role="alert"
       style={{
         position:"fixed",right:20,bottom:20,zIndex:7900,
@@ -12825,8 +12958,9 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
-    {/* Bottom navigation — фиксированный нижний бар на мобайле, tab-bar на десктопе */}
-    {!streamerMode&&<BottomNav
+    {/* Bottom navigation — только на мобайле (<769px). На десктопе вкладки уже в верхней
+        шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
+    {!streamerMode&&vwPx<769&&<BottomNav
       setup={setup} tab={tab}
       onPlay={()=>sShowQuickSetupModal(true)}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}

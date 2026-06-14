@@ -41,7 +41,7 @@ const ANTHROPIC_VERSION = "2023-06-01";
 
 // Opus 4.7 — Anthropic's flagship, strongest chess reasoning ($15 in / $75 out per M tokens).
 // Each Coach request ≈ $0.015-0.02, acceptable for premium experience. Override via env.
-const DEFAULT_MODEL = process.env.COACH_MODEL || "claude-opus-4-7";
+const DEFAULT_MODEL = process.env.COACH_MODEL || "claude-opus-4-8";
 
 // Absolute ceiling on tokens per response — chess coaching fits comfortably in 1500.
 // Client may request less (e.g. 150 for Live Coach one-liners).

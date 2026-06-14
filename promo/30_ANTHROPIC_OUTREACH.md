@@ -28,7 +28,7 @@ The urgency is real: OpenAI just placed 165,000 free ChatGPT Edu licences into K
 
 I'm not pricing it and I'm not asking for a share of Anthropic — you'd integrate or absorb it anyway. I'm proposing collaboration: help me bring this live to real users with your platform and reach. My claim stays deliberately modest and tied to your success — details if we talk. One concrete example I can vouch for as a Candidate Master myself: CyberChess is already live and, with finishing I can do, rivals chess.com and lichess — that one module alone could repay the advance within a year of launch.
 
-The best first step is simply writing back — English is my second language, so I'm sharpest in writing; a call whenever suits you. If we reach a conversation at all, it already tells me the idea resonated.
+And if it's not for you, I take that with full respect — no pressure either way. The best first step is simply writing back — English is my second language, so I'm sharpest in writing; a call whenever suits you. If we reach a conversation at all, it already tells me the idea resonated.
 
 Live demo: https://aevion.app/acquire
 Public repo: https://github.com/Dossymbek281078/AEVION

@@ -399,7 +399,11 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
     // cache = API results only (what we persist back).
     const cache = loadCache(lang);
     const map: Record<string, string> = { ...buildSeedMap(lang), ...cache };
-    const translatedValues = new Set<string>(Object.values(map)); // never re-translate our own output
+    // Seeded EMPTY on purpose. Pre-seeding from the dict's values wrongly marked
+    // stale dict stubs (a kk entry still holding the RU word) as "already done",
+    // so they never reached the API and stayed mixed. Loop-safety instead comes
+    // from the script heuristic + caching identity results in flush() below.
+    const translatedValues = new Set<string>();
     const pending = new Set<string>();
     let obs: MutationObserver | null = null;
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -463,15 +467,17 @@ export function AutoTranslate({ children }: { children: React.ReactNode }) {
           const trs = data.translations || [];
           let changed = false;
           for (let i = 0; i < batch.length; i++) {
-            const tr = trs[i];
-            if (typeof tr === "string" && tr && tr !== batch[i]) {
-              map[batch[i]] = tr;
-              cache[batch[i]] = tr;
-              translatedValues.add(tr);
-              changed = true;
-            }
+            const raw = trs[i];
+            const tr = typeof raw === "string" && raw ? raw : batch[i];
+            // Record EVERY result — including identity (loanwords, brand names
+            // that come back unchanged) — so they are cached and never re-sent
+            // on the next pass. Only a real change triggers a re-apply walk.
+            map[batch[i]] = tr;
+            cache[batch[i]] = tr;
+            translatedValues.add(tr);
+            if (tr !== batch[i]) changed = true;
           }
-          if (changed && !destroyed) { saveCache(lang, cache); apply(root); }
+          if (!destroyed) { saveCache(lang, cache); if (changed) apply(root); }
         }
       } catch {
         /* offline / 5xx — leave source text, don't hammer */

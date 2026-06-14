@@ -46,6 +46,7 @@ import cyberchessAnticheatRouter from "./routes/cyberchessAnticheat";
 import { puzzlesRouter } from "./routes/puzzles";
 import { buildRouter } from "./routes/build";
 import { aevionHubRouter } from "./routes/aevion-hub";
+import { i18nRouter } from "./routes/i18n";
 import { qrightRoyaltiesRouter } from "./routes/qrightRoyalties";
 import { planetPayoutsRouter } from "./routes/planetPayouts";
 import { planetConstitutionRouter } from "./routes/planetConstitution";
@@ -942,6 +943,7 @@ app.use("/api/awards", awardsRouter);
 // AEVION Hub — composite cross-product health + OpenAPI index
 // ==========================
 app.use("/api/aevion", aevionHubRouter);
+app.use("/api/i18n", i18nRouter);
 
 // Internal: synthetic webhook dispatcher used by /bank/diagnostics.
 app.use("/api/bank", bankTestRouter);

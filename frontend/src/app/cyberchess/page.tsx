@@ -787,10 +787,12 @@ export default function CyberChessPage(){
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
-  // -400 оставляет место правой панели (≤340) + поля. Кап 1400 — доска заполняет
-  // высоту больших/высоких окон (а не висит маленькой), но не доминирует на 4K.
-  // boardScale (0.5–1.5) применяется поверх — финал дополнительно зажат потолком ниже.
-  const baseBoardPx=Math.max(320,Math.min(1400,vhPx-280,vwPx-400));
+  // По ширине запас зависит от того, показан ли левый инфо-рейл: с рейлом резервируем
+  // ~660 (рейл 248 + панель 340 + поля), без рейла ~400 (только панель + поля) — так
+  // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
+  // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
+  const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  const baseBoardPx=Math.max(320,Math.min(1400,vhPx-280,vwPx-(railShown?660:400)));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
   // Жёсткий потолок: даже при boardScale=1.5 доска не больше окна (vhPx-160 по высоте,
   // vwPx-360 по ширине) — гарантия что низ доски не уезжает за экран/панель задач.
@@ -5984,11 +5986,11 @@ export default function CyberChessPage(){
         ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
-        {/* ─── Left info rail (chess.com-style) — заполняет левое поле на ШИРОКИХ экранах.
-            Только read-only сводка из уже посчитанных данных. Порог vwPx>=2200 гарантирует,
-            что aside(248)+доска(≤1400)+панель(340)+gaps влезают без overflow; на более узких
-            экранах рейл скрыт и раскладка остаётся прежней (доска+правая панель). */}
-        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=2200&&(()=>{
+        {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
+            Порог vwPx>=1100 (синхронен с railShown выше — бюджет ширины доски резервирует
+            под рейл, поэтому aside(248)+доска+панель(340)+gaps влезают без overflow на любой
+            ширине ≥1100). Ниже 1100 рейл скрыт → привычная раскладка доска+правая панель. */}
+        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=1100&&(()=>{
           const PV:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
           const sum=(a:string[])=>a.reduce((s,c)=>s+(PV[c]||0),0);
           const adv=sum(capB)-sum(capW); // >0 = белые впереди

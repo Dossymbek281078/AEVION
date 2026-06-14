@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import Globus3D from "./components/Globus3D";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
 import { PlanetPulse } from "./components/PlanetPulse";
@@ -247,7 +247,7 @@ export default function HomePage() {
     return { bg: "rgba(100,100,100,0.1)", fg: "#444", label: "HUB" };
   };
 
-  const backendOrigin = getBackendOrigin();
+  const backendOrigin = getClientApiBase();
 
   return (
     <main style={{ padding: 0 }}>

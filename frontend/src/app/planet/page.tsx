@@ -7,7 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import PlanetActivityFeed from "@/components/PlanetActivityFeed";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { planetNominationOptions } from "@/lib/planetNominations";
 
 const TOKEN_KEY = "aevion_auth_token_v1";
@@ -333,7 +333,7 @@ export default function PlanetCompliancePage() {
     }
   };
 
-  const backendOrigin = getBackendOrigin();
+  const backendOrigin = getClientApiBase();
 
   const createLabel = res ? "Re-run in new submission (separate)" : "Create & Run Compliance";
   const awardsBackHref = awardPreset === "music" ? "/awards/music" : awardPreset === "film" ? "/awards/film" : "/awards";

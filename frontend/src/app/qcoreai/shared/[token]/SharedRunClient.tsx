@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
+import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Public read-only page for a shared QCoreAI run.
@@ -449,14 +449,14 @@ export default function SharedRunClient() {
               {showCost ? "Hide" : "💲 Cost breakdown"}
             </button>
             <a
-              href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=md`}
+              href={`${getClientApiBase()}/api/qcoreai/runs/${run.id}/export?format=md`}
               target="_blank" rel="noreferrer"
               style={{ color: "#0e7490", fontWeight: 700, textDecoration: "none" }}
             >
               ⬇ Download Markdown
             </a>
             <a
-              href={`${getBackendOrigin()}/api/qcoreai/runs/${run.id}/export?format=csv`}
+              href={`${getClientApiBase()}/api/qcoreai/runs/${run.id}/export?format=csv`}
               download
               style={{ color: "#0e7490", fontWeight: 700, textDecoration: "none", fontSize: 11 }}
             >

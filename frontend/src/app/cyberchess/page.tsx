@@ -4151,7 +4151,8 @@ export default function CyberChessPage(){
     pzTimerIntervalRef.current=setInterval(()=>sPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);};
 
   // Next puzzle helper
-  const nextPz=useCallback(()=>{const nextIdx=(pzI+1)%Math.max(1,fPz.length);ldPz(nextIdx)},[pzI,fPz.length]);
+  // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
+  const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
 
   /* ── Puzzle hotkeys — H: подсказка · N/→: следующий · R: рестарт текущего.
@@ -4338,11 +4339,11 @@ export default function CyberChessPage(){
 
   // Auto-advance to next puzzle in rush/timed modes after a correct solve
   useEffect(()=>{
-    if(pzAttempt!=="correct"||pzMode==="learn")return;
-    const delay=pzMode==="rush"?600:1200;
+    if(pzAttempt!=="correct")return; // авто-переход во ВСЕХ режимах (поток как на lichess/chess.com)
+    const delay=pzMode==="rush"?600:pzMode==="learn"?1100:1200;
     const t=setTimeout(()=>{
       if(!fPz.length)return;
-      const nextIdx=(pzI+1)%fPz.length;
+      const n=fPz.length;let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n; // СЛУЧАЙНЫЙ следующий
       const pz=fPz[nextIdx];if(!pz)return;
       const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sPzI(nextIdx);sPzCurrent(pz);sPzAttempt("idle");
       sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);

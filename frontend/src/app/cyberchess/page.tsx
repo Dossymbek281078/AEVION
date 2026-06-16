@@ -792,12 +792,18 @@ export default function CyberChessPage(){
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
   const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
-  const baseBoardPx=Math.max(320,Math.min(1400,vhPx-280,vwPx-(railShown?660:400)));
+  // Вертикальный резерв под обвязку колонки. На ДЕСКТОПЕ нижнего навбара нет (скрыт) —
+  // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
+  const vReserve=vwPx>=769?264:300; // десктоп без навбара (хедер+строки игроков+контролы) / мобайл +навбар
+  // Правый WorkspaceDock (fixed ~46px у края) — резервируем 56px по ширине, чтобы 3 колонки
+  // не уходили под него (баг: док наезжал на панель ходов).
+  const dockReserve=56;
+  // Кап 1600 (было 1400) — больше места для доски на высоких/больших экранах.
+  const baseBoardPx=Math.max(320,Math.min(1600,vhPx-vReserve,vwPx-(railShown?660:400)-dockReserve));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
-  // Жёсткий потолок: даже при boardScale=1.5 доска не выше доступной высоты МИНУС вся
-  // вертикальная обвязка колонки (хедер+строки игроков+координаты+нижние контролы+низ.навбар
-  // на мобайле) ≈ 290px. Иначе при увеличении доска уезжала под нижнюю плашку (баг 2026-06-14).
-  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-290,vwPx-360));
+  // Потолок: при scale до 1.5 доска влезает по высоте (с запасом под контролы) и по ширине
+  // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290.
+  const boardPx=Math.max(280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-360-dockReserve));
   const bw=boardPx+"px";
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
@@ -5985,7 +5991,10 @@ export default function CyberChessPage(){
         // inline paddingRight) so globals.css can zero it on narrow desktops and the
         // right panel never gets pushed off-screen. Banner is a fixed overlay; this
         // only stops it from covering the panel when there's room for both.
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px"}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        // paddingRight = резерв под правый WorkspaceDock (56, всегда) + баннер «Проекты» (244,
+        // когда показан). Инлайн (надёжнее CSS-var: правый док больше не наезжает на панель ходов).
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?"244px":"0px",
+        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn)?244:0)+56}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.

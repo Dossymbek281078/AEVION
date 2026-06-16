@@ -8167,7 +8167,7 @@ export default function CyberChessPage(){
           {tab==="analysis"&&analyzing&&<div style={{padding:"10px 14px",borderRadius:10,background:"rgba(124,58,237,0.08)",border:`1px solid ${T.purple}`,color:T.purple,fontSize:13,fontWeight:700,textAlign:"center"}}>⚡ Анализирую… {analysisProgress}%</div>}
 
           {/* Move list + premoves — hidden in info/coach sub-tabs during active play */}
-          {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+          {!(tab==="play"&&on&&!over&&rpTab!=="moves")&&<div ref={hR} style={{borderRadius:12,background:T.surface,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",flex:"1 1 auto",minHeight:160,display:"flex",flexDirection:"column"}}>
             {/* Premove queue — sits ABOVE the move list so the user can see what's queued.
                 Each chip has a per-premove ✕ for surgical removal; the toolbar at the right
                 has ↶ (undo last) and ✕ (clear all). User feedback: clicking the chip's ✕
@@ -8256,7 +8256,7 @@ export default function CyberChessPage(){
                   previewLeaveTimer.current=null;
                 },80);
               }}
-              style={{maxHeight:tab==="analysis"?520:320,overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
+              style={{flex:"1 1 auto",minHeight:140,maxHeight:tab==="analysis"?640:"none",overflowY:"auto",padding:"4px 0",scrollBehavior:"smooth"}}>
               {hist.length?(()=>{
                 // Smart phase detection: find first pair where major+minor pieces drop thresholds
                 const cntMM=(fen:string)=>(fen.split(" ")[0].match(/[nbrqNBRQ]/g)||[]).length;

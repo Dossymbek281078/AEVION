@@ -4355,17 +4355,21 @@ export default function CyberChessPage(){
   // Auto-load first puzzle when filters change
   useEffect(()=>{
     if(tab!=="puzzles"||!fPz.length)return;
-    // Load first puzzle from filtered list
-    const pz=fPz[0];
+    // СЛУЧАЙНЫЙ пазл из отфильтрованного списка (рандомное распределение). Срабатывает и
+    // на смену режима (pzMode в deps) — поэтому вход в Rush/Timed сразу загружает пазл (фикс:
+    // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
+    const idx=Math.floor(Math.random()*fPz.length);
+    const pz=fPz[idx];
     const g=new Chess(pz.fen);
-    setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");
+    setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
     sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
     if(pzMode==="timed3")sPzTimeLeft(180);
     else if(pzMode==="timed5")sPzTimeLeft(300);
     else if(pzMode==="custom")sPzTimeLeft(pzCustomSec);
+    else if(pzMode==="rush")sPzTimeLeft(rushDuration);
     else sPzTimeLeft(0);
-  },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab]);
+  },[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,PUZZLES.length,tab,pzMode,rushDuration,pzCustomSec]);
 
   /* ── Post-game analysis ── */
   const runAnalysis=useCallback(async(depth=16)=>{
@@ -8858,8 +8862,8 @@ export default function CyberChessPage(){
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                     {[["all","Все"],["Mate","Мат"],["Best move","Лучший ход"]].map(([g,l])=>
                       <button key={g} onClick={()=>{sPzFilterGoal(g);if(g!=="Mate")sPzFilterMate(0);sPzI(0)}} style={{padding:"5px 12px",borderRadius:6,border:"none",background:pzFilterGoal===g?T.accent:"#f3f4f6",color:pzFilterGoal===g?"#fff":T.dim,fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>)}
-                    {pzFilterGoal==="Mate"&&[1,2,3].map(n=>
-                      <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} style={{padding:"5px 10px",borderRadius:6,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"monospace"}}>M{n}</button>)}
+                    {pzFilterGoal==="Mate"&&[1,2,3,4,5].map(n=>
+                      <button key={n} onClick={()=>{sPzFilterMate(pzFilterMate===n?0:n);sPzI(0)}} title={`Мат в ${n}`} style={{padding:"5px 10px",borderRadius:6,border:"none",background:pzFilterMate===n?T.danger:"#f3f4f6",color:pzFilterMate===n?"#fff":T.dim,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"monospace"}}>M{n}</button>)}
                   </div>
                 </div>
                 <div>
